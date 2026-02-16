@@ -72,11 +72,13 @@ RTCSetResult readFromRTC()
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
     if (rtc_found.address == PCF8563_RTC) {
+        SensorPCF8563 rtc;
 #elif defined(PCF85063_RTC)
     if (rtc_found.address == PCF85063_RTC) {
+        SensorPCF85063 rtc;
+
 #endif
         uint32_t now = millis();
-        SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
         rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
@@ -240,10 +242,12 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
         if (rtc_found.address == PCF8563_RTC) {
+            SensorPCF8563 rtc;
 #elif defined(PCF85063_RTC)
         if (rtc_found.address == PCF85063_RTC) {
+            SensorPCF85063 rtc;
+
 #endif
-            SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
             rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
@@ -276,11 +280,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         settimeofday(tv, NULL);
 #endif
 
-        // nrf52 doesn't have a readable RTC (yet - software not written)
-#if HAS_RTC
         readFromRTC();
-#endif
-
         return RTCSetResultSuccess;
     } else {
         return RTCSetResultNotSet; // RTC was already set with a higher quality time
@@ -397,7 +397,7 @@ uint32_t getValidTime(RTCQuality minQuality, bool local)
     return (currentQuality >= minQuality) ? getTime(local) : 0;
 }
 
-time_t gm_mktime(struct tm *tm)
+time_t gm_mktime(const struct tm *tm)
 {
 #if !MESHTASTIC_EXCLUDE_TZ
     time_t result = 0;
@@ -413,8 +413,8 @@ time_t gm_mktime(struct tm *tm)
     days_before_this_year -= 719162; // (1969 * 365 + 1969 / 4 - 1969 / 100 + 1969 / 400);
 
     // Now, within this tm->year, compute the days *before* this tm->month starts.
-    int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
-    int days_this_year_before_this_month = days_before_month[tm->tm_mon];                // tm->tm_mon is 0..11
+    static const int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
+    int days_this_year_before_this_month = days_before_month[tm->tm_mon];                             // tm->tm_mon is 0..11
 
     // If this is a leap year, and we're past February, add a day:
     if (tm->tm_mon >= 2 && (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)) {
@@ -435,6 +435,7 @@ time_t gm_mktime(struct tm *tm)
 
     return result;
 #else
-    return mktime(tm);
+    struct tm tmCopy = *tm;
+    return mktime(&tmCopy);
 #endif
 }

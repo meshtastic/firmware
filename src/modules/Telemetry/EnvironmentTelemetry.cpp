@@ -529,37 +529,46 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
 bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m)
 {
-    bool valid = true;
+    bool valid = false;
     bool hasSensor = false;
+    // getMetrics() doesn't always get evaluated because of
+    // short-circuit evaluation rules in c++
+    bool get_metrics;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
 
     for (TelemetrySensor *sensor : sensors) {
-        valid = valid && sensor->getMetrics(m);
+        get_metrics = sensor->getMetrics(m); // avoid short-circuit evaluation rules
+        valid = valid || get_metrics;
         hasSensor = true;
     }
 
 #ifndef T1000X_SENSOR_EN
     if (ina219Sensor.hasSensor()) {
-        valid = valid && ina219Sensor.getMetrics(m);
+        get_metrics = ina219Sensor.getMetrics(m);
+        valid = valid || get_metrics;
         hasSensor = true;
     }
     if (ina260Sensor.hasSensor()) {
-        valid = valid && ina260Sensor.getMetrics(m);
+        get_metrics = ina260Sensor.getMetrics(m);
+        valid = valid || get_metrics;
         hasSensor = true;
     }
     if (ina3221Sensor.hasSensor()) {
-        valid = valid && ina3221Sensor.getMetrics(m);
+        get_metrics = ina3221Sensor.getMetrics(m);
+        valid = valid || get_metrics;
         hasSensor = true;
     }
     if (max17048Sensor.hasSensor()) {
-        valid = valid && max17048Sensor.getMetrics(m);
+        get_metrics = max17048Sensor.getMetrics(m);
+        valid = valid || get_metrics;
         hasSensor = true;
     }
 #endif
 #ifdef HAS_RAKPROT
-    valid = valid && rak9154Sensor.getMetrics(m);
+    get_metrics = rak9154Sensor.getMetrics(m);
+    valid = valid || get_metrics;
     hasSensor = true;
 #endif
     return valid && hasSensor;

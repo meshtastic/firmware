@@ -12,6 +12,10 @@
 #endif
 #endif
 
+#ifndef TB_THRESHOLD
+#define TB_THRESHOLD 0
+#endif
+
 class TrackballInterruptBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
@@ -25,8 +29,6 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
     void intUpHandler();
     void intLeftHandler();
     void intRightHandler();
-    uint32_t lastTime = 0;
-
     virtual int32_t runOnce() override;
 
   protected:
@@ -67,4 +69,12 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
     input_broker_event _eventPressedLong = INPUT_BROKER_NONE;
     const char *_originName;
     TrackballInterruptBaseActionType lastEvent = TB_ACTION_NONE;
+    volatile uint32_t lastInterruptTime = 0;
+
+#if TB_THRESHOLD
+    volatile uint8_t left_counter = 0;
+    volatile uint8_t right_counter = 0;
+    volatile uint8_t up_counter = 0;
+    volatile uint8_t down_counter = 0;
+#endif
 };

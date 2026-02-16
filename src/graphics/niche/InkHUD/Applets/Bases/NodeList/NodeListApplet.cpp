@@ -103,7 +103,7 @@ uint8_t InkHUD::NodeListApplet::maxCards()
 }
 
 // Draw, using info which derived applet placed into NodeListApplet::cards for us
-void InkHUD::NodeListApplet::onRender()
+void InkHUD::NodeListApplet::onRender(bool full)
 {
 
     // ================================

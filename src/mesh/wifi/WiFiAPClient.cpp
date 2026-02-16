@@ -392,6 +392,11 @@ static void WiFiEvent(WiFiEvent_t event)
 #ifdef WIFI_LED
         digitalWrite(WIFI_LED, LOW);
 #endif
+#if HAS_UDP_MULTICAST
+        if (udpHandler) {
+            udpHandler->stop();
+        }
+#endif
         if (!isReconnecting) {
             WiFi.disconnect(false, true);
             syslog.disable();
@@ -417,6 +422,11 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         LOG_INFO("Lost IP address and IP address is reset to 0");
+#if HAS_UDP_MULTICAST
+        if (udpHandler) {
+            udpHandler->stop();
+        }
+#endif
         if (!isReconnecting) {
             WiFi.disconnect(false, true);
             syslog.disable();

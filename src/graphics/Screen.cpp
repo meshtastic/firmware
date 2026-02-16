@@ -1731,6 +1731,26 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showFrame(FrameDirection::PREVIOUS);
             } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
                 showFrame(FrameDirection::NEXT);
+            } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
+                this->ui->switchToFrame(0);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F2) {
+                this->ui->switchToFrame(1);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F3) {
+                this->ui->switchToFrame(2);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F4) {
+                this->ui->switchToFrame(3);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F5) {
+                this->ui->switchToFrame(4);
+                lastScreenTransition = millis();
+                setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_UP_LONG) {
                 // Long press up button for fast frame switching
                 showPrevFrame();
