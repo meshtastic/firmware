@@ -96,7 +96,6 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.has_relative_humidity = true;
     measurement->variant.environment_metrics.has_barometric_pressure = true;
     measurement->variant.environment_metrics.has_gas_resistance = true;
-    measurement->variant.environment_metrics.has_iaq = true;
 
     measurement->variant.environment_metrics.temperature = bme680->readTemperature();
     measurement->variant.environment_metrics.relative_humidity = bme680->readHumidity();
@@ -109,15 +108,20 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
     // Gas sensor resistance drops with humidity; compensate to a 40% RH reference baseline
     // Map compensated gas resistance (Ohms) to IAQ 0-500 using log-linear interpolation
     // Clean air reference ~400 kOhm, polluted reference ~5 kOhm
-    static constexpr float LOG_UPPER = 12.899219f;                          // log(400k)
-    static constexpr float LOG_RANGE_INV = 1.0f / (12.899219f - 8.517193f); // 1 / (log(400k) - log(5k))
-    measurement->variant.environment_metrics.iaq = (uint16_t)(fminf(
-        fmaxf(((LOG_UPPER -
-                logf(fmaxf(gasRaw * expf(0.035f * (measurement->variant.environment_metrics.relative_humidity - 40.0f)), 1.0f))) *
-               LOG_RANGE_INV) *
-                  500.0f,
-              0.0f),
-        500.0f));
+    if (gasRaw > 0.0f && !isfinite(gasRaw)) {
+
+        static constexpr float LOG_UPPER = 12.899219f;                          // log(400k)
+        static constexpr float LOG_RANGE_INV = 1.0f / (12.899219f - 8.517193f); // 1 / (log(400k) - log(5k))
+        measurement->variant.environment_metrics.has_iaq = true;
+        measurement->variant.environment_metrics.iaq = (uint16_t)(fminf(
+            fmaxf(((LOG_UPPER -
+                    logf(fmaxf(gasRaw * expf(0.035f * (measurement->variant.environment_metrics.relative_humidity - 40.0f)),
+                               1.0f))) *
+                   LOG_RANGE_INV) *
+                      500.0f,
+                  0.0f),
+            500.0f));
+    }
 #endif
     return true;
 }
