@@ -65,7 +65,7 @@ static unsigned char TLoraPagerTapMap[_TCA8418_NUM_KEYS][3] = {{'q', 'Q', '1'},
                                                                {' ', 0x00, Key::BL_TOGGLE}};
 
 TLoraPagerKeyboard::TLoraPagerKeyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), last_modifier_time(0), last_key(-1), next_key(-1),
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), last_modifier_time(0), last_key(UINT8_MAX), next_key(UINT8_MAX),
       last_tap(0L), char_idx(0), tap_interval(0)
 {
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
@@ -129,7 +129,6 @@ void TLoraPagerKeyboard::pressed(uint8_t key)
         modifierFlag = 0;
     }
 
-    uint8_t next_key = 0;
     int row = (key - 1) / 10;
     int col = (key - 1) % 10;
 
@@ -170,8 +169,8 @@ void TLoraPagerKeyboard::released()
         return;
     }
 
-    if (last_key < 0 || last_key >= _TCA8418_NUM_KEYS) {
-        last_key = -1;
+    if (last_key >= _TCA8418_NUM_KEYS) {
+        last_key = UINT8_MAX;
         state = Idle;
         return;
     }
