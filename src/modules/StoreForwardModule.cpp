@@ -131,9 +131,7 @@ void StoreForwardModule::historySend(uint32_t secAgo, uint32_t to)
 uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_time)
 {
     uint32_t count = 0;
-    if (lastRequest.find(dest) == lastRequest.end()) {
-        lastRequest.emplace(dest, 0);
-    }
+    lastRequest.emplace(dest, 0);
     for (uint32_t i = lastRequest[dest]; i < this->packetHistoryTotalCount; i++) {
         if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
             // Client is only interested in packets not from itself and only in broadcast packets or packets towards it.

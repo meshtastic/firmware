@@ -8,7 +8,7 @@
 
 static std::forward_list<TelemetrySensor *> sensors;
 
-template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType type)
+template <typename T> void addSensor(const ScanI2C *i2cScanner, ScanI2C::DeviceType type)
 {
     ScanI2C::FoundDevice dev = i2cScanner->find(type);
     if (dev.type != ScanI2C::DeviceType::NONE || type == ScanI2C::DeviceType::NONE) {
