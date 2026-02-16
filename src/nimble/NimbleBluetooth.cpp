@@ -170,7 +170,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         }
 
         // the run is triggered via NimbleBluetoothToRadioCallback and NimbleBluetoothFromRadioCallback
-        return INT32_MAX;
+        return 100; // FIXME: INT32_MAX breaks button and rotary encoder resposiveness
     }
 
     virtual void onConfigStart() override

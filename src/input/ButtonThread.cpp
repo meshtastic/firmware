@@ -297,10 +297,10 @@ int32_t ButtonThread::runOnce()
     btnEvent = BUTTON_EVENT_NONE;
 
     // only pull when the button is pressed, we get notified via IRQ on a new press
-    if (!userButton.isIdle() || waitingForLongPress) {
-        return 50;
-    }
-    return 100; // FIXME: Why can't we rely on interrupts and use INT32_MAX here?
+    // if (!userButton.isIdle() || waitingForLongPress) {
+    //     return 50;
+    // }
+    return 50; // FIXME: Why can't we rely on interrupts and use INT32_MAX here?
 }
 
 /*
