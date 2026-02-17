@@ -44,14 +44,13 @@ class BluetoothPhoneAPI : public PhoneAPI
         PhoneAPI::onNowHasData(fromRadioNum);
 
         if (fromRadioSync.indicateEnabled()) {
-             uint8_t syncBuffer[meshtastic_FromRadio_size];
-             while (true) {
-                 size_t len = getFromRadio(syncBuffer);
-                 if (len == 0) break;
+            while (true) {
+                size_t len = getFromRadio(fromRadioBytes);
+                if (len == 0) break;
 
-                 if (!fromRadioSync.indicate(syncBuffer, len)) break;
-             }
-             return;
+                if (!fromRadioSync.indicate(fromRadioBytes, len)) break;
+            }
+            return;
         }
 
         LOG_INFO("BLE notify fromNum");
