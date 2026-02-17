@@ -307,7 +307,6 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         }
     }
 
-
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
@@ -890,7 +889,8 @@ void NimbleBluetooth::setupService()
         // Allow notifications so phones can stream FromRadio without polling.
         FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
         fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
-        fromRadioSyncCharacteristic = bleService->createCharacteristic(FROMRADIOSYNC_UUID, NIMBLE_PROPERTY::INDICATE | NIMBLE_PROPERTY::READ);
+        fromRadioSyncCharacteristic =
+            bleService->createCharacteristic(FROMRADIOSYNC_UUID, NIMBLE_PROPERTY::INDICATE | NIMBLE_PROPERTY::READ);
         logRadioCharacteristic =
             bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 512U);
     } else {
@@ -903,7 +903,7 @@ void NimbleBluetooth::setupService()
                                                                NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
         fromRadioSyncCharacteristic =
             bleService->createCharacteristic(FROMRADIOSYNC_UUID, NIMBLE_PROPERTY::INDICATE | NIMBLE_PROPERTY::READ |
-                                                               NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+                                                                     NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
         logRadioCharacteristic = bleService->createCharacteristic(
             LOGRADIO_UUID,
             NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 512U);
