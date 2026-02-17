@@ -65,7 +65,7 @@ static bool weatherEmoteColor(const Emote &emote, uint16_t &color565)
 
     // Clouds and fog.
     if (bmp == cloud || bmp == fog) {
-        color565 = COLOR565(190, 200, 210);
+        color565 = COLOR565(150, 170, 185);
         return true;
     }
 
@@ -89,7 +89,7 @@ static bool weatherEmoteColor(const Emote &emote, uint16_t &color565)
     }
 
     // Temperature / heat.
-    if (bmp == thermometer || bmp == fire) {
+    if (bmp == thermometer || bmp == fire || bmp == strong) {
         color565 = COLOR565(255, 110, 60);
         return true;
     }
@@ -855,6 +855,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int yOffset = -finalScroll + getTextPositions(display)[1];
     const int contentTop = getTextPositions(display)[1];
     const int contentBottom = scrollBottom; // already excludes nav line
+    setWeatherColorOverlayClip(0, contentTop, SCREEN_WIDTH - 1, contentBottom - 1);
     const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
     const int bubbleGapY = std::max(1, MESSAGE_BLOCK_GAP / 2);
 

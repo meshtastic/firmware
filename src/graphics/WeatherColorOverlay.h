@@ -5,6 +5,9 @@
 namespace graphics
 {
 
+// Sets clipping rectangle for subsequent overlays (inclusive bounds).
+void setWeatherColorOverlayClip(int16_t left, int16_t top, int16_t right, int16_t bottom);
+
 // Clears all queued overlays for the current frame.
 void clearWeatherColorOverlays();
 
@@ -15,4 +18,3 @@ void queueWeatherColorOverlay(int16_t x, int16_t y, uint16_t width, uint16_t hei
 void flushWeatherColorOverlays();
 
 } // namespace graphics
-

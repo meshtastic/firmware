@@ -26,6 +26,10 @@ struct WeatherOverlay {
 static constexpr uint8_t MAX_WEATHER_OVERLAYS = 40;
 static WeatherOverlay g_overlays[MAX_WEATHER_OVERLAYS];
 static uint8_t g_overlayCount = 0;
+static int16_t g_clipLeft = 0;
+static int16_t g_clipTop = 0;
+static int16_t g_clipRight = TFT_WIDTH - 1;
+static int16_t g_clipBottom = TFT_HEIGHT - 1;
 
 static constexpr uint8_t ST77XX_CASET = 0x2A;
 static constexpr uint8_t ST77XX_RASET = 0x2B;
@@ -87,7 +91,7 @@ static void drawXbmColorTransparent(const WeatherOverlay &o)
 
     for (int16_t row = 0; row < static_cast<int16_t>(o.height); ++row) {
         const int16_t y = o.y + row;
-        if (y < 0 || y >= TFT_HEIGHT) {
+        if (y < 0 || y >= TFT_HEIGHT || y < g_clipTop || y > g_clipBottom) {
             continue;
         }
 
@@ -103,8 +107,12 @@ static void drawXbmColorTransparent(const WeatherOverlay &o)
                 const int16_t x1 = o.x + runStart;
                 const int16_t x2 = o.x + runEnd;
                 if (x2 >= 0 && x1 < TFT_WIDTH) {
-                    const int16_t clippedX1 = (x1 < 0) ? 0 : x1;
-                    const int16_t clippedX2 = (x2 >= TFT_WIDTH) ? (TFT_WIDTH - 1) : x2;
+                    int16_t clippedX1 = (x1 < 0) ? 0 : x1;
+                    int16_t clippedX2 = (x2 >= TFT_WIDTH) ? (TFT_WIDTH - 1) : x2;
+                    if (clippedX1 < g_clipLeft)
+                        clippedX1 = g_clipLeft;
+                    if (clippedX2 > g_clipRight)
+                        clippedX2 = g_clipRight;
                     const uint16_t runLen = static_cast<uint16_t>(clippedX2 - clippedX1 + 1);
                     if (runLen > 0) {
                         stSetAddrWindow(static_cast<uint16_t>(clippedX1), static_cast<uint16_t>(y), runLen, 1);
@@ -121,8 +129,12 @@ static void drawXbmColorTransparent(const WeatherOverlay &o)
             const int16_t x1 = o.x + runStart;
             const int16_t x2 = o.x + static_cast<int16_t>(o.width) - 1;
             if (x2 >= 0 && x1 < TFT_WIDTH) {
-                const int16_t clippedX1 = (x1 < 0) ? 0 : x1;
-                const int16_t clippedX2 = (x2 >= TFT_WIDTH) ? (TFT_WIDTH - 1) : x2;
+                int16_t clippedX1 = (x1 < 0) ? 0 : x1;
+                int16_t clippedX2 = (x2 >= TFT_WIDTH) ? (TFT_WIDTH - 1) : x2;
+                if (clippedX1 < g_clipLeft)
+                    clippedX1 = g_clipLeft;
+                if (clippedX2 > g_clipRight)
+                    clippedX2 = g_clipRight;
                 const uint16_t runLen = static_cast<uint16_t>(clippedX2 - clippedX1 + 1);
                 if (runLen > 0) {
                     stSetAddrWindow(static_cast<uint16_t>(clippedX1), static_cast<uint16_t>(y), runLen, 1);
@@ -136,9 +148,29 @@ static void drawXbmColorTransparent(const WeatherOverlay &o)
 }
 } // namespace
 
+void setWeatherColorOverlayClip(int16_t left, int16_t top, int16_t right, int16_t bottom)
+{
+    if (left > right || top > bottom) {
+        g_clipLeft = 0;
+        g_clipTop = 0;
+        g_clipRight = TFT_WIDTH - 1;
+        g_clipBottom = TFT_HEIGHT - 1;
+        return;
+    }
+
+    g_clipLeft = (left < 0) ? 0 : left;
+    g_clipTop = (top < 0) ? 0 : top;
+    g_clipRight = (right >= TFT_WIDTH) ? (TFT_WIDTH - 1) : right;
+    g_clipBottom = (bottom >= TFT_HEIGHT) ? (TFT_HEIGHT - 1) : bottom;
+}
+
 void clearWeatherColorOverlays()
 {
     g_overlayCount = 0;
+    g_clipLeft = 0;
+    g_clipTop = 0;
+    g_clipRight = TFT_WIDTH - 1;
+    g_clipBottom = TFT_HEIGHT - 1;
 }
 
 void queueWeatherColorOverlay(int16_t x, int16_t y, uint16_t width, uint16_t height, const uint8_t *xbm, uint16_t color565)
@@ -180,6 +212,8 @@ void flushWeatherColorOverlays()
 }
 
 #else
+
+void setWeatherColorOverlayClip(int16_t, int16_t, int16_t, int16_t) {}
 
 void clearWeatherColorOverlays() {}
 
