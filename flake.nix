@@ -32,16 +32,22 @@
       devShells = forAllSystems (
         { pkgs, ... }:
         let
-          python3 = pkgs.python312.withPackages (
-            ps: with ps; [
-              protobuf
-              grpcio-tools
-            ]
-          );
+          # these are the python deps we need to build,
+          # instead of pio installing them later
+          # we provide them deterministically here, skipping the install later
+          pioPyDeps = ps: with ps; [
+            protobuf
+            grpcio-tools
+            intelhex
+          ];
+          platformio = pkgs.platformio;
+          # Keep PlatformIO and shell Python aligned by deriving both from
+          # PlatformIO's own pinned interpreter version
+          python3 = platformio.python.withPackages pioPyDeps;
         in
         {
           default = pkgs.mkShell {
-            buildInputs = with pkgs; [
+            buildInputs = [
               python3
               platformio
             ];
