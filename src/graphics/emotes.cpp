@@ -159,6 +159,7 @@ const Emote emotes[] = {
     {"\U0001F36A", cookie, cookie_width, cookie_height},             // 🍪 Cookie
     {"\U0001F370", shortcake, shortcake_width, shortcake_height},    // 🍰 Shortcake
     {"\U0001F3CB\uFE0F", strong, strong_width, strong_height},       // 🏋️ Person Lifting Weights
+    {"\U0001F3CB", strong, strong_width, strong_height},             // 🏋 Person Lifting Weights (without VS)
     {"\U0001F351", peach, peach_width, peach_height},                // 🍑 Peach
     {"\U0001F983", turkey, turkey_width, turkey_height},             // 🦃 Turkey
     {"\U0001F357", turkey_leg, turkey_leg_width, turkey_leg_height}, // 🍗 Poultry Leg
