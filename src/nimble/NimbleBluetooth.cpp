@@ -45,6 +45,7 @@ constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
 #define NIMBLE_BLUETOOTH_FROM_PHONE_QUEUE_SIZE 3
 
 NimBLECharacteristic *fromNumCharacteristic;
+NimBLECharacteristic *fromRadioSyncCharacteristic;
 NimBLECharacteristic *BatteryCharacteristic;
 NimBLECharacteristic *logRadioCharacteristic;
 NimBLEServer *bleServer;
@@ -306,12 +307,42 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         }
     }
 
+#endif
+    }
+
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
     virtual void onNowHasData(uint32_t fromRadioNum)
     {
         PhoneAPI::onNowHasData(fromRadioNum);
+
+        // Check if FromRadioSync is subscribed (indications enabled)
+        // If so, we push the data directly via indication and consume it from the queue
+        if (fromRadioSyncCharacteristic->getSubscribedCount() > 0) {
+            uint8_t fromRadioBytes[meshtastic_FromRadio_size];
+            // Loop until queue is empty or we fail to send
+            while (true) {
+                // Peek at the request to see if we have data, but we need to dequeue to send.
+                // getFromRadio dequeues.
+                size_t numBytes = getFromRadio(fromRadioBytes);
+                if (numBytes == 0) {
+                    break;
+                }
+
+                fromRadioSyncCharacteristic->setValue(fromRadioBytes, numBytes);
+#ifdef NIMBLE_TWO
+                fromRadioSyncCharacteristic->indicate(fromRadioBytes, numBytes, BLE_HS_CONN_HANDLE_NONE);
+#else
+                fromRadioSyncCharacteristic->indicate();
+#endif
+            }
+            // If we sent via Sync, we don't notify legacy FromNum to avoid double-processing or confusion,
+            // as the queue is now empty/drained.
+            // However, if there are multiple listeners (legacy vs sync), legacy will starve.
+            // This is acceptable for "co-exist" where a client chooses one method.
+            return;
+        }
 
 #ifdef DEBUG_NIMBLE_NOTIFY
 
@@ -871,6 +902,7 @@ void NimbleBluetooth::setupService()
         // Allow notifications so phones can stream FromRadio without polling.
         FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
         fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
+        fromRadioSyncCharacteristic = bleService->createCharacteristic(FROMRADIOSYNC_UUID, NIMBLE_PROPERTY::INDICATE | NIMBLE_PROPERTY::READ);
         logRadioCharacteristic =
             bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 512U);
     } else {
@@ -880,6 +912,9 @@ void NimbleBluetooth::setupService()
             FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
         fromNumCharacteristic =
             bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
+                                                               NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        fromRadioSyncCharacteristic =
+            bleService->createCharacteristic(FROMRADIOSYNC_UUID, NIMBLE_PROPERTY::INDICATE | NIMBLE_PROPERTY::READ |
                                                                NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
         logRadioCharacteristic = bleService->createCharacteristic(
             LOGRADIO_UUID,
