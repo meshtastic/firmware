@@ -1,24 +1,29 @@
 #pragma once
 
+#include <utility>
+#include <functional>
+
 #include "concurrency/OSThread.h"
 
 namespace concurrency
 {
 
 /**
- * @brief Periodically invoke a callback. This just provides C-style callback conventions
- *        rather than a virtual function - FIXME, remove?
+ * @brief Periodically invoke a callback.
+ *        Supports both legacy function pointers and modern callables.
  */
 class Periodic : public OSThread
 {
-    int32_t (*callback)();
-
   public:
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
-    Periodic(const char *name, int32_t (*_callback)()) : OSThread(name), callback(_callback) {}
+    Periodic(const char *name, int32_t (*cb)()) : OSThread(name), callback(cb) {}
+    Periodic(const char *name, std::function<int32_t()> cb) : OSThread(name), callback(std::move(cb)) {}
 
   protected:
-    int32_t runOnce() override { return callback(); }
+    int32_t runOnce() override { return callback ? callback() : 0; }
+
+  private:
+    std::function<int32_t()> callback;
 };
 
 } // namespace concurrency
