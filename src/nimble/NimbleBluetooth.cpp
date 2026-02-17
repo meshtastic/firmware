@@ -316,18 +316,11 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         PhoneAPI::onNowHasData(fromRadioNum);
 
         // Check if FromRadioSync is subscribed (indications enabled)
-        // If so, we push the data directly via indication and consume it from the queue
+        // If so, we push a single packet via indication to keep overhead low.
         if (fromRadioSyncCharacteristic->getSubscribedCount() > 0) {
             uint8_t fromRadioBytes[meshtastic_FromRadio_size];
-            // Loop until queue is empty or we fail to send
-            while (true) {
-                // Peek at the request to see if we have data, but we need to dequeue to send.
-                // getFromRadio dequeues.
-                size_t numBytes = getFromRadio(fromRadioBytes);
-                if (numBytes == 0) {
-                    break;
-                }
-
+            size_t numBytes = getFromRadio(fromRadioBytes);
+            if (numBytes > 0) {
                 fromRadioSyncCharacteristic->setValue(fromRadioBytes, numBytes);
 #ifdef NIMBLE_TWO
                 fromRadioSyncCharacteristic->indicate(fromRadioBytes, numBytes, BLE_HS_CONN_HANDLE_NONE);
@@ -335,10 +328,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
                 fromRadioSyncCharacteristic->indicate();
 #endif
             }
-            // If we sent via Sync, we don't notify legacy FromNum to avoid double-processing or confusion,
-            // as the queue is now empty/drained.
-            // However, if there are multiple listeners (legacy vs sync), legacy will starve.
-            // This is acceptable for "co-exist" where a client chooses one method.
+            // If we sent via Sync, we don't notify legacy FromNum to avoid double-processing or confusion.
             return;
         }
 

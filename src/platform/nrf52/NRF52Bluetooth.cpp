@@ -44,11 +44,9 @@ class BluetoothPhoneAPI : public PhoneAPI
         PhoneAPI::onNowHasData(fromRadioNum);
 
         if (fromRadioSync.indicateEnabled()) {
-            while (true) {
-                size_t len = getFromRadio(fromRadioBytes);
-                if (len == 0) break;
-
-                if (!fromRadioSync.indicate(fromRadioBytes, len)) break;
+            size_t len = getFromRadio(fromRadioBytes);
+            if (len > 0) {
+                fromRadioSync.indicate(fromRadioBytes, len);
             }
             return;
         }
