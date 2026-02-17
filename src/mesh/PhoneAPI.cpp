@@ -50,24 +50,31 @@ void PhoneAPI::handleStartConfig()
 {
     // Must be before setting state (because state is how we know !connected)
     if (!isConnected()) {
+        const char *apiTypeName = "UNKNOWN";
         MeshService::APIState clientState = MeshService::STATE_DISCONNECTED;
         switch (api_type) {
         case TYPE_BLE:
+            apiTypeName = "BLE";
             clientState = MeshService::STATE_BLE;
             break;
         case TYPE_WIFI:
+            apiTypeName = "WiFi";
             clientState = MeshService::STATE_WIFI;
             break;
         case TYPE_SERIAL:
+            apiTypeName = "Serial";
             clientState = MeshService::STATE_SERIAL;
             break;
         case TYPE_PACKET:
+            apiTypeName = "Internal";
             clientState = MeshService::STATE_PACKET;
             break;
         case TYPE_HTTP:
+            apiTypeName = "HTTP";
             clientState = MeshService::STATE_HTTP;
             break;
         case TYPE_ETH:
+            apiTypeName = "Ethernet";
             clientState = MeshService::STATE_ETH;
             break;
         default:
@@ -75,7 +82,8 @@ void PhoneAPI::handleStartConfig()
         }
 
         if (!service->registerPhoneClient(this, clientState)) {
-            LOG_ERROR("Failed to register phone client for fanout");
+            LOG_ERROR("Failed to register phone client for fanout (api_type=%s), aborting config start", apiTypeName);
+            return;
         }
         onConnectionChanged(true);
         observe(&service->fromNumChanged);

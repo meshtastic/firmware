@@ -10,7 +10,11 @@
 #include "MeshTypes.h"
 #include "Observer.h"
 #include "concurrency/Lock.h"
+#if defined(ARCH_PORTDUINO)
+#include "PointerQueue.h"
+#else
 #include "StaticPointerQueue.h"
+#endif
 #include "mesh-pb-constants.h"
 #if defined(ARCH_PORTDUINO)
 #include "../platform/portduino/SimRadio.h"
@@ -28,7 +32,7 @@ extern Allocator<meshtastic_ClientNotification> &clientNotificationPool;
 class PhoneAPI;
 
 #ifndef MAX_PHONE_API_CLIENTS
-#define MAX_PHONE_API_CLIENTS 8
+#define MAX_PHONE_API_CLIENTS 3
 #endif
 
 /**
@@ -84,22 +88,48 @@ class MeshService
         APIState state = STATE_DISCONNECTED;
         bool active = false;
 
+#if defined(ARCH_PORTDUINO)
+        PointerQueue<PacketFanoutEntry> packetQueue;
+        PointerQueue<QueueStatusFanoutEntry> queueStatusQueue;
+        PointerQueue<MqttProxyFanoutEntry> mqttProxyQueue;
+        PointerQueue<ClientNotificationFanoutEntry> clientNotificationQueue;
+#else
         StaticPointerQueue<PacketFanoutEntry, MAX_RX_TOPHONE> packetQueue;
         StaticPointerQueue<QueueStatusFanoutEntry, MAX_RX_QUEUESTATUS_TOPHONE> queueStatusQueue;
         StaticPointerQueue<MqttProxyFanoutEntry, MAX_RX_MQTTPROXY_TOPHONE> mqttProxyQueue;
         StaticPointerQueue<ClientNotificationFanoutEntry, MAX_RX_NOTIFICATION_TOPHONE> clientNotificationQueue;
+#endif
 
         PacketFanoutEntry *packetInflight = nullptr;
         QueueStatusFanoutEntry *queueStatusInflight = nullptr;
         MqttProxyFanoutEntry *mqttProxyInflight = nullptr;
         ClientNotificationFanoutEntry *clientNotificationInflight = nullptr;
+
+#if defined(ARCH_PORTDUINO)
+        PhoneClientSlot()
+            : packetQueue(MAX_RX_TOPHONE), queueStatusQueue(MAX_RX_QUEUESTATUS_TOPHONE),
+              mqttProxyQueue(MAX_RX_MQTTPROXY_TOPHONE), clientNotificationQueue(MAX_RX_NOTIFICATION_TOPHONE)
+        {
+        }
+#endif
     };
 
-    MemoryPool<PacketFanoutEntry, MAX_PHONE_API_CLIENTS * MAX_RX_TOPHONE> packetFanoutPool;
-    MemoryPool<QueueStatusFanoutEntry, MAX_PHONE_API_CLIENTS * MAX_RX_QUEUESTATUS_TOPHONE> queueStatusFanoutPool;
-    MemoryPool<MqttProxyFanoutEntry, MAX_PHONE_API_CLIENTS * MAX_RX_MQTTPROXY_TOPHONE> mqttProxyFanoutPool;
-    MemoryPool<ClientNotificationFanoutEntry, MAX_PHONE_API_CLIENTS * MAX_RX_NOTIFICATION_TOPHONE>
-        clientNotificationFanoutPool;
+#if defined(ARCH_PORTDUINO)
+    MemoryDynamic<PacketFanoutEntry> packetFanoutPool;
+    MemoryDynamic<QueueStatusFanoutEntry> queueStatusFanoutPool;
+    MemoryDynamic<MqttProxyFanoutEntry> mqttProxyFanoutPool;
+    MemoryDynamic<ClientNotificationFanoutEntry> clientNotificationFanoutPool;
+#else
+    static constexpr int kPacketFanoutPoolSize = MAX_PHONE_API_CLIENTS * (MAX_RX_TOPHONE + 1);
+    static constexpr int kQueueStatusFanoutPoolSize = MAX_PHONE_API_CLIENTS * (MAX_RX_QUEUESTATUS_TOPHONE + 1);
+    static constexpr int kMqttFanoutPoolSize = MAX_PHONE_API_CLIENTS * (MAX_RX_MQTTPROXY_TOPHONE + 1);
+    static constexpr int kNotificationFanoutPoolSize = MAX_PHONE_API_CLIENTS * (MAX_RX_NOTIFICATION_TOPHONE + 1);
+
+    MemoryPool<PacketFanoutEntry, kPacketFanoutPoolSize> packetFanoutPool;
+    MemoryPool<QueueStatusFanoutEntry, kQueueStatusFanoutPoolSize> queueStatusFanoutPool;
+    MemoryPool<MqttProxyFanoutEntry, kMqttFanoutPoolSize> mqttProxyFanoutPool;
+    MemoryPool<ClientNotificationFanoutEntry, kNotificationFanoutPoolSize> clientNotificationFanoutPool;
+#endif
 
     PhoneClientSlot phoneClients[MAX_PHONE_API_CLIENTS];
 

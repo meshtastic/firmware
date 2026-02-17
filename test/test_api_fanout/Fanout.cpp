@@ -155,6 +155,81 @@ void test_api_state_mask_refcount_for_same_state_clients(void)
     TEST_ASSERT_EQUAL(MeshService::STATE_DISCONNECTED, meshService.api_state);
 }
 
+void test_fanout_pool_capacity_accounts_for_inflight_all_clients(void)
+{
+    MeshService meshService;
+    DummyClientToken tokens[MAX_PHONE_API_CLIENTS];
+    PhoneAPI *clients[MAX_PHONE_API_CLIENTS] = {};
+    meshtastic_MeshPacket *heldInflight[MAX_PHONE_API_CLIENTS] = {};
+
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        clients[i] = asClient(tokens[i]);
+        TEST_ASSERT_TRUE(meshService.registerPhoneClient(clients[i], MeshService::STATE_SERIAL));
+    }
+
+    for (uint32_t i = 1; i <= MAX_RX_TOPHONE; i++) {
+        meshService.sendToPhone(allocDecodedPacket(4000 + i, 0x4000 + i));
+    }
+
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        heldInflight[i] = meshService.getForPhone(clients[i]);
+        TEST_ASSERT_NOT_NULL(heldInflight[i]);
+    }
+
+    const uint32_t extraPacketId = 4999;
+    meshService.sendToPhone(allocDecodedPacket(extraPacketId, 0x4999));
+
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        meshService.releaseToPoolForPhone(clients[i], heldInflight[i]);
+        heldInflight[i] = nullptr;
+
+        bool sawExtraPacket = false;
+        for (int q = 0; q < MAX_RX_TOPHONE; q++) {
+            meshtastic_MeshPacket *p = meshService.getForPhone(clients[i]);
+            TEST_ASSERT_NOT_NULL(p);
+            if (p->id == extraPacketId) {
+                sawExtraPacket = true;
+            }
+            meshService.releaseToPoolForPhone(clients[i], p);
+            if (sawExtraPacket)
+                break;
+        }
+        TEST_ASSERT_TRUE(sawExtraPacket);
+    }
+}
+
+void test_register_overflow_does_not_change_state_mask_or_existing_delivery(void)
+{
+    MeshService meshService;
+    DummyClientToken tokens[MAX_PHONE_API_CLIENTS];
+    PhoneAPI *clients[MAX_PHONE_API_CLIENTS] = {};
+
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        clients[i] = asClient(tokens[i]);
+        MeshService::APIState state = (i % 2 == 0) ? MeshService::STATE_SERIAL : MeshService::STATE_WIFI;
+        TEST_ASSERT_TRUE(meshService.registerPhoneClient(clients[i], state));
+    }
+
+    uint32_t expectedMask = MeshService::apiStateBit(MeshService::STATE_SERIAL) | MeshService::apiStateBit(MeshService::STATE_WIFI);
+    TEST_ASSERT_EQUAL_UINT32(expectedMask, meshService.api_state_mask);
+
+    DummyClientToken overflowToken;
+    PhoneAPI *overflowClient = asClient(overflowToken);
+    TEST_ASSERT_FALSE(meshService.registerPhoneClient(overflowClient, MeshService::STATE_BLE));
+    TEST_ASSERT_EQUAL_UINT32(expectedMask, meshService.api_state_mask);
+
+    meshService.sendToPhone(allocDecodedPacket(5001, 0x5001));
+
+    for (int i = 0; i < MAX_PHONE_API_CLIENTS; i++) {
+        meshtastic_MeshPacket *p = meshService.getForPhone(clients[i]);
+        TEST_ASSERT_NOT_NULL(p);
+        TEST_ASSERT_EQUAL_UINT32(5001, p->id);
+        meshService.releaseToPoolForPhone(clients[i], p);
+    }
+
+    TEST_ASSERT_NULL(meshService.getForPhone(overflowClient));
+}
+
 } // namespace
 
 void setUp(void) {}
@@ -170,6 +245,8 @@ void setup()
     RUN_TEST(test_disconnect_cleans_pending_and_inflight_without_breaking_other_clients);
     RUN_TEST(test_no_active_clients_does_not_buffer_packets);
     RUN_TEST(test_api_state_mask_refcount_for_same_state_clients);
+    RUN_TEST(test_fanout_pool_capacity_accounts_for_inflight_all_clients);
+    RUN_TEST(test_register_overflow_does_not_change_state_mask_or_existing_delivery);
     exit(UNITY_END());
 }
 
