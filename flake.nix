@@ -11,46 +11,29 @@
     };
   };
 
-  outputs =
-    inputs:
+  outputs = { nixpkgs, ... }:
     let
-      lib = inputs.nixpkgs.lib;
-
-      forAllSystems =
+      forAllSystems = with nixpkgs.lib;
         fn:
-        lib.genAttrs lib.systems.flakeExposed (
-          system:
+        genAttrs systems.flakeExposed (system:
           fn {
-            pkgs = import inputs.nixpkgs {
-              inherit system;
-            };
+            pkgs = import nixpkgs { inherit system; };
             inherit system;
-          }
-        );
-    in
-    {
-      devShells = forAllSystems (
-        { pkgs, ... }:
+          });
+    in {
+      devShells = forAllSystems ({ pkgs, ... }:
         let
           # these are the python deps we need to build,
           # instead of pio installing them later
           # we provide them deterministically here, skipping the install later
-          pioPyDeps = ps: with ps; [
-            protobuf
-            grpcio-tools
-            intelhex
-          ];
+          pioPyDeps = ps: with ps; [ protobuf grpcio-tools intelhex ];
           platformio = pkgs.platformio;
           # Keep PlatformIO and shell Python aligned by deriving both from
           # PlatformIO's own pinned interpreter version
           python3 = platformio.python.withPackages pioPyDeps;
-        in
-        {
+        in {
           default = pkgs.mkShell {
-            buildInputs = [
-              python3
-              platformio
-            ];
+            buildInputs = [ python3 platformio ];
 
             shellHook = ''
               # Set up PlatformIO to use a local core directory.
@@ -72,7 +55,6 @@
               unset SOURCE_DATE_EPOCH
             '';
           };
-        }
-      );
+        });
     };
 }
