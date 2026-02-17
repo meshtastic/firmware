@@ -7,13 +7,13 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
+#include "RadioLibInterface.h"
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "power/PowerHAL.h"
 
 #include "FSCommon.h"
-#include "Led.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
@@ -29,7 +29,6 @@
 #include <Wire.h>
 #endif
 #include "detect/einkScan.h"
-#include "graphics/RAKled.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
@@ -193,6 +192,8 @@ bool kb_found = false;
 // global bool to record that on-screen keyboard (OSK) is present
 bool osk_found = false;
 
+unsigned long last_listen = 0;
+
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the Accelerometer (if found)
@@ -242,33 +243,13 @@ const char *getDeviceName()
     return name;
 }
 
-// TODO remove from main.cpp
-static int32_t ledBlinker()
-{
-    // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
-    // config.device.led_heartbeat_disabled is changed
-    if (config.device.led_heartbeat_disabled)
-        return 1000;
-
-    static bool ledOn;
-    ledOn ^= 1;
-
-    ledBlink.set(ledOn);
-
-    // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
-}
-
 uint32_t timeLastPowered = 0;
 
-static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
-static OSThread *ambientLightingThread;
+OSThread *ambientLightingThread;
 
 RadioInterface *rIf = NULL;
-#ifdef ARCH_PORTDUINO
 RadioLibHal *RadioLibHAL = NULL;
-#endif
 
 /**
  * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
@@ -299,21 +280,16 @@ void earlyInitVariant() {}
 // blink user led in 3 flashes sequence to indicate what is happening
 void waitUntilPowerLevelSafe()
 {
-
-#ifdef LED_PIN
-    pinMode(LED_PIN, OUTPUT);
-#endif
-
     while (powerHAL_isPowerLevelSafe() == false) {
 
-#ifdef LED_PIN
+#ifdef LED_POWER
 
         // 3x: blink for 300 ms, pause for 300 ms
 
         for (int i = 0; i < 3; i++) {
-            digitalWrite(LED_PIN, LED_STATE_ON);
+            digitalWrite(LED_POWER, LED_STATE_ON);
             delay(300);
-            digitalWrite(LED_PIN, LED_STATE_OFF);
+            digitalWrite(LED_POWER, LED_STATE_OFF);
             delay(300);
         }
 #endif
@@ -337,6 +313,11 @@ void setup()
     // initialize power HAL layer as early as possible
     powerHAL_init();
 
+#ifdef LED_POWER
+    pinMode(LED_POWER, OUTPUT);
+    digitalWrite(LED_POWER, LED_STATE_ON);
+#endif
+
     // prevent booting if device is in power failure mode
     // boot sequence will follow when battery level raises to safe mode
     waitUntilPowerLevelSafe();
@@ -347,11 +328,6 @@ void setup()
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
-#endif
-
-#ifdef LED_POWER
-    pinMode(LED_POWER, OUTPUT);
-    digitalWrite(LED_POWER, LED_STATE_ON);
 #endif
 
 #ifdef LED_NOTIFICATION
@@ -366,11 +342,7 @@ void setup()
 
 #ifdef BLE_LED
     pinMode(BLE_LED, OUTPUT);
-#ifdef BLE_LED_INVERTED
-    digitalWrite(BLE_LED, HIGH);
-#else
-    digitalWrite(BLE_LED, LOW);
-#endif
+    digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
 
     concurrency::hasBeenSetup = true;
@@ -488,14 +460,6 @@ void setup()
     initSPI();
 
     OSThread::setup();
-
-    // TODO make this ifdef based on defined pins and move from main.cpp
-#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
-    // The ThinkNodes have their own blink logic
-    // ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
-#else
-    ledPeriodic = new Periodic("Blink", ledBlinker);
-#endif
 
     fsInit();
 
@@ -715,18 +679,10 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
 #endif
 
 #ifdef HAS_SDCARD
     setupSDCard();
-#endif
-
-    // LED init
-
-#ifdef LED_PIN
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, LED_STATE_ON); // turn on for now
 #endif
 
     // Hello
@@ -767,17 +723,15 @@ void setup()
         playStartMelody();
 
 #if HAS_SCREEN
-    // fixed screen override?
-    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
-        screen_model = config.display.oled;
-
+        // fixed screen override?
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
     screen_geometry = GEOMETRY_128_128;
-#endif
-
-#if defined(USE_SH1107_128_64)
+#elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+#else
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
+        screen_model = config.display.oled;
 #endif
 #endif
 
@@ -838,7 +792,7 @@ void setup()
     SPI.begin();
 #endif
 #else
-// ESP32
+        // ESP32
 #if defined(HW_SPI1_DEVICE)
     SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
@@ -971,12 +925,6 @@ void setup()
     setupNicheGraphics();
 #endif
 
-#ifdef LED_PIN
-    // Turn LED off after boot, if heartbeat by config
-    if (config.device.led_heartbeat_disabled)
-        digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
-#endif
-
 // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
     if (!pmu_found)
@@ -1002,7 +950,7 @@ void setup()
 #endif
 #endif
 
-    initLoRa();
+    auto rIf = initLoRa();
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 
@@ -1051,12 +999,12 @@ void setup()
     if (!rIf)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
     else {
-        router->addInterface(rIf);
-
         // Log bit rate to debug output
         LOG_DEBUG("LoRA bitrate = %f bytes / sec", (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
                                                     (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
                                                        1000);
+
+        router->addInterface(std::move(rIf));
     }
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
@@ -1173,6 +1121,12 @@ void loop()
 #endif
     power->powerCommandsCheck();
 
+    if (RadioLibInterface::instance != nullptr && !Throttle::isWithinTimespanMs(last_listen, 1000 * 60) &&
+        !(RadioLibInterface::instance->isSending() || RadioLibInterface::instance->isActivelyReceiving())) {
+        RadioLibInterface::instance->startReceive();
+        LOG_DEBUG("attempting AGC reset");
+    }
+
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
     if (!Throttle::isWithinTimespanMs(lastPrint, 10 * 1000L)) {
@@ -1192,10 +1146,7 @@ void loop()
     }
     if (portduino_status.LoRa_in_error && rebootAtMsec == 0) {
         LOG_ERROR("LoRa in error detected, attempting to recover");
-        if (rIf != nullptr) {
-            delete rIf;
-            rIf = nullptr;
-        }
+        router->addInterface(nullptr);
         if (portduino_config.lora_spi_dev == "ch341") {
             if (ch341Hal != nullptr) {
                 delete ch341Hal;
@@ -1211,8 +1162,9 @@ void loop()
                 exit(EXIT_FAILURE);
             }
         }
-        if (initLoRa()) {
-            router->addInterface(rIf);
+        auto rIf = initLoRa();
+        if (rIf) {
+            router->addInterface(std::move(rIf));
             portduino_status.LoRa_in_error = false;
         } else {
             LOG_WARN("Reconfigure failed, rebooting");
