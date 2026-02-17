@@ -58,14 +58,51 @@ const Emote emotes[] = {
     // --- Weather ---
     {"\u2600", sun, sun_width, sun_height},                                   // ☀ Sun (without variation selector)
     {"\u2600\uFE0F", sun, sun_width, sun_height},                             // ☀️ Sun (with variation selector)
+    {"\U0001F31E", sun, sun_width, sun_height},                               // 🌞 Sun with Face
+    {"\U0001F304", sun, sun_width, sun_height},                               // 🌄 Sunrise Over Mountains
+    {"\U0001F305", sun, sun_width, sun_height},                               // 🌅 Sunrise
+    {"\U0001F306", sun, sun_width, sun_height},                               // 🌆 Cityscape at Dusk
+    {"\U0001F307", sun, sun_width, sun_height},                               // 🌇 Sunset
+    {"\U0001F324", sun_behind_cloud, sun_behind_cloud_width, sun_behind_cloud_height},      // 🌤 Sun Behind Small Cloud
+    {"\U0001F324\uFE0F", sun_behind_cloud, sun_behind_cloud_width, sun_behind_cloud_height}, // 🌤️ Sun Behind Small Cloud
+    {"\U0001F326", sun_behind_raincloud, sun_behind_raincloud_width,
+     sun_behind_raincloud_height},                                                        // 🌦 Sun Behind Rain Cloud
     {"\U0001F327\uFE0F", rain, rain_width, rain_height},                      // 🌧️ Cloud with Rain
+    {"\U0001F327", rain, rain_width, rain_height},                            // 🌧 Cloud with Rain
+    {"\u2614", rain, rain_width, rain_height},                                // ☔ Umbrella With Rain Drops
+    {"\u2614\uFE0F", rain, rain_width, rain_height},                          // ☔️ Umbrella With Rain Drops
+    {"\u2602", rain, rain_width, rain_height},                                // ☂ Umbrella
+    {"\u2602\uFE0F", rain, rain_width, rain_height},                          // ☂️ Umbrella
+    {"\u2601", cloud, cloud_width, cloud_height},                             // ☁ Cloud
     {"\u2601\uFE0F", cloud, cloud_width, cloud_height},                       // ☁️ Cloud
+    {"\U0001F32B", fog, fog_width, fog_height},                               // 🌫 Fog
     {"\U0001F32B\uFE0F", fog, fog_width, fog_height},                         // 🌫️ Fog
+    {"\U0001F300", wind_face, wind_face_width, wind_face_height},             // 🌀 Cyclone
+    {"\U0001F4A8", wind_face, wind_face_width, wind_face_height},             // 💨 Dash Symbol
+    {"\U0001F32A", wind_face, wind_face_width, wind_face_height},             // 🌪 Tornado
+    {"\U0001F32A\uFE0F", wind_face, wind_face_width, wind_face_height},       // 🌪️ Tornado
+    {"\U0001F32C", wind_face, wind_face_width, wind_face_height},             // 🌬 Wind Face
+    {"\u2744", snowflake, snowflake_width, snowflake_height},                 // ❄ Snowflake
     {"\u2744\uFE0F", snowflake, snowflake_width, snowflake_height},           // ❄️ Snowflake
+    {"\U0001F9CA", snowflake, snowflake_width, snowflake_height},             // 🧊 Ice
+    {"\u2603", cloud_with_snow, cloud_with_snow_width, cloud_with_snow_height},   // ☃ Snowman
+    {"\u26C4", cloud_with_snow, cloud_with_snow_width, cloud_with_snow_height},   // ⛄ Snowman Without Snow
+    {"\U0001F328", cloud_with_snow, cloud_with_snow_width, cloud_with_snow_height}, // 🌨 Cloud with Snow
+    {"\u26A1", cloud_with_lightning, cloud_with_lightning_width, cloud_with_lightning_height},        // ⚡ High Voltage
+    {"\u26A1\uFE0F", cloud_with_lightning, cloud_with_lightning_width, cloud_with_lightning_height},  // ⚡️ High Voltage
     {"\U0001F4A7", drop, drop_width, drop_height},                            // 💧 Droplet
+    {"\U0001F4A6", drop, drop_width, drop_height},                            // 💦 Sweat Droplets
+    {"\U0001F30A", drop, drop_width, drop_height},                            // 🌊 Water Wave
     {"\U0001F321\uFE0F", thermometer, thermometer_width, thermometer_height}, // 🌡️ Thermometer
+    {"\U0001F321", thermometer, thermometer_width, thermometer_height},       // 🌡 Thermometer
+    {"\U0001F975", thermometer, thermometer_width, thermometer_height},       // 🥵 Hot Face
+    {"\U0001F976", snowflake, snowflake_width, snowflake_height},             // 🥶 Cold Face
     {"\U0001F326\uFE0F", sun_behind_raincloud, sun_behind_raincloud_width,
      sun_behind_raincloud_height},                                                        // 🌦️ Sun Behind Rain Cloud
+    {"\U0001F308", sun_behind_raincloud, sun_behind_raincloud_width, sun_behind_raincloud_height}, // 🌈 Rainbow
+    {"\U0001F325", sun_behind_cloud, sun_behind_cloud_width, sun_behind_cloud_height},  // 🌥 Sun Behind Large Cloud
+    {"\U0001F325\uFE0F", sun_behind_cloud, sun_behind_cloud_width,
+     sun_behind_cloud_height},                                                          // 🌥️ Sun Behind Large Cloud
     {"\u26C5", sun_behind_cloud, sun_behind_cloud_width, sun_behind_cloud_height},        // ⛅ Sun Behind Cloud
     {"\u26C5\uFE0F", sun_behind_cloud, sun_behind_cloud_width, sun_behind_cloud_height},  // ⛅️ Sun Behind Cloud
     {"\U0001F328\uFE0F", cloud_with_snow, cloud_with_snow_width, cloud_with_snow_height}, // 🌨️ Cloud with Snow
@@ -76,18 +113,27 @@ const Emote emotes[] = {
     {"\u26C8\uFE0F", cloud_with_lightning_rain, cloud_with_lightning_rain_width,
      cloud_with_lightning_rain_height},                                 // ⛈️ Cloud with Lightning and Rain
     {"\U0001F32C\uFE0F", wind_face, wind_face_width, wind_face_height}, // 🌬️ Wind Face
+    {"\u2604", fire, fire_width, fire_height},                          // ☄ Comet
+    {"\u2604\uFE0F", fire, fire_width, fire_height},                    // ☄️ Comet
+    {"\U0001F320", sparkles, sparkles_width, sparkles_height},          // 🌠 Shooting Star
+    {"\U0001F30C", sparkles, sparkles_width, sparkles_height},          // 🌌 Milky Way
 
     // --- Moon Phases ---
     {"\U0001F311", new_moon, new_moon_width, new_moon_height},                                     // 🌑 New Moon
+    {"\U0001F31A", new_moon, new_moon_width, new_moon_height},                                     // 🌚 New Moon Face
     {"\U0001F312", waxing_crescent_moon, waxing_crescent_moon_width, waxing_crescent_moon_height}, // 🌒 Waxing Crescent Moon
+    {"\U0001F319", waxing_crescent_moon, waxing_crescent_moon_width, waxing_crescent_moon_height}, // 🌙 Crescent Moon
     {"\U0001F313", first_quarter_moon, first_quarter_moon_width, first_quarter_moon_height},       // 🌓 First Quarter Moon
     {"\U0001F314", waxing_gibbous_moon, waxing_gibbous_moon_width, waxing_gibbous_moon_height},    // 🌔 Waxing Gibbous Moon
     {"\U0001F315", full_moon, full_moon_width, full_moon_height},                                  // 🌕 Full Moon
+    {"\U0001F31D", full_moon, full_moon_width, full_moon_height},                                  // 🌝 Full Moon Face
     {"\U0001F316", waning_gibbous_moon, waning_gibbous_moon_width, waning_gibbous_moon_height},    // 🌖 Waning Gibbous Moon
     {"\U0001F317", last_quarter_moon, last_quarter_moon_width, last_quarter_moon_height},          // 🌗 Last Quarter Moon
     {"\U0001F318", waning_crescent_moon, waning_crescent_moon_width, waning_crescent_moon_height}, // 🌘 Waning Crescent Moon
     {"\U0001F31B", first_quarter_moon_face, first_quarter_moon_face_width,
      first_quarter_moon_face_height}, // 🌛 First Quarter Moon Face
+    {"\U0001F31C", first_quarter_moon_face, first_quarter_moon_face_width,
+     first_quarter_moon_face_height}, // 🌜 Last Quarter Moon Face
 
     // --- Misc Faces ---
     {"\U0001F608", devil, devil_width, devil_height}, // 😈 Smiling Face with Horns
@@ -112,6 +158,7 @@ const Emote emotes[] = {
     {"\U0001F4CB", clipboard, clipboard_width, clipboard_height},    // 📋 Clipboard
     {"\U0001F36A", cookie, cookie_width, cookie_height},             // 🍪 Cookie
     {"\U0001F370", shortcake, shortcake_width, shortcake_height},    // 🍰 Shortcake
+    {"\U0001F3CB\uFE0F", strong, strong_width, strong_height},       // 🏋️ Person Lifting Weights
     {"\U0001F351", peach, peach_width, peach_height},                // 🍑 Peach
     {"\U0001F983", turkey, turkey_width, turkey_height},             // 🦃 Turkey
     {"\U0001F357", turkey_leg, turkey_leg_width, turkey_leg_height}, // 🍗 Poultry Leg
