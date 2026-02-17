@@ -55,7 +55,7 @@ extern "C" {
 /*
  * Buttons
  */
-#define PIN_BUTTON1 (31)
+#define PIN_BUTTON1 (9)
 #define BUTTON_NEED_PULLUP
 
 /*
