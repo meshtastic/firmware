@@ -49,6 +49,8 @@ using namespace STM32_LittleFS_Namespace;
 #define DISK_LABEL "EXT FLASH"
 #if defined(EXTERNAL_FLASH_USE_QSPI)
 extern Adafruit_FlashTransport_QSPI flashTransport;
+#elif defined(EXTERNAL_FLASH_USE_SPI)
+extern Adafruit_FlashTransport_SPI flashTransport;
 #endif
 extern Adafruit_SPIFlash flash;
 extern ExternalLittleFS externalFS;

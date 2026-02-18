@@ -14,7 +14,11 @@
 #include <memory>
 #ifdef USE_EXTERNAL_FLASH
 #if defined(EXTERNAL_FLASH_USE_QSPI)
-Adafruit_FlashTransport_QSPI flashTransport(PIN_QSPI_SCK, PIN_QSPI_CS, PIN_QSPI_IO0, PIN_QSPI_IO1, PIN_QSPI_IO2, PIN_QSPI_IO3);
+Adafruit_FlashTransport_QSPI flashTransport;
+#elif defined(EXTERNAL_FLASH_USE_SPI)
+Adafruit_FlashTransport_SPI flashTransport(EXTERNAL_FLASH_USE_CS, EXTERNAL_FLASH_USE_SPI);
+#else
+#error "USE_EXTERNAL_FLASH is enabled, but neither EXTERNAL_FLASH_USE_QSPI nor EXTERNAL_FLASH_USE_SPI is defined"
 #endif
 Adafruit_SPIFlash flash(&flashTransport);
 bool flashInitialized = false;
