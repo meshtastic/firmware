@@ -5,6 +5,11 @@
 
 #if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
 #include <SPI.h>
+#include "Screen.h"
+#endif
+
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+extern uint16_t TFT_MESH;
 #endif
 
 namespace graphics
@@ -26,14 +31,16 @@ struct WeatherOverlay {
 static constexpr uint8_t MAX_WEATHER_OVERLAYS = 40;
 static WeatherOverlay g_overlays[MAX_WEATHER_OVERLAYS];
 static uint8_t g_overlayCount = 0;
+static WeatherOverlay g_prevOverlays[MAX_WEATHER_OVERLAYS];
+static uint8_t g_prevOverlayCount = 0;
 static int16_t g_clipLeft = 0;
 static int16_t g_clipTop = 0;
 static int16_t g_clipRight = TFT_WIDTH - 1;
 static int16_t g_clipBottom = TFT_HEIGHT - 1;
 
-static constexpr uint8_t ST77XX_CASET = 0x2A;
-static constexpr uint8_t ST77XX_RASET = 0x2B;
-static constexpr uint8_t ST77XX_RAMWR = 0x2C;
+static constexpr uint8_t OVERLAY_CMD_CASET = 0x2A;
+static constexpr uint8_t OVERLAY_CMD_RASET = 0x2B;
+static constexpr uint8_t OVERLAY_CMD_RAMWR = 0x2C;
 
 // Keep this aligned with ST7789Spi default.
 static ::SPISettings g_overlaySpiSettings(40000000, MSBFIRST, SPI_MODE0);
@@ -68,15 +75,55 @@ static inline void stSetAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t 
     const uint16_t x2 = static_cast<uint16_t>(x + w - 1);
     const uint16_t y2 = static_cast<uint16_t>(y + h - 1);
 
-    stWriteCommand(ST77XX_CASET);
+    stWriteCommand(OVERLAY_CMD_CASET);
     stWriteData16(x);
     stWriteData16(x2);
 
-    stWriteCommand(ST77XX_RASET);
+    stWriteCommand(OVERLAY_CMD_RASET);
     stWriteData16(y);
     stWriteData16(y2);
 
-    stWriteCommand(ST77XX_RAMWR);
+    stWriteCommand(OVERLAY_CMD_RAMWR);
+}
+
+static inline bool framebufferBitSet(int16_t x, int16_t y)
+{
+    if (screen == nullptr) {
+        return false;
+    }
+    OLEDDisplay *display = screen->getDisplayDevice();
+    if (display == nullptr) {
+        return false;
+    }
+    if (x < 0 || y < 0 || x >= static_cast<int16_t>(display->getWidth()) || y >= static_cast<int16_t>(display->getHeight())) {
+        return false;
+    }
+
+    const uint32_t yByteIndex = (static_cast<uint32_t>(y) / 8) * display->getWidth();
+    const uint8_t yByteMask = static_cast<uint8_t>(1u << (y & 7));
+    return (display->buffer[static_cast<uint32_t>(x) + yByteIndex] & yByteMask) != 0;
+}
+
+static inline void drawRun(int16_t x1, int16_t x2, int16_t y, uint16_t color565)
+{
+    if (x2 < x1) {
+        return;
+    }
+
+    int16_t clippedX1 = x1;
+    int16_t clippedX2 = x2;
+    if (clippedX1 < g_clipLeft)
+        clippedX1 = g_clipLeft;
+    if (clippedX2 > g_clipRight)
+        clippedX2 = g_clipRight;
+    if (clippedX2 < clippedX1)
+        return;
+
+    const uint16_t runLen = static_cast<uint16_t>(clippedX2 - clippedX1 + 1);
+    stSetAddrWindow(static_cast<uint16_t>(clippedX1), static_cast<uint16_t>(y), runLen, 1);
+    for (uint16_t i = 0; i < runLen; ++i) {
+        stWriteData16(color565);
+    }
 }
 
 static void drawXbmColorTransparent(const WeatherOverlay &o)
@@ -107,19 +154,7 @@ static void drawXbmColorTransparent(const WeatherOverlay &o)
                 const int16_t x1 = o.x + runStart;
                 const int16_t x2 = o.x + runEnd;
                 if (x2 >= 0 && x1 < TFT_WIDTH) {
-                    int16_t clippedX1 = (x1 < 0) ? 0 : x1;
-                    int16_t clippedX2 = (x2 >= TFT_WIDTH) ? (TFT_WIDTH - 1) : x2;
-                    if (clippedX1 < g_clipLeft)
-                        clippedX1 = g_clipLeft;
-                    if (clippedX2 > g_clipRight)
-                        clippedX2 = g_clipRight;
-                    const uint16_t runLen = static_cast<uint16_t>(clippedX2 - clippedX1 + 1);
-                    if (runLen > 0) {
-                        stSetAddrWindow(static_cast<uint16_t>(clippedX1), static_cast<uint16_t>(y), runLen, 1);
-                        for (uint16_t i = 0; i < runLen; ++i) {
-                            stWriteData16(o.color565);
-                        }
-                    }
+                    drawRun((x1 < 0) ? 0 : x1, (x2 >= TFT_WIDTH) ? (TFT_WIDTH - 1) : x2, y, o.color565);
                 }
                 runStart = -1;
             }
@@ -129,20 +164,51 @@ static void drawXbmColorTransparent(const WeatherOverlay &o)
             const int16_t x1 = o.x + runStart;
             const int16_t x2 = o.x + static_cast<int16_t>(o.width) - 1;
             if (x2 >= 0 && x1 < TFT_WIDTH) {
-                int16_t clippedX1 = (x1 < 0) ? 0 : x1;
-                int16_t clippedX2 = (x2 >= TFT_WIDTH) ? (TFT_WIDTH - 1) : x2;
-                if (clippedX1 < g_clipLeft)
-                    clippedX1 = g_clipLeft;
-                if (clippedX2 > g_clipRight)
-                    clippedX2 = g_clipRight;
-                const uint16_t runLen = static_cast<uint16_t>(clippedX2 - clippedX1 + 1);
-                if (runLen > 0) {
-                    stSetAddrWindow(static_cast<uint16_t>(clippedX1), static_cast<uint16_t>(y), runLen, 1);
-                    for (uint16_t i = 0; i < runLen; ++i) {
-                        stWriteData16(o.color565);
-                    }
-                }
+                drawRun((x1 < 0) ? 0 : x1, (x2 >= TFT_WIDTH) ? (TFT_WIDTH - 1) : x2, y, o.color565);
             }
+        }
+    }
+}
+
+static void restoreXbmFromFramebuffer(const WeatherOverlay &o)
+{
+    if (o.xbm == nullptr || o.width == 0 || o.height == 0) {
+        return;
+    }
+
+    for (int16_t row = 0; row < static_cast<int16_t>(o.height); ++row) {
+        const int16_t y = o.y + row;
+        if (y < 0 || y >= TFT_HEIGHT || y < g_clipTop || y > g_clipBottom) {
+            continue;
+        }
+
+        int16_t runStart = -1;
+        uint16_t runColor = 0;
+
+        for (int16_t col = 0; col < static_cast<int16_t>(o.width); ++col) {
+            if (!xbmBit(o.xbm, o.width, col, row)) {
+                if (runStart >= 0) {
+                    drawRun(runStart, o.x + col - 1, y, runColor);
+                    runStart = -1;
+                }
+                continue;
+            }
+
+            const int16_t x = o.x + col;
+            const uint16_t pixelColor = framebufferBitSet(x, y) ? ::TFT_MESH : static_cast<uint16_t>(0x0000);
+
+            if (runStart < 0) {
+                runStart = x;
+                runColor = pixelColor;
+            } else if (pixelColor != runColor) {
+                drawRun(runStart, x - 1, y, runColor);
+                runStart = x;
+                runColor = pixelColor;
+            }
+        }
+
+        if (runStart >= 0) {
+            drawRun(runStart, o.x + static_cast<int16_t>(o.width) - 1, y, runColor);
         }
     }
 }
@@ -194,13 +260,19 @@ void queueWeatherColorOverlay(int16_t x, int16_t y, uint16_t width, uint16_t hei
 
 void flushWeatherColorOverlays()
 {
-    if (g_overlayCount == 0) {
+    if (g_overlayCount == 0 && g_prevOverlayCount == 0) {
         return;
     }
 
     ::SPI1.beginTransaction(g_overlaySpiSettings);
     digitalWrite(ST7789_NSS, LOW);
 
+    // First restore pixels that were touched by previous frame overlays.
+    for (uint8_t i = 0; i < g_prevOverlayCount; ++i) {
+        restoreXbmFromFramebuffer(g_prevOverlays[i]);
+    }
+
+    // Then draw current frame overlays.
     for (uint8_t i = 0; i < g_overlayCount; ++i) {
         drawXbmColorTransparent(g_overlays[i]);
     }
@@ -208,6 +280,10 @@ void flushWeatherColorOverlays()
     digitalWrite(ST7789_NSS, HIGH);
     ::SPI1.endTransaction();
 
+    g_prevOverlayCount = g_overlayCount;
+    for (uint8_t i = 0; i < g_overlayCount; ++i) {
+        g_prevOverlays[i] = g_overlays[i];
+    }
     g_overlayCount = 0;
 }
 
