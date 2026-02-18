@@ -1,4 +1,6 @@
 #include "ScanI2CTwoWire.h"
+#include "configuration.h"
+#include "detect/ScanI2C.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 
@@ -113,6 +115,25 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
     }
     LOG_DEBUG("Register value from 0x%x: 0x%x", registerLocation.i2cAddress.address, value);
     return value;
+}
+
+bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint16_t command, uint8_t expectedLength) const
+{
+    TwoWire *i2cBus = fetchI2CBus(addr);
+    i2cBus->beginTransmission(addr.address);
+    if (command > 0xFF) {
+        i2cBus->write((uint8_t)(command >> 8));
+    }
+    i2cBus->write((uint8_t)(command & 0xFF));
+    if (i2cBus->endTransmission() != 0) {
+        return false;
+    }
+    delay(20);
+    uint8_t received = i2cBus->requestFrom(addr.address, expectedLength);
+    bool match = (received == expectedLength);
+    while (i2cBus->available())
+        i2cBus->read();
+    return match;
 }
 
 /// for SEN5X detection
@@ -430,8 +451,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
                     type = OPT3001;
                     logFoundDevice("OPT3001", (uint8_t)addr.address);
-                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 6) !=
-                           0) { // unique SHT4x serial number (6 bytes inc. CRC)
+                } else if (i2cCommandResponseLength(addr, 0x89, 6)) { // SHT4x serial number (6 bytes inc. CRC)
                     type = SHT4X;
                     logFoundDevice("SHT4X", (uint8_t)addr.address);
                 } else {
@@ -456,6 +476,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case LPS22HB_ADDR_ALT:
+                // SFA30 detection: send 2-byte command 0xD060 (Get Device Marking) and check for 48-byte response
+                if (i2cCommandResponseLength(addr, 0xD060, 48)) {
+                    type = SFA30;
+                    logFoundDevice("SFA30", (uint8_t)addr.address);
+                    break;
+                }
+                // Fallback: LPS22HB detection at alternate address using WHO_AM_I register (0x0F == 0xB1)
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 1);
+                if (registerValue == 0xB1) {
+                    type = LPS22HB;
+                    logFoundDevice("LPS22HB", (uint8_t)addr.address);
+                }
+                break;
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB", (uint8_t)addr.address)
                 SCAN_SIMPLE_CASE(QMC6310U_ADDR, QMC6310U, "QMC6310U", (uint8_t)addr.address)
 
@@ -548,6 +581,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(SCD30_ADDR, SCD30, "SCD30", (uint8_t)addr.address);
             case CST328_ADDR:
                 // Do we have the CST328 or the CST226SE
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xAB), 1);

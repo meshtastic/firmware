@@ -67,7 +67,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 #endif /* CAN_RECLOCK_I2C */
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
 
-    _bus->requestFrom(_address, PMSA003I_FRAME_LENGTH);
+    _bus->requestFrom(_address, (uint8_t)PMSA003I_FRAME_LENGTH);
     if (_bus->available() < PMSA003I_FRAME_LENGTH) {
         LOG_WARN("%s read failed: incomplete data (%d bytes)", sensorName, _bus->available());
         return false;
@@ -86,7 +86,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
-    auto read16 = [](uint8_t *data, uint8_t idx) -> uint16_t { return (data[idx] << 8) | data[idx + 1]; };
+    auto read16 = [](const uint8_t *data, uint8_t idx) -> uint16_t { return (data[idx] << 8) | data[idx + 1]; };
 
     computedChecksum = 0;
 
@@ -137,6 +137,10 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 
     measurement->variant.air_quality_metrics.has_particles_100um = true;
     measurement->variant.air_quality_metrics.particles_100um = read16(buffer, 26);
+
+    LOG_DEBUG("Got %s readings: pM1p0_standard=%u, pM2p5_standard=%u, pM10p0_standard=%u", sensorName,
+              measurement->variant.air_quality_metrics.pm10_standard, measurement->variant.air_quality_metrics.pm25_standard,
+              measurement->variant.air_quality_metrics.pm100_standard);
 
     return true;
 }
