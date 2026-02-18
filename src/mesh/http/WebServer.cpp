@@ -55,6 +55,9 @@ static const int32_t ACTIVE_INTERVAL_MS = 50;
 static const int32_t MEDIUM_INTERVAL_MS = 200;
 static const int32_t IDLE_INTERVAL_MS = 1000;
 
+// Maximum concurrent HTTPS connections (reduced from default 4 to save memory)
+static const uint8_t MAX_HTTPS_CONNECTIONS = 2;
+
 static SSLCert *cert;
 static HTTPSServer *secureServer;
 static HTTPServer *insecureServer;
@@ -229,7 +232,7 @@ void initWebServer()
     LOG_DEBUG("Init Web Server");
 
     // We can now use the new certificate to setup our server as usual.
-    secureServer = new HTTPSServer(cert);
+    secureServer = new HTTPSServer(cert, 443, MAX_HTTPS_CONNECTIONS);
     insecureServer = new HTTPServer();
 
     registerHandlers(insecureServer, secureServer);
