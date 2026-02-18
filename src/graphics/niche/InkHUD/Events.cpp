@@ -59,10 +59,16 @@ void InkHUD::Events::onButtonShort()
     if (consumer) {
         consumer->onButtonShortPress();
     } else if (!dismissedExt) { // Don't change applet if this button press silenced the external notification module
-        if (!settings->joystick.enabled)
-            inkhud->nextApplet();
-        else
-            inkhud->openMenu();
+        Applet *userConsumer = inkhud->getActiveApplet();
+
+        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::BUTTON_SHORT))
+            userConsumer->onButtonShortPress();
+        else {
+            if (!settings->joystick.enabled)
+                inkhud->nextApplet();
+            else
+                inkhud->openMenu();
+        }
     }
 }
 
@@ -84,8 +90,14 @@ void InkHUD::Events::onButtonLong()
     // If no system applet is handling input, default behavior instead is to open the menu
     if (consumer)
         consumer->onButtonLongPress();
-    else
-        inkhud->openMenu();
+    else {
+        Applet *userConsumer = inkhud->getActiveApplet();
+
+        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::BUTTON_LONG))
+            userConsumer->onButtonLongPress();
+        else
+            inkhud->openMenu();
+    }
 }
 
 void InkHUD::Events::onExitShort()
@@ -110,8 +122,14 @@ void InkHUD::Events::onExitShort()
         // If no system applet is handling input, default behavior instead is change tiles
         if (consumer)
             consumer->onExitShort();
-        else if (!dismissedExt) // Don't change tile if this button press silenced the external notification module
-            inkhud->nextTile();
+        else if (!dismissedExt) { // Don't change tile if this button press silenced the external notification module
+            Applet *userConsumer = inkhud->getActiveApplet();
+
+            if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::EXIT_SHORT))
+                userConsumer->onExitShort();
+            else
+                inkhud->nextTile();
+        }
     }
 }
 
@@ -133,6 +151,13 @@ void InkHUD::Events::onExitLong()
 
         if (consumer)
             consumer->onExitLong();
+        else {
+            Applet *userConsumer = inkhud->getActiveApplet();
+
+            if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::EXIT_LONG))
+                userConsumer->onExitLong();
+            // Nothing uses exit long yet
+        }
     }
 }
 
@@ -157,6 +182,12 @@ void InkHUD::Events::onNavUp()
 
         if (consumer)
             consumer->onNavUp();
+        else if (!dismissedExt) {
+            Applet *userConsumer = inkhud->getActiveApplet();
+
+            if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::NAV_UP))
+                userConsumer->onNavUp();
+        }
     }
 }
 
@@ -181,6 +212,12 @@ void InkHUD::Events::onNavDown()
 
         if (consumer)
             consumer->onNavDown();
+        else if (!dismissedExt) {
+            Applet *userConsumer = inkhud->getActiveApplet();
+
+            if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::NAV_DOWN))
+                userConsumer->onNavDown();
+        }
     }
 }
 
@@ -206,8 +243,14 @@ void InkHUD::Events::onNavLeft()
         // If no system applet is handling input, default behavior instead is to cycle applets
         if (consumer)
             consumer->onNavLeft();
-        else if (!dismissedExt) // Don't change applet if this button press silenced the external notification module
-            inkhud->prevApplet();
+        else if (!dismissedExt) { // Don't change applet if this button press silenced the external notification module
+            Applet *userConsumer = inkhud->getActiveApplet();
+
+            if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::NAV_LEFT))
+                userConsumer->onNavLeft();
+            else
+                inkhud->prevApplet();
+        }
     }
 }
 
@@ -233,8 +276,14 @@ void InkHUD::Events::onNavRight()
         // If no system applet is handling input, default behavior instead is to cycle applets
         if (consumer)
             consumer->onNavRight();
-        else if (!dismissedExt) // Don't change applet if this button press silenced the external notification module
-            inkhud->nextApplet();
+        else if (!dismissedExt) { // Don't change applet if this button press silenced the external notification module
+            Applet *userConsumer = inkhud->getActiveApplet();
+
+            if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::NAV_RIGHT))
+                userConsumer->onNavRight();
+            else
+                inkhud->nextApplet();
+        }
     }
 }
 
