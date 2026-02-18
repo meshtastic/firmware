@@ -771,15 +771,18 @@ void setup()
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
 
-#if defined(USE_SH1107)
-    screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
-    screen_geometry = GEOMETRY_128_128;
-#endif
-
 #if defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+    screen_geometry = GEOMETRY_128_64;
 #endif
 #endif
+
+    // if we have one of the fixed overrides in the settings, adjust display type accordingly.
+    if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107) {
+        screen_geometry = GEOMETRY_128_64;
+    } else if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128) {
+        screen_geometry = GEOMETRY_128_128;
+    }
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #if !defined(ARCH_STM32WL)
