@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NodeDB.h"
+#include <array>
 
 // Number of relayers we keep track of. Use 6 to be efficient with memory alignment of PacketRecord to 20 bytes
 #define NUM_RELAYERS 6
@@ -27,12 +28,21 @@ class PacketHistory
     uint32_t recentPacketsCapacity =
         0; // Can be set in constructor, no need to recompile. Used to allocate memory for mx_recentPackets.
     PacketRecord *recentPackets = NULL; // Simple and fixed in size. Debloat.
+    struct RecentIndexEntry {
+        NodeNum sender = 0;
+        PacketId id = 0;
+        uint32_t slot = 0;
+    };
+    static constexpr uint32_t RECENT_INDEX_SIZE = 64;
+    std::array<RecentIndexEntry, RECENT_INDEX_SIZE> recentIndex = {};
 
     /** Find a packet record in history.
      * @param sender NodeNum
      * @param id PacketId
      * @return pointer to PacketRecord if found, NULL if not found */
     PacketRecord *find(NodeNum sender, PacketId id);
+    uint32_t hashRecentIndex(NodeNum sender, PacketId id) const;
+    void updateRecentIndex(NodeNum sender, PacketId id, uint32_t slot);
 
     /** Insert/Replace oldest PacketRecord in mx_recentPackets.
      * @param r PacketRecord to insert or replace */

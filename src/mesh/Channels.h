@@ -27,9 +27,15 @@ class Channels
 
     /// the precomputed hashes for each of our channels, or -1 for invalid
     int16_t hashes[MAX_NUM_CHANNELS] = {};
+    /// Per-hash candidate list head for O(1) lookup by 8-bit channel hash.
+    int8_t hashFirst[256] = {};
+    /// Singly-linked next pointer for channels in the same hash bucket.
+    int8_t hashNext[MAX_NUM_CHANNELS] = {};
+    /// Number of local channels sharing each 8-bit hash.
+    uint8_t hashCounts[256] = {};
 
   public:
-    Channels() {}
+    Channels();
 
     /// Well known channel names
     static const char *adminChannel, *gpioChannel, *serialChannel, *mqttChannel;
@@ -98,15 +104,19 @@ class Channels
 
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
+    /** Return the channel index for the specified channel hash, or -1 for not found */
+    int8_t getIndexByHash(ChannelHash channelHash) const;
+    /** Return the next channel index that shares the specified hash, or -1. */
+    int8_t getNextIndexByHash(ChannelHash channelHash, ChannelIndex afterIndex) const;
+    /** Return how many local channels share the specified hash. */
+    uint8_t getHashMatchCount(ChannelHash channelHash) const;
+
   private:
     /** Given a channel index, change to use the crypto key specified by that index
      *
      * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
      */
     int16_t setCrypto(ChannelIndex chIndex);
-
-    /** Return the channel index for the specified channel hash, or -1 for not found */
-    int8_t getIndexByHash(ChannelHash channelHash);
 
     /** Given a channel number, return the (0 to 255) hash for that channel
      * If no suitable channel could be found, return -1
@@ -135,6 +145,7 @@ class Channels
      * PSK)
      */
     CryptoKey getKey(ChannelIndex chIndex);
+    void rebuildHashIndex();
 };
 
 /// Singleton channel table

@@ -2,6 +2,7 @@
 
 #include "Observer.h"
 #include <Arduino.h>
+#include <array>
 #include <algorithm>
 #include <assert.h>
 #include <pb_encode.h>
@@ -10,6 +11,7 @@
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
+#include "concurrency/Lock.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
@@ -254,6 +256,7 @@ class NodeDB
     }
 
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
+    meshtastic_NodeInfoLite *getMeshNodeCached(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
     UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
@@ -308,6 +311,14 @@ class NodeDB
     }
 
   private:
+    struct NodeLookupCacheEntry {
+        NodeNum num = 0;
+        uint16_t idx = 0xFFFF;
+    };
+    static constexpr size_t NODE_LOOKUP_CACHE_SIZE = 128;
+    std::array<NodeLookupCacheEntry, NODE_LOOKUP_CACHE_SIZE> nodeLookupCache = {};
+    concurrency::Lock nodeLookupCacheLock;
+
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
@@ -315,6 +326,9 @@ class NodeDB
     uint32_t lastSort = 0;          // When last sorted the nodeDB
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+    uint16_t hashNodeLookup(NodeNum n) const;
+    void cacheNodeLookup(NodeNum n, uint16_t idx);
+    void invalidateNodeLookupCache();
 
     /*
      * Internal boolean to track sorting paused

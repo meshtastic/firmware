@@ -1,5 +1,6 @@
 #pragma once
 #include "RadioInterface.h"
+#include <array>
 
 #define PACKET_HASH(a, b) ((((a ^ b) >> 16) ^ (a ^ b)) & 0xFFFF) // 16 bit fold of packet (from, id) tuple
 typedef uint16_t PacketHash;
@@ -65,9 +66,19 @@ class PacketCache
     void release(PacketCacheEntry *e);
 
   private:
+    struct FreeBlock {
+        PacketCacheEntry *ptr = nullptr;
+        size_t size = 0;
+    };
+    static constexpr size_t FREELIST_CAPACITY = 16;
+    std::array<FreeBlock, FREELIST_CAPACITY> freelist = {};
+    size_t freelistCount = 0;
+
     PacketCacheEntry *buckets[PACKET_CACHE_BUCKETS]{};
     size_t num_entries = 0;
     size_t size = 0;
+    PacketCacheEntry *allocEntryBuffer(size_t bytes);
+    void freeEntryBuffer(PacketCacheEntry *ptr, size_t bytes);
     void insert(PacketCacheEntry *e);
     void remove(PacketCacheEntry *e);
 };

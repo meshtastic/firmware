@@ -305,7 +305,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 
         // don't override if a channel was requested and no need to set it when PKI is enforced
         if (!p->channel && !p->pki_encrypted && !isBroadcast(p->to)) {
-            meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->to);
+            meshtastic_NodeInfoLite const *node = nodeDB->getMeshNodeCached(p->to);
             if (node) {
                 p->channel = node->channel;
                 LOG_DEBUG("localSend to channel %d", p->channel);
@@ -404,11 +404,19 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
-        DEBUG_HEAP_BEFORE;
-        meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
-        DEBUG_HEAP_AFTER("Router::send", p_decoded);
-        if (!p_decoded) {
-            LOG_WARN("Failed to allocate decoded copy during send(), skip MQTT mirror for packet 0x%08x", p->id);
+        meshtastic_MeshPacket *p_decoded = nullptr;
+#if !MESHTASTIC_EXCLUDE_MQTT
+        const bool needsMqttDecodedCopy = moduleConfig.mqtt.enabled && isFromUs(p) && mqtt;
+#else
+        const bool needsMqttDecodedCopy = false;
+#endif
+        if (needsMqttDecodedCopy) {
+            DEBUG_HEAP_BEFORE;
+            p_decoded = packetPool.allocCopy(*p);
+            DEBUG_HEAP_AFTER("Router::send", p_decoded);
+            if (!p_decoded) {
+                LOG_WARN("Failed to allocate decoded copy during send(), skip MQTT mirror for packet 0x%08x", p->id);
+            }
         }
 
         auto encodeResult = perhapsEncode(p);
@@ -420,7 +428,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         }
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
-        if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt && p_decoded) {
+        if (needsMqttDecodedCopy && p_decoded) {
             mqtt->onSend(*p, *p_decoded, chIndex);
         }
 #endif
@@ -487,9 +495,10 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
 DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
+    meshtastic_NodeInfoLite *fromNode = nodeDB->getMeshNodeCached(p->from);
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
-        (nodeDB->getMeshNode(p->from) == NULL || !nodeDB->getMeshNode(p->from)->has_user)) {
+        (!fromNode || !fromNode->has_user)) {
         LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
         return DecodeState::DECODE_FAILURE;
     }
@@ -505,14 +514,16 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     bool decrypted = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
+    meshtastic_NodeInfoLite *toNode = nullptr;
+    if (p->to > 0 && !isBroadcast(p->to)) {
+        toNode = nodeDB->getMeshNodeCached(p->to);
+    }
     // Attempt PKI decryption first
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
-        nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
-        rawSize > MESHTASTIC_PKC_OVERHEAD) {
+    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && fromNode && toNode &&
+        fromNode->user.public_key.size > 0 && toNode->user.public_key.size > 0 && rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes,
-                                      bytes)) {
+        if (crypto->decryptCurve25519(p->from, fromNode->user.public_key, p->id, rawSize, p->encrypted.bytes, bytes)) {
             LOG_INFO("PKI Decryption worked!");
 
             meshtastic_Data decodedtmp;
@@ -523,7 +534,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
-                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
+                memcpy(&p->public_key.bytes, fromNode->user.public_key.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
@@ -539,37 +550,48 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 
     // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
     if (!decrypted) {
-        // Try to find a channel that works with this hash
-        for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
-            // Try to use this hash/channel pair
-            if (channels.decryptForHash(chIndex, p->channel)) {
-                // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf. Create a
-                // fresh copy for each decrypt attempt.
+        const int8_t matchedChannel = channels.getIndexByHash(p->channel);
+        if (matchedChannel >= 0) {
+            auto tryDecodeOnChannel = [&](ChannelIndex idx) -> bool {
+                if (!channels.decryptForHash(idx, p->channel)) {
+                    return false;
+                }
+
+                // We have to copy into a scratch buffer because these bytes are a union with decoded protobuf.
                 memcpy(bytes, p->encrypted.bytes, rawSize);
-                // Try to decrypt the packet if we can
                 crypto->decrypt(p->from, p->id, rawSize, bytes);
 
-                // printBytes("plaintext", bytes, p->encrypted.size);
-
-                // Take those raw bytes and convert them back into a well structured protobuf we can understand
                 meshtastic_Data decodedtmp;
                 memset(&decodedtmp, 0, sizeof(decodedtmp));
                 if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
                     LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!", p->id);
+                    return false;
                 } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
                     LOG_ERROR("Invalid portnum (bad psk?)!");
+                    return false;
 #if !(MESHTASTIC_EXCLUDE_PKI)
                 } else if (!owner.is_licensed && isToUs(p) && decodedtmp.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
                     LOG_WARN("Rejecting legacy DM");
-                    return DecodeState::DECODE_FAILURE;
+                    return false;
 #endif
-                } else {
-                    p->decoded = decodedtmp;
-                    p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
-                    decrypted = true;
-                    break;
+                }
+                p->decoded = decodedtmp;
+                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
+                chIndex = idx;
+                return true;
+            };
+
+            // Fast path: most packets have exactly one local channel candidate for this 8-bit hash.
+            if (!tryDecodeOnChannel((ChannelIndex)matchedChannel) && channels.getHashMatchCount(p->channel) > 1) {
+                // Hash collisions are possible, so only try channels in the same hash bucket.
+                for (int8_t i = channels.getNextIndexByHash(p->channel, (ChannelIndex)matchedChannel); i >= 0;
+                     i = channels.getNextIndexByHash(p->channel, (ChannelIndex)i)) {
+                    if (tryDecodeOnChannel((ChannelIndex)i)) {
+                        break;
+                    }
                 }
             }
+            decrypted = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag);
         }
     }
 
@@ -679,7 +701,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeCached(p->to);
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
         // First, only PKC encrypt packets we are originating
@@ -773,10 +795,18 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
 
-    // Store a copy of encrypted packet for MQTT
-    DEBUG_HEAP_BEFORE;
-    p_encrypted = packetPool.allocCopy(*p);
-    DEBUG_HEAP_AFTER("Router::handleReceived", p_encrypted);
+#if !MESHTASTIC_EXCLUDE_MQTT
+    const bool mqttMirrorEnabled = moduleConfig.mqtt.enabled && mqtt;
+#else
+    const bool mqttMirrorEnabled = false;
+#endif
+    meshtastic_MeshPacket *encryptedCopy = nullptr;
+    if (mqttMirrorEnabled) {
+        // Store a copy of encrypted packet for MQTT before decode potentially mutates payload variant.
+        DEBUG_HEAP_BEFORE;
+        encryptedCopy = packetPool.allocCopy(*p);
+        DEBUG_HEAP_AFTER("Router::handleReceived", encryptedCopy);
+    }
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     auto decodedState = perhapsDecode(p);
@@ -829,24 +859,23 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
-        if (p_encrypted == nullptr) {
+        if (mqttMirrorEnabled && encryptedCopy == nullptr) {
             LOG_WARN("p_encrypted is null, skipping MQTT publish");
-        } else {
+        } else if (mqttMirrorEnabled) {
             // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not
             // to us (because we would be able to decrypt it)
             if (decodedState == DecodeState::DECODE_FAILURE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 &&
                 !isBroadcast(p->to) && !isToUs(p))
-                p_encrypted->pki_encrypted = true;
+                encryptedCopy->pki_encrypted = true;
             // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-            if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
+            if ((decodedState == DecodeState::DECODE_SUCCESS || encryptedCopy->pki_encrypted) &&
                 !isFromUs(p) && mqtt)
-                mqtt->onSend(*p_encrypted, *p, p->channel);
+                mqtt->onSend(*encryptedCopy, *p, p->channel);
         }
 #endif
     }
 
-    packetPool.release(p_encrypted); // Release the encrypted packet
-    p_encrypted = nullptr;
+    packetPool.release(encryptedCopy); // Release optional encrypted packet copy
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
@@ -869,7 +898,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         return;
     }
 
-    meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->from);
+    meshtastic_NodeInfoLite const *node = nodeDB->getMeshNodeCached(p->from);
     if (node != NULL && node->is_ignored) {
         LOG_DEBUG("Ignore msg, 0x%x is ignored", p->from);
         packetPool.release(p);

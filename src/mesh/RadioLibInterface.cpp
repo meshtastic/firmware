@@ -174,9 +174,8 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
     // Sometimes when testing it is useful to be able to never turn on the xmitter
 #ifndef LORA_DISABLE_SENDING
-    printPacket("enqueue for send", p);
-
-    LOG_DEBUG("txGood=%d,txRelay=%d,rxGood=%d,rxBad=%d", txGood, txRelay, rxGood, rxBad);
+    LOG_DEBUG("enqueue for send id=0x%08x to=0x%08x txGood=%d txRelay=%d rxGood=%d rxBad=%d", p->id, p->to, txGood, txRelay,
+              rxGood, rxBad);
     bool dropped = false;
     ErrorCode res = txQueue.enqueue(p, &dropped) ? ERRNO_OK : ERRNO_UNKNOWN;
 
@@ -453,11 +452,18 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 #endif
     if (state != RADIOLIB_ERR_NONE) {
+        static uint32_t lastRxErrLogMsec = 0;
+        const bool shouldLogDetailed = !Throttle::isWithinTimespanMs(lastRxErrLogMsec, 10 * 1000UL);
+        lastRxErrLogMsec = millis();
         // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
-        LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
-                  "nextHop=0x%x relay=0x%x)",
-                  state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
-                  iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+        if (shouldLogDetailed) {
+            LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g "
+                      "rxRSSI=%i nextHop=0x%x relay=0x%x)",
+                      state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
+                      iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+        } else {
+            LOG_DEBUG("Ignore received packet due to error=%d", state);
+        }
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);

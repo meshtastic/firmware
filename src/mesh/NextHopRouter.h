@@ -2,7 +2,9 @@
 
 #include "FloodingRouter.h"
 #include "concurrency/Lock.h"
+#include <stdint.h>
 #include <unordered_map>
+#include <vector>
 
 /**
  * An identifier for a globally unique message - a pair of the sending nodenum and the packet id assigned
@@ -61,6 +63,17 @@ class GlobalPacketIdHashFunction
 */
 class NextHopRouter : public FloodingRouter
 {
+    struct RetransmitAction {
+        enum Kind { NONE, FLOOD, NEXTHOP } kind = NONE;
+        meshtastic_MeshPacket *packet = nullptr;
+    };
+
+    struct AckNakAction {
+        NodeNum to = 0;
+        PacketId id = 0;
+        ChannelIndex ch = 0;
+    };
+
   public:
     /**
      * Constructor
@@ -98,6 +111,9 @@ class NextHopRouter : public FloodingRouter
      */
     std::unordered_map<GlobalPacketId, PendingPacket, GlobalPacketIdHashFunction> pending;
     concurrency::Lock pendingMutex;
+    uint32_t nextPendingTxMsec = UINT32_MAX;
+    std::vector<RetransmitAction> txActionsScratch;
+    std::vector<AckNakAction> ackActionsScratch;
 
     /**
      * Should this incoming filter be dropped?
@@ -146,6 +162,7 @@ class NextHopRouter : public FloodingRouter
 
     PendingPacket *findPendingPacketUnlocked(GlobalPacketId p);
     bool stopRetransmissionUnlocked(GlobalPacketId p);
+    void recomputeNextPendingTxUnlocked();
 
   private:
     /**
