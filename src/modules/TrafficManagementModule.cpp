@@ -756,10 +756,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // This response is spoofed from another node, so Router::perhapsEncode()
     // will not auto-populate the bitfield via config_ok_to_mqtt.
     reply->decoded.has_bitfield = true;
+    // Only update the OK_TO_MQTT bit; preserve any other bitfield data.
+    reply->decoded.bitfield &= ~BITFIELD_OK_TO_MQTT_MASK;
     if (config.lora.config_ok_to_mqtt)
-        reply->decoded.bitfield = BITFIELD_OK_TO_MQTT_MASK;
-    else
-        reply->decoded.bitfield = 0;
+        reply->decoded.bitfield |= BITFIELD_OK_TO_MQTT_MASK;
     // Spoof the sender as the target node so the requestor sees a valid NodeInfo response.
     // hop_limit=0 ensures this reply travels only one hop (direct to requestor).
     reply->from = p->to;
