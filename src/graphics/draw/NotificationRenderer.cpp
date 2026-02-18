@@ -14,6 +14,7 @@
 #endif
 #include "main.h"
 #include <algorithm>
+#include <limits>
 #include <string>
 #include <vector>
 #if HAS_TRACKBALL
@@ -51,16 +52,292 @@ bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
 uint32_t NotificationRenderer::numDigits = 0;
 uint32_t NotificationRenderer::currentNumber = 0;
+int16_t NotificationRenderer::signedDecimalValueTenths = 0;
+int16_t NotificationRenderer::signedDecimalMinTenths = -999;
+int16_t NotificationRenderer::signedDecimalMaxTenths = 999;
+bool NotificationRenderer::signedDecimalIsNegative = false;
 VirtualKeyboard *NotificationRenderer::virtualKeyboard = nullptr;
 std::function<void(const std::string &)> NotificationRenderer::textInputCallback = nullptr;
 
-uint32_t pow_of_10(uint32_t n)
+struct NumericSlotPickerState {
+    std::vector<uint8_t> digits;
+    bool hasSign = false;
+    bool isNegative = false;
+    uint8_t decimalDigits = 0;
+    int32_t minValue = 0;
+    int32_t maxValue = 0;
+};
+
+int32_t maxValueForDigits(uint8_t digitCount)
 {
-    uint32_t ret = 1;
-    for (uint32_t i = 0; i < n; i++) {
-        ret *= 10;
+    int64_t value = 0;
+    for (uint8_t i = 0; i < digitCount; i++) {
+        value = (value * 10) + 9;
+        if (value > std::numeric_limits<int32_t>::max()) {
+            return std::numeric_limits<int32_t>::max();
+        }
     }
-    return ret;
+    return static_cast<int32_t>(value);
+}
+
+uint8_t pickerSlotCount(const NumericSlotPickerState &state)
+{
+    return static_cast<uint8_t>(state.digits.size() + (state.hasSign ? 1 : 0));
+}
+
+int32_t clampPickerValue(int32_t value, int32_t minValue, int32_t maxValue)
+{
+    if (value < minValue) {
+        return minValue;
+    }
+    if (value > maxValue) {
+        return maxValue;
+    }
+    return value;
+}
+
+uint32_t combinePickerDigits(const std::vector<uint8_t> &digits)
+{
+    uint32_t value = 0;
+    for (const uint8_t digit : digits) {
+        value = (value * 10) + digit;
+    }
+    return value;
+}
+
+void splitPickerDigits(uint32_t value, std::vector<uint8_t> &digits)
+{
+    if (digits.empty()) {
+        return;
+    }
+
+    for (int i = static_cast<int>(digits.size()) - 1; i >= 0; i--) {
+        digits[static_cast<size_t>(i)] = static_cast<uint8_t>(value % 10);
+        value /= 10;
+    }
+}
+
+int32_t composePickerValue(const NumericSlotPickerState &state)
+{
+    int64_t value = static_cast<int64_t>(combinePickerDigits(state.digits));
+    if (state.hasSign && state.isNegative && value != 0) {
+        value = -value;
+    }
+    return clampPickerValue(static_cast<int32_t>(value), state.minValue, state.maxValue);
+}
+
+void normalizePickerState(NumericSlotPickerState &state)
+{
+    const bool keepNegativeZero = state.isNegative;
+    const int32_t clampedValue = composePickerValue(state);
+    const uint32_t absValue =
+        (clampedValue < 0) ? static_cast<uint32_t>(-static_cast<int64_t>(clampedValue)) : static_cast<uint32_t>(clampedValue);
+    splitPickerDigits(absValue, state.digits);
+
+    if (!state.hasSign) {
+        state.isNegative = false;
+        return;
+    }
+
+    if (clampedValue < 0) {
+        state.isNegative = true;
+    } else if (clampedValue > 0) {
+        state.isNegative = false;
+    } else {
+        // Keep selected sign for zero so users can pick +/- before entering digits.
+        state.isNegative = keepNegativeZero;
+    }
+}
+
+bool isPickerIncrementEvent(uint8_t eventType)
+{
+    return eventType == INPUT_BROKER_UP || eventType == INPUT_BROKER_ALT_PRESS || eventType == INPUT_BROKER_UP_LONG;
+}
+
+bool isPickerDecrementEvent(uint8_t eventType)
+{
+    return eventType == INPUT_BROKER_DOWN || eventType == INPUT_BROKER_USER_PRESS || eventType == INPUT_BROKER_DOWN_LONG;
+}
+
+void applyPickerDelta(NumericSlotPickerState &state, int8_t selectedSlot, int8_t delta)
+{
+    const uint8_t slotCount = pickerSlotCount(state);
+    if (selectedSlot < 0 || selectedSlot >= static_cast<int8_t>(slotCount)) {
+        return;
+    }
+
+    if (state.hasSign && selectedSlot == 0) {
+        state.isNegative = !state.isNegative;
+        normalizePickerState(state);
+        return;
+    }
+
+    const int8_t digitOffset = state.hasSign ? 1 : 0;
+    const int8_t digitIndex = selectedSlot - digitOffset;
+    if (digitIndex < 0 || digitIndex >= static_cast<int8_t>(state.digits.size())) {
+        return;
+    }
+
+    uint8_t &digit = state.digits[static_cast<size_t>(digitIndex)];
+    if (delta > 0) {
+        digit = static_cast<uint8_t>((digit + 1) % 10);
+    } else {
+        digit = static_cast<uint8_t>((digit == 0) ? 9 : (digit - 1));
+    }
+    normalizePickerState(state);
+}
+
+bool applyPickerKeypress(NumericSlotPickerState &state, int8_t selectedSlot, char key)
+{
+    const uint8_t slotCount = pickerSlotCount(state);
+    if (selectedSlot < 0 || selectedSlot >= static_cast<int8_t>(slotCount)) {
+        return false;
+    }
+
+    if (state.hasSign && selectedSlot == 0 && (key == '+' || key == '-')) {
+        state.isNegative = (key == '-');
+        normalizePickerState(state);
+        return true;
+    }
+
+    if (key < '0' || key > '9') {
+        return false;
+    }
+
+    const int8_t digitOffset = state.hasSign ? 1 : 0;
+    const int8_t digitIndex = selectedSlot - digitOffset;
+    if (digitIndex < 0 || digitIndex >= static_cast<int8_t>(state.digits.size())) {
+        return false;
+    }
+
+    state.digits[static_cast<size_t>(digitIndex)] = static_cast<uint8_t>(key - '0');
+    normalizePickerState(state);
+    return true;
+}
+
+void parseBannerLines(const char *lineStarts[MAX_LINES + 1], uint16_t &lineCount)
+{
+    lineCount = 0;
+    char *alertEnd = NotificationRenderer::alertBannerMessage +
+                     strnlen(NotificationRenderer::alertBannerMessage, sizeof(NotificationRenderer::alertBannerMessage));
+    lineStarts[lineCount] = NotificationRenderer::alertBannerMessage;
+    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
+        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
+        if (lineStarts[lineCount + 1][0] == '\n') {
+            lineStarts[lineCount + 1] += 1;
+        }
+        lineCount++;
+    }
+}
+
+void buildNumericPickerDisplay(const NumericSlotPickerState &state, std::string &formattedValue,
+                               std::vector<int16_t> &slotCharIndexBySlot)
+{
+    const uint8_t slotCount = pickerSlotCount(state);
+    slotCharIndexBySlot.assign(slotCount, -1);
+
+    formattedValue = " ";
+    formattedValue.reserve(24);
+    int8_t slot = 0;
+
+    if (state.hasSign) {
+        slotCharIndexBySlot[slot++] = static_cast<int16_t>(formattedValue.size());
+        formattedValue += state.isNegative ? '-' : '+';
+        formattedValue += ' ';
+    }
+
+    const size_t digitCount = state.digits.size();
+    const size_t decimalBreak =
+        (state.decimalDigits > 0 && state.decimalDigits < digitCount) ? (digitCount - state.decimalDigits) : digitCount;
+    for (size_t i = 0; i < digitCount; i++) {
+        slotCharIndexBySlot[slot++] = static_cast<int16_t>(formattedValue.size());
+        formattedValue += static_cast<char>('0' + state.digits[i]);
+        formattedValue += ' ';
+
+        if (state.decimalDigits > 0 && i + 1 == decimalBreak) {
+            formattedValue += '.';
+            formattedValue += ' ';
+        }
+    }
+}
+
+// Shared picker renderer for any "editable slots in a formatted string" flow.
+// Reuse by building `formattedValue` as displayed, and mapping each editable slot
+// to its character index in that string via `slotCharIndexBySlot`.
+void NumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lineStarts[MAX_LINES + 1], uint16_t lineCount,
+                  const std::string &formattedValue, const int16_t *slotCharIndexBySlot, uint8_t slotCount, int8_t selectedSlot)
+{
+    if (formattedValue.empty() || slotCharIndexBySlot == nullptr || slotCount == 0) {
+        return;
+    }
+
+    std::string spacer(formattedValue.size(), ' ');
+    uint16_t totalLines = lineCount + 3;
+    const char *linePointers[totalLines + 1] = {0};
+    for (uint16_t i = 0; i < lineCount; i++) {
+        linePointers[i] = lineStarts[i];
+    }
+    const uint16_t topGuideLineIndex = lineCount;
+    linePointers[lineCount++] = spacer.c_str();
+    const uint16_t valueLineIndex = lineCount;
+    linePointers[lineCount++] = formattedValue.c_str();
+    const uint16_t bottomGuideLineIndex = lineCount;
+    linePointers[lineCount++] = spacer.c_str();
+
+    NotificationRenderer::drawNotificationBox(display, state, linePointers, totalLines, 0);
+
+    constexpr uint16_t hPadding = 5;
+    constexpr uint16_t vPadding = 2;
+    uint16_t maxWidth = 0;
+    uint16_t lineWidths[MAX_LINES + 3] = {0};
+    for (uint16_t i = 0; i < totalLines; i++) {
+        const uint16_t lineLength = static_cast<uint16_t>(strlen(linePointers[i]));
+        lineWidths[i] = display->getStringWidth(linePointers[i], lineLength, true);
+        if (lineWidths[i] > maxWidth) {
+            maxWidth = lineWidths[i];
+        }
+    }
+
+    uint16_t boxWidth = hPadding * 2 + maxWidth;
+    uint16_t screenHeight = display->height();
+    uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
+    uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
+    uint16_t contentHeight = visibleTotalLines * effectiveLineHeight;
+    uint16_t boxHeight = contentHeight + vPadding * 2;
+    if (visibleTotalLines == 1) {
+        boxHeight += (currentResolution == ScreenResolution::High) ? 4 : 3;
+    }
+    int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
+    if (totalLines > visibleTotalLines) {
+        boxWidth += (currentResolution == ScreenResolution::High) ? 4 : 2;
+    }
+    int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
+
+    const int selectedSlotClamped = std::max<int>(0, std::min<int>(selectedSlot, static_cast<int>(slotCount) - 1));
+    const int selectedCharIndex = slotCharIndexBySlot[selectedSlotClamped];
+    if (selectedCharIndex < 0 || selectedCharIndex >= static_cast<int>(formattedValue.size())) {
+        return;
+    }
+
+    int16_t valueTextX = boxLeft + (boxWidth - lineWidths[valueLineIndex]) / 2;
+    const uint16_t prefixWidth = display->getStringWidth(formattedValue.c_str(), selectedCharIndex, true);
+    const uint16_t slotCharWidth = display->getStringWidth(formattedValue.c_str() + selectedCharIndex, 1, true);
+    const int16_t slotCenterX = valueTextX + static_cast<int16_t>(prefixWidth + (slotCharWidth / 2));
+
+    int16_t topGuideY = boxTop + vPadding + (topGuideLineIndex * effectiveLineHeight);
+    int16_t bottomGuideY = boxTop + vPadding + (bottomGuideLineIndex * effectiveLineHeight);
+    const int16_t triHalfWidth = (currentResolution == ScreenResolution::High) ? 3 : 2;
+    const int16_t guideInsetY = 1;
+    const int16_t triHeight = std::max<int16_t>(2, static_cast<int16_t>((effectiveLineHeight - (guideInsetY * 2) - 1) / 2));
+    const int16_t topBaseY = topGuideY + effectiveLineHeight - guideInsetY - 1;
+    const int16_t topApexY = topBaseY - triHeight;
+    const int16_t bottomBaseY = bottomGuideY + guideInsetY;
+    const int16_t bottomApexY = bottomBaseY + triHeight;
+
+    display->setColor(WHITE);
+    display->fillTriangle(slotCenterX, topApexY, slotCenterX - triHalfWidth, topBaseY, slotCenterX + triHalfWidth, topBaseY);
+    display->fillTriangle(slotCenterX - triHalfWidth, bottomBaseY, slotCenterX + triHalfWidth, bottomBaseY, slotCenterX,
+                          bottomApexY);
 }
 
 // Used on boot when a certificate is being created
@@ -102,6 +379,10 @@ void NotificationRenderer::resetBanner()
     pauseBanner = false;
     numDigits = 0;
     currentNumber = 0;
+    signedDecimalValueTenths = 0;
+    signedDecimalMinTenths = -999;
+    signedDecimalMaxTenths = 999;
+    signedDecimalIsNegative = false;
 
     nodeDB->pause_sort(false);
 
@@ -152,6 +433,9 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
     case notificationTypeEnum::number_picker:
         drawNumberPicker(display, state);
         break;
+    case notificationTypeEnum::signed_decimal_picker:
+        drawSignedDecimalPicker(display, state);
+        break;
     }
 }
 
@@ -159,83 +443,132 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
 {
     const char *lineStarts[MAX_LINES + 1] = {0};
     uint16_t lineCount = 0;
+    parseBannerLines(lineStarts, lineCount);
 
-    // Parse lines
-    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
-    lineStarts[lineCount] = alertBannerMessage;
+    NumericSlotPickerState pickerState;
+    pickerState.hasSign = false;
+    pickerState.decimalDigits = 0;
+    pickerState.minValue = 0;
+    pickerState.maxValue = maxValueForDigits(static_cast<uint8_t>(numDigits));
+    pickerState.digits.assign(numDigits, 0);
+    splitPickerDigits(currentNumber, pickerState.digits);
+    normalizePickerState(pickerState);
 
-    // Find lines
-    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
-        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
-        if (lineStarts[lineCount + 1][0] == '\n')
-            lineStarts[lineCount + 1] += 1;
-        lineCount++;
+    const uint8_t slotCount = pickerSlotCount(pickerState);
+    if (curSelected < 0) {
+        curSelected = 0;
+    } else if (curSelected > static_cast<int8_t>(slotCount)) {
+        curSelected = static_cast<int8_t>(slotCount);
     }
-    // modulo to extract
-    uint8_t this_digit = (currentNumber % (pow_of_10(numDigits - curSelected))) / (pow_of_10(numDigits - curSelected - 1));
-    // Handle input
-    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS ||
-        inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
-        if (this_digit == 9) {
-            currentNumber -= 9 * (pow_of_10(numDigits - curSelected - 1));
-        } else {
-            currentNumber += (pow_of_10(numDigits - curSelected - 1));
-        }
-    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS ||
-               inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
-        if (this_digit == 0) {
-            currentNumber += 9 * (pow_of_10(numDigits - curSelected - 1));
-        } else {
-            currentNumber -= (pow_of_10(numDigits - curSelected - 1));
-        }
+
+    if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
+        resetBanner();
+        return;
+    }
+
+    if (isPickerIncrementEvent(inEvent.inputEvent)) {
+        applyPickerDelta(pickerState, curSelected, 1);
+    } else if (isPickerDecrementEvent(inEvent.inputEvent)) {
+        applyPickerDelta(pickerState, curSelected, -1);
     } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
-        if (inEvent.kbchar > 47 && inEvent.kbchar < 58) { // have a digit
-            currentNumber -= this_digit * (pow_of_10(numDigits - curSelected - 1));
-            currentNumber += (inEvent.kbchar - 48) * (pow_of_10(numDigits - curSelected - 1));
+        if (applyPickerKeypress(pickerState, curSelected, inEvent.kbchar)) {
             curSelected++;
         }
     } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
         curSelected++;
     } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
-        curSelected--;
-    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
-               alertBannerUntil != 0) {
-        resetBanner();
-        return;
+        curSelected = std::max<int8_t>(0, curSelected - 1);
     }
-    if (curSelected == static_cast<int8_t>(numDigits)) {
+
+    currentNumber = static_cast<uint32_t>(std::max<int32_t>(0, composePickerValue(pickerState)));
+    if (curSelected == static_cast<int8_t>(slotCount)) {
         alertBannerCallback(currentNumber);
         resetBanner();
         return;
     }
 
     inEvent.inputEvent = INPUT_BROKER_NONE;
-    if (alertBannerMessage[0] == '\0')
+    if (alertBannerMessage[0] == '\0') {
         return;
-
-    uint16_t totalLines = lineCount + 2;
-    const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
-
-    // copy the linestarts to display to the linePointers holder
-    for (uint16_t i = 0; i < lineCount; i++) {
-        linePointers[i] = lineStarts[i];
     }
-    std::string digits = " ";
-    std::string arrowPointer = " ";
-    for (uint16_t i = 0; i < numDigits; i++) {
-        // Modulo minus modulo to return just the current number
-        digits += std::to_string((currentNumber % (pow_of_10(numDigits - i))) / (pow_of_10(numDigits - i - 1))) + " ";
-        if (curSelected == i) {
-            arrowPointer += "^ ";
-        } else {
-            arrowPointer += "_ ";
+
+    std::string formattedValue;
+    std::vector<int16_t> slotCharIndexBySlot;
+    buildNumericPickerDisplay(pickerState, formattedValue, slotCharIndexBySlot);
+
+    NumberPicker(display, state, lineStarts, lineCount, formattedValue, slotCharIndexBySlot.data(), slotCount, curSelected);
+}
+
+void NotificationRenderer::drawSignedDecimalPicker(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    const char *lineStarts[MAX_LINES + 1] = {0};
+    uint16_t lineCount = 0;
+    parseBannerLines(lineStarts, lineCount);
+
+    NumericSlotPickerState pickerState;
+    pickerState.hasSign = true;
+    pickerState.decimalDigits = 1;
+    pickerState.minValue = signedDecimalMinTenths;
+    pickerState.maxValue = signedDecimalMaxTenths;
+    pickerState.digits.assign(3, 0); // XX.X format
+
+    const int32_t currentValue = static_cast<int32_t>(signedDecimalValueTenths);
+    if (currentValue < 0) {
+        pickerState.isNegative = true;
+    } else if (currentValue > 0) {
+        pickerState.isNegative = false;
+    } else {
+        pickerState.isNegative = signedDecimalIsNegative;
+    }
+    const uint32_t absValue =
+        (currentValue < 0) ? static_cast<uint32_t>(-static_cast<int64_t>(currentValue)) : static_cast<uint32_t>(currentValue);
+    splitPickerDigits(absValue, pickerState.digits);
+    normalizePickerState(pickerState);
+
+    const uint8_t slotCount = pickerSlotCount(pickerState);
+    if (curSelected < 0) {
+        curSelected = 0;
+    } else if (curSelected > static_cast<int8_t>(slotCount)) {
+        curSelected = static_cast<int8_t>(slotCount);
+    }
+
+    if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
+        resetBanner();
+        return;
+    }
+
+    if (isPickerIncrementEvent(inEvent.inputEvent)) {
+        applyPickerDelta(pickerState, curSelected, 1);
+    } else if (isPickerDecrementEvent(inEvent.inputEvent)) {
+        applyPickerDelta(pickerState, curSelected, -1);
+    } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
+        if (applyPickerKeypress(pickerState, curSelected, inEvent.kbchar)) {
+            curSelected++;
         }
+    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
+        curSelected++;
+    } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
+        curSelected = std::max<int8_t>(0, curSelected - 1);
     }
 
-    linePointers[lineCount++] = digits.c_str();
-    linePointers[lineCount++] = arrowPointer.c_str();
+    signedDecimalValueTenths = static_cast<int16_t>(composePickerValue(pickerState));
+    signedDecimalIsNegative = pickerState.isNegative;
+    if (curSelected == static_cast<int8_t>(slotCount)) {
+        alertBannerCallback(signedDecimalValueTenths);
+        resetBanner();
+        return;
+    }
 
-    drawNotificationBox(display, state, linePointers, totalLines, 0);
+    inEvent.inputEvent = INPUT_BROKER_NONE;
+    if (alertBannerMessage[0] == '\0') {
+        return;
+    }
+
+    std::string formattedValue;
+    std::vector<int16_t> slotCharIndexBySlot;
+    buildNumericPickerDisplay(pickerState, formattedValue, slotCharIndexBySlot);
+
+    NumberPicker(display, state, lineStarts, lineCount, formattedValue, slotCharIndexBySlot.data(), slotCount, curSelected);
 }
 
 void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state)

@@ -56,6 +56,32 @@ BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOp
     return bannerOptions;
 }
 
+constexpr float kTemperatureOffsetMinC = -20.0f;
+constexpr float kTemperatureOffsetMaxC = 20.0f;
+constexpr float kTemperatureOffsetDeltaFPerC = 1.8f;
+
+bool useImperialTemperatureOffsetUnits()
+{
+    return config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL ||
+           moduleConfig.telemetry.environment_display_fahrenheit;
+}
+
+float clampTemperatureOffsetC(float offsetC)
+{
+    if (offsetC < kTemperatureOffsetMinC) {
+        return kTemperatureOffsetMinC;
+    }
+    if (offsetC > kTemperatureOffsetMaxC) {
+        return kTemperatureOffsetMaxC;
+    }
+    return offsetC;
+}
+
+int toTenthsRounded(float value)
+{
+    return (value >= 0.0f) ? static_cast<int>(value * 10.0f + 0.5f) : static_cast<int>(value * 10.0f - 0.5f);
+}
+
 } // namespace
 
 menuHandler::screenMenus menuHandler::menuQueue = MenuNone;
@@ -1006,6 +1032,52 @@ void menuHandler::homeBaseMenu()
 void menuHandler::textMessageMenu()
 {
     cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+}
+
+void menuHandler::environmentTelemetryBaseMenu()
+{
+    enum optionsNumbers { Back, SetTempOffset };
+
+    static const char *optionsArray[] = {"Back", "Set Temp Offset"};
+    static int optionsEnumArray[] = {Back, SetTempOffset};
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Env Actions";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == SetTempOffset) {
+            menuQueue = EnvironmentTempOffsetPicker;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::environmentTemperatureOffsetPicker()
+{
+    static char pickerTitle[40];
+
+    const bool useImperial = useImperialTemperatureOffsetUnits();
+    const char displayUnit = useImperial ? 'F' : 'C';
+    const float currentOffsetC = clampTemperatureOffsetC(moduleConfig.telemetry.environment_temperature_offset_c);
+    const float displayOffset = useImperial ? (currentOffsetC * kTemperatureOffsetDeltaFPerC) : currentOffsetC;
+    const float minDisplay = useImperial ? (kTemperatureOffsetMinC * kTemperatureOffsetDeltaFPerC) : kTemperatureOffsetMinC;
+    const float maxDisplay = useImperial ? (kTemperatureOffsetMaxC * kTemperatureOffsetDeltaFPerC) : kTemperatureOffsetMaxC;
+
+    snprintf(pickerTitle, sizeof(pickerTitle), "Set Temp Offset (%c)", displayUnit);
+    screen->showSignedDecimalPicker(pickerTitle, 60000, toTenthsRounded(displayOffset), toTenthsRounded(minDisplay),
+                                    toTenthsRounded(maxDisplay), [useImperial](int pickedTenths) -> void {
+                                        float selectedOffset = static_cast<float>(pickedTenths) / 10.0f;
+                                        if (useImperial) {
+                                            selectedOffset /= kTemperatureOffsetDeltaFPerC;
+                                        }
+
+                                        moduleConfig.telemetry.environment_temperature_offset_c =
+                                            clampTemperatureOffsetC(selectedOffset);
+                                        nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+                                    });
 }
 
 void menuHandler::textMessageBaseMenu()
@@ -2204,13 +2276,10 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    enum optionsNumbers { Back, NumberPicker, ShowChirpy };
-    static const char *optionsArray[4] = {"Back"};
-    static int optionsEnumArray[4] = {Back};
+    enum optionsNumbers { Back, ShowChirpy };
+    static const char *optionsArray[3] = {"Back"};
+    static int optionsEnumArray[3] = {Back};
     int options = 1;
-
-    optionsArray[options] = "Number Picker";
-    optionsEnumArray[options++] = NumberPicker;
 
     optionsArray[options] = screen->isFrameHidden("chirpy") ? "Show Chirpy" : "Hide Chirpy";
     optionsEnumArray[options++] = ShowChirpy;
@@ -2221,10 +2290,7 @@ void menuHandler::testMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == NumberPicker) {
-            menuQueue = NumberTest;
-            screen->runNow();
-        } else if (selected == ShowChirpy) {
+        if (selected == ShowChirpy) {
             screen->toggleFrameVisibility("chirpy");
             screen->setFrames(Screen::FOCUS_SYSTEM);
 
@@ -2234,12 +2300,6 @@ void menuHandler::testMenu()
         }
     };
     screen->showOverlayBanner(bannerOptions);
-}
-
-void menuHandler::numberTest()
-{
-    screen->showNumberPicker("Pick a number\n ", 30000, 4,
-                             [](int number_picked) -> void { LOG_WARN("Nodenum: %u", number_picked); });
 }
 
 void menuHandler::wifiBaseMenu()
@@ -2737,8 +2797,8 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case TestMenu:
         testMenu();
         break;
-    case NumberTest:
-        numberTest();
+    case EnvironmentTempOffsetPicker:
+        environmentTemperatureOffsetPicker();
         break;
     case WifiToggleMenu:
         wifiToggleMenu();

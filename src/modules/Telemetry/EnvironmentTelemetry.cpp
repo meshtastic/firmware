@@ -145,6 +145,33 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
+namespace
+{
+constexpr float TEMPERATURE_OFFSET_MIN_C = -20.0f;
+constexpr float TEMPERATURE_OFFSET_MAX_C = 20.0f;
+
+float clampTemperatureOffsetC(float offsetC)
+{
+    if (offsetC < TEMPERATURE_OFFSET_MIN_C)
+        return TEMPERATURE_OFFSET_MIN_C;
+    if (offsetC > TEMPERATURE_OFFSET_MAX_C)
+        return TEMPERATURE_OFFSET_MAX_C;
+    return offsetC;
+}
+
+void applyTemperatureOffset(meshtastic_EnvironmentMetrics *metrics)
+{
+    const float offsetC = clampTemperatureOffsetC(moduleConfig.telemetry.environment_temperature_offset_c);
+    if (offsetC == 0.0f)
+        return;
+
+    if (metrics->has_temperature)
+        metrics->temperature += offsetC;
+    if (metrics->has_soil_temperature)
+        metrics->soil_temperature += offsetC;
+}
+} // namespace
+
 void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
     if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
@@ -571,6 +598,9 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid || get_metrics;
     hasSensor = true;
 #endif
+    if (valid)
+        applyTemperatureOffset(&m->variant.environment_metrics);
+
     return valid && hasSensor;
 }
 

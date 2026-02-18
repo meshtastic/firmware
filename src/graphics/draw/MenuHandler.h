@@ -38,7 +38,7 @@ class menuHandler
         ManageNodeMenu,
         RemoveFavorite,
         TestMenu,
-        NumberTest,
+        EnvironmentTempOffsetPicker,
         WifiToggleMenu,
         BluetoothToggleMenu,
         ScreenOptionsMenu,
@@ -78,6 +78,7 @@ class menuHandler
     static void deleteMessagesMenu();
     static void homeBaseMenu();
     static void textMessageBaseMenu();
+    static void environmentTelemetryBaseMenu();
     static void systemBaseMenu();
     static void favoriteBaseMenu();
     static void positionBaseMenu();
@@ -101,7 +102,7 @@ class menuHandler
     static void removeFavoriteMenu();
     static void traceRouteMenu();
     static void testMenu();
-    static void numberTest();
+    static void environmentTemperatureOffsetPicker();
     static void wifiBaseMenu();
     static void wifiToggleMenu();
     static void screenOptionsMenu();
