@@ -752,6 +752,14 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     reply->decoded.payload.size =
         pb_encode_to_bytes(reply->decoded.payload.bytes, sizeof(reply->decoded.payload.bytes), &meshtastic_User_msg, &user);
     reply->decoded.want_response = false;
+    // Respect the node-wide config_ok_to_mqtt setting for cached NodeInfo replies.
+    // This response is spoofed from another node, so Router::perhapsEncode()
+    // will not auto-populate the bitfield via config_ok_to_mqtt.
+    reply->decoded.has_bitfield = true;
+    if (config.lora.config_ok_to_mqtt)
+        reply->decoded.bitfield = BITFIELD_OK_TO_MQTT_MASK;
+    else
+        reply->decoded.bitfield = 0;
     // Spoof the sender as the target node so the requestor sees a valid NodeInfo response.
     // hop_limit=0 ensures this reply travels only one hop (direct to requestor).
     reply->from = p->to;
