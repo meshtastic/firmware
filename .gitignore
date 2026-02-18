@@ -48,5 +48,8 @@ arduino-lib-builder*
 dependencies.lock
 idf_component.yml
 CMakeLists.txt
-sdkconfig.*
+/sdkconfig.*
 .dummy/*
+
+# PYTHONPATH used by the Nix shell
+.python3

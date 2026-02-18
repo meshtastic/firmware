@@ -132,8 +132,7 @@ CannedMessageModule::CannedMessageModule()
     : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessage")
 {
     this->loadProtoForModule();
-    if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
-        !CANNED_MESSAGE_MODULE_ENABLE) {
+    if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE) {
         LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
         this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         disable();
@@ -1278,14 +1277,13 @@ int32_t CannedMessageModule::runOnce()
                 this->cursor = 0;
 
                 // Tell Screen to jump straight to the TextMessage frame
-                UIFrameEvent e;
                 e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
                 this->notifyObservers(&e);
 
                 // Now deactivate this module
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 
-                return INT32_MAX; // don’t fall back into canned list
+                return INT32_MAX; // don't fall back into canned list
             } else {
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
@@ -1306,14 +1304,13 @@ int32_t CannedMessageModule::runOnce()
                     this->cursor = 0;
 
                     // Tell Screen to jump straight to the TextMessage frame
-                    UIFrameEvent e;
                     e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
                     this->notifyObservers(&e);
 
                     // Now deactivate this module
                     this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 
-                    return INT32_MAX; // don’t fall back into canned list
+                    return INT32_MAX; // don't fall back into canned list
                 }
             } else {
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
@@ -1324,11 +1321,10 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = "";
         this->cursor = 0;
 
-        UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->notifyObservers(&e);
 
-        // Immediately stop, don’t linger on canned screen
+        // Immediately stop, don't linger on canned screen
         return INT32_MAX;
     }
     // Highlight [Select Destination] initially when entering the message list
@@ -2139,7 +2135,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             // Draw lines with emotes
             int rowHeight = FONT_HEIGHT_SMALL;
             int yLine = inputY;
-            for (auto &line : lines) {
+            for (const auto &line : lines) {
                 int nextX = x;
                 for (const auto &token : line) {
                     if (token.first) {

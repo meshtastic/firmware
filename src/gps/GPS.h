@@ -2,6 +2,8 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 
+#include <memory>
+
 #include "GPSStatus.h"
 #include "GpioLogic.h"
 #include "Observer.h"
@@ -14,6 +16,11 @@
 // Allow defining the polarity of the ENABLE output.  default is active high
 #ifndef GPS_EN_ACTIVE
 #define GPS_EN_ACTIVE 1
+#endif
+
+// Allow defining the polarity of the STANDBY output.  default is LOW for standby
+#ifndef GPS_STANDBY_ACTIVE
+#define GPS_STANDBY_ACTIVE LOW
 #endif
 
 static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
@@ -113,7 +120,7 @@ class GPS : private concurrency::OSThread
 
     // Creates an instance of the GPS class.
     // Returns the new instance or null if the GPS is not present.
-    static GPS *createGps();
+    static std::unique_ptr<GPS> createGps();
 
     // Wake the GPS hardware - ready for an update
     void up();
@@ -251,5 +258,5 @@ class GPS : private concurrency::OSThread
     uint8_t fixeddelayCtr = 0;
 };
 
-extern GPS *gps;
+extern std::unique_ptr<GPS> gps;
 #endif // Exclude GPS

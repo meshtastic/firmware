@@ -18,7 +18,7 @@
 #endif
 
 #if HAS_NETWORKING
-extern Syslog syslog;
+extern meshtastic::Syslog syslog;
 #endif
 void RedirectablePrint::rpInit()
 {
@@ -227,34 +227,21 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
 #endif
         if (isBleConnected) {
-            char *message;
-            size_t initialLen;
-            size_t len;
-            initialLen = strlen(format);
-            message = new char[initialLen + 1];
-            len = vsnprintf(message, initialLen + 1, format, arg);
-            if (len > initialLen) {
-                delete[] message;
-                message = new char[len + 1];
-                vsnprintf(message, len + 1, format, arg);
-            }
             auto thread = concurrency::OSThread::currentThread;
             meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
             logRecord.level = getLogLevel(logLevel);
-            strcpy(logRecord.message, message);
+            vsprintf(logRecord.message, format, arg);
             if (thread)
                 strcpy(logRecord.source, thread->ThreadName.c_str());
             logRecord.time = getValidTime(RTCQuality::RTCQualityDevice, true);
 
-            uint8_t *buffer = new uint8_t[meshtastic_LogRecord_size];
-            size_t size = pb_encode_to_bytes(buffer, meshtastic_LogRecord_size, meshtastic_LogRecord_fields, &logRecord);
+            auto buffer = std::unique_ptr<uint8_t[]>(new uint8_t[meshtastic_LogRecord_size]);
+            size_t size = pb_encode_to_bytes(buffer.get(), meshtastic_LogRecord_size, meshtastic_LogRecord_fields, &logRecord);
 #ifdef ARCH_ESP32
-            nimbleBluetooth->sendLog(buffer, size);
+            nimbleBluetooth->sendLog(buffer.get(), size);
 #elif defined(ARCH_NRF52)
-            nrf52Bluetooth->sendLog(buffer, size);
+            nrf52Bluetooth->sendLog(buffer.get(), size);
 #endif
-            delete[] message;
-            delete[] buffer;
         }
     }
 #else
@@ -292,8 +279,8 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 
     // append \n to format
     size_t len = strlen(format);
-    char *newFormat = new char[len + 2];
-    strcpy(newFormat, format);
+    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
+    strcpy(newFormat.get(), format);
     newFormat[len] = '\n';
     newFormat[len + 1] = '\0';
 
@@ -310,23 +297,18 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
             va_end(arg);
         }
         if (portduino_config.logoutputlevel < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
-            delete[] newFormat;
             return;
         }
     }
     if (portduino_config.logoutputlevel < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
-        delete[] newFormat;
         return;
     } else if (portduino_config.logoutputlevel < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0) {
-        delete[] newFormat;
         return;
     } else if (portduino_config.logoutputlevel < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0) {
-        delete[] newFormat;
         return;
     }
 #endif
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
-        delete[] newFormat;
         return;
     }
 
@@ -338,11 +320,19 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #endif
 
         va_list arg;
+        va_list arg_copy;
+
         va_start(arg, format);
 
-        log_to_serial(logLevel, newFormat, arg);
-        log_to_syslog(logLevel, newFormat, arg);
-        log_to_ble(logLevel, newFormat, arg);
+        va_copy(arg_copy, arg);
+        log_to_serial(logLevel, newFormat.get(), arg_copy);
+        va_end(arg_copy);
+
+        va_copy(arg_copy, arg);
+        log_to_syslog(logLevel, newFormat.get(), arg_copy);
+        va_end(arg_copy);
+
+        log_to_ble(logLevel, newFormat.get(), arg);
 
         va_end(arg);
 #ifdef HAS_FREE_RTOS
@@ -352,7 +342,6 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #endif
     }
 
-    delete[] newFormat;
     return;
 }
 
