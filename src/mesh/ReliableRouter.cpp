@@ -2,6 +2,7 @@
 #include "Default.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
+#include "concurrency/LockGuard.h"
 #include "configuration.h"
 #include "memGet.h"
 #include "mesh-pb-constants.h"
@@ -21,15 +22,22 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         auto copy = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("ReliableRouter::send", copy);
 
-        startRetransmission(copy, NUM_RELIABLE_RETX);
+        if (copy) {
+            startRetransmission(copy, NUM_RELIABLE_RETX);
+        } else {
+            LOG_WARN("Reliable send for packet 0x%08x will be best-effort (no retransmission state)", p->id);
+        }
     }
 
     /* If we have pending retransmissions, add the airtime of this packet to it, because during that time we cannot receive an
        (implicit) ACK. Otherwise, we might retransmit too early.
      */
-    for (auto i = pending.begin(); i != pending.end(); i++) {
-        if (i->first.id != p->id) {
-            i->second.nextTxMsec += iface->getPacketTime(p);
+    {
+        concurrency::LockGuard g(&pendingMutex);
+        for (auto i = pending.begin(); i != pending.end(); i++) {
+            if (i->first.id != p->id) {
+                i->second.nextTxMsec += iface->getPacketTime(p);
+            }
         }
     }
 
@@ -49,12 +57,12 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
         // from the intended recipient.
         auto key = GlobalPacketId(getFrom(p), p->id);
-        auto old = findPendingPacket(key);
-        if (old) {
+        ChannelIndex pendingChannel = 0;
+        if (getPendingPacketChannel(key, pendingChannel)) {
             LOG_DEBUG("Generate implicit ack");
             // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
             // marked as wantAck
-            sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
+            sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, pendingChannel);
 
             // Only stop retransmissions if the rebroadcast came via LoRa
             if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
@@ -70,8 +78,11 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
        because while receiving this packet, we could not have received an (implicit) ACK for it.
        If we don't add this, we will likely retransmit too early.
     */
-    for (auto i = pending.begin(); i != pending.end(); i++) {
-        i->second.nextTxMsec += iface->getPacketTime(p, true);
+    {
+        concurrency::LockGuard g(&pendingMutex);
+        for (auto i = pending.begin(); i != pending.end(); i++) {
+            i->second.nextTxMsec += iface->getPacketTime(p, true);
+        }
     }
 
     return isBroadcast(p->to) ? FloodingRouter::shouldFilterReceived(p) : NextHopRouter::shouldFilterReceived(p);

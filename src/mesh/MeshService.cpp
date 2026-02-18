@@ -108,7 +108,12 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     }
 
     printPacket("Forwarding to phone", mp);
-    sendToPhone(packetPool.allocCopy(*mp));
+    auto *copy = packetPool.allocCopy(*mp);
+    if (copy) {
+        sendToPhone(copy);
+    } else {
+        LOG_WARN("Drop forwarding to phone for packet 0x%08x: no packet buffers", mp->id);
+    }
 
     return 0;
 }
@@ -223,6 +228,10 @@ bool MeshService::cancelSending(PacketId id)
 ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id)
 {
     meshtastic_QueueStatus *copied = queueStatusPool.allocCopy(qs);
+    if (!copied) {
+        LOG_WARN("Failed to allocate QueueStatus message for phone");
+        return ERRNO_UNKNOWN;
+    }
 
     copied->res = res;
     copied->mesh_packet_id = mesh_packet_id;
@@ -263,7 +272,11 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
         auto a = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("MeshService::sendToMesh", a);
 
-        sendToPhone(a);
+        if (a) {
+            sendToPhone(a);
+        } else {
+            LOG_WARN("Unable to copy packet 0x%08x for ccToPhone", p->id);
+        }
     }
 
     // Router may ask us to release the packet if it wasn't sent
@@ -301,6 +314,10 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 
 void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
+    if (!p) {
+        return;
+    }
+
     perhapsDecode(p);
 
 #ifdef ARCH_ESP32
@@ -338,6 +355,9 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
 void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
 {
+    if (!m) {
+        return;
+    }
     LOG_DEBUG("Send mqtt message on topic '%s' to client for proxy", m->topic);
     if (toPhoneMqttProxyQueue.numFree() == 0) {
         LOG_WARN("MqttClientProxyMessagePool queue is full, discard oldest");
@@ -370,6 +390,9 @@ void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const
 
 void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 {
+    if (!n) {
+        return;
+    }
     LOG_DEBUG("Send client notification to phone");
     if (toPhoneClientNotificationQueue.numFree() == 0) {
         LOG_WARN("ClientNotification queue is full, discard oldest");

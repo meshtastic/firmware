@@ -22,8 +22,9 @@
 #include "serialization/MeshPacketSerializer.h"
 #endif
 
-#define MAX_RX_FROMRADIO                                                                                                         \
-    4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
+#define MAX_RX_FROMRADIO_CONTROL 3
+#define MAX_RX_FROMRADIO_DATA 5
+#define MAX_RX_FROMRADIO_TOTAL (MAX_RX_FROMRADIO_CONTROL + MAX_RX_FROMRADIO_DATA)
 
 // I think this is right, one packet for each of the three fifos + one packet being currently assembled for TX or RX
 // And every TX packet might have a retransmission packet or an ack alive at any moment
@@ -31,7 +32,7 @@
 #ifdef ARCH_PORTDUINO
 // Portduino (native) targets can use dynamic memory pools with runtime-configurable sizes
 #define MAX_PACKETS                                                                                                              \
-    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO_TOTAL + 2 * MAX_TX_QUEUE +                                                                \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
@@ -40,7 +41,7 @@ Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 // On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this statically.
 // For now, make it dynamic again.
 #define MAX_PACKETS                                                                                                              \
-    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO_TOTAL + 2 * MAX_TX_QUEUE +                                                                \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
@@ -48,7 +49,7 @@ Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #else
 // Embedded targets use static memory pools with compile-time constants
 #define MAX_PACKETS_STATIC                                                                                                       \
-    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO_TOTAL + 2 * MAX_TX_QUEUE +                                                                \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
 static MemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> staticPool;
@@ -62,7 +63,8 @@ static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
  *
  * Currently we only allow one interface, that may change in the future
  */
-Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRADIO)
+Router::Router()
+    : concurrency::OSThread("Router"), fromRadioControlQueue(MAX_RX_FROMRADIO_CONTROL), fromRadioDataQueue(MAX_RX_FROMRADIO_DATA)
 {
     // This is called pre main(), don't touch anything here, the following code is not safe
 
@@ -70,7 +72,8 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     LOG_DEBUG("Size of SubPacket %d", sizeof(SubPacket));
     LOG_DEBUG("Size of MeshPacket %d", sizeof(MeshPacket)); */
 
-    fromRadioQueue.setReader(this);
+    fromRadioControlQueue.setReader(this);
+    fromRadioDataQueue.setReader(this);
 
     // init Lockguard for crypt operations
     assert(!cryptLock);
@@ -135,8 +138,15 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 int32_t Router::runOnce()
 {
     meshtastic_MeshPacket *mp;
-    while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
-        // printPacket("handle fromRadioQ", mp);
+    while (true) {
+        // Always drain control traffic first to minimize reliability-control loss under burst load.
+        mp = fromRadioControlQueue.dequeuePtr(0);
+        if (!mp) {
+            mp = fromRadioDataQueue.dequeuePtr(0);
+        }
+        if (!mp) {
+            break;
+        }
         perhapsHandleReceived(mp);
     }
 
@@ -150,15 +160,43 @@ int32_t Router::runOnce()
  */
 void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p)
 {
-    // Try enqueue until successful
-    while (!fromRadioQueue.enqueue(p, 0)) {
-        meshtastic_MeshPacket *old_p;
-        old_p = fromRadioQueue.dequeuePtr(0); // Dequeue and discard the oldest packet
+    if (!p) {
+        return;
+    }
+
+    auto dropOldest = [&](PointerQueue<meshtastic_MeshPacket> &q, const char *reason) -> bool {
+        meshtastic_MeshPacket *old_p = q.dequeuePtr(0);
         if (old_p) {
-            printPacket("fromRadioQ full, drop oldest!", old_p);
+            printPacket(reason, old_p);
             packetPool.release(old_p);
+            return true;
+        }
+        return false;
+    };
+
+    bool isControl = isIngressControlPacket(p);
+    bool queued = false;
+    if (isControl) {
+        queued = fromRadioControlQueue.enqueue(p, 0);
+        if (!queued && dropOldest(fromRadioDataQueue, "fromRadio dataQ full, drop oldest for control")) {
+            queued = fromRadioControlQueue.enqueue(p, 0);
+        }
+        if (!queued && dropOldest(fromRadioControlQueue, "fromRadio controlQ full, drop oldest control")) {
+            queued = fromRadioControlQueue.enqueue(p, 0);
+        }
+    } else {
+        queued = fromRadioDataQueue.enqueue(p, 0);
+        if (!queued && dropOldest(fromRadioDataQueue, "fromRadio dataQ full, drop oldest data")) {
+            queued = fromRadioDataQueue.enqueue(p, 0);
         }
     }
+
+    if (!queued) {
+        printPacket("fromRadio ingress full, drop new packet", p);
+        packetPool.release(p);
+        return;
+    }
+
     // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
     setReceivedMessage();
 }
@@ -190,6 +228,10 @@ PacketId generatePacketId()
 meshtastic_MeshPacket *Router::allocForSending()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    if (!p) {
+        LOG_ERROR("Failed to allocate MeshPacket for sending");
+        return nullptr;
+    }
 
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB->getNodeNum();
@@ -237,6 +279,10 @@ meshtastic_QueueStatus Router::getQueueStatus()
 
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 {
+    if (!p) {
+        LOG_WARN("sendLocal called with null packet");
+        return ERRNO_UNKNOWN;
+    }
     if (p->to == 0) {
         LOG_ERROR("Packet received with to: of 0!");
     }
@@ -307,12 +353,16 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d mins", silentMinutes);
 
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-            cn->has_reply_id = true;
-            cn->reply_id = p->id;
-            cn->level = meshtastic_LogRecord_Level_WARNING;
-            cn->time = getValidTime(RTCQualityFromNet);
-            sprintf(cn->message, "Duty cycle limit exceeded. You can send again in %d mins", silentMinutes);
-            service->sendClientNotification(cn);
+            if (cn) {
+                cn->has_reply_id = true;
+                cn->reply_id = p->id;
+                cn->level = meshtastic_LogRecord_Level_WARNING;
+                cn->time = getValidTime(RTCQualityFromNet);
+                sprintf(cn->message, "Duty cycle limit exceeded. You can send again in %d mins", silentMinutes);
+                service->sendClientNotification(cn);
+            } else {
+                LOG_WARN("Failed to allocate duty-cycle warning notification");
+            }
 
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
             if (isFromUs(p)) { // only send NAK to API, not to the mesh
@@ -357,6 +407,9 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         DEBUG_HEAP_BEFORE;
         meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("Router::send", p_decoded);
+        if (!p_decoded) {
+            LOG_WARN("Failed to allocate decoded copy during send(), skip MQTT mirror for packet 0x%08x", p->id);
+        }
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
@@ -367,7 +420,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         }
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
-        if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
+        if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt && p_decoded) {
             mqtt->onSend(*p, *p_decoded, chIndex);
         }
 #endif
@@ -382,6 +435,27 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
     return iface->send(p);
+}
+
+bool Router::isIngressControlPacket(const meshtastic_MeshPacket *p) const
+{
+    if (!p) {
+        return false;
+    }
+
+    if (p->want_ack || p->next_hop != NO_NEXT_HOP_PREFERENCE) {
+        return true;
+    }
+
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        if (p->decoded.portnum == meshtastic_PortNum_ROUTING_APP) {
+            return true;
+        }
+        if (p->decoded.request_id || p->decoded.reply_id || p->decoded.want_response) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */

@@ -1985,6 +1985,10 @@ uint16_t InkHUD::MenuApplet::getSystemInfoPanelHeight()
 void InkHUD::MenuApplet::sendText(NodeNum dest, ChannelIndex channel, const char *message)
 {
     meshtastic_MeshPacket *p = router->allocForSending();
+    if (!p) {
+        LOG_WARN("Unable to send canned message: no packet buffers");
+        return;
+    }
     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     p->to = dest;
     p->channel = channel;

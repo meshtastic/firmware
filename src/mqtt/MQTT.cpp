@@ -108,6 +108,10 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     }
 
     UniquePacketPoolPacket p = packetPool.allocUniqueZeroed();
+    if (!p) {
+        LOG_WARN("Drop MQTT message due to packetPool exhaustion");
+        return;
+    }
     p->from = e.packet->from;
     p->to = e.packet->to;
     p->id = e.packet->id;
@@ -186,6 +190,10 @@ inline void onReceiveJson(byte *payload, size_t length)
 
         // construct protobuf data packet using TEXT_MESSAGE, send it to the mesh
         meshtastic_MeshPacket *p = router->allocForSending();
+        if (!p) {
+            LOG_WARN("Drop MQTT JSON text message: no packet buffers");
+            return;
+        }
         p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
         if (json.find("channel") != json.end() && json["channel"]->IsNumber() &&
             (json["channel"]->AsNumber() < channels.getNumChannels()))
@@ -217,6 +225,10 @@ inline void onReceiveJson(byte *payload, size_t length)
 
         // construct protobuf data packet using POSITION, send it to the mesh
         meshtastic_MeshPacket *p = router->allocForSending();
+        if (!p) {
+            LOG_WARN("Drop MQTT JSON position message: no packet buffers");
+            return;
+        }
         p->decoded.portnum = meshtastic_PortNum_POSITION_APP;
         if (json.find("channel") != json.end() && json["channel"]->IsNumber() &&
             (json["channel"]->AsNumber() < channels.getNumChannels()))
@@ -474,6 +486,10 @@ bool MQTT::publish(const char *topic, const char *payload, bool retained)
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
+        if (!msg) {
+            LOG_WARN("MQTT proxy publish dropped: no proxy message buffers");
+            return false;
+        }
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
         strncpy(msg->topic, topic, sizeof(msg->topic));
         msg->topic[sizeof(msg->topic) - 1] = '\0';
@@ -495,6 +511,10 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
+        if (!msg) {
+            LOG_WARN("MQTT proxy publish dropped: no proxy message buffers");
+            return false;
+        }
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_data_tag;
         strncpy(msg->topic, topic, sizeof(msg->topic));
         msg->topic[sizeof(msg->topic) - 1] = '\0'; // Ensure null termination
@@ -665,6 +685,10 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         LOG_ERROR(warning);
 #if !IS_RUNNING_TESTS
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        if (!cn) {
+            LOG_WARN("Failed to allocate MQTT config error notification");
+            return false;
+        }
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);
         strncpy(cn->message, warning, sizeof(cn->message) - 1);
@@ -681,6 +705,10 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         LOG_ERROR(warning);
 #if !IS_RUNNING_TESTS
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        if (!cn) {
+            LOG_WARN("Failed to allocate MQTT config error notification");
+            return false;
+        }
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);
         strncpy(cn->message, warning, sizeof(cn->message) - 1);
@@ -856,6 +884,10 @@ void MQTT::perhapsReportToMap()
 
     // Allocate MeshPacket and fill it
     meshtastic_MeshPacket *mp = packetPool.allocZeroed();
+    if (!mp) {
+        LOG_WARN("MQTT map report dropped: no packet buffers");
+        return;
+    }
     mp->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     mp->from = nodeDB->getNodeNum();
     mp->to = NODENUM_BROADCAST;

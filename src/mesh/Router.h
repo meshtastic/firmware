@@ -16,9 +16,10 @@
 class Router : protected concurrency::OSThread, protected PacketHistory
 {
   private:
-    /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
-    /// forwarded to the phone.
-    PointerQueue<meshtastic_MeshPacket> fromRadioQueue;
+    /// High-priority/control packets from ingress paths.
+    PointerQueue<meshtastic_MeshPacket> fromRadioControlQueue;
+    /// Normal data packets from ingress paths.
+    PointerQueue<meshtastic_MeshPacket> fromRadioDataQueue;
 
   protected:
     std::unique_ptr<RadioInterface> iface = nullptr;
@@ -155,6 +156,8 @@ class Router : protected concurrency::OSThread, protected PacketHistory
 
     /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
+
+    bool isIngressControlPacket(const meshtastic_MeshPacket *p) const;
 };
 
 enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };

@@ -78,6 +78,10 @@ class UdpMulticastHandler final
             mp.public_key.size = 0;
             memset(mp.public_key.bytes, 0, sizeof(mp.public_key.bytes));
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
+            if (!p) {
+                LOG_WARN("Drop UDP multicast packet: no packet buffers");
+                return;
+            }
             // Unset received SNR/RSSI
             p->rx_snr = 0;
             p->rx_rssi = 0;
