@@ -144,6 +144,21 @@ void InkHUD::Applet::resetDrawingSpace()
     setFont(fontSmall);
 }
 
+// Sets one or more inputs to enabled/disabled for this applet and if they should be sent to it
+void InkHUD::Applet::setInputsSubscribed(uint8_t input, bool captured)
+{
+    if (captured)
+        subscribedInputs |= input;
+    else
+        subscribedInputs &= ~input;
+}
+
+// Checks if a specific input is enabled for this applet and should be sent to it
+bool InkHUD::Applet::isInputSubscribed(InputMask input)
+{
+    return (subscribedInputs & input) == input;
+}
+
 // Tell InkHUD::Renderer that we want to render now
 // Applets should internally listen for events they are interested in, via MeshModule, CallbackObserver etc
 // When an applet decides it has heard something important, and wants to redraw, it calls this method
