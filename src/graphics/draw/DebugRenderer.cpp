@@ -514,7 +514,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 // ****************************
 // *      System Screen       *
 // ****************************
-#if ESP32
+#ifdef ESP32
 static uint32_t lastFlashCheck = 0;
 static uint32_t cachedFlashUsed = 0;
 static uint32_t cachedFlashTotal = 0;
@@ -590,7 +590,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     uint32_t heapUsed = memGet.getHeapSize() - memGet.getFreeHeap();
     uint32_t heapTotal = memGet.getHeapSize();
 
-#if ESP32
+#ifdef ESP32
     uint32_t psramUsed = memGet.getPsramSize() - memGet.getFreePsram();
     uint32_t psramTotal = memGet.getPsramSize();
 
