@@ -29,6 +29,106 @@ extern int bannerSignalBars;
 // Tracks whether destination-picker cancel/select should return to canned list vs freetext.
 static bool returnToCannedList = false;
 
+namespace
+{
+// ASCII lowercase helper keeps filtering deterministic and avoids locale overhead.
+char toLowerAscii(char c)
+{
+    if (c >= 'A' && c <= 'Z') {
+        return static_cast<char>(c + ('a' - 'A'));
+    }
+    return c;
+}
+
+// Case-insensitive substring search without temporary String allocations.
+bool containsCaseInsensitiveAscii(const char *text, const char *needle)
+{
+    if (!text || !needle || !needle[0]) {
+        return true;
+    }
+
+    const size_t textLen = strlen(text);
+    const size_t needleLen = strlen(needle);
+    if (needleLen > textLen) {
+        return false;
+    }
+
+    for (size_t i = 0; i + needleLen <= textLen; ++i) {
+        bool matched = true;
+        for (size_t j = 0; j < needleLen; ++j) {
+            if (toLowerAscii(text[i + j]) != toLowerAscii(needle[j])) {
+                matched = false;
+                break;
+            }
+        }
+        if (matched) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Truncate text to fit width and append ellipsis when clipping is required.
+void truncateWithEllipsisToWidth(OLEDDisplay *display, char *text, size_t textSize, int maxWidth)
+{
+    if (!display || !text || textSize == 0) {
+        return;
+    }
+    if (maxWidth <= 0) {
+        text[0] = '\0';
+        return;
+    }
+    if (display->getStringWidth(text) <= maxWidth) {
+        return;
+    }
+    if (textSize < 4) {
+        text[0] = '\0';
+        return;
+    }
+
+    const size_t originalLen = strlen(text);
+    size_t low = 0;
+    size_t high = std::min(originalLen, textSize - 4);
+    char candidate[64];
+    candidate[0] = '\0';
+
+    // Binary search shortest-fitting clipped token with ellipsis.
+    while (low <= high) {
+        const size_t mid = low + ((high - low) / 2);
+        if (mid >= sizeof(candidate)) {
+            break;
+        }
+        memcpy(candidate, text, mid);
+        candidate[mid] = '\0';
+        strcat(candidate, "...");
+        if (display->getStringWidth(candidate) <= maxWidth) {
+            low = mid + 1;
+        } else {
+            if (mid == 0) {
+                break;
+            }
+            high = mid - 1;
+        }
+    }
+
+    const size_t keep = (low == 0) ? 0 : (low - 1);
+    const size_t clipped = std::min(keep, textSize - 4);
+    text[clipped] = '\0';
+    strcat(text, "...");
+}
+
+// Find the emote descriptor for a token label.
+const graphics::Emote *findEmoteByLabel(const String &label)
+{
+    for (int i = 0; i < graphics::numEmotes; ++i) {
+        if (label == graphics::emotes[i].label) {
+            return &graphics::emotes[i];
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
 // Reset destination search state and keep the previous selection roughly centered.
 void CannedMessageModule::resetSearch()
 {
@@ -69,8 +169,8 @@ void CannedMessageModule::updateDestinationSelectionList()
     this->activeChannelIndices.clear();
 
     NodeNum myNodeNum = nodeDB->getNodeNum();
-    String lowerSearchQuery = searchQuery;
-    lowerSearchQuery.toLowerCase();
+    const bool hasSearchFilter = searchQuery.length() > 0;
+    const char *searchText = searchQuery.c_str();
 
     // Preallocate space to reduce reallocation
     this->filteredNodes.reserve(numMeshNodes);
@@ -80,33 +180,35 @@ void CannedMessageModule::updateDestinationSelectionList()
         if (!node || node->num == myNodeNum || !node->has_user || node->user.public_key.size != 32)
             continue;
 
-        const String &nodeName = node->user.long_name;
-
-        if (searchQuery.length() == 0) {
+        const char *nodeName = node->user.long_name;
+        if (!hasSearchFilter) {
             this->filteredNodes.push_back({node, sinceLastSeen(node)});
         } else {
-            // Avoid unnecessary lowercase conversion if already matched
-            String lowerNodeName = nodeName;
-            lowerNodeName.toLowerCase();
-
-            if (lowerNodeName.indexOf(lowerSearchQuery) != -1) {
+            // Compare in place to avoid building lower-cased temporary Strings per node.
+            if (containsCaseInsensitiveAscii(nodeName, searchText)) {
                 this->filteredNodes.push_back({node, sinceLastSeen(node)});
             }
         }
     }
 
-    meshtastic_MeshPacket *p = allocDataPacket();
-    p->pki_encrypted = true;
-    p->channel = 0;
-
-    // Populate active channels
-    std::vector<String> seenChannels;
-    seenChannels.reserve(channels.getNumChannels());
+    // Populate unique active channels without temporary String lists.
     for (uint8_t i = 0; i < channels.getNumChannels(); ++i) {
-        String name = channels.getName(i);
-        if (name.length() > 0 && std::find(seenChannels.begin(), seenChannels.end(), name) == seenChannels.end()) {
+        const char *name = channels.getName(i);
+        if (!name || !name[0]) {
+            continue;
+        }
+
+        bool alreadyIncluded = false;
+        for (uint8_t existingIndex : this->activeChannelIndices) {
+            const char *existingName = channels.getName(existingIndex);
+            if (existingName && strcmp(existingName, name) == 0) {
+                alreadyIncluded = true;
+                break;
+            }
+        }
+
+        if (!alreadyIncluded) {
             this->activeChannelIndices.push_back(i);
-            seenChannels.push_back(name);
         }
     }
 
@@ -569,14 +671,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                                  ((node && node->is_favorite) ? 10 : 0);
                 if (availWidth < 0)
                     availWidth = 0;
-
-                size_t origLen = strlen(entryText);
-                while (entryText[0] && display->getStringWidth(entryText) > availWidth) {
-                    entryText[strlen(entryText) - 1] = '\0';
-                }
-                if (strlen(entryText) < origLen) {
-                    strcat(entryText, "...");
-                }
+                truncateWithEllipsisToWidth(display, entryText, sizeof(entryText), availWidth);
 
                 // Prepend "* " if this is a favorite
                 if (node && node->is_favorite) {
@@ -659,7 +754,6 @@ void CannedMessageModule::drawCannedMessageListScreen(OLEDDisplay *display, OLED
     const int baseRowSpacing = FONT_HEIGHT_SMALL - 4;
 
     int topMsg;
-    std::vector<int> rowHeights;
     int _visibleRows;
 
     // Draw header (To: ...).
@@ -669,28 +763,10 @@ void CannedMessageModule::drawCannedMessageListScreen(OLEDDisplay *display, OLED
     const int listYOffset = y + FONT_HEIGHT_SMALL - 3;
     _visibleRows = (display->getHeight() - listYOffset) / baseRowSpacing;
 
-    // Figure out which messages are visible and their needed heights.
+    // Figure out which messages are visible.
     topMsg =
         (messagesCount > _visibleRows && currentMessageIndex >= _visibleRows - 1) ? currentMessageIndex - _visibleRows + 2 : 0;
     int countRows = std::min(messagesCount, _visibleRows);
-
-    // Build per-row max height based on all emotes in line.
-    for (int i = 0; i < countRows; i++) {
-        const char *msg = getMessageByIndex(topMsg + i);
-        int maxEmoteHeight = 0;
-        for (int j = 0; j < graphics::numEmotes; j++) {
-            const char *label = graphics::emotes[j].label;
-            if (!label || !*label)
-                continue;
-            const char *search = msg;
-            while ((search = strstr(search, label))) {
-                if (graphics::emotes[j].height > maxEmoteHeight)
-                    maxEmoteHeight = graphics::emotes[j].height;
-                search += strlen(label); // Advance past this emote.
-            }
-        }
-        rowHeights.push_back(std::max(baseRowSpacing, maxEmoteHeight + 2));
-    }
 
     // Draw all message rows with multi-emote support.
     int yCursor = listYOffset;
@@ -698,11 +774,21 @@ void CannedMessageModule::drawCannedMessageListScreen(OLEDDisplay *display, OLED
         int msgIdx = topMsg + vis;
         int lineY = yCursor;
         const char *msg = getMessageByIndex(msgIdx);
-        int rowHeight = rowHeights[vis];
         bool _highlight = (msgIdx == currentMessageIndex);
 
         // Multi-emote tokenization.
         std::vector<std::pair<bool, String>> tokens = freeTextModule::tokenizeMessageWithEmotes(msg);
+        int maxEmoteHeight = 0;
+        for (const auto &token : tokens) {
+            if (!token.first) {
+                continue;
+            }
+            const graphics::Emote *emote = findEmoteByLabel(token.second);
+            if (emote && emote->height > maxEmoteHeight) {
+                maxEmoteHeight = emote->height;
+            }
+        }
+        const int rowHeight = std::max(baseRowSpacing, maxEmoteHeight + 2);
 
         // Vertically center based on rowHeight.
         int textYOffset = (rowHeight - FONT_HEIGHT_SMALL) / 2;
@@ -871,14 +957,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                     display->getWidth() - ((graphics::currentResolution == graphics::ScreenResolution::High) ? 60 : 30);
                 if (availWidth < 0)
                     availWidth = 0;
-
-                size_t origLen = strlen(nodeName);
-                while (nodeName[0] && display->getStringWidth(nodeName) > availWidth) {
-                    nodeName[strlen(nodeName) - 1] = '\0';
-                }
-                if (strlen(nodeName) < origLen) {
-                    strcat(nodeName, "...");
-                }
+                truncateWithEllipsisToWidth(display, nodeName, sizeof(nodeName), availWidth);
 
                 // Calculate signal quality and bars based on preset, SNR, and RSSI
                 float snrLimit = getSnrLimit(config.lora.modem_preset);

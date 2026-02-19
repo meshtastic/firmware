@@ -2,6 +2,8 @@
 #if HAS_SCREEN
 #include "ProtobufModule.h"
 #include "input/InputBroker.h"
+#include <utility>
+#include <vector>
 
 // ============================
 //        Enums & Defines
@@ -155,6 +157,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     uint8_t freeTextCompletionCount = 0;
     uint8_t freeTextCompletionIndex = 0;
     bool freeTextCompletionSuppressed = false;
+    // Cached wrapped token lines for freetext rendering (rebuilt only when content/width changes).
+    String freeTextLayoutCacheText;
+    int freeTextLayoutCacheWidth = -1;
+    std::vector<std::vector<std::pair<bool, String>>> freeTextLayoutCacheLines;
     // When true, the next emote picker selection replaces this typed prefix span.
     bool freeTextEmoteReplacePending = false;
     unsigned int freeTextEmoteReplaceStart = 0;
@@ -202,6 +208,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleFreeTextInput(const InputEvent *event);
     bool tryStartFreeTextFromInactive(const InputEvent *event);
+    void clearComposeState();
     int32_t runFreeTextState(UIFrameEvent &e);
     String getFreeTextPrefix() const;
     void updateFreeTextCompletion();

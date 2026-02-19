@@ -210,6 +210,17 @@ void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y,
     }
 }
 
+// Reset transient compose state used by canned/freetext flows.
+void CannedMessageModule::clearComposeState()
+{
+    this->currentMessageIndex = -1;
+    this->freetext = "";
+    this->cursor = 0;
+    this->freeTextLayoutCacheText = "";
+    this->freeTextLayoutCacheWidth = -1;
+    this->freeTextLayoutCacheLines.clear();
+}
+
 // Returns true if character input is currently allowed (used for search/freetext states)
 bool CannedMessageModule::isCharInputAllowed() const
 {
@@ -381,9 +392,7 @@ int32_t CannedMessageModule::runOnce()
 
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-        this->currentMessageIndex = -1;
-        this->freetext = "";
-        this->cursor = 0;
+        this->clearComposeState();
         this->notifyObservers(&e);
         return 2000;
     }
@@ -395,25 +404,19 @@ int32_t CannedMessageModule::runOnce()
         (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE_SELECTION)) {
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-        this->currentMessageIndex = -1;
-        this->freetext = "";
-        this->cursor = 0;
+        this->clearComposeState();
         this->notifyObservers(&e);
     }
     // Handle SENDING_ACTIVE state transition after virtual keyboard message
     else if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload == 0) {
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        this->currentMessageIndex = -1;
-        this->freetext = "";
-        this->cursor = 0;
+        this->clearComposeState();
         return INT32_MAX;
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
                !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
         // Reset module on inactivity
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-        this->currentMessageIndex = -1;
-        this->freetext = "";
-        this->cursor = 0;
+        this->clearComposeState();
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 
         // Clean up virtual keyboard if it exists during timeout
@@ -434,9 +437,7 @@ int32_t CannedMessageModule::runOnce()
                 sendText(this->dest, this->channel, this->freetext.c_str(), true);
 
                 // Clean up state but *don’t* deactivate yet
-                this->currentMessageIndex = -1;
-                this->freetext = "";
-                this->cursor = 0;
+                this->clearComposeState();
 
                 // Tell Screen to jump straight to the TextMessage frame
                 e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
@@ -461,9 +462,7 @@ int32_t CannedMessageModule::runOnce()
                     sendText(this->dest, this->channel, this->messages[this->currentMessageIndex], true);
 
                     // Clean up state
-                    this->currentMessageIndex = -1;
-                    this->freetext = "";
-                    this->cursor = 0;
+                    this->clearComposeState();
 
                     // Tell Screen to jump straight to the TextMessage frame
                     e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
@@ -479,9 +478,7 @@ int32_t CannedMessageModule::runOnce()
             }
         }
         // fallback clean-up if nothing above returned
-        this->currentMessageIndex = -1;
-        this->freetext = "";
-        this->cursor = 0;
+        this->clearComposeState();
 
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->notifyObservers(&e);

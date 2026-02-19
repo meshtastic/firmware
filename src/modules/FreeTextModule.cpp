@@ -20,6 +20,7 @@ static constexpr int32_t kInactivateAfterMs = 20000;
 std::vector<std::pair<bool, String>> freeTextModule::tokenizeMessageWithEmotes(const char *msg)
 {
     std::vector<std::pair<bool, String>> tokens;
+    tokens.reserve(8);
     int msgLen = strlen(msg);
     int pos = 0;
     while (pos < msgLen) {
@@ -597,8 +598,8 @@ bool CannedMessageModule::acceptFreeTextCompletion(bool appendSpace)
 
     String prefixLower = getFreeTextPrefix();
     const bool isEmoteCompletion = (this->freeTextCompletion == kFreeTextEmoteCompletion);
-    if (prefixLower.length() == 0 || this->cursor < prefixLower.length() ||
-        (!isEmoteCompletion && prefixLower.length() < 2) || this->freeTextCompletion.length() <= prefixLower.length()) {
+    if (prefixLower.length() == 0 || this->cursor < prefixLower.length() || (!isEmoteCompletion && prefixLower.length() < 2) ||
+        this->freeTextCompletion.length() <= prefixLower.length()) {
         return false;
     }
 
@@ -614,7 +615,7 @@ bool CannedMessageModule::acceptFreeTextCompletion(bool appendSpace)
         this->runState = CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER;
         this->requestFocus();
         if (screen) {
-            screen->forceDisplay();
+            screen->forceDisplay(true);
         }
         return true;
     }
@@ -713,7 +714,8 @@ void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_
         return -1;
     };
 
-    std::vector<ChoiceLayout> choices;
+    ChoiceLayout choices[maxFreeTextCompletions];
+    uint8_t choiceCount = 0;
     int runningX = 0;
     bool hasChoices = false;
     int selectedStart = 0;
@@ -736,7 +738,9 @@ void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_
         const int emoteIndex = findEmoteIndex(candidate);
         int tokenWidth = (emoteIndex >= 0) ? graphics::emotes[emoteIndex].width : display->getStringWidth(candidate);
         int chipWidth = tokenWidth + (chipPaddingX * 2);
-        choices.push_back({i, candidate, runningX, chipWidth, emoteIndex});
+        if (choiceCount < maxFreeTextCompletions) {
+            choices[choiceCount++] = {i, candidate, runningX, chipWidth, emoteIndex};
+        }
         if (i == this->freeTextCompletionIndex) {
             selectedStart = runningX;
             selectedEnd = runningX + chipWidth;
@@ -762,7 +766,8 @@ void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_
     const int centeredOffsetX = (runningX < viewportWidth) ? ((viewportWidth - runningX) / 2) : 0;
     const int drawBaseX = x + centeredOffsetX;
 
-    for (const auto &choice : choices) {
+    for (uint8_t i = 0; i < choiceCount; ++i) {
+        const ChoiceLayout &choice = choices[i];
         int boxX = drawBaseX + (choice.startX - choiceScrollX);
         if ((boxX + choice.width) < x || boxX > (x + viewportWidth)) {
             continue;
@@ -872,8 +877,8 @@ int32_t CannedMessageModule::runFreeTextState(UIFrameEvent &e)
             const size_t emoteLen = emoteLabelLengthEndingAtCursor(this->freetext, this->cursor);
             const unsigned int deleteLen = (emoteLen > 0) ? static_cast<unsigned int>(emoteLen) : 1;
             const unsigned int deleteStart = this->cursor - deleteLen;
-            this->freetext = this->freetext.substring(0, deleteStart) +
-                             this->freetext.substring(this->cursor, this->freetext.length());
+            this->freetext =
+                this->freetext.substring(0, deleteStart) + this->freetext.substring(this->cursor, this->freetext.length());
             this->cursor = deleteStart;
         }
         break;
@@ -990,7 +995,8 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         this->freeTextEmoteReplaceLength = 0;
         runState = CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER;
         requestFocus();
-        screen->forceDisplay();
+        // Force immediate UI refresh so picker appears/snaps quickly on low idle FPS.
+        screen->forceDisplay(true);
         return true;
     }
 
@@ -1098,12 +1104,14 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 
     if (isUp && emotePickerIndex > 0) {
         emotePickerIndex--;
-        screen->forceDisplay();
+        // Non-EInk builds need forceUiUpdate=true for responsive per-step redraw.
+        screen->forceDisplay(true);
         return 1;
     }
     if (isDown && emotePickerIndex < numEmotes - 1) {
         emotePickerIndex++;
-        screen->forceDisplay();
+        // Non-EInk builds need forceUiUpdate=true for responsive per-step redraw.
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -1128,7 +1136,7 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
         this->freeTextEmoteReplaceStart = 0;
         this->freeTextEmoteReplaceLength = 0;
         runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -1140,7 +1148,7 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
         this->freeTextCompletionSuppressed = false;
         this->updateFreeTextCompletion();
         runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -1256,70 +1264,78 @@ void CannedMessageModule::drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUi
         int inputY = y + FONT_HEIGHT_SMALL + inputTopOffset;
         String msgWithCursor = this->drawWithCursor(this->freetext, this->cursor);
 
-        // Tokenize input into (isEmote, token) pairs.
-        const char *msg = msgWithCursor.c_str();
-        std::vector<std::pair<bool, String>> tokens = freeTextModule::tokenizeMessageWithEmotes(msg);
+        // Rebuild wrapped token lines only when text or viewport width changes.
+        const int maxWidth = display->getWidth();
+        if (this->freeTextLayoutCacheWidth != maxWidth || this->freeTextLayoutCacheText != msgWithCursor) {
+            this->freeTextLayoutCacheWidth = maxWidth;
+            this->freeTextLayoutCacheText = msgWithCursor;
+            this->freeTextLayoutCacheLines.clear();
 
-        // Advanced word-wrapping (emotes + text, split by word, wrap inside word if needed).
-        std::vector<std::vector<std::pair<bool, String>>> lines;
-        std::vector<std::pair<bool, String>> currentLine;
-        int lineWidth = 0;
-        int maxWidth = display->getWidth();
-        for (auto &token : tokens) {
-            if (token.first) {
-                int tokenWidth = 0;
-                for (int j = 0; j < graphics::numEmotes; j++) {
-                    if (token.second == graphics::emotes[j].label) {
-                        tokenWidth = graphics::emotes[j].width + 2;
-                        break;
-                    }
-                }
-                if (lineWidth + tokenWidth > maxWidth && !currentLine.empty()) {
-                    lines.push_back(currentLine);
+            const char *msg = msgWithCursor.c_str();
+            std::vector<std::pair<bool, String>> tokens = freeTextModule::tokenizeMessageWithEmotes(msg);
+            std::vector<std::pair<bool, String>> currentLine;
+            currentLine.reserve(8);
+            int lineWidth = 0;
+
+            // Commit the current line and reset wrapping state.
+            auto flushLine = [this, &currentLine, &lineWidth]() {
+                if (!currentLine.empty()) {
+                    this->freeTextLayoutCacheLines.push_back(currentLine);
                     currentLine.clear();
                     lineWidth = 0;
                 }
-                currentLine.push_back(token);
-                lineWidth += tokenWidth;
-            } else {
-                // Text: split by words and wrap inside word if needed.
-                String text = token.second;
-                int pos = 0;
-                while (pos < static_cast<int>(text.length())) {
-                    int spacePos = text.indexOf(' ', pos);
-                    int endPos = (spacePos == -1) ? text.length() : spacePos + 1; // Include space.
-                    String word = text.substring(pos, endPos);
-                    int wordWidth = display->getStringWidth(word);
+            };
 
-                    if (lineWidth + wordWidth > maxWidth && lineWidth > 0) {
-                        lines.push_back(currentLine);
-                        currentLine.clear();
-                        lineWidth = 0;
-                    }
-                    if (wordWidth > maxWidth) {
-                        uint16_t charPos = 0;
-                        while (charPos < word.length()) {
-                            String oneChar = word.substring(charPos, charPos + 1);
-                            int charWidth = display->getStringWidth(oneChar);
-                            if (lineWidth + charWidth > maxWidth && lineWidth > 0) {
-                                lines.push_back(currentLine);
-                                currentLine.clear();
-                                lineWidth = 0;
-                            }
-                            currentLine.push_back({false, oneChar});
-                            lineWidth += charWidth;
-                            charPos++;
+            for (const auto &token : tokens) {
+                if (token.first) {
+                    int tokenWidth = 0;
+                    for (int j = 0; j < graphics::numEmotes; j++) {
+                        if (token.second == graphics::emotes[j].label) {
+                            tokenWidth = graphics::emotes[j].width + 2;
+                            break;
                         }
-                    } else {
-                        currentLine.push_back({false, word});
-                        lineWidth += wordWidth;
                     }
-                    pos = endPos;
+                    if (lineWidth + tokenWidth > maxWidth && !currentLine.empty()) {
+                        flushLine();
+                    }
+                    currentLine.push_back(token);
+                    lineWidth += tokenWidth;
+                } else {
+                    // Text: split by words and wrap inside a long word when needed.
+                    const String &text = token.second;
+                    int pos = 0;
+                    while (pos < static_cast<int>(text.length())) {
+                        int spacePos = text.indexOf(' ', pos);
+                        int endPos = (spacePos == -1) ? text.length() : (spacePos + 1); // Include trailing space.
+                        String word = text.substring(pos, endPos);
+                        int wordWidth = display->getStringWidth(word);
+
+                        if (lineWidth + wordWidth > maxWidth && lineWidth > 0) {
+                            flushLine();
+                        }
+                        if (wordWidth > maxWidth) {
+                            uint16_t charPos = 0;
+                            while (charPos < word.length()) {
+                                String oneChar = word.substring(charPos, charPos + 1);
+                                int charWidth = display->getStringWidth(oneChar);
+                                if (lineWidth + charWidth > maxWidth && lineWidth > 0) {
+                                    flushLine();
+                                }
+                                currentLine.push_back({false, oneChar});
+                                lineWidth += charWidth;
+                                charPos++;
+                            }
+                        } else {
+                            currentLine.push_back({false, word});
+                            lineWidth += wordWidth;
+                        }
+                        pos = endPos;
+                    }
                 }
             }
+            flushLine();
         }
-        if (!currentLine.empty())
-            lines.push_back(currentLine);
+        const auto &lines = this->freeTextLayoutCacheLines;
 
         const int rowHeight = std::max(8, FONT_HEIGHT_SMALL - 3);
         const int viewportTop = inputY;
@@ -1332,7 +1348,8 @@ void CannedMessageModule::drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUi
 
         // Reserve enough space for the completion row so chip/text rendering is not clipped.
         const int completionRowHeight = FONT_HEIGHT_SMALL + 1;
-        const int textViewportBottom = showCompletionRow ? std::max(viewportTop, viewportBottom - completionRowHeight) : viewportBottom;
+        const int textViewportBottom =
+            showCompletionRow ? std::max(viewportTop, viewportBottom - completionRowHeight) : viewportBottom;
         const int viewportHeight = std::max(1, textViewportBottom - viewportTop);
         const int viewportRows = std::max(1, viewportHeight / rowHeight);
 
@@ -1397,22 +1414,35 @@ void CannedMessageModule::drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUi
 // Draw scrollable emote picker list.
 void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+#if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
+    EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
+    einkDisplay->enableUnlimitedFastMode();
+#endif
+
     const int headerFontHeight = FONT_HEIGHT_SMALL;
     const int headerMargin = 2;
     const int labelGap = 6;
     const int bitmapGapX = 4;
+    const int displayWidth = display->getWidth();
+    const int displayHeight = display->getHeight();
 
-    int maxEmoteHeight = 0;
-    for (int i = 0; i < graphics::numEmotes; ++i) {
-        if (graphics::emotes[i].height > maxEmoteHeight) {
-            maxEmoteHeight = graphics::emotes[i].height;
+    // Cache max row bitmap height; emote table is static in runtime.
+    static int cachedMaxEmoteHeight = -1;
+    static int cachedNumEmotes = -1;
+    if (cachedMaxEmoteHeight < 0 || cachedNumEmotes != graphics::numEmotes) {
+        cachedMaxEmoteHeight = 0;
+        for (int i = 0; i < graphics::numEmotes; ++i) {
+            if (graphics::emotes[i].height > cachedMaxEmoteHeight) {
+                cachedMaxEmoteHeight = graphics::emotes[i].height;
+            }
         }
+        cachedNumEmotes = graphics::numEmotes;
     }
 
-    const int rowHeight = maxEmoteHeight + 2;
+    const int rowHeight = cachedMaxEmoteHeight + 2;
     int headerY = y;
     int listTop = headerY + headerFontHeight + headerMargin;
-    int _visibleRows = (display->getHeight() - listTop - 2) / rowHeight;
+    int _visibleRows = (displayHeight - listTop - 2) / rowHeight;
     int numEmotes = graphics::numEmotes;
 
     this->visibleRows = _visibleRows;
@@ -1434,8 +1464,9 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(display->getWidth() / 2, headerY, "Select Emote");
+    display->drawString(displayWidth / 2, headerY, "Select Emote");
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_MEDIUM);
 
     for (int vis = 0; vis < _visibleRows; ++vis) {
         int emoteIdx = topIndex + vis;
@@ -1446,14 +1477,13 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
         int rowY = listTop + vis * rowHeight;
 
         if (emoteIdx == emotePickerIndex) {
-            display->fillRect(x, rowY, display->getWidth() - 8, emote.height + 2);
+            display->fillRect(x, rowY, displayWidth - 8, rowHeight);
             display->setColor(BLACK);
         }
 
         int emoteY = rowY + 1;
         display->drawXbm(x + bitmapGapX, emoteY, emote.width, emote.height, emote.bitmap);
 
-        display->setFont(FONT_MEDIUM);
         int labelY = rowY + ((rowHeight - FONT_HEIGHT_MEDIUM) / 2);
         display->drawString(x + bitmapGapX + emote.width + labelGap, labelY, emote.label);
 
@@ -1464,7 +1494,7 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
 
     if (numEmotes > _visibleRows) {
         int scrollbarHeight = _visibleRows * rowHeight;
-        int scrollTrackX = display->getWidth() - 6;
+        int scrollTrackX = displayWidth - 6;
         display->drawRect(scrollTrackX, listTop, 4, scrollbarHeight);
         int scrollBarLen = std::max(6, (scrollbarHeight * _visibleRows) / numEmotes);
         int scrollBarPos = listTop + (scrollbarHeight * topIndex) / numEmotes;
