@@ -72,6 +72,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool shouldDraw();
     bool hasMessages();
     void resetSearch();
+    bool isFreeTextUIActive() const { return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT; }
     void updateDestinationSelectionList();
     void drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     bool isCharInputAllowed() const;
@@ -202,8 +203,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void updateFreeTextCompletion();
     bool cycleFreeTextCompletion(int8_t step);
     bool acceptFreeTextCompletion(bool appendSpace);
-    void drawFreeTextCompletionRow(OLEDDisplay *display, int16_t x, int16_t viewportTop, int16_t viewportBottom, int rowHeight,
-                                   int linesCount, int scrollRows, const String &completionPrefix);
+    void drawFreeTextCompletionRow(OLEDDisplay *display, int16_t x, int16_t rowY, const String &completionPrefix);
     void drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, char *buffer);
     void drawCannedMessageListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, char *buffer);
 

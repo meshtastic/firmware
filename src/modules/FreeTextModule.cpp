@@ -595,17 +595,47 @@ bool CannedMessageModule::acceptFreeTextCompletion(bool appendSpace)
 }
 
 // Draw horizontally scrollable completion chips under the freetext input area.
-void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_t x, int16_t viewportTop, int16_t viewportBottom,
-                                                    int rowHeight, int linesCount, int scrollRows, const String &completionPrefix)
+void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_t x, int16_t rowY, const String &completionPrefix)
 {
-    const int completionRowY = viewportTop + ((linesCount - scrollRows) * rowHeight);
-    if (completionRowY < (viewportTop - rowHeight) || completionRowY > viewportBottom) {
+    const int completionRowY = rowY;
+    if (completionRowY < 0 || completionRowY >= display->getHeight()) {
         return;
     }
 
     const int spaceWidth = display->getStringWidth(" ");
-    const int separatorWidth = spaceWidth * 2;
+    const int separatorWidth = spaceWidth;
     const int viewportWidth = display->getWidth();
+    const int chipPaddingX = 3;
+    const int chipRadius = 2;
+    const int chipHeight = FONT_HEIGHT_SMALL;
+
+    // Draw a filled rounded rectangle using rects + circles (works across OLED/EInk backends).
+    auto drawRoundedFill = [display](int x0, int y0, int w0, int h0, int radius) {
+        if (w0 <= 0 || h0 <= 0) {
+            return;
+        }
+
+        int r = std::max(0, radius);
+        r = std::min(r, std::min(w0 / 2, h0 / 2));
+        if (r == 0) {
+            display->fillRect(x0, y0, w0, h0);
+            return;
+        }
+
+        const int centerW = w0 - (r * 2);
+        const int sideH = h0 - (r * 2);
+        if (centerW > 0) {
+            display->fillRect(x0 + r, y0, centerW, h0);
+        }
+        if (sideH > 0) {
+            display->fillRect(x0, y0 + r, r, sideH);
+            display->fillRect(x0 + w0 - r, y0 + r, r, sideH);
+        }
+        display->fillCircle(x0 + r, y0 + r, r);
+        display->fillCircle(x0 + w0 - r - 1, y0 + r, r);
+        display->fillCircle(x0 + r, y0 + h0 - r - 1, r);
+        display->fillCircle(x0 + w0 - r - 1, y0 + h0 - r - 1, r);
+    };
 
     struct ChoiceLayout {
         uint8_t idx;
@@ -631,13 +661,14 @@ void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_
         }
 
         int tokenWidth = display->getStringWidth(candidate);
-        choices.push_back({i, candidate, runningX, tokenWidth});
+        int chipWidth = tokenWidth + (chipPaddingX * 2);
+        choices.push_back({i, candidate, runningX, chipWidth});
         if (i == this->freeTextCompletionIndex) {
             selectedStart = runningX;
-            selectedEnd = runningX + tokenWidth;
+            selectedEnd = runningX + chipWidth;
         }
 
-        runningX += tokenWidth;
+        runningX += chipWidth;
         hasChoices = true;
     }
 
@@ -653,26 +684,36 @@ void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_
         }
     }
 
+    // Center the whole row when all chips fit on screen; otherwise keep scroll behavior.
+    const int centeredOffsetX = (runningX < viewportWidth) ? ((viewportWidth - runningX) / 2) : 0;
+    const int drawBaseX = x + centeredOffsetX;
+
     for (const auto &choice : choices) {
-        int drawX = x + (choice.startX - choiceScrollX);
-        if ((drawX + choice.width) < x || drawX > (x + viewportWidth)) {
+        int boxX = drawBaseX + (choice.startX - choiceScrollX);
+        if ((boxX + choice.width) < x || boxX > (x + viewportWidth)) {
             continue;
         }
 
+        const int textX = boxX + chipPaddingX;
         if (choice.idx == this->freeTextCompletionIndex) {
-#ifdef USE_EINK
-            display->drawRect(drawX - 1, completionRowY, choice.width + 2, FONT_HEIGHT_SMALL - 1);
-            display->drawString(drawX, completionRowY, choice.word);
-#else
-            display->fillRect(drawX - 1, completionRowY, choice.width + 2, FONT_HEIGHT_SMALL);
-            display->setColor(BLACK);
-            display->drawString(drawX, completionRowY, choice.word);
+            // Selected completion: filled rounded chip.
             display->setColor(WHITE);
-#endif
+            drawRoundedFill(boxX, completionRowY, choice.width, chipHeight, chipRadius);
+            display->setColor(BLACK);
+            display->drawString(textX, completionRowY, choice.word);
         } else {
-            display->drawString(drawX, completionRowY, choice.word);
+            // Unselected completion: hollow rounded chip.
+            display->setColor(WHITE);
+            drawRoundedFill(boxX, completionRowY, choice.width, chipHeight, chipRadius);
+            if (choice.width > 2 && chipHeight > 2) {
+                display->setColor(BLACK);
+                drawRoundedFill(boxX + 1, completionRowY + 1, choice.width - 2, chipHeight - 2, chipRadius - 1);
+            }
+            display->setColor(WHITE);
+            display->drawString(textX, completionRowY, choice.word);
         }
     }
+    display->setColor(WHITE);
 }
 
 // Insert visual cursor (and optional completion suffix hint) into rendered text.
@@ -1174,7 +1215,14 @@ void CannedMessageModule::drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUi
         const int rowHeight = std::max(8, FONT_HEIGHT_SMALL - 3);
         const int viewportTop = inputY;
         const int viewportBottom = y + display->getHeight();
-        const int viewportHeight = std::max(1, viewportBottom - viewportTop);
+        String completionPrefix = this->getFreeTextPrefix();
+        const bool showCompletionRow =
+            (this->cursor == this->freetext.length() && this->freeTextCompletionCount > 1 && completionPrefix.length() >= 2);
+
+        // Reserve enough space for the completion row so chip/text rendering is not clipped.
+        const int completionRowHeight = FONT_HEIGHT_SMALL + 1;
+        const int textViewportBottom = showCompletionRow ? std::max(viewportTop, viewportBottom - completionRowHeight) : viewportBottom;
+        const int viewportHeight = std::max(1, textViewportBottom - viewportTop);
         const int viewportRows = std::max(1, viewportHeight / rowHeight);
 
         int cursorRow = static_cast<int>(lines.size()) - 1;
@@ -1197,12 +1245,9 @@ void CannedMessageModule::drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUi
             }
         }
 
-        String completionPrefix = this->getFreeTextPrefix();
-        const bool showCompletionRow =
-            (this->cursor == this->freetext.length() && this->freeTextCompletionCount > 1 && completionPrefix.length() >= 2);
-        const int totalRows = static_cast<int>(lines.size()) + (showCompletionRow ? 1 : 0);
+        const int totalRows = static_cast<int>(lines.size());
         int scrollRows = std::max(0, totalRows - viewportRows);
-        int targetRow = cursorRow + (showCompletionRow ? 1 : 0);
+        int targetRow = cursorRow;
         if (targetRow < scrollRows) {
             scrollRows = targetRow;
         }
@@ -1216,7 +1261,7 @@ void CannedMessageModule::drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUi
         // Draw wrapped text rows with vertical scrolling.
         for (int rowIdx = 0; rowIdx < static_cast<int>(lines.size()); ++rowIdx) {
             int yLine = viewportTop + ((rowIdx - scrollRows) * rowHeight);
-            if (yLine < viewportTop || (yLine + rowHeight) > (viewportBottom + rowHeight)) {
+            if (yLine < viewportTop || yLine >= textViewportBottom) {
                 continue;
             }
 
@@ -1232,8 +1277,7 @@ void CannedMessageModule::drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUi
         }
 
         if (showCompletionRow) {
-            this->drawFreeTextCompletionRow(display, x, viewportTop, viewportBottom, rowHeight, static_cast<int>(lines.size()),
-                                            scrollRows, completionPrefix);
+            this->drawFreeTextCompletionRow(display, x, viewportBottom - completionRowHeight, completionPrefix);
         }
     }
 #endif

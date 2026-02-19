@@ -12,6 +12,7 @@
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
+#include "modules/CannedMessageModule.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
 #include <RTC.h>
@@ -1422,7 +1423,9 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
 
-    bool navBarVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
+    // Suppress nav overlay while canned-message freetext composer is active.
+    const bool hideForFreeText = (cannedMessageModule && cannedMessageModule->isFreeTextUIActive());
+    bool navBarVisible = !hideForFreeText && (millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS);
     int y = navBarVisible ? (SCREEN_HEIGHT - iconSize - 1) : SCREEN_HEIGHT;
 
 #if defined(USE_EINK)
@@ -1451,6 +1454,10 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     navBarPrevVisible = navBarVisible;
 #endif
+
+    if (!navBarVisible) {
+        return;
+    }
 
     // Pre-calculate bounding rect
     const int rectX = xStart - 2 - bigOffset;
