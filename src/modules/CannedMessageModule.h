@@ -155,6 +155,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     uint8_t freeTextCompletionCount = 0;
     uint8_t freeTextCompletionIndex = 0;
     bool freeTextCompletionSuppressed = false;
+    // When true, the next emote picker selection replaces this typed prefix span.
+    bool freeTextEmoteReplacePending = false;
+    unsigned int freeTextEmoteReplaceStart = 0;
+    unsigned int freeTextEmoteReplaceLength = 0;
 
     // === Message Storage ===
     char messageBuffer[CANNED_MESSAGE_MODULE_MESSAGES_SIZE + 1];

@@ -119,6 +119,10 @@ static const char *const kFreeTextCompletionWords[] = {
     "watch",   "weather",     "welcome",    "west",     "when",     "where",    "who",       "why",         "will",
     "with",    "work",        "yes",        "you",      "your"};
 
+// Special completion token that opens emote picker instead of inserting plain text.
+// Use an existing emote label (🙂) so the suggestion is a real smile emoji.
+static const char *const kFreeTextEmoteCompletion = "\U0001F642";
+
 enum CompletionWordForm : uint8_t {
     COMPLETION_FORM_NONE = 0,
     COMPLETION_FORM_S = 1 << 0,
@@ -409,6 +413,34 @@ bool startsWithLowercasePrefix(const String &word, const String &prefixLower)
     }
     return true;
 }
+
+// Return the byte length of an emote label ending exactly at `cursorPos`.
+size_t emoteLabelLengthEndingAtCursor(const String &text, unsigned int cursorPos)
+{
+    if (cursorPos == 0 || cursorPos > text.length()) {
+        return 0;
+    }
+
+    const char *raw = text.c_str();
+    size_t bestLen = 0;
+    for (int i = 0; i < graphics::numEmotes; ++i) {
+        const char *label = graphics::emotes[i].label;
+        if (!label || !*label) {
+            continue;
+        }
+
+        const size_t labelLen = strlen(label);
+        if (labelLen == 0 || labelLen > cursorPos || labelLen <= bestLen) {
+            continue;
+        }
+
+        const size_t start = static_cast<size_t>(cursorPos) - labelLen;
+        if (strncmp(raw + start, label, labelLen) == 0) {
+            bestLen = labelLen;
+        }
+    }
+    return bestLen;
+}
 } // namespace
 
 // Return the current trailing word at cursor (lowercased) for completion lookup.
@@ -452,6 +484,13 @@ void CannedMessageModule::updateFreeTextCompletion()
 
     String prefixLower = getFreeTextPrefix();
     if (prefixLower.length() < 2) {
+        // Single-letter shortcut: typing "e" offers an emote-picker completion.
+        if (prefixLower == "e") {
+            this->freeTextCompletions[0] = kFreeTextEmoteCompletion;
+            this->freeTextCompletionCount = 1;
+            this->freeTextCompletionIndex = 0;
+            this->freeTextCompletion = this->freeTextCompletions[0];
+        }
         return;
     }
 
@@ -557,8 +596,27 @@ bool CannedMessageModule::acceptFreeTextCompletion(bool appendSpace)
     }
 
     String prefixLower = getFreeTextPrefix();
-    if (prefixLower.length() < 2 || this->freeTextCompletion.length() <= prefixLower.length()) {
+    const bool isEmoteCompletion = (this->freeTextCompletion == kFreeTextEmoteCompletion);
+    if (prefixLower.length() == 0 || this->cursor < prefixLower.length() ||
+        (!isEmoteCompletion && prefixLower.length() < 2) || this->freeTextCompletion.length() <= prefixLower.length()) {
         return false;
+    }
+
+    // Emote completion opens picker and remembers the typed prefix to replace on insert.
+    if (isEmoteCompletion) {
+        this->freeTextEmoteReplacePending = true;
+        this->freeTextEmoteReplaceStart = this->cursor - prefixLower.length();
+        this->freeTextEmoteReplaceLength = prefixLower.length();
+        this->freeTextCompletionSuppressed = true;
+        this->freeTextCompletion = "";
+        this->freeTextCompletionCount = 0;
+        this->freeTextCompletionIndex = 0;
+        this->runState = CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER;
+        this->requestFocus();
+        if (screen) {
+            screen->forceDisplay();
+        }
+        return true;
     }
 
     unsigned int start = this->cursor - prefixLower.length();
@@ -642,6 +700,17 @@ void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_
         String word;
         int startX;
         int width;
+        int emoteIndex;
+    };
+
+    // Map a completion label to an emote index (if this completion is an emote).
+    auto findEmoteIndex = [](const String &label) {
+        for (int j = 0; j < graphics::numEmotes; ++j) {
+            if (label == graphics::emotes[j].label) {
+                return j;
+            }
+        }
+        return -1;
     };
 
     std::vector<ChoiceLayout> choices;
@@ -652,7 +721,11 @@ void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_
 
     for (uint8_t i = 0; i < this->freeTextCompletionCount; ++i) {
         const String &candidate = this->freeTextCompletions[i];
-        if (!startsWithLowercasePrefix(candidate, completionPrefix) || candidate.length() <= completionPrefix.length()) {
+        // Keep normal prefix filtering for word completions, plus allow the single-letter emote shortcut.
+        const bool matchesWordPrefix =
+            startsWithLowercasePrefix(candidate, completionPrefix) && candidate.length() > completionPrefix.length();
+        const bool isSingleLetterEmoteShortcut = (completionPrefix == "e" && candidate == kFreeTextEmoteCompletion);
+        if (!matchesWordPrefix && !isSingleLetterEmoteShortcut) {
             continue;
         }
 
@@ -660,9 +733,10 @@ void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_
             runningX += separatorWidth;
         }
 
-        int tokenWidth = display->getStringWidth(candidate);
+        const int emoteIndex = findEmoteIndex(candidate);
+        int tokenWidth = (emoteIndex >= 0) ? graphics::emotes[emoteIndex].width : display->getStringWidth(candidate);
         int chipWidth = tokenWidth + (chipPaddingX * 2);
-        choices.push_back({i, candidate, runningX, chipWidth});
+        choices.push_back({i, candidate, runningX, chipWidth, emoteIndex});
         if (i == this->freeTextCompletionIndex) {
             selectedStart = runningX;
             selectedEnd = runningX + chipWidth;
@@ -694,13 +768,11 @@ void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_
             continue;
         }
 
-        const int textX = boxX + chipPaddingX;
         if (choice.idx == this->freeTextCompletionIndex) {
             // Selected completion: filled rounded chip.
             display->setColor(WHITE);
             drawRoundedFill(boxX, completionRowY, choice.width, chipHeight, chipRadius);
             display->setColor(BLACK);
-            display->drawString(textX, completionRowY, choice.word);
         } else {
             // Unselected completion: hollow rounded chip.
             display->setColor(WHITE);
@@ -710,6 +782,16 @@ void CannedMessageModule::drawFreeTextCompletionRow(OLEDDisplay *display, int16_
                 drawRoundedFill(boxX + 1, completionRowY + 1, choice.width - 2, chipHeight - 2, chipRadius - 1);
             }
             display->setColor(WHITE);
+        }
+
+        // Render emote completions using bitmap icons so they are visible on all fonts.
+        if (choice.emoteIndex >= 0) {
+            const graphics::Emote &emote = graphics::emotes[choice.emoteIndex];
+            const int emoteX = boxX + ((choice.width - emote.width) / 2);
+            const int emoteY = completionRowY + std::max(0, (chipHeight - emote.height) / 2);
+            display->drawXbm(emoteX, emoteY, emote.width, emote.height, emote.bitmap);
+        } else {
+            const int textX = boxX + chipPaddingX;
             display->drawString(textX, completionRowY, choice.word);
         }
     }
@@ -786,13 +868,13 @@ int32_t CannedMessageModule::runFreeTextState(UIFrameEvent &e)
     case 0x08: // backspace
         this->freeTextCompletionSuppressed = false;
         if (this->freetext.length() > 0 && this->cursor > 0) {
-            if (this->cursor == this->freetext.length()) {
-                this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
-            } else {
-                this->freetext = this->freetext.substring(0, this->cursor - 1) +
-                                 this->freetext.substring(this->cursor, this->freetext.length());
-            }
-            this->cursor--;
+            // Delete one whole emote token when cursor is right after it; otherwise delete one byte.
+            const size_t emoteLen = emoteLabelLengthEndingAtCursor(this->freetext, this->cursor);
+            const unsigned int deleteLen = (emoteLen > 0) ? static_cast<unsigned int>(emoteLen) : 1;
+            const unsigned int deleteStart = this->cursor - deleteLen;
+            this->freetext = this->freetext.substring(0, deleteStart) +
+                             this->freetext.substring(this->cursor, this->freetext.length());
+            this->cursor = deleteStart;
         }
         break;
     case INPUT_BROKER_MSG_TAB:
@@ -902,6 +984,10 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 #endif
 
     if (event->kbchar == INPUT_BROKER_MSG_EMOTE_LIST) {
+        // Direct emote picker open: insert at cursor, no replacement span.
+        this->freeTextEmoteReplacePending = false;
+        this->freeTextEmoteReplaceStart = 0;
+        this->freeTextEmoteReplaceLength = 0;
         runState = CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER;
         requestFocus();
         screen->forceDisplay();
@@ -915,6 +1001,9 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
             this->payload = 0;
             this->lastTouchMillis = millis();
             requestFocus();
+            if (this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
+                return true;
+            }
             runOnce();
             return true;
         }
@@ -961,6 +1050,9 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG ||
         (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() == 0)) {
+        this->freeTextEmoteReplacePending = false;
+        this->freeTextEmoteReplaceStart = 0;
+        this->freeTextEmoteReplaceLength = 0;
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         freetext = "";
         cursor = 0;
@@ -1018,18 +1110,35 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     if (isSelect) {
         String label = graphics::emotes[emotePickerIndex].label;
         String emoteInsert = label;
+        // If picker was opened by the "e -> emote :)" completion, replace that prefix first.
+        if (this->freeTextEmoteReplacePending) {
+            const unsigned int maxLen = this->freetext.length();
+            const unsigned int replaceStart = std::min(this->freeTextEmoteReplaceStart, maxLen);
+            const unsigned int replaceEnd = std::min(replaceStart + this->freeTextEmoteReplaceLength, maxLen);
+            this->freetext = this->freetext.substring(0, replaceStart) + this->freetext.substring(replaceEnd);
+            this->cursor = replaceStart;
+        }
         if (cursor == freetext.length()) {
             freetext += emoteInsert;
         } else {
             freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
         }
         cursor += emoteInsert.length();
+        this->freeTextEmoteReplacePending = false;
+        this->freeTextEmoteReplaceStart = 0;
+        this->freeTextEmoteReplaceLength = 0;
         runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         screen->forceDisplay();
         return 1;
     }
 
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
+        // Cancel should preserve text and drop pending replacement.
+        this->freeTextEmoteReplacePending = false;
+        this->freeTextEmoteReplaceStart = 0;
+        this->freeTextEmoteReplaceLength = 0;
+        this->freeTextCompletionSuppressed = false;
+        this->updateFreeTextCompletion();
         runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         screen->forceDisplay();
         return 1;
@@ -1216,8 +1325,10 @@ void CannedMessageModule::drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUi
         const int viewportTop = inputY;
         const int viewportBottom = y + display->getHeight();
         String completionPrefix = this->getFreeTextPrefix();
+        const bool showSingleLetterEmoteShortcut = (completionPrefix == "e" && this->freeTextCompletionCount > 0);
         const bool showCompletionRow =
-            (this->cursor == this->freetext.length() && this->freeTextCompletionCount > 1 && completionPrefix.length() >= 2);
+            (this->cursor == this->freetext.length() &&
+             ((this->freeTextCompletionCount > 1 && completionPrefix.length() >= 2) || showSingleLetterEmoteShortcut));
 
         // Reserve enough space for the completion row so chip/text rendering is not clipped.
         const int completionRowHeight = FONT_HEIGHT_SMALL + 1;
