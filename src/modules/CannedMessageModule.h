@@ -148,6 +148,12 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     unsigned long lastUpdateMillis = 0;
     String searchQuery;
     String freetext;
+    static constexpr uint8_t maxFreeTextPredictions = 4;
+    String freeTextPrediction;
+    String freeTextPredictions[maxFreeTextPredictions];
+    uint8_t freeTextPredictionCount = 0;
+    uint8_t freeTextPredictionIndex = 0;
+    bool freeTextPredictionSuppressed = false;
 
     // === Message Storage ===
     char messageBuffer[CANNED_MESSAGE_MODULE_MESSAGES_SIZE + 1];
@@ -190,6 +196,12 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleFreeTextInput(const InputEvent *event);
+    String getFreeTextPrefix() const;
+    void updateFreeTextPrediction();
+    bool cycleFreeTextPrediction(int8_t step);
+    bool acceptFreeTextPrediction(bool appendSpace);
+    void drawFreeTextPredictionRow(OLEDDisplay *display, int16_t x, int16_t viewportTop, int16_t viewportBottom, int rowHeight,
+                                   int linesCount, int scrollRows, const String &predictionPrefix);
 
 #if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},

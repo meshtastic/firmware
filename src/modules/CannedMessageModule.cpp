@@ -866,6 +866,17 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Confirm select (Enter)
     bool isSelect = isSelectEvent(event);
     if (isSelect) {
+        // When multiple predictions exist, SELECT accepts the currently highlighted
+        // suggestion first. Press SELECT again to send.
+        if (this->cursor == this->freetext.length() && this->freeTextPredictionCount > 0 &&
+            this->acceptFreeTextPrediction(true)) {
+            this->payload = 0;
+            this->lastTouchMillis = millis();
+            requestFocus();
+            runOnce();
+            return true;
+        }
+
         LOG_DEBUG("[SELECT] handleFreeTextInput: runState=%d, dest=%u, channel=%d, freetext='%s'", (int)runState, dest, channel,
                   freetext.c_str());
         if (dest == 0)
@@ -1291,13 +1302,25 @@ int32_t CannedMessageModule::runOnce()
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
         case INPUT_BROKER_LEFT:
-            if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor > 0) {
-                this->cursor--;
+            if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+                if (this->cursor == this->freetext.length() && this->freeTextPredictionCount > 1) {
+                    this->cycleFreeTextPrediction(-1);
+                } else if (this->cursor > 0) {
+                    this->cursor--;
+                }
             }
             break;
         case INPUT_BROKER_RIGHT:
-            if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor < this->freetext.length()) {
-                this->cursor++;
+            if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+                if (this->cursor < this->freetext.length()) {
+                    this->cursor++;
+                } else if (this->freeTextPredictionCount > 1) {
+                    this->cycleFreeTextPrediction(1);
+                } else if (this->freeTextPredictionCount > 0) {
+                    this->acceptFreeTextPrediction(true);
+                } else {
+                    // Keep right-at-end as navigation only.
+                }
             }
             break;
         default:
@@ -1307,6 +1330,7 @@ int32_t CannedMessageModule::runOnce()
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             switch (this->payload) {
             case 0x08: // backspace
+                this->freeTextPredictionSuppressed = false;
                 if (this->freetext.length() > 0) {
                     if (this->cursor > 0) {
                         if (this->cursor == this->freetext.length()) {
@@ -1328,14 +1352,16 @@ int32_t CannedMessageModule::runOnce()
             default:
                 // Only insert ASCII printable characters (32–126)
                 if (this->payload >= 32 && this->payload <= 126) {
+                    this->freeTextPredictionSuppressed = false;
                     requestFocus();
                     if (this->cursor == this->freetext.length()) {
-                        this->freetext += (char)this->payload;
+                        this->freetext += static_cast<char>(this->payload);
+                        this->cursor++;
                     } else {
-                        this->freetext = this->freetext.substring(0, this->cursor) + (char)this->payload +
+                        this->freetext = this->freetext.substring(0, this->cursor) + static_cast<char>(this->payload) +
                                          this->freetext.substring(this->cursor);
+                        this->cursor++;
                     }
-                    this->cursor++;
                     const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
                     if (this->freetext.length() > maxChars) {
                         this->cursor = maxChars;
@@ -1344,6 +1370,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 break;
             }
+            this->updateFreeTextPrediction();
         }
         this->lastTouchMillis = millis();
         this->notifyObservers(&e);
@@ -1993,7 +2020,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         // Draw Free Text input with multi-emote support and proper line wrapping
         display->setColor(WHITE);
         {
-            int inputY = 0 + y + FONT_HEIGHT_SMALL;
+            const int inputTopOffset = -3;
+            int inputY = y + FONT_HEIGHT_SMALL + inputTopOffset;
             String msgWithCursor = this->drawWithCursor(this->freetext, this->cursor);
 
             // Tokenize input into (isEmote, token) pairs
@@ -2064,21 +2092,69 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             if (!currentLine.empty())
                 lines.push_back(currentLine);
 
-            // Draw lines with emotes
-            int rowHeight = FONT_HEIGHT_SMALL;
-            int yLine = inputY;
-            for (const auto &line : lines) {
+            const int rowHeight = std::max(8, FONT_HEIGHT_SMALL - 3);
+            const int viewportTop = inputY;
+            const int viewportBottom = y + display->getHeight();
+            const int viewportHeight = std::max(1, viewportBottom - viewportTop);
+            const int viewportRows = std::max(1, viewportHeight / rowHeight);
+
+            int cursorRow = static_cast<int>(lines.size()) - 1;
+            if (cursorRow < 0) {
+                cursorRow = 0;
+            }
+            if (this->cursor < this->freetext.length()) {
+                for (int lineIdx = 0; lineIdx < static_cast<int>(lines.size()); ++lineIdx) {
+                    bool hasCursorMarker = false;
+                    for (const auto &token : lines[lineIdx]) {
+                        if (!token.first && token.second.indexOf('_') >= 0) {
+                            hasCursorMarker = true;
+                            break;
+                        }
+                    }
+                    if (hasCursorMarker) {
+                        cursorRow = lineIdx;
+                        break;
+                    }
+                }
+            }
+
+            String predictionPrefix = this->getFreeTextPrefix();
+            const bool showPredictionRow =
+                (this->cursor == this->freetext.length() && this->freeTextPredictionCount > 1 && predictionPrefix.length() >= 2);
+            const int totalRows = static_cast<int>(lines.size()) + (showPredictionRow ? 1 : 0);
+            int scrollRows = std::max(0, totalRows - viewportRows);
+            int targetRow = cursorRow + (showPredictionRow ? 1 : 0);
+            if (targetRow < scrollRows) {
+                scrollRows = targetRow;
+            }
+            if (targetRow >= (scrollRows + viewportRows)) {
+                scrollRows = targetRow - viewportRows + 1;
+            }
+            if (scrollRows < 0) {
+                scrollRows = 0;
+            }
+
+            // Draw wrapped text rows with vertical scrolling.
+            for (int rowIdx = 0; rowIdx < static_cast<int>(lines.size()); ++rowIdx) {
+                int yLine = viewportTop + ((rowIdx - scrollRows) * rowHeight);
+                if (yLine < viewportTop || (yLine + rowHeight) > (viewportBottom + rowHeight)) {
+                    continue;
+                }
+
                 int nextX = x;
-                for (const auto &token : line) {
+                for (const auto &token : lines[rowIdx]) {
                     if (token.first) {
-                        // Emote rendering centralized in helper
                         renderEmote(display, nextX, yLine, rowHeight, token.second);
                     } else {
                         display->drawString(nextX, yLine, token.second);
                         nextX += display->getStringWidth(token.second);
                     }
                 }
-                yLine += rowHeight;
+            }
+
+            if (showPredictionRow) {
+                this->drawFreeTextPredictionRow(display, x, viewportTop, viewportBottom, rowHeight,
+                                                static_cast<int>(lines.size()), scrollRows, predictionPrefix);
             }
         }
 #endif
@@ -2453,12 +2529,6 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
             moduleConfig.canned_message.enabled = true;
         }
     }
-}
-
-String CannedMessageModule::drawWithCursor(String text, int cursor)
-{
-    String result = text.substring(0, cursor) + "_" + text.substring(cursor);
-    return result;
 }
 
 #endif
