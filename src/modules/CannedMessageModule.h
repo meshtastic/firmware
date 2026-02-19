@@ -148,12 +148,12 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     unsigned long lastUpdateMillis = 0;
     String searchQuery;
     String freetext;
-    static constexpr uint8_t maxFreeTextPredictions = 4;
-    String freeTextPrediction;
-    String freeTextPredictions[maxFreeTextPredictions];
-    uint8_t freeTextPredictionCount = 0;
-    uint8_t freeTextPredictionIndex = 0;
-    bool freeTextPredictionSuppressed = false;
+    static constexpr uint8_t maxFreeTextCompletions = 4;
+    String freeTextCompletion;
+    String freeTextCompletions[maxFreeTextCompletions];
+    uint8_t freeTextCompletionCount = 0;
+    uint8_t freeTextCompletionIndex = 0;
+    bool freeTextCompletionSuppressed = false;
 
     // === Message Storage ===
     char messageBuffer[CANNED_MESSAGE_MODULE_MESSAGES_SIZE + 1];
@@ -196,12 +196,16 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleFreeTextInput(const InputEvent *event);
+    bool tryStartFreeTextFromInactive(const InputEvent *event);
+    int32_t runFreeTextState(UIFrameEvent &e);
     String getFreeTextPrefix() const;
-    void updateFreeTextPrediction();
-    bool cycleFreeTextPrediction(int8_t step);
-    bool acceptFreeTextPrediction(bool appendSpace);
-    void drawFreeTextPredictionRow(OLEDDisplay *display, int16_t x, int16_t viewportTop, int16_t viewportBottom, int rowHeight,
-                                   int linesCount, int scrollRows, const String &predictionPrefix);
+    void updateFreeTextCompletion();
+    bool cycleFreeTextCompletion(int8_t step);
+    bool acceptFreeTextCompletion(bool appendSpace);
+    void drawFreeTextCompletionRow(OLEDDisplay *display, int16_t x, int16_t viewportTop, int16_t viewportBottom, int rowHeight,
+                                   int linesCount, int scrollRows, const String &completionPrefix);
+    void drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, char *buffer);
+    void drawCannedMessageListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, char *buffer);
 
 #if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},
