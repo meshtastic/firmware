@@ -50,3 +50,6 @@ idf_component.yml
 CMakeLists.txt
 /sdkconfig.*
 .dummy/*
+
+# PYTHONPATH used by the Nix shell
+.python3

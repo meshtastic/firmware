@@ -63,14 +63,22 @@ class InkHUD
     void navLeft();
     void navRight();
 
+    // Freetext handlers
+    void freeText(char c);
+    void freeTextDone();
+    void freeTextCancel();
+
     // Trigger UI changes
     // - called by various InkHUD components
     // - suitable(?) for use by aux button, connected in variant nicheGraphics.h
 
     void nextApplet();
     void prevApplet();
+    NicheGraphics::InkHUD::Applet *getActiveApplet();
     void openMenu();
     void openAlignStick();
+    void openKeyboard();
+    void closeKeyboard();
     void nextTile();
     void prevTile();
     void rotate();
@@ -84,7 +92,8 @@ class InkHUD
     // - called by various InkHUD components
 
     void requestUpdate();
-    void forceUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED, bool async = true);
+    void forceUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED, bool all = false,
+                     bool async = true);
     void awaitUpdate();
 
     // (Re)configuring WindowManager

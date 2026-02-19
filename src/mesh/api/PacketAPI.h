@@ -17,7 +17,7 @@ class PacketAPI : public PhoneAPI, public concurrency::OSThread
     virtual int32_t runOnce();
 
   protected:
-    PacketAPI(PacketServer *_server);
+    explicit PacketAPI(PacketServer *_server);
     // Check the current underlying physical queue to see if the client is fetching packets
     bool checkIsConnected() override;
 

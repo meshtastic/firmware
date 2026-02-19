@@ -83,6 +83,12 @@ static const unsigned char mail[] PROGMEM = {
     0b11111111, 0b00  // Bottom line
 };
 
+// Hop icon (9x10)
+#define hop_width 9
+#define hop_height 10
+const uint8_t hop[] PROGMEM = {0x05, 0x00, 0x07, 0x00, 0x05, 0x00, 0x38, 0x00, 0x28, 0x00,
+                               0x38, 0x00, 0xC0, 0x01, 0x40, 0x01, 0xC0, 0x01, 0x40, 0x00};
+
 // 📬 Mail / Message
 const uint8_t icon_mail[] PROGMEM = {
     0b11111111, // ████████ top border
