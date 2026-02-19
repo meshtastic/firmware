@@ -269,8 +269,12 @@ template <typename T> void SX126xInterface<T>::setStandby()
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_DEBUG("SX126x standby %s%d", radioLibErr, err);
+#ifdef ARCH_PORTDUINO
+    if (err != RADIOLIB_ERR_NONE)
+        portduino_status.LoRa_in_error = true;
+#else
     assert(err == RADIOLIB_ERR_NONE);
-
+#endif
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     disableInterrupt();
@@ -313,7 +317,12 @@ template <typename T> void SX126xInterface<T>::startReceive()
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX126X startReceiveDutyCycleAuto %s%d", radioLibErr, err);
+#ifdef ARCH_PORTDUINO
+    if (err != RADIOLIB_ERR_NONE)
+        portduino_status.LoRa_in_error = true;
+#else
     assert(err == RADIOLIB_ERR_NONE);
+#endif
 
     RadioLibInterface::startReceive();
 
@@ -341,7 +350,12 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
         return true;
     if (result != RADIOLIB_CHANNEL_FREE)
         LOG_ERROR("SX126X scanChannel %s%d", radioLibErr, result);
+#ifdef ARCH_PORTDUINO
+    if (result == RADIOLIB_ERR_WRONG_MODEM)
+        portduino_status.LoRa_in_error = true;
+#else
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
+#endif
 
     return false;
 }

@@ -40,9 +40,8 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define LED_BUILTIN -1
 #define LED_BLUE -1
-#define PIN_LED2 (32 + 9)
+#define LED_NOTIFICATION (32 + 9)
 #define LED_PAIRING (13)
 
 #define Battery_LED_1 (15)
@@ -134,6 +133,8 @@ static const uint8_t A0 = PIN_A0;
 
 #define PIN_SERIAL1_RX GPS_RX_PIN
 #define PIN_SERIAL1_TX GPS_TX_PIN
+
+#define SERIAL_PRINT_PORT 0
 
 #ifdef __cplusplus
 }

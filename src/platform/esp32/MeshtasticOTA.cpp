@@ -1,13 +1,17 @@
 #include "MeshtasticOTA.h"
 #include "configuration.h"
+#ifdef ESP_PLATFORM
 #include <Preferences.h>
 #include <esp_ota_ops.h>
+#endif
 
 namespace MeshtasticOTA
 {
 
 static const char *nvsNamespace = "MeshtasticOTA";
-static const char *appProjectName = "MeshtasticOTA";
+static const char *combinedAppProjectName = "MeshtasticOTA";
+static const char *bleOnlyAppProjectName = "MeshtasticOTA-BLE";
+static const char *wifiOnlyAppProjectName = "MeshtasticOTA-WiFi";
 
 static bool updated = false;
 
@@ -68,21 +72,44 @@ bool getAppDesc(const esp_partition_t *part, esp_app_desc_t *app_desc)
         LOG_INFO("esp_ota_get_partition_description failed");
         return false;
     }
-    if (strcmp(app_desc->project_name, appProjectName) != 0) {
-        LOG_INFO("app_desc->project_name == 0");
-        return false;
-    }
     return true;
+}
+
+bool checkOTACapability(esp_app_desc_t *app_desc, uint8_t method)
+{
+    // Combined loader supports all (both) transports, BLE and WiFi
+    if (strcmp(app_desc->project_name, combinedAppProjectName) == 0) {
+        LOG_INFO("OTA partition contains combined BLE/WiFi OTA Loader");
+        return true;
+    }
+    if (method == METHOD_OTA_BLE && strcmp(app_desc->project_name, bleOnlyAppProjectName) == 0) {
+        LOG_INFO("OTA partition contains BLE-only OTA Loader");
+        return true;
+    }
+    if (method == METHOD_OTA_WIFI && strcmp(app_desc->project_name, wifiOnlyAppProjectName) == 0) {
+        LOG_INFO("OTA partition contains WiFi-only OTA Loader");
+        return true;
+    }
+    LOG_INFO("OTA partition does not contain a known OTA loader");
+    return false;
 }
 
 bool trySwitchToOTA()
 {
     const esp_partition_t *part = getAppPartition();
-    esp_app_desc_t app_desc;
-    if (!getAppDesc(part, &app_desc))
+
+    if (part == NULL) {
+        LOG_WARN("Unable to get app partition in preparation of OTA reboot");
         return false;
-    if (esp_ota_set_boot_partition(part) != ESP_OK)
+    }
+
+    uint8_t result = esp_ota_set_boot_partition(part);
+    // Partition and app checks should now be done in the AdminModule before this is called
+    if (result != ESP_OK) {
+        LOG_WARN("Unable to switch to OTA partiton.  (Reason %d)", result);
         return false;
+    }
+
     return true;
 }
 

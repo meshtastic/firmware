@@ -69,11 +69,6 @@ static const uint8_t A5 = PIN_A5;
 #define PIN_LED2 LED_BLUE
 #define PIN_LED3 LED_RED
 
-#define LED_BUILTIN LED_RED // LED_BUILTIN is used by framework-arduinoadafruitnrf52 to indicate flash writes
-
-#define LED_PWR LED_RED
-#define USER_LED LED_BLUE
-
 /*
  * Buttons
  */

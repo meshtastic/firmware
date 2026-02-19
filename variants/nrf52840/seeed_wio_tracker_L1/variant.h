@@ -23,13 +23,9 @@
 #define PIN_LED1 (11) // LED        P1.15
 #define PIN_LED2 (12) //
 
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
-
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
-// #define LED_PIN PIN_LED2
-#define LED_STATE_ON 1 // State when LED is litted
+#define LED_STATE_ON 1 // State when LED is lit
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -157,8 +153,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  joystick
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 #define CANNED_MESSAGE_ADD_CONFIRMATION 1
 

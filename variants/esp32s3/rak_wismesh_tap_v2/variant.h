@@ -30,9 +30,8 @@
 #define LED_BLUE 45
 
 #define PIN_LED1 LED_GREEN
-#define PIN_LED2 LED_BLUE
+#define LED_NOTIFICATION LED_BLUE
 
-#define LED_CONN LED_BLUE
 #define LED_PIN LED_GREEN
 #define ledOff(pin) pinMode(pin, INPUT)
 
@@ -47,10 +46,8 @@
 #define SPI_MISO (10)
 #define SPI_CS (12)
 
-#define HAS_BUTTON 1
 #define BUTTON_PIN 0
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 #define USE_VIRTUAL_KEYBOARD 1
 
 #define BATTERY_PIN 1

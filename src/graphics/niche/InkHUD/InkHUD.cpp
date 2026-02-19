@@ -53,6 +53,13 @@ void InkHUD::InkHUD::addApplet(const char *name, Applet *a, bool defaultActive, 
     windowManager->addApplet(name, a, defaultActive, defaultAutoshow, onTile);
 }
 
+void InkHUD::InkHUD::notifyApplyingChanges()
+{
+    if (events) {
+        events->applyingChanges();
+    }
+}
+
 // Start InkHUD!
 // Call this only after you have configured InkHUD
 void InkHUD::InkHUD::begin()
@@ -168,6 +175,25 @@ void InkHUD::InkHUD::navRight()
     }
 }
 
+// Call this for keyboard input
+// The Keyboard Applet also calls this
+void InkHUD::InkHUD::freeText(char c)
+{
+    events->onFreeText(c);
+}
+
+// Call this to complete a freetext input
+void InkHUD::InkHUD::freeTextDone()
+{
+    events->onFreeTextDone();
+}
+
+// Call this to cancel a freetext input
+void InkHUD::InkHUD::freeTextCancel()
+{
+    events->onFreeTextCancel();
+}
+
 // Cycle the next user applet to the foreground
 // Only activated applets are cycled
 // If user has a multi-applet layout, the applets will cycle on the "focused tile"
@@ -195,6 +221,18 @@ void InkHUD::InkHUD::openMenu()
 void InkHUD::InkHUD::openAlignStick()
 {
     windowManager->openAlignStick();
+}
+
+// Open the on-screen keyboard
+void InkHUD::InkHUD::openKeyboard()
+{
+    windowManager->openKeyboard();
+}
+
+// Close the on-screen keyboard
+void InkHUD::InkHUD::closeKeyboard()
+{
+    windowManager->closeKeyboard();
 }
 
 // In layouts where multiple applets are shown at once, change which tile is focused
@@ -245,10 +283,11 @@ void InkHUD::InkHUD::requestUpdate()
 // Ignores all diplomacy:
 //  - the display *will* update
 //  - the specified update type *will* be used
+// If the all parameter is true, the whole screen buffer is cleared and re-rendered
 // If the async parameter is false, code flow is blocked while the update takes place
-void InkHUD::InkHUD::forceUpdate(EInk::UpdateTypes type, bool async)
+void InkHUD::InkHUD::forceUpdate(EInk::UpdateTypes type, bool all, bool async)
 {
-    renderer->forceUpdate(type, async);
+    renderer->forceUpdate(type, all, async);
 }
 
 // Wait for any in-progress display update to complete before continuing

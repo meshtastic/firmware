@@ -25,9 +25,6 @@ extern "C" {
 #define LED_BLUE PIN_LED1
 #define LED_GREEN PIN_LED2
 
-#define LED_BUILTIN LED_BLUE
-#define LED_CONN LED_GREEN
-
 #define LED_STATE_ON 0
 
 // Buttons / touch
@@ -137,6 +134,8 @@ static const uint8_t A0 = PIN_A0;
 
 // Battery / ADC already defined above
 #define HAS_RTC 1
+
+#define SERIAL_PRINT_PORT 0
 
 #ifdef __cplusplus
 }

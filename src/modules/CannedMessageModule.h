@@ -27,10 +27,6 @@ enum CannedMessageModuleIconType { shift, backspace, space, enter };
 #define CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT 50
 #define CANNED_MESSAGE_MODULE_MESSAGES_SIZE 800
 
-#ifndef CANNED_MESSAGE_MODULE_ENABLE
-#define CANNED_MESSAGE_MODULE_ENABLE 0
-#endif
-
 // ============================
 //        Data Structures
 // ============================

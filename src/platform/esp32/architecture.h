@@ -33,9 +33,6 @@
 #ifndef HAS_RADIO
 #define HAS_RADIO 1
 #endif
-#ifndef HAS_RTC
-#define HAS_RTC 1
-#endif
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 1
 #endif

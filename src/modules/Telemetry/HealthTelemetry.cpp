@@ -168,18 +168,21 @@ bool HealthTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 
 bool HealthTelemetryModule::getHealthTelemetry(meshtastic_Telemetry *m)
 {
-    bool valid = true;
+    bool valid = false;
     bool hasSensor = false;
+    bool get_metrics;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_health_metrics_tag;
     m->variant.health_metrics = meshtastic_HealthMetrics_init_zero;
 
     if (max30102Sensor.hasSensor()) {
-        valid = valid && max30102Sensor.getMetrics(m);
+        get_metrics = max30102Sensor.getMetrics(m);
+        valid = valid || get_metrics; // avoid short-circuit evaluation rules
         hasSensor = true;
     }
     if (mlx90614Sensor.hasSensor()) {
-        valid = valid && mlx90614Sensor.getMetrics(m);
+        get_metrics = mlx90614Sensor.getMetrics(m);
+        valid = valid || get_metrics;
         hasSensor = true;
     }
 

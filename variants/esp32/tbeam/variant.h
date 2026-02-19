@@ -57,7 +57,6 @@
 #ifndef TOUCH_IRQ
 #define TOUCH_IRQ -1
 #endif
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 #define USE_VIRTUAL_KEYBOARD 1
 
 #define ST7796_NSS 25

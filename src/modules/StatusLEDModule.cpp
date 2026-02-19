@@ -50,9 +50,10 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
             break;
         }
         case meshtastic::BluetoothStatus::ConnectionState::CONNECTED: {
-            ble_state = connected;
-            PAIRING_LED_starttime = millis();
-            break;
+            if (ble_state != connected) {
+                ble_state = connected;
+                PAIRING_LED_starttime = millis();
+            }
         }
         }
 
@@ -129,7 +130,6 @@ int32_t StatusLEDModule::runOnce()
 #ifdef LED_CHARGE
     digitalWrite(LED_CHARGE, CHARGE_LED_state);
 #endif
-    // digitalWrite(green_LED_PIN, LED_STATE_OFF);
 #ifdef LED_PAIRING
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif

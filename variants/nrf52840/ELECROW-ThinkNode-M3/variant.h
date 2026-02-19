@@ -50,15 +50,14 @@ extern "C" {
 #define EEPROM_POWER 7
 
 // LED
-#define red_LED_PIN 33
-#define LED_POWER red_LED_PIN
+#define LED_RED 33
+#define LED_POWER LED_RED
 #define LED_CHARGE LED_POWER // Signals the Status LED Module to handle this LED
-#define green_LED_PIN 35
-#define PIN_LED2 green_LED_PIN
+#define LED_GREEN 35
+#define LED_NOTIFICATION LED_GREEN
 #define LED_BLUE 37
 #define LED_PAIRING LED_BLUE // Signals the Status LED Module to handle this LED
 
-#define LED_BUILTIN -1
 #define LED_STATE_ON LOW
 #define LED_STATE_OFF HIGH
 
@@ -113,9 +112,11 @@ extern "C" {
 #define LR11X0_DIO3_TCXO_VOLTAGE 3.3
 #define LR11X0_DIO_AS_RF_SWITCH
 
+#define SERIAL_PRINT_PORT 0
+
 // PCF8563 RTC Module
-// REVISIT https://github.com/meshtastic/firmware/pull/9084
-// #define PCF8563_RTC 0x51
+#define PCF8563_RTC 0x51
+#define HAS_RTC 1
 
 #ifdef __cplusplus
 }

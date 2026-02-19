@@ -4,6 +4,8 @@
 #define UART_TX 43
 #define UART_RX 44
 
+#define HAS_PCA9557
+
 // LED
 // Both of these are on the GPIO expander
 #define PCA_LED_USER 1  // the Blue LED
@@ -79,4 +81,6 @@
 
 #define BUTTON_PIN PIN_BUTTON1
 #define BUTTON_PIN_ALT PIN_BUTTON2
+
+#define SERIAL_PRINT_PORT 0
 #endif
