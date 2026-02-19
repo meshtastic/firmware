@@ -453,7 +453,7 @@ struct EmotePickerLayout {
     int totalRows = 0;
 };
 
-// Grid layout
+// Grid Emote layout
 EmotePickerLayout buildEmotePickerLayout(OLEDDisplay *display, int numEmotes, int originY)
 {
     EmotePickerLayout layout;
@@ -462,10 +462,9 @@ EmotePickerLayout buildEmotePickerLayout(OLEDDisplay *display, int numEmotes, in
     }
 
     const int headerFontHeight = FONT_HEIGHT_SMALL;
-    const int headerMargin = 2;
-    const int cellPadX = 2;
-    const int cellPadY = 2;
-    const int reservedScrollbarWidth = 8;
+    const int headerMargin = 0;
+    const int cellGap = 1;
+    const int scrollbarWidth = 6;
     static int cachedNumEmotes = -1;
     static int cachedMaxEmoteWidth = 1;
     static int cachedMaxEmoteHeight = 1;
@@ -478,17 +477,24 @@ EmotePickerLayout buildEmotePickerLayout(OLEDDisplay *display, int numEmotes, in
             cachedMaxEmoteHeight = std::max(cachedMaxEmoteHeight, graphics::emotes[i].height);
         }
     }
-
-    layout.cellWidth = cachedMaxEmoteWidth + (cellPadX * 2) + 2;
-    layout.cellHeight = cachedMaxEmoteHeight + (cellPadY * 2) + 2;
+    layout.cellWidth = cachedMaxEmoteWidth + cellGap;
+    layout.cellHeight = cachedMaxEmoteHeight + cellGap;
     layout.listTop = originY + headerFontHeight + headerMargin;
 
-    const int listHeight = std::max(0, display->getHeight() - layout.listTop - 2);
-    layout.contentWidth = std::max(1, display->getWidth() - reservedScrollbarWidth);
+    const int listHeight = std::max(0, display->getHeight() - layout.listTop);
+    const int fullWidth = display->getWidth();
+    layout.contentWidth = std::max(1, fullWidth);
     layout.columns = std::max(1, layout.contentWidth / std::max(1, layout.cellWidth));
     layout.columns = std::min(layout.columns, numEmotes);
-    layout.visibleRows = std::max(1, listHeight / std::max(1, layout.cellHeight));
+    layout.visibleRows = std::max(1, (listHeight + cellGap) / std::max(1, layout.cellHeight));
     layout.totalRows = (numEmotes + layout.columns - 1) / layout.columns;
+
+    if (layout.totalRows > layout.visibleRows) {
+        layout.contentWidth = std::max(1, fullWidth - scrollbarWidth);
+        layout.columns = std::max(1, layout.contentWidth / std::max(1, layout.cellWidth));
+        layout.columns = std::min(layout.columns, numEmotes);
+        layout.totalRows = (numEmotes + layout.columns - 1) / layout.columns;
+    }
 
     return layout;
 }
@@ -1149,9 +1155,9 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     int columns = std::max(1, layout.columns);
 
     bool moveLeft = (event->inputEvent == INPUT_BROKER_LEFT);
-    bool moveRight = (event->inputEvent == INPUT_BROKER_RIGHT);
+    bool moveRight = (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS);
     bool moveUp = (event->inputEvent == INPUT_BROKER_UP || event->inputEvent == INPUT_BROKER_ALT_PRESS);
-    bool moveDown = (event->inputEvent == INPUT_BROKER_DOWN || event->inputEvent == INPUT_BROKER_USER_PRESS);
+    bool moveDown = (event->inputEvent == INPUT_BROKER_DOWN);
     bool isSelect = isSelectEvent(event);
     if (runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
         if (event->inputEvent == INPUT_BROKER_SELECT) {
@@ -1558,7 +1564,7 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
     }
 
     if (layout.totalRows > layout.visibleRows) {
-        int scrollbarHeight = layout.visibleRows * layout.cellHeight;
+        int scrollbarHeight = std::max(1, (layout.visibleRows * layout.cellHeight) - 1);
         int scrollTrackX = displayWidth - 6;
         display->drawRect(scrollTrackX, layout.listTop, 4, scrollbarHeight);
         int scrollBarLen = std::max(6, (scrollbarHeight * layout.visibleRows) / layout.totalRows);

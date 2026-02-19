@@ -74,7 +74,11 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool shouldDraw();
     bool hasMessages();
     void resetSearch();
-    bool isFreeTextUIActive() const { return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT; }
+    // Treat both freetext compose and emote picker as "text compose UI" for global overlays.
+    bool isFreeTextUIActive() const
+    {
+        return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER;
+    }
     void updateDestinationSelectionList();
     void drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     bool isCharInputAllowed() const;
