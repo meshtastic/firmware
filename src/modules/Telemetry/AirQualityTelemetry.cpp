@@ -1,3 +1,4 @@
+#include "DebugConfiguration.h"
 #include "configuration.h"
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
@@ -25,6 +26,12 @@
 #if __has_include(<SensirionI2cScd4x.h>)
 #include "Sensor/SCD4XSensor.h"
 #endif
+#if __has_include(<SensirionI2cSfa3x.h>)
+#include "Sensor/SFA30Sensor.h"
+#endif
+#if __has_include(<SensirionI2cScd30.h>)
+#include "Sensor/SCD30Sensor.h"
+#endif
 
 void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
@@ -50,6 +57,12 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<SensirionI2cScd4x.h>)
     addSensor<SCD4XSensor>(i2cScanner, ScanI2C::DeviceType::SCD4X);
 #endif
+#if __has_include(<SensirionI2cSfa3x.h>)
+    addSensor<SFA30Sensor>(i2cScanner, ScanI2C::DeviceType::SFA30);
+#endif
+#if __has_include(<SensirionI2cScd30.h>)
+    addSensor<SCD30Sensor>(i2cScanner, ScanI2C::DeviceType::SCD30);
+#endif
 }
 
 int32_t AirQualityTelemetryModule::runOnce()
@@ -71,7 +84,8 @@ int32_t AirQualityTelemetryModule::runOnce()
     }
 
     if (firstTime) {
-        // This is the first time the OSThread library has called this function, so do some setup
+        // This is the first time the OSThread library has called this function, so
+        // do some setup
         firstTime = false;
 
         if (moduleConfig.telemetry.air_quality_enabled) {
@@ -221,6 +235,8 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
         entries.push_back("PM10: " + String(m.pm100_standard) + "ug/m3");
     if (m.has_co2)
         entries.push_back("CO2: " + String(m.co2) + "ppm");
+    if (m.has_form_formaldehyde)
+        entries.push_back("HCHO: " + String(m.form_formaldehyde) + "ppb");
 
     // === Show first available metric on top-right of first line ===
     if (!entries.empty()) {
@@ -256,17 +272,19 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
-        LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, pm100_standard=%i", sender,
-                 t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
-                 t->variant.air_quality_metrics.pm100_standard);
+        if (t->variant.air_quality_metrics.has_pm10_standard)
+            LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, "
+                     "pm100_standard=%i",
+                     sender, t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
+                     t->variant.air_quality_metrics.pm100_standard);
 
-        // TODO - Decide what to do with these
-        // LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",
-        //          t->variant.air_quality_metrics.pm10_environmental, t->variant.air_quality_metrics.pm25_environmental,
-        //          t->variant.air_quality_metrics.pm100_environmental);
+        if (t->variant.air_quality_metrics.has_co2)
+            LOG_INFO("CO2=%i, CO2_T=%.2f, CO2_H=%.2f", t->variant.air_quality_metrics.co2,
+                     t->variant.air_quality_metrics.co2_temperature, t->variant.air_quality_metrics.co2_humidity);
 
-        LOG_INFO("                  | CO2=%i, CO2_T=%f, CO2_H=%f", t->variant.air_quality_metrics.co2,
-                 t->variant.air_quality_metrics.co2_temperature, t->variant.air_quality_metrics.co2_humidity);
+        if (t->variant.air_quality_metrics.has_form_formaldehyde)
+            LOG_INFO("HCHO=%.2f, HCHO_T=%.2f, HCHO_H=%.2f", t->variant.air_quality_metrics.form_formaldehyde,
+                     t->variant.air_quality_metrics.form_temperature, t->variant.air_quality_metrics.form_humidity);
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -354,8 +372,16 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                          m.variant.air_quality_metrics.has_co2_humidity;
 
         if (hasAnyCO2) {
-            LOG_INFO("Send: co2=%i, co2_t=%f, co2_rh=%f", m.variant.air_quality_metrics.co2,
+            LOG_INFO("Send: co2=%i, co2_t=%.2f, co2_rh=%.2f", m.variant.air_quality_metrics.co2,
                      m.variant.air_quality_metrics.co2_temperature, m.variant.air_quality_metrics.co2_humidity);
+        }
+
+        bool hasAnyHCHO = m.variant.air_quality_metrics.has_form_formaldehyde ||
+                          m.variant.air_quality_metrics.has_form_temperature || m.variant.air_quality_metrics.has_form_humidity;
+
+        if (hasAnyHCHO) {
+            LOG_INFO("Send: hcho=%.2f, hcho_t=%.2f, hcho_rh=%.2f", m.variant.air_quality_metrics.form_formaldehyde,
+                     m.variant.air_quality_metrics.form_temperature, m.variant.air_quality_metrics.form_humidity);
         }
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
