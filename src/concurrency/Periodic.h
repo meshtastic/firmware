@@ -1,7 +1,7 @@
 #pragma once
 
-#include <utility>
 #include <functional>
+#include <utility>
 
 #include "concurrency/OSThread.h"
 
