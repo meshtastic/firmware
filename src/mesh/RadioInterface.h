@@ -260,6 +260,12 @@ class RadioInterface
      */
     virtual void saveChannelNum(uint32_t savedChannelNum);
 
+    /**
+     * Get current RSSI reading from the radio.
+     * Returns 0 if not available.
+     */
+    virtual int16_t getCurrentRSSI() { return 0; }
+
   private:
     /**
      * Convert our modemConfig enum into wf, sf, etc...
