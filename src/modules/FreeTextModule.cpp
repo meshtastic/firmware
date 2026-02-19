@@ -442,6 +442,56 @@ size_t emoteLabelLengthEndingAtCursor(const String &text, unsigned int cursorPos
     }
     return bestLen;
 }
+
+struct EmotePickerLayout {
+    int listTop = 0;
+    int contentWidth = 1;
+    int cellWidth = 1;
+    int cellHeight = 1;
+    int columns = 1;
+    int visibleRows = 1;
+    int totalRows = 0;
+};
+
+// Grid layout
+EmotePickerLayout buildEmotePickerLayout(OLEDDisplay *display, int numEmotes, int originY)
+{
+    EmotePickerLayout layout;
+    if (!display || numEmotes <= 0) {
+        return layout;
+    }
+
+    const int headerFontHeight = FONT_HEIGHT_SMALL;
+    const int headerMargin = 2;
+    const int cellPadX = 2;
+    const int cellPadY = 2;
+    const int reservedScrollbarWidth = 8;
+    static int cachedNumEmotes = -1;
+    static int cachedMaxEmoteWidth = 1;
+    static int cachedMaxEmoteHeight = 1;
+    if (cachedNumEmotes != numEmotes) {
+        cachedNumEmotes = numEmotes;
+        cachedMaxEmoteWidth = 1;
+        cachedMaxEmoteHeight = 1;
+        for (int i = 0; i < numEmotes; ++i) {
+            cachedMaxEmoteWidth = std::max(cachedMaxEmoteWidth, graphics::emotes[i].width);
+            cachedMaxEmoteHeight = std::max(cachedMaxEmoteHeight, graphics::emotes[i].height);
+        }
+    }
+
+    layout.cellWidth = cachedMaxEmoteWidth + (cellPadX * 2) + 2;
+    layout.cellHeight = cachedMaxEmoteHeight + (cellPadY * 2) + 2;
+    layout.listTop = originY + headerFontHeight + headerMargin;
+
+    const int listHeight = std::max(0, display->getHeight() - layout.listTop - 2);
+    layout.contentWidth = std::max(1, display->getWidth() - reservedScrollbarWidth);
+    layout.columns = std::max(1, layout.contentWidth / std::max(1, layout.cellWidth));
+    layout.columns = std::min(layout.columns, numEmotes);
+    layout.visibleRows = std::max(1, listHeight / std::max(1, layout.cellHeight));
+    layout.totalRows = (numEmotes + layout.columns - 1) / layout.columns;
+
+    return layout;
+}
 } // namespace
 
 // Return the current trailing word at cursor (lowercased) for completion lookup.
@@ -1090,26 +1140,51 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 {
     int numEmotes = graphics::numEmotes;
+    if (numEmotes <= 0) {
+        return 0;
+    }
 
-    bool isUp = isUpEvent(event);
-    bool isDown = isDownEvent(event);
+    OLEDDisplay *displayDev = screen ? screen->getDisplayDevice() : nullptr;
+    EmotePickerLayout layout = buildEmotePickerLayout(displayDev, numEmotes, 0);
+    int columns = std::max(1, layout.columns);
+
+    bool moveLeft = (event->inputEvent == INPUT_BROKER_LEFT);
+    bool moveRight = (event->inputEvent == INPUT_BROKER_RIGHT);
+    bool moveUp = (event->inputEvent == INPUT_BROKER_UP || event->inputEvent == INPUT_BROKER_ALT_PRESS);
+    bool moveDown = (event->inputEvent == INPUT_BROKER_DOWN || event->inputEvent == INPUT_BROKER_USER_PRESS);
     bool isSelect = isSelectEvent(event);
     if (runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
-        if (event->inputEvent == INPUT_BROKER_USER_PRESS) {
-            isDown = true;
-        } else if (event->inputEvent == INPUT_BROKER_SELECT) {
+        if (event->inputEvent == INPUT_BROKER_SELECT) {
             isSelect = true;
         }
     }
 
-    if (isUp && emotePickerIndex > 0) {
-        emotePickerIndex--;
-        // Non-EInk builds need forceUiUpdate=true for responsive per-step redraw.
-        screen->forceDisplay(true);
-        return 1;
+    int nextIndex = emotePickerIndex;
+    if (moveLeft && nextIndex > 0) {
+        nextIndex -= 1;
+    } else if (moveRight && nextIndex < (numEmotes - 1)) {
+        nextIndex += 1;
+    } else if (moveUp) {
+        int candidate = nextIndex - columns;
+        if (candidate >= 0) {
+            nextIndex = candidate;
+        }
+    } else if (moveDown) {
+        int candidate = nextIndex + columns;
+        if (candidate < numEmotes) {
+            nextIndex = candidate;
+        } else {
+            // If next row exists but this column is empty there, snap to the last emote.
+            const int lastRow = (numEmotes - 1) / columns;
+            const int currentRow = nextIndex / columns;
+            if (currentRow < lastRow) {
+                nextIndex = numEmotes - 1;
+            }
+        }
     }
-    if (isDown && emotePickerIndex < numEmotes - 1) {
-        emotePickerIndex++;
+
+    if (nextIndex != emotePickerIndex) {
+        emotePickerIndex = nextIndex;
         // Non-EInk builds need forceUiUpdate=true for responsive per-step redraw.
         screen->forceDisplay(true);
         return 1;
@@ -1411,41 +1486,23 @@ void CannedMessageModule::drawFreeTextScreen(OLEDDisplay *display, OLEDDisplayUi
 #endif
 }
 
-// Draw scrollable emote picker list.
+// Draw emotes in a left-to-right wrapped grid with row-based scrolling.
 void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    (void)state;
 #if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
     EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
     einkDisplay->enableUnlimitedFastMode();
 #endif
 
-    const int headerFontHeight = FONT_HEIGHT_SMALL;
-    const int headerMargin = 2;
-    const int labelGap = 6;
-    const int bitmapGapX = 4;
     const int displayWidth = display->getWidth();
-    const int displayHeight = display->getHeight();
-
-    // Cache max row bitmap height; emote table is static in runtime.
-    static int cachedMaxEmoteHeight = -1;
-    static int cachedNumEmotes = -1;
-    if (cachedMaxEmoteHeight < 0 || cachedNumEmotes != graphics::numEmotes) {
-        cachedMaxEmoteHeight = 0;
-        for (int i = 0; i < graphics::numEmotes; ++i) {
-            if (graphics::emotes[i].height > cachedMaxEmoteHeight) {
-                cachedMaxEmoteHeight = graphics::emotes[i].height;
-            }
-        }
-        cachedNumEmotes = graphics::numEmotes;
+    int numEmotes = graphics::numEmotes;
+    if (numEmotes <= 0) {
+        return;
     }
 
-    const int rowHeight = cachedMaxEmoteHeight + 2;
-    int headerY = y;
-    int listTop = headerY + headerFontHeight + headerMargin;
-    int _visibleRows = (displayHeight - listTop - 2) / rowHeight;
-    int numEmotes = graphics::numEmotes;
-
-    this->visibleRows = _visibleRows;
+    EmotePickerLayout layout = buildEmotePickerLayout(display, numEmotes, y);
+    this->visibleRows = layout.visibleRows;
 
     if (emotePickerIndex < 0) {
         emotePickerIndex = 0;
@@ -1454,50 +1511,58 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
         emotePickerIndex = numEmotes - 1;
     }
 
-    int topIndex = emotePickerIndex - _visibleRows / 2;
-    if (topIndex < 0) {
-        topIndex = 0;
+    int selectedRow = emotePickerIndex / layout.columns;
+    int topRow = selectedRow - (layout.visibleRows / 2);
+    if (topRow < 0) {
+        topRow = 0;
     }
-    if (topIndex > numEmotes - _visibleRows) {
-        topIndex = std::max(0, numEmotes - _visibleRows);
+    int maxTopRow = std::max(0, layout.totalRows - layout.visibleRows);
+    if (topRow > maxTopRow) {
+        topRow = maxTopRow;
     }
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(displayWidth / 2, headerY, "Select Emote");
+    display->drawString(displayWidth / 2, y, "Select Emote");
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_MEDIUM);
 
-    for (int vis = 0; vis < _visibleRows; ++vis) {
-        int emoteIdx = topIndex + vis;
-        if (emoteIdx >= numEmotes) {
-            break;
-        }
-        const graphics::Emote &emote = graphics::emotes[emoteIdx];
-        int rowY = listTop + vis * rowHeight;
-
-        if (emoteIdx == emotePickerIndex) {
-            display->fillRect(x, rowY, displayWidth - 8, rowHeight);
-            display->setColor(BLACK);
+    for (int visRow = 0; visRow < layout.visibleRows; ++visRow) {
+        int row = topRow + visRow;
+        if (row >= layout.totalRows) {
+            continue;
         }
 
-        int emoteY = rowY + 1;
-        display->drawXbm(x + bitmapGapX, emoteY, emote.width, emote.height, emote.bitmap);
+        for (int col = 0; col < layout.columns; ++col) {
+            int emoteIdx = row * layout.columns + col;
+            if (emoteIdx >= numEmotes) {
+                break;
+            }
 
-        int labelY = rowY + ((rowHeight - FONT_HEIGHT_MEDIUM) / 2);
-        display->drawString(x + bitmapGapX + emote.width + labelGap, labelY, emote.label);
+            const graphics::Emote &emote = graphics::emotes[emoteIdx];
+            int cellX = x + col * layout.cellWidth;
+            int cellY = layout.listTop + visRow * layout.cellHeight;
 
-        if (emoteIdx == emotePickerIndex) {
-            display->setColor(WHITE);
+            if (emoteIdx == emotePickerIndex) {
+                display->fillRect(cellX, cellY, layout.cellWidth - 1, layout.cellHeight - 1);
+                display->setColor(BLACK);
+            }
+
+            int emoteX = cellX + std::max(0, (layout.cellWidth - emote.width) / 2);
+            int emoteY = cellY + std::max(0, (layout.cellHeight - emote.height) / 2);
+            display->drawXbm(emoteX, emoteY, emote.width, emote.height, emote.bitmap);
+
+            if (emoteIdx == emotePickerIndex) {
+                display->setColor(WHITE);
+            }
         }
     }
 
-    if (numEmotes > _visibleRows) {
-        int scrollbarHeight = _visibleRows * rowHeight;
+    if (layout.totalRows > layout.visibleRows) {
+        int scrollbarHeight = layout.visibleRows * layout.cellHeight;
         int scrollTrackX = displayWidth - 6;
-        display->drawRect(scrollTrackX, listTop, 4, scrollbarHeight);
-        int scrollBarLen = std::max(6, (scrollbarHeight * _visibleRows) / numEmotes);
-        int scrollBarPos = listTop + (scrollbarHeight * topIndex) / numEmotes;
+        display->drawRect(scrollTrackX, layout.listTop, 4, scrollbarHeight);
+        int scrollBarLen = std::max(6, (scrollbarHeight * layout.visibleRows) / layout.totalRows);
+        int scrollBarPos = layout.listTop + (scrollbarHeight * topRow) / layout.totalRows;
         display->fillRect(scrollTrackX, scrollBarPos, 4, scrollBarLen);
     }
 }
