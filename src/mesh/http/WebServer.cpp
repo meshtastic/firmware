@@ -58,6 +58,9 @@ static const int32_t IDLE_INTERVAL_MS = 1000;
 // Maximum concurrent HTTPS connections (reduced from default 4 to save memory)
 static const uint8_t MAX_HTTPS_CONNECTIONS = 2;
 
+// Minimum free heap required for SSL handshake (~40KB for mbedTLS contexts)
+static const uint32_t MIN_HEAP_FOR_SSL = 40000;
+
 static SSLCert *cert;
 static HTTPSServer *secureServer;
 static HTTPServer *insecureServer;
@@ -70,8 +73,20 @@ static void handleWebResponse()
     if (isWifiAvailable()) {
 
         if (isWebServerReady) {
-            if (secureServer)
-                secureServer->loop();
+            // Check heap before HTTPS processing - SSL requires significant memory
+            if (secureServer) {
+                uint32_t freeHeap = ESP.getFreeHeap();
+                if (freeHeap >= MIN_HEAP_FOR_SSL) {
+                    secureServer->loop();
+                } else {
+                    // Skip HTTPS when memory is low to prevent SSL setup failures
+                    static uint32_t lastHeapWarning = 0;
+                    if (millis() - lastHeapWarning > 30000) { // Warn every 30s max
+                        LOG_WARN("Low heap (%u bytes), skipping HTTPS processing", freeHeap);
+                        lastHeapWarning = millis();
+                    }
+                }
+            }
             insecureServer->loop();
         }
     }
