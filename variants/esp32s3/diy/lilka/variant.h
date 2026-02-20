@@ -12,7 +12,7 @@
 #define TB_DOWN 41
 #define TB_LEFT 39
 #define TB_RIGHT 40
-#define TB_PRESS 10 // C (A, B and D will stay to be used for cammed messages)
+#define TB_PRESS 10 // C (A, B and D will stay to be used for canned messages)
 #define TB_DIRECTION FALLING
 
 // IPS 1.69 280х240 ST7789
