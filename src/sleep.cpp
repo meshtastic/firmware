@@ -383,6 +383,8 @@ void doLightSleep(uint32_t sleepMsec)
     }
 #endif
 
+    notifyLightSleep.notifyObservers(NULL);
+
     enableLoraInterrupt();
     enableButtonInterrupt();
 
@@ -453,8 +455,6 @@ void doLightSleep(uint32_t sleepMsec)
 
     res = esp_sleep_enable_gpio_wakeup();
     assert(res == ESP_OK);
-
-    notifyLightSleep.notifyObservers(NULL);
 
     console->flush();
 

@@ -328,8 +328,13 @@ void ButtonThread::detachButtonInterrupts()
 // Allows sleep.cpp to configure its own interrupts, which wake the device on user-button press
 int ButtonThread::beforeLightSleep(void *unused)
 {
-    // detachButtonInterrupts();
-    // not really needed and stays in conflict with dynamic light sleep
+    // when dynamic light sleep is enabled, we will never get
+    // a valid wake source, so there is no way PowerFSM
+    // knows if button was pressed; that's why interrupt handler
+    // should not be detached during dynamic light sleep
+#if !HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+    detachButtonInterrupts();
+#endif
     return 0; // Indicates success
 }
 

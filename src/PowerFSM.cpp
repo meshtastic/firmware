@@ -146,7 +146,7 @@ static void lsIdle()
 
     case ESP_SLEEP_WAKEUP_GPIO:
         LOG_POWERFSM("Wake cause ESP_SLEEP_WAKEUP_GPIO");
-        // FSM events should be triggered by interrupt handlers
+        powerFSM.trigger(EVENT_WAKE_TIMER);
         return;
 
     default:
