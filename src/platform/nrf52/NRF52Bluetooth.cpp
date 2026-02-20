@@ -32,6 +32,7 @@ static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 static uint16_t connectionHandle;
+static bool passkeyShowing;
 
 class BluetoothPhoneAPI : public PhoneAPI
 {
@@ -86,6 +87,14 @@ void onDisconnect(uint16_t conn_handle, uint8_t reason)
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
+
+    // If a pairing prompt is active, make sure we dismiss it on disconnect/cancel/failure paths.
+    if (passkeyShowing) {
+        passkeyShowing = false;
+        if (screen) {
+            screen->endAlert();
+        }
+    }
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
@@ -400,6 +409,8 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         });
     }
 #endif
+    passkeyShowing = true;
+
     if (match_request) {
         uint32_t start_time = millis();
         while (millis() < start_time + 30000) {
@@ -451,6 +462,7 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
     }
 
     // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+    passkeyShowing = false;
     if (screen) {
         screen->endAlert();
     }
