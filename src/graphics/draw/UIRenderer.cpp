@@ -1423,9 +1423,12 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
 
-    // Suppress nav overlay while canned-message text compose UI is active (freetext + emote picker).
-    const bool hideForTextCompose = (cannedMessageModule && cannedMessageModule->isFreeTextUIActive());
-    bool navBarVisible = !hideForTextCompose && (millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS);
+    // Suppress nav overlay entirely
+    if (cannedMessageModule && cannedMessageModule->isFreeTextUIActive()) {
+        return;
+    }
+
+    bool navBarVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
     int y = navBarVisible ? (SCREEN_HEIGHT - iconSize - 1) : SCREEN_HEIGHT;
 
 #if defined(USE_EINK)
@@ -1454,10 +1457,6 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     navBarPrevVisible = navBarVisible;
 #endif
-
-    if (!navBarVisible) {
-        return;
-    }
 
     // Pre-calculate bounding rect
     const int rectX = xStart - 2 - bigOffset;
