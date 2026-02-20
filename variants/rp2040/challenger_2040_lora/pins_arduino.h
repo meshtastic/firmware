@@ -7,7 +7,7 @@
 #define ADC_RESOLUTION (12u)
 
 // LEDs
-#define PIN_LED (24u)
+#define LED_POWER (24u)
 
 // Serial
 #define PIN_SERIAL1_TX (16u)
@@ -44,8 +44,6 @@
 #define SERIAL_HOWMANY (1u)
 #define SPI_HOWMANY (2u)
 #define WIRE_HOWMANY (1u)
-
-#define LED_BUILTIN PIN_LED
 
 static const uint8_t D0 = (16u);
 static const uint8_t D1 = (17u);

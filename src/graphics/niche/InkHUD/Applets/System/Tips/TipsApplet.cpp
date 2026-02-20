@@ -10,39 +10,42 @@ using namespace NicheGraphics;
 
 InkHUD::TipsApplet::TipsApplet()
 {
-    // Decide which tips (if any) should be shown to user after the boot screen
+    bool needsRegion = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+
+    bool showTutorialTips = (settings->tips.firstBoot || needsRegion);
 
     // Welcome screen
-    if (settings->tips.firstBoot)
+    if (showTutorialTips)
         tipQueue.push_back(Tip::WELCOME);
 
-    // Antenna, region, timezone
-    // Shown at boot if region not yet set
-    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+    // Finish setup
+    if (needsRegion)
         tipQueue.push_back(Tip::FINISH_SETUP);
+
+    // Using the UI
+    if (showTutorialTips) {
+        tipQueue.push_back(Tip::CUSTOMIZATION);
+        tipQueue.push_back(Tip::BUTTONS);
+    }
 
     // Shutdown info
     // Shown until user performs one valid shutdown
     if (!settings->tips.safeShutdownSeen)
         tipQueue.push_back(Tip::SAFE_SHUTDOWN);
 
-    // Using the UI
-    if (settings->tips.firstBoot) {
-        tipQueue.push_back(Tip::CUSTOMIZATION);
-        tipQueue.push_back(Tip::BUTTONS);
-    }
-
     // Catch an incorrect attempt at rotating display
     if (config.display.flip_screen)
         tipQueue.push_back(Tip::ROTATION);
 
-    // Applet is foreground immediately at boot, but is obscured by LogoApplet, which is also foreground
-    // LogoApplet can be considered to have a higher Z-index, because it is placed before TipsApplet in the systemApplets vector
+    // Region picker
+    if (needsRegion)
+        tipQueue.push_back(Tip::PICK_REGION);
+
     if (!tipQueue.empty())
         bringToForeground();
 }
 
-void InkHUD::TipsApplet::onRender()
+void InkHUD::TipsApplet::onRender(bool full)
 {
     switch (tipQueue.front()) {
     case Tip::WELCOME:
@@ -51,81 +54,109 @@ void InkHUD::TipsApplet::onRender()
 
     case Tip::FINISH_SETUP: {
         setFont(fontMedium);
-        printAt(0, 0, "Tip: Finish Setup");
+        const char *title = "Tip: Finish Setup";
+        uint16_t h = getWrappedTextHeight(0, width(), title);
+        printWrapped(0, 0, width(), title);
 
         setFont(fontSmall);
-        int16_t cursorY = fontMedium.lineHeight() * 1.5;
-        printAt(0, cursorY, "- connect antenna");
+        int16_t cursorY = h + fontSmall.lineHeight();
 
-        cursorY += fontSmall.lineHeight() * 1.2;
-        printAt(0, cursorY, "- connect a client app");
+        auto drawBullet = [&](const char *text) {
+            uint16_t bh = getWrappedTextHeight(0, width(), text);
+            printWrapped(0, cursorY, width(), text);
+            cursorY += bh + (fontSmall.lineHeight() / 3);
+        };
 
-        // Only if region not set
-        if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- set region");
-        }
+        drawBullet("- connect antenna");
+        drawBullet("- connect a client app");
 
-        // Only if tz not set
-        if (!(*config.device.tzdef && config.device.tzdef[0] != 0)) {
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- set timezone");
-        }
+        if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            drawBullet("- set region");
 
-        cursorY += fontSmall.lineHeight() * 1.5;
-        printAt(0, cursorY, "More info at meshtastic.org");
+        if (!(*config.device.tzdef && config.device.tzdef[0] != 0))
+            drawBullet("- set timezone");
 
-        setFont(fontSmall);
+        cursorY += fontSmall.lineHeight() / 2;
+        drawBullet("More info at meshtastic.org");
+
         printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+    } break;
+
+    case Tip::PICK_REGION: {
+        setFont(fontMedium);
+        printAt(0, 0, "Set Region");
+
+        setFont(fontSmall);
+        printWrapped(0, fontMedium.lineHeight() * 1.5, width(), "Please select your LoRa region to complete setup.");
+
+        printAt(0, Y(1.0), "Press button to choose", LEFT, BOTTOM);
     } break;
 
     case Tip::SAFE_SHUTDOWN: {
         setFont(fontMedium);
-        printAt(0, 0, "Tip: Shutdown");
+
+        const char *title = "Tip: Shutdown";
+        uint16_t h = getWrappedTextHeight(0, width(), title);
+        printWrapped(0, 0, width(), title);
 
         setFont(fontSmall);
-        std::string shutdown;
-        shutdown += "Before removing power, please shut down from InkHUD menu, or a client app. \n";
-        shutdown += "\n";
-        shutdown += "This ensures data is saved.";
-        printWrapped(0, fontMedium.lineHeight() * 1.5, width(), shutdown);
+        int16_t cursorY = h + fontSmall.lineHeight();
+
+        const char *body = "Before removing power, please shut down from InkHUD menu, or a client app.\n\n"
+                           "This ensures data is saved.";
+
+        uint16_t bodyH = getWrappedTextHeight(0, width(), body);
+        printWrapped(0, cursorY, width(), body);
+        cursorY += bodyH + (fontSmall.lineHeight() / 2);
 
         printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
-
     } break;
 
     case Tip::CUSTOMIZATION: {
         setFont(fontMedium);
-        printAt(0, 0, "Tip: Customization");
+
+        const char *title = "Tip: Customization";
+        uint16_t h = getWrappedTextHeight(0, width(), title);
+        printWrapped(0, 0, width(), title);
 
         setFont(fontSmall);
-        printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
-                     "Configure & control display with the InkHUD menu. Optional features, layout, rotation, and more.");
+        int16_t cursorY = h + fontSmall.lineHeight();
+
+        const char *body = "Configure & control display with the InkHUD menu. "
+                           "Optional features, layout, rotation, and more.";
+
+        uint16_t bodyH = getWrappedTextHeight(0, width(), body);
+        printWrapped(0, cursorY, width(), body);
+        cursorY += bodyH + (fontSmall.lineHeight() / 2);
 
         printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
     } break;
 
     case Tip::BUTTONS: {
         setFont(fontMedium);
-        printAt(0, 0, "Tip: Buttons");
+
+        const char *title = "Tip: Buttons";
+        uint16_t h = getWrappedTextHeight(0, width(), title);
+        printWrapped(0, 0, width(), title);
 
         setFont(fontSmall);
-        int16_t cursorY = fontMedium.lineHeight() * 1.5;
+        int16_t cursorY = h + fontSmall.lineHeight();
+
+        auto drawBullet = [&](const char *text) {
+            uint16_t bh = getWrappedTextHeight(0, width(), text);
+            printWrapped(0, cursorY, width(), text);
+            cursorY += bh + (fontSmall.lineHeight() / 3);
+        };
 
         if (!settings->joystick.enabled) {
-            printAt(0, cursorY, "User Button");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- short press: next");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- long press: select / open menu");
+            drawBullet("User Button");
+            drawBullet("- short press: next");
+            drawBullet("- long press: select or open menu");
         } else {
-            printAt(0, cursorY, "Joystick");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- open menu / select");
-            cursorY += fontSmall.lineHeight() * 1.5;
-            printAt(0, cursorY, "Exit Button");
-            cursorY += fontSmall.lineHeight() * 1.2;
-            printAt(0, cursorY, "- switch tile / close menu");
+            drawBullet("Joystick");
+            drawBullet("- press: open menu or select");
+            drawBullet("Exit Button");
+            drawBullet("- press: switch tile or close menu");
         }
 
         printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
@@ -133,12 +164,21 @@ void InkHUD::TipsApplet::onRender()
 
     case Tip::ROTATION: {
         setFont(fontMedium);
-        printAt(0, 0, "Tip: Rotation");
+
+        const char *title = "Tip: Rotation";
+        uint16_t h = getWrappedTextHeight(0, width(), title);
+        printWrapped(0, 0, width(), title);
 
         setFont(fontSmall);
         if (!settings->joystick.enabled) {
-            printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
-                         "To rotate the display, use the InkHUD menu. Long-press the user button > Options > Rotate.");
+            int16_t cursorY = h + fontSmall.lineHeight();
+
+            const char *body = "To rotate the display, use the InkHUD menu. "
+                               "Long-press the user button > Options > Rotate.";
+
+            uint16_t bh = getWrappedTextHeight(0, width(), body);
+            printWrapped(0, cursorY, width(), body);
+            cursorY += bh + (fontSmall.lineHeight() / 2);
         } else {
             printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
                          "To rotate the display, use the InkHUD menu. Press the user button > Options > Rotate.");
@@ -159,12 +199,15 @@ void InkHUD::TipsApplet::renderWelcome()
 {
     uint16_t padW = X(0.05);
 
+    // Detect portrait orientation
+    bool portrait = height() > width();
+
     // Block 1 - logo & title
     // ========================
 
     // Logo size
-    uint16_t logoWLimit = X(0.3);
-    uint16_t logoHLimit = Y(0.3);
+    uint16_t logoWLimit = portrait ? X(0.5) : X(0.3);
+    uint16_t logoHLimit = portrait ? Y(0.25) : Y(0.3);
     uint16_t logoW = getLogoWidth(logoWLimit, logoHLimit);
     uint16_t logoH = getLogoHeight(logoWLimit, logoHLimit);
 
@@ -177,7 +220,7 @@ void InkHUD::TipsApplet::renderWelcome()
 
     // Center the block
     // Desired effect: equal margin from display edge for logo left and title right
-    int16_t block1Y = Y(0.3);
+    int16_t block1Y = portrait ? Y(0.2) : Y(0.3);
     int16_t block1CX = X(0.5) + (logoW / 2) - (titleW / 2);
     int16_t logoCX = block1CX - (logoW / 2) - (padW / 2);
     int16_t titleCX = block1CX + (titleW / 2) + (padW / 2);
@@ -192,7 +235,7 @@ void InkHUD::TipsApplet::renderWelcome()
     std::string subtitle = "InkHUD";
     if (width() >= 200)
         subtitle += "  -  A Heads-Up Display"; // Future proofing: narrower for tiny display
-    printAt(X(0.5), Y(0.6), subtitle, CENTER, MIDDLE);
+    printAt(X(0.5), portrait ? Y(0.45) : Y(0.6), subtitle, CENTER, MIDDLE);
 
     // Block 3 - press to continue
     // ============================
@@ -218,32 +261,42 @@ void InkHUD::TipsApplet::onBackground()
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
 }
 
 // While our SystemApplet::handleInput flag is true
 void InkHUD::TipsApplet::onButtonShortPress()
 {
+    bool needsRegion = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    // If we're prompting the user to pick a region, hand off to the menu
+    if (!tipQueue.empty() && tipQueue.front() == Tip::PICK_REGION) {
+        tipQueue.pop_front();
+
+        // Signal InkHUD to open the menu on Region page
+        inkhud->forceRegionMenu = true;
+
+        // Close tips and open menu
+        sendToBackground();
+        inkhud->openMenu();
+        return;
+    }
+    // Consume current tip
     tipQueue.pop_front();
 
     // All tips done
     if (tipQueue.empty()) {
         // Record that user has now seen the "tutorial" set of tips
         // Don't show them on subsequent boots
-        if (settings->tips.firstBoot) {
+        if (settings->tips.firstBoot && !needsRegion) {
             settings->tips.firstBoot = false;
             inkhud->persistence->saveSettings();
         }
 
-        // Close applet, and full refresh to clean the screen
-        // Need to force update, because our request would be ignored otherwise, as we are now background
+        // Close applet
         sendToBackground();
-        inkhud->forceUpdate(EInk::UpdateTypes::FULL);
-    }
-
-    // More tips left
-    else
+    } else {
         requestUpdate();
+    }
 }
 
 // Functions the same as the user button in this instance

@@ -69,9 +69,10 @@ void InkHUD::HeardApplet::populateFromNodeDB()
     }
 
     // Sort the collection by age
-    std::sort(ordered.begin(), ordered.end(), [](meshtastic_NodeInfoLite *top, meshtastic_NodeInfoLite *bottom) -> bool {
-        return (top->last_heard > bottom->last_heard);
-    });
+    std::sort(ordered.begin(), ordered.end(),
+              [](const meshtastic_NodeInfoLite *top, const meshtastic_NodeInfoLite *bottom) -> bool {
+                  return (top->last_heard > bottom->last_heard);
+              });
 
     // Keep the most recent entries only
     // Just enough to fill the screen

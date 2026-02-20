@@ -90,9 +90,9 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     bool seenRecently = (found != NULL);        // If found -> the packet was seen recently
 
     // Check for hop_limit upgrade scenario
-    if (seenRecently && wasUpgraded && found->hop_limit < p->hop_limit) {
-        LOG_DEBUG("Packet History - Hop limit upgrade: packet 0x%08x from hop_limit=%d to hop_limit=%d", p->id, found->hop_limit,
-                  p->hop_limit);
+    if (seenRecently && wasUpgraded && getHighestHopLimit(*found) < p->hop_limit) {
+        LOG_DEBUG("Packet History - Hop limit upgrade: packet 0x%08x from hop_limit=%d to hop_limit=%d", p->id,
+                  getHighestHopLimit(*found), p->hop_limit);
         *wasUpgraded = true;
     } else if (wasUpgraded) {
         *wasUpgraded = false; // Initialize to false if not an upgrade
@@ -439,7 +439,7 @@ void PacketHistory::removeRelayer(const uint8_t relayer, const uint32_t id, cons
 }
 
 // Getters and setters for hop limit fields packed in hop_limit
-inline uint8_t PacketHistory::getHighestHopLimit(PacketRecord &r)
+inline uint8_t PacketHistory::getHighestHopLimit(const PacketRecord &r)
 {
     return r.hop_limit & HOP_LIMIT_HIGHEST_MASK;
 }
@@ -449,7 +449,7 @@ inline void PacketHistory::setHighestHopLimit(PacketRecord &r, uint8_t hopLimit)
     r.hop_limit = (r.hop_limit & ~HOP_LIMIT_HIGHEST_MASK) | (hopLimit & HOP_LIMIT_HIGHEST_MASK);
 }
 
-inline uint8_t PacketHistory::getOurTxHopLimit(PacketRecord &r)
+inline uint8_t PacketHistory::getOurTxHopLimit(const PacketRecord &r)
 {
     return (r.hop_limit & HOP_LIMIT_OUR_TX_MASK) >> HOP_LIMIT_OUR_TX_SHIFT;
 }

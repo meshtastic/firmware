@@ -438,7 +438,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         if (currentResolution == ScreenResolution::UltraLow) {
             snprintf(frequencyslot, sizeof(frequencyslot), "%sMHz (%d)", freqStr, config.lora.channel_num);
         } else {
-            snprintf(frequencyslot, sizeof(frequencyslot), "Freq/Ch: %sMHz (%d)", freqStr, config.lora.channel_num);
+            snprintf(frequencyslot, sizeof(frequencyslot), "Freq: %sMHz (%d)", freqStr, config.lora.channel_num);
         }
     }
     size_t len = strlen(frequencyslot);
@@ -663,7 +663,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
-        getUptimeStr(millis(), "Up", uptimeStr, sizeof(uptimeStr));
+        getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
         textWidth = display->getStringWidth(uptimeStr);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
