@@ -7,6 +7,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
+#include "RadioLibInterface.h"
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
