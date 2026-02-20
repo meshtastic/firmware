@@ -1,10 +1,19 @@
 #define PIN_BUZZER 11
-#define BUTTON_PIN 39
+// #define BUTTON_PIN 4
 #define BATTERY_PIN 3
 #define ADC_MULTIPLIER 1.2
 #define ADC_CHANNEL ADC1_GPIO3_CHANNEL
 #define I2C_SCL 42
 #define I2C_SDA 2
+
+// trackball
+#define HAS_TRACKBALL 1
+#define TB_UP 38
+#define TB_DOWN 41
+#define TB_LEFT 39
+#define TB_RIGHT 40
+#define TB_PRESS 10 // C (A, B and D will stay to be used for cammed messages)
+#define TB_DIRECTION FALLING
 
 // IPS 1.69 280х240 ST7789
 #define USE_TFTDISPLAY 1
