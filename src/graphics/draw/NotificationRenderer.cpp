@@ -261,7 +261,7 @@ void buildNumericPickerDisplay(const NumericSlotPickerState &state, std::string 
     }
 }
 
-// Shared picker renderer for any "editable slots in a formatted string" flow.
+// Number picker renderer
 // Reuse by building `formattedValue` as displayed, and mapping each editable slot
 // to its character index in that string via `slotCharIndexBySlot`.
 void NumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lineStarts[MAX_LINES + 1], uint16_t lineCount,
@@ -929,7 +929,9 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
         strncpy(lineBuffer, lines[i], lineLengths[i]);
         lineBuffer[lineLengths[i]] = '\0';
         // Determine if this is a pop-up or a pick list
-        if (alertBannerOptions > 0 && i == 0) {
+        const bool highlightTitleRow =
+            (i == 0) && (alertBannerOptions > 0 || current_notification_type == notificationTypeEnum::signed_decimal_picker);
+        if (highlightTitleRow) {
             // Pick List
             display->setColor(WHITE);
             int background_yOffset = 1;
