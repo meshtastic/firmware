@@ -299,6 +299,29 @@ int32_t EnvironmentTelemetryModule::runOnce()
         return disable();
     }
 
+    auto refreshLocalMeasurementPacket = [this]() {
+        // Keep displaying remote telemetry once we have it.
+        if (lastMeasurementPacket != nullptr && lastMeasurementPacket->from != nodeDB->getNodeNum()) {
+            return;
+        }
+
+        meshtastic_Telemetry local = meshtastic_Telemetry_init_zero;
+        if (!getEnvironmentTelemetry(&local)) {
+            return;
+        }
+
+        meshtastic_MeshPacket *localPacket = allocDataProtobuf(local);
+        if (localPacket == nullptr) {
+            return;
+        }
+
+        if (lastMeasurementPacket != nullptr) {
+            packetPool.release(lastMeasurementPacket);
+        }
+        lastMeasurementPacket = packetPool.allocCopy(*localPacket);
+        packetPool.release(localPacket);
+    };
+
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
@@ -327,6 +350,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             result = rak9154Sensor.runOnce();
 #endif
 #endif
+            refreshLocalMeasurementPacket();
         }
         // it's possible to have this module enabled, only for displaying values on the screen.
         // therefore, we should only enable the sensor loop if measurement is also enabled
@@ -343,6 +367,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = delay;
             }
         }
+        refreshLocalMeasurementPacket();
 
         if (((lastSentToMesh == 0) ||
              !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -661,11 +686,14 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
         else
             p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-        // release previous packet before occupying a new spot
-        if (lastMeasurementPacket != nullptr)
-            packetPool.release(lastMeasurementPacket);
+        const bool shouldReplaceDisplayPacket = (lastMeasurementPacket == nullptr || lastMeasurementPacket->from == nodeDB->getNodeNum());
+        if (shouldReplaceDisplayPacket) {
+            // release previous packet before occupying a new spot
+            if (lastMeasurementPacket != nullptr)
+                packetPool.release(lastMeasurementPacket);
 
-        lastMeasurementPacket = packetPool.allocCopy(*p);
+            lastMeasurementPacket = packetPool.allocCopy(*p);
+        }
         if (phoneOnly) {
             LOG_INFO("Send packet to phone");
             service->sendToPhone(p);
