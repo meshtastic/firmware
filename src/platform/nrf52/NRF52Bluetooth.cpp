@@ -88,6 +88,7 @@ void onDisconnect(uint16_t conn_handle, uint8_t reason)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
 
+#if HAS_SCREEN
     // If a pairing prompt is active, make sure we dismiss it on disconnect/cancel/failure paths.
     if (passkeyShowing) {
         passkeyShowing = false;
@@ -95,6 +96,7 @@ void onDisconnect(uint16_t conn_handle, uint8_t reason)
             screen->endAlert();
         }
     }
+#endif
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
