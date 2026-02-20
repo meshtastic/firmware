@@ -686,7 +686,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
         else
             p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-        const bool shouldReplaceDisplayPacket = (lastMeasurementPacket == nullptr || lastMeasurementPacket->from == nodeDB->getNodeNum());
+        const bool shouldReplaceDisplayPacket =
+            (lastMeasurementPacket == nullptr || lastMeasurementPacket->from == nodeDB->getNodeNum());
         if (shouldReplaceDisplayPacket) {
             // release previous packet before occupying a new spot
             if (lastMeasurementPacket != nullptr)
