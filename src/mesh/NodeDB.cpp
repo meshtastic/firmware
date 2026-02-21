@@ -1641,6 +1641,25 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
     return delta;
 }
 
+HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p)
+{
+    // Guard against invalid values.
+    if (p.hop_start < p.hop_limit)
+        return HopStartStatus::INVALID;
+
+    if (p.hop_start == 0) {
+        // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
+        // bitfield that is always present. Use the presence of the bitfield to determine if the origin's firmware
+        // version is guaranteed to have hop_start populated. Note that this can only be done for decoded packets as
+        // the bitfield is encrypted under the channel encryption key.
+        if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.has_bitfield)
+            return HopStartStatus::VALID;
+        return HopStartStatus::MISSING_OR_UNKNOWN;
+    }
+
+    return HopStartStatus::VALID;
+}
+
 int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown)
 {
     // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
@@ -1677,6 +1696,21 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 
 #include "MeshModule.h"
 #include "Throttle.h"
+
+static constexpr uint32_t HOPSTART_DROP_LOG_INTERVAL_MS = 15000;
+
+void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context)
+{
+    static uint32_t lastLogMs = 0;
+    if (Throttle::isWithinTimespanMs(lastLogMs, HOPSTART_DROP_LOG_INTERVAL_MS)) {
+        return;
+    }
+    lastLogMs = millis();
+    const bool decoded = (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag);
+    const bool hasBitfield = decoded && p.decoded.has_bitfield;
+    LOG_DEBUG("Drop packet (%s): hop_start invalid/missing (from=0x%x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)",
+              context ? context : "unknown", p.from, p.id, p.hop_start, p.hop_limit, decoded, hasBitfield);
+}
 
 /** Update position info for this node based on received position data
  */
