@@ -22,6 +22,13 @@ const char *Channels::serialChannel = "serial";
 const char *Channels::mqttChannel = "mqtt";
 #endif
 
+Channels::Channels()
+{
+    memset(hashFirst, -1, sizeof(hashFirst));
+    memset(hashNext, -1, sizeof(hashNext));
+    memset(hashCounts, 0, sizeof(hashCounts));
+}
+
 uint8_t xorHash(const uint8_t *p, size_t len)
 {
     uint8_t code = 0;
@@ -74,6 +81,26 @@ meshtastic_Channel &Channels::fixupChannel(ChannelIndex chIndex)
     hashes[chIndex] = generateHash(chIndex);
 
     return ch;
+}
+
+void Channels::rebuildHashIndex()
+{
+    memset(hashFirst, -1, sizeof(hashFirst));
+    memset(hashNext, -1, sizeof(hashNext));
+    memset(hashCounts, 0, sizeof(hashCounts));
+
+    for (ChannelIndex i = 0; i < channelFile.channels_count; ++i) {
+        const int16_t hash = hashes[i];
+        if (hash < 0 || hash > 0xFF) {
+            continue;
+        }
+        const uint8_t bucket = static_cast<uint8_t>(hash);
+        hashNext[i] = hashFirst[bucket];
+        hashFirst[bucket] = static_cast<int8_t>(i);
+        if (hashCounts[bucket] < 0xFF) {
+            ++hashCounts[bucket];
+        }
+    }
 }
 
 void Channels::initDefaultLoraConfig()
@@ -201,6 +228,8 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     default:
         break;
     }
+
+    hashes[chIndex] = generateHash(chIndex);
 }
 
 CryptoKey Channels::getKey(ChannelIndex chIndex)
@@ -282,6 +311,7 @@ void Channels::initDefaults()
 #else
     initDefaultChannel(0);
 #endif
+    rebuildHashIndex();
 }
 
 void Channels::onConfigChanged()
@@ -293,6 +323,7 @@ void Channels::onConfigChanged()
         if (ch.role == meshtastic_Channel_Role_PRIMARY)
             primaryIndex = i;
     }
+    rebuildHashIndex();
 #if !MESHTASTIC_EXCLUDE_MQTT
     if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
         LOG_DEBUG("MQTT is enabled on at least one channel, so set MQTT thread to run immediately");
@@ -341,6 +372,8 @@ void Channels::setChannel(const meshtastic_Channel &c)
                 channelFile.channels[i].role = meshtastic_Channel_Role_SECONDARY;
 
     old = c; // slam in the new settings/role
+    hashes[c.index] = generateHash(c.index);
+    rebuildHashIndex();
 }
 
 bool Channels::anyMqttEnabled()
@@ -448,6 +481,24 @@ bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
         }
     }
     return false;
+}
+
+int8_t Channels::getIndexByHash(ChannelHash channelHash) const
+{
+    return hashFirst[channelHash];
+}
+
+int8_t Channels::getNextIndexByHash(ChannelHash channelHash, ChannelIndex afterIndex) const
+{
+    if (afterIndex >= channelFile.channels_count || hashes[afterIndex] != channelHash) {
+        return -1;
+    }
+    return hashNext[afterIndex];
+}
+
+uint8_t Channels::getHashMatchCount(ChannelHash channelHash) const
+{
+    return hashCounts[channelHash];
 }
 
 /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)

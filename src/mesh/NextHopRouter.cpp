@@ -1,6 +1,8 @@
 #include "NextHopRouter.h"
 #include "MeshTypes.h"
+#include "concurrency/LockGuard.h"
 #include "meshUtils.h"
+#include <vector>
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
@@ -28,8 +30,14 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
-    if ((!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE && (p->hop_limit > 0 || p->want_ack))
-        startRetransmission(packetPool.allocCopy(*p)); // start retransmission for relayed packet
+    if ((!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE && (p->hop_limit > 0 || p->want_ack)) {
+        auto *copy = packetPool.allocCopy(*p);
+        if (copy) {
+            startRetransmission(copy); // start retransmission for relayed packet
+        } else {
+            LOG_WARN("Unable to track retransmission for packet 0x%08x: no packet buffers", p->id);
+        }
+    }
 
     return Router::send(p);
 }
@@ -94,7 +102,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
         // is not 0 (means implicit ACK) and original packet was also relayed by this node, or we sent it directly to the
         // destination
         if (p->from != 0) {
-            meshtastic_NodeInfoLite *origTx = nodeDB->getMeshNode(p->from);
+            meshtastic_NodeInfoLite *origTx = nodeDB->getMeshNodeCached(p->from);
             if (origTx) {
                 // Either relayer of ACK was also a relayer of the packet, or we were the *only* relayer and the ACK came
                 // directly from the destination
@@ -131,6 +139,10 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
             if (isRebroadcaster()) {
                 if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == nodeDB->getLastByteOfNodeNum(getNodeNum())) {
                     meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+                    if (!tosend) {
+                        LOG_WARN("Unable to rebroadcast packet 0x%08x: no packet buffers", p->id);
+                        return false;
+                    }
                     LOG_INFO("Rebroadcast received message coming from %x", p->relay_node);
 
                     // Use shared logic to determine if hop_limit should be decremented
@@ -175,7 +187,7 @@ uint8_t NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
     if (isBroadcast(to))
         return NO_NEXT_HOP_PREFERENCE;
 
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(to);
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeCached(to);
     if (node && node->next_hop) {
         // We are careful not to return the relay node as the next hop
         if (node->next_hop != relay_node) {
@@ -188,6 +200,12 @@ uint8_t NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
 }
 
 PendingPacket *NextHopRouter::findPendingPacket(GlobalPacketId key)
+{
+    concurrency::LockGuard g(&pendingMutex);
+    return findPendingPacketUnlocked(key);
+}
+
+PendingPacket *NextHopRouter::findPendingPacketUnlocked(GlobalPacketId key)
 {
     auto old = pending.find(key); // If we have an old record, someone messed up because id got reused
     if (old != pending.end()) {
@@ -216,7 +234,13 @@ bool NextHopRouter::roleAllowsCancelingFromTxQueue(const meshtastic_MeshPacket *
 
 bool NextHopRouter::stopRetransmission(GlobalPacketId key)
 {
-    auto old = findPendingPacket(key);
+    concurrency::LockGuard g(&pendingMutex);
+    return stopRetransmissionUnlocked(key);
+}
+
+bool NextHopRouter::stopRetransmissionUnlocked(GlobalPacketId key)
+{
+    auto old = findPendingPacketUnlocked(key);
     if (old) {
         auto p = old->packet;
         /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
@@ -233,6 +257,7 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
         // doesn't get scheduled again. (This is the core of stopRetransmission.)
         auto numErased = pending.erase(key);
         assert(numErased == 1);
+        recomputeNextPendingTxUnlocked();
 
         // When we remove an entry from pending, always be sure to release the copy of the packet that was allocated in the
         // call to startRetransmission.
@@ -243,18 +268,41 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
         return false;
 }
 
+void NextHopRouter::recomputeNextPendingTxUnlocked()
+{
+    if (pending.empty()) {
+        nextPendingTxMsec = UINT32_MAX;
+        return;
+    }
+
+    uint32_t next = UINT32_MAX;
+    for (const auto &entry : pending) {
+        if (entry.second.nextTxMsec < next) {
+            next = entry.second.nextTxMsec;
+        }
+    }
+    nextPendingTxMsec = next;
+}
+
 /**
  * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
  */
 PendingPacket *NextHopRouter::startRetransmission(meshtastic_MeshPacket *p, uint8_t numReTx)
 {
+    if (!p) {
+        return nullptr;
+    }
     auto id = GlobalPacketId(p);
     auto rec = PendingPacket(p, numReTx);
 
-    stopRetransmission(getFrom(p), p->id);
+    concurrency::LockGuard g(&pendingMutex);
+    stopRetransmissionUnlocked(id);
 
     setNextTx(&rec);
     pending[id] = rec;
+    if (rec.nextTxMsec < nextPendingTxMsec) {
+        nextPendingTxMsec = rec.nextTxMsec;
+    }
 
     return &pending[id];
 }
@@ -266,65 +314,125 @@ int32_t NextHopRouter::doRetransmissions()
 {
     uint32_t now = millis();
     int32_t d = INT32_MAX;
+    txActionsScratch.clear();
+    ackActionsScratch.clear();
 
-    // FIXME, we should use a better datastructure rather than walking through this map.
-    // for(auto el: pending) {
-    for (auto it = pending.begin(), nextIt = it; it != pending.end(); it = nextIt) {
-        ++nextIt; // we use this odd pattern because we might be deleting it...
-        auto &p = it->second;
+    {
+        concurrency::LockGuard g(&pendingMutex);
 
-        bool stillValid = true; // assume we'll keep this record around
-
-        // FIXME, handle 51 day rolloever here!!!
-        if (p.nextTxMsec <= now) {
-            if (p.numRetransmissions == 0) {
-                if (isFromUs(p.packet)) {
-                    LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
-                              p.packet->id);
-                    sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
-                }
-                // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
-                stopRetransmission(it->first);
-                stillValid = false; // just deleted it
-            } else {
-                LOG_DEBUG("Sending retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
-                          p.packet->id, p.numRetransmissions);
-
-                if (!isBroadcast(p.packet->to)) {
-                    if (p.numRetransmissions == 1) {
-                        // Last retransmission, reset next_hop (fallback to FloodingRouter)
-                        p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
-                        // Also reset it in the nodeDB
-                        meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
-                        if (sentTo) {
-                            LOG_INFO("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
-                            sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
-                        }
-                        FloodingRouter::send(packetPool.allocCopy(*p.packet));
-                    } else {
-                        NextHopRouter::send(packetPool.allocCopy(*p.packet));
-                    }
-                } else {
-                    // Note: we call the superclass version because we don't want to have our version of send() add a new
-                    // retransmission record
-                    FloodingRouter::send(packetPool.allocCopy(*p.packet));
-                }
-
-                // Queue again
-                --p.numRetransmissions;
-                setNextTx(&p);
-            }
+        if (pending.empty()) {
+            nextPendingTxMsec = UINT32_MAX;
+            return d;
         }
 
-        if (stillValid) {
-            // Update our desired sleep delay
-            int32_t t = p.nextTxMsec - now;
+        if (nextPendingTxMsec != UINT32_MAX && (int32_t)(nextPendingTxMsec - now) > 0) {
+            return nextPendingTxMsec - now;
+        }
 
-            d = min(t, d);
+        // FIXME, we should use a better datastructure rather than walking through this map.
+        for (auto it = pending.begin(), nextIt = it; it != pending.end(); it = nextIt) {
+            ++nextIt; // we use this odd pattern because we might be deleting it...
+            auto &p = it->second;
+
+            bool stillValid = true; // assume we'll keep this record around
+
+            // FIXME, handle 51 day rollover here!!!
+            if (p.nextTxMsec <= now) {
+                if (p.numRetransmissions == 0) {
+                    if (isFromUs(p.packet)) {
+                        LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
+                                  p.packet->id);
+                        AckNakAction ack;
+                        ack.to = getFrom(p.packet);
+                        ack.id = p.packet->id;
+                        ack.ch = p.packet->channel;
+                        ackActionsScratch.push_back(ack);
+                    }
+                    stopRetransmissionUnlocked(it->first);
+                    stillValid = false; // just deleted it
+                } else {
+                    LOG_DEBUG("Sending retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
+                              p.packet->id, p.numRetransmissions);
+
+                    meshtastic_MeshPacket *copy = packetPool.allocCopy(*p.packet);
+                    if (!copy) {
+                        LOG_WARN("Drop retransmission copy for packet 0x%08x: no packet buffers", p.packet->id);
+                    } else if (!isBroadcast(p.packet->to)) {
+                        if (p.numRetransmissions == 1) {
+                            // Last retransmission, reset next_hop (fallback to FloodingRouter)
+                            p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
+                            copy->next_hop = NO_NEXT_HOP_PREFERENCE;
+
+                            // Also reset it in the nodeDB
+                            meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNodeCached(p.packet->to);
+                            if (sentTo) {
+                                LOG_INFO("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
+                                sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
+                            }
+                            RetransmitAction action;
+                            action.kind = RetransmitAction::FLOOD;
+                            action.packet = copy;
+                            txActionsScratch.push_back(action);
+                        } else {
+                            RetransmitAction action;
+                            action.kind = RetransmitAction::NEXTHOP;
+                            action.packet = copy;
+                            txActionsScratch.push_back(action);
+                        }
+                    } else {
+                        RetransmitAction action;
+                        action.kind = RetransmitAction::FLOOD;
+                        action.packet = copy;
+                        txActionsScratch.push_back(action);
+                    }
+
+                    // Queue again
+                    --p.numRetransmissions;
+                    setNextTx(&p);
+                    if (p.nextTxMsec < nextPendingTxMsec) {
+                        nextPendingTxMsec = p.nextTxMsec;
+                    }
+                }
+            }
+
+            if (stillValid) {
+                // Update our desired sleep delay
+                int32_t t = p.nextTxMsec - now;
+                d = min(t, d);
+            }
+        }
+        recomputeNextPendingTxUnlocked();
+    }
+
+    for (const auto &a : ackActionsScratch) {
+        sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, a.to, a.id, a.ch);
+    }
+
+    for (auto &a : txActionsScratch) {
+        if (!a.packet) {
+            continue;
+        }
+        if (a.kind == RetransmitAction::FLOOD) {
+            FloodingRouter::send(a.packet);
+        } else if (a.kind == RetransmitAction::NEXTHOP) {
+            NextHopRouter::send(a.packet);
+        } else {
+            packetPool.release(a.packet);
         }
     }
 
     return d;
+}
+
+bool NextHopRouter::getPendingPacketChannel(GlobalPacketId key, ChannelIndex &ch)
+{
+    concurrency::LockGuard g(&pendingMutex);
+    auto old = findPendingPacketUnlocked(key);
+    if (!old || !old->packet) {
+        return false;
+    }
+    ch = old->packet->channel;
+    return true;
 }
 
 void NextHopRouter::setNextTx(PendingPacket *pending)

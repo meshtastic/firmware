@@ -542,6 +542,7 @@ void NodeDB::installDefaultNodeDatabase()
     nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
     numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
+    invalidateNodeLookupCache();
 }
 
 void NodeDB::installDefaultConfig(bool preserveKey = false)
@@ -1022,6 +1023,7 @@ void NodeDB::resetNodes(bool keepFavorites)
         LOG_INFO("Clearing node database - removing favorites");
         std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     }
+    invalidateNodeLookupCache();
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
@@ -1040,6 +1042,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
             removed++;
     }
     numMeshNodes -= removed;
+    invalidateNodeLookupCache();
     std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
               meshtastic_NodeInfoLite());
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
@@ -1076,6 +1079,7 @@ void NodeDB::cleanupMeshDB()
         }
     }
     numMeshNodes -= removed;
+    invalidateNodeLookupCache();
     std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
               meshtastic_NodeInfoLite());
     LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
@@ -1241,6 +1245,7 @@ void NodeDB::loadFromDisk()
         numMeshNodes = MAX_NUM_NODES;
     }
     meshNodes->resize(MAX_NUM_NODES);
+    invalidateNodeLookupCache();
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1921,7 +1926,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
 void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
 {
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    meshtastic_NodeInfoLite *lite = getMeshNodeCached(nodeId);
     if (lite && lite->is_favorite != is_favorite) {
         lite->is_favorite = is_favorite;
         sortMeshDB();
@@ -1937,7 +1942,7 @@ bool NodeDB::isFavorite(uint32_t nodeId)
     if (nodeId == NODENUM_BROADCAST)
         return false;
 
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    meshtastic_NodeInfoLite *lite = getMeshNodeCached(nodeId);
 
     if (lite) {
         return lite->is_favorite;
@@ -1947,45 +1952,17 @@ bool NodeDB::isFavorite(uint32_t nodeId)
 
 bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
 {
-    // This method is logically equivalent to:
-    //   return isFavorite(p.from) || isFavorite(p.to);
-    // but is more efficient by:
-    //   1. doing only one pass through the database, instead of two
-    //   2. exiting early when a favorite is found, or if both from and to have been seen
-
-    if (p.to == NODENUM_BROADCAST)
-        return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
-
-    meshtastic_NodeInfoLite *lite = NULL;
-
-    bool seenFrom = false;
-    bool seenTo = false;
-
-    for (int i = 0; i < numMeshNodes; i++) {
-        lite = &meshNodes->at(i);
-
-        if (lite->num == p.from) {
-            if (lite->is_favorite)
-                return true;
-
-            seenFrom = true;
-        }
-
-        if (lite->num == p.to) {
-            if (lite->is_favorite)
-                return true;
-
-            seenTo = true;
-        }
-
-        if (seenFrom && seenTo)
-            return false; // we've seen both, and neither is a favorite, so we can stop searching early
-
-        // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after searching
-        // all favorited nodes first.
+    const meshtastic_NodeInfoLite *fromNode = getMeshNodeCached(p.from);
+    if (fromNode && fromNode->is_favorite) {
+        return true;
     }
 
-    return false;
+    if (p.to == NODENUM_BROADCAST) {
+        return false;
+    }
+
+    const meshtastic_NodeInfoLite *toNode = getMeshNodeCached(p.to);
+    return toNode && toNode->is_favorite;
 }
 
 void NodeDB::pause_sort(bool paused)
@@ -1997,35 +1974,29 @@ void NodeDB::sortMeshDB()
 {
     if (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5))) {
         lastSort = millis();
-        bool changed = true;
-        while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
-            changed = false;
-            for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
-                if (meshNodes->at(i - 1).num == getNodeNum()) {
-                    // noop
-                } else if (meshNodes->at(i).num ==
-                           getNodeNum()) { // in the oddball case our own node num is not at location 0, put it there
-                    // TODO: Look for at(i-1) also matching own node num, and throw the DB in the trash
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
-                    changed = true;
-                } else if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
-                    changed = true;
-                } else if (!meshNodes->at(i).is_favorite && meshNodes->at(i - 1).is_favorite) {
-                    // noop
-                } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
-                    changed = true;
-                }
-            }
+        if (numMeshNodes > 1) {
+            const NodeNum self = getNodeNum();
+            std::stable_sort(meshNodes->begin(), meshNodes->begin() + numMeshNodes,
+                             [self](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
+                                 const bool aIsSelf = a.num == self;
+                                 const bool bIsSelf = b.num == self;
+                                 if (aIsSelf != bIsSelf) {
+                                     return aIsSelf;
+                                 }
+                                 if (a.is_favorite != b.is_favorite) {
+                                     return a.is_favorite;
+                                 }
+                                 return a.last_heard > b.last_heard;
+                             });
         }
+        invalidateNodeLookupCache();
         LOG_INFO("Sort took %u milliseconds", millis() - lastSort);
     }
 }
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    const meshtastic_NodeInfoLite *info = getMeshNodeCached(n);
     if (!info) {
         return 0; // defaults to PRIMARY
     }
@@ -2043,10 +2014,32 @@ std::string NodeDB::getNodeId() const
 /// NOTE: This function might be called from an ISR
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
-    for (int i = 0; i < numMeshNodes; i++)
-        if (meshNodes->at(i).num == n)
+    for (int i = 0; i < numMeshNodes; i++) {
+        if (meshNodes->at(i).num == n) {
             return &meshNodes->at(i);
+        }
+    }
 
+    return NULL;
+}
+
+meshtastic_NodeInfoLite *NodeDB::getMeshNodeCached(NodeNum n)
+{
+    const uint16_t bucket = hashNodeLookup(n);
+    {
+        concurrency::LockGuard g(&nodeLookupCacheLock);
+        const NodeLookupCacheEntry &cached = nodeLookupCache[bucket];
+        if (cached.num == n && cached.idx < numMeshNodes && meshNodes->at(cached.idx).num == n) {
+            return &meshNodes->at(cached.idx);
+        }
+    }
+
+    for (int i = 0; i < numMeshNodes; i++) {
+        if (meshNodes->at(i).num == n) {
+            cacheNodeLookup(n, i);
+            return &meshNodes->at(i);
+        }
+    }
     return NULL;
 }
 
@@ -2059,7 +2052,7 @@ bool NodeDB::isFull()
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
-    meshtastic_NodeInfoLite *lite = getMeshNode(n);
+    meshtastic_NodeInfoLite *lite = getMeshNodeCached(n);
 
     if (!lite) {
         if (isFull()) {
@@ -2096,6 +2089,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                     meshNodes->at(i) = meshNodes->at(i + 1);
                 }
                 (numMeshNodes)--;
+                invalidateNodeLookupCache();
             }
         }
         // add the node at the end
@@ -2104,10 +2098,38 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
+        cacheNodeLookup(n, numMeshNodes - 1);
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
     }
 
     return lite;
+}
+
+uint16_t NodeDB::hashNodeLookup(NodeNum n) const
+{
+    uint32_t x = n ^ (n >> 16);
+    x ^= (x >> 7);
+    return x % NODE_LOOKUP_CACHE_SIZE;
+}
+
+void NodeDB::cacheNodeLookup(NodeNum n, uint16_t idx)
+{
+    if (idx >= numMeshNodes) {
+        return;
+    }
+    concurrency::LockGuard g(&nodeLookupCacheLock);
+    auto &entry = nodeLookupCache[hashNodeLookup(n)];
+    entry.num = n;
+    entry.idx = idx;
+}
+
+void NodeDB::invalidateNodeLookupCache()
+{
+    concurrency::LockGuard g(&nodeLookupCacheLock);
+    for (auto &entry : nodeLookupCache) {
+        entry.num = 0;
+        entry.idx = 0xFFFF;
+    }
 }
 
 /// Sometimes we will have Position objects that only have a time, so check for
@@ -2121,7 +2143,7 @@ bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
 /// we consider them licensed
 UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(nodeNum);
+    meshtastic_NodeInfoLite *info = getMeshNodeCached(nodeNum);
     if (!info || !info->has_user) {
         return UserLicenseStatus::NotKnown;
     }

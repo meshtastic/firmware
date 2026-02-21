@@ -818,9 +818,13 @@ void RadioInterface::applyModemConfig()
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-            cn->level = meshtastic_LogRecord_Level_ERROR;
-            snprintf(cn->message, sizeof(cn->message), "%s", err_string);
-            service->sendClientNotification(cn);
+            if (cn) {
+                cn->level = meshtastic_LogRecord_Level_ERROR;
+                snprintf(cn->message, sizeof(cn->message), "%s", err_string);
+                service->sendClientNotification(cn);
+            } else {
+                LOG_WARN("Failed to allocate radio-setting error notification");
+            }
 
             // Set to default modem preset
             loraConfig.use_preset = true;

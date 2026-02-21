@@ -3,6 +3,34 @@
 
 PacketCache packetCache{};
 
+PacketCacheEntry *PacketCache::allocEntryBuffer(size_t bytes)
+{
+    for (size_t i = 0; i < freelistCount; ++i) {
+        if (freelist[i].ptr && freelist[i].size >= bytes) {
+            PacketCacheEntry *reused = freelist[i].ptr;
+            freelist[i] = freelist[freelistCount - 1];
+            freelist[freelistCount - 1] = {};
+            freelistCount--;
+            return reused;
+        }
+    }
+    return (PacketCacheEntry *)malloc(bytes);
+}
+
+void PacketCache::freeEntryBuffer(PacketCacheEntry *ptr, size_t bytes)
+{
+    if (!ptr) {
+        return;
+    }
+    if (freelistCount < FREELIST_CAPACITY) {
+        freelist[freelistCount].ptr = ptr;
+        freelist[freelistCount].size = bytes;
+        freelistCount++;
+        return;
+    }
+    free(ptr);
+}
+
 /**
  * Allocate a new cache entry and copy the packet header and payload into it
  */
@@ -10,8 +38,8 @@ PacketCacheEntry *PacketCache::cache(const meshtastic_MeshPacket *p, bool preser
 {
     size_t payload_size =
         (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) ? p->encrypted.size : p->decoded.payload.size;
-    PacketCacheEntry *e = (PacketCacheEntry *)malloc(sizeof(PacketCacheEntry) + payload_size +
-                                                     (preserveMetadata ? sizeof(PacketCacheMetadata) : 0));
+    const size_t entrySize = sizeof(PacketCacheEntry) + payload_size + (preserveMetadata ? sizeof(PacketCacheMetadata) : 0);
+    PacketCacheEntry *e = allocEntryBuffer(entrySize);
     if (!e) {
         LOG_ERROR("Unable to allocate memory for packet cache entry");
         return NULL;
@@ -63,7 +91,7 @@ PacketCacheEntry *PacketCache::cache(const meshtastic_MeshPacket *p, bool preser
     if (preserveMetadata)
         memcpy(((unsigned char *)e) + sizeof(PacketCacheEntry) + e->payload_len, &m, sizeof(m));
 
-    size += sizeof(PacketCacheEntry) + e->payload_len + (e->has_metadata ? sizeof(PacketCacheMetadata) : 0);
+    size += entrySize;
     insert(e);
     return e;
 };
@@ -136,14 +164,15 @@ bool PacketCache::load(void *src, PacketCacheEntry **entries, size_t num_entries
         PacketCacheEntry e{};
         memcpy(&e, pos, sizeof(PacketCacheEntry));
         size_t entry_len = sizeof(PacketCacheEntry) + e.payload_len + (e.has_metadata ? sizeof(PacketCacheMetadata) : 0);
-        entries[i] = (PacketCacheEntry *)malloc(entry_len);
+        entries[i] = allocEntryBuffer(entry_len);
         size += entry_len;
         if (!entries[i]) {
             LOG_ERROR("Unable to allocate memory for packet cache entry");
             for (size_t j = 0; j < i; j++) {
-                size -= sizeof(PacketCacheEntry) + entries[j]->payload_len +
-                        (entries[j]->has_metadata ? sizeof(PacketCacheMetadata) : 0);
-                free(entries[j]);
+                const size_t loadedEntryLen = sizeof(PacketCacheEntry) + entries[j]->payload_len +
+                                              (entries[j]->has_metadata ? sizeof(PacketCacheMetadata) : 0);
+                size -= loadedEntryLen;
+                freeEntryBuffer(entries[j], loadedEntryLen);
                 entries[j] = NULL;
             }
             return false;
@@ -215,8 +244,9 @@ void PacketCache::release(PacketCacheEntry *e)
     if (!e)
         return;
     remove(e);
-    size -= sizeof(PacketCacheEntry) + e->payload_len + (e->has_metadata ? sizeof(PacketCacheMetadata) : 0);
-    free(e);
+    const size_t entrySize = sizeof(PacketCacheEntry) + e->payload_len + (e->has_metadata ? sizeof(PacketCacheMetadata) : 0);
+    size -= entrySize;
+    freeEntryBuffer(e, entrySize);
 }
 
 /**

@@ -742,6 +742,10 @@ bool PhoneAPI::available()
 void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message)
 {
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn) {
+        LOG_WARN("Failed to allocate client notification");
+        return;
+    }
     cn->has_reply_id = true;
     cn->reply_id = replyId;
     cn->level = meshtastic_LogRecord_Level_WARNING;

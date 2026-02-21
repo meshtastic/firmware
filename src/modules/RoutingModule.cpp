@@ -51,6 +51,10 @@ void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketI
                                bool ackWantsAck)
 {
     auto p = allocAckNak(err, to, idFrom, chIndex, hopLimit);
+    if (!p) {
+        LOG_WARN("sendAckNak dropped: failed to allocate ACK/NAK packet");
+        return;
+    }
 
     // Allow the caller to set want_ack on this ACK packet if it's important that the ACK be delivered reliably
     p->want_ack = ackWantsAck;

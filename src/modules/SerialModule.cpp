@@ -309,6 +309,10 @@ int32_t SerialModule::runOnce()
 void SerialModule::sendTelemetry(meshtastic_Telemetry m)
 {
     meshtastic_MeshPacket *p = router->allocForSending();
+    if (!p) {
+        LOG_WARN("Serial telemetry dropped: no packet buffers");
+        return;
+    }
     p->decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);

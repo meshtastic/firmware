@@ -71,6 +71,9 @@ class SerialModuleRadio : public MeshModule
     {
         // Update our local node info with our position (even if we don't decide to update anyone else)
         meshtastic_MeshPacket *p = router->allocForSending();
+        if (!p) {
+            return nullptr;
+        }
         p->decoded.portnum = ourPortNum;
 
         return p;

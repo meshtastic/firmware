@@ -37,6 +37,24 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPa
     memset(recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
 }
 
+uint32_t PacketHistory::hashRecentIndex(NodeNum sender, PacketId id) const
+{
+    uint32_t x = sender ^ (id * 2654435761UL);
+    x ^= (x >> 16);
+    return x % RECENT_INDEX_SIZE;
+}
+
+void PacketHistory::updateRecentIndex(NodeNum sender, PacketId id, uint32_t slot)
+{
+    if (sender == 0 || id == 0 || slot >= recentPacketsCapacity) {
+        return;
+    }
+    auto &entry = recentIndex[hashRecentIndex(sender, id)];
+    entry.sender = sender;
+    entry.id = id;
+    entry.slot = slot;
+}
+
 PacketHistory::~PacketHistory()
 {
     recentPacketsCapacity = 0;
@@ -205,9 +223,18 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
         return NULL;
     }
 
+    auto &indexEntry = recentIndex[hashRecentIndex(sender, id)];
+    if (indexEntry.sender == sender && indexEntry.id == id && indexEntry.slot < recentPacketsCapacity) {
+        PacketRecord *indexed = recentPackets + indexEntry.slot;
+        if (indexed->sender == sender && indexed->id == id) {
+            return indexed;
+        }
+    }
+
     PacketRecord *it = NULL;
     for (it = recentPackets; it < (recentPackets + recentPacketsCapacity); ++it) {
         if (it->id == id && it->sender == sender) {
+            updateRecentIndex(sender, id, it - recentPackets);
 #if VERBOSE_PACKET_HISTORY
             LOG_DEBUG("Packet History - find: s=%08x id=%08x FOUND nh=%02x rby=%02x %02x %02x age=%d slot=%d/%d", it->sender,
                       it->id, it->next_hop, it->relayed_by[0], it->relayed_by[1], it->relayed_by[2], millis() - (it->rxTimeMsec),
@@ -328,6 +355,7 @@ void PacketHistory::insert(const PacketRecord &r)
     }
 
     *tu = r; // store the packet
+    updateRecentIndex(r.sender, r.id, tu - recentPackets);
 
 #if VERBOSE_PACKET_HISTORY
     LOG_DEBUG("Packet History - insert: Store slot@ %d/%d s=%08x id=%08x nh=%02x rby=%02x %02x %02x rxT=%d AFTER",
