@@ -82,7 +82,7 @@ static void handleWebResponse()
                 } else {
                     // Skip HTTPS when memory is low to prevent SSL setup failures
                     static uint32_t lastHeapWarning = 0;
-                    if (!Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
+                    if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
                         LOG_WARN("Low heap (%u bytes), skipping HTTPS processing", freeHeap);
                         lastHeapWarning = millis();
                     }
