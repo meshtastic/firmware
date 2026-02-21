@@ -35,6 +35,21 @@
 #include "nrfx_power.h"
 #endif
 
+#if defined(ARCH_STM32WL) && BATTERY_PIN == AVBAT
+#include "stm32yyxx_ll_adc.h"
+
+/* Analog read resolution */
+#if defined(LL_ADC_RESOLUTION_12B)
+#define LL_ADC_RESOLUTION LL_ADC_RESOLUTION_12B
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+#elif defined(LL_ADC_DS_DATA_WIDTH_12_BIT)
+#define LL_ADC_RESOLUTION LL_ADC_DS_DATA_WIDTH_12_BIT
+#else
+#error "ADC resolution could not be defined!"
+#endif
+#define ADC_RANGE 4096
+#endif
+
 #if defined(DEBUG_HEAP_MQTT) && !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
@@ -701,6 +716,8 @@ bool Power::setup()
     } else if (serialBatteryInit()) {
         found = true;
     } else if (meshSolarInit()) {
+        found = true;
+    } else if (stm32wlInit()) {
         found = true;
     } else if (analogInit()) {
         found = true;
@@ -1687,6 +1704,109 @@ bool Power::meshSolarInit()
  * AnalogBatteryLevel
  */
 bool Power::meshSolarInit()
+{
+    return false;
+}
+#endif
+
+#if defined(ARCH_STM32WL) && BATTERY_PIN == AVBAT
+
+/**
+ * STM32WL internal VBAT ADC channel
+ */
+
+class Stm32wlBatteryLevel : public HasBatteryLevel
+{
+
+  public:
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     * Copied almost wholesale from AnalogBatteryLevel
+     */
+    virtual int getBatteryPercent() override
+    {
+        float v = getBattVoltage();
+
+        if (v < noBatVolt)
+            return -1; // If voltage is super low assume no battery installed
+
+        float battery_SOC = 0.0;
+        uint16_t voltage = v / NUM_CELLS; // single cell voltage (average)
+        for (int i = 0; i < NUM_OCV_POINTS; i++) {
+            if (OCV[i] <= voltage) {
+                if (i == 0) {
+                    battery_SOC = 100.0; // 100% full
+                } else {
+                    // interpolate between OCV[i] and OCV[i-1]
+                    battery_SOC = (float)100.0 / (NUM_OCV_POINTS - 1.0) *
+                                  (NUM_OCV_POINTS - 1.0 - i + ((float)voltage - OCV[i]) / (OCV[i - 1] - OCV[i]));
+                }
+                break;
+            }
+        }
+#if defined(BATTERY_CHARGING_INV)
+        // bit of trickery to show 99% up until the charge finishes
+        if (!digitalRead(BATTERY_CHARGING_INV) && battery_SOC > 99)
+            battery_SOC = 99;
+#endif
+        return clamp((int)(battery_SOC), 0, 100);
+    }
+
+    /**
+     * Read VREF in mV once, used to scale all subsequent VBAT readings
+     */
+    bool runOnce()
+    {
+#ifdef __LL_ADC_CALC_VREFANALOG_VOLTAGE
+        Vref = __LL_ADC_CALC_VREFANALOG_VOLTAGE(analogRead(AVREF), LL_ADC_RESOLUTION);
+#else
+        Vref = VREFINT * ADC_RANGE / analogRead(AVREF); // ADC sample to mV
+#endif
+        return true;
+    }
+
+    /**
+     * Read VBAT in mV
+     */
+    virtual uint16_t getBattVoltage() override
+    {
+        // VBAT pin is internally connected to a bridge divider by three (DS13105§3.18.3)
+        return 3 * __LL_ADC_CALC_DATA_TO_VOLTAGE(Vref, analogRead(BATTERY_PIN), LL_ADC_RESOLUTION);
+    }
+
+    /**
+     * If BATTERY_PIN = AVBAT, assume a battery is present (otherwise don't define it!)
+     */
+    virtual bool isBatteryConnect() override { return true; }
+
+  private:
+    // 3300mV is a placeholder value in case of future errata e.g. STM32U0
+    uint32_t Vref = 3300;
+    const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
+    const float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
+    const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
+};
+
+Stm32wlBatteryLevel stm32wlLevel;
+
+/**
+ * Init the STM32WL internal VBAT ADC channel
+ */
+bool Power::stm32wlInit()
+{
+    bool result = stm32wlLevel.runOnce();
+    LOG_DEBUG("Power::stm32wlInit is %s", result ? "ready" : "not ready yet");
+    if (!result)
+        return false;
+    batteryLevel = &stm32wlLevel;
+    return true;
+}
+
+#else
+/**
+ * The STM32WL battery level sensor is unavailable - default to AnalogBatteryLevel
+ */
+bool Power::stm32wlInit()
 {
     return false;
 }
