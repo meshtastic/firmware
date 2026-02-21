@@ -113,6 +113,11 @@ void RF95Interface::setTransmitEnable(bool txon)
 /// \return true if initialisation succeeded.
 bool RF95Interface::init()
 {
+#ifdef RF95_POWER_EN
+    digitalWrite(RF95_POWER_EN, HIGH);
+    pinMode(RF95_POWER_EN, OUTPUT);
+#endif
+
     RadioLibInterface::init();
 
 #if defined(RADIOMASTER_900_BANDIT_NANO) || defined(RADIOMASTER_900_BANDIT)
@@ -335,6 +340,10 @@ bool RF95Interface::sleep()
     // put chipset into sleep mode
     setStandby(); // First cancel any active receiving/sending
     lora->sleep();
+
+#ifdef RF95_POWER_EN
+    digitalWrite(RF95_POWER_EN, LOW);
+#endif
 
 #ifdef RF95_FAN_EN
     digitalWrite(RF95_FAN_EN, 0);
