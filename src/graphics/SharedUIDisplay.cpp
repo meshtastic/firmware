@@ -86,7 +86,8 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 // *************************
 // * Common Header Drawing *
 // *************************
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert, bool show_date)
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert, bool show_date,
+                      bool transparent_background)
 {
     constexpr int HEADER_OFFSET_Y = 1;
     y += HEADER_OFFSET_Y;
@@ -110,7 +111,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #endif
     // Color TFT headers use a fixed dark background + white glyphs.
     // Keep legacy inverted bitmap behavior only for monochrome displays.
-    const bool useInvertedHeaderStyle = (isInverted && !force_no_invert && !applyTFTColorRoles);
+    const bool useInvertedHeaderStyle = (isInverted && !force_no_invert && !applyTFTColorRoles && !transparent_background);
     int statusLeftEndX = 0;
     int statusRightStartX = screenW;
 
@@ -132,17 +133,20 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #endif
 
         if (applyTFTColorRoles) {
-            if (useInvertedHeaderStyle) {
+            if (transparent_background) {
+                setTFTColorRole(TFTColorRole::HeaderTitle, headerTextColor, 0x0000);
+                setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, 0x0000);
+            } else if (useInvertedHeaderStyle) {
                 setTFTColorRole(TFTColorRole::HeaderBackground, headerColor, 0x0000);
                 setTFTColorRole(TFTColorRole::HeaderTitle, headerColor, headerTextColor);
                 setTFTColorRole(TFTColorRole::HeaderStatus, headerColor, headerStatusColor);
+                registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
             } else {
                 setTFTColorRole(TFTColorRole::HeaderBackground, 0x0000, headerColor);
                 setTFTColorRole(TFTColorRole::HeaderTitle, headerTextColor, headerColor);
                 setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, headerColor);
+                registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
             }
-
-            registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
         }
 
         // === Inverted Header Background ===
@@ -155,8 +159,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         } else {
             display->setColor(BLACK);
             display->fillRect(0, 0, screenW, headerHeight);
-            // Keep the legacy white separator for monochrome displays only.
-            if (!applyTFTColorRoles) {
+            // Keep the legacy white separator for monochrome displays only when header background is visible.
+            if (!applyTFTColorRoles && !transparent_background) {
                 display->setColor(WHITE);
                 if (currentResolution == ScreenResolution::High) {
                     display->drawLine(0, 20, screenW, 20);
@@ -164,6 +168,10 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                     display->drawLine(0, 14, screenW, 14);
                 }
             }
+        }
+
+        if (transparent_background) {
+            display->setColor(WHITE);
         }
 
         if (applyTFTColorRoles) {

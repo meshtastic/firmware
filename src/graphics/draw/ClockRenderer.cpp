@@ -145,7 +145,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     // === Set Title, Blank for Clock
     const char *titleStr = "";
     // === Header ===
-    graphics::drawCommonHeader(display, x, y, titleStr, true, true);
+    graphics::drawCommonHeader(display, x, y, titleStr, true, true, true);
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     char timeString[16];
@@ -297,7 +297,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // === Set Title, Blank for Clock
     const char *titleStr = "";
     // === Header ===
-    graphics::drawCommonHeader(display, x, y, titleStr, true, true);
+    graphics::drawCommonHeader(display, x, y, titleStr, true, true, true);
 
     // clock face center coordinates
     int16_t centerX = display->getWidth() / 2;
