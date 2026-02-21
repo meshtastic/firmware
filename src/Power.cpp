@@ -327,6 +327,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw = espAdcRead();
             scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
             scaled *= operativeAdcMultiplier;
+#elif defined(ARCH_STM32WL) // ADC block for STM32WL platforms
+#include "stm32yyxx_ll_adc.h"
+            raw = analogRead(BATTERY_PIN);
+            // Simplified from STM32duino example code at
+            // https://github.com/stm32duino/STM32Examples/blob/main/examples/Peripherals/ADC/Internal_channels/Internal_channels.ino
+            uint32_t VRef = __LL_ADC_CALC_VREFANALOG_VOLTAGE(analogRead(AVREF), LL_ADC_RESOLUTION);
+            scaled = __LL_ADC_CALC_DATA_TO_VOLTAGE(VRef, raw, LL_ADC_RESOLUTION);
+            scaled *= operativeAdcMultiplier;
 #else // block for all other platforms
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += analogRead(BATTERY_PIN);
@@ -624,8 +632,13 @@ bool Power::analogInit()
 #ifdef BATTERY_PIN
     LOG_DEBUG("Use analog input %d for battery level", BATTERY_PIN);
 
+#ifdef ARCH_STM32WL
+    // STM32-specific analog pinmode
+    pinMode(BATTERY_PIN, INPUT_ANALOG);
+#else
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
+#endif
 
 #ifndef BATTERY_SENSE_RESOLUTION_BITS
 #define BATTERY_SENSE_RESOLUTION_BITS 10
