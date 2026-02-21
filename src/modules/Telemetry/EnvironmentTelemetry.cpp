@@ -85,6 +85,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/VEML7700Sensor.h"
 #endif
 
+#if __has_include(<Adafruit_VL53L0X.h>)
+#include "Sensor/VL53L0XSensor.h"
+#endif
+
 #if __has_include(<Adafruit_TSL2591.h>)
 #include "Sensor/TSL2591Sensor.h"
 #endif
@@ -213,6 +217,9 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
 #if __has_include(<Adafruit_VEML7700.h>)
     addSensor<VEML7700Sensor>(i2cScanner, ScanI2C::DeviceType::VEML7700);
+#endif
+#if __has_include(<Adafruit_VL53L0X.h>)
+    addSensor<VL53L0XSensor>(i2cScanner, ScanI2C::DeviceType::VL53L0X);
 #endif
 #if __has_include(<Adafruit_TSL2591.h>)
     addSensor<TSL2591Sensor>(i2cScanner, ScanI2C::DeviceType::TSL2591);

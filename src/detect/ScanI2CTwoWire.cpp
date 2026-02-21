@@ -565,13 +565,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             case TSL25911_ADDR:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xA0 | 0x12), 1);
-                if (registerValue == 0x50) {
-                    type = TSL2591;
-                    logFoundDevice("TSL25911", (uint8_t)addr.address);
+                if(getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x12), 1) == 0x50) {
+                        type = TSL2591;
+                        logFoundDevice("TSL25911", (uint8_t)addr.address);
+                } else if ((getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1)&0xF0) == 0x50) {
+                        type = TSL2561;
+                        logFoundDevice("TSL2561", (uint8_t)addr.address);
+                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xC0), 1) == 0xEE) {
+                        type = VL53L0X;
+                        logFoundDevice("VL53L0X", (uint8_t)addr.address);
                 } else {
-                    type = TSL2561;
-                    logFoundDevice("TSL2561", (uint8_t)addr.address);
+                        LOG_INFO("Unknown device found at address 0x%x", (uint8_t)addr.address);
                 }
                 break;
 
