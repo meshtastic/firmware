@@ -9,6 +9,7 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "meshUtils.h"
 #include <algorithm>
@@ -222,7 +223,7 @@ static inline void applyFavoriteNodeNameColor(OLEDDisplay *display, meshtastic_N
         return;
     }
 
-    setTFTColorRole(TFTColorRole::FavoriteNode, COLOR565(255, 255, 0), COLOR565(0, 0, 0));
+    setTFTColorRole(TFTColorRole::FavoriteNode, TFTPalette::Yellow, TFTPalette::Black);
     registerTFTColorRegion(TFTColorRole::FavoriteNode, nameX, regionY, regionWidth, regionHeight);
 }
 
@@ -323,15 +324,15 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     const int barGap = 1;
 
     if (bars > 0) {
-        uint16_t signalBarsColor = COLOR565(255, 0, 0); // Weak
+        uint16_t signalBarsColor = TFTPalette::Bad;
         if (bars >= 3) {
-            signalBarsColor = COLOR565(0, 255, 0); // Strong
+            signalBarsColor = TFTPalette::Good;
         } else if (bars == 2) {
-            signalBarsColor = COLOR565(255, 255, 0); // Medium
+            signalBarsColor = TFTPalette::Medium;
         }
 
         // Highest bar reaches 6 px in this renderer.
-        setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, COLOR565(0, 0, 0));
+        setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black);
         registerTFTColorRegion(TFTColorRole::SignalBars, barStartX, barStartY - 6, (4 * barWidth) + (3 * barGap), 6);
     }
 

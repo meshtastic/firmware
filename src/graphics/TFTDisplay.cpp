@@ -1136,6 +1136,7 @@ static LGFX *tft = nullptr;
 #include "SPILock.h"
 #include "TFTColorRegions.h"
 #include "TFTDisplay.h"
+#include "TFTPalette.h"
 #include <SPI.h>
 
 #ifdef UNPHONE
@@ -1204,7 +1205,7 @@ void TFTDisplay::display(bool fromBlank)
     bool somethingChanged = false;
 
     // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
-    colorTftWhite = (COLOR565(255, 255, 255) >> 8) | ((COLOR565(255, 255, 255) & 0xFF) << 8);
+    colorTftWhite = (TFTPalette::White >> 8) | ((TFTPalette::White & 0xFF) << 8);
     colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
 
     if (graphics::isTFTColoringEnabled()) {

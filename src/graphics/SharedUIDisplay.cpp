@@ -6,6 +6,7 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
@@ -107,7 +108,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
     const uint16_t headerColorForRoles = TFT_HEADER_BG_COLOR_OVERRIDE;
 #else
-    const uint16_t headerColorForRoles = 0x4208;
+    const uint16_t headerColorForRoles = TFTPalette::DarkGray;
 #endif
     // Color TFT headers use a fixed dark background + white glyphs.
     // Keep legacy inverted bitmap behavior only for monochrome displays.
@@ -119,30 +120,30 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
         const uint16_t headerColor = TFT_HEADER_BG_COLOR_OVERRIDE;
 #else
-        const uint16_t headerColor = 0x4208;
+        const uint16_t headerColor = TFTPalette::DarkGray;
 #endif
 #ifdef TFT_HEADER_TITLE_COLOR_OVERRIDE
         const uint16_t headerTextColor = TFT_HEADER_TITLE_COLOR_OVERRIDE;
 #else
-        const uint16_t headerTextColor = 0xFFFF;
+        const uint16_t headerTextColor = TFTPalette::White;
 #endif
 #ifdef TFT_HEADER_STATUS_COLOR_OVERRIDE
         const uint16_t headerStatusColor = TFT_HEADER_STATUS_COLOR_OVERRIDE;
 #else
-        const uint16_t headerStatusColor = 0xFFFF;
+        const uint16_t headerStatusColor = TFTPalette::White;
 #endif
 
         if (applyTFTColorRoles) {
             if (transparent_background) {
-                setTFTColorRole(TFTColorRole::HeaderTitle, headerTextColor, 0x0000);
-                setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, 0x0000);
+                setTFTColorRole(TFTColorRole::HeaderTitle, headerTextColor, TFTPalette::Black);
+                setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, TFTPalette::Black);
             } else if (useInvertedHeaderStyle) {
-                setTFTColorRole(TFTColorRole::HeaderBackground, headerColor, 0x0000);
+                setTFTColorRole(TFTColorRole::HeaderBackground, headerColor, TFTPalette::Black);
                 setTFTColorRole(TFTColorRole::HeaderTitle, headerColor, headerTextColor);
                 setTFTColorRole(TFTColorRole::HeaderStatus, headerColor, headerStatusColor);
                 registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
             } else {
-                setTFTColorRole(TFTColorRole::HeaderBackground, 0x0000, headerColor);
+                setTFTColorRole(TFTColorRole::HeaderBackground, TFTPalette::Black, headerColor);
                 setTFTColorRole(TFTColorRole::HeaderTitle, headerTextColor, headerColor);
                 setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, headerColor);
                 registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
@@ -221,19 +222,19 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
     auto batteryFillColorForPercent = [](int percent) {
         if (percent <= 20) {
-            return COLOR565(255, 0, 0); // Low
+            return TFTPalette::Bad;
         }
         if (percent <= 50) {
-            return COLOR565(255, 255, 0); // Medium
+            return TFTPalette::Medium;
         }
-        return COLOR565(0, 255, 0); // Good
+        return TFTPalette::Good;
     };
     bool hasBatteryFillRegion = false;
     int16_t batteryFillRegionX = 0;
     int16_t batteryFillRegionY = 0;
     int16_t batteryFillRegionW = 0;
     int16_t batteryFillRegionH = 0;
-    uint16_t batteryFillColor = COLOR565(0, 255, 0);
+    uint16_t batteryFillColor = TFTPalette::Good;
 
     int batteryX = 1;
     int batteryY = HEADER_OFFSET_Y + 1;
@@ -549,11 +550,6 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
     const bool applyTFTColorRoles = isTFTColoringEnabled();
     const int footerY = SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale);
     const int footerH = (connection_icon_height * scale) + (2 * scale);
-#ifdef TFT_HEADER_BG_COLOR_OVERRIDE
-    const uint16_t footerBgColor = TFT_HEADER_BG_COLOR_OVERRIDE;
-#else
-    const uint16_t footerBgColor = 0x4208;
-#endif
     const int iconX = 0;
     const int iconY = SCREEN_HEIGHT - (connection_icon_height * scale);
     const int iconW = connection_icon_width * scale;
@@ -561,7 +557,7 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 
     if (applyTFTColorRoles) {
         // Only tint the link glyph itself on TFT; keep the footer background black.
-        setTFTColorRole(TFTColorRole::ConnectionIcon, COLOR565(0, 0, 255), COLOR565(0, 0, 0));
+        setTFTColorRole(TFTColorRole::ConnectionIcon, TFTPalette::Blue, TFTPalette::Black);
         registerTFTColorRegion(TFTColorRole::ConnectionIcon, iconX, iconY, iconW, iconH);
     }
 

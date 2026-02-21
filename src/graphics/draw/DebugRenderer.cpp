@@ -12,6 +12,7 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -505,13 +506,13 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // Fill progress
     if (fillRight > 0) {
         if (isTFTColoringEnabled()) {
-            uint16_t chUtilFillColor = COLOR565(0, 255, 0); // Low utilization
+            uint16_t chUtilFillColor = TFTPalette::Good;
             if (raw_chutil_percent >= 60) {
-                chUtilFillColor = COLOR565(255, 0, 0); // High utilization
+                chUtilFillColor = TFTPalette::Bad;
             } else if (raw_chutil_percent >= 35) {
-                chUtilFillColor = COLOR565(255, 255, 0); // Medium utilization
+                chUtilFillColor = TFTPalette::Medium;
             }
-            setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, COLOR565(0, 0, 0));
+            setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, TFTPalette::Black);
             registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x, chUtil_y, fillRight,
                                    chutil_bar_height);
         }

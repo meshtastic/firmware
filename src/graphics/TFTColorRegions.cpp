@@ -1,4 +1,5 @@
 #include "TFTColorRegions.h"
+#include "TFTPalette.h"
 
 #include "configuration.h"
 #include <OLEDDisplay.h>
@@ -30,19 +31,6 @@ static size_t colorRegionCount = 0;
 static TFTRoleColorsBe roleColors[static_cast<size_t>(TFTColorRole::Count)];
 static bool roleColorsInitialized = false;
 
-static constexpr uint16_t BLACK_565 = 0x0000;
-static constexpr uint16_t WHITE_565 = 0xFFFF;
-static constexpr uint16_t DARK_GRAY_565 = 0x4208;
-
-#ifndef COLOR565
-#define COLOR565(r, g, b) static_cast<uint16_t>((((r)&0xF8) << 8) | (((g)&0xFC) << 3) | ((b) >> 3))
-#endif
-
-static constexpr uint16_t rgb565(uint8_t red, uint8_t green, uint8_t blue)
-{
-    return static_cast<uint16_t>(((red & 0xF8) << 8) | ((green & 0xFC) << 3) | (blue >> 3));
-}
-
 static uint16_t toBe565(uint16_t color)
 {
     return static_cast<uint16_t>((color >> 8) | (color << 8));
@@ -57,43 +45,43 @@ static void initializeRoleColors()
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
     const uint16_t headerBackground = TFT_HEADER_BG_COLOR_OVERRIDE;
 #else
-    const uint16_t headerBackground = DARK_GRAY_565;
+    const uint16_t headerBackground = TFTPalette::DarkGray;
 #endif
 
 #ifdef TFT_HEADER_TITLE_COLOR_OVERRIDE
     const uint16_t titleColor = TFT_HEADER_TITLE_COLOR_OVERRIDE;
 #else
-    const uint16_t titleColor = WHITE_565;
+    const uint16_t titleColor = TFTPalette::White;
 #endif
 
 #ifdef TFT_HEADER_STATUS_COLOR_OVERRIDE
     const uint16_t statusColor = TFT_HEADER_STATUS_COLOR_OVERRIDE;
 #else
-    const uint16_t statusColor = WHITE_565;
+    const uint16_t statusColor = TFTPalette::White;
 #endif
 
-    const uint16_t signalBarsColor = rgb565(0, 255, 0);
-    const uint16_t batteryFillColor = rgb565(0, 255, 0);
-    const uint16_t connectionIconColor = rgb565(0, 0, 255);
-    const uint16_t channelUtilizationColor = rgb565(0, 255, 0);
-    const uint16_t favoriteNodeColor = rgb565(255, 255, 0);
+    const uint16_t signalBarsColor = TFTPalette::Good;
+    const uint16_t batteryFillColor = TFTPalette::Good;
+    const uint16_t connectionIconColor = TFTPalette::Blue;
+    const uint16_t channelUtilizationColor = TFTPalette::Good;
+    const uint16_t favoriteNodeColor = TFTPalette::Yellow;
 
     roleColors[static_cast<size_t>(TFTColorRole::HeaderBackground)].onColorBe = toBe565(headerBackground);
-    roleColors[static_cast<size_t>(TFTColorRole::HeaderBackground)].offColorBe = toBe565(BLACK_565);
+    roleColors[static_cast<size_t>(TFTColorRole::HeaderBackground)].offColorBe = toBe565(TFTPalette::Black);
     roleColors[static_cast<size_t>(TFTColorRole::HeaderTitle)].onColorBe = toBe565(headerBackground);
     roleColors[static_cast<size_t>(TFTColorRole::HeaderTitle)].offColorBe = toBe565(titleColor);
     roleColors[static_cast<size_t>(TFTColorRole::HeaderStatus)].onColorBe = toBe565(headerBackground);
     roleColors[static_cast<size_t>(TFTColorRole::HeaderStatus)].offColorBe = toBe565(statusColor);
     roleColors[static_cast<size_t>(TFTColorRole::SignalBars)].onColorBe = toBe565(signalBarsColor);
-    roleColors[static_cast<size_t>(TFTColorRole::SignalBars)].offColorBe = toBe565(BLACK_565);
+    roleColors[static_cast<size_t>(TFTColorRole::SignalBars)].offColorBe = toBe565(TFTPalette::Black);
     roleColors[static_cast<size_t>(TFTColorRole::BatteryFill)].onColorBe = toBe565(batteryFillColor);
-    roleColors[static_cast<size_t>(TFTColorRole::BatteryFill)].offColorBe = toBe565(BLACK_565);
+    roleColors[static_cast<size_t>(TFTColorRole::BatteryFill)].offColorBe = toBe565(TFTPalette::Black);
     roleColors[static_cast<size_t>(TFTColorRole::ConnectionIcon)].onColorBe = toBe565(connectionIconColor);
-    roleColors[static_cast<size_t>(TFTColorRole::ConnectionIcon)].offColorBe = toBe565(BLACK_565);
+    roleColors[static_cast<size_t>(TFTColorRole::ConnectionIcon)].offColorBe = toBe565(TFTPalette::Black);
     roleColors[static_cast<size_t>(TFTColorRole::ChannelUtilization)].onColorBe = toBe565(channelUtilizationColor);
-    roleColors[static_cast<size_t>(TFTColorRole::ChannelUtilization)].offColorBe = toBe565(BLACK_565);
+    roleColors[static_cast<size_t>(TFTColorRole::ChannelUtilization)].offColorBe = toBe565(TFTPalette::Black);
     roleColors[static_cast<size_t>(TFTColorRole::FavoriteNode)].onColorBe = toBe565(favoriteNodeColor);
-    roleColors[static_cast<size_t>(TFTColorRole::FavoriteNode)].offColorBe = toBe565(BLACK_565);
+    roleColors[static_cast<size_t>(TFTColorRole::FavoriteNode)].offColorBe = toBe565(TFTPalette::Black);
     roleColorsInitialized = true;
 }
 

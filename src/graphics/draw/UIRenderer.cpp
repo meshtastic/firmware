@@ -10,6 +10,7 @@
 #include "gps/GeoCoord.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -462,14 +463,14 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
             int barY = yPos + (FONT_HEIGHT_SMALL - maxBarHeight) / 2;
             int totalBarsWidth = (kMaxBars * barWidth) + ((kMaxBars - 1) * barGap);
 
-            uint16_t signalBarsColor = COLOR565(0, 255, 0); // Good
+            uint16_t signalBarsColor = TFTPalette::Good;
             if (qualityLabel && strcmp(qualityLabel, "Fair") == 0) {
-                signalBarsColor = COLOR565(255, 255, 0);
+                signalBarsColor = TFTPalette::Medium;
             } else if (qualityLabel && strcmp(qualityLabel, "Bad") == 0) {
-                signalBarsColor = COLOR565(255, 0, 0);
+                signalBarsColor = TFTPalette::Bad;
             }
 
-            setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, COLOR565(0, 0, 0));
+            setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black);
             registerTFTColorRegion(TFTColorRole::SignalBars, barX, barY, totalBarsWidth, maxBarHeight);
 
             for (int bi = 0; bi < kMaxBars; bi++) {
@@ -902,13 +903,13 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     // Fill progress
     if (fillRight > 0) {
         if (isTFTColoringEnabled()) {
-            uint16_t chUtilFillColor = COLOR565(0, 255, 0); // Low utilization
+            uint16_t chUtilFillColor = TFTPalette::Good;
             if (raw_chutil_percent >= 60) {
-                chUtilFillColor = COLOR565(255, 0, 0); // High utilization
+                chUtilFillColor = TFTPalette::Bad;
             } else if (raw_chutil_percent >= 35) {
-                chUtilFillColor = COLOR565(255, 255, 0); // Medium utilization
+                chUtilFillColor = TFTPalette::Medium;
             }
-            setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, COLOR565(0, 0, 0));
+            setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, TFTPalette::Black);
             registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x, chUtil_y, fillRight,
                                    chutil_bar_height);
         }
@@ -1499,10 +1500,10 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
     const uint16_t navBgColor = TFT_HEADER_BG_COLOR_OVERRIDE;
 #else
-    const uint16_t navBgColor = 0x4208;
+    const uint16_t navBgColor = TFTPalette::DarkGray;
 #endif
     if (applyTFTColorRoles) {
-        setTFTColorRole(TFTColorRole::HeaderStatus, COLOR565(255, 255, 255), navBgColor);
+        setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, navBgColor);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, bgX, rectY, bgWidth, rectHeight);
     }
 
@@ -1519,7 +1520,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     // TFT-only: draw invisible side sentinels so visible->hidden always forces a row refresh
     // across the prior nav footprint, clearing side artifacts from color-role changes.
     if (applyTFTColorRoles && navBarVisible && clearWidth > 1) {
-        setTFTColorRole(TFTColorRole::HeaderStatus, COLOR565(0, 0, 0), COLOR565(0, 0, 0));
+        setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::Black, TFTPalette::Black);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX, rectY, 1, rectHeight);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX + clearWidth - 1, rectY, 1, rectHeight);
         display->setColor(WHITE);
@@ -1545,7 +1546,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         } else if (drawActiveHighlightTFT) {
             // Active icon inverts on TFT: white chip with black glyph.
             // Keep the buffer visibly different too, so dirty-rect updates include this region.
-            setTFTColorRole(TFTColorRole::HeaderStatus, COLOR565(255, 255, 255), COLOR565(0, 0, 0));
+            setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, TFTPalette::Black);
             registerTFTColorRegion(TFTColorRole::HeaderStatus, x - 1, y - 1, iconSize + 2, iconSize + 2);
             display->setColor(WHITE);
             display->fillRect(x - 1, y - 1, iconSize + 2, iconSize + 2);

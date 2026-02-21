@@ -53,6 +53,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/emotes.h"
 #include "graphics/images.h"
 #include "input/TouchScreenImpl1.h"
@@ -362,9 +363,9 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #endif
 
 #if defined(USE_ST7789)
-    static_cast<ST7789Spi *>(dispdev)->setRGB(COLOR565(255, 255, 255));
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFTPalette::White);
 #elif defined(USE_ST7796)
-    static_cast<ST7796Spi *>(dispdev)->setRGB(COLOR565(255, 255, 255));
+    static_cast<ST7796Spi *>(dispdev)->setRGB(TFTPalette::White);
 #endif
 
     ui = new OLEDDisplayUi(dispdev);
@@ -543,13 +544,13 @@ void Screen::setup()
 #endif
 
 #if defined(USE_ST7789)
-    static_cast<ST7789Spi *>(dispdev)->setRGB(COLOR565(255, 255, 255));
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFTPalette::White);
 #endif
 #if defined(MUZI_BASE)
     dispdev->delayPoweron = true;
 #endif
 #if defined(USE_ST7796)
-    static_cast<ST7796Spi *>(dispdev)->setRGB(COLOR565(255, 255, 255));
+    static_cast<ST7796Spi *>(dispdev)->setRGB(TFTPalette::White);
 #endif
 
     // Initialize display and UI system
