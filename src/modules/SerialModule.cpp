@@ -524,6 +524,73 @@ ParsedLine parseLine(const char *line)
 
     return result;
 }
+/*
+ *  Function to calculate 1-hour rainfall from cumulative rain data using rolling bucket system
+ *  Returns precipitation over the past hour for Windy.com compatibility
+ */
+#if !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) &&              \
+    !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5) && !defined(ARCH_STM32WL)
+float SerialModule::updateRain1h(float cum_mm, uint32_t now_ms)
+{
+    static bool inited = false;
+    static float lastCum = 0.0f;
+    static uint32_t lastMinuteNumber = 0;
+    static uint8_t idx = 0;
+    static float buckets[60] = {0};
+
+    const float Rain_EPS = 0.0005f;
+    const uint32_t minuteNow = now_ms / 60000UL;
+
+    if (!inited) {
+        inited = true;
+        lastCum = (!isnan(cum_mm) && !isinf(cum_mm)) ? cum_mm : 0.0f;
+        lastMinuteNumber = minuteNow;
+        idx = minuteNow % 60;
+        memset(buckets, 0, sizeof(buckets));
+        return 0.0f;
+    }
+
+    if (minuteNow != lastMinuteNumber) {
+        uint32_t steps = minuteNow - lastMinuteNumber;
+        if (steps > 3600)
+            steps = 3600;
+        for (uint32_t i = 0; i < steps; ++i) {
+            idx = (uint8_t)((idx + 1) % 60);
+            buckets[idx] = 0.0f;
+        }
+        lastMinuteNumber = minuteNow;
+    }
+
+    float inc = 0.0f;
+    if (!isnan(cum_mm) && !isinf(cum_mm)) {
+        if (cum_mm + Rain_EPS >= lastCum) {
+            // Normal increment
+            inc = cum_mm - lastCum;
+        } else {
+            // Reset detected (cum_mm < lastCum)
+            // This happens when the weather station resets or counter rolls over
+            // Don't add the full cumulative value - just restart tracking
+            lastCum = cum_mm;
+            float sum1h = 0.0f;
+            for (int i = 0; i < 60; ++i)
+                sum1h += buckets[i];
+            return sum1h;
+        }
+
+        // Sanity check: reject unreasonably large increments (> 50mm in one minute)
+        if (inc < 0 || inc > 50.0f || isnan(inc) || isinf(inc))
+            inc = 0.0f;
+
+        buckets[idx] += inc;
+        lastCum = cum_mm;
+    }
+
+    float sum1h = 0.0f;
+    for (int i = 0; i < 60; ++i)
+        sum1h += buckets[i];
+    return sum1h;
+}
+#endif
 
 /**
  * Process the received weather station serial data, extract wind, voltage, and temperature information,
@@ -556,7 +623,8 @@ void SerialModule::processWXSerial()
 
     static char rainStr[] = "5780860000";
     static int rainSum = 0;
-    static float rain = 0;
+    static float cum_mm = 0;
+    static float Rain1h = 0;
     bool gotwind = false;
 
     while (Serial2.available()) {
@@ -630,7 +698,8 @@ void SerialModule::processWXSerial()
                                 rainSum = int(strtof(rainStr, nullptr));
                             } else if (strcmp(parsed.name, "Rain") == 0) {
                                 strlcpy(rainStr, parsed.value, sizeof(rainStr));
-                                rain = strtof(rainStr, nullptr);
+                                cum_mm = strtof(rainStr, nullptr);
+                                Rain1h = SerialModule::updateRain1h(cum_mm, millis());
                             }
                         }
 
@@ -648,8 +717,8 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
-                 strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
+        LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain1h: %.1f, %i rainIntSum", atoi(windDir), strtof(windVel, nullptr),
+                 strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, Rain1h, rainSum);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
         // calculate averages and send to the mesh
@@ -686,11 +755,10 @@ void SerialModule::processWXSerial()
         m.variant.environment_metrics.wind_gust = gust;
         m.variant.environment_metrics.has_wind_gust = true;
 
-        m.variant.environment_metrics.rainfall_24h = rainSum;
-        m.variant.environment_metrics.has_rainfall_24h = true;
+        // m.variant.environment_metrics.rainfall_24h = rainSum;
+        // m.variant.environment_metrics.has_rainfall_24h = true;
 
-        // not sure if this value is actually the 1hr sum so needs to do some testing
-        m.variant.environment_metrics.rainfall_1h = rain;
+        m.variant.environment_metrics.rainfall_1h = Rain1h;
         m.variant.environment_metrics.has_rainfall_1h = true;
 
         if (lull == -1)
