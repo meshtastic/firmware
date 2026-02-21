@@ -573,51 +573,30 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     virtual uint32_t onPassKeyRequest()
 #endif
     {
-        uint32_t passkey = config.bluetooth.fixed_pin;
+        uint32_t configuredPasskey = config.bluetooth.fixed_pin;
 
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Use random passkey");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
-            passkey = random(100000, 999999);
+            configuredPasskey = random(100000, 999999);
         }
-        LOG_INFO("*** Enter passkey %d on the peer side ***", passkey);
+        LOG_INFO("*** Enter passkey %d on the peer side ***", configuredPasskey);
 
         powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-        meshtastic::BluetoothStatus newStatus(std::to_string(passkey));
+        std::string passkey = std::to_string(configuredPasskey);
+        meshtastic::BluetoothStatus newStatus(passkey);
         bluetoothStatus->updateStatus(&newStatus);
 
 #if HAS_SCREEN // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
         if (screen) {
-            screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-                char btPIN[16] = "888888";
-                snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
-                int x_offset = display->width() / 2;
-                int y_offset = display->height() <= 80 ? 0 : 12;
-                display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->setFont(FONT_MEDIUM);
-                display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-#if !defined(M5STACK_UNITC6L)
-                display->setFont(FONT_SMALL);
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-                display->drawString(x_offset + x, y_offset + y, "Enter this code");
-#endif
-                display->setFont(FONT_LARGE);
-                char pin[8];
-                snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-                display->drawString(x_offset + x, y_offset + y, pin);
 
-                display->setFont(FONT_SMALL);
-                char deviceName[64];
-                snprintf(deviceName, sizeof(deviceName), "Name: %s", getDeviceName());
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-                display->drawString(x_offset + x, y_offset + y, deviceName);
-            });
+            std::string ble_message = "Bluetooth\nPIN\n[M]" + passkey.substr(0, 3) + " " + passkey.substr(3, 6);
+            screen->showSimpleBanner(ble_message.c_str(), 30000);
         }
 #endif
         passkeyShowing = true;
 
-        return passkey;
+        return configuredPasskey;
     }
 
 #ifdef NIMBLE_TWO

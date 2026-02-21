@@ -157,6 +157,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 #endif
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, banner_overlay_options.message, 255);
+    NotificationRenderer::parseBannerMessageWithFonts(NotificationRenderer::alertBannerMessage);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
     NotificationRenderer::alertBannerUntil =
         (banner_overlay_options.durationMs == 0) ? 0 : millis() + banner_overlay_options.durationMs;
@@ -166,9 +167,9 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     NotificationRenderer::alertBannerCallback = banner_overlay_options.bannerCallback;
     NotificationRenderer::curSelected = banner_overlay_options.InitialSelected;
     NotificationRenderer::pauseBanner = false;
-    NotificationRenderer::current_notification_type = notificationTypeEnum::selection_picker;
+    NotificationRenderer::current_notification_type = banner_overlay_options.notificationType;
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
-    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setOverlays(overlays, 2);
     ui->setTargetFPS(60);
     ui->update();
 }
@@ -190,7 +191,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
     NotificationRenderer::current_notification_type = notificationTypeEnum::node_picker;
 
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
-    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setOverlays(overlays, 2);
     ui->setTargetFPS(60);
     ui->update();
 }
@@ -214,7 +215,7 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     NotificationRenderer::currentNumber = 0;
 
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
-    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setOverlays(overlays, 2);
     ui->setTargetFPS(60);
     ui->update();
 }
@@ -237,7 +238,7 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
 
     // Set the overlay using the same pattern as other notification types
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
-    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setOverlays(overlays, 2);
     ui->setTargetFPS(60);
     ui->update();
 }
@@ -608,7 +609,7 @@ void Screen::setup()
     static OverlayCallback overlays[] = {
         graphics::UIRenderer::drawNavigationBar // Custom indicator icons for each frame
     };
-    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setOverlays(overlays, 1);
 
     // Enable UTF-8 to display mapping
     dispdev->setFontTableLookupFunction(customFontTableLookup);
@@ -1202,7 +1203,7 @@ void Screen::setFrames(FrameFocus focus)
 
     // Add overlays: frame icons and alert banner)
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
-    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setOverlays(overlays, 2);
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list just changed)
 
@@ -1630,7 +1631,7 @@ int Screen::handleInputEvent(const InputEvent *event)
     if (NotificationRenderer::current_notification_type == notificationTypeEnum::text_input) {
         NotificationRenderer::inEvent = *event;
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
-        ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+        ui->setOverlays(overlays, 2);
         setFastFramerate(); // Draw ASAP
         ui->update();
         return 0;
@@ -1645,7 +1646,7 @@ int Screen::handleInputEvent(const InputEvent *event)
     if (NotificationRenderer::isOverlayBannerShowing()) {
         NotificationRenderer::inEvent = *event;
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
-        ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+        ui->setOverlays(overlays, 2);
         setFastFramerate(); // Draw ASAP
         ui->update();
 

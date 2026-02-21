@@ -31,6 +31,12 @@ class NotificationRenderer
 
     static bool pauseBanner;
 
+    enum BannerFont : uint8_t { BANNER_FONT_DEFAULT = 0, BANNER_FONT_SMALL, BANNER_FONT_MEDIUM, BANNER_FONT_LARGE };
+
+    static char alertBannerLines[MAX_LINES + 1][64]; // parsed text per line
+    static uint8_t alertBannerLineCount;
+    static BannerFont alertBannerLineFonts[MAX_LINES + 1];
+    static void parseBannerMessageWithFonts(const char *message);
     static void resetBanner();
     static void showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs);
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
