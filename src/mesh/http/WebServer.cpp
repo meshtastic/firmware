@@ -9,6 +9,7 @@
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
+#include <Throttle.h>
 #include <WebServer.h>
 #include <WiFi.h>
 
@@ -81,7 +82,7 @@ static void handleWebResponse()
                 } else {
                     // Skip HTTPS when memory is low to prevent SSL setup failures
                     static uint32_t lastHeapWarning = 0;
-                    if (millis() - lastHeapWarning > 30000) { // Warn every 30s max
+                    if (!Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
                         LOG_WARN("Low heap (%u bytes), skipping HTTPS processing", freeHeap);
                         lastHeapWarning = millis();
                     }
