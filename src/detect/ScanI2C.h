@@ -50,6 +50,7 @@ class ScanI2C
         TCA9535,
         TCA9555,
         VEML7700,
+        VL53L0X,
         RCWL9620,
         NCP5623,
         LP5562,
