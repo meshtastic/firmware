@@ -251,6 +251,8 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
 #endif
 }
 
+Print *RedirectablePrint::uartLogDestination = nullptr;
+
 meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 {
     meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
