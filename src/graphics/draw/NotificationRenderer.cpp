@@ -6,6 +6,8 @@
 #include "NotificationRenderer.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -620,6 +622,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                 const int barSpacing = 2;
                 const int barHeightStep = 2;
                 const int gap = 6;
+                const int maxBarHeight = totalBars * barHeightStep;
 
                 int textWidth = display->getStringWidth(lineBuffer, strlen(lineBuffer), true);
                 int barsWidth = totalBars * barWidth + (totalBars - 1) * barSpacing + gap;
@@ -630,12 +633,25 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
                 int baseX = groupStartX + textWidth + gap;
                 int baseY = lineY + effectiveLineHeight - 1;
+                const bool colorSignalBars = isTFTColoringEnabled() && graphics::bannerSignalBars > 0;
+                if (colorSignalBars) {
+                    uint16_t signalBarsColor = TFTPalette::Medium;
+                    if (graphics::bannerSignalBars <= 1) {
+                        signalBarsColor = TFTPalette::Bad;
+                    } else if (graphics::bannerSignalBars >= 4) {
+                        signalBarsColor = TFTPalette::Good;
+                    }
+                    setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black);
+                }
                 for (int b = 0; b < totalBars; b++) {
                     int barHeight = (b + 1) * barHeightStep;
                     int x = baseX + b * (barWidth + barSpacing);
                     int y = baseY - barHeight;
 
                     if (b < graphics::bannerSignalBars) {
+                        if (colorSignalBars) {
+                            registerTFTColorRegion(TFTColorRole::SignalBars, x, baseY - maxBarHeight, barWidth, maxBarHeight);
+                        }
                         display->fillRect(x, y, barWidth, barHeight);
                     } else {
                         display->drawRect(x, y, barWidth, barHeight);

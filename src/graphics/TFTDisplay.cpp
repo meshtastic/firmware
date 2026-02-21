@@ -1205,7 +1205,7 @@ void TFTDisplay::display(bool fromBlank)
     bool somethingChanged = false;
 
     // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
-    colorTftWhite = (TFTPalette::White >> 8) | ((TFTPalette::White & 0xFF) << 8);
+    colorTftWhite = (graphics::TFTPalette::White >> 8) | ((graphics::TFTPalette::White & 0xFF) << 8);
     colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
 
     if (graphics::isTFTColoringEnabled()) {
