@@ -502,8 +502,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     if (applyTFTColorRoles) {
         registerTFTColorRegion(TFTColorRole::HeaderStatus, 0, 0, statusLeftEndX, headerHeight);
         if (statusRightStartX < screenW) {
-            registerTFTColorRegion(TFTColorRole::HeaderStatus, statusRightStartX, 0, screenW - statusRightStartX,
-                                   headerHeight);
+            registerTFTColorRegion(TFTColorRole::HeaderStatus, statusRightStartX, 0, screenW - statusRightStartX, headerHeight);
         }
         if (hasBatteryFillRegion) {
             setTFTColorRole(TFTColorRole::BatteryFill, batteryFillColor, headerColorForRoles);
@@ -584,8 +583,7 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
         }
 
     } else {
-        display->drawXbm(iconX, iconY, connection_icon_width, connection_icon_height,
-                         connection_icon);
+        display->drawXbm(iconX, iconY, connection_icon_width, connection_icon_height, connection_icon);
     }
 }
 

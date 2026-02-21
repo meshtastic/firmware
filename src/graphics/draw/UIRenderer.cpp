@@ -1513,7 +1513,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         // Keep legacy OLED behavior untouched.
         display->fillRect(rectX + 1, rectY, rectWidth - 2, rectHeight - 2);
         display->setColor(WHITE);
-            display->drawRect(rectX, rectY, rectWidth, rectHeight);
+        display->drawRect(rectX, rectY, rectWidth, rectHeight);
     }
 
     // TFT-only: draw invisible side sentinels so visible->hidden always forces a row refresh
@@ -1610,7 +1610,6 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         display->drawRect(rectX + rectWidth - 1, rectY, 1, 1);
         display->setColor(WHITE);
     }
-
 }
 
 void UIRenderer::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)

@@ -35,7 +35,7 @@ static constexpr uint16_t WHITE_565 = 0xFFFF;
 static constexpr uint16_t DARK_GRAY_565 = 0x4208;
 
 #ifndef COLOR565
-#define COLOR565(r, g, b) static_cast<uint16_t>((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
+#define COLOR565(r, g, b) static_cast<uint16_t>((((r)&0xF8) << 8) | (((g)&0xFC) << 3) | ((b) >> 3))
 #endif
 
 static constexpr uint16_t rgb565(uint8_t red, uint8_t green, uint8_t blue)
@@ -102,9 +102,8 @@ static void initializeRoleColors()
 bool isTFTColoringEnabled()
 {
 #if HAS_TFT || defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||                 \
-    defined(ST7789_CS) ||                                                                                                           \
-    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(USE_ST7796) ||             \
-    defined(HACKADAY_COMMUNICATOR)
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
+    defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
     return true;
 #else
     return false;

@@ -1217,7 +1217,7 @@ void TFTDisplay::display(bool fromBlank)
             for (x = 0; x < displayWidth; x++) {
                 isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
                 linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                     colorTftWhite, colorTftBlack);
+                                                                    colorTftWhite, colorTftBlack);
             }
 #if defined(HACKADAY_COMMUNICATOR)
             tft->draw16bitBeRGBBitmap(0, y, linePixelBuffer, displayWidth, 1);
@@ -1275,9 +1275,8 @@ void TFTDisplay::display(bool fromBlank)
         if (x_FirstPixelUpdate < displayWidth) {
 
             // Quickly write out the first changed pixel (saves another array lookup)
-            linePixelBuffer[x_FirstPixelUpdate] =
-                graphics::resolveTFTColorPixel(static_cast<int16_t>(x_FirstPixelUpdate), static_cast<int16_t>(y), isset,
-                                               colorTftWhite, colorTftBlack);
+            linePixelBuffer[x_FirstPixelUpdate] = graphics::resolveTFTColorPixel(
+                static_cast<int16_t>(x_FirstPixelUpdate), static_cast<int16_t>(y), isset, colorTftWhite, colorTftBlack);
             x_LastPixelUpdate = x_FirstPixelUpdate;
 
             // Step 3: copy all remaining pixels in this row into the pixel line buffer,
@@ -1285,7 +1284,7 @@ void TFTDisplay::display(bool fromBlank)
             for (x = x_FirstPixelUpdate + 1; x < displayWidth; x++) {
                 isset = buffer[x + y_byteIndex] & y_byteMask;
                 linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                     colorTftWhite, colorTftBlack);
+                                                                    colorTftWhite, colorTftBlack);
 
                 if (!fromBlank) {
                     dblbuf_isset = buffer_back[x + y_byteIndex] & y_byteMask;
