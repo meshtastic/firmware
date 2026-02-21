@@ -318,10 +318,14 @@ template <typename T> void LR11x0Interface<T>::resetAGC()
     uint8_t calData = RADIOLIB_LR11X0_CALIBRATE_ALL;
     module.SPIwriteStream(RADIOLIB_LR11X0_CMD_CALIBRATE, &calData, 1, true, true);
 
-    // 4. Re-apply RX boosted gain mode
+    // 4. Re-calibrate image rejection for actual operating frequency
+    //    Calibrate(0x3F) defaults to 902-928 MHz which is wrong for other regions.
+    lora.calibrateImageRejection(getFreq() - 4.0f, getFreq() + 4.0f);
+
+    // 5. Re-apply RX boosted gain mode
     lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
 
-    // 5. Resume receiving
+    // 6. Resume receiving
     startReceive();
 }
 

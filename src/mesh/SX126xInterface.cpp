@@ -468,7 +468,11 @@ template <typename T> void SX126xInterface<T>::resetAGC()
         return;
     }
 
-    // 5. Re-apply settings that calibration may have reset
+    // 5. Re-calibrate image rejection for actual operating frequency
+    //    Calibrate(0x7F) defaults to 902-928 MHz which is wrong for other regions.
+    lora.calibrateImage(getFreq());
+
+    // Re-apply settings that calibration may have reset
 
     // DIO2 as RF switch
 #ifdef SX126X_DIO2_AS_RF_SWITCH
