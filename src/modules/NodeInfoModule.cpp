@@ -166,10 +166,10 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
 
 void NodeInfoModule::pruneLastNodeInfoCache()
 {
-    if (!nodeDB || !nodeDB->meshNodes)
+    if (!nodeDB)
         return;
 
-    const size_t maxEntries = nodeDB->meshNodes->size();
+    const size_t maxEntries = nodeDB->getNumMeshNodes();
 
     for (auto it = lastNodeInfoSeen.begin(); it != lastNodeInfoSeen.end();) {
         if (!nodeDB->getMeshNode(it->first)) {
