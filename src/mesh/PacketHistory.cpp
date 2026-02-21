@@ -1,6 +1,7 @@
 #include "PacketHistory.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -23,6 +24,14 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPa
         size = PACKETHISTORY_MAX; // Use default size if invalid
     }
 
+#if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
+    // Ensure capacity fits in uint16_t hash index (HASH_EMPTY = 0xFFFF is the sentinel)
+    if (size >= HASH_EMPTY) {
+        LOG_WARN("Packet History - Clamping size %d to %d (hash index limit)", size, HASH_EMPTY - 1);
+        size = HASH_EMPTY - 1;
+    }
+#endif
+
     // Allocate memory for the recent packets array
     recentPacketsCapacity = size;
     recentPackets = new PacketRecord[recentPacketsCapacity];
@@ -35,6 +44,20 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPa
 
     // Initialize the recent packets array to zero
     memset(recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
+
+#if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
+    // Allocate hash index with load factor <= 0.5 for short probe chains
+    hashCapacity = nextPowerOf2(recentPacketsCapacity * 2);
+    hashMask = hashCapacity - 1;
+    hashIndex = new uint16_t[hashCapacity];
+    if (!hashIndex) {
+        LOG_ERROR("Packet History - Hash index allocation failed for %d entries", hashCapacity);
+        hashCapacity = 0;
+        hashMask = 0;
+        return;
+    }
+    memset(hashIndex, 0xFF, sizeof(uint16_t) * hashCapacity); // Fill with HASH_EMPTY (0xFFFF)
+#endif
 }
 
 PacketHistory::~PacketHistory()
@@ -42,6 +65,12 @@ PacketHistory::~PacketHistory()
     recentPacketsCapacity = 0;
     delete[] recentPackets;
     recentPackets = NULL;
+#if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
+    delete[] hashIndex;
+    hashIndex = NULL;
+    hashCapacity = 0;
+    hashMask = 0;
+#endif
 }
 
 /** Update recentPackets and return true if we have already seen this packet */
@@ -194,7 +223,78 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     return seenRecently;
 }
 
-/** Find a packet record in history.
+#if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
+// Hash function for (sender, id) pairs. Uses xor-shift mixing for good distribution.
+uint32_t PacketHistory::hashSlot(NodeNum sender, PacketId id) const
+{
+    uint32_t h = sender ^ (id * 0x9E3779B9); // Fibonacci hashing constant
+    h ^= h >> 16;
+    h *= 0x45d9f3b;
+    h ^= h >> 16;
+    return h & hashMask;
+}
+
+void PacketHistory::hashInsert(NodeNum sender, PacketId id, uint16_t slotIdx)
+{
+    if (!hashIndex)
+        return;
+    uint32_t bucket = hashSlot(sender, id);
+    // Guard against infinite loop if hash table is corrupted (no HASH_EMPTY slots)
+    for (uint32_t i = 0; i < hashCapacity; i++) {
+        if (hashIndex[bucket] == HASH_EMPTY) {
+            hashIndex[bucket] = slotIdx;
+            return;
+        }
+        bucket = (bucket + 1) & hashMask;
+    }
+    LOG_ERROR("Packet History - hashInsert: table full or corrupted, rebuilding");
+    hashRebuild();
+}
+
+void PacketHistory::hashRemove(NodeNum sender, PacketId id)
+{
+    if (!hashIndex)
+        return;
+    uint32_t bucket = hashSlot(sender, id);
+    for (uint32_t i = 0; i < hashCapacity; i++) {
+        if (hashIndex[bucket] == HASH_EMPTY)
+            return;
+        uint16_t idx = hashIndex[bucket];
+        if (idx < recentPacketsCapacity && recentPackets[idx].sender == sender && recentPackets[idx].id == id) {
+            // Found it — delete and re-insert subsequent entries to maintain probe chain integrity
+            hashIndex[bucket] = HASH_EMPTY;
+            uint32_t next = (bucket + 1) & hashMask;
+            for (uint32_t j = 0; j < hashCapacity; j++) {
+                if (hashIndex[next] == HASH_EMPTY)
+                    break;
+                uint16_t displaced = hashIndex[next];
+                hashIndex[next] = HASH_EMPTY;
+                if (displaced < recentPacketsCapacity) {
+                    auto &rec = recentPackets[displaced];
+                    hashInsert(rec.sender, rec.id, displaced);
+                }
+                next = (next + 1) & hashMask;
+            }
+            return;
+        }
+        bucket = (bucket + 1) & hashMask;
+    }
+}
+
+void PacketHistory::hashRebuild()
+{
+    if (!hashIndex)
+        return;
+    memset(hashIndex, 0xFF, sizeof(uint16_t) * hashCapacity);
+    for (uint32_t i = 0; i < recentPacketsCapacity; i++) {
+        if (recentPackets[i].rxTimeMsec != 0)
+            hashInsert(recentPackets[i].sender, recentPackets[i].id, (uint16_t)i);
+    }
+}
+#endif
+
+/** Find a packet record in history using the hash index for O(1) average lookup.
+ * Falls back to linear scan if hash index is unavailable.
  * @return pointer to PacketRecord if found, NULL if not found */
 PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
 {
@@ -205,23 +305,40 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
         return NULL;
     }
 
-    PacketRecord *it = NULL;
-    for (it = recentPackets; it < (recentPackets + recentPacketsCapacity); ++it) {
-        if (it->id == id && it->sender == sender) {
+#if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
+    // Use hash index for O(1) lookup when available
+    if (hashIndex) {
+        uint32_t bucket = hashSlot(sender, id);
+        for (uint32_t i = 0; i < hashCapacity; i++) {
+            if (hashIndex[bucket] == HASH_EMPTY)
+                break;
+            uint16_t idx = hashIndex[bucket];
+            if (idx < recentPacketsCapacity && recentPackets[idx].id == id && recentPackets[idx].sender == sender) {
 #if VERBOSE_PACKET_HISTORY
-            LOG_DEBUG("Packet History - find: s=%08x id=%08x FOUND nh=%02x rby=%02x %02x %02x age=%d slot=%d/%d", it->sender,
-                      it->id, it->next_hop, it->relayed_by[0], it->relayed_by[1], it->relayed_by[2], millis() - (it->rxTimeMsec),
-                      it - recentPackets, recentPacketsCapacity);
+                LOG_DEBUG("Packet History - find: s=%08x id=%08x FOUND nh=%02x rby=%02x %02x %02x age=%d slot=%d/%d",
+                          recentPackets[idx].sender, recentPackets[idx].id, recentPackets[idx].next_hop,
+                          recentPackets[idx].relayed_by[0], recentPackets[idx].relayed_by[1], recentPackets[idx].relayed_by[2],
+                          millis() - (recentPackets[idx].rxTimeMsec), idx, recentPacketsCapacity);
 #endif
-            // only the first match is returned, so be careful not to create duplicate entries
-            return it; // Return pointer to the found record
+                return &recentPackets[idx];
+            }
+            bucket = (bucket + 1) & hashMask;
+        }
+#if VERBOSE_PACKET_HISTORY
+        LOG_DEBUG("Packet History - find: s=%08x id=%08x NOT FOUND", sender, id);
+#endif
+        return NULL;
+    }
+#endif
+
+    // Linear scan (sole path when hash excluded, fallback when hash allocation failed)
+    for (PacketRecord *it = recentPackets; it < (recentPackets + recentPacketsCapacity); ++it) {
+        if (it->id == id && it->sender == sender) {
+            return it;
         }
     }
 
-#if VERBOSE_PACKET_HISTORY
-    LOG_DEBUG("Packet History - find: s=%08x id=%08x NOT FOUND", sender, id);
-#endif
-    return NULL; // Not found
+    return NULL;
 }
 
 /** Insert/Replace oldest PacketRecord in recentPackets. */
@@ -327,7 +444,21 @@ void PacketHistory::insert(const PacketRecord &r)
         return; // Return early if we can't update the history
     }
 
+#if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
+    // Maintain hash index: remove old entry if evicting a different packet, then insert new entry
+    bool isMatchingSlot = (tu->id == r.id && tu->sender == r.sender);
+    if (!isMatchingSlot && tu->rxTimeMsec != 0) {
+        hashRemove(tu->sender, tu->id);
+    }
+
     *tu = r; // store the packet
+
+    if (!isMatchingSlot) {
+        hashInsert(r.sender, r.id, (uint16_t)(tu - recentPackets));
+    }
+#else
+    *tu = r; // store the packet
+#endif
 
 #if VERBOSE_PACKET_HISTORY
     LOG_DEBUG("Packet History - insert: Store slot@ %d/%d s=%08x id=%08x nh=%02x rby=%02x %02x %02x rxT=%d AFTER",
@@ -394,6 +525,31 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r, boo
 #endif
 
     return found;
+}
+
+// Check two relayers against the same packet record with a single find() call,
+// avoiding redundant O(N) lookups when both are checked for the same (id, sender) pair.
+void PacketHistory::checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t id, NodeNum sender, bool *r1Result, bool *r2Result,
+                                  bool *r2WasSole)
+{
+    *r1Result = false;
+    *r2Result = false;
+    if (r2WasSole)
+        *r2WasSole = false;
+
+    if (!initOk()) {
+        LOG_ERROR("PacketHistory - checkRelayers: NOT INITIALIZED!");
+        return;
+    }
+
+    const PacketRecord *found = find(sender, id);
+    if (!found)
+        return;
+
+    if (relayer1 != 0)
+        *r1Result = wasRelayer(relayer1, *found);
+    if (relayer2 != 0)
+        *r2Result = wasRelayer(relayer2, *found, r2WasSole);
 }
 
 // Remove a relayer from the list of relayers of a packet in the history given an ID and sender

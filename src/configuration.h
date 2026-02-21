@@ -471,6 +471,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_PKI 1
 #define MESHTASTIC_EXCLUDE_POWER_FSM 1
 #define MESHTASTIC_EXCLUDE_TZ 1
+#define MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH 1
 #endif
 
 // Turn off all optional modules
