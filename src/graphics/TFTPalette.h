@@ -32,4 +32,3 @@ constexpr uint16_t Bad = Red;
 
 } // namespace TFTPalette
 } // namespace graphics
-
