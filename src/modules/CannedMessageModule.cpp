@@ -20,6 +20,7 @@
 #include "graphics/emotes.h"
 #include "graphics/images.h"
 #include "input/SerialKeyboard.h"
+#include "input/kbLayout.h"
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
@@ -121,6 +122,17 @@ static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 static NodeNum lastDest = NODENUM_BROADCAST;
 static uint8_t lastChannel = 0;
 static bool lastDestSet = false;
+
+bool showLayoutIndicator = true;
+
+const char *getCurrentLayoutName()
+{
+    return kb_getCurrentLayoutName();
+}
+
+static int utf8_prev_index(const String &s, int idx);
+static int utf8_next_index(const String &s, int idx);
+static bool wordContainsUtf8(const String &s);
 
 meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 
@@ -908,6 +920,16 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         return true;
     }
 
+    // fn+l (switch layout)
+    if (event->inputEvent == INPUT_BROKER_LAYOUT_CHANGE) {
+        payload = INPUT_BROKER_LAYOUT_CHANGE;
+        showLayoutIndicator = true;
+        kb_nextLayout();
+        runOnce();
+        screen->forceDisplay(true);
+        return true;
+    }
+
     // Cancel (dismiss freetext screen)
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG ||
         (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() == 0)) {
@@ -934,6 +956,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->kbchar >= 32 && event->kbchar <= 126) {
         payload = event->kbchar;
         lastTouchMillis = millis();
+        showLayoutIndicator = false;
         runOnce();
         return true;
     }
@@ -1292,12 +1315,12 @@ int32_t CannedMessageModule::runOnce()
         switch (this->payload) {
         case INPUT_BROKER_LEFT:
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor > 0) {
-                this->cursor--;
+                this->cursor = utf8_prev_index(this->freetext, this->cursor);
             }
             break;
         case INPUT_BROKER_RIGHT:
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor < this->freetext.length()) {
-                this->cursor++;
+                this->cursor = utf8_next_index(this->freetext, this->cursor);
             }
             break;
         default:
@@ -1309,13 +1332,14 @@ int32_t CannedMessageModule::runOnce()
             case 0x08: // backspace
                 if (this->freetext.length() > 0) {
                     if (this->cursor > 0) {
+                        // Delete the previous UTF-8 character
+                        int prev = utf8_prev_index(this->freetext, this->cursor);
                         if (this->cursor == this->freetext.length()) {
-                            this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
+                            this->freetext = this->freetext.substring(0, prev);
                         } else {
-                            this->freetext = this->freetext.substring(0, this->cursor - 1) +
-                                             this->freetext.substring(this->cursor, this->freetext.length());
+                            this->freetext = this->freetext.substring(0, prev) + this->freetext.substring(this->cursor);
                         }
-                        this->cursor--;
+                        this->cursor = prev;
                     }
                 } else {
                 }
@@ -1324,18 +1348,28 @@ int32_t CannedMessageModule::runOnce()
                 return 0;
             case INPUT_BROKER_LEFT:
             case INPUT_BROKER_RIGHT:
+            case INPUT_BROKER_LAYOUT_CHANGE:
                 break;
             default:
-                // Only insert ASCII printable characters (32–126)
+                // Only insert ASCII printable characters (32–126), but get layout mapping first
                 if (this->payload >= 32 && this->payload <= 126) {
                     requestFocus();
+                    // Apply current layout mapping.
+                    char key = (char)this->payload;
+
+                    const char *mapped_c = kb_applyCurrentLayout(key);
+                    String mapped = mapped_c ? String(mapped_c) : String((char)key);
+
                     if (this->cursor == this->freetext.length()) {
-                        this->freetext += (char)this->payload;
+                        this->freetext += mapped;
                     } else {
-                        this->freetext = this->freetext.substring(0, this->cursor) + (char)this->payload +
-                                         this->freetext.substring(this->cursor);
+                        this->freetext =
+                            this->freetext.substring(0, this->cursor) + mapped + this->freetext.substring(this->cursor);
                     }
-                    this->cursor++;
+                    // Increase the cursor by the length of the inserted string.
+                    // Note: multi-byte UTF-8 support is only partial because Arduino's String::length() counts bytes for
+                    // multi-byte characters.
+                    this->cursor += mapped.length();
                     const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
                     if (this->freetext.length() > maxChars) {
                         this->cursor = maxChars;
@@ -1854,6 +1888,7 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
 
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    int layoutIndicatorWidth = 0;
     this->displayHeight = display->getHeight(); // Store display height for later use
     char buffer[50];
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1900,6 +1935,37 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
         // Draw node/channel header at the top
         drawHeader(display, x, y, buffer);
+        // --- Keyboard Layout symbol:
+        if (KB_LAYOUT_COUNT > 1 && showLayoutIndicator) {
+            if (graphics::currentResolution == graphics::ScreenResolution::High) {
+                const int hShift = -2; // move locale symbol left by 2 pixels
+                const int hBorder = 2; // add some border thickness left and right
+                display->setColor(WHITE);
+                snprintf(buffer, sizeof(buffer), "%s", getCurrentLayoutName());
+                layoutIndicatorWidth = display->getStringWidth(buffer);
+                display->fillRect(display->getWidth() - layoutIndicatorWidth + 2 - hBorder + hShift,
+                                  display->getHeight() - FONT_HEIGHT_SMALL, layoutIndicatorWidth + 2 * hBorder - 4,
+                                  FONT_HEIGHT_SMALL);
+                display->fillRect(display->getWidth() - layoutIndicatorWidth + 1 - hBorder + hShift,
+                                  display->getHeight() - FONT_HEIGHT_SMALL + 1, layoutIndicatorWidth + 2 * hBorder - 2,
+                                  FONT_HEIGHT_SMALL - 2);
+                display->fillRect(display->getWidth() - layoutIndicatorWidth - hBorder + hShift,
+                                  display->getHeight() - FONT_HEIGHT_SMALL + 2, layoutIndicatorWidth + 2 * hBorder,
+                                  FONT_HEIGHT_SMALL - 4);
+                display->setColor(BLACK);
+                display->drawString(display->getWidth() - layoutIndicatorWidth + hShift, display->getHeight() - FONT_HEIGHT_SMALL,
+                                    buffer);
+            } else {
+                display->setColor(WHITE);
+                snprintf(buffer, sizeof(buffer), "%c", getCurrentLayoutName()[0]);
+                layoutIndicatorWidth = display->getStringWidth(buffer);
+                display->fillRect(display->getWidth() - layoutIndicatorWidth, display->getHeight() - FONT_HEIGHT_SMALL,
+                                  layoutIndicatorWidth, FONT_HEIGHT_SMALL);
+                display->setColor(BLACK);
+                display->drawString(display->getWidth() - layoutIndicatorWidth, display->getHeight() - FONT_HEIGHT_SMALL, buffer);
+            }
+        }
+        display->setColor(WHITE);
 
         // Char count right-aligned
         if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
@@ -2031,7 +2097,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         int spacePos = text.indexOf(' ', pos);
                         int endPos = (spacePos == -1) ? text.length() : spacePos + 1; // Include space
                         String word = text.substring(pos, endPos);
-                        int wordWidth = display->getStringWidth(word);
+                        int wordWidth = display->getStringWidth(word.c_str(), word.length(), wordContainsUtf8(word));
 
                         if (lineWidth + wordWidth > maxWidth && lineWidth > 0) {
                             lines.push_back(currentLine);
@@ -2040,10 +2106,12 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         }
                         // If word itself too big, split by character
                         if (wordWidth > maxWidth) {
-                            uint16_t charPos = 0;
+                            unsigned int charPos = 0;
                             while (charPos < word.length()) {
-                                String oneChar = word.substring(charPos, charPos + 1);
-                                int charWidth = display->getStringWidth(oneChar);
+                                int nextPos = utf8_next_index(word, charPos);
+                                String oneChar = word.substring(charPos, nextPos);
+                                int charWidth =
+                                    display->getStringWidth(oneChar.c_str(), oneChar.length(), wordContainsUtf8(oneChar));
                                 if (lineWidth + charWidth > maxWidth && lineWidth > 0) {
                                     lines.push_back(currentLine);
                                     currentLine.clear();
@@ -2051,7 +2119,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                                 }
                                 currentLine.push_back({false, oneChar});
                                 lineWidth += charWidth;
-                                charPos++;
+                                charPos = nextPos;
                             }
                         } else {
                             currentLine.push_back({false, word});
@@ -2075,7 +2143,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         renderEmote(display, nextX, yLine, rowHeight, token.second);
                     } else {
                         display->drawString(nextX, yLine, token.second);
-                        nextX += display->getStringWidth(token.second);
+                        nextX +=
+                            display->getStringWidth(token.second.c_str(), token.second.length(), wordContainsUtf8(token.second));
                     }
                 }
                 yLine += rowHeight;
@@ -2164,7 +2233,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 } else {
                     // Text
                     display->drawString(nextX, lineY + textYOffset, token.second);
-                    nextX += display->getStringWidth(token.second);
+                    nextX += display->getStringWidth(token.second.c_str(), token.second.length(), wordContainsUtf8(token.second));
                 }
             }
 #ifndef USE_EINK
@@ -2457,8 +2526,66 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
 
 String CannedMessageModule::drawWithCursor(String text, int cursor)
 {
+
+    // Guard against invalid values
+    if (cursor < 0) {
+        cursor = 0;
+    }
+
+    int len = text.length();
+    if (cursor > len) {
+        cursor = len;
+    }
+
+    // If cursor points inside a multi-byte UTF-8 character,
+    // move it to the start of that character to avoid splitting the sequence.
+    if (cursor < len) {
+        const char *buf = text.c_str();
+        if (((uint8_t)buf[cursor] & 0xC0) == 0x80) { // continuation byte
+            cursor = utf8_prev_index(text, cursor);
+        }
+    }
+
     String result = text.substring(0, cursor) + "_" + text.substring(cursor);
     return result;
 }
 
+// Function to check if a string contains non-ASCII characters
+static bool wordContainsUtf8(const String &s)
+{
+    const char *buf = s.c_str();
+    for (size_t i = 0; i < s.length(); ++i) {
+        if (((uint8_t)buf[i] & 0x80) != 0)
+            return true;
+    }
+    return false;
+}
+
+// Function to find the previous UTF-8 characters
+static int utf8_prev_index(const String &s, int idx)
+{
+    const char *buf = s.c_str();
+    if (idx <= 0)
+        return 0;
+    int i = idx - 1;
+    while (i > 0 && (((uint8_t)buf[i] & 0xC0) == 0x80))
+        --i;
+    return i;
+}
+
+// Function to find the next UTF-8 character
+static int utf8_next_index(const String &s, int idx)
+{
+    const char *buf = s.c_str();
+    int len = s.length();
+    if (idx >= len)
+        return len;
+    int i = idx;
+    if (((uint8_t)buf[i] & 0x80) == 0)
+        return i + 1;
+    ++i;
+    while (i < len && (((uint8_t)buf[i] & 0xC0) == 0x80))
+        ++i;
+    return i;
+}
 #endif
