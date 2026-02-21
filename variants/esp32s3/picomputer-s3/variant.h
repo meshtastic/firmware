@@ -50,7 +50,6 @@
 #define SCREEN_TRANSITION_FRAMERATE 5
 
 // Picomputer gets a white on black display
-#define TFT_MESH_OVERRIDE COLOR565(255, 255, 255)
 
 #define INPUTBROKER_MATRIX_TYPE 1
 

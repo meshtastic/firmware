@@ -5,6 +5,7 @@
 #include "draw/NodeListRenderer.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
 #include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
@@ -100,27 +101,84 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
+    const int headerHeight = highlightHeight + 2;
+    const bool applyTFTColorRoles = isTFTColoringEnabled();
+#ifdef TFT_HEADER_BG_COLOR_OVERRIDE
+    const uint16_t headerColorForRoles = TFT_HEADER_BG_COLOR_OVERRIDE;
+#else
+    const uint16_t headerColorForRoles = 0x4208;
+#endif
+    // Color TFT headers use a fixed dark background + white glyphs.
+    // Keep legacy inverted bitmap behavior only for monochrome displays.
+    const bool useInvertedHeaderStyle = (isInverted && !force_no_invert && !applyTFTColorRoles);
+    int statusLeftEndX = 0;
+    int statusRightStartX = screenW;
 
-    if (!force_no_invert) {
+    {
+#ifdef TFT_HEADER_BG_COLOR_OVERRIDE
+        const uint16_t headerColor = TFT_HEADER_BG_COLOR_OVERRIDE;
+#else
+        const uint16_t headerColor = 0x4208;
+#endif
+#ifdef TFT_HEADER_TITLE_COLOR_OVERRIDE
+        const uint16_t headerTextColor = TFT_HEADER_TITLE_COLOR_OVERRIDE;
+#else
+        const uint16_t headerTextColor = 0xFFFF;
+#endif
+#ifdef TFT_HEADER_STATUS_COLOR_OVERRIDE
+        const uint16_t headerStatusColor = TFT_HEADER_STATUS_COLOR_OVERRIDE;
+#else
+        const uint16_t headerStatusColor = 0xFFFF;
+#endif
+
+        if (applyTFTColorRoles) {
+            if (useInvertedHeaderStyle) {
+                setTFTColorRole(TFTColorRole::HeaderBackground, headerColor, 0x0000);
+                setTFTColorRole(TFTColorRole::HeaderTitle, headerColor, headerTextColor);
+                setTFTColorRole(TFTColorRole::HeaderStatus, headerColor, headerStatusColor);
+            } else {
+                setTFTColorRole(TFTColorRole::HeaderBackground, 0x0000, headerColor);
+                setTFTColorRole(TFTColorRole::HeaderTitle, headerTextColor, headerColor);
+                setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, headerColor);
+            }
+
+            registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
+        }
+
         // === Inverted Header Background ===
-        if (isInverted) {
+        if (useInvertedHeaderStyle) {
             display->setColor(BLACK);
-            display->fillRect(0, 0, screenW, highlightHeight + 2);
+            display->fillRect(0, 0, screenW, headerHeight);
             display->setColor(WHITE);
             drawRoundedHighlight(display, x, y, screenW, highlightHeight, 2);
             display->setColor(BLACK);
         } else {
             display->setColor(BLACK);
-            display->fillRect(0, 0, screenW, highlightHeight + 2);
-            display->setColor(WHITE);
-            if (currentResolution == ScreenResolution::High) {
-                display->drawLine(0, 20, screenW, 20);
-            } else {
-                display->drawLine(0, 14, screenW, 14);
+            display->fillRect(0, 0, screenW, headerHeight);
+            // Keep the legacy white separator for monochrome displays only.
+            if (!applyTFTColorRoles) {
+                display->setColor(WHITE);
+                if (currentResolution == ScreenResolution::High) {
+                    display->drawLine(0, 20, screenW, 20);
+                } else {
+                    display->drawLine(0, 14, screenW, 14);
+                }
             }
         }
 
+        if (applyTFTColorRoles) {
+            // TFT role coloring expects foreground glyph bits to be "set".
+            display->setColor(WHITE);
+        }
+
         // === Screen Title ===
+        const int titleWidth = display->getStringWidth(titleStr);
+        const int titleX = (SCREEN_WIDTH / 2) - (titleWidth / 2);
+        const int titleRegionWidth = titleWidth + (config.display.heading_bold ? 3 : 2);
+        if (applyTFTColorRoles) {
+            registerTFTColorRegion(TFTColorRole::HeaderTitle, titleX - 1, y, titleRegionWidth, FONT_HEIGHT_SMALL);
+        }
+
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->drawString(SCREEN_WIDTH / 2, y, titleStr);
         if (config.display.heading_bold) {
@@ -153,6 +211,21 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     bool useHorizontalBattery = (currentResolution == ScreenResolution::High && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    auto batteryFillColorForPercent = [](int percent) {
+        if (percent <= 20) {
+            return COLOR565(255, 0, 0); // Low
+        }
+        if (percent <= 50) {
+            return COLOR565(255, 255, 0); // Medium
+        }
+        return COLOR565(0, 255, 0); // Good
+    };
+    bool hasBatteryFillRegion = false;
+    int16_t batteryFillRegionX = 0;
+    int16_t batteryFillRegionY = 0;
+    int16_t batteryFillRegionW = 0;
+    int16_t batteryFillRegionH = 0;
+    uint16_t batteryFillColor = COLOR565(0, 255, 0);
 
     int batteryX = 1;
     int batteryY = HEADER_OFFSET_Y + 1;
@@ -181,6 +254,14 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 display->drawLine(batteryX + 5, batteryY + 12, batteryX + 10, batteryY + 12);
                 int fillWidth = 14 * chargePercent / 100;
                 display->fillRect(batteryX + 1, batteryY + 1, fillWidth, 11);
+                if (applyTFTColorRoles && fillWidth > 0) {
+                    hasBatteryFillRegion = true;
+                    batteryFillRegionX = batteryX + 1;
+                    batteryFillRegionY = batteryY + 1;
+                    batteryFillRegionW = fillWidth;
+                    batteryFillRegionH = 11;
+                    batteryFillColor = batteryFillColorForPercent(chargePercent);
+                }
             }
             batteryX += 18; // Icon + 2 pixels
         } else {
@@ -195,21 +276,34 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int fillHeight = 8 * chargePercent / 100;
                 int fillY = batteryY - fillHeight;
                 display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
+                if (applyTFTColorRoles && fillHeight > 0) {
+                    hasBatteryFillRegion = true;
+                    batteryFillRegionX = batteryX + 1;
+                    batteryFillRegionY = fillY + 10;
+                    batteryFillRegionW = 5;
+                    batteryFillRegionH = fillHeight;
+                    batteryFillColor = batteryFillColorForPercent(chargePercent);
+                }
             }
             batteryX += 9; // Icon + 2 pixels
         }
     }
+    statusLeftEndX = batteryX + 2;
 
     if (chargePercent != 101) {
         // === Battery % Display ===
         char chargeStr[4];
         snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
         int chargeNumWidth = display->getStringWidth(chargeStr);
+        const int percentWidth = display->getStringWidth("%");
+        const int percentX = batteryX + chargeNumWidth - 1;
         display->drawString(batteryX, textY, chargeStr);
-        display->drawString(batteryX + chargeNumWidth - 1, textY, "%");
+        display->drawString(percentX, textY, "%");
+        statusLeftEndX = percentX + percentWidth + 2;
         if (isBold) {
             display->drawString(batteryX + 1, textY, chargeStr);
-            display->drawString(batteryX + chargeNumWidth, textY, "%");
+            display->drawString(percentX + 1, textY, "%");
+            statusLeftEndX = percentX + percentWidth + 3;
         }
     }
 
@@ -254,6 +348,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             timeStrWidth = display->getStringWidth(timeStr);
         }
         timeX = screenW - xOffset - timeStrWidth + 3;
+        statusRightStartX = timeX - (useHorizontalBattery ? 22 : 16);
 
         // === Show Mail or Mute Icon to the Left of Time ===
         int iconRightEdge = timeX - 2;
@@ -279,7 +374,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconW = 16, iconH = 12;
                 int iconX = iconRightEdge - iconW;
                 int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
-                if (isInverted && !force_no_invert) {
+                if (useInvertedHeaderStyle) {
                     display->setColor(WHITE);
                     display->fillRect(iconX - 1, iconY - 1, iconW + 3, iconH + 2);
                     display->setColor(BLACK);
@@ -294,7 +389,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             } else {
                 int iconX = iconRightEdge - (mail_width - 2);
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
-                if (isInverted && !force_no_invert) {
+                if (useInvertedHeaderStyle) {
                     display->setColor(WHITE);
                     display->fillRect(iconX - 1, iconY - 1, mail_width + 2, mail_height + 2);
                     display->setColor(BLACK);
@@ -310,7 +405,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
 
-                if (isInverted && !force_no_invert) {
+                if (useInvertedHeaderStyle) {
                     display->setColor(WHITE);
                     display->fillRect(iconX - 1, iconY - 1, mute_symbol_big_width + 2, mute_symbol_big_height + 2);
                     display->setColor(BLACK);
@@ -324,7 +419,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconX = iconRightEdge - mute_symbol_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
 
-                if (isInverted && !force_no_invert) {
+                if (useInvertedHeaderStyle) {
                     display->setColor(WHITE);
                     display->fillRect(iconX - 1, iconY - 1, mute_symbol_width + 2, mute_symbol_height + 2);
                     display->setColor(BLACK);
@@ -352,6 +447,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     } else {
         // === No Time Available: Mail/Mute Icon Moves to Far Right ===
         int iconRightEdge = screenW - xOffset;
+        statusRightStartX = screenW - (useHorizontalBattery ? 22 : 12);
 
         bool showMail = false;
 
@@ -395,6 +491,18 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         }
     }
 #endif
+    if (applyTFTColorRoles) {
+        registerTFTColorRegion(TFTColorRole::HeaderStatus, 0, 0, statusLeftEndX, headerHeight);
+        if (statusRightStartX < screenW) {
+            registerTFTColorRegion(TFTColorRole::HeaderStatus, statusRightStartX, 0, screenW - statusRightStartX,
+                                   headerHeight);
+        }
+        if (hasBatteryFillRegion) {
+            setTFTColorRole(TFTColorRole::BatteryFill, batteryFillColor, headerColorForRoles);
+            registerTFTColorRegion(TFTColorRole::BatteryFill, batteryFillRegionX, batteryFillRegionY, batteryFillRegionW,
+                                   batteryFillRegionH);
+        }
+    }
     display->setColor(WHITE); // Reset for other UI
 }
 
@@ -431,14 +539,30 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
         return;
 
     const int scale = (currentResolution == ScreenResolution::High) ? 2 : 1;
+    const bool applyTFTColorRoles = isTFTColoringEnabled();
+    const int footerY = SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale);
+    const int footerH = (connection_icon_height * scale) + (2 * scale);
+#ifdef TFT_HEADER_BG_COLOR_OVERRIDE
+    const uint16_t footerBgColor = TFT_HEADER_BG_COLOR_OVERRIDE;
+#else
+    const uint16_t footerBgColor = 0x4208;
+#endif
+    const int iconX = 0;
+    const int iconY = SCREEN_HEIGHT - (connection_icon_height * scale);
+    const int iconW = connection_icon_width * scale;
+    const int iconH = connection_icon_height * scale;
+
+    if (applyTFTColorRoles) {
+        // Only tint the link glyph itself on TFT; keep the footer background black.
+        setTFTColorRole(TFTColorRole::ConnectionIcon, COLOR565(0, 0, 255), COLOR565(0, 0, 0));
+        registerTFTColorRegion(TFTColorRole::ConnectionIcon, iconX, iconY, iconW, iconH);
+    }
+
     display->setColor(BLACK);
-    display->fillRect(0, SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale), (connection_icon_width * scale),
-                      (connection_icon_height * scale) + (2 * scale));
+    display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
     display->setColor(WHITE);
     if (currentResolution == ScreenResolution::High) {
         const int bytesPerRow = (connection_icon_width + 7) / 8;
-        int iconX = 0;
-        int iconY = SCREEN_HEIGHT - (connection_icon_height * 2);
 
         for (int yy = 0; yy < connection_icon_height; ++yy) {
             const uint8_t *rowPtr = connection_icon + yy * bytesPerRow;
@@ -452,7 +576,7 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
         }
 
     } else {
-        display->drawXbm(0, SCREEN_HEIGHT - connection_icon_height, connection_icon_width, connection_icon_height,
+        display->drawXbm(iconX, iconY, connection_icon_width, connection_icon_height,
                          connection_icon);
     }
 }

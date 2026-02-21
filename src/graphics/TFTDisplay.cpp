@@ -16,12 +16,6 @@
 extern SX1509 gpioExtender;
 #endif
 
-#ifdef TFT_MESH_OVERRIDE
-uint16_t TFT_MESH = TFT_MESH_OVERRIDE;
-#else
-uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
-#endif
-
 #if defined(ST7735S)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
@@ -1140,6 +1134,7 @@ static LGFX *tft = nullptr;
 #endif
 
 #include "SPILock.h"
+#include "TFTColorRegions.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
 
@@ -1205,11 +1200,11 @@ void TFTDisplay::display(bool fromBlank)
     uint32_t x_FirstPixelUpdate;
     uint32_t x_LastPixelUpdate;
     bool isset, dblbuf_isset;
-    uint16_t colorTftMesh, colorTftBlack;
+    uint16_t colorTftWhite, colorTftBlack;
     bool somethingChanged = false;
 
     // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
-    colorTftMesh = (TFT_MESH >> 8) | ((TFT_MESH & 0xFF) << 8);
+    colorTftWhite = (COLOR565(255, 255, 255) >> 8) | ((COLOR565(255, 255, 255) & 0xFF) << 8);
     colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
 
     y = 0;
@@ -1256,14 +1251,17 @@ void TFTDisplay::display(bool fromBlank)
         if (x_FirstPixelUpdate < displayWidth) {
 
             // Quickly write out the first changed pixel (saves another array lookup)
-            linePixelBuffer[x_FirstPixelUpdate] = isset ? colorTftMesh : colorTftBlack;
+            linePixelBuffer[x_FirstPixelUpdate] =
+                graphics::resolveTFTColorPixel(static_cast<int16_t>(x_FirstPixelUpdate), static_cast<int16_t>(y), isset,
+                                               colorTftWhite, colorTftBlack);
             x_LastPixelUpdate = x_FirstPixelUpdate;
 
             // Step 3: copy all remaining pixels in this row into the pixel line buffer,
             // while also recording the last pixel in the row that needs updating
             for (x = x_FirstPixelUpdate + 1; x < displayWidth; x++) {
                 isset = buffer[x + y_byteIndex] & y_byteMask;
-                linePixelBuffer[x] = isset ? colorTftMesh : colorTftBlack;
+                linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
+                                                                     colorTftWhite, colorTftBlack);
 
                 if (!fromBlank) {
                     dblbuf_isset = buffer_back[x + y_byteIndex] & y_byteMask;
@@ -1290,6 +1288,8 @@ void TFTDisplay::display(bool fromBlank)
     // Copy the Buffer to the Back Buffer
     if (somethingChanged)
         memcpy(buffer_back, buffer, displayBufferSize);
+
+    graphics::clearTFTColorRegions();
 }
 
 void TFTDisplay::sdlLoop()

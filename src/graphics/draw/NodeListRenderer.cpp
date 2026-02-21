@@ -8,6 +8,7 @@
 #include "gps/RTC.h" // for getTime() function
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
 #include "graphics/images.h"
 #include "meshUtils.h"
 #include <algorithm>
@@ -198,6 +199,33 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
     }
 }
 
+static inline void applyFavoriteNodeNameColor(OLEDDisplay *display, meshtastic_NodeInfoLite *node, const char *nodeName,
+                                              int16_t nameX, int16_t y, int nameMaxWidth)
+{
+    if (!display || !node || !node->is_favorite || !isTFTColoringEnabled() || !nodeName) {
+        return;
+    }
+
+    const int textWidth = display->getStringWidth(nodeName);
+    const int regionWidth = min(textWidth, max(0, nameMaxWidth));
+    if (regionWidth <= 0) {
+        return;
+    }
+
+    // Node list rows can begin a couple of pixels inside header space.
+    // Clamp favorite-name color region below the header to avoid black overlap there.
+    const int16_t minContentY = static_cast<int16_t>(FONT_HEIGHT_SMALL + 1);
+    const int16_t regionY = max(y, minContentY);
+    const int16_t yClip = regionY - y;
+    const int16_t regionHeight = static_cast<int16_t>(FONT_HEIGHT_SMALL - yClip);
+    if (regionHeight <= 0) {
+        return;
+    }
+
+    setTFTColorRole(TFTColorRole::FavoriteNode, COLOR565(255, 255, 0), COLOR565(0, 0, 0));
+    registerTFTColorRegion(TFTColorRole::FavoriteNode, nameX, regionY, regionWidth, regionHeight);
+}
+
 // =============================
 // Entry Renderers
 // =============================
@@ -209,6 +237,8 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     int timeOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 7 : 10) : (isLeftCol ? 3 : 7);
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     char timeStr[10];
@@ -228,7 +258,7 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawString(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nodeName);
+    display->drawString(nameX, y, nodeName);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -262,12 +292,14 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     int barsXOffset = columnWidth - barsOffset;
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    display->drawStringMaxWidth(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nameMaxWidth, nodeName);
+    display->drawStringMaxWidth(nameX, y, nameMaxWidth, nodeName);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -288,11 +320,25 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     int barWidth = 2;
     int barStartX = x + barsXOffset;
     int barStartY = y + 1 + (FONT_HEIGHT_SMALL / 2) + 2;
+    const int barGap = 1;
+
+    if (bars > 0) {
+        uint16_t signalBarsColor = COLOR565(255, 0, 0); // Weak
+        if (bars >= 3) {
+            signalBarsColor = COLOR565(0, 255, 0); // Strong
+        } else if (bars == 2) {
+            signalBarsColor = COLOR565(255, 255, 0); // Medium
+        }
+
+        // Highest bar reaches 6 px in this renderer.
+        setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, COLOR565(0, 0, 0));
+        registerTFTColorRegion(TFTColorRole::SignalBars, barStartX, barStartY - 6, (4 * barWidth) + (3 * barGap), 6);
+    }
 
     for (int b = 0; b < 4; b++) {
         if (b < bars) {
             int height = (b * 2);
-            display->fillRect(barStartX + (b * (barWidth + 1)), barStartY - height, barWidth, height);
+            display->fillRect(barStartX + (b * (barWidth + barGap)), barStartY - height, barWidth, height);
         }
     }
 
@@ -315,6 +361,8 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
     char distStr[10] = "";
 
@@ -368,7 +416,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nameMaxWidth, nodeName);
+    display->drawStringMaxWidth(nameX, y, nameMaxWidth, nodeName);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -417,11 +465,13 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nameMaxWidth, nodeName);
+    display->drawStringMaxWidth(nameX, y, nameMaxWidth, nodeName);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);

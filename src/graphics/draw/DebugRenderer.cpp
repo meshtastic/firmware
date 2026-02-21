@@ -11,6 +11,7 @@
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -463,6 +464,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
     int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
     int chutil_percent = airTime->channelUtilizationPercent();
+    const int raw_chutil_percent = chutil_percent;
 
     int centerofscreen = SCREEN_WIDTH / 2;
     int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
@@ -502,6 +504,17 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
     // Fill progress
     if (fillRight > 0) {
+        if (isTFTColoringEnabled()) {
+            uint16_t chUtilFillColor = COLOR565(0, 255, 0); // Low utilization
+            if (raw_chutil_percent >= 60) {
+                chUtilFillColor = COLOR565(255, 0, 0); // High utilization
+            } else if (raw_chutil_percent >= 35) {
+                chUtilFillColor = COLOR565(255, 255, 0); // Medium utilization
+            }
+            setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, COLOR565(0, 0, 0));
+            registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x, chUtil_y, fillRight,
+                                   chutil_bar_height);
+        }
         display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
     }
 

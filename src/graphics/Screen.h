@@ -77,7 +77,7 @@ class Screen
 #elif defined(USE_SSD1306)
 #include <SSD1306Wire.h>
 #elif defined(USE_ST7789)
-#include <ST7789Spi.h>
+#include "../ST7789Spi.h"
 #elif defined(USE_SPISSD1306)
 #include <SSD1306Spi.h>
 #elif defined(USE_ST7796)

@@ -9,6 +9,7 @@
 #include "airtime.h"
 #include "gps/GeoCoord.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -385,7 +386,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
         bars = 2;
     } else if (snr > snrLimit - 4) {
         qualityLabel = "Fair";
-        bars = 1;
+        bars = 2;
     } else {
         qualityLabel = "Bad";
         bars = 1;
@@ -459,6 +460,17 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
             if (!hi)
                 maxBarHeight -= 1;
             int barY = yPos + (FONT_HEIGHT_SMALL - maxBarHeight) / 2;
+            int totalBarsWidth = (kMaxBars * barWidth) + ((kMaxBars - 1) * barGap);
+
+            uint16_t signalBarsColor = COLOR565(0, 255, 0); // Good
+            if (qualityLabel && strcmp(qualityLabel, "Fair") == 0) {
+                signalBarsColor = COLOR565(255, 255, 0);
+            } else if (qualityLabel && strcmp(qualityLabel, "Bad") == 0) {
+                signalBarsColor = COLOR565(255, 0, 0);
+            }
+
+            setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, COLOR565(0, 0, 0));
+            registerTFTColorRegion(TFTColorRole::SignalBars, barX, barY, totalBarsWidth, maxBarHeight);
 
             for (int bi = 0; bi < kMaxBars; bi++) {
                 int barHeight = maxBarHeight * (bi + 1) / kMaxBars;
@@ -476,7 +488,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
                 }
             }
 
-            curX += (kMaxBars * barWidth) + ((kMaxBars - 1) * barGap) + 2;
+            curX += totalBarsWidth + 2;
         }
 
         // Draw hops AFTER the bars as: [ number + hop icon ]
@@ -846,6 +858,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 1;
     }
     int chutil_percent = airTime->channelUtilizationPercent();
+    const int raw_chutil_percent = chutil_percent;
 
     int centerofscreen = SCREEN_WIDTH / 2;
     int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
@@ -888,6 +901,17 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     // Fill progress
     if (fillRight > 0) {
+        if (isTFTColoringEnabled()) {
+            uint16_t chUtilFillColor = COLOR565(0, 255, 0); // Low utilization
+            if (raw_chutil_percent >= 60) {
+                chUtilFillColor = COLOR565(255, 0, 0); // High utilization
+            } else if (raw_chutil_percent >= 35) {
+                chUtilFillColor = COLOR565(255, 255, 0); // Medium utilization
+            }
+            setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, COLOR565(0, 0, 0));
+            registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x, chUtil_y, fillRight,
+                                   chutil_bar_height);
+        }
         display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
     }
 
@@ -1385,18 +1409,21 @@ void UIRenderer::drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *sta
 #endif
 
 // Navigation bar overlay implementation
-static int8_t lastFrameIndex = -1;
+static int16_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;
 constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
 
 // cppcheck-suppress constParameterPointer; signature must match OverlayCallback typedef from OLEDDisplayUi library
 void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    int currentFrame = state->currentFrame;
+    uint8_t frameToHighlight = state->currentFrame;
+    if (state->frameState == IN_TRANSITION && state->transitionFrameTarget < screen->indicatorIcons.size()) {
+        frameToHighlight = state->transitionFrameTarget;
+    }
 
     // Detect frame change and record time
-    if (currentFrame != lastFrameIndex) {
-        lastFrameIndex = currentFrame;
+    if (frameToHighlight != lastFrameIndex) {
+        lastFrameIndex = frameToHighlight;
         lastFrameChangeTime = millis();
     }
 
@@ -1415,15 +1442,16 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         usableWidth = iconSize;
 
     const size_t iconsPerPage = usableWidth / (iconSize + spacing);
-    const size_t currentPage = currentFrame / iconsPerPage;
+    const size_t currentPage = frameToHighlight / iconsPerPage;
     const size_t pageStart = currentPage * iconsPerPage;
     const size_t pageEnd = min(pageStart + iconsPerPage, totalIcons);
 
     const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
+    const bool applyTFTColorRoles = isTFTColoringEnabled();
 
-    bool navBarVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
-    int y = navBarVisible ? (SCREEN_HEIGHT - iconSize - 1) : SCREEN_HEIGHT;
+    const bool navBarVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
+    const int y = navBarVisible ? (SCREEN_HEIGHT - iconSize - 1) : SCREEN_HEIGHT;
 
 #if defined(USE_EINK)
     // Only show bar briefly after switching frames
@@ -1454,24 +1482,73 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     // Pre-calculate bounding rect
     const int rectX = xStart - 2 - bigOffset;
+    const int rectY = y - 2;
     const int rectWidth = totalWidth + 4 + (bigOffset * 2);
     const int rectHeight = iconSize + 6;
+    const int arrowOffset = (currentResolution == ScreenResolution::High) ? 3 : 1;
+    const int arrowMaxWidth = 4;
+    const int sideClearPadding = arrowOffset + arrowMaxWidth + 1;
+    const int clearX = max(0, rectX - sideClearPadding);
+    const int clearWidth = min(SCREEN_WIDTH - clearX, rectWidth + (sideClearPadding * 2));
+    const bool drawCompactHiddenBar = !navBarVisible;
+
+    const int bgX = (applyTFTColorRoles && !drawCompactHiddenBar) ? clearX : rectX;
+    const int bgWidth = (applyTFTColorRoles && !drawCompactHiddenBar) ? clearWidth : rectWidth;
 
     // Clear background and draw border
+#ifdef TFT_HEADER_BG_COLOR_OVERRIDE
+    const uint16_t navBgColor = TFT_HEADER_BG_COLOR_OVERRIDE;
+#else
+    const uint16_t navBgColor = 0x4208;
+#endif
+    if (applyTFTColorRoles) {
+        setTFTColorRole(TFTColorRole::HeaderStatus, COLOR565(255, 255, 255), navBgColor);
+        registerTFTColorRegion(TFTColorRole::HeaderStatus, bgX, rectY, bgWidth, rectHeight);
+    }
+
     display->setColor(BLACK);
-    display->fillRect(rectX + 1, y - 2, rectWidth - 2, rectHeight - 2);
+    if (applyTFTColorRoles) {
+        display->fillRect(bgX, rectY, bgWidth, rectHeight);
+    } else {
+        // Keep legacy OLED behavior untouched.
+        display->fillRect(rectX + 1, rectY, rectWidth - 2, rectHeight - 2);
+        display->setColor(WHITE);
+            display->drawRect(rectX, rectY, rectWidth, rectHeight);
+    }
+
+    // TFT-only: draw invisible side sentinels so visible->hidden always forces a row refresh
+    // across the prior nav footprint, clearing side artifacts from color-role changes.
+    if (applyTFTColorRoles && navBarVisible && clearWidth > 1) {
+        setTFTColorRole(TFTColorRole::HeaderStatus, COLOR565(0, 0, 0), COLOR565(0, 0, 0));
+        registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX, rectY, 1, rectHeight);
+        registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX + clearWidth - 1, rectY, 1, rectHeight);
+        display->setColor(WHITE);
+        display->drawVerticalLine(clearX, rectY, rectHeight);
+        display->drawVerticalLine(clearX + clearWidth - 1, rectY, rectHeight);
+    }
+
+    // Icons are 1-bit glyphs and must be drawn with WHITE to set pixels.
     display->setColor(WHITE);
-    display->drawRect(rectX, y - 2, rectWidth, rectHeight);
 
     // Icon drawing loop for the current page
     for (size_t i = pageStart; i < pageEnd; ++i) {
         const uint8_t *icon = screen->indicatorIcons[i];
         const int x = xStart + (i - pageStart) * (iconSize + spacing);
-        const bool isActive = (i == static_cast<size_t>(currentFrame));
+        const bool isActive = (i == static_cast<size_t>(frameToHighlight));
+        const bool drawActiveHighlightMono = isActive && !applyTFTColorRoles;
+        const bool drawActiveHighlightTFT = isActive && applyTFTColorRoles;
 
-        if (isActive) {
+        if (drawActiveHighlightMono) {
             display->setColor(WHITE);
             display->fillRect(x - 2, y - 2, iconSize + 4, iconSize + 4);
+            display->setColor(BLACK);
+        } else if (drawActiveHighlightTFT) {
+            // Active icon inverts on TFT: white chip with black glyph.
+            // Keep the buffer visibly different too, so dirty-rect updates include this region.
+            setTFTColorRole(TFTColorRole::HeaderStatus, COLOR565(255, 255, 255), COLOR565(0, 0, 0));
+            registerTFTColorRegion(TFTColorRole::HeaderStatus, x - 1, y - 1, iconSize + 2, iconSize + 2);
+            display->setColor(WHITE);
+            display->fillRect(x - 1, y - 1, iconSize + 2, iconSize + 2);
             display->setColor(BLACK);
         }
 
@@ -1481,7 +1558,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             display->drawXbm(x, y, iconSize, iconSize, icon);
         }
 
-        if (isActive) {
+        if (drawActiveHighlightMono || drawActiveHighlightTFT) {
             display->setColor(WHITE);
         }
     }
@@ -1493,7 +1570,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         const int offset = (currentResolution == ScreenResolution::High) ? 3 : 1;
         const int halfH = rectHeight / 2;
 
-        const int top = (y - 2) + (rectHeight - halfH) / 2;
+        const int top = rectY + (rectHeight - halfH) / 2;
         const int bottom = top + halfH - 1;
         const int midY = top + (halfH / 2);
 
@@ -1517,20 +1594,23 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         }
     };
     // Right arrow
-    if (pageEnd < totalIcons) {
+    if (navBarVisible && pageEnd < totalIcons) {
         drawArrow(true);
     }
 
     // Left arrow
-    if (pageStart > 0) {
+    if (navBarVisible && pageStart > 0) {
         drawArrow(false);
     }
 
-    // Knock the corners off the square
-    display->setColor(BLACK);
-    display->drawRect(rectX, y - 2, 1, 1);
-    display->drawRect(rectX + rectWidth - 1, y - 2, 1, 1);
-    display->setColor(WHITE);
+    // Knock the corners off the square (monochrome styling only)
+    if (!applyTFTColorRoles) {
+        display->setColor(BLACK);
+        display->drawRect(rectX, rectY, 1, 1);
+        display->drawRect(rectX + rectWidth - 1, rectY, 1, 1);
+        display->setColor(WHITE);
+    }
+
 }
 
 void UIRenderer::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)

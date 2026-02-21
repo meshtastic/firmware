@@ -67,12 +67,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "target_specific.h"
 extern MessageStore messageStore;
 
-#if USE_TFTDISPLAY
-extern uint16_t TFT_MESH;
-#else
-uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
-#endif
-
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -308,30 +302,6 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 {
     graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 
-    int32_t rawRGB = uiconfig.screen_rgb_color;
-
-    // Only validate the combined value once
-    if (rawRGB > 0 && rawRGB <= 255255255) {
-        LOG_INFO("Setting screen RGB color to user chosen: 0x%06X", rawRGB);
-        // Extract each component as a normal int first
-        int r = (rawRGB >> 16) & 0xFF;
-        int g = (rawRGB >> 8) & 0xFF;
-        int b = rawRGB & 0xFF;
-        if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
-            TFT_MESH = COLOR565(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
-        }
-#ifdef TFT_MESH_OVERRIDE
-    } else if (rawRGB == 0) {
-        LOG_INFO("Setting screen RGB color to TFT_MESH_OVERRIDE: 0x%04X", TFT_MESH_OVERRIDE);
-        // Default to TFT_MESH_OVERRIDE if available
-        TFT_MESH = TFT_MESH_OVERRIDE;
-#endif
-    } else {
-        // Default best readable yellow color
-        LOG_INFO("Setting screen RGB color to default: (255,255,128)");
-        TFT_MESH = COLOR565(255, 255, 128);
-    }
-
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -392,9 +362,9 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #endif
 
 #if defined(USE_ST7789)
-    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+    static_cast<ST7789Spi *>(dispdev)->setRGB(COLOR565(255, 255, 255));
 #elif defined(USE_ST7796)
-    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
+    static_cast<ST7796Spi *>(dispdev)->setRGB(COLOR565(255, 255, 255));
 #endif
 
     ui = new OLEDDisplayUi(dispdev);
@@ -572,16 +542,14 @@ void Screen::setup()
     static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
-#if defined(USE_ST7789) && defined(TFT_MESH)
-    // Apply custom RGB color (e.g. Heltec T114/T190)
-    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#if defined(USE_ST7789)
+    static_cast<ST7789Spi *>(dispdev)->setRGB(COLOR565(255, 255, 255));
 #endif
 #if defined(MUZI_BASE)
     dispdev->delayPoweron = true;
 #endif
-#if defined(USE_ST7796) && defined(TFT_MESH)
-    // Custom text color, if defined in variant.h
-    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
+#if defined(USE_ST7796)
+    static_cast<ST7796Spi *>(dispdev)->setRGB(COLOR565(255, 255, 255));
 #endif
 
     // Initialize display and UI system
