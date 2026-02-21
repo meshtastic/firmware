@@ -26,7 +26,8 @@ void deInitApiServer()
 WiFiServerAPI::WiFiServerAPI(WiFiClient &_client) : ServerAPI(_client)
 {
     api_type = TYPE_WIFI;
-    LOG_INFO("Incoming wifi connection");
+    auto ip = _client.remoteIP();
+    LOG_INFO("Incoming wifi connection from %u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
 }
 
 WiFiServerPort::WiFiServerPort(int port) : APIServerPort(port) {}
