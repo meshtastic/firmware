@@ -27,6 +27,8 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+    void resetAGC() override;
+
   protected:
     /**
      * Specific module instance
