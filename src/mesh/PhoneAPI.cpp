@@ -2,6 +2,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+#ifdef ARCH_ESP32
+#define MIN_HEAP_FOR_FILE_MANIFEST 8192 // Minimum heap required before generating file manifest
+#endif
 
 #include "Channels.h"
 #include "Default.h"
@@ -69,10 +72,22 @@ void PhoneAPI::handleStartConfig()
         state = STATE_SEND_MY_INFO;
     }
     pauseBluetoothLogging = true;
-    spiLock->lock();
-    filesManifest = getFiles("/", 10);
-    spiLock->unlock();
-    LOG_DEBUG("Got %d files in manifest", filesManifest.size());
+
+    // Check available heap before getting files to prevent crash
+#ifdef ARCH_ESP32
+    size_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < MIN_HEAP_FOR_FILE_MANIFEST) {
+        LOG_WARN("Low memory (%zu bytes), skipping file manifest", freeHeap);
+        filesManifest.clear();
+    } else {
+#endif
+        spiLock->lock();
+        filesManifest = getFiles("/", 10);
+        spiLock->unlock();
+        LOG_DEBUG("Got %zu files in manifest", filesManifest.size());
+#ifdef ARCH_ESP32
+    }
+#endif
 
     LOG_INFO("Start API client config millis=%u", millis());
     // Protect against concurrent BLE callbacks: they run in NimBLE's FreeRTOS task and also touch nodeInfoQueue.
