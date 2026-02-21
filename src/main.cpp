@@ -1125,6 +1125,13 @@ void loop()
             lastRadioMissedIrqPoll = millis();
             RadioLibInterface::instance->pollMissedIrqs();
         }
+
+        // Periodic AGC reset — warm sleep + recalibrate to prevent stuck AGC gain
+        static uint32_t lastAgcReset;
+        if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
+            lastAgcReset = millis();
+            RadioLibInterface::instance->resetAGC();
+        }
     }
 
 #ifdef DEBUG_STACK
