@@ -643,23 +643,15 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
-        } else {
-            if (p->pki_encrypted == true) {
-                // Client specifically requested PKI encryption
-                return meshtastic_Routing_Error_PKI_FAILED;
-            }
-            hash = channels.setActiveByIndex(chIndex);
 
-            // Now that we are encrypting the packet channel should be the hash (no longer the index)
-            p->channel = hash;
-            if (hash < 0) {
-                // No suitable channel could be found for
-                return meshtastic_Routing_Error_NO_CHANNEL;
-            }
-            crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
-            memcpy(p->encrypted.bytes, bytes, numbytes);
+            // Copy back into the packet and set the variant type
+            p->encrypted.size = numbytes;
+            p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+
+            return meshtastic_Routing_Error_NONE;
         }
-#else
+#endif
+
         if (p->pki_encrypted == true) {
             // Client specifically requested PKI encryption
             return meshtastic_Routing_Error_PKI_FAILED;
@@ -674,7 +666,6 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         }
         crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
         memcpy(p->encrypted.bytes, bytes, numbytes);
-#endif
 
         // Copy back into the packet and set the variant type
         p->encrypted.size = numbytes;
