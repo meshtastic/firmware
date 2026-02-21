@@ -9,6 +9,18 @@
 static uint32_t computeExpectedMs(uint32_t defaultSeconds, uint32_t numOnlineNodes)
 {
     uint32_t baseMs = Default::getConfiguredOrDefaultMs(0, defaultSeconds);
+
+    // Routers don't scale
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
+        return baseMs;
+    }
+
+    // Sensors and trackers don't scale
+    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) ||
+        (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER)) {
+        return baseMs;
+    }
+
     if (numOnlineNodes <= 40) {
         return baseMs;
     }
@@ -77,7 +89,8 @@ void test_client_medium_fast_preset_scaling()
     // nodesOverForty = 30 -> test with nodes=70
     uint32_t res = Default::getConfiguredOrDefaultMsScaled(0, 60, 70);
     uint32_t expected = computeExpectedMs(60, 70);
-    TEST_ASSERT_EQUAL_UINT32(expected, res);
+    // Allow ±1 ms tolerance for floating-point rounding
+    TEST_ASSERT_INT_WITHIN(1, expected, res);
 }
 
 void setup()
