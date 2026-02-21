@@ -1101,7 +1101,7 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_compass);
     }
 #endif
-    if (RadioLibInterface::instance && !hiddenFrames.lora) {
+    if (!RadioLibInterface::instances.empty() && !hiddenFrames.lora) {
         fsi.positions.lora = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
         indicatorIcons.push_back(icon_radio);

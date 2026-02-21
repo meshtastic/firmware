@@ -792,11 +792,11 @@ void setup()
 #else
         // ESP32
 #if defined(HW_SPI1_DEVICE)
-    SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, -1); // CS handled by RadioLib
     LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI1.setFrequency(4000000);
 #else
-    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, -1); // CS handled by RadioLib
     LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);
 #endif
