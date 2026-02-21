@@ -72,11 +72,13 @@ RTCSetResult readFromRTC()
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
     if (rtc_found.address == PCF8563_RTC) {
+        SensorPCF8563 rtc;
 #elif defined(PCF85063_RTC)
     if (rtc_found.address == PCF85063_RTC) {
+        SensorPCF85063 rtc;
+
 #endif
         uint32_t now = millis();
-        SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
         rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
@@ -240,10 +242,12 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
         if (rtc_found.address == PCF8563_RTC) {
+            SensorPCF8563 rtc;
 #elif defined(PCF85063_RTC)
         if (rtc_found.address == PCF85063_RTC) {
+            SensorPCF85063 rtc;
+
 #endif
-            SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
             rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
@@ -308,7 +312,7 @@ const char *RtcName(RTCQuality quality)
  * @param t The time to potentially set the RTC to.
  * @return True if the RTC was set to the provided time, false otherwise.
  */
-RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
 {
     /* Convert to unix time
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970

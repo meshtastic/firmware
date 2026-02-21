@@ -23,7 +23,6 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
 {
     switch (arg->getStatusType()) {
     case STATUS_TYPE_POWER: {
-        meshtastic::PowerStatus *powerStatus = (meshtastic::PowerStatus *)arg;
         if (powerStatus->getHasUSB() || powerStatus->getIsCharging()) {
             power_state = charging;
             if (powerStatus->getBatteryChargePercent() >= 100) {
@@ -39,7 +38,6 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
         break;
     }
     case STATUS_TYPE_BLUETOOTH: {
-        meshtastic::BluetoothStatus *bluetoothStatus = (meshtastic::BluetoothStatus *)arg;
         switch (bluetoothStatus->getConnectionState()) {
         case meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED: {
             ble_state = unpaired;
@@ -93,19 +91,17 @@ int32_t StatusLEDModule::runOnce()
             my_interval = 250;
             if (POWER_LED_starttime + 2000 < millis()) {
                 doing_fast_blink = false;
+                CHARGE_LED_state = LED_STATE_OFF;
             }
-        } else {
-            CHARGE_LED_state = LED_STATE_OFF;
         }
+    }
 
-    } else {
-        if (doing_fast_blink) {
+    if (power_state != charging && power_state != charged && !doing_fast_blink) {
+        if (CHARGE_LED_state == LED_STATE_ON) {
             CHARGE_LED_state = LED_STATE_OFF;
-            doing_fast_blink = false;
             my_interval = 999;
         } else {
             CHARGE_LED_state = LED_STATE_ON;
-            doing_fast_blink = true;
             my_interval = 1;
         }
     }
@@ -166,6 +162,16 @@ int32_t StatusLEDModule::runOnce()
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif
 
+#ifdef RGB_LED_POWER
+    if (!config.device.led_heartbeat_disabled) {
+        if (CHARGE_LED_state == LED_STATE_ON) {
+            ambientLightingThread->setLighting(10, 255, 0, 0);
+        } else {
+            ambientLightingThread->setLighting(0, 0, 0, 0);
+        }
+    }
+#endif
+
 #ifdef Battery_LED_1
     digitalWrite(Battery_LED_1, chargeIndicatorLED1);
 #endif
@@ -191,33 +197,30 @@ void StatusLEDModule::setPowerLED(bool LEDon)
         PMU->setChargingLedMode(LEDon ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
     }
 #endif
-    if (LEDon)
-        LEDon = LED_STATE_ON;
-    else
-        LEDon = LED_STATE_OFF;
+    uint8_t ledState = LEDon ? LED_STATE_ON : LED_STATE_OFF;
 #ifdef PCA_LED_POWER
-    io.digitalWrite(PCA_LED_POWER, LEDon);
+    io.digitalWrite(PCA_LED_POWER, ledState);
 #endif
 #ifdef PCA_LED_ENABLE
-    io.digitalWrite(PCA_LED_ENABLE, LEDon);
+    io.digitalWrite(PCA_LED_ENABLE, ledState);
 #endif
 #ifdef LED_POWER
-    digitalWrite(LED_POWER, LEDon);
+    digitalWrite(LED_POWER, ledState);
 #endif
 #ifdef LED_PAIRING
-    digitalWrite(LED_PAIRING, LEDon);
+    digitalWrite(LED_PAIRING, ledState);
 #endif
 
 #ifdef Battery_LED_1
-    digitalWrite(Battery_LED_1, LEDon);
+    digitalWrite(Battery_LED_1, ledState);
 #endif
 #ifdef Battery_LED_2
-    digitalWrite(Battery_LED_2, LEDon);
+    digitalWrite(Battery_LED_2, ledState);
 #endif
 #ifdef Battery_LED_3
-    digitalWrite(Battery_LED_3, LEDon);
+    digitalWrite(Battery_LED_3, ledState);
 #endif
 #ifdef Battery_LED_4
-    digitalWrite(Battery_LED_4, LEDon);
+    digitalWrite(Battery_LED_4, ledState);
 #endif
 }
