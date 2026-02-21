@@ -299,6 +299,32 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
                            RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED);
 }
 
+template <typename T> void LR11x0Interface<T>::resetAGC()
+{
+    // Safety: don't reset mid-packet
+    if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
+        return;
+
+    LOG_DEBUG("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
+
+    // 1. Warm sleep — powers down the analog frontend, resetting AGC state
+    lora.sleep(true, 0);
+
+    // 2. Wake to RC standby for stable calibration
+    lora.standby(RADIOLIB_LR11X0_STANDBY_RC, true);
+
+    // 3. Calibrate all blocks (PLL, ADC, image, RC oscillators)
+    //    calibrate() is protected on LR11x0, so use raw SPI (same as internal implementation)
+    uint8_t calData = RADIOLIB_LR11X0_CALIBRATE_ALL;
+    module.SPIwriteStream(RADIOLIB_LR11X0_CMD_CALIBRATE, &calData, 1, true, true);
+
+    // 4. Re-apply RX boosted gain mode
+    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+
+    // 5. Resume receiving
+    startReceive();
+}
+
 template <typename T> bool LR11x0Interface<T>::sleep()
 {
     // \todo Display actual typename of the adapter, not just `LR11x0`
