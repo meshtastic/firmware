@@ -184,6 +184,26 @@ extern struct portduino_config_struct {
     bool has_statusMessage = false;
     bool enable_UDP = false;
 
+    // Store and Forward++
+    std::string sfpp_db_path = "/var/lib/meshtasticd/";
+    bool sfpp_stratum0 = false;
+    bool sfpp_enabled = true;
+    bool sfpp_steal_port = false;
+    int sfpp_initial_sync = 10;
+    int sfpp_hops = 3;
+    int sfpp_announce_interval = 5; // minutes
+    uint32_t sfpp_max_chain = 1000;
+    uint32_t sfpp_backlog_limit = 100;
+    // allowed root hashes
+    // upstream node
+    // Are we allowing unknown channel hashes? Does this even make sense?
+    // Allow DMs
+
+    // Routing
+    bool whitelist_enabled = false;
+    std::vector<int> whitelist_ports = {};
+    std::vector<int> nohop_ports = {};
+
     // General
     std::string mac_address = "";
     bool mac_address_explicit = false;
@@ -536,6 +556,29 @@ extern struct portduino_config_struct {
             }
 
             out << YAML::EndMap; // Config
+        }
+
+        // StoreAndForward
+        if (sfpp_enabled) {
+            out << YAML::Key << "StoreAndForward" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "Enabled" << YAML::Value << sfpp_enabled;
+            out << YAML::Key << "DBPath" << YAML::Value << sfpp_db_path;
+            out << YAML::Key << "Stratum0" << YAML::Value << sfpp_stratum0;
+            out << YAML::Key << "InitialSync" << YAML::Value << sfpp_initial_sync;
+            out << YAML::Key << "Hops" << YAML::Value << sfpp_hops;
+            out << YAML::Key << "AnnounceInterval" << YAML::Value << sfpp_announce_interval;
+            out << YAML::Key << "BacklogLimit" << YAML::Value << sfpp_backlog_limit;
+            out << YAML::Key << "MaxChainLength" << YAML::Value << sfpp_max_chain;
+            out << YAML::Key << "StealPort" << YAML::Value << sfpp_steal_port;
+            out << YAML::EndMap; // StoreAndForward
+        }
+
+        // Routing
+        if (whitelist_enabled || nohop_ports.size() > 0) {
+            out << YAML::Key << "Routing" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "WhitelistPorts" << YAML::Value << whitelist_ports;
+            out << YAML::Key << "NoHopPorts" << YAML::Value << nohop_ports;
+            out << YAML::EndMap; // Routing
         }
 
         // General
