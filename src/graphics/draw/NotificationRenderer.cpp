@@ -569,7 +569,8 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     }
 #endif
 
-    const bool applyActionMenuTheme = isTFTColoringEnabled() && alertBannerOptions > 0;
+    const bool applyNotificationBorderTheme = isTFTColoringEnabled();
+    const bool applyActionMenuTheme = applyNotificationBorderTheme && alertBannerOptions > 0;
 
     // Draw Box
     display->setColor(BLACK);
@@ -586,7 +587,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
     display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
     display->setColor(WHITE);
-    if (applyActionMenuTheme) {
+    if (applyNotificationBorderTheme) {
         setTFTColorRole(TFTColorRole::ActionMenuBorder, TFTPalette::DarkGray, TFTPalette::Black);
         registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, boxWidth, 1);
         registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop + boxHeight - 1, boxWidth, 1);
