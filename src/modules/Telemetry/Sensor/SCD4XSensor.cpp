@@ -133,12 +133,16 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
         }
         return false;
     } else {
-        measurement->variant.air_quality_metrics.has_co2_temperature = true;
-        measurement->variant.air_quality_metrics.has_co2_humidity = true;
-        measurement->variant.air_quality_metrics.has_co2 = true;
-        measurement->variant.air_quality_metrics.co2_temperature = temperature;
-        measurement->variant.air_quality_metrics.co2_humidity = humidity;
-        measurement->variant.air_quality_metrics.co2 = co2;
+        if (!moduleConfig.telemetry.sensordisables.scd4x.disable_co2) {
+            measurement->variant.air_quality_metrics.has_co2 = true;
+            measurement->variant.air_quality_metrics.co2 = co2;
+        }
+        if (!moduleConfig.telemetry.sensordisables.scd4x.disable_trh) {
+            measurement->variant.air_quality_metrics.has_co2_temperature = true;
+            measurement->variant.air_quality_metrics.co2_temperature = temperature;
+            measurement->variant.air_quality_metrics.has_co2_humidity = true;
+            measurement->variant.air_quality_metrics.co2_humidity = humidity;
+        }
         return true;
     }
 }
@@ -791,6 +795,25 @@ int32_t SCD4XSensor::pendingForReadyMs()
     return 0;
 }
 
+bool SCD4XSensor::allDisabled()
+{
+    return moduleConfig.telemetry.sensordisables.scd4x.disable_co2 && moduleConfig.telemetry.sensordisables.scd4x.disable_trh;
+}
+
+void SCD4XSensor::setDisables(meshtastic_SCD4XDisables setDisables)
+{
+    if (setDisables.has_disable_co2) {
+        moduleConfig.telemetry.sensordisables.scd4x.disable_co2 = setDisables.disable_co2;
+        LOG_INFO("%s disabling CO2 metric", sensorName);
+    }
+    if (setDisables.has_disable_trh) {
+        moduleConfig.telemetry.sensordisables.scd4x.disable_trh = setDisables.disable_trh;
+        LOG_INFO("%s disabling T/RH metrics", sensorName);
+    }
+
+    nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+}
+
 AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
                                                          meshtastic_AdminMessage *response)
 {
@@ -894,6 +917,11 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
                     result = AdminMessageHandleResult::NOT_HANDLED;
                     break;
                 }
+            }
+
+            // Check for disables request
+            if (request->sensor_config.scd4x_config.has_scd4xdisables) {
+                this->setDisables(request->sensor_config.scd4x_config.scd4xdisables);
             }
         }
 

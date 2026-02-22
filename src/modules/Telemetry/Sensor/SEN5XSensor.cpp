@@ -335,10 +335,10 @@ bool SEN5XSensor::vocStateFromSensor()
         return true;
     }
 
-    LOG_INFO("SEN5X: Getting VOC state from sensor");
+    LOG_INFO("%s: Getting VOC state from sensor", sensorName);
     //  Ask VOCs state from the sensor
     if (!sendCommand(SEN5X_RW_VOCS_STATE)) {
-        LOG_ERROR("SEN5X: Error sending VOC's state command'");
+        LOG_ERROR("%s: Error sending VOC's state command", sensorName);
         return false;
     }
 
@@ -350,13 +350,13 @@ bool SEN5XSensor::vocStateFromSensor()
     delay(20); // From Sensirion Datasheet
 
     if (receivedNumber == 0) {
-        LOG_DEBUG("SEN5X: Error getting VOC's state");
+        LOG_DEBUG("%s: Error getting VOC's state", sensorName);
         return false;
     }
 
     // Print the state (if debug is on)
-    LOG_DEBUG("SEN5X: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", vocState[0], vocState[1], vocState[2],
-              vocState[3], vocState[4], vocState[5], vocState[6], vocState[7]);
+    LOG_DEBUG("%s: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", sensorName, vocState[0], vocState[1],
+              vocState[2], vocState[3], vocState[4], vocState[5], vocState[6], vocState[7]);
 
     return true;
 }
@@ -372,7 +372,7 @@ bool SEN5XSensor::loadState()
         pb_istream_t stream = {&readcb, &file, meshtastic_SEN5XState_size};
 
         if (!pb_decode(&stream, &meshtastic_SEN5XState_msg, &sen5xstate)) {
-            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+            LOG_ERROR("%s: can't decode protobuf %s", sensorName, PB_GET_ERROR(&stream));
         } else {
             lastCleaning = sen5xstate.last_cleaning_time;
             lastCleaningValid = sen5xstate.last_cleaning_valid;
@@ -404,12 +404,13 @@ bool SEN5XSensor::loadState()
         }
         file.close();
     } else {
-        LOG_INFO("No %s state found (File: %s)", sensorName, sen5XStateFileName);
+        LOG_INFO("%s: No state found (File: %s)", sensorName, sen5XStateFileName);
     }
     spiLock->unlock();
     return okay;
 #else
-    LOG_ERROR("SEN5X: ERROR - Filesystem not implemented");
+    LOG_WARN("%s: Filesystem not implemented", sensorName);
+    return true;
 #endif
 }
 
@@ -442,7 +443,7 @@ bool SEN5XSensor::saveState()
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_SEN5XState_size};
 
     if (!pb_encode(&stream, &meshtastic_SEN5XState_msg, &sen5xstate)) {
-        LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+        LOG_ERROR("%s: can't encode protobuf %s", sensorName, PB_GET_ERROR(&stream));
     } else {
         okay = true;
     }
@@ -454,7 +455,8 @@ bool SEN5XSensor::saveState()
 
     return okay;
 #else
-    LOG_ERROR("%s: ERROR - Filesystem not implemented", sensorName);
+    LOG_WARN("%s: Filesystem not implemented", sensorName);
+    return true;
 #endif
 }
 
@@ -839,66 +841,76 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
     response = getMeasurements();
 
     if (response == 0) {
-        if (sen5xmeasurement.pM1p0 != UINT16_MAX) {
-            measurement->variant.air_quality_metrics.has_pm10_standard = true;
-            measurement->variant.air_quality_metrics.pm10_standard = sen5xmeasurement.pM1p0;
+        if (!moduleConfig.telemetry.sensordisables.sen5x.disable_pm) {
+            if (sen5xmeasurement.pM1p0 != UINT16_MAX) {
+                measurement->variant.air_quality_metrics.has_pm10_standard = true;
+                measurement->variant.air_quality_metrics.pm10_standard = sen5xmeasurement.pM1p0;
+            }
+            if (sen5xmeasurement.pM2p5 != UINT16_MAX) {
+                measurement->variant.air_quality_metrics.has_pm25_standard = true;
+                measurement->variant.air_quality_metrics.pm25_standard = sen5xmeasurement.pM2p5;
+            }
+            if (sen5xmeasurement.pM4p0 != UINT16_MAX) {
+                measurement->variant.air_quality_metrics.has_pm40_standard = true;
+                measurement->variant.air_quality_metrics.pm40_standard = sen5xmeasurement.pM4p0;
+            }
+            if (sen5xmeasurement.pM10p0 != UINT16_MAX) {
+                measurement->variant.air_quality_metrics.has_pm100_standard = true;
+                measurement->variant.air_quality_metrics.pm100_standard = sen5xmeasurement.pM10p0;
+            }
         }
-        if (sen5xmeasurement.pM2p5 != UINT16_MAX) {
-            measurement->variant.air_quality_metrics.has_pm25_standard = true;
-            measurement->variant.air_quality_metrics.pm25_standard = sen5xmeasurement.pM2p5;
-        }
-        if (sen5xmeasurement.pM4p0 != UINT16_MAX) {
-            measurement->variant.air_quality_metrics.has_pm40_standard = true;
-            measurement->variant.air_quality_metrics.pm40_standard = sen5xmeasurement.pM4p0;
-        }
-        if (sen5xmeasurement.pM10p0 != UINT16_MAX) {
-            measurement->variant.air_quality_metrics.has_pm100_standard = true;
-            measurement->variant.air_quality_metrics.pm100_standard = sen5xmeasurement.pM10p0;
-        }
-        if (sen5xmeasurement.pN0p5 != UINT32_MAX) {
-            measurement->variant.air_quality_metrics.has_particles_05um = true;
-            measurement->variant.air_quality_metrics.particles_05um = sen5xmeasurement.pN0p5;
-        }
-        if (sen5xmeasurement.pN1p0 != UINT32_MAX) {
-            measurement->variant.air_quality_metrics.has_particles_10um = true;
-            measurement->variant.air_quality_metrics.particles_10um = sen5xmeasurement.pN1p0;
-        }
-        if (sen5xmeasurement.pN2p5 != UINT32_MAX) {
-            measurement->variant.air_quality_metrics.has_particles_25um = true;
-            measurement->variant.air_quality_metrics.particles_25um = sen5xmeasurement.pN2p5;
-        }
-        if (sen5xmeasurement.pN4p0 != UINT32_MAX) {
-            measurement->variant.air_quality_metrics.has_particles_40um = true;
-            measurement->variant.air_quality_metrics.particles_40um = sen5xmeasurement.pN4p0;
-        }
-        if (sen5xmeasurement.pN10p0 != UINT32_MAX) {
-            measurement->variant.air_quality_metrics.has_particles_100um = true;
-            measurement->variant.air_quality_metrics.particles_100um = sen5xmeasurement.pN10p0;
-        }
-        if (sen5xmeasurement.tSize != FLT_MAX) {
-            measurement->variant.air_quality_metrics.has_particles_tps = true;
-            measurement->variant.air_quality_metrics.particles_tps = sen5xmeasurement.tSize;
+        if (!moduleConfig.telemetry.sensordisables.sen5x.disable_pn) {
+            if (sen5xmeasurement.pN0p5 != UINT32_MAX) {
+                measurement->variant.air_quality_metrics.has_particles_05um = true;
+                measurement->variant.air_quality_metrics.particles_05um = sen5xmeasurement.pN0p5;
+            }
+            if (sen5xmeasurement.pN1p0 != UINT32_MAX) {
+                measurement->variant.air_quality_metrics.has_particles_10um = true;
+                measurement->variant.air_quality_metrics.particles_10um = sen5xmeasurement.pN1p0;
+            }
+            if (sen5xmeasurement.pN2p5 != UINT32_MAX) {
+                measurement->variant.air_quality_metrics.has_particles_25um = true;
+                measurement->variant.air_quality_metrics.particles_25um = sen5xmeasurement.pN2p5;
+            }
+            if (sen5xmeasurement.pN4p0 != UINT32_MAX) {
+                measurement->variant.air_quality_metrics.has_particles_40um = true;
+                measurement->variant.air_quality_metrics.particles_40um = sen5xmeasurement.pN4p0;
+            }
+            if (sen5xmeasurement.pN10p0 != UINT32_MAX) {
+                measurement->variant.air_quality_metrics.has_particles_100um = true;
+                measurement->variant.air_quality_metrics.particles_100um = sen5xmeasurement.pN10p0;
+            }
+            if (sen5xmeasurement.tSize != FLT_MAX) {
+                measurement->variant.air_quality_metrics.has_particles_tps = true;
+                measurement->variant.air_quality_metrics.particles_tps = sen5xmeasurement.tSize;
+            }
         }
 
         if (model != SEN50) {
-            if (sen5xmeasurement.humidity != FLT_MAX) {
-                measurement->variant.air_quality_metrics.has_pm_humidity = true;
-                measurement->variant.air_quality_metrics.pm_humidity = sen5xmeasurement.humidity;
+            if (!moduleConfig.telemetry.sensordisables.sen5x.disable_trh) {
+                if (sen5xmeasurement.humidity != FLT_MAX) {
+                    measurement->variant.air_quality_metrics.has_pm_humidity = true;
+                    measurement->variant.air_quality_metrics.pm_humidity = sen5xmeasurement.humidity;
+                }
+                if (sen5xmeasurement.temperature != FLT_MAX) {
+                    measurement->variant.air_quality_metrics.has_pm_temperature = true;
+                    measurement->variant.air_quality_metrics.pm_temperature = sen5xmeasurement.temperature;
+                }
             }
-            if (sen5xmeasurement.temperature != FLT_MAX) {
-                measurement->variant.air_quality_metrics.has_pm_temperature = true;
-                measurement->variant.air_quality_metrics.pm_temperature = sen5xmeasurement.temperature;
-            }
-            if (sen5xmeasurement.noxIndex != FLT_MAX) {
-                measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
-                measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
+            if (!moduleConfig.telemetry.sensordisables.sen5x.disable_idx) {
+                if (sen5xmeasurement.noxIndex != FLT_MAX) {
+                    measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
+                    measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
+                }
             }
         }
 
         if (model == SEN55) {
-            if (sen5xmeasurement.noxIndex != FLT_MAX) {
-                measurement->variant.air_quality_metrics.has_pm_nox_idx = true;
-                measurement->variant.air_quality_metrics.pm_nox_idx = sen5xmeasurement.noxIndex;
+            if (!moduleConfig.telemetry.sensordisables.sen5x.disable_idx) {
+                if (sen5xmeasurement.noxIndex != FLT_MAX) {
+                    measurement->variant.air_quality_metrics.has_pm_nox_idx = true;
+                    measurement->variant.air_quality_metrics.pm_nox_idx = sen5xmeasurement.noxIndex;
+                }
             }
         }
 
@@ -917,6 +929,12 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
     return true;
 }
 
+bool SEN5XSensor::allDisabled()
+{
+    return moduleConfig.telemetry.sensordisables.sen5x.disable_pm && moduleConfig.telemetry.sensordisables.sen5x.disable_pn &&
+           moduleConfig.telemetry.sensordisables.sen5x.disable_trh && moduleConfig.telemetry.sensordisables.sen5x.disable_idx;
+}
+
 void SEN5XSensor::setMode(bool setOneShot)
 {
     oneShotMode = setOneShot;
@@ -925,6 +943,28 @@ void SEN5XSensor::setMode(bool setOneShot)
     } else {
         LOG_INFO("%s setting mode to continuous mode", sensorName);
     }
+}
+
+void SEN5XSensor::setDisables(meshtastic_SEN5XDisables setDisables)
+{
+    if (setDisables.has_disable_pm) {
+        moduleConfig.telemetry.sensordisables.sen5x.disable_pm = setDisables.disable_pm;
+        LOG_INFO("%s disabling PM metrics", sensorName);
+    }
+    if (setDisables.has_disable_pn) {
+        moduleConfig.telemetry.sensordisables.sen5x.disable_pn = setDisables.disable_pn;
+        LOG_INFO("%s disabling PN metrics", sensorName);
+    }
+    if (setDisables.has_disable_trh) {
+        moduleConfig.telemetry.sensordisables.sen5x.disable_trh = setDisables.disable_trh;
+        LOG_INFO("%s disabling T/RH metrics", sensorName);
+    }
+    if (setDisables.has_disable_idx) {
+        moduleConfig.telemetry.sensordisables.sen5x.disable_idx = setDisables.disable_idx;
+        LOG_INFO("%s disabling NOx and VOCs index metrics", sensorName);
+    }
+
+    nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
 }
 
 AdminMessageHandleResult SEN5XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
@@ -943,6 +983,11 @@ AdminMessageHandleResult SEN5XSensor::handleAdminMessage(const meshtastic_MeshPa
         // Check for one-shot/continuous mode request
         if (request->sensor_config.sen5x_config.has_set_one_shot_mode) {
             this->setMode(request->sensor_config.sen5x_config.set_one_shot_mode);
+        }
+
+        // Check for disables request
+        if (request->sensor_config.sen5x_config.has_sen5xdisables) {
+            this->setDisables(request->sensor_config.sen5x_config.sen5xdisables);
         }
 
         // TODO - Add admin command to set temperature offset?

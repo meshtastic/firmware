@@ -3,6 +3,7 @@
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && __has_include(<SensirionI2cScd4x.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "NodeDB.h"
 #include "RTC.h"
 #include "TelemetrySensor.h"
 #include <SensirionI2cScd4x.h>
@@ -56,6 +57,8 @@ class SCD4XSensor : public TelemetrySensor
     virtual bool canSleep() override;
     virtual int32_t wakeUpTimeMs() override;
     virtual int32_t pendingForReadyMs() override;
+    virtual bool allDisabled() override;
+    virtual void setDisables(const meshtastic_SCD4XDisables setDisables);
     AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
                                                 meshtastic_AdminMessage *response) override;
 };
