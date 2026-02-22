@@ -112,7 +112,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     p->to = e.packet->to;
     p->id = e.packet->id;
     p->channel = e.packet->channel;
-    p->hop_limit = e.packet->hop_limit;
+    p->hop_limit = 0; // Always zero-hop MQTT traffic
     p->hop_start = e.packet->hop_start;
     p->want_ack = e.packet->want_ack;
     p->via_mqtt = true; // Mark that the packet was received via MQTT
