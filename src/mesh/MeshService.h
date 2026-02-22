@@ -9,7 +9,8 @@
 #include "MeshRadio.h"
 #include "MeshTypes.h"
 #include "Observer.h"
-#ifdef ARCH_PORTDUINO
+#include "concurrency/Lock.h"
+#if defined(ARCH_PORTDUINO)
 #include "PointerQueue.h"
 #else
 #include "StaticPointerQueue.h"
@@ -28,56 +29,18 @@ extern Allocator<meshtastic_QueueStatus> &queueStatusPool;
 extern Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool;
 extern Allocator<meshtastic_ClientNotification> &clientNotificationPool;
 
+class PhoneAPI;
+
+#ifndef MAX_PHONE_API_CLIENTS
+#define MAX_PHONE_API_CLIENTS 3
+#endif
+
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
  *
  */
 class MeshService
 {
-#if HAS_GPS
-    CallbackObserver<MeshService, const meshtastic::GPSStatus *> gpsObserver =
-        CallbackObserver<MeshService, const meshtastic::GPSStatus *>(this, &MeshService::onGPSChanged);
-#endif
-    /// received packets waiting for the phone to process them
-    /// FIXME, change to a DropOldestQueue and keep a count of the number of dropped packets to ensure
-    /// we never hang because android hasn't been there in a while
-    /// FIXME - save this to flash on deep sleep
-#ifdef ARCH_PORTDUINO
-    PointerQueue<meshtastic_MeshPacket> toPhoneQueue;
-#else
-    StaticPointerQueue<meshtastic_MeshPacket, MAX_RX_TOPHONE> toPhoneQueue;
-#endif
-
-    // keep list of QueueStatus packets to be send to the phone
-#ifdef ARCH_PORTDUINO
-    PointerQueue<meshtastic_QueueStatus> toPhoneQueueStatusQueue;
-#else
-    StaticPointerQueue<meshtastic_QueueStatus, MAX_RX_QUEUESTATUS_TOPHONE> toPhoneQueueStatusQueue;
-#endif
-
-    // keep list of MqttClientProxyMessages to be send to the client for delivery
-#ifdef ARCH_PORTDUINO
-    PointerQueue<meshtastic_MqttClientProxyMessage> toPhoneMqttProxyQueue;
-#else
-    StaticPointerQueue<meshtastic_MqttClientProxyMessage, MAX_RX_MQTTPROXY_TOPHONE> toPhoneMqttProxyQueue;
-#endif
-
-    // keep list of ClientNotifications to be send to the client (phone)
-#ifdef ARCH_PORTDUINO
-    PointerQueue<meshtastic_ClientNotification> toPhoneClientNotificationQueue;
-#else
-    StaticPointerQueue<meshtastic_ClientNotification, MAX_RX_NOTIFICATION_TOPHONE> toPhoneClientNotificationQueue;
-#endif
-
-    // This holds the last QueueStatus send
-    meshtastic_QueueStatus lastQueueStatus;
-
-    /// The current nonce for the newest packet which has been queued for the phone
-    uint32_t fromNum = 0;
-
-    /// Updated in loop() to detect when fromNum changes
-    uint32_t oldFromNum = 0;
-
   public:
     enum APIState {
         STATE_DISCONNECTED, // Initial state, no API is connected
@@ -89,7 +52,121 @@ class MeshService
         STATE_ETH
     };
 
+    static constexpr uint32_t apiStateBit(APIState s)
+    {
+        return (s == STATE_DISCONNECTED) ? 0u : (1u << (static_cast<uint32_t>(s) - 1u));
+    }
+
+  private:
+#if HAS_GPS
+    CallbackObserver<MeshService, const meshtastic::GPSStatus *> gpsObserver =
+        CallbackObserver<MeshService, const meshtastic::GPSStatus *>(this, &MeshService::onGPSChanged);
+#endif
+
+    struct PacketFanoutEntry {
+        meshtastic_MeshPacket *payload = nullptr;
+        uint8_t refcount = 0;
+    };
+
+    struct QueueStatusFanoutEntry {
+        meshtastic_QueueStatus *payload = nullptr;
+        uint8_t refcount = 0;
+    };
+
+    struct MqttProxyFanoutEntry {
+        meshtastic_MqttClientProxyMessage *payload = nullptr;
+        uint8_t refcount = 0;
+    };
+
+    struct ClientNotificationFanoutEntry {
+        meshtastic_ClientNotification *payload = nullptr;
+        uint8_t refcount = 0;
+    };
+
+    struct PhoneClientSlot {
+        PhoneAPI *client = nullptr;
+        APIState state = STATE_DISCONNECTED;
+        bool active = false;
+
+#if defined(ARCH_PORTDUINO)
+        PointerQueue<PacketFanoutEntry> packetQueue;
+        PointerQueue<QueueStatusFanoutEntry> queueStatusQueue;
+        PointerQueue<MqttProxyFanoutEntry> mqttProxyQueue;
+        PointerQueue<ClientNotificationFanoutEntry> clientNotificationQueue;
+#else
+        StaticPointerQueue<PacketFanoutEntry, MAX_RX_TOPHONE> packetQueue;
+        StaticPointerQueue<QueueStatusFanoutEntry, MAX_RX_QUEUESTATUS_TOPHONE> queueStatusQueue;
+        StaticPointerQueue<MqttProxyFanoutEntry, MAX_RX_MQTTPROXY_TOPHONE> mqttProxyQueue;
+        StaticPointerQueue<ClientNotificationFanoutEntry, MAX_RX_NOTIFICATION_TOPHONE> clientNotificationQueue;
+#endif
+
+        PacketFanoutEntry *packetInflight = nullptr;
+        QueueStatusFanoutEntry *queueStatusInflight = nullptr;
+        MqttProxyFanoutEntry *mqttProxyInflight = nullptr;
+        ClientNotificationFanoutEntry *clientNotificationInflight = nullptr;
+
+#if defined(ARCH_PORTDUINO)
+        PhoneClientSlot()
+            : packetQueue(MAX_RX_TOPHONE), queueStatusQueue(MAX_RX_QUEUESTATUS_TOPHONE),
+              mqttProxyQueue(MAX_RX_MQTTPROXY_TOPHONE), clientNotificationQueue(MAX_RX_NOTIFICATION_TOPHONE)
+        {
+        }
+#endif
+    };
+
+#if defined(ARCH_PORTDUINO)
+    MemoryDynamic<PacketFanoutEntry> packetFanoutPool;
+    MemoryDynamic<QueueStatusFanoutEntry> queueStatusFanoutPool;
+    MemoryDynamic<MqttProxyFanoutEntry> mqttProxyFanoutPool;
+    MemoryDynamic<ClientNotificationFanoutEntry> clientNotificationFanoutPool;
+#else
+    static constexpr int kPacketFanoutPoolSize = MAX_PHONE_API_CLIENTS * (MAX_RX_TOPHONE + 1);
+    static constexpr int kQueueStatusFanoutPoolSize = MAX_PHONE_API_CLIENTS * (MAX_RX_QUEUESTATUS_TOPHONE + 1);
+    static constexpr int kMqttFanoutPoolSize = MAX_PHONE_API_CLIENTS * (MAX_RX_MQTTPROXY_TOPHONE + 1);
+    static constexpr int kNotificationFanoutPoolSize = MAX_PHONE_API_CLIENTS * (MAX_RX_NOTIFICATION_TOPHONE + 1);
+
+    MemoryPool<PacketFanoutEntry, kPacketFanoutPoolSize> packetFanoutPool;
+    MemoryPool<QueueStatusFanoutEntry, kQueueStatusFanoutPoolSize> queueStatusFanoutPool;
+    MemoryPool<MqttProxyFanoutEntry, kMqttFanoutPoolSize> mqttProxyFanoutPool;
+    MemoryPool<ClientNotificationFanoutEntry, kNotificationFanoutPoolSize> clientNotificationFanoutPool;
+#endif
+
+    PhoneClientSlot phoneClients[MAX_PHONE_API_CLIENTS];
+
+    /// Protects fanout client registry and all per-client fanout queues
+    concurrency::Lock phoneClientsLock;
+
+    /// Per APIState connected client counts
+    uint8_t apiStateCounts[STATE_ETH + 1] = {0};
+
+    // This holds the last QueueStatus send
+    meshtastic_QueueStatus lastQueueStatus;
+
+    /// The current nonce for the newest packet which has been queued for the phone
+    uint32_t fromNum = 0;
+
+    /// Updated in loop() to detect when fromNum changes
+    uint32_t oldFromNum = 0;
+
+    int findClientSlotByPtrLocked(const PhoneAPI *client) const;
+    int findClientSlotByPtrLocked(const PhoneAPI *client);
+    int findFreeClientSlotLocked() const;
+    void clearClientSlotLocked(PhoneClientSlot &slot);
+    void updateApiStateLocked(APIState preferred = STATE_DISCONNECTED);
+
+    void releasePacketFanoutEntryLocked(PacketFanoutEntry *entry);
+    void releaseQueueStatusFanoutEntryLocked(QueueStatusFanoutEntry *entry);
+    void releaseMqttProxyFanoutEntryLocked(MqttProxyFanoutEntry *entry);
+    void releaseClientNotificationFanoutEntryLocked(ClientNotificationFanoutEntry *entry);
+
+    bool enqueuePacketFanoutLocked(meshtastic_MeshPacket *p);
+    bool enqueueQueueStatusFanoutLocked(meshtastic_QueueStatus *qs);
+    bool enqueueMqttProxyFanoutLocked(meshtastic_MqttClientProxyMessage *m);
+    bool enqueueClientNotificationFanoutLocked(meshtastic_ClientNotification *cn);
+
+  public:
     APIState api_state = STATE_DISCONNECTED;
+    uint32_t api_state_mask = 0;
 
     static bool isTextPayload(const meshtastic_MeshPacket *p)
     {
@@ -113,21 +190,28 @@ class MeshService
     /// Do idle processing (mostly processing messages which have been queued from the radio)
     void loop();
 
-    /// Return the next packet destined to the phone.  FIXME, somehow use fromNum to allow the phone to retry the
-    /// last few packets if needs to.
-    meshtastic_MeshPacket *getForPhone() { return toPhoneQueue.dequeuePtr(0); }
+    bool registerPhoneClient(PhoneAPI *client, APIState state);
+    void unregisterPhoneClient(PhoneAPI *client);
 
-    /// Allows the bluetooth handler to free packets after they have been sent
+    /// Return the next packet destined to the specified phone client.
+    meshtastic_MeshPacket *getForPhone(PhoneAPI *client);
+
+    /// Allows handlers to free packets after they have been sent
     void releaseToPool(meshtastic_MeshPacket *p) { packetPool.release(p); }
 
-    /// Return the next QueueStatus packet destined to the phone.
-    meshtastic_QueueStatus *getQueueStatusForPhone() { return toPhoneQueueStatusQueue.dequeuePtr(0); }
+    /// Return the next QueueStatus packet destined to the specified phone client.
+    meshtastic_QueueStatus *getQueueStatusForPhone(PhoneAPI *client);
 
-    /// Return the next MqttClientProxyMessage packet destined to the phone.
-    meshtastic_MqttClientProxyMessage *getMqttClientProxyMessageForPhone() { return toPhoneMqttProxyQueue.dequeuePtr(0); }
+    /// Return the next MqttClientProxyMessage packet destined to the specified phone client.
+    meshtastic_MqttClientProxyMessage *getMqttClientProxyMessageForPhone(PhoneAPI *client);
 
-    /// Return the next ClientNotification packet destined to the phone.
-    meshtastic_ClientNotification *getClientNotificationForPhone() { return toPhoneClientNotificationQueue.dequeuePtr(0); }
+    /// Return the next ClientNotification packet destined to the specified phone client.
+    meshtastic_ClientNotification *getClientNotificationForPhone(PhoneAPI *client);
+
+    void releaseToPoolForPhone(PhoneAPI *client, meshtastic_MeshPacket *p);
+    void releaseQueueStatusToPoolForPhone(PhoneAPI *client, meshtastic_QueueStatus *p);
+    void releaseMqttClientProxyMessageToPoolForPhone(PhoneAPI *client, meshtastic_MqttClientProxyMessage *p);
+    void releaseClientNotificationToPoolForPhone(PhoneAPI *client, meshtastic_ClientNotification *p);
 
     // search the queue for a request id and return the matching nodenum
     NodeNum getNodenumFromRequestId(uint32_t request_id);
@@ -172,13 +256,13 @@ class MeshService
     /// Pull the latest power and time info into my nodeinfo
     meshtastic_NodeInfoLite *refreshLocalMeshNode();
 
-    /// Send a packet to the phone
+    /// Send a packet to active phone clients
     void sendToPhone(meshtastic_MeshPacket *p);
 
-    /// Send an MQTT message to the phone for client proxying
+    /// Send an MQTT message to active phone clients for client proxying
     virtual void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m);
 
-    /// Send a ClientNotification to the phone
+    /// Send a ClientNotification to active phone clients
     virtual void sendClientNotification(meshtastic_ClientNotification *cn);
 
     /// Send an error response to the phone

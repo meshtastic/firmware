@@ -146,6 +146,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
     if (webServerThread)
         webServerThread->markActivity();
+    webAPI.markActivity();
 
     LOG_DEBUG("webAPI handleAPIv1FromRadio");
 
@@ -168,6 +169,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto");
 
     if (req->getMethod() == "OPTIONS") {
+        webAPI.markActivity();
         res->setStatusCode(204); // Success with no content
         res->print("");
         return;
@@ -204,6 +206,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 {
     LOG_DEBUG("webAPI handleAPIv1ToRadio");
+    webAPI.markActivity();
 
     /*
         For documentation, see:
@@ -218,6 +221,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto");
 
     if (req->getMethod() == "OPTIONS") {
+        webAPI.markActivity();
         res->setStatusCode(204); // Success with no content
         res->print("");
         return;
