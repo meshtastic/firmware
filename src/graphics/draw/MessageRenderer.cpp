@@ -11,6 +11,7 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TimeFormatters.h"
+#include "graphics/WeatherColorOverlay.h"
 #include "graphics/emotes.h"
 #include "main.h"
 #include "meshUtils.h"
@@ -46,7 +47,7 @@ static inline size_t utf8CharLen(uint8_t c)
     return 1;
 }
 
-// Remove variation selectors (FE0F) and skin tone modifiers from emoji so they match your labels
+// Remove emoji presentation/modifier code points that our bitmap matcher doesn't need.
 static std::string normalizeEmoji(const std::string &s)
 {
     std::string out;
@@ -54,15 +55,30 @@ static std::string normalizeEmoji(const std::string &s)
         uint8_t c = static_cast<uint8_t>(s[i]);
         size_t len = utf8CharLen(c);
 
-        if (c == 0xEF && i + 2 < s.size() && (uint8_t)s[i + 1] == 0xB8 && (uint8_t)s[i + 2] == 0x8F) {
+        // U+FE0F / U+FE0E variation selectors.
+        if (c == 0xEF && i + 2 < s.size() && (uint8_t)s[i + 1] == 0xB8 &&
+            ((uint8_t)s[i + 2] == 0x8F || (uint8_t)s[i + 2] == 0x8E)) {
             i += 3;
             continue;
         }
 
-        // Skip skin tone modifiers
+        // Skip skin tone modifiers (U+1F3FB..U+1F3FF).
         if (c == 0xF0 && i + 3 < s.size() && (uint8_t)s[i + 1] == 0x9F && (uint8_t)s[i + 2] == 0x8F &&
             ((uint8_t)s[i + 3] >= 0xBB && (uint8_t)s[i + 3] <= 0xBF)) {
             i += 4;
+            continue;
+        }
+
+        // Skip ZWJ (U+200D) used in combined emoji sequences.
+        if (c == 0xE2 && i + 2 < s.size() && (uint8_t)s[i + 1] == 0x80 && (uint8_t)s[i + 2] == 0x8D) {
+            i += 3;
+            continue;
+        }
+
+        // Skip gender signs U+2640 / U+2642 (often part of emoji ZWJ sequences).
+        if (c == 0xE2 && i + 2 < s.size() && (uint8_t)s[i + 1] == 0x99 &&
+            ((uint8_t)s[i + 2] == 0x80 || (uint8_t)s[i + 2] == 0x82)) {
+            i += 3;
             continue;
         }
 
@@ -110,16 +126,17 @@ void scrollDown()
 
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
 {
+    const std::string normalizedLine = normalizeEmoji(line);
     int cursorX = x;
     const int fontHeight = FONT_HEIGHT_SMALL;
 
     // Step 1: Find tallest emote in the line
     int maxIconHeight = fontHeight;
-    for (size_t i = 0; i < line.length();) {
+    for (size_t i = 0; i < normalizedLine.length();) {
         bool matched = false;
         for (int e = 0; e < emoteCount; ++e) {
             size_t emojiLen = strlen(emotes[e].label);
-            if (line.compare(i, emojiLen, emotes[e].label) == 0) {
+            if (normalizedLine.compare(i, emojiLen, emotes[e].label) == 0) {
                 if (emotes[e].height > maxIconHeight)
                     maxIconHeight = emotes[e].height;
                 i += emojiLen;
@@ -128,7 +145,7 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
             }
         }
         if (!matched) {
-            i += utf8CharLen(static_cast<uint8_t>(line[i]));
+            i += utf8CharLen(static_cast<uint8_t>(normalizedLine[i]));
         }
     }
 
@@ -141,9 +158,9 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     size_t i = 0;
     bool inBold = false;
 
-    while (i < line.length()) {
+    while (i < normalizedLine.length()) {
         // Check for ** start/end for faux bold
-        if (line.compare(i, 2, "**") == 0) {
+        if (normalizedLine.compare(i, 2, "**") == 0) {
             inBold = !inBold;
             i += 2;
             continue;
@@ -155,7 +172,7 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
         size_t emojiLen = 0;
 
         for (int e = 0; e < emoteCount; ++e) {
-            size_t pos = line.find(emotes[e].label, i);
+            size_t pos = normalizedLine.find(emotes[e].label, i);
             if (pos != std::string::npos && (nextEmotePos == std::string::npos || pos < nextEmotePos)) {
                 nextEmotePos = pos;
                 matchedEmote = &emotes[e];
@@ -164,12 +181,12 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
         }
 
         // Render normal text segment up to the emote or bold toggle
-        size_t nextControl = std::min(nextEmotePos, line.find("**", i));
+        size_t nextControl = std::min(nextEmotePos, normalizedLine.find("**", i));
         if (nextControl == std::string::npos)
-            nextControl = line.length();
+            nextControl = normalizedLine.length();
 
         if (nextControl > i) {
-            std::string textChunk = line.substr(i, nextControl - i);
+            std::string textChunk = normalizedLine.substr(i, nextControl - i);
             if (inBold) {
                 // Faux bold: draw twice, offset by 1px
                 display->drawString(cursorX + 1, fontY, textChunk.c_str());
@@ -188,12 +205,13 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
         if (matchedEmote && i == nextEmotePos) {
             int iconY = y + (lineHeight - matchedEmote->height) / 2;
             display->drawXbm(cursorX, iconY, matchedEmote->width, matchedEmote->height, matchedEmote->bitmap);
+
             cursorX += matchedEmote->width + 1;
             i += emojiLen;
             continue;
         } else {
             // No more emotes — render the rest of the line
-            std::string remaining = line.substr(i);
+            std::string remaining = normalizedLine.substr(i);
             if (inBold) {
                 display->drawString(cursorX + 1, fontY, remaining.c_str());
             }
@@ -480,6 +498,8 @@ static void drawMessageScrollbar(OLEDDisplay *display, int visibleHeight, int to
 
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    clearWeatherColorOverlays();
+
     // Ensure any boot-relative timestamps are upgraded if RTC is valid
     messageStore.upgradeBootRelativeTimestamps();
 
@@ -787,6 +807,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int yOffset = -finalScroll + getTextPositions(display)[1];
     const int contentTop = getTextPositions(display)[1];
     const int contentBottom = scrollBottom; // already excludes nav line
+    setWeatherColorOverlayClip(0, contentTop, SCREEN_WIDTH - 1, contentBottom - 1);
     const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
     const int bubbleGapY = std::max(1, MESSAGE_BLOCK_GAP / 2);
 
@@ -973,6 +994,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     drawMessageScrollbar(display, usableHeight, totalHeight, finalScroll, getTextPositions(display)[1]);
     graphics::drawCommonHeader(display, x, y, titleStr);
     graphics::drawCommonFooter(display, x, y);
+    setWeatherColorOverlayClip(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
 }
 
 std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth)
