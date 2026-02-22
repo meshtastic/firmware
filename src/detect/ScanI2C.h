@@ -89,6 +89,7 @@ class ScanI2C
         DA217,
         CHSC6X,
         CST226SE,
+        BMI270,
         SEN5X,
         SFA30,
         CW2015,

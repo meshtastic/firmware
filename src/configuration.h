@@ -261,6 +261,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BHI260AP_ADDR 0x28
 #define BMM150_ADDR 0x13
 #define DA217_ADDR 0x26
+#define BMI270_ADDR 0x68
+#define BMI270_ADDR_ALT 0x69
 
 // -----------------------------------------------------------------------------
 // LED
