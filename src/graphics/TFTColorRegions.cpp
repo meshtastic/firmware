@@ -65,6 +65,9 @@ static void initializeRoleColors()
     const uint16_t connectionIconColor = TFTPalette::Blue;
     const uint16_t channelUtilizationColor = TFTPalette::Good;
     const uint16_t favoriteNodeColor = TFTPalette::Yellow;
+    const uint16_t actionMenuBorderColor = TFTPalette::DarkGray;
+    const uint16_t actionMenuTitleBackgroundColor = TFTPalette::DarkGray;
+    const uint16_t actionMenuTitleTextColor = TFTPalette::White;
 
     roleColors[static_cast<size_t>(TFTColorRole::HeaderBackground)].onColorBe = toBe565(headerBackground);
     roleColors[static_cast<size_t>(TFTColorRole::HeaderBackground)].offColorBe = toBe565(TFTPalette::Black);
@@ -82,6 +85,10 @@ static void initializeRoleColors()
     roleColors[static_cast<size_t>(TFTColorRole::ChannelUtilization)].offColorBe = toBe565(TFTPalette::Black);
     roleColors[static_cast<size_t>(TFTColorRole::FavoriteNode)].onColorBe = toBe565(favoriteNodeColor);
     roleColors[static_cast<size_t>(TFTColorRole::FavoriteNode)].offColorBe = toBe565(TFTPalette::Black);
+    roleColors[static_cast<size_t>(TFTColorRole::ActionMenuBorder)].onColorBe = toBe565(actionMenuBorderColor);
+    roleColors[static_cast<size_t>(TFTColorRole::ActionMenuBorder)].offColorBe = toBe565(TFTPalette::Black);
+    roleColors[static_cast<size_t>(TFTColorRole::ActionMenuTitle)].onColorBe = toBe565(actionMenuTitleBackgroundColor);
+    roleColors[static_cast<size_t>(TFTColorRole::ActionMenuTitle)].offColorBe = toBe565(actionMenuTitleTextColor);
     roleColorsInitialized = true;
 }
 
