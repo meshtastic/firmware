@@ -113,6 +113,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void enableInterrupt(void (*)()) = 0;
 
     /**
+     * Poll as a backup to catch missed edge-triggered interrupts.
+     */
+    void pollMissedIrqs();
+
+    /**
      * Debugging counts
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
@@ -264,4 +269,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
 
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
+
+    void checkRxDoneIrqFlag();
 };

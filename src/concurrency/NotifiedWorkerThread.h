@@ -1,6 +1,7 @@
 #pragma once
 
 #include "OSThread.h"
+#include <atomic>
 
 namespace concurrency
 {
@@ -13,7 +14,7 @@ class NotifiedWorkerThread : public OSThread
     /**
      * The notification that was most recently used to wake the thread.  Read from runOnce()
      */
-    uint32_t notification = 0;
+    std::atomic<uint32_t> notification{0};
 
   public:
     NotifiedWorkerThread(const char *name) : OSThread(name) {}

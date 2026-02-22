@@ -524,6 +524,22 @@ void RadioLibInterface::startReceive()
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
+void RadioLibInterface::pollMissedIrqs()
+{
+    // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
+    if (isReceiving) {
+        checkRxDoneIrqFlag();
+    }
+}
+
+void RadioLibInterface::checkRxDoneIrqFlag()
+{
+    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
+        LOG_WARN("caught missed RX_DONE");
+        notify(ISR_RX, true);
+    }
+}
+
 void RadioLibInterface::configHardwareForSend()
 {
     powerMon->setState(meshtastic_PowerMon_State_Lora_TXOn);
