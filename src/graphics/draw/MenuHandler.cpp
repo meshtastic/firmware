@@ -615,15 +615,21 @@ void menuHandler::replyMenu()
     optionsArray[options] = "Back";
     optionsEnumArray[options++] = Back;
 
-    // Preset reply
-    optionsArray[options] = "With Preset";
-    optionsEnumArray[options++] = ReplyPreset;
+    // Freetext reply (only when keyboard exists or BUTTON_PIN is defined)
+#if defined(BUTTON_PIN)
+    bool hasInput = true;
+#else
+    bool hasInput = kb_found;
+#endif
 
-    // Freetext reply (only when keyboard exists)
-    if (kb_found) {
+    if (hasInput) {
         optionsArray[options] = "With Freetext";
         optionsEnumArray[options++] = ReplyFreetext;
     }
+
+    // Preset reply
+    optionsArray[options] = "With Preset";
+    optionsEnumArray[options++] = ReplyPreset;
 
     BannerOverlayOptions bannerOptions;
 
@@ -679,17 +685,17 @@ void menuHandler::replyMenu()
         if (selected == ReplyFreetext) {
 
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
-                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, ch);
+                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, ch, true);
 
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
-                cannedMessageModule->LaunchFreetextWithDestination(peer);
+                cannedMessageModule->LaunchFreetextWithDestination(peer, 0, true);
 
             } else {
                 // Fallback for last received message
                 if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                    cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
+                    cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel, true);
                 } else {
-                    cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
+                    cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from, 0, true);
                 }
             }
 
@@ -997,7 +1003,7 @@ void menuHandler::homeBaseMenu()
         } else if (selected == Preset) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
         } else if (selected == Freetext) {
-            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, 0, true);
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -1015,12 +1021,17 @@ void menuHandler::textMessageBaseMenu()
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
-    optionsArray[options] = "New Preset Msg";
-    optionsEnumArray[options++] = Preset;
-    if (kb_found) {
+#if defined(BUTTON_PIN)
+    bool hasInput = true;
+#else
+    bool hasInput = kb_found;
+#endif
+    if (hasInput) {
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
+    optionsArray[options] = "New Preset Msg";
+    optionsEnumArray[options++] = Preset;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Message Action";
@@ -1031,7 +1042,7 @@ void menuHandler::textMessageBaseMenu()
         if (selected == Preset) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
         } else if (selected == Freetext) {
-            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, 0, true);
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -1133,17 +1144,18 @@ void menuHandler::favoriteBaseMenu()
         optionsArray[options] = "Go To Chat";
         optionsEnumArray[options++] = GoToChat;
     }
+
+    if (kb_found) {
+        optionsArray[options] = "New Freetext Msg";
+        optionsEnumArray[options++] = Freetext;
+    }
+
     if (currentResolution == ScreenResolution::UltraLow) {
         optionsArray[options] = "New Preset";
     } else {
         optionsArray[options] = "New Preset Msg";
     }
     optionsEnumArray[options++] = Preset;
-
-    if (kb_found) {
-        optionsArray[options] = "New Freetext Msg";
-        optionsEnumArray[options++] = Freetext;
-    }
 
     if (currentResolution != ScreenResolution::UltraLow) {
         optionsArray[options] = "Trace Route";

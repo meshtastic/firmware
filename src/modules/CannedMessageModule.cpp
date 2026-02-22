@@ -24,6 +24,7 @@
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h" // for buzzer control
+#include "modules/SingleButtonInputManager.h"
 extern MessageStore messageStore;
 #if HAS_TRACKBALL
 #include "input/TrackballInterruptImpl1.h"
@@ -121,6 +122,7 @@ static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 static NodeNum lastDest = NODENUM_BROADCAST;
 static uint8_t lastChannel = 0;
 static bool lastDestSet = false;
+static bool returnToCannedList = false;
 
 meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 
@@ -182,7 +184,7 @@ void CannedMessageModule::LaunchRepeatDestination()
     }
 }
 
-void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
+void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel, bool forceSelectDest)
 {
     // Do NOT override explicit broadcast replies
     // Only reuse lastDest in LaunchRepeatDestination()
@@ -194,6 +196,46 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     lastChannel = channel;
     lastDestSet = true;
 
+    if (forceSelectDest) {
+        runState = CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
+        returnToCannedList = false;
+        resetSearch();
+        updateDestinationSelectionList();
+        requestFocus();
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        notifyObservers(&e);
+        return;
+    }
+
+#if defined(BUTTON_PIN) || HAS_TOUCHSCREEN || ARCH_PORTDUINO
+    // Use screen->showTextInput for single button input, touchscreen, or when there's no keyboard
+    // When BUTTON_PIN is defined, Screen::showTextInput will route to SingleButtonInputManager
+    if (screen) {
+        const char *nodeName = getNodeName(dest);
+        char header[64];
+        snprintf(header, sizeof(header), "To: %s", nodeName ? nodeName : "Unknown");
+
+        // Use screen->showTextInput which will start SingleButtonInputManager via OnScreenKeyboardModule
+        // and properly set up all the overlays
+        screen->showTextInput(header, "", 0, [this](const std::string &text) {
+             if (!text.empty()) {
+                 this->sendText(this->dest, this->channel, text.c_str(), true);
+             }
+             // Return to inactive state
+             this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+             // Force redraw to clear input screen
+             UIFrameEvent e;
+             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+             notifyObservers(&e);
+        });
+        
+        // Request focus to ensure screen updates
+        requestFocus();
+        return;
+    }
+#endif
+
     runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
     requestFocus();
     UIFrameEvent e;
@@ -203,7 +245,6 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     LOG_DEBUG("[CannedMessage] LaunchFreetextWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
-static bool returnToCannedList = false;
 bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
 {
     return node && node->has_user && node->user.public_key.size > 0;
@@ -595,7 +636,34 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
             }
         }
 
-        runState = returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT;
+        if (returnToCannedList) {
+            runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+        } else {
+#if defined(BUTTON_PIN)
+            if (!kb_found) {
+                const char *nodeName = getNodeName(dest);
+                char header[64];
+                snprintf(header, sizeof(header), "To: %s", nodeName ? nodeName : "Unknown");
+
+                graphics::SingleButtonInputManager::instance().start(header, "", 0, [this](const std::string &text) {
+                    if (!text.empty()) {
+                        this->sendText(this->dest, this->channel, text.c_str(), true);
+                    }
+                    this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                    UIFrameEvent e;
+                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                    notifyObservers(&e);
+                });
+                graphics::NotificationRenderer::current_notification_type = graphics::notificationTypeEnum::text_input;
+                graphics::NotificationRenderer::alertBannerUntil = 0; // Ensure no timeout
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            } else {
+                runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            }
+#else
+            runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+#endif
+        }
         returnToCannedList = false;
         screen->forceDisplay(true);
         return 1;
