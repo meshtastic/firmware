@@ -389,8 +389,8 @@ void setup()
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
 #ifndef SENSECAP_INDICATOR
-    // use PSRAM for malloc calls > 256 bytes
-    heap_caps_malloc_extmem_enable(256);
+    // use PSRAM for malloc calls > 2048 bytes
+    heap_caps_malloc_extmem_enable(2048);
 #endif
 #endif
 
@@ -964,10 +964,14 @@ void setup()
 #endif
 
 #ifndef ARCH_PORTDUINO
-
-        // Initialize Wifi
 #if HAS_WIFI
+    // Initialize Wifi
     initWifi();
+#endif
+
+#if HAS_BLUETOOTH
+    // Enable Bluetooth
+    setBluetoothEnable(true);
 #endif
 
 #if HAS_ETHERNET
@@ -1005,12 +1009,25 @@ void setup()
         router->addInterface(std::move(rIf));
     }
 
+#ifdef ARCH_ESP32
+    if (config.power.is_power_saving) {
+        initLightSleep();
+    }
+#endif
+
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
 
-#if !HAS_TFT
-    setCPUFast(false); // 80MHz is fine for our slow peripherals
+#ifndef ARCH_PORTDUINO
+    auto cpuFast = false;
+#if HAS_TFT
+    cpuFast |= true;
+#endif
+#if HAS_WIFI
+    cpuFast |= !config.power.is_power_saving && isWifiAvailable();
+#endif
+    setCPUFast(cpuFast);
 #endif
 
 #ifdef ARDUINO_ARCH_ESP32

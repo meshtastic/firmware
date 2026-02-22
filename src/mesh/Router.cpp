@@ -11,6 +11,7 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#include "sleep.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -75,6 +76,13 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     // init Lockguard for crypt operations
     assert(!cryptLock);
     cryptLock = new concurrency::Lock();
+
+    preflightSleepObserver.observe(&preflightSleep);
+}
+
+Router::~Router()
+{
+    preflightSleepObserver.unobserve(&preflightSleep);
 }
 
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
@@ -135,6 +143,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 int32_t Router::runOnce()
 {
     meshtastic_MeshPacket *mp;
+
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
         // printPacket("handle fromRadioQ", mp);
         perhapsHandleReceived(mp);
