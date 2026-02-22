@@ -433,12 +433,15 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
 
-#if defined(MUZI_BASE)
+// some screens seem to need a kick in the pants to turn back on
+#if defined(MUZI_BASE) || defined(M5STACK_CARDPUTER_ADV)
             dispdev->init();
             dispdev->setBrightness(brightness);
             dispdev->flipScreenVertically();
             dispdev->resetDisplay();
+#ifdef SCREEN_12V_ENABLE
             digitalWrite(SCREEN_12V_ENABLE, HIGH);
+#endif
             delay(100);
 #endif
 #if !ARCH_PORTDUINO
