@@ -5,6 +5,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Default.h"
 #include "EnvironmentTelemetry.h"
+#include "MeshRadio.h" // needed for region specific broadcast throttling
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -322,7 +323,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
                                                                moduleConfig.telemetry.environment_update_interval,
                                                                default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil()) {
+            airTime->isTxAllowedAirUtil() && !myRegion->telemetryThrottle == 0) {
             sendTelemetry();
             lastSentToMesh = millis();
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&

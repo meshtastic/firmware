@@ -772,6 +772,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             LOG_WARN("Invalid bandwidth %d, setting to default", originalBandwidth);
         }
 
+        if (!RadioInterface::validateModemConfig(validatedLora)) {
+            return;
+        }
+
         // If no lora radio parameters change, don't need to reboot
         if (oldLoraConfig.use_preset == validatedLora.use_preset && oldLoraConfig.region == validatedLora.region &&
             oldLoraConfig.modem_preset == validatedLora.modem_preset && oldLoraConfig.bandwidth == validatedLora.bandwidth &&
@@ -824,7 +828,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #endif
             config.lora.tx_enabled = true;
             initRegion();
-            if (myRegion->dutyCycle < 100) {
+            if (getEffectiveDutyCycle() < 100) {
                 config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
             }
             //  Compare the entire string, we are sure of the length as a topic has never been set

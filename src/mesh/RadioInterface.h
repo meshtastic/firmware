@@ -230,6 +230,9 @@ class RadioInterface
     // Whether we use the default frequency slot given our LoRa config (region and modem preset)
     static bool uses_default_frequency_slot;
 
+    // Check if a candidate radio configuration is valid.
+    static bool validateModemConfig(meshtastic_Config_LoRaConfig &loraConfig);
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 

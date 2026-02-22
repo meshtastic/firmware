@@ -115,6 +115,8 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"US", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_US},
         {"EU_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_433},
         {"EU_868", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_868},
+        {"NARROW_868", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NARROW_868},
+        {"EU_866", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_866},
         {"CN", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_CN},
         {"JP", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_JP},
         {"ANZ", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ANZ},
@@ -137,8 +139,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"KZ_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_KZ_433},
         {"KZ_863", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_KZ_863},
         {"NP_865", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NP_865},
-        {"BR_902", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_BR_902},
-    };
+        {"BR_902", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_BR_902}};
 
     constexpr size_t regionCount = sizeof(regionOptions) / sizeof(regionOptions[0]);
     static std::array<const char *, regionCount> regionLabels{};
@@ -188,7 +189,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 #endif
             config.lora.tx_enabled = true;
             initRegion();
-            if (myRegion->dutyCycle < 100) {
+            if (getEffectiveDutyCycle() < 100) {
                 config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
             }
 
@@ -325,7 +326,10 @@ void menuHandler::radioPresetPicker()
         {"ShortSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW},
         {"ShortFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST},
         {"ShortTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO},
-    };
+        {"LiteFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST},
+        {"LiteSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW},
+        {"NarrowFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST},
+        {"NarrowSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW}};
 
     constexpr size_t presetCount = sizeof(presetOptions) / sizeof(presetOptions[0]);
     static std::array<const char *, presetCount> presetLabels{};

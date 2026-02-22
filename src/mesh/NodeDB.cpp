@@ -1294,7 +1294,7 @@ void NodeDB::loadFromDisk()
     // Coerce LoRa config fields derived from presets while bootstrapping.
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
     if (config.has_lora && config.lora.use_preset) {
-        RadioInterface::bootstrapLoRaConfigFromPreset(config.lora);
+        RadioInterface::validateModemConfig(config.lora);
     }
 
     if (backupSecurity.private_key.size > 0) {
