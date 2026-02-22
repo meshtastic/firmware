@@ -10,6 +10,7 @@
 #include <utility/bonding.h>
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
+static BLECharacteristic fromRadioSync = BLECharacteristic(BLEUuid(FROMRADIOSYNC_UUID_16));
 static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16));
 static BLECharacteristic toRadio = BLECharacteristic(BLEUuid(TORADIO_UUID_16));
 static BLECharacteristic logRadio = BLECharacteristic(BLEUuid(LOGRADIO_UUID_16));
@@ -41,6 +42,14 @@ class BluetoothPhoneAPI : public PhoneAPI
     virtual void onNowHasData(uint32_t fromRadioNum) override
     {
         PhoneAPI::onNowHasData(fromRadioNum);
+
+        if (fromRadioSync.indicateEnabled()) {
+            size_t len = getFromRadio(fromRadioBytes);
+            if (len > 0) {
+                fromRadioSync.indicate(fromRadioBytes, len);
+            }
+            return;
+        }
 
         LOG_INFO("BLE notify fromNum");
         fromNum.notify32(fromRadioNum);
@@ -97,7 +106,7 @@ void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
     // According to the GATT spec: cccd value = 0x0001 means notifications are enabled
     // and cccd value = 0x0002 means indications are enabled
 
-    if (chr->uuid == fromNum.uuid || chr->uuid == logRadio.uuid) {
+    if (chr->uuid == fromNum.uuid || chr->uuid == logRadio.uuid || chr->uuid == fromRadioSync.uuid) {
         auto result = cccd_value == 2 ? chr->indicateEnabled(conn_hdl) : chr->notifyEnabled(conn_hdl);
         if (result) {
             LOG_INFO("Notify/Indicate enabled");
@@ -187,6 +196,12 @@ void setupMeshService(void)
     // fromNum.setReadAuthorizeCallback(fromNumAuthorizeCb);
     fromNum.write32(0); // Provide default fromNum of 0
     fromNum.begin();
+
+    fromRadioSync.setProperties(CHR_PROPS_INDICATE | CHR_PROPS_READ);
+    fromRadioSync.setPermission(secMode, SECMODE_NO_ACCESS);
+    fromRadioSync.setMaxLen(sizeof(fromRadioBytes)); // Reuse size
+    fromRadioSync.setCccdWriteCallback(onCccd);
+    fromRadioSync.begin();
 
     fromRadio.setProperties(CHR_PROPS_READ);
     fromRadio.setPermission(secMode, SECMODE_NO_ACCESS);
