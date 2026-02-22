@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "configuration.h"
 #include "meshUtils.h"
 #if HAS_SCREEN
+#include "EInkParallelDisplay.h"
 #include <OLEDDisplay.h>
 
 #include "DisplayFormatters.h"
@@ -364,12 +365,14 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
+#elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY) && !defined(USE_EINK_PARALLELDISPLAY)
     dispdev = new EInkDisplay(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
     dispdev = new EInkDynamicDisplay(address.address, -1, -1, geometry,
                                      (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_EINK_PARALLELDISPLAY)
+    dispdev = new EInkParallelDisplay(EPD_WIDTH, EPD_HEIGHT, EInkParallelDisplay::EPD_ROT_PORTRAIT);
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -750,7 +753,11 @@ void Screen::forceDisplay(bool forceUiUpdate)
     }
 
     // Tell EInk class to update the display
+#if defined(USE_EINK_PARALLELDISPLAY)
+    static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay();
+#elif defined(USE_EINK)
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#endif
 #else
     // No delay between UI frame rendering
     if (forceUiUpdate) {
@@ -989,8 +996,10 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
         ui->update();
     } while (ui->getUiState()->lastUpdate < startUpdate);
 
+#if defined(USE_EINK_PARALLELDISPLAY)
+    static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay(0);
+#elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
     // Old EInkDisplay class
-#if !defined(USE_EINK_DYNAMICDISPLAY)
     static_cast<EInkDisplay *>(dispdev)->forceDisplay(0); // Screen::forceDisplay(), but override rate-limit
 #endif
 
@@ -1002,7 +1011,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 #ifdef EINK_HASQUIRK_GHOSTING
     EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // Really ugly to see ghosting from "screen paused"
 #else
-    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE); // Really nice to wake screen with a fast-refresh
+    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE);              // Really nice to wake screen with a fast-refresh
 #endif
 }
 #endif

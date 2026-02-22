@@ -343,6 +343,68 @@ void setup()
     digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
 
+#if defined(T_DECK)
+    // GPIO10 manages all peripheral power supplies
+    // Turn on peripheral power immediately after MUC starts.
+    // If some boards are turned on late, ESP32 will reset due to low voltage.
+    // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) ,
+    // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
+    pinMode(KB_POWERON, OUTPUT);
+    digitalWrite(KB_POWERON, HIGH);
+    // T-Deck has all three SPI peripherals (TFT, SD, LoRa) attached to the same SPI bus
+    // We need to initialize all CS pins in advance otherwise there will be SPI communication issues
+    // e.g. when detecting the SD card
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(TFT_CS, OUTPUT);
+    digitalWrite(TFT_CS, HIGH);
+    delay(100);
+#elif defined(T_DECK_PRO)
+    pinMode(LORA_EN, OUTPUT);
+    digitalWrite(LORA_EN, HIGH);
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(PIN_EINK_CS, OUTPUT);
+    digitalWrite(PIN_EINK_CS, HIGH);
+#elif defined(T_LORA_PAGER)
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(TFT_CS, OUTPUT);
+    digitalWrite(TFT_CS, HIGH);
+    pinMode(KB_INT, INPUT_PULLUP);
+    // io expander
+    io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
+    io.pinMode(EXPANDS_DRV_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_DRV_EN, HIGH);
+    io.pinMode(EXPANDS_AMP_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_AMP_EN, LOW);
+    io.pinMode(EXPANDS_LORA_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_LORA_EN, HIGH);
+    io.pinMode(EXPANDS_GPS_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_GPS_EN, HIGH);
+    io.pinMode(EXPANDS_KB_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_KB_EN, HIGH);
+    io.pinMode(EXPANDS_SD_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_SD_EN, HIGH);
+    io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
+    io.pinMode(EXPANDS_SD_PULLEN, INPUT);
+#elif defined(T5_S3_EPAPER_PRO)
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(BOARD_BL_EN, OUTPUT);
+#elif defined(HACKADAY_COMMUNICATOR)
+    pinMode(KB_INT, INPUT);
+#endif
+
     concurrency::hasBeenSetup = true;
 #if HAS_SCREEN
     meshtastic_Config_DisplayConfig_OledType screen_model =

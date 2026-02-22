@@ -20,7 +20,7 @@
 #include "graphics/fonts/OLEDDisplayFontsGR.h"
 #endif
 
-#if defined(CROWPANEL_ESP32S3_5_EPAPER) && defined(USE_EINK)
+#if (defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(T5_S3_EPAPER_PRO)) && defined(USE_EINK)
 #include "graphics/fonts/EinkDisplayFonts.h"
 #endif
 
@@ -90,7 +90,7 @@
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) ||             \
-     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796)) &&                                                                   \
+     defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)) &&                                                                   \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL FONT_MEDIUM_LOCAL // Height: 19
@@ -106,7 +106,7 @@
 #define FONT_LARGE FONT_LARGE_LOCAL   // Height: 28
 #endif
 
-#if defined(CROWPANEL_ESP32S3_5_EPAPER) && defined(USE_EINK)
+#if defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(T5_S3_EPAPER_PRO)
 #undef FONT_SMALL
 #undef FONT_MEDIUM
 #undef FONT_LARGE
