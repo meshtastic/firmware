@@ -29,6 +29,14 @@
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
+// Enable Traffic Management Module for Heltec V4
+#ifndef HAS_TRAFFIC_MANAGEMENT
+#define HAS_TRAFFIC_MANAGEMENT 1
+#endif
+#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048
+#endif
+
 // ---- GC1109 RF FRONT END CONFIGURATION ----
 // The Heltec V4 uses a GC1109 FEM chip with integrated PA and LNA
 // RF path: SX1262 -> GC1109 PA -> Pi attenuator -> Antenna

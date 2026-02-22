@@ -11,6 +11,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -93,6 +96,20 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     if (!localIsRouter) {
         return true;
     }
+
+#if HAS_TRAFFIC_MANAGEMENT
+    // When router_preserve_hops is enabled, preserve hops for decoded packets that are not
+    // position or telemetry (those have their own exhaust_hop controls).
+    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled &&
+        moduleConfig.traffic_management.router_preserve_hops && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        p->decoded.portnum != meshtastic_PortNum_POSITION_APP && p->decoded.portnum != meshtastic_PortNum_TELEMETRY_APP) {
+        LOG_DEBUG("Router hop preserved: port=%d from=0x%08x (traffic_management)", p->decoded.portnum, getFrom(p));
+        if (trafficManagementModule) {
+            trafficManagementModule->recordRouterHopPreserved();
+        }
+        return false;
+    }
+#endif
 
     // For subsequent hops, check if previous relay is a favorite router
     // Optimized search for favorite routers with matching last byte
