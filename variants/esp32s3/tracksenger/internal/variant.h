@@ -1,4 +1,4 @@
-#define LED_PIN 18
+#define LED_POWER 18
 
 #define HELTEC_TRACKER_V1_X
 
@@ -28,6 +28,7 @@
 #define TFT_OFFSET_Y -1
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
+#define USE_TFTDISPLAY 1
 
 #define VEXT_ENABLE 3 // active HIGH, powers the lora antenna boost
 #define VEXT_ON_VALUE HIGH
@@ -77,7 +78,6 @@
 // keyboard changes
 
 #define PIN_BUZZER 43
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 #define INPUTBROKER_MATRIX_TYPE 1
 

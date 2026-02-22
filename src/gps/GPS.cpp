@@ -38,19 +38,21 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
     return N;
 }
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
-#if defined(GPS_SERIAL_PORT)
-HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
-#else
-HardwareSerial *GPS::_serial_gps = &Serial1;
+#ifndef GPS_SERIAL_PORT
+#define GPS_SERIAL_PORT Serial1
 #endif
+
+#if defined(ARCH_NRF52)
+Uart *GPS::_serial_gps = &GPS_SERIAL_PORT;
+#elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #elif defined(ARCH_RP2040)
-SerialUART *GPS::_serial_gps = &Serial1;
+SerialUART *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #else
 HardwareSerial *GPS::_serial_gps = nullptr;
 #endif
 
-GPS *gps = nullptr;
+std::unique_ptr<GPS> gps = nullptr;
 
 static GPSUpdateScheduling scheduling;
 
@@ -125,7 +127,7 @@ static int32_t gpsSwitch()
     return 1000;
 }
 
-static concurrency::Periodic *gpsPeriodic;
+static std::unique_ptr<concurrency::Periodic> gpsPeriodic;
 #endif
 
 static void UBXChecksum(uint8_t *message, size_t length)
@@ -240,6 +242,9 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
             buffer[bytesRead] = b;
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
+#ifdef GPS_DEBUG
+                LOG_DEBUG(debugmsg.c_str());
+#endif
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
 #ifdef GPS_DEBUG
                     LOG_DEBUG("Found: %s", message); // Log the found message
@@ -247,9 +252,6 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
                     return GNSS_RESPONSE_OK;
                 } else {
                     bytesRead = 0;
-#ifdef GPS_DEBUG
-                    LOG_DEBUG(debugmsg.c_str());
-#endif
                 }
             }
         }
@@ -894,18 +896,21 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
-
-// Determine the new value for the pin
-// Normally: active HIGH for awake
-#ifdef PIN_GPS_STANDBY_INVERTED
-    bool val = standby;
-#else
-    bool val = !standby;
-#endif
+    bool val;
+    if (standby)
+        val = GPS_STANDBY_ACTIVE;
+    else
+        val = !GPS_STANDBY_ACTIVE;
 
     // Write and log
     pinMode(PIN_GPS_STANDBY, OUTPUT);
     digitalWrite(PIN_GPS_STANDBY, val);
+
+    // Enter backup mode on PA1010D; TODO: may be applicable to other MTK GPS too
+    if (IS_ONE_OF(gnssModel, GNSS_MODEL_MTK_PA1010D)) {
+        _serial_gps->write("$PMTK225,4*2F\r\n");
+    }
+
 #ifdef GPS_DEBUG
     LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
 #endif
@@ -932,8 +937,11 @@ void GPS::setPowerPMU(bool on)
             // t-beam v1.2 GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO3) : PMU->disablePowerOutput(XPOWERS_ALDO3);
         } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
-            // t-beam-s3-core GNSS  power channel
+            // t-beam-s3-core GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
+        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
+            // t-watch-s3-plus GNSS power channel
+            on ? PMU->enablePowerOutput(XPOWERS_BLDO1) : PMU->disablePowerOutput(XPOWERS_BLDO1);
         }
     } else if (model == XPOWERS_AXP192) {
         // t-beam v1.1 GNSS  power channel
@@ -1275,6 +1283,24 @@ GnssModel_t GPS::probe(int serialSpeed)
         memset(&ublox_info, 0, sizeof(ublox_info));
         delay(100);
 
+#if defined(PIN_GPS_RESET) && PIN_GPS_RESET != -1
+        digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
+        delay(10);
+        digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+
+        // attempt to detect the chip based on boot messages
+        std::vector<ChipInfo> passive_detect = {
+            {"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
+            {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
+            {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352},
+            {"UC6580", "UC6580", GNSS_MODEL_UC6580},
+            // as L76K is sort of a last ditch effort, we won't attempt to detect it by startup messages for now.
+            /*{"L76K", "SW=URANUS", GNSS_MODEL_MTK}*/};
+        GnssModel_t detectedDriver = getProbeResponse(500, passive_detect, serialSpeed);
+        if (detectedDriver != GNSS_MODEL_UNKNOWN) {
+            return detectedDriver;
+        }
+#endif
         // Close all NMEA sentences, valid for L76K, ATGM336H (and likely other AT6558 devices)
         _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
         delay(20);
@@ -1459,7 +1485,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
     if (bufferSize > 2048)
         bufferSize = 2048;
 
-    char *response = new char[bufferSize](); // Dynamically allocate based on baud rate
+    auto response = std::unique_ptr<char[]>(new char[bufferSize]); // Dynamically allocate based on baud rate
     uint16_t responseLen = 0;
     unsigned long start = millis();
     while (millis() - start < timeout) {
@@ -1473,19 +1499,21 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
             }
 
             if (c == ',' || (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n')) {
-#ifdef GPS_DEBUG
-                LOG_DEBUG(response);
-#endif
                 // check if we can see our chips
                 for (const auto &chipInfo : responseMap) {
-                    if (strstr(response, chipInfo.detectionString.c_str()) != nullptr) {
+                    if (strstr(response.get(), chipInfo.detectionString.c_str()) != nullptr) {
+#ifdef GPS_DEBUG
+                        LOG_DEBUG(response.get());
+#endif
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
-                        delete[] response; // Cleanup before return
                         return chipInfo.driver;
                     }
                 }
             }
             if (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n') {
+#ifdef GPS_DEBUG
+                LOG_DEBUG(response.get());
+#endif
                 // Reset the response buffer for the next potential message
                 responseLen = 0;
                 response[0] = '\0';
@@ -1493,21 +1521,17 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
         }
     }
 #ifdef GPS_DEBUG
-    LOG_DEBUG(response);
+    LOG_DEBUG(response.get());
 #endif
-    delete[] response;         // Cleanup before return
     return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
 }
 
-GPS *GPS::createGps()
+std::unique_ptr<GPS> GPS::createGps()
 {
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
     int8_t _en_gpio = config.position.gps_en_gpio;
-#if HAS_GPS && !defined(ARCH_ESP32)
-    _rx_gpio = 1; // We only specify GPS serial ports on ESP32. Otherwise, these are just flags.
-    _tx_gpio = 1;
-#endif
+
 #if defined(GPS_RX_PIN)
     if (!_rx_gpio)
         _rx_gpio = GPS_RX_PIN;
@@ -1527,7 +1551,7 @@ GPS *GPS::createGps()
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
 
-    GPS *new_gps = new GPS;
+    auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
 
@@ -1555,7 +1579,7 @@ GPS *GPS::createGps()
 #ifdef PIN_GPS_SWITCH
     // toggle GPS via external GPIO switch
     pinMode(PIN_GPS_SWITCH, INPUT);
-    gpsPeriodic = new concurrency::Periodic("GPSSwitch", gpsSwitch);
+    gpsPeriodic = std::unique_ptr<concurrency::Periodic>(new concurrency::Periodic("GPSSwitch", gpsSwitch));
 #endif
 
 // Currently disabled per issue #525 (TinyGPS++ crash bug)
@@ -1572,8 +1596,6 @@ GPS *GPS::createGps()
 
 #ifdef PIN_GPS_RESET
     pinMode(PIN_GPS_RESET, OUTPUT);
-    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
-    delay(10);
     digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #endif
 
@@ -1583,16 +1605,28 @@ GPS *GPS::createGps()
         _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
 #endif
 
-//  ESP32 has a special set of parameters vs other arduino ports
-#if defined(ARCH_ESP32)
         LOG_DEBUG("Use GPIO%d for GPS RX", new_gps->rx_gpio);
         LOG_DEBUG("Use GPIO%d for GPS TX", new_gps->tx_gpio);
+
+//  ESP32 has a special set of parameters vs other arduino ports
+#if defined(ARCH_ESP32)
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, new_gps->rx_gpio, new_gps->tx_gpio);
 #elif defined(ARCH_RP2040)
+        _serial_gps->setPinout(new_gps->tx_gpio, new_gps->rx_gpio);
         _serial_gps->setFIFOSize(256);
         _serial_gps->begin(GPS_BAUDRATE);
-#else
+#elif defined(ARCH_NRF52)
+        _serial_gps->setPins(new_gps->rx_gpio, new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE);
+#elif defined(ARCH_STM32WL)
+        _serial_gps->setTx(new_gps->tx_gpio);
+        _serial_gps->setRx(new_gps->rx_gpio);
+        _serial_gps->begin(GPS_BAUDRATE);
+#elif defined(ARCH_PORTDUINO)
+        // Portduino can't set the GPS pins directly.
+        _serial_gps->begin(GPS_BAUDRATE);
+#else
+#error Unsupported architecture!
 #endif
     }
     return new_gps;
@@ -1659,8 +1693,12 @@ bool GPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_STATISTICS
     if (reader.failedChecksum() > lastChecksumFailCount) {
-        LOG_WARN("%u new GPS checksum failures, for a total of %u", reader.failedChecksum() - lastChecksumFailCount,
-                 reader.failedChecksum());
+// In a GPS_DEBUG build we want to log all of these. In production, we only care if there are many of them.
+#ifndef GPS_DEBUG
+        if (reader.failedChecksum() > 4)
+#endif
+            LOG_WARN("%u new GPS checksum failures, for a total of %u", reader.failedChecksum() - lastChecksumFailCount,
+                     reader.failedChecksum());
         lastChecksumFailCount = reader.failedChecksum();
     }
 #endif

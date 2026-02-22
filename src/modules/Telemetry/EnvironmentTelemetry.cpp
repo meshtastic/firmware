@@ -53,7 +53,7 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/LTR390UVSensor.h"
 #endif
 
-#if __has_include(<bsec2.h>)
+#if __has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>)
 #include "Sensor/BME680Sensor.h"
 #endif
 
@@ -141,36 +141,9 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
+#include "Sensor/AddI2CSensorTemplate.h"
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
-
-#include <forward_list>
-
-static std::forward_list<TelemetrySensor *> sensors;
-
-template <typename T> void addSensor(ScanI2C *i2cScanner, ScanI2C::DeviceType type)
-{
-    ScanI2C::FoundDevice dev = i2cScanner->find(type);
-    if (dev.type != ScanI2C::DeviceType::NONE || type == ScanI2C::DeviceType::NONE) {
-        TelemetrySensor *sensor = new T();
-#if WIRE_INTERFACES_COUNT > 1
-        TwoWire *bus = ScanI2CTwoWire::fetchI2CBus(dev.address);
-        if (dev.address.port != ScanI2C::I2CPort::WIRE1 && sensor->onlyWire1()) {
-            // This sensor only works on Wire (Wire1 is not supported)
-            delete sensor;
-            return;
-        }
-#else
-        TwoWire *bus = &Wire;
-#endif
-        if (sensor->initDevice(bus, &dev)) {
-            sensors.push_front(sensor);
-            return;
-        }
-        // destroy sensor
-        delete sensor;
-    }
-}
 
 void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
@@ -214,7 +187,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_LTR390.h>)
     addSensor<LTR390UVSensor>(i2cScanner, ScanI2C::DeviceType::LTR390UV);
 #endif
-#if __has_include(<bsec2.h>)
+#if __has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>)
     addSensor<BME680Sensor>(i2cScanner, ScanI2C::DeviceType::BME_680);
 #endif
 #if __has_include(<Adafruit_BMP280.h>)
@@ -378,7 +351,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     int line = 1;
 
     // === Set Title
-    const char *titleStr = (graphics::isHighResolution) ? "Environment" : "Env.";
+    const char *titleStr = (graphics::currentResolution == graphics::ScreenResolution::High) ? "Environment" : "Env.";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -517,6 +490,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
         currentY += rowHeight;
     }
+    graphics::drawCommonFooter(display, x, y);
 }
 #endif
 
@@ -555,37 +529,46 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
 bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m)
 {
-    bool valid = true;
+    bool valid = false;
     bool hasSensor = false;
+    // getMetrics() doesn't always get evaluated because of
+    // short-circuit evaluation rules in c++
+    bool get_metrics;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
 
     for (TelemetrySensor *sensor : sensors) {
-        valid = valid && sensor->getMetrics(m);
+        get_metrics = sensor->getMetrics(m); // avoid short-circuit evaluation rules
+        valid = valid || get_metrics;
         hasSensor = true;
     }
 
 #ifndef T1000X_SENSOR_EN
     if (ina219Sensor.hasSensor()) {
-        valid = valid && ina219Sensor.getMetrics(m);
+        get_metrics = ina219Sensor.getMetrics(m);
+        valid = valid || get_metrics;
         hasSensor = true;
     }
     if (ina260Sensor.hasSensor()) {
-        valid = valid && ina260Sensor.getMetrics(m);
+        get_metrics = ina260Sensor.getMetrics(m);
+        valid = valid || get_metrics;
         hasSensor = true;
     }
     if (ina3221Sensor.hasSensor()) {
-        valid = valid && ina3221Sensor.getMetrics(m);
+        get_metrics = ina3221Sensor.getMetrics(m);
+        valid = valid || get_metrics;
         hasSensor = true;
     }
     if (max17048Sensor.hasSensor()) {
-        valid = valid && max17048Sensor.getMetrics(m);
+        get_metrics = max17048Sensor.getMetrics(m);
+        valid = valid || get_metrics;
         hasSensor = true;
     }
 #endif
 #ifdef HAS_RAKPROT
-    valid = valid && rak9154Sensor.getMetrics(m);
+    get_metrics = rak9154Sensor.getMetrics(m);
+    valid = valid || get_metrics;
     hasSensor = true;
 #endif
     return valid && hasSensor;
@@ -640,8 +623,6 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
                  m.variant.environment_metrics.soil_moisture);
-
-        sensor_read_error_count = 0;
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;

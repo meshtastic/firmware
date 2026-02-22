@@ -2,8 +2,9 @@
 #include "configuration.h"
 #include <Throttle.h>
 
+SerialKeyboard *globalSerialKeyboard = nullptr;
+
 #ifdef INPUTBROKER_SERIAL_TYPE
-#define CANNED_MESSAGE_MODULE_ENABLE 1 // in case it's not set in the variant file
 
 #if INPUTBROKER_SERIAL_TYPE == 1 // It's a Chatter
 // 3 SHIFT level (lower case, upper case, numbers), up to 4 repeated presses, button number
@@ -25,6 +26,8 @@ unsigned char KeyMap[3][4][10] = {{{'.', 'a', 'd', 'g', 'j', 'm', 'p', 't', 'w',
 SerialKeyboard::SerialKeyboard(const char *name) : concurrency::OSThread(name)
 {
     this->_originName = name;
+
+    globalSerialKeyboard = this;
 }
 
 void SerialKeyboard::erase()
@@ -85,9 +88,21 @@ int32_t SerialKeyboard::runOnce()
             e.source = this->_originName;
             // SELECT OR SEND OR CANCEL EVENT
             if (!(shiftRegister2 & (1 << 3))) {
-                e.inputEvent = INPUT_BROKER_UP;
+                if (shift > 0) {
+                    e.inputEvent = INPUT_BROKER_ANYKEY; // REQUIRED
+                    e.kbchar = 0x09;                    // TAB
+                    shift = 0;                          // reset shift after TAB
+                } else {
+                    e.inputEvent = INPUT_BROKER_LEFT;
+                }
             } else if (!(shiftRegister2 & (1 << 2))) {
-                e.inputEvent = INPUT_BROKER_RIGHT;
+                if (shift > 0) {
+                    e.inputEvent = INPUT_BROKER_ANYKEY; // REQUIRED
+                    e.kbchar = 0x09;                    // TAB
+                    shift = 0;                          // reset shift after TAB
+                } else {
+                    e.inputEvent = INPUT_BROKER_RIGHT;
+                }
                 e.kbchar = 0;
             } else if (!(shiftRegister2 & (1 << 1))) {
                 e.inputEvent = INPUT_BROKER_SELECT;

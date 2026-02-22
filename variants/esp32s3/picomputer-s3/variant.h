@@ -32,6 +32,7 @@
 #define ST7789_CS 6
 #define ST7789_RS 1
 #define ST7789_BL 5
+#define USE_TFTDISPLAY 1
 
 #define ST7789_RESET -1
 #define ST7789_MISO -1
@@ -50,8 +51,6 @@
 
 // Picomputer gets a white on black display
 #define TFT_MESH_OVERRIDE COLOR565(255, 255, 255)
-
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 #define INPUTBROKER_MATRIX_TYPE 1
 

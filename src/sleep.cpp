@@ -5,7 +5,6 @@
 #endif
 
 #include "Default.h"
-#include "Led.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -13,6 +12,7 @@
 #include "detect/LoRaRadioType.h"
 #include "error.h"
 #include "main.h"
+#include "modules/StatusLEDModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -162,6 +162,13 @@ void initDeepSleep()
     if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
         LOG_DEBUG("Disable any holds on RTC IO pads");
         for (uint8_t i = 0; i <= GPIO_NUM_MAX; i++) {
+#if defined(USE_GC1109_PA)
+            // Skip GC1109 FEM power pins - they are held HIGH during deep sleep to keep
+            // the LNA active for RX wake. Released later in SX126xInterface::init() after
+            // GPIO registers are set HIGH first, avoiding a power glitch.
+            if (i == LORA_PA_POWER || i == LORA_PA_EN)
+                continue;
+#endif
             if (rtc_gpio_is_valid_gpio((gpio_num_t)i))
                 rtc_gpio_hold_dis((gpio_num_t)i);
 
@@ -241,7 +248,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #ifdef PIN_POWER_EN
     digitalWrite(PIN_POWER_EN, LOW);
     pinMode(PIN_POWER_EN, INPUT); // power off peripherals
-    // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
 
 #ifdef RAK_WISMESH_TAP_V2
@@ -269,8 +275,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     digitalWrite(PIN_WD_EN, LOW);
 #endif
 #endif
-    ledBlink.set(false);
-
+    statusLEDModule->setPowerLED(false);
 #ifdef RESET_OLED
     digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
 #endif
@@ -558,8 +563,13 @@ void enableLoraInterrupt()
 #endif
 
 #if defined(USE_GC1109_PA)
-    gpio_pullup_en((gpio_num_t)LORA_PA_POWER);
-    gpio_pullup_en((gpio_num_t)LORA_PA_EN);
+    // Keep GC1109 FEM powered during deep sleep so LNA remains active for RX wake.
+    // Set PA_POWER and PA_EN HIGH (overrides SX126xInterface::sleep() shutdown),
+    // then latch with RTC hold so the state survives deep sleep.
+    digitalWrite(LORA_PA_POWER, HIGH);
+    rtc_gpio_hold_en((gpio_num_t)LORA_PA_POWER);
+    digitalWrite(LORA_PA_EN, HIGH);
+    rtc_gpio_hold_en((gpio_num_t)LORA_PA_EN);
     gpio_pulldown_en((gpio_num_t)LORA_PA_TX_EN);
 #endif
 

@@ -131,9 +131,7 @@ void StoreForwardModule::historySend(uint32_t secAgo, uint32_t to)
 uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_time)
 {
     uint32_t count = 0;
-    if (lastRequest.find(dest) == lastRequest.end()) {
-        lastRequest.emplace(dest, 0);
-    }
+    lastRequest.emplace(dest, 0);
     for (uint32_t i = lastRequest[dest]; i < this->packetHistoryTotalCount; i++) {
         if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
             // Client is only interested in packets not from itself and only in broadcast packets or packets towards it.
@@ -204,6 +202,10 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     this->packetHistory[this->packetHistoryTotalCount].payload_size = p.payload.size;
     this->packetHistory[this->packetHistoryTotalCount].rx_rssi = mp.rx_rssi;
     this->packetHistory[this->packetHistoryTotalCount].rx_snr = mp.rx_snr;
+    this->packetHistory[this->packetHistoryTotalCount].hop_start = mp.hop_start;
+    this->packetHistory[this->packetHistoryTotalCount].hop_limit = mp.hop_limit;
+    this->packetHistory[this->packetHistoryTotalCount].via_mqtt = mp.via_mqtt;
+    this->packetHistory[this->packetHistoryTotalCount].transport_mechanism = mp.transport_mechanism;
     memcpy(this->packetHistory[this->packetHistoryTotalCount].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 
     this->packetHistoryTotalCount++;
@@ -256,6 +258,10 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                 p->decoded.emoji = (uint32_t)this->packetHistory[i].emoji;
                 p->rx_rssi = this->packetHistory[i].rx_rssi;
                 p->rx_snr = this->packetHistory[i].rx_snr;
+                p->hop_start = this->packetHistory[i].hop_start;
+                p->hop_limit = this->packetHistory[i].hop_limit;
+                p->via_mqtt = this->packetHistory[i].via_mqtt;
+                p->transport_mechanism = (meshtastic_MeshPacket_TransportMechanism)this->packetHistory[i].transport_mechanism;
 
                 // Let's assume that if the server received the S&F request that the client is in range.
                 //   TODO: Make this configurable.
@@ -505,7 +511,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             LOG_DEBUG("StoreAndForward_RequestResponse_ROUTER_BUSY");
             // retry in messages_saved * packetTimeMax ms
             retry_delay = millis() + getNumAvailablePackets(this->busyTo, this->last_time) * packetTimeMax *
-                                         (meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
+                                         (p->rr == meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
         }
         break;
 

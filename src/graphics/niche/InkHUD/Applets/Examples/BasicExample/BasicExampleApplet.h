@@ -28,7 +28,7 @@ class BasicExampleApplet : public Applet
     // You must have an onRender() method
     // All drawing happens here
 
-    void onRender() override;
+    void onRender(bool full) override;
 };
 
 } // namespace NicheGraphics::InkHUD

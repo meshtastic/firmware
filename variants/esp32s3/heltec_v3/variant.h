@@ -1,4 +1,4 @@
-#define LED_PIN LED
+#define LED_POWER LED
 
 #define USE_SSD1306 // Heltec_v3 has a SSD1306 display
 

@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<bsec2.h>)
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && (__has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>))
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "BME680Sensor.h"
@@ -8,8 +8,13 @@
 #include "SPILock.h"
 #include "TelemetrySensor.h"
 
+#if __has_include(<Adafruit_BME680.h>)
+#include <cmath>
+#endif
+
 BME680Sensor::BME680Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BME680, "BME680") {}
 
+#if __has_include(<bsec2.h>)
 int32_t BME680Sensor::runOnce()
 {
     if (!bme680.run()) {
@@ -17,10 +22,13 @@ int32_t BME680Sensor::runOnce()
     }
     return 35;
 }
+#endif
 
 bool BME680Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     status = 0;
+
+#if __has_include(<bsec2.h>)
     if (!bme680.begin(dev->address.address, *bus))
         checkStatus("begin");
 
@@ -42,12 +50,25 @@ bool BME680Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (status == 0)
         LOG_DEBUG("BME680Sensor::runOnce: bme680.status %d", bme680.status);
 
+#else
+    bme680 = makeBME680(bus);
+
+    if (!bme680->begin(dev->address.address)) {
+        LOG_ERROR("Init sensor: %s failed at begin()", sensorName);
+        return status;
+    }
+
+    status = 1;
+
+#endif
+
     initI2CSensor();
     return status;
 }
 
 bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+#if __has_include(<bsec2.h>)
     if (bme680.getData(BSEC_OUTPUT_RAW_PRESSURE).signal == 0)
         return false;
 
@@ -65,9 +86,47 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
     // Check if we need to save state to filesystem (every STATE_SAVE_PERIOD ms)
     measurement->variant.environment_metrics.iaq = bme680.getData(BSEC_OUTPUT_IAQ).signal;
     updateState();
+#else
+    if (!bme680->performReading()) {
+        LOG_ERROR("BME680Sensor::getMetrics: performReading failed");
+        return false;
+    }
+
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
+    measurement->variant.environment_metrics.has_barometric_pressure = true;
+    measurement->variant.environment_metrics.has_gas_resistance = true;
+
+    measurement->variant.environment_metrics.temperature = bme680->readTemperature();
+    measurement->variant.environment_metrics.relative_humidity = bme680->readHumidity();
+    measurement->variant.environment_metrics.barometric_pressure = bme680->readPressure() / 100.0F;
+
+    float gasRaw = bme680->readGas();
+    measurement->variant.environment_metrics.gas_resistance = gasRaw / 1000.0;
+
+    // IAQ approximation: humidity-compensated logarithmic mapping of gas resistance
+    // Gas sensor resistance drops with humidity; compensate to a 40% RH reference baseline
+    // Map compensated gas resistance (Ohms) to IAQ 0-500 using log-linear interpolation
+    // Clean air reference ~400 kOhm, polluted reference ~5 kOhm
+    if (gasRaw > 0.0f && !isfinite(gasRaw)) {
+
+        static constexpr float LOG_UPPER = 12.899219f;                          // log(400k)
+        static constexpr float LOG_RANGE_INV = 1.0f / (12.899219f - 8.517193f); // 1 / (log(400k) - log(5k))
+        measurement->variant.environment_metrics.has_iaq = true;
+        measurement->variant.environment_metrics.iaq = (uint16_t)(fminf(
+            fmaxf(((LOG_UPPER -
+                    logf(fmaxf(gasRaw * expf(0.035f * (measurement->variant.environment_metrics.relative_humidity - 40.0f)),
+                               1.0f))) *
+                   LOG_RANGE_INV) *
+                      500.0f,
+                  0.0f),
+            500.0f));
+    }
+#endif
     return true;
 }
 
+#if __has_include(<bsec2.h>)
 void BME680Sensor::loadState()
 {
 #ifdef FSCom
@@ -144,5 +203,6 @@ void BME680Sensor::checkStatus(const char *functionName)
     else if (bme680.sensor.status > BME68X_OK)
         LOG_WARN("%s BME68X code: %d", functionName, bme680.sensor.status);
 }
+#endif
 
 #endif

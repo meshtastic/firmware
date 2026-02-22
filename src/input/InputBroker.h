@@ -1,7 +1,14 @@
 #pragma once
 
 #include "Observer.h"
+#include "concurrency/OSThread.h"
 #include "freertosinc.h"
+
+#ifdef InputBrokerDebug
+#define LOG_INPUT(...) LOG_DEBUG(__VA_ARGS__)
+#else
+#define LOG_INPUT(...)
+#endif
 
 enum input_broker_event {
     INPUT_BROKER_NONE = 0,
@@ -21,6 +28,11 @@ enum input_broker_event {
     INPUT_BROKER_SHUTDOWN = 0x9b,
     INPUT_BROKER_GPS_TOGGLE = 0x9e,
     INPUT_BROKER_SEND_PING = 0xaf,
+    INPUT_BROKER_FN_F1 = 0xf1,
+    INPUT_BROKER_FN_F2 = 0xf2,
+    INPUT_BROKER_FN_F3 = 0xf3,
+    INPUT_BROKER_FN_F4 = 0xf4,
+    INPUT_BROKER_FN_F5 = 0xf5,
     INPUT_BROKER_MATRIXKEY = 0xFE,
     INPUT_BROKER_ANYKEY = 0xff
 
@@ -47,6 +59,7 @@ typedef struct _InputEvent {
 class InputPollable
 {
   public:
+    virtual ~InputPollable() = default;
     virtual void pollOnce() = 0;
 };
 
@@ -59,17 +72,18 @@ class InputBroker : public Observable<const InputEvent *>
     InputBroker();
     void registerSource(Observable<const InputEvent *> *source);
     void injectInputEvent(const InputEvent *event) { handleInputEvent(event); }
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     void requestPollSoon(InputPollable *pollable);
     void queueInputEvent(const InputEvent *event);
     void processInputEventQueue();
 #endif
+    void Init();
 
   protected:
     int handleInputEvent(const InputEvent *event);
 
   private:
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     QueueHandle_t inputEventQueue;
     QueueHandle_t pollSoonQueue;
     TaskHandle_t pollSoonTask;
@@ -78,3 +92,4 @@ class InputBroker : public Observable<const InputEvent *>
 };
 
 extern InputBroker *inputBroker;
+extern bool runASAP;

@@ -8,6 +8,7 @@
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
+#include <memory>
 
 /**
  * A mesh aware router that supports multiple interfaces.
@@ -20,7 +21,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     PointerQueue<meshtastic_MeshPacket> fromRadioQueue;
 
   protected:
-    RadioInterface *iface = NULL;
+    std::unique_ptr<RadioInterface> iface = nullptr;
 
   public:
     /**
@@ -32,7 +33,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /**
      * Currently we only allow one interface, that may change in the future
      */
-    void addInterface(RadioInterface *_iface) { iface = _iface; }
+    void addInterface(std::unique_ptr<RadioInterface> _iface) { iface = std::move(_iface); }
 
     /**
      * do idle processing
@@ -90,6 +91,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
+
+    // pointer to the encrypted packet
+    meshtastic_MeshPacket *p_encrypted = nullptr;
 
   protected:
     friend class RoutingModule;
