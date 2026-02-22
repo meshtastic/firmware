@@ -100,47 +100,54 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
-    measurement->variant.air_quality_metrics.has_pm10_standard = true;
-    measurement->variant.air_quality_metrics.pm10_standard = read16(buffer, 4);
+    if (!moduleConfig.telemetry.sensordisables.pmsa003i.disable_pm) {
+        measurement->variant.air_quality_metrics.has_pm10_standard = true;
+        measurement->variant.air_quality_metrics.pm10_standard = read16(buffer, 4);
 
-    measurement->variant.air_quality_metrics.has_pm25_standard = true;
-    measurement->variant.air_quality_metrics.pm25_standard = read16(buffer, 6);
+        measurement->variant.air_quality_metrics.has_pm25_standard = true;
+        measurement->variant.air_quality_metrics.pm25_standard = read16(buffer, 6);
 
-    measurement->variant.air_quality_metrics.has_pm100_standard = true;
-    measurement->variant.air_quality_metrics.pm100_standard = read16(buffer, 8);
+        measurement->variant.air_quality_metrics.has_pm100_standard = true;
+        measurement->variant.air_quality_metrics.pm100_standard = read16(buffer, 8);
+        LOG_DEBUG("Got %s readings: pM1p0_standard=%u, pM2p5_standard=%u, pM10p0_standard=%u", sensorName,
+                  measurement->variant.air_quality_metrics.pm10_standard, measurement->variant.air_quality_metrics.pm25_standard,
+                  measurement->variant.air_quality_metrics.pm100_standard);
+    }
 
-    // TODO - Add admin command to remove environmental metrics to save protobuf space
-    measurement->variant.air_quality_metrics.has_pm10_environmental = true;
-    measurement->variant.air_quality_metrics.pm10_environmental = read16(buffer, 10);
+    if (!moduleConfig.telemetry.sensordisables.pmsa003i.disable_pm_env) {
+        measurement->variant.air_quality_metrics.has_pm10_environmental = true;
+        measurement->variant.air_quality_metrics.pm10_environmental = read16(buffer, 10);
 
-    measurement->variant.air_quality_metrics.has_pm25_environmental = true;
-    measurement->variant.air_quality_metrics.pm25_environmental = read16(buffer, 12);
+        measurement->variant.air_quality_metrics.has_pm25_environmental = true;
+        measurement->variant.air_quality_metrics.pm25_environmental = read16(buffer, 12);
 
-    measurement->variant.air_quality_metrics.has_pm100_environmental = true;
-    measurement->variant.air_quality_metrics.pm100_environmental = read16(buffer, 14);
+        measurement->variant.air_quality_metrics.has_pm100_environmental = true;
+        measurement->variant.air_quality_metrics.pm100_environmental = read16(buffer, 14);
+        LOG_DEBUG("Got %s readings: pM1p0_env=%u, pM2p5_env=%u, pM10p0_env=%u", sensorName,
+                  measurement->variant.air_quality_metrics.pm10_environmental,
+                  measurement->variant.air_quality_metrics.pm25_environmental,
+                  measurement->variant.air_quality_metrics.pm100_environmental);
+    }
 
-    // TODO - Add admin command to remove PN to save protobuf space
-    measurement->variant.air_quality_metrics.has_particles_03um = true;
-    measurement->variant.air_quality_metrics.particles_03um = read16(buffer, 16);
+    if (!moduleConfig.telemetry.sensordisables.pmsa003i.disable_pn) {
+        measurement->variant.air_quality_metrics.has_particles_03um = true;
+        measurement->variant.air_quality_metrics.particles_03um = read16(buffer, 16);
 
-    measurement->variant.air_quality_metrics.has_particles_05um = true;
-    measurement->variant.air_quality_metrics.particles_05um = read16(buffer, 18);
+        measurement->variant.air_quality_metrics.has_particles_05um = true;
+        measurement->variant.air_quality_metrics.particles_05um = read16(buffer, 18);
 
-    measurement->variant.air_quality_metrics.has_particles_10um = true;
-    measurement->variant.air_quality_metrics.particles_10um = read16(buffer, 20);
+        measurement->variant.air_quality_metrics.has_particles_10um = true;
+        measurement->variant.air_quality_metrics.particles_10um = read16(buffer, 20);
 
-    measurement->variant.air_quality_metrics.has_particles_25um = true;
-    measurement->variant.air_quality_metrics.particles_25um = read16(buffer, 22);
+        measurement->variant.air_quality_metrics.has_particles_25um = true;
+        measurement->variant.air_quality_metrics.particles_25um = read16(buffer, 22);
 
-    measurement->variant.air_quality_metrics.has_particles_50um = true;
-    measurement->variant.air_quality_metrics.particles_50um = read16(buffer, 24);
+        measurement->variant.air_quality_metrics.has_particles_50um = true;
+        measurement->variant.air_quality_metrics.particles_50um = read16(buffer, 24);
 
-    measurement->variant.air_quality_metrics.has_particles_100um = true;
-    measurement->variant.air_quality_metrics.particles_100um = read16(buffer, 26);
-
-    LOG_DEBUG("Got %s readings: pM1p0_standard=%u, pM2p5_standard=%u, pM10p0_standard=%u", sensorName,
-              measurement->variant.air_quality_metrics.pm10_standard, measurement->variant.air_quality_metrics.pm25_standard,
-              measurement->variant.air_quality_metrics.pm100_standard);
+        measurement->variant.air_quality_metrics.has_particles_100um = true;
+        measurement->variant.air_quality_metrics.particles_100um = read16(buffer, 26);
+    }
 
     return true;
 }
@@ -206,5 +213,58 @@ uint32_t PMSA003ISensor::wakeUp()
 #endif
     // No need to wait for warmup if already active
     return 0;
+}
+
+bool PMSA003ISensor::allDisabled()
+{
+    return moduleConfig.telemetry.sensordisables.pmsa003i.disable_pm &&
+           moduleConfig.telemetry.sensordisables.pmsa003i.disable_pm_env &&
+           moduleConfig.telemetry.sensordisables.pmsa003i.disable_pn;
+}
+
+void PMSA003ISensor::setDisables(meshtastic_PMSA003IDisables setDisables)
+{
+    if (setDisables.has_disable_pm) {
+        moduleConfig.telemetry.sensordisables.pmsa003i.disable_pm = setDisables.disable_pm;
+        LOG_INFO("%s disabling PM metrics", sensorName);
+    }
+    if (setDisables.has_disable_pm_env) {
+        moduleConfig.telemetry.sensordisables.pmsa003i.disable_pm_env = setDisables.disable_pm_env;
+        LOG_INFO("%s disabling PM metrics", sensorName);
+    }
+    if (setDisables.has_disable_pn) {
+        moduleConfig.telemetry.sensordisables.pmsa003i.disable_pn = setDisables.disable_pn;
+        LOG_INFO("%s disabling PN metrics", sensorName);
+    }
+
+    nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+}
+
+AdminMessageHandleResult PMSA003ISensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                            meshtastic_AdminMessage *response)
+{
+    AdminMessageHandleResult result;
+
+    switch (request->which_payload_variant) {
+    case meshtastic_AdminMessage_sensor_config_tag:
+        // Check for ASC-FRC request first
+        if (!request->sensor_config.has_pmsa003i_config) {
+            result = AdminMessageHandleResult::NOT_HANDLED;
+            break;
+        }
+
+        // Check for disables request
+        if (request->sensor_config.pmsa003i_config.has_pmsa003idisables) {
+            this->setDisables(request->sensor_config.pmsa003i_config.pmsa003idisables);
+        }
+
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    default:
+        result = AdminMessageHandleResult::NOT_HANDLED;
+    }
+
+    return result;
 }
 #endif

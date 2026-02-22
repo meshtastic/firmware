@@ -109,23 +109,25 @@ int32_t AirQualityTelemetryModule::runOnce()
         // Wake up the sensors that need it
         LOG_INFO("Waking up sensors...");
         for (TelemetrySensor *sensor : sensors) {
-            if (!sensor->canSleep()) {
-                LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
-            } else if (((lastSentToMesh == 0) ||
-                        !Throttle::isWithinTimespanMs(lastSentToMesh - sensor->wakeUpTimeMs(),
-                                                      Default::getConfiguredOrDefaultMsScaled(
-                                                          moduleConfig.telemetry.air_quality_interval,
-                                                          default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-                       airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-                       airTime->isTxAllowedAirUtil()) {
-                if (!sensor->isActive()) {
-                    LOG_DEBUG("Waking up: %s", sensor->sensorName);
-                    return sensor->wakeUp();
-                } else {
-                    int32_t pendingForReadyMs = sensor->pendingForReadyMs();
-                    LOG_DEBUG("%s. Pending for ready %ums", sensor->sensorName, pendingForReadyMs);
-                    if (pendingForReadyMs) {
-                        return pendingForReadyMs;
+            if (!sensor->allDisabled()) {
+                if (!sensor->canSleep()) {
+                    LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
+                } else if (((lastSentToMesh == 0) ||
+                            !Throttle::isWithinTimespanMs(lastSentToMesh - sensor->wakeUpTimeMs(),
+                                                          Default::getConfiguredOrDefaultMsScaled(
+                                                              moduleConfig.telemetry.air_quality_interval,
+                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+                           airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                           airTime->isTxAllowedAirUtil()) {
+                    if (!sensor->isActive()) {
+                        LOG_DEBUG("Waking up: %s", sensor->sensorName);
+                        return sensor->wakeUp();
+                    } else {
+                        int32_t pendingForReadyMs = sensor->pendingForReadyMs();
+                        LOG_DEBUG("%s. Pending for ready %ums", sensor->sensorName, pendingForReadyMs);
+                        if (pendingForReadyMs) {
+                            return pendingForReadyMs;
+                        }
                     }
                 }
             }
@@ -150,14 +152,16 @@ int32_t AirQualityTelemetryModule::runOnce()
         // Send to sleep sensors that consume power
         LOG_DEBUG("Sending sensors to sleep");
         for (TelemetrySensor *sensor : sensors) {
-            if (sensor->isActive() && sensor->canSleep()) {
-                if (sensor->wakeUpTimeMs() <
-                    (int32_t)Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
-                                                                     default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
-                    LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
-                    sensor->sleep();
-                } else {
-                    LOG_DEBUG("Sensor stays enabled due to warm up period");
+            if (!sensor->allDisabled()) {
+                if (sensor->isActive() && sensor->canSleep()) {
+                    if (sensor->wakeUpTimeMs() < (int32_t)Default::getConfiguredOrDefaultMsScaled(
+                                                     moduleConfig.telemetry.air_quality_interval,
+                                                     default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
+                        LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
+                        sensor->sleep();
+                    } else {
+                        LOG_DEBUG("Sensor stays enabled due to warm up period");
+                    }
                 }
             }
         }
@@ -308,11 +312,13 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 
     bool sensor_get = false;
     for (TelemetrySensor *sensor : sensors) {
-        LOG_DEBUG("Reading %s", sensor->sensorName);
-        // Note - this function doesn't get properly called if within a conditional
-        sensor_get = sensor->getMetrics(m);
-        valid = valid || sensor_get;
-        hasSensor = true;
+        if (!sensor->allDisabled()) {
+            LOG_DEBUG("Reading %s", sensor->sensorName);
+            // Note - this function doesn't get properly called if within a conditional
+            sensor_get = sensor->getMetrics(m);
+            valid = valid || sensor_get;
+            hasSensor = true;
+        }
     }
 
     return valid && hasSensor;

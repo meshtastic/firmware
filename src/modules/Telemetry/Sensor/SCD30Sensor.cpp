@@ -30,16 +30,20 @@ bool SCD30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     scd30.begin(*_bus, _address);
 
-    if (!startMeasurement()) {
-        LOG_ERROR("%s: Failed to start periodic measurement", sensorName);
+    if (!getASC(ascActive)) {
+        LOG_WARN("%s: Could not determine ASC state", sensorName);
 #if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
         reClockI2C(currentClock, _bus, false);
 #endif
         return false;
     }
 
-    if (!getASC(ascActive)) {
-        LOG_WARN("%s: Could not determine ASC state", sensorName);
+    if (!startMeasurement()) {
+        LOG_ERROR("%s: Failed to start periodic measurement", sensorName);
+#if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
+        reClockI2C(currentClock, _bus, false);
+#endif
+        return false;
     }
 
 #if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
@@ -89,12 +93,16 @@ bool SCD30Sensor::getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
-    measurement->variant.air_quality_metrics.has_co2 = true;
-    measurement->variant.air_quality_metrics.has_co2_temperature = true;
-    measurement->variant.air_quality_metrics.has_co2_humidity = true;
-    measurement->variant.air_quality_metrics.co2 = (uint32_t)co2;
-    measurement->variant.air_quality_metrics.co2_temperature = temperature;
-    measurement->variant.air_quality_metrics.co2_humidity = humidity;
+    if (!moduleConfig.telemetry.sensordisables.scd30.disable_co2) {
+        measurement->variant.air_quality_metrics.has_co2 = true;
+        measurement->variant.air_quality_metrics.co2 = (uint32_t)co2;
+    }
+    if (!moduleConfig.telemetry.sensordisables.scd30.disable_trh) {
+        measurement->variant.air_quality_metrics.has_co2_temperature = true;
+        measurement->variant.air_quality_metrics.co2_temperature = temperature;
+        measurement->variant.air_quality_metrics.has_co2_humidity = true;
+        measurement->variant.air_quality_metrics.co2_humidity = humidity;
+    }
 
     LOG_DEBUG("Got %s readings: co2=%u, co2_temp=%.2f, co2_hum=%.2f", sensorName, (uint32_t)co2, temperature, humidity);
 
@@ -432,6 +440,25 @@ int32_t SCD30Sensor::pendingForReadyMs()
     return 0;
 }
 
+bool SCD30Sensor::allDisabled()
+{
+    return moduleConfig.telemetry.sensordisables.scd30.disable_co2 && moduleConfig.telemetry.sensordisables.scd30.disable_trh;
+}
+
+void SCD30Sensor::setDisables(meshtastic_SCD30Disables setDisables)
+{
+    if (setDisables.has_disable_co2) {
+        moduleConfig.telemetry.sensordisables.scd30.disable_co2 = setDisables.disable_co2;
+        LOG_INFO("%s disabling CO2 metric", sensorName);
+    }
+    if (setDisables.has_disable_trh) {
+        moduleConfig.telemetry.sensordisables.scd30.disable_trh = setDisables.disable_trh;
+        LOG_INFO("%s disabling T/RH metrics", sensorName);
+    }
+
+    nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+}
+
 AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
                                                          meshtastic_AdminMessage *response)
 {
@@ -491,6 +518,11 @@ AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPa
             // Check for set measuremen interval
             if (request->sensor_config.scd30_config.has_set_measurement_interval) {
                 this->setMeasurementInterval(request->sensor_config.scd30_config.set_measurement_interval);
+            }
+
+            // Check for disables request
+            if (request->sensor_config.scd30_config.has_scd30disables) {
+                this->setDisables(request->sensor_config.scd30_config.scd30disables);
             }
         }
 
