@@ -145,6 +145,33 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
+namespace
+{
+constexpr float TEMPERATURE_OFFSET_MIN_C = -20.0f;
+constexpr float TEMPERATURE_OFFSET_MAX_C = 20.0f;
+
+float clampTemperatureOffsetC(float offsetC)
+{
+    if (offsetC < TEMPERATURE_OFFSET_MIN_C)
+        return TEMPERATURE_OFFSET_MIN_C;
+    if (offsetC > TEMPERATURE_OFFSET_MAX_C)
+        return TEMPERATURE_OFFSET_MAX_C;
+    return offsetC;
+}
+
+void applyTemperatureOffset(meshtastic_EnvironmentMetrics *metrics)
+{
+    const float offsetC = clampTemperatureOffsetC(moduleConfig.telemetry.environment_temperature_offset_c);
+    if (offsetC == 0.0f)
+        return;
+
+    if (metrics->has_temperature)
+        metrics->temperature += offsetC;
+    if (metrics->has_soil_temperature)
+        metrics->soil_temperature += offsetC;
+}
+} // namespace
+
 void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
     if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
@@ -272,6 +299,29 @@ int32_t EnvironmentTelemetryModule::runOnce()
         return disable();
     }
 
+    auto refreshLocalMeasurementPacket = [this]() {
+        // Keep displaying remote telemetry once we have it.
+        if (lastMeasurementPacket != nullptr && lastMeasurementPacket->from != nodeDB->getNodeNum()) {
+            return;
+        }
+
+        meshtastic_Telemetry local = meshtastic_Telemetry_init_zero;
+        if (!getEnvironmentTelemetry(&local)) {
+            return;
+        }
+
+        meshtastic_MeshPacket *localPacket = allocDataProtobuf(local);
+        if (localPacket == nullptr) {
+            return;
+        }
+
+        if (lastMeasurementPacket != nullptr) {
+            packetPool.release(lastMeasurementPacket);
+        }
+        lastMeasurementPacket = packetPool.allocCopy(*localPacket);
+        packetPool.release(localPacket);
+    };
+
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
@@ -300,6 +350,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             result = rak9154Sensor.runOnce();
 #endif
 #endif
+            refreshLocalMeasurementPacket();
         }
         // it's possible to have this module enabled, only for displaying values on the screen.
         // therefore, we should only enable the sensor loop if measurement is also enabled
@@ -316,6 +367,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = delay;
             }
         }
+        refreshLocalMeasurementPacket();
 
         if (((lastSentToMesh == 0) ||
              !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -571,6 +623,9 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid || get_metrics;
     hasSensor = true;
 #endif
+    if (valid)
+        applyTemperatureOffset(&m->variant.environment_metrics);
+
     return valid && hasSensor;
 }
 
@@ -631,11 +686,15 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
         else
             p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-        // release previous packet before occupying a new spot
-        if (lastMeasurementPacket != nullptr)
-            packetPool.release(lastMeasurementPacket);
+        const bool shouldReplaceDisplayPacket =
+            (lastMeasurementPacket == nullptr || lastMeasurementPacket->from == nodeDB->getNodeNum());
+        if (shouldReplaceDisplayPacket) {
+            // release previous packet before occupying a new spot
+            if (lastMeasurementPacket != nullptr)
+                packetPool.release(lastMeasurementPacket);
 
-        lastMeasurementPacket = packetPool.allocCopy(*p);
+            lastMeasurementPacket = packetPool.allocCopy(*p);
+        }
         if (phoneOnly) {
             LOG_INFO("Send packet to phone");
             service->sendToPhone(p);

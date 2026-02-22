@@ -219,6 +219,42 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     ui->update();
 }
 
+void Screen::showSignedDecimalPicker(const char *message, uint32_t durationMs, int initialValueTenths, int minValueTenths,
+                                     int maxValueTenths, std::function<void(int)> bannerCallback)
+{
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
+#endif
+    if (minValueTenths > maxValueTenths) {
+        int temp = minValueTenths;
+        minValueTenths = maxValueTenths;
+        maxValueTenths = temp;
+    }
+
+    if (initialValueTenths < minValueTenths) {
+        initialValueTenths = minValueTenths;
+    } else if (initialValueTenths > maxValueTenths) {
+        initialValueTenths = maxValueTenths;
+    }
+
+    strncpy(NotificationRenderer::alertBannerMessage, message, 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerCallback = bannerCallback;
+    NotificationRenderer::pauseBanner = false;
+    NotificationRenderer::curSelected = 0;
+    NotificationRenderer::current_notification_type = notificationTypeEnum::signed_decimal_picker;
+    NotificationRenderer::signedDecimalValueTenths = static_cast<int16_t>(initialValueTenths);
+    NotificationRenderer::signedDecimalMinTenths = static_cast<int16_t>(minValueTenths);
+    NotificationRenderer::signedDecimalMaxTenths = static_cast<int16_t>(maxValueTenths);
+    NotificationRenderer::signedDecimalIsNegative = (initialValueTenths < 0);
+
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setTargetFPS(60);
+    ui->update();
+}
+
 void Screen::showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                            std::function<void(const std::string &)> textCallback)
 {
@@ -1155,6 +1191,8 @@ void Screen::setFrames(FrameFocus focus)
                 fsi.positions.focusedModule = numframes;
             if (m && m == waypointModule)
                 fsi.positions.waypoint = numframes;
+            if (m && strcmp(m->getName(), "EnvironmentTelemetry") == 0)
+                fsi.positions.environment = numframes;
 
             indicatorIcons.push_back(icon_module);
             numframes++;
@@ -1783,6 +1821,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                             menuHandler::textMessageBaseMenu();
                         }
                     }
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.environment) {
+                    menuHandler::environmentTelemetryBaseMenu();
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
