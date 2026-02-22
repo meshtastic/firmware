@@ -1175,7 +1175,7 @@ void Screen::setFrames(FrameFocus focus)
         for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
             const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
             if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
-                favoriteFrames.push_back(graphics::UIRenderer::drawNodeInfo);
+                favoriteFrames.push_back(graphics::UIRenderer::drawFavoriteNode);
             }
         }
 
@@ -1204,7 +1204,7 @@ void Screen::setFrames(FrameFocus focus)
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
-    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list just changed)
+    prevFrame = -1; // Force drawFavoriteNode to pick a new node (because our list just changed)
 
     // Focus on a specific frame, in the frame set we just created
     switch (focus) {

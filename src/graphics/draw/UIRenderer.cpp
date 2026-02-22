@@ -5,6 +5,9 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
+#if !MESHTASTIC_EXCLUDE_STATUS
+#include "modules/StatusMessageModule.h"
+#endif
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/GeoCoord.h"
@@ -289,7 +292,7 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 // * Favorite Node Info *
 // **********************
 // cppcheck-suppress constParameterPointer; signature must match FrameCallback typedef from OLEDDisplayUi library
-void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     if (favoritedNodes.empty())
         return;
@@ -342,6 +345,57 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
         // Print node's long name (e.g. "Backpack Node")
         display->drawString(x, getTextPositions(display)[line++], usernameStr.c_str());
     }
+
+#if !MESHTASTIC_EXCLUDE_STATUS
+    // === Optional: Last received StatusMessage line for this node ===
+    // Display it directly under the username line (if we have one).
+    if (statusMessageModule) {
+        const auto &recent = statusMessageModule->getRecentReceived();
+        const StatusMessageModule::RecentStatus *found = nullptr;
+
+        // Search newest-to-oldest
+        for (auto it = recent.rbegin(); it != recent.rend(); ++it) {
+            if (it->fromNodeId == node->num && !it->statusText.empty()) {
+                found = &(*it);
+                break;
+            }
+        }
+
+        if (found) {
+            std::string statusLine = std::string(" Status: ") + found->statusText;
+            {
+                const int screenW = display->getWidth();
+                const int ellipseW = display->getStringWidth("...");
+                int w = display->getStringWidth(statusLine.c_str());
+
+                // Only do work if it overflows
+                if (w > screenW) {
+                    bool truncated = false;
+                    if (ellipseW > screenW) {
+                        statusLine.clear();
+                    } else {
+                        while (!statusLine.empty()) {
+                            // remove one char (byte) at a time
+                            statusLine.pop_back();
+                            truncated = true;
+
+                            // Measure candidate with ellipsis appended
+                            std::string candidate = statusLine + "...";
+                            if (display->getStringWidth(candidate.c_str()) <= screenW) {
+                                statusLine = std::move(candidate);
+                                break;
+                            }
+                        }
+                        if (statusLine.empty() && ellipseW <= screenW) {
+                            statusLine = "...";
+                        }
+                    }
+                }
+            }
+            display->drawString(x, getTextPositions(display)[line++], statusLine.c_str());
+        }
+    }
+#endif
 
     // === 2. Signal and Hops (combined on one line, if available) ===
     char signalHopsStr[32] = "";
