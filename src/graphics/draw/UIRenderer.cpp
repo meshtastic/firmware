@@ -8,6 +8,8 @@
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/GeoCoord.h"
+#include "graphics/ColorOverlayQueue.h"
+#include "graphics/ColorPalette.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
@@ -1479,6 +1481,10 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             NodeListRenderer::drawScaledXBitmap16x16(x, y, 8, 8, icon, display);
         } else {
             display->drawXbm(x, y, iconSize, iconSize, icon);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+            const uint8_t navColor = isActive ? kUIPaletteAccent : kUIPaletteForeground;
+            queueColorOverlayXbm(x, y, iconSize, iconSize, icon, navColor);
+#endif
         }
 
         if (isActive) {

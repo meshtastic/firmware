@@ -47,64 +47,6 @@ static inline size_t utf8CharLen(uint8_t c)
     return 1;
 }
 
-static bool weatherEmoteColor(const Emote &emote, uint16_t &color565)
-{
-    const uint8_t *bmp = emote.bitmap;
-
-    // Sun / clear / warm conditions.
-    if (bmp == sun || bmp == sun_behind_cloud || bmp == sun_behind_raincloud || bmp == sparkles) {
-        color565 = COLOR565(255, 210, 60);
-        return true;
-    }
-
-    // Rain / humidity / water.
-    if (bmp == rain || bmp == drop || bmp == cloud_with_lightning_rain) {
-        color565 = COLOR565(70, 175, 255);
-        return true;
-    }
-
-    // Clouds and fog.
-    if (bmp == cloud || bmp == fog) {
-        color565 = COLOR565(150, 170, 185);
-        return true;
-    }
-
-    // Snow / ice.
-    if (bmp == snowflake || bmp == cloud_with_snow) {
-        color565 = COLOR565(190, 240, 255);
-        return true;
-    }
-
-    // Wind and direction arrows.
-    if (bmp == wind_face || bmp == upwards_arrow || bmp == downwards_arrow || bmp == leftwards_arrow || bmp == rightwards_arrow ||
-        bmp == north_east_arrow || bmp == north_west_arrow || bmp == south_east_arrow || bmp == south_west_arrow) {
-        color565 = COLOR565(120, 240, 255);
-        return true;
-    }
-
-    // Lightning / storm.
-    if (bmp == cloud_with_lightning) {
-        color565 = COLOR565(255, 235, 70);
-        return true;
-    }
-
-    // Temperature / heat.
-    if (bmp == thermometer || bmp == fire || bmp == strong) {
-        color565 = COLOR565(255, 110, 60);
-        return true;
-    }
-
-    // Moon phases.
-    if (bmp == new_moon || bmp == waxing_crescent_moon || bmp == first_quarter_moon || bmp == waxing_gibbous_moon ||
-        bmp == full_moon || bmp == waning_gibbous_moon || bmp == last_quarter_moon || bmp == waning_crescent_moon ||
-        bmp == first_quarter_moon_face) {
-        color565 = COLOR565(210, 225, 255);
-        return true;
-    }
-
-    return false;
-}
-
 // Remove emoji presentation/modifier code points that our bitmap matcher doesn't need.
 static std::string normalizeEmoji(const std::string &s)
 {
@@ -263,12 +205,6 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
         if (matchedEmote && i == nextEmotePos) {
             int iconY = y + (lineHeight - matchedEmote->height) / 2;
             display->drawXbm(cursorX, iconY, matchedEmote->width, matchedEmote->height, matchedEmote->bitmap);
-
-            uint16_t weatherColor = 0;
-            if (weatherEmoteColor(*matchedEmote, weatherColor)) {
-                queueWeatherColorOverlay(cursorX, iconY, static_cast<uint16_t>(matchedEmote->width),
-                                         static_cast<uint16_t>(matchedEmote->height), matchedEmote->bitmap, weatherColor);
-            }
 
             cursorX += matchedEmote->width + 1;
             i += emojiLen;
@@ -1058,6 +994,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     drawMessageScrollbar(display, usableHeight, totalHeight, finalScroll, getTextPositions(display)[1]);
     graphics::drawCommonHeader(display, x, y, titleStr);
     graphics::drawCommonFooter(display, x, y);
+    setWeatherColorOverlayClip(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
 }
 
 std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth)

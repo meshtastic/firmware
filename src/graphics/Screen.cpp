@@ -53,7 +53,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/ColorPalette.h"
 #include "graphics/WeatherColorOverlay.h"
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114) && ENABLE_T114_INDEXED_UI
+#include "graphics/T114IndexedDisplay.h"
+#endif
 #include "graphics/emotes.h"
 #include "graphics/images.h"
 #include "input/TouchScreenImpl1.h"
@@ -333,15 +337,28 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         TFT_MESH = COLOR565(255, 255, 128);
     }
 
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114) && ENABLE_T114_INDEXED_UI
+    setUIPaletteAccent(TFT_MESH);
+#endif
+
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_ST7789)
+#if defined(HELTEC_MESH_NODE_T114) && ENABLE_T114_INDEXED_UI
+#ifdef ESP_PLATFORM
+    dispdev = new T114IndexedDisplay(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7789_SDA,
+                                     ST7789_MISO, ST7789_SCK);
+#else
+    dispdev = new T114IndexedDisplay(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
+#endif
+#else
 #ifdef ESP_PLATFORM
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7789_SDA,
                             ST7789_MISO, ST7789_SCK);
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
+#endif
 #endif
 #elif defined(USE_ST7796)
 #ifdef ESP_PLATFORM
@@ -393,7 +410,11 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #endif
 
 #if defined(USE_ST7789)
+#if defined(HELTEC_MESH_NODE_T114) && ENABLE_T114_INDEXED_UI
+    static_cast<T114IndexedDisplay *>(dispdev)->setAccentColor(TFT_MESH);
+#else
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#endif
 #elif defined(USE_ST7796)
     static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
@@ -574,8 +595,13 @@ void Screen::setup()
 #endif
 
 #if defined(USE_ST7789) && defined(TFT_MESH)
-    // Apply custom RGB color (e.g. Heltec T114/T190)
+    // Apply color/accent preference (for T114 this is accent, not global foreground).
+#if defined(HELTEC_MESH_NODE_T114) && ENABLE_T114_INDEXED_UI
+    setUIPaletteAccent(TFT_MESH);
+    static_cast<T114IndexedDisplay *>(dispdev)->setAccentColor(TFT_MESH);
+#else
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#endif
 #endif
 #if defined(MUZI_BASE)
     dispdev->delayPoweron = true;

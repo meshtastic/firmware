@@ -9,8 +9,12 @@
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "buzz.h"
+#include "graphics/ColorPalette.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114) && ENABLE_T114_INDEXED_UI
+#include "graphics/T114IndexedDisplay.h"
+#endif
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
@@ -2081,7 +2085,12 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             }
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+#if defined(HELTEC_MESH_NODE_T114) && ENABLE_T114_INDEXED_UI
+            setUIPaletteAccent(TFT_MESH);
+            static_cast<T114IndexedDisplay *>(screen->getDisplayDevice())->setAccentColor(TFT_MESH);
+#else
             static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
+#endif
 #endif
 
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);

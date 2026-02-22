@@ -3,6 +3,8 @@
 #include "MeshService.h"
 #include "RTC.h"
 #include "draw/NodeListRenderer.h"
+#include "graphics/ColorOverlayQueue.h"
+#include "graphics/ColorPalette.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/UIRenderer.h"
@@ -163,9 +165,15 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         batteryY += 2;
         if (currentResolution == ScreenResolution::High) {
             display->drawXbm(batteryX, batteryY, 19, 12, imgUSB_HighResolution);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+            queueColorOverlayXbm(batteryX, batteryY, 19, 12, imgUSB_HighResolution, kUIPaletteInfo);
+#endif
             batteryX += 20; // Icon + 1 pixel
         } else {
             display->drawXbm(batteryX, batteryY, 10, 8, imgUSB);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+            queueColorOverlayXbm(batteryX, batteryY, 10, 8, imgUSB, kUIPaletteInfo);
+#endif
             batteryX += 11; // Icon + 1 pixel
         }
     } else {
@@ -174,8 +182,17 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             batteryY += 2;
             display->drawXbm(batteryX, batteryY, 9, 13, batteryBitmap_h_bottom);
             display->drawXbm(batteryX + 9, batteryY, 9, 13, batteryBitmap_h_top);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+            queueColorOverlayXbm(batteryX, batteryY, 9, 13, batteryBitmap_h_bottom, kUIPalettePanelBorder);
+            queueColorOverlayXbm(batteryX + 9, batteryY, 9, 13, batteryBitmap_h_top, kUIPalettePanelBorder);
+#endif
             if (isCharging && isBoltVisibleShared)
                 display->drawXbm(batteryX + 4, batteryY, 9, 13, lightning_bolt_h);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+            if (isCharging && isBoltVisibleShared) {
+                queueColorOverlayXbm(batteryX + 4, batteryY, 9, 13, lightning_bolt_h, kUIPaletteWarning);
+            }
+#endif
             else {
                 display->drawLine(batteryX + 5, batteryY, batteryX + 10, batteryY);
                 display->drawLine(batteryX + 5, batteryY + 12, batteryX + 10, batteryY + 12);
@@ -188,8 +205,16 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             batteryY += 2;
 #endif
             display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+            queueColorOverlayXbm(batteryX, batteryY, 7, 11, batteryBitmap_v, kUIPalettePanelBorder);
+#endif
             if (isCharging && isBoltVisibleShared)
                 display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+            if (isCharging && isBoltVisibleShared) {
+                queueColorOverlayXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v, kUIPaletteWarning);
+            }
+#endif
             else {
                 display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
                 int fillHeight = 8 * chargePercent / 100;
@@ -304,6 +329,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                     display->setColor(WHITE);
                 }
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+                queueColorOverlayXbm(iconX, iconY, mail_width, mail_height, mail, kUIPaletteAccent);
+#endif
             }
         } else if (externalNotificationModule->getMute()) {
             if (currentResolution == ScreenResolution::High) {
@@ -320,6 +348,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                     display->setColor(WHITE);
                 }
                 display->drawXbm(iconX, iconY, mute_symbol_big_width, mute_symbol_big_height, mute_symbol_big);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+                queueColorOverlayXbm(iconX, iconY, mute_symbol_big_width, mute_symbol_big_height, mute_symbol_big, kUIPaletteWarning);
+#endif
             } else {
                 int iconX = iconRightEdge - mute_symbol_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
@@ -334,6 +365,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                     display->setColor(WHITE);
                 }
                 display->drawXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+                queueColorOverlayXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol, kUIPaletteWarning);
+#endif
             }
         }
 
@@ -381,16 +415,25 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconX = iconRightEdge - mail_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+                queueColorOverlayXbm(iconX, iconY, mail_width, mail_height, mail, kUIPaletteAccent);
+#endif
             }
         } else if (externalNotificationModule->getMute()) {
             if (currentResolution == ScreenResolution::High) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
                 display->drawXbm(iconX, iconY, mute_symbol_big_width, mute_symbol_big_height, mute_symbol_big);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+                queueColorOverlayXbm(iconX, iconY, mute_symbol_big_width, mute_symbol_big_height, mute_symbol_big, kUIPaletteWarning);
+#endif
             } else {
                 int iconX = iconRightEdge - mute_symbol_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
                 display->drawXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol);
+#if defined(USE_ST7789) && defined(HELTEC_MESH_NODE_T114)
+                queueColorOverlayXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol, kUIPaletteWarning);
+#endif
             }
         }
     }

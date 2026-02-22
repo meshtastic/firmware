@@ -37,6 +37,10 @@ extern "C" {
 
 #define USE_ST7789
 
+#ifndef ENABLE_T114_INDEXED_UI
+#define ENABLE_T114_INDEXED_UI 0
+#endif
+
 #define ST7789_NSS 11
 #define ST7789_RS 12  // DC
 #define ST7789_SDA 41 // MOSI
