@@ -96,6 +96,9 @@ class Channels
 
     bool setDefaultPresetCryptoForHash(ChannelHash channelHash);
 
+    /** Return the channel index for the specified channel hash, or -1 for not found */
+    int8_t getIndexByHash(ChannelHash channelHash);
+  
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
   private:
@@ -104,9 +107,6 @@ class Channels
      * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
      */
     int16_t setCrypto(ChannelIndex chIndex);
-
-    /** Return the channel index for the specified channel hash, or -1 for not found */
-    int8_t getIndexByHash(ChannelHash channelHash);
 
     /** Given a channel number, return the (0 to 255) hash for that channel
      * If no suitable channel could be found, return -1

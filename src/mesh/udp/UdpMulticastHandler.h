@@ -2,6 +2,7 @@
 #if HAS_UDP_MULTICAST
 #include "configuration.h"
 #include "main.h"
+#include "mesh/Channels.h"
 #include "mesh/Router.h"
 
 #if HAS_ETHERNET && defined(ARCH_NRF52)
@@ -73,6 +74,20 @@ class UdpMulticastHandler final
         LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
         bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router && mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+            // Convert channel hash to index for downlink check
+            int8_t chIndex = channels.getIndexByHash(mp.channel);
+            if (chIndex < 0) {
+                LOG_DEBUG("UDP received packet with unknown channel hash 0x%x", mp.channel);
+                return;
+            }
+
+            // Check if downlink is enabled for this channel
+            auto &ch = channels.getByIndex(chIndex);
+            if (!ch.settings.downlink_enabled) {
+                LOG_DEBUG("UDP downlink disabled for channel %d", chIndex);
+                return;
+            }
+
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
             mp.pki_encrypted = false;
             mp.public_key.size = 0;
@@ -85,9 +100,15 @@ class UdpMulticastHandler final
         }
     }
 
-    bool onSend(const meshtastic_MeshPacket *mp)
+    bool onSend(const meshtastic_MeshPacket *mp, ChannelIndex chIndex)
     {
         if (!isRunning || !mp || !udp) {
+            return false;
+        }
+        // Check if uplink is enabled for this specific channel
+        auto &ch = channels.getByIndex(chIndex);
+        if (!ch.settings.uplink_enabled) {
+            LOG_DEBUG("UDP uplink disabled for channel %d", chIndex);
             return false;
         }
 #if defined(ARCH_NRF52)

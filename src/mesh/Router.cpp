@@ -371,12 +371,54 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             mqtt->onSend(*p, *p_decoded, chIndex);
         }
 #endif
+#if HAS_UDP_MULTICAST
+        if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+            // We must have at least one channel setup for with uplink_enabled
+            bool uplinkEnabled = false;
+            for (int i = 0; i <= 7; i++) {
+                if (channels.getByIndex(i).settings.uplink_enabled)
+                    uplinkEnabled = true;
+            }
+            if (uplinkEnabled) {
+                udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p), chIndex);
+            }
+        }
+#endif
         packetPool.release(p_decoded);
     }
-
 #if HAS_UDP_MULTICAST
-    if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
+    // For packets that are already encrypted, we need to determine the channel from packet info
+    else if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST &&
+             isFromUs(p)) {
+        // Check if any channel has uplink enabled (for PKI support)
+        bool uplinkEnabled = false;
+        for (int i = 0; i <= 7; i++) {
+            if (channels.getByIndex(i).settings.uplink_enabled) {
+                uplinkEnabled = true;
+                break;
+            }
+        }
+        if (uplinkEnabled) {
+            ChannelIndex chIndex = 0; // Default to primary channel
+
+            // For PKI encrypted packets, use default channel if at least one channel has uplink
+            if (p->pki_encrypted) {
+                for (int i = 0; i <= 7; i++) {
+                    if (channels.getByIndex(i).settings.uplink_enabled) {
+                        chIndex = i;
+                        break;
+                    }
+                }
+                udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p), chIndex);
+            } else {
+                // For regular channel PSK encrypted packets, try to find the channel by hash
+                int8_t foundIndex = channels.getIndexByHash(p->channel);
+                if (foundIndex >= 0) {
+                    chIndex = foundIndex;
+                    udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p), chIndex);
+                }
+            }
+        }
     }
 #endif
 
@@ -499,6 +541,35 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         }
     }
 
+#if HAS_UDP_MULTICAST
+    // Fallback: for UDP multicast, try default preset names with default PSK if normal channel match failed
+    if (!decrypted && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP) {
+        if (channels.setDefaultPresetCryptoForHash(p->channel)) {
+            memcpy(bytes, p->encrypted.bytes, rawSize);
+            crypto->decrypt(p->from, p->id, rawSize, bytes);
+
+            meshtastic_Data decodedtmp;
+            memset(&decodedtmp, 0, sizeof(decodedtmp));
+            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
+                decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                p->decoded = decodedtmp;
+                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+                // Map to our local default channel index (name+PSK default), not necessarily primary
+                ChannelIndex defaultIndex = channels.getPrimaryIndex();
+                for (ChannelIndex i = 0; i < channels.getNumChannels(); ++i) {
+                    if (channels.isDefaultChannel(i)) {
+                        defaultIndex = i;
+                        break;
+                    }
+                }
+                chIndex = defaultIndex;
+                decrypted = true;
+            } else {
+                LOG_WARN("UDP fallback decode attempted but failed for hash 0x%x", p->channel);
+            }
+        }
+    }
+#endif
     if (decrypted) {
         // parsing was successful
         p->channel = chIndex; // change to store the index instead of the hash
