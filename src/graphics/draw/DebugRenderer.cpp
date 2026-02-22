@@ -514,6 +514,12 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 // ****************************
 // *      System Screen       *
 // ****************************
+#ifdef ARCH_ESP32
+static uint32_t lastFlashCheck = 0;
+static uint32_t cachedFlashUsed = 0;
+static uint32_t cachedFlashTotal = 0;
+#endif
+
 void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->clear();
@@ -584,13 +590,18 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     uint32_t heapUsed = memGet.getHeapSize() - memGet.getFreeHeap();
     uint32_t heapTotal = memGet.getHeapSize();
 
+#ifdef ARCH_ESP32
     uint32_t psramUsed = memGet.getPsramSize() - memGet.getFreePsram();
     uint32_t psramTotal = memGet.getPsramSize();
 
-    uint32_t flashUsed = 0, flashTotal = 0;
-#ifdef ESP32
-    flashUsed = FSCom.usedBytes();
-    flashTotal = FSCom.totalBytes();
+    // Cache flash usage to speed up menu rendering
+    if (millis() - lastFlashCheck > 10000 || lastFlashCheck == 0) {
+        cachedFlashUsed = FSCom.usedBytes();
+        cachedFlashTotal = FSCom.totalBytes();
+        lastFlashCheck = millis();
+    }
+    uint32_t flashUsed = cachedFlashUsed;
+    uint32_t flashTotal = cachedFlashTotal;
 #endif
 
     uint32_t sdUsed = 0, sdTotal = 0;
@@ -606,7 +617,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     */
     // === Draw memory rows
     drawUsageRow("Heap:", heapUsed, heapTotal, true);
-#ifdef ESP32
+#ifdef ARCH_ESP32
     if (psramUsed > 0) {
         line += 1;
         drawUsageRow("PSRAM:", psramUsed, psramTotal);
