@@ -1,5 +1,8 @@
 #pragma once
+#include <MeshRadio.h>
 #include <NodeDB.h>
+#include <RadioInterface.h>
+#include <cmath>
 #include <cstdint>
 #include <meshUtils.h>
 #define ONE_DAY 24 * 60 * 60
@@ -63,25 +66,26 @@ class Default
         if (numOnlineNodes <= 40) {
             return 1.0;
         } else {
-            float throttlingFactor = 0.075;
-            if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW)
-                throttlingFactor = 0.04;
-            else if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST)
-                throttlingFactor = 0.02;
-            else if (config.lora.use_preset &&
-                     IS_ONE_OF(config.lora.modem_preset, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW))
-                throttlingFactor = 0.01;
+            // Get bandwidth in kHz - convert from code if not using preset
+            float bwKHz =
+                config.lora.use_preset ? modemPresetToBwKHz(config.lora.modem_preset, false) : bwCodeToKHz(config.lora.bandwidth);
+
+            // throttlingFactor = 2^SF / (BW_in_kHz * scaling_divisor)
+            // With scaling_divisor=100:
+            // In SF11 and BW=250khz (longfast), this gives 0.08192 rather than the original 0.075
+            // In SF10 and BW=250khz (mediumslow), this gives 0.04096 rather than the original 0.04
+            // In SF9 and BW=250khz (mediumfast), this gives 0.02048 rather than the original 0.02
+            // In SF7 and BW=250khz (shortfast), this gives 0.00512 rather than the original 0.01
+            float throttlingFactor = static_cast<float>(pow_of_2(config.lora.spread_factor)) / (bwKHz * 100.0f);
 
 #if USERPREFS_EVENT_MODE
-            // If we are in event mode, scale down the throttling factor
-            throttlingFactor = 0.04;
+            // If we are in event mode, scale down the throttling factor by 4
+            throttlingFactor = static_cast<float>(pow_of_2(config.lora.spread_factor)) / (bwKHz * 25.0f);
 #endif
 
             // Scaling up traffic based on number of nodes over 40
             int nodesOverForty = (numOnlineNodes - 40);
-            return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by 0.075 (default)
+            return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by throttle factor
         }
     }
 };
