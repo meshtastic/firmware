@@ -234,6 +234,36 @@ static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
+static void applyTAKTeam(meshtastic_Team team)
+{
+    if (moduleConfig.tak.team == team)
+        return;
+
+    moduleConfig.tak.team = team;
+    moduleConfig.has_tak = true;
+
+    nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+
+    service->reloadConfig(SEGMENT_MODULECONFIG);
+
+    InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
+}
+
+static void applyTAKRole(meshtastic_MemberRole role)
+{
+    if (moduleConfig.tak.role == role)
+        return;
+
+    moduleConfig.tak.role = role;
+    moduleConfig.has_tak = true;
+
+    nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+
+    service->reloadConfig(SEGMENT_MODULECONFIG);
+
+    InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
+}
+
 static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
     if (config.lora.modem_preset == preset)
@@ -692,6 +722,76 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyDeviceRole(meshtastic_Config_DeviceConfig_Role_REPEATER);
         break;
 
+    // TAK Team Colors
+    case SET_TAK_TEAM_WHITE:
+        applyTAKTeam(meshtastic_Team_White);
+        break;
+    case SET_TAK_TEAM_YELLOW:
+        applyTAKTeam(meshtastic_Team_Yellow);
+        break;
+    case SET_TAK_TEAM_ORANGE:
+        applyTAKTeam(meshtastic_Team_Orange);
+        break;
+    case SET_TAK_TEAM_MAGENTA:
+        applyTAKTeam(meshtastic_Team_Magenta);
+        break;
+    case SET_TAK_TEAM_RED:
+        applyTAKTeam(meshtastic_Team_Red);
+        break;
+    case SET_TAK_TEAM_MAROON:
+        applyTAKTeam(meshtastic_Team_Maroon);
+        break;
+    case SET_TAK_TEAM_PURPLE:
+        applyTAKTeam(meshtastic_Team_Purple);
+        break;
+    case SET_TAK_TEAM_DARK_BLUE:
+        applyTAKTeam(meshtastic_Team_Dark_Blue);
+        break;
+    case SET_TAK_TEAM_BLUE:
+        applyTAKTeam(meshtastic_Team_Blue);
+        break;
+    case SET_TAK_TEAM_CYAN:
+        applyTAKTeam(meshtastic_Team_Cyan);
+        break;
+    case SET_TAK_TEAM_TEAL:
+        applyTAKTeam(meshtastic_Team_Teal);
+        break;
+    case SET_TAK_TEAM_GREEN:
+        applyTAKTeam(meshtastic_Team_Green);
+        break;
+    case SET_TAK_TEAM_DARK_GREEN:
+        applyTAKTeam(meshtastic_Team_Dark_Green);
+        break;
+    case SET_TAK_TEAM_BROWN:
+        applyTAKTeam(meshtastic_Team_Brown);
+        break;
+
+    // TAK Member Roles
+    case SET_TAK_ROLE_TEAM_MEMBER:
+        applyTAKRole(meshtastic_MemberRole_TeamMember);
+        break;
+    case SET_TAK_ROLE_TEAM_LEAD:
+        applyTAKRole(meshtastic_MemberRole_TeamLead);
+        break;
+    case SET_TAK_ROLE_HQ:
+        applyTAKRole(meshtastic_MemberRole_HQ);
+        break;
+    case SET_TAK_ROLE_SNIPER:
+        applyTAKRole(meshtastic_MemberRole_Sniper);
+        break;
+    case SET_TAK_ROLE_MEDIC:
+        applyTAKRole(meshtastic_MemberRole_Medic);
+        break;
+    case SET_TAK_ROLE_FORWARD_OBSERVER:
+        applyTAKRole(meshtastic_MemberRole_ForwardObserver);
+        break;
+    case SET_TAK_ROLE_RTO:
+        applyTAKRole(meshtastic_MemberRole_RTO);
+        break;
+    case SET_TAK_ROLE_K9:
+        applyTAKRole(meshtastic_MemberRole_K9);
+        break;
+
     // Presets
     case SET_PRESET_LONG_SLOW:
         applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW);
@@ -971,6 +1071,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 #endif
         items.push_back(MenuItem("Display", MenuPage::NODE_CONFIG_DISPLAY));
         items.push_back(MenuItem("Bluetooth", MenuPage::NODE_CONFIG_BLUETOOTH));
+
+        // TAK Config Section (only shown for TAK/TAK_TRACKER roles)
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK ||
+            config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+            items.push_back(MenuItem::Header("TAK Config"));
+            items.push_back(MenuItem("TAK", MenuPage::NODE_CONFIG_TAK));
+        }
 
         // Administration Section
         items.push_back(MenuItem::Header("Administration"));
@@ -1350,6 +1457,49 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
+    // TAK Config Section
+    case NODE_CONFIG_TAK:
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Team Color", MenuPage::NODE_CONFIG_TAK_TEAM));
+        items.push_back(MenuItem("Member Role", MenuPage::NODE_CONFIG_TAK_ROLE));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_TAK_TEAM:
+        previousPage = MenuPage::NODE_CONFIG_TAK;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem("White", MenuAction::SET_TAK_TEAM_WHITE, MenuPage::EXIT));
+        items.push_back(MenuItem("Yellow", MenuAction::SET_TAK_TEAM_YELLOW, MenuPage::EXIT));
+        items.push_back(MenuItem("Orange", MenuAction::SET_TAK_TEAM_ORANGE, MenuPage::EXIT));
+        items.push_back(MenuItem("Magenta", MenuAction::SET_TAK_TEAM_MAGENTA, MenuPage::EXIT));
+        items.push_back(MenuItem("Red", MenuAction::SET_TAK_TEAM_RED, MenuPage::EXIT));
+        items.push_back(MenuItem("Maroon", MenuAction::SET_TAK_TEAM_MAROON, MenuPage::EXIT));
+        items.push_back(MenuItem("Purple", MenuAction::SET_TAK_TEAM_PURPLE, MenuPage::EXIT));
+        items.push_back(MenuItem("Dark Blue", MenuAction::SET_TAK_TEAM_DARK_BLUE, MenuPage::EXIT));
+        items.push_back(MenuItem("Blue", MenuAction::SET_TAK_TEAM_BLUE, MenuPage::EXIT));
+        items.push_back(MenuItem("Cyan", MenuAction::SET_TAK_TEAM_CYAN, MenuPage::EXIT));
+        items.push_back(MenuItem("Teal", MenuAction::SET_TAK_TEAM_TEAL, MenuPage::EXIT));
+        items.push_back(MenuItem("Green", MenuAction::SET_TAK_TEAM_GREEN, MenuPage::EXIT));
+        items.push_back(MenuItem("Dark Green", MenuAction::SET_TAK_TEAM_DARK_GREEN, MenuPage::EXIT));
+        items.push_back(MenuItem("Brown", MenuAction::SET_TAK_TEAM_BROWN, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_TAK_ROLE:
+        previousPage = MenuPage::NODE_CONFIG_TAK;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Team Member", MenuAction::SET_TAK_ROLE_TEAM_MEMBER, MenuPage::EXIT));
+        items.push_back(MenuItem("Team Lead", MenuAction::SET_TAK_ROLE_TEAM_LEAD, MenuPage::EXIT));
+        items.push_back(MenuItem("HQ", MenuAction::SET_TAK_ROLE_HQ, MenuPage::EXIT));
+        items.push_back(MenuItem("Sniper", MenuAction::SET_TAK_ROLE_SNIPER, MenuPage::EXIT));
+        items.push_back(MenuItem("Medic", MenuAction::SET_TAK_ROLE_MEDIC, MenuPage::EXIT));
+        items.push_back(MenuItem("Fwd Observer", MenuAction::SET_TAK_ROLE_FORWARD_OBSERVER, MenuPage::EXIT));
+        items.push_back(MenuItem("RTO", MenuAction::SET_TAK_ROLE_RTO, MenuPage::EXIT));
+        items.push_back(MenuItem("K9", MenuAction::SET_TAK_ROLE_K9, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
     // Administration Section
     case NODE_CONFIG_ADMIN_RESET:
         previousPage = MenuPage::NODE_CONFIG;

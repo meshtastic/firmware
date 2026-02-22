@@ -1001,6 +1001,11 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.statusmessage = c.payload_variant.statusmessage;
         shouldReboot = false;
         break;
+    case meshtastic_ModuleConfig_tak_tag:
+        LOG_INFO("Set module config: TAK");
+        moduleConfig.has_tak = true;
+        moduleConfig.tak = c.payload_variant.tak;
+        break;
     }
     saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
     return true;
@@ -1185,6 +1190,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             LOG_INFO("Get module config: StatusMessage");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_statusmessage_tag;
             res.get_module_config_response.payload_variant.statusmessage = moduleConfig.statusmessage;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_TAK_CONFIG:
+            LOG_INFO("Get module config: TAK");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_tak_tag;
+            res.get_module_config_response.payload_variant.tak = moduleConfig.tak;
             break;
         }
 
