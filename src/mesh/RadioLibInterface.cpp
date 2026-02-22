@@ -517,10 +517,24 @@ void RadioLibInterface::handleReceiveInterrupt()
 
 void RadioLibInterface::startReceive()
 {
-    // Note the updated timestamp, to avoid unneeded AGC resets
-    last_listen = millis();
     isReceiving = true;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
+}
+
+void RadioLibInterface::pollMissedIrqs()
+{
+    // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
+    if (isReceiving) {
+        checkRxDoneIrqFlag();
+    }
+}
+
+void RadioLibInterface::checkRxDoneIrqFlag()
+{
+    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
+        LOG_WARN("caught missed RX_DONE");
+        notify(ISR_RX, true);
+    }
 }
 
 void RadioLibInterface::configHardwareForSend()

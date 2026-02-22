@@ -192,8 +192,6 @@ bool kb_found = false;
 // global bool to record that on-screen keyboard (OSK) is present
 bool osk_found = false;
 
-unsigned long last_listen = 0;
-
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the Accelerometer (if found)
@@ -1121,10 +1119,12 @@ void loop()
 #endif
     power->powerCommandsCheck();
 
-    if (RadioLibInterface::instance != nullptr && !Throttle::isWithinTimespanMs(last_listen, 1000 * 60) &&
-        !(RadioLibInterface::instance->isSending() || RadioLibInterface::instance->isActivelyReceiving())) {
-        RadioLibInterface::instance->startReceive();
-        LOG_DEBUG("attempting AGC reset");
+    if (RadioLibInterface::instance != nullptr) {
+        static uint32_t lastRadioMissedIrqPoll;
+        if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
+            lastRadioMissedIrqPoll = millis();
+            RadioLibInterface::instance->pollMissedIrqs();
+        }
     }
 
 #ifdef DEBUG_STACK
