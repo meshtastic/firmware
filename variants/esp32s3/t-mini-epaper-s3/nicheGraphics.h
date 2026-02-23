@@ -40,10 +40,11 @@ void setupNicheGraphics()
     InkHUD::InkHUD *inkhud = InkHUD::InkHUD::getInstance();
     inkhud->setDriver(driver);
     inkhud->setDisplayResilience(10, 1.5);
+    inkhud->twoWayRocker = true;
 
     // Fonts
-    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
-    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_6PT_WIN1252;
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Small display defaults
@@ -78,7 +79,7 @@ void setupNicheGraphics()
     // Center press (boot button)
     buttons->setWiring(0, INPUTDRIVER_ENCODER_BTN, true);
     buttons->setTiming(0, 75, 500);
-    buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
+    buttons->setUnifiedPressHandler(0, [inkhud]() { inkhud->shortpress(); });
 
     // INPUTDRIVER_ENCODER_UP maps to physical LEFT rocker pin (IO4)
     // INPUTDRIVER_ENCODER_DOWN maps to physical RIGHT rocker pin (IO3)
