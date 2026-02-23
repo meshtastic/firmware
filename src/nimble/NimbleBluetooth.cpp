@@ -52,6 +52,20 @@ NimBLEServer *bleServer;
 static bool passkeyShowing;
 static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
 
+static void clearPairingDisplay()
+{
+    if (!passkeyShowing) {
+        return;
+    }
+
+    passkeyShowing = false;
+#if HAS_SCREEN
+    if (screen) {
+        screen->endAlert();
+    }
+#endif
+}
+
 class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 {
     /*
@@ -630,13 +644,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
-
-        // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
-        if (passkeyShowing) {
-            passkeyShowing = false;
-            if (screen)
-                screen->endAlert();
-        }
+        clearPairingDisplay();
 
         // Store the connection handle for future use
 #ifdef NIMBLE_TWO
@@ -693,6 +701,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
+        clearPairingDisplay();
 
         if (bluetoothPhoneAPI) {
             bluetoothPhoneAPI->close();
