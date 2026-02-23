@@ -9,6 +9,9 @@ class TestModule : public MeshModule
   public:
     TestModule() : MeshModule("TestModule") {}
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return true; }
+    using MeshModule::currentRequest;
+    using MeshModule::ignoreRequest;
+    using MeshModule::isMultiHopBroadcastRequest;
 };
 
 static TestModule *testModule;
