@@ -299,6 +299,7 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
                            RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED);
 }
 
+#ifdef LR11X0_AGC_RESET
 template <typename T> void LR11x0Interface<T>::resetAGC()
 {
     // Safety: don't reset mid-packet
@@ -328,6 +329,7 @@ template <typename T> void LR11x0Interface<T>::resetAGC()
     // 6. Resume receiving
     startReceive();
 }
+#endif
 
 template <typename T> bool LR11x0Interface<T>::sleep()
 {
