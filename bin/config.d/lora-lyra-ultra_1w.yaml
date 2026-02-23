@@ -1,0 +1,16 @@
+# For use with Armbian luckfox-lyra-ultra-w
+# Enable overlay 'luckfox-lyra-ultra-w-spi0-cs0-spidev' with armbian-config
+# https://github.com/wehooper4/Meshtastic-Hardware/tree/main/Luckfox%20Ultra%20Hat
+# 1 Watt Lyra Ultra hat
+Lora:
+  Module: sx1262
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  CS: 10
+  IRQ: 5
+  Busy: 11
+  Reset: 9
+  RXen: 14
+
+  spidev: spidev0.0 #pins are (CS=10, CLK=8, MOSI=6, MISO=7)
+  spiSpeed: 2000000
