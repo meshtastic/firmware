@@ -60,8 +60,10 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
 {
     if (currentRequest) {
-        if (isMultiHopBroadcastRequest())
+        if (isMultiHopBroadcastRequest()) {
+            ignoreRequest = true;
             return NULL;
+        }
         auto req = *currentRequest;
         const auto &p = req.decoded;
         meshtastic_Telemetry scratch;
