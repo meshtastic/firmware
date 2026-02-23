@@ -2,186 +2,168 @@
 
 #include "./GDEW0102T4.h"
 
-#include "SPILock.h"
+#include <cstring>
 
 using namespace NicheGraphics::Drivers;
 
-GDEW0102T4::GDEW0102T4() : EInk(width, height, supported)
+// LUTs from GxEPD2_102.cpp (GDEW0102T4 / UC8175).
+static const uint8_t LUT_W_FULL[] = {
+    0x60, 0x5A, 0x5A, 0x00, 0x00, 0x01, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+};
+
+static const uint8_t LUT_B_FULL[] = {
+    0x90, 0x5A, 0x5A, 0x00, 0x00, 0x01, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+};
+
+static const uint8_t LUT_W_FAST[] = {
+    0x60, 0x01, 0x01, 0x00, 0x00, 0x01, //
+    0x80, 0x12, 0x00, 0x00, 0x00, 0x01, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+};
+
+static const uint8_t LUT_B_FAST[] = {
+    0x90, 0x01, 0x01, 0x00, 0x00, 0x01, //
+    0x40, 0x14, 0x00, 0x00, 0x00, 0x01, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+};
+
+GDEW0102T4::GDEW0102T4() : UC8175(width, height, supported) {}
+
+void GDEW0102T4::setFastConfig(FastConfig cfg)
 {
-    bufferRowSize = ((width - 1) / 8) + 1;
-    bufferSize = bufferRowSize * height;
+    // Very low clock values make transitions "melt"/bleed on this panel.
+    if (cfg.reg30 < 0x10)
+        cfg.reg30 = 0x10;
+    fastConfig = cfg;
 }
 
-void GDEW0102T4::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_busy, uint8_t pin_rst)
+GDEW0102T4::FastConfig GDEW0102T4::getFastConfig() const
 {
-    this->spi = spi;
-    this->pin_dc = pin_dc;
-    this->pin_cs = pin_cs;
-    this->pin_busy = pin_busy;
-    this->pin_rst = pin_rst;
-
-    pinMode(this->pin_dc, OUTPUT);
-    pinMode(this->pin_cs, OUTPUT);
-    pinMode(this->pin_busy, INPUT);
-
-    if (this->pin_rst != (uint8_t)-1) {
-        pinMode(this->pin_rst, OUTPUT);
-        digitalWrite(this->pin_rst, HIGH);
-    }
-
-    configDisplay();
+    return fastConfig;
 }
 
-void GDEW0102T4::update(uint8_t *imageData, UpdateTypes type)
+void GDEW0102T4::configCommon()
 {
-    this->buffer = imageData;
-    this->updateType = type;
+    // Init path aligned with GxEPD2_GDEW0102T4 (UC8175 family).
+    sendCommand(0xD2);
+    sendData(0x3F);
 
-    configDisplay();
-
-    // For this panel, writing white to old-image RAM before full refresh is the
-    // most reliable baseline and matches the vendor/GxEPD flow.
-    sendCommand(0x10);
-    for (uint32_t i = 0; i < bufferSize; ++i)
-        sendData((uint8_t)0xFF);
-
-    writeNewImage();
-
-    // Full display refresh (UC8175 family)
-    sendCommand(0x12);
-
-    detachFromUpdate();
-}
-
-void GDEW0102T4::wait(uint32_t timeoutMs)
-{
-    uint32_t started = millis();
-    while (digitalRead(pin_busy) == BUSY_ACTIVE) {
-        if ((millis() - started) > timeoutMs) {
-            failed = true;
-            break;
-        }
-        yield();
-    }
-}
-
-void GDEW0102T4::reset()
-{
-    if (pin_rst != (uint8_t)-1) {
-        digitalWrite(pin_rst, LOW);
-        delay(20);
-        digitalWrite(pin_rst, HIGH);
-        delay(20);
-    } else {
-        sendCommand(0x12); // software reset
-        delay(10);
-    }
-
-    wait(1000);
-}
-
-void GDEW0102T4::sendCommand(uint8_t command)
-{
-    spiLock->lock();
-    spi->beginTransaction(spiSettings);
-    digitalWrite(pin_dc, LOW);
-    digitalWrite(pin_cs, LOW);
-    spi->transfer(command);
-    digitalWrite(pin_cs, HIGH);
-    digitalWrite(pin_dc, HIGH);
-    spi->endTransaction();
-    spiLock->unlock();
-}
-
-void GDEW0102T4::sendData(uint8_t data)
-{
-    sendData(&data, 1);
-}
-
-void GDEW0102T4::sendData(const uint8_t *data, uint32_t size)
-{
-    spiLock->lock();
-    spi->beginTransaction(spiSettings);
-    digitalWrite(pin_dc, HIGH);
-    digitalWrite(pin_cs, LOW);
-
-#if defined(ARCH_ESP32)
-    spi->transferBytes(data, NULL, size);
-#elif defined(ARCH_NRF52)
-    spi->transfer(data, NULL, size);
-#else
-    for (uint32_t i = 0; i < size; ++i)
-        spi->transfer(data[i]);
-#endif
-
-    digitalWrite(pin_cs, HIGH);
-    digitalWrite(pin_dc, HIGH);
-    spi->endTransaction();
-    spiLock->unlock();
-}
-
-void GDEW0102T4::configDisplay()
-{
-    reset();
-
-    // Vendor-proven wake sequence (LilyGO/GxEPD path for GDGDEW0102T4 / UC8175)
     sendCommand(0x00);
-    sendData(0x5F);
+    sendData(0x6F);
+
+    sendCommand(0x01);
+    sendData(0x03);
+    sendData(0x00);
+    sendData(0x2B);
+    sendData(0x2B);
+
+    sendCommand(0x06);
+    sendData(0x3F);
 
     sendCommand(0x2A);
     sendData(0x00);
     sendData(0x00);
 
-    sendCommand(0x04); // Power on
-    wait(2000);
+    sendCommand(0x30); // PLL / drive clock
+    sendData(0x13);
+
+    sendCommand(0x50);//Last border/data interval; subtle but can affect artifacts
+    sendData(0x57);
+
+    sendCommand(0x60);
+    sendData(0x22);
+
+    sendCommand(0x61);
+    sendData(width);
+    sendData(height);
+
+    sendCommand(0x82); // VCOM DC setting
+    sendData(0x12);
+
+    sendCommand(0xE3);
+    sendData(0x33);
+}
+
+void GDEW0102T4::configFull()
+{
+    sendCommand(0x23);
+    sendData(LUT_W_FULL, sizeof(LUT_W_FULL));
+    sendCommand(0x24);
+    sendData(LUT_B_FULL, sizeof(LUT_B_FULL));
+
+    powerOn();
+}
+
+void GDEW0102T4::configFast()
+{
+    uint8_t lutW[sizeof(LUT_W_FAST)];
+    uint8_t lutB[sizeof(LUT_B_FAST)];
+    memcpy(lutW, LUT_W_FAST, sizeof(LUT_W_FAST));
+    memcpy(lutB, LUT_B_FAST, sizeof(LUT_B_FAST));
+
+    // Second stage duration bytes are the main "darkness vs ghosting" control for this panel.
+    lutW[7] = fastConfig.lutW2;
+    lutB[7] = fastConfig.lutB2;
+
+    sendCommand(0x30);
+    sendData(fastConfig.reg30);
 
     sendCommand(0x50);
-    sendData(0x97);
+    sendData(fastConfig.reg50);
+
+    sendCommand(0x82);
+    sendData(fastConfig.reg82);
+
+    sendCommand(0x23);
+    sendData(lutW, sizeof(lutW));
+    sendCommand(0x24);
+    sendData(lutB, sizeof(lutB));
+
+    powerOn();
 }
 
 void GDEW0102T4::writeOldImage()
 {
-    sendCommand(0x10);
-    sendData(buffer, bufferSize);
-}
-
-void GDEW0102T4::writeNewImage()
-{
-    sendCommand(0x13);
-    sendData(buffer, bufferSize);
-}
-
-void GDEW0102T4::detachFromUpdate()
-{
-    switch (updateType) {
-    case FULL:
-        EInk::beginPolling(10, 900);
-        break;
-    case FAST:
-        // This panel path currently uses the same full-refresh command sequence.
-        EInk::beginPolling(10, 900);
-        break;
-    default:
-        EInk::beginPolling(10, 900);
-        break;
+    // On this panel, FULL refresh is most reliable when "old image" is all white.
+    if (updateType == FULL) {
+        sendCommand(0x10);
+        for (uint32_t i = 0; i < bufferSize; ++i)
+            sendData((uint8_t)0xFF);
+        return;
     }
-}
 
-bool GDEW0102T4::isUpdateDone()
-{
-    return digitalRead(pin_busy) != BUSY_ACTIVE;
+    // FAST refresh uses differential data (previous frame as old image).
+    if (previousBuffer) {
+        writeImage(0x10, previousBuffer);
+    } else {
+        writeImage(0x10, buffer);
+    }
 }
 
 void GDEW0102T4::finalizeUpdate()
 {
-    // Power-off + deep sleep sequence used by the reference implementation.
-    sendCommand(0x02); // Power off
-    wait(2000);
-
-    if (pin_rst != (uint8_t)-1) {
-        sendCommand(0x07); // Deep sleep
-        sendData(0xA5);
-    }
+    // Keep panel out of deep-sleep between updates for better reliability of repeated FAST refresh.
+    powerOff();
 }
 
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

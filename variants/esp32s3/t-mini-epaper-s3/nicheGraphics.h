@@ -16,6 +16,7 @@
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
+#include "graphics/niche/InkHUD/Applet.h"
 
 // Shared NicheGraphics components
 #include "graphics/niche/Drivers/EInk/GDEW0102T4.h"
@@ -34,12 +35,15 @@ void setupNicheGraphics()
     SPIClass *hspi = new SPIClass(HSPI);
     hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
 
-    Drivers::EInk *driver = new Drivers::GDEW0102T4;
+    Drivers::GDEW0102T4 *driver = new Drivers::GDEW0102T4;
     driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
+    // Runtime default: chosen preset #1.
+    driver->setFastConfig({0x13, 0xD2, 0x12, 0x0E, 0x14});
 
     InkHUD::InkHUD *inkhud = InkHUD::InkHUD::getInstance();
     inkhud->setDriver(driver);
-    inkhud->setDisplayResilience(10, 1.5);
+    // Stronger anti-ghosting profile: fewer FAST updates before enforcing FULL cleanup.
+    inkhud->setDisplayResilience(3, 3);
     inkhud->twoWayRocker = true;
 
     // Fonts
@@ -79,7 +83,8 @@ void setupNicheGraphics()
     // Center press (boot button)
     buttons->setWiring(0, INPUTDRIVER_ENCODER_BTN, true);
     buttons->setTiming(0, 75, 500);
-    buttons->setUnifiedPressHandler(0, [inkhud]() { inkhud->shortpress(); });
+    buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
+    buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
     // INPUTDRIVER_ENCODER_UP maps to physical LEFT rocker pin (IO4)
     // INPUTDRIVER_ENCODER_DOWN maps to physical RIGHT rocker pin (IO3)

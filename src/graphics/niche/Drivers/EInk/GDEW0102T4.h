@@ -14,12 +14,12 @@ E-Ink display driver
 
 #include "configuration.h"
 
-#include "./EInk.h"
+#include "./UC8175.h"
 
 namespace NicheGraphics::Drivers
 {
 
-class GDEW0102T4 : public EInk
+class GDEW0102T4 : public UC8175
 {
   private:
     static constexpr uint16_t width = 80;
@@ -27,38 +27,27 @@ class GDEW0102T4 : public EInk
     static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
   public:
+    struct FastConfig {
+        uint8_t reg30;
+        uint8_t reg50;
+        uint8_t reg82;
+        uint8_t lutW2;
+        uint8_t lutB2;
+    };
+
     GDEW0102T4();
-    void begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_busy, uint8_t pin_rst = -1) override;
-    void update(uint8_t *imageData, UpdateTypes type) override;
+    void setFastConfig(FastConfig cfg);
+    FastConfig getFastConfig() const;
 
   protected:
-    void wait(uint32_t timeoutMs = 1000);
-    void reset();
-    void sendCommand(uint8_t command);
-    void sendData(uint8_t data);
-    void sendData(const uint8_t *data, uint32_t size);
-    void configDisplay();
-    void writeOldImage();
-    void writeNewImage();
-
-    void detachFromUpdate();
-    bool isUpdateDone() override;
+    void configCommon() override;
+    void configFull() override;
+    void configFast() override;
+    void writeOldImage() override;
     void finalizeUpdate() override;
 
   private:
-    static constexpr uint8_t BUSY_ACTIVE = LOW;
-
-    uint16_t bufferRowSize = 0;
-    uint32_t bufferSize = 0;
-    uint8_t *buffer = nullptr;
-    UpdateTypes updateType = UpdateTypes::UNSPECIFIED;
-
-    uint8_t pin_dc = (uint8_t)-1;
-    uint8_t pin_cs = (uint8_t)-1;
-    uint8_t pin_busy = (uint8_t)-1;
-    uint8_t pin_rst = (uint8_t)-1;
-    SPIClass *spi = nullptr;
-    SPISettings spiSettings = SPISettings(8000000, MSBFIRST, SPI_MODE0);
+    FastConfig fastConfig = {0x13, 0xF2, 0x12, 0x0E, 0x14};
 };
 
 } // namespace NicheGraphics::Drivers
