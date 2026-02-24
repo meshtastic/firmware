@@ -20,12 +20,12 @@ void setUp(void)
 {
     testModule = new TestModule();
     memset(&testPacket, 0, sizeof(testPacket));
-    MeshModule::currentRequest = &testPacket;
+    TestModule::currentRequest = &testPacket;
 }
 
 void tearDown(void)
 {
-    MeshModule::currentRequest = NULL;
+    TestModule::currentRequest = NULL;
     delete testModule;
 }
 
@@ -72,7 +72,7 @@ static void test_fullyRelayedBroadcast_isBlocked()
 // No current request: should not crash, should return false
 static void test_noCurrentRequest_isAllowed()
 {
-    MeshModule::currentRequest = NULL;
+    TestModule::currentRequest = NULL;
 
     TEST_ASSERT_FALSE(testModule->isMultiHopBroadcastRequest());
 }
