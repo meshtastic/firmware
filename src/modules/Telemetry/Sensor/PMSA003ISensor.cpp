@@ -138,6 +138,10 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.air_quality_metrics.has_particles_100um = true;
     measurement->variant.air_quality_metrics.particles_100um = read16(buffer, 26);
 
+    LOG_DEBUG("Got %s readings: pM1p0_standard=%u, pM2p5_standard=%u, pM10p0_standard=%u", sensorName,
+              measurement->variant.air_quality_metrics.pm10_standard, measurement->variant.air_quality_metrics.pm25_standard,
+              measurement->variant.air_quality_metrics.pm100_standard);
+
     return true;
 }
 
