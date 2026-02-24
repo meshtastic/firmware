@@ -280,7 +280,7 @@ void RadioLibInterface::updateNoiseFloor()
     // Get current RSSI from the radio
     int16_t rssi = getCurrentRSSI();
 
-    if (rssi  >= 0 || rssi < NOISE_FLOOR_MIN) {
+    if (rssi >= 0 || rssi < NOISE_FLOOR_MIN) {
         LOG_DEBUG("Skipping invalid RSSI reading: %d", rssi);
         return;
     }
@@ -351,8 +351,6 @@ currently active.
 */
 void RadioLibInterface::onNotify(uint32_t notification)
 {
-
-    updateNoiseFloor();
 
     switch (notification) {
     case ISR_TX:
