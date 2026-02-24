@@ -216,7 +216,8 @@ void InkHUD::NodeListApplet::onRender(bool full)
         }
 
         // Give long names as much room as possible while still avoiding right side signal and hop space
-        const uint16_t longNameMaxW = (rightContentW + rightContentGap < width()) ? (width() - rightContentW - rightContentGap) : 0;
+        const uint16_t longNameMaxW =
+            (rightContentW + rightContentGap < width()) ? (width() - rightContentW - rightContentGap) : 0;
         const std::string longNameShown = ellipsizeToWidth(longName, longNameMaxW);
 
         // Safety crop
