@@ -273,6 +273,12 @@ void InkHUD::WindowManager::prevApplet()
     inkhud->forceUpdate(EInk::UpdateTypes::FAST); // bringToForeground already requested, but we're manually forcing FAST
 }
 
+// Returns active applet
+NicheGraphics::InkHUD::Applet *InkHUD::WindowManager::getActiveApplet()
+{
+    return userTiles.at(settings->userTiles.focused)->getAssignedApplet();
+}
+
 // Rotate the display image by 90 degrees
 void InkHUD::WindowManager::rotate()
 {
@@ -396,7 +402,7 @@ void InkHUD::WindowManager::autoshow()
 {
     // Don't perform autoshow if a system applet has exclusive use of the display right now
     // Note: lockRequests prevents autoshow attempting to hide menuApplet
-    for (SystemApplet *sa : inkhud->systemApplets) {
+    for (const SystemApplet *sa : inkhud->systemApplets) {
         if (sa->lockRendering || sa->lockRequests)
             return;
     }

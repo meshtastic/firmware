@@ -29,6 +29,9 @@
 #if __has_include(<SensirionI2cSfa3x.h>)
 #include "Sensor/SFA30Sensor.h"
 #endif
+#if __has_include(<SensirionI2cScd30.h>)
+#include "Sensor/SCD30Sensor.h"
+#endif
 
 void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
@@ -56,6 +59,9 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
 #if __has_include(<SensirionI2cSfa3x.h>)
     addSensor<SFA30Sensor>(i2cScanner, ScanI2C::DeviceType::SFA30);
+#endif
+#if __has_include(<SensirionI2cScd30.h>)
+    addSensor<SCD30Sensor>(i2cScanner, ScanI2C::DeviceType::SCD30);
 #endif
 }
 

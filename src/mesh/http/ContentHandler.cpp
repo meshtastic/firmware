@@ -623,7 +623,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     }
 
     // Helper lambda to create JSON array and clean up memory properly
-    auto createJSONArrayFromLog = [](uint32_t *logArray, int count) -> JSONValue * {
+    auto createJSONArrayFromLog = [](const uint32_t *logArray, int count) -> JSONValue * {
         JSONArray tempArray;
         for (int i = 0; i < count; i++) {
             tempArray.push_back(new JSONValue((int)logArray[i]));

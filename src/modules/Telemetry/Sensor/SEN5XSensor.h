@@ -114,7 +114,7 @@ See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
     bool sendCommand(uint16_t command);
     bool sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNumber = 0);
     uint8_t readBuffer(uint8_t *buffer, uint8_t byteNumber); // Return number of bytes received
-    uint8_t sen5xCRC(uint8_t *buffer);
+    uint8_t sen5xCRC(const uint8_t *buffer);
     bool startCleaning();
     uint8_t getMeasurements();
     // bool readRawValues();

@@ -41,7 +41,7 @@ extern uint32_t lastSetFromPhoneNtpOrGps;
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
 RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate = false);
-RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t);
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t);
 
 /// Return a string name for the quality
 const char *RtcName(RTCQuality quality);
