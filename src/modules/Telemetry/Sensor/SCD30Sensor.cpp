@@ -447,15 +447,24 @@ bool SCD30Sensor::allDisabled()
 
 void SCD30Sensor::setDisables(meshtastic_SCD30Disables setDisables)
 {
+    bool toSave = false;
     if (setDisables.has_disable_co2) {
+        moduleConfig.telemetry.sensordisables.has_scd30 = true;
+        moduleConfig.telemetry.sensordisables.scd30.has_disable_co2 = true;
         moduleConfig.telemetry.sensordisables.scd30.disable_co2 = setDisables.disable_co2;
         LOG_INFO("%s %s CO2 metric", sensorName, setDisables.disable_co2 ? "disabling" : "enabling");
+        toSave = true;
     }
     if (setDisables.has_disable_trh) {
+        moduleConfig.telemetry.sensordisables.has_scd30 = true;
+        moduleConfig.telemetry.sensordisables.scd30.has_disable_trh = true;
         moduleConfig.telemetry.sensordisables.scd30.disable_trh = setDisables.disable_trh;
         LOG_INFO("%s %s T/RH metrics", sensorName, setDisables.disable_trh ? "disabling" : "enabling");
+        toSave = true;
     }
 
+    if (!toSave)
+        return;
     if (!nodeDB->saveToDisk(SEGMENT_MODULECONFIG))
         LOG_ERROR("%s: Can't save module config", sensorName);
 }

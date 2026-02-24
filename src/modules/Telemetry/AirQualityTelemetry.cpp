@@ -130,6 +130,8 @@ int32_t AirQualityTelemetryModule::runOnce()
                         }
                     }
                 }
+            } else {
+                LOG_INFO("%s: All subsensors are disabled", sensor->sensorName);
             }
         }
 
@@ -163,6 +165,8 @@ int32_t AirQualityTelemetryModule::runOnce()
                         LOG_DEBUG("Sensor stays enabled due to warm up period");
                     }
                 }
+            } else {
+                LOG_INFO("%s: All subsensors are disabled", sensor->sensorName);
             }
         }
     }
@@ -318,6 +322,8 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
             sensor_get = sensor->getMetrics(m);
             valid = valid || sensor_get;
             hasSensor = true;
+        } else {
+            LOG_INFO("%s: All subsensors are disabled", sensor->sensorName);
         }
     }
 
