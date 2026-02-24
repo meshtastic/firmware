@@ -244,7 +244,6 @@ bool SEN5XSensor::idle(bool checkState)
         saveState();
     }
 
-    // TODO - Add logic for enable/disabled sensors
     if (!oneShotMode) {
         LOG_INFO("%s: Not stopping measurement, continuous mode!", sensorName);
         return true;
@@ -253,7 +252,7 @@ bool SEN5XSensor::idle(bool checkState)
     }
 
     // Switch to low-power based on the model
-    if (model == SEN50) {
+    if (model == SEN50 || (moduleConfig.sensordisables.sen5x.disable_idx && moduleConfig.sensordisables.sen5x.disable_trh)) {
         if (!sendCommand(SEN5X_STOP_MEASUREMENT)) {
             LOG_ERROR("%s: Error stopping measurement", sensorName);
             return false;
