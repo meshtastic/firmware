@@ -98,6 +98,8 @@ extern struct portduino_config_struct {
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
+    bool has_gpio_detect_pa = false;
+    int gpio_detect_pa = 0;
     int num_pa_points = 1; // default to 1 point, with 0 gain
     uint16_t tx_gain_lora[22] = {0};
     pinMapping lora_cs_pin = {"Lora", "CS"};
@@ -107,6 +109,7 @@ extern struct portduino_config_struct {
     pinMapping lora_txen_pin = {"Lora", "TXen"};
     pinMapping lora_rxen_pin = {"Lora", "RXen"};
     pinMapping lora_sx126x_ant_sw_pin = {"Lora", "SX126X_ANT_SW"};
+    pinMapping lora_pa_detect_pin = {"Lora", "GPIO_DETECT_PA"};
     std::vector<pinMapping> extra_pins = {};
 
     // GPS
@@ -194,13 +197,14 @@ extern struct portduino_config_struct {
     int maxtophone = 100;
     int MaxNodes = 200;
 
-    pinMapping *all_pins[20] = {&lora_cs_pin,
+    pinMapping *all_pins[21] = {&lora_cs_pin,
                                 &lora_irq_pin,
                                 &lora_busy_pin,
                                 &lora_reset_pin,
                                 &lora_txen_pin,
                                 &lora_rxen_pin,
                                 &lora_sx126x_ant_sw_pin,
+                                &lora_pa_detect_pin,
                                 &displayDC,
                                 &displayCS,
                                 &displayBacklight,
@@ -244,6 +248,9 @@ extern struct portduino_config_struct {
             out << YAML::Key << "LR1120_MAX_POWER" << YAML::Value << lr1120_max_power;
         if (rf95_max_power != 20)
             out << YAML::Key << "RF95_MAX_POWER" << YAML::Value << rf95_max_power;
+
+        if (has_gpio_detect_pa)
+            out << YAML::Key << "GPIO_DETECT_PA" << YAML::Value << gpio_detect_pa;
 
         if (num_pa_points > 1) {
             out << YAML::Key << "TX_GAIN_LORA" << YAML::Value << YAML::Flow << YAML::BeginSeq;
