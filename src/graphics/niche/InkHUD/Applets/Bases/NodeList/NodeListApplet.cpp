@@ -81,25 +81,25 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
 uint8_t InkHUD::NodeListApplet::maxCards()
 {
     // Cache result. Shouldn't change during execution
-    static uint8_t cards = 0;
+    static uint8_t maxCardCount = 0;
 
-    if (!cards) {
+    if (!maxCardCount) {
         const uint16_t height = Tile::maxDisplayDimension();
 
         // Use a loop instead of arithmetic, because it's easier for my brain to follow
         // Add cards one by one, until the latest card extends below screen
 
         uint16_t y = cardH; // First card: no margin above
-        cards = 1;
+        maxCardCount = 1;
 
         while (y < height) {
             y += cardMarginH;
             y += cardH;
-            cards++;
+            maxCardCount++;
         }
     }
 
-    return cards;
+    return maxCardCount;
 }
 
 // Draw, using info which derived applet placed into NodeListApplet::cards for us
@@ -137,12 +137,12 @@ void InkHUD::NodeListApplet::onRender(bool full)
 
         // Gather info
         // ========================================
-        NodeNum &nodeNum = card->nodeNum;
+        const NodeNum &nodeNum = card->nodeNum;
         SignalStrength &signal = card->signal;
         std::string longName;  // handled below
         std::string shortName; // handled below
         std::string distance;  // handled below;
-        uint8_t &hopsAway = card->hopsAway;
+        const uint8_t &hopsAway = card->hopsAway;
 
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
 

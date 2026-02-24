@@ -288,7 +288,8 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 // **********************
 // * Favorite Node Info *
 // **********************
-void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
+// cppcheck-suppress constParameterPointer; signature must match FrameCallback typedef from OLEDDisplayUi library
+void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     if (favoritedNodes.empty())
         return;
@@ -1388,6 +1389,7 @@ static int8_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;
 constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
 
+// cppcheck-suppress constParameterPointer; signature must match OverlayCallback typedef from OLEDDisplayUi library
 void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     int currentFrame = state->currentFrame;

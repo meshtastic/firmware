@@ -75,7 +75,7 @@ bool getAppDesc(const esp_partition_t *part, esp_app_desc_t *app_desc)
     return true;
 }
 
-bool checkOTACapability(esp_app_desc_t *app_desc, uint8_t method)
+bool checkOTACapability(const esp_app_desc_t *app_desc, uint8_t method)
 {
     // Combined loader supports all (both) transports, BLE and WiFi
     if (strcmp(app_desc->project_name, combinedAppProjectName) == 0) {

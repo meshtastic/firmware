@@ -312,7 +312,7 @@ const char *RtcName(RTCQuality quality)
  * @param t The time to potentially set the RTC to.
  * @return True if the RTC was set to the provided time, false otherwise.
  */
-RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
 {
     /* Convert to unix time
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
