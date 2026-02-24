@@ -113,7 +113,6 @@ class MeshModule
     bool isMultiHopBroadcastRequest()
     {
         if (currentRequest && isBroadcast(currentRequest->to) && currentRequest->hop_limit < currentRequest->hop_start) {
-            ignoreRequest = true;
             return true;
         }
         return false;
