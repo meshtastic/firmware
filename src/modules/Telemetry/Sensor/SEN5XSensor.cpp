@@ -950,28 +950,24 @@ void SEN5XSensor::setDisables(meshtastic_SEN5XDisables setDisables)
 {
     bool toSave = false;
     if (setDisables.has_disable_pm) {
-        moduleConfig.telemetry.sensordisables.has_sen5x = true;
         moduleConfig.telemetry.sensordisables.sen5x.has_disable_pm = true;
         moduleConfig.telemetry.sensordisables.sen5x.disable_pm = setDisables.disable_pm;
         LOG_INFO("%s %s PM metrics", sensorName, setDisables.disable_pm ? "disabling" : "enabling");
         toSave = true;
     }
     if (setDisables.has_disable_pn) {
-        moduleConfig.telemetry.sensordisables.has_sen5x = true;
         moduleConfig.telemetry.sensordisables.sen5x.has_disable_pn = true;
         moduleConfig.telemetry.sensordisables.sen5x.disable_pn = setDisables.disable_pn;
         LOG_INFO("%s %s PN metrics", sensorName, setDisables.disable_pn ? "disabling" : "enabling");
         toSave = true;
     }
     if (setDisables.has_disable_trh) {
-        moduleConfig.telemetry.sensordisables.has_sen5x = true;
         moduleConfig.telemetry.sensordisables.sen5x.has_disable_trh = true;
         moduleConfig.telemetry.sensordisables.sen5x.disable_trh = setDisables.disable_trh;
         LOG_INFO("%s %s T/RH metrics", sensorName, setDisables.disable_trh ? "disabling" : "enabling");
         toSave = true;
     }
     if (setDisables.has_disable_idx) {
-        moduleConfig.telemetry.sensordisables.has_sen5x = true;
         moduleConfig.telemetry.sensordisables.sen5x.has_disable_idx = true;
         moduleConfig.telemetry.sensordisables.sen5x.disable_idx = setDisables.disable_idx;
         LOG_INFO("%s %s NOx and VOCs index metrics", sensorName, setDisables.disable_idx ? "disabling" : "enabling");
@@ -980,6 +976,8 @@ void SEN5XSensor::setDisables(meshtastic_SEN5XDisables setDisables)
 
     if (!toSave)
         return;
+    moduleConfig.telemetry.has_sensordisables = true;
+    moduleConfig.telemetry.sensordisables.has_sen5x = true;
     if (!nodeDB->saveToDisk(SEGMENT_MODULECONFIG))
         LOG_ERROR("%s: Can't save module config", sensorName);
 }

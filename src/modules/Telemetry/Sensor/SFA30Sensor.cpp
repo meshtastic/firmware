@@ -208,14 +208,12 @@ void SFA30Sensor::setDisables(meshtastic_SFA30Disables setDisables)
 {
     bool toSave = false;
     if (setDisables.has_disable_hcho) {
-        moduleConfig.telemetry.sensordisables.has_sfa30 = true;
         moduleConfig.telemetry.sensordisables.sfa30.has_disable_hcho = true;
         moduleConfig.telemetry.sensordisables.sfa30.disable_hcho = setDisables.disable_hcho;
         LOG_INFO("%s %s HCHO metrics", sensorName, setDisables.disable_hcho ? "disabling" : "enabling");
         toSave = true;
     }
     if (setDisables.has_disable_trh) {
-        moduleConfig.telemetry.sensordisables.has_sfa30 = true;
         moduleConfig.telemetry.sensordisables.sfa30.has_disable_trh = true;
         moduleConfig.telemetry.sensordisables.sfa30.disable_trh = setDisables.disable_trh;
         LOG_INFO("%s %s T/RH metrics", sensorName, setDisables.disable_trh ? "disabling" : "enabling");
@@ -223,6 +221,9 @@ void SFA30Sensor::setDisables(meshtastic_SFA30Disables setDisables)
     }
     if (!toSave)
         return;
+
+    moduleConfig.telemetry.has_sensordisables = true;
+    moduleConfig.telemetry.sensordisables.has_sfa30 = true;
     if (!nodeDB->saveToDisk(SEGMENT_MODULECONFIG))
         LOG_ERROR("%s: Can't save module config", sensorName);
 }

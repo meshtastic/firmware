@@ -226,21 +226,18 @@ void PMSA003ISensor::setDisables(meshtastic_PMSA003IDisables setDisables)
 {
     bool toSave = false;
     if (setDisables.has_disable_pm) {
-        moduleConfig.telemetry.sensordisables.has_pmsa003i = true;
         moduleConfig.telemetry.sensordisables.pmsa003i.has_disable_pm = true;
         moduleConfig.telemetry.sensordisables.pmsa003i.disable_pm = setDisables.disable_pm;
         LOG_INFO("%s disabling PM metrics", sensorName);
         toSave = true;
     }
     if (setDisables.has_disable_pm_env) {
-        moduleConfig.telemetry.sensordisables.has_pmsa003i = true;
         moduleConfig.telemetry.sensordisables.pmsa003i.has_disable_pm_env = true;
         moduleConfig.telemetry.sensordisables.pmsa003i.disable_pm_env = setDisables.disable_pm_env;
         LOG_INFO("%s disabling PM metrics", sensorName);
         toSave = true;
     }
     if (setDisables.has_disable_pn) {
-        moduleConfig.telemetry.sensordisables.has_pmsa003i = true;
         moduleConfig.telemetry.sensordisables.pmsa003i.has_disable_pn = true;
         moduleConfig.telemetry.sensordisables.pmsa003i.disable_pn = setDisables.disable_pn;
         LOG_INFO("%s disabling PN metrics", sensorName);
@@ -249,6 +246,9 @@ void PMSA003ISensor::setDisables(meshtastic_PMSA003IDisables setDisables)
 
     if (!toSave)
         return;
+
+    moduleConfig.telemetry.has_sensordisables = true;
+    moduleConfig.telemetry.sensordisables.has_pmsa003i = true;
     if (!nodeDB->saveToDisk(SEGMENT_MODULECONFIG))
         LOG_ERROR("%s: Can't save module config", sensorName);
 }
