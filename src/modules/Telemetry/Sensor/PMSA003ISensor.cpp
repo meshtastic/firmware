@@ -228,19 +228,19 @@ void PMSA003ISensor::setDisables(meshtastic_PMSA003IDisables setDisables)
     if (setDisables.has_disable_pm) {
         moduleConfig.telemetry.sensordisables.pmsa003i.has_disable_pm = true;
         moduleConfig.telemetry.sensordisables.pmsa003i.disable_pm = setDisables.disable_pm;
-        LOG_INFO("%s disabling PM metrics", sensorName);
+        LOG_INFO("%s %s PM metrics", sensorName, setDisables.disable_pm ? "disabling" : "enabling");
         toSave = true;
     }
     if (setDisables.has_disable_pm_env) {
         moduleConfig.telemetry.sensordisables.pmsa003i.has_disable_pm_env = true;
         moduleConfig.telemetry.sensordisables.pmsa003i.disable_pm_env = setDisables.disable_pm_env;
-        LOG_INFO("%s disabling PM metrics", sensorName);
+        LOG_INFO("%s %s PM environmental metrics", sensorName, setDisables.disable_pm_env ? "disabling" : "enabling");
         toSave = true;
     }
     if (setDisables.has_disable_pn) {
         moduleConfig.telemetry.sensordisables.pmsa003i.has_disable_pn = true;
         moduleConfig.telemetry.sensordisables.pmsa003i.disable_pn = setDisables.disable_pn;
-        LOG_INFO("%s disabling PN metrics", sensorName);
+        LOG_INFO("%s %s PN metrics", sensorName, setDisables.disable_pn ? "disabling" : "enabling");
         toSave = true;
     }
 
