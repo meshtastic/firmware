@@ -55,7 +55,10 @@ class menuHandler
         NodeNameLengthMenu,
         FrameToggles,
         DisplayUnits,
-        MessageBubblesMenu
+        MessageBubblesMenu,
+        TAKMenu,
+        TAKTeamPicker,
+        TAKRolePicker
     };
     static screenMenus menuQueue;
     static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
@@ -111,6 +114,9 @@ class menuHandler
     static void displayUnitsMenu();
     static void messageBubblesMenu();
     static void textMessageMenu();
+    static void takMenu();
+    static void takTeamPicker();
+    static void takRolePicker();
 
   private:
     static void saveUIConfig();

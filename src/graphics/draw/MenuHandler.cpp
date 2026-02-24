@@ -65,26 +65,61 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region"};
-    enum optionsNumbers { Back = 0, DeviceRolePicker = 1, RadioPresetPicker = 2, FrequencySlot = 3, LoraPicker = 4 };
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "LoRa Actions";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 5;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Back) {
-            // No action
-        } else if (selected == DeviceRolePicker) {
-            menuHandler::menuQueue = menuHandler::DeviceRolePicker;
-        } else if (selected == RadioPresetPicker) {
-            menuHandler::menuQueue = menuHandler::RadioPresetPicker;
-        } else if (selected == FrequencySlot) {
-            menuHandler::menuQueue = menuHandler::FrequencySlot;
-        } else if (selected == LoraPicker) {
-            menuHandler::menuQueue = menuHandler::LoraPicker;
-        }
-    };
-    screen->showOverlayBanner(bannerOptions);
+    bool isTAKRole = (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK ||
+                      config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER);
+    if (isTAKRole) {
+        static const char *optionsArray[] = {"Back",           "Device Role", "Radio Preset",
+                                             "Frequency Slot", "LoRa Region", "TAK Config"};
+        enum optionsNumbers {
+            Back = 0,
+            DeviceRolePicker = 1,
+            RadioPresetPicker = 2,
+            FrequencySlot = 3,
+            LoraPicker = 4,
+            TAKConfig = 5
+        };
+        BannerOverlayOptions bannerOptions;
+        bannerOptions.message = "LoRa Actions";
+        bannerOptions.optionsArrayPtr = optionsArray;
+        bannerOptions.optionsCount = 6;
+        bannerOptions.bannerCallback = [](int selected) -> void {
+            if (selected == Back) {
+                // No action
+            } else if (selected == DeviceRolePicker) {
+                menuHandler::menuQueue = menuHandler::DeviceRolePicker;
+            } else if (selected == RadioPresetPicker) {
+                menuHandler::menuQueue = menuHandler::RadioPresetPicker;
+            } else if (selected == FrequencySlot) {
+                menuHandler::menuQueue = menuHandler::FrequencySlot;
+            } else if (selected == LoraPicker) {
+                menuHandler::menuQueue = menuHandler::LoraPicker;
+            } else if (selected == TAKConfig) {
+                menuHandler::menuQueue = menuHandler::TAKMenu;
+            }
+        };
+        screen->showOverlayBanner(bannerOptions);
+    } else {
+        static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region"};
+        enum optionsNumbers { Back = 0, DeviceRolePicker = 1, RadioPresetPicker = 2, FrequencySlot = 3, LoraPicker = 4 };
+        BannerOverlayOptions bannerOptions;
+        bannerOptions.message = "LoRa Actions";
+        bannerOptions.optionsArrayPtr = optionsArray;
+        bannerOptions.optionsCount = 5;
+        bannerOptions.bannerCallback = [](int selected) -> void {
+            if (selected == Back) {
+                // No action
+            } else if (selected == DeviceRolePicker) {
+                menuHandler::menuQueue = menuHandler::DeviceRolePicker;
+            } else if (selected == RadioPresetPicker) {
+                menuHandler::menuQueue = menuHandler::RadioPresetPicker;
+            } else if (selected == FrequencySlot) {
+                menuHandler::menuQueue = menuHandler::FrequencySlot;
+            } else if (selected == LoraPicker) {
+                menuHandler::menuQueue = menuHandler::LoraPicker;
+            }
+        };
+        screen->showOverlayBanner(bannerOptions);
+    }
 }
 
 void menuHandler::OnboardMessage()
@@ -246,6 +281,81 @@ void menuHandler::deviceRolePicker()
         }
         service->reloadConfig(SEGMENT_CONFIG);
         rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::takMenu()
+{
+    static const char *optionsArray[] = {"Back", "Team Color", "Member Role"};
+    enum optionsNumbers { Back = 0, TeamColor = 1, MemberRole = 2 };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "TAK Config";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::LoraMenu;
+            screen->runNow();
+        } else if (selected == TeamColor) {
+            menuHandler::menuQueue = menuHandler::TAKTeamPicker;
+        } else if (selected == MemberRole) {
+            menuHandler::menuQueue = menuHandler::TAKRolePicker;
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::takTeamPicker()
+{
+    static const char *optionsArray[] = {"Back",    "White", "Yellow", "Orange", "Magenta", "Red",      "Maroon", "Purple",
+                                         "Dk Blue", "Blue",  "Cyan",   "Teal",   "Green",   "Dk Green", "Brown"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Team Color";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 15;
+    // Pre-select current team
+    meshtastic_Team current = moduleConfig.tak.team;
+    if (current != meshtastic_Team_Unspecifed_Color) {
+        bannerOptions.InitialSelected = (int)current; // enum values 1-14 map to options 1-14
+    }
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuHandler::menuQueue = menuHandler::TAKMenu;
+            screen->runNow();
+            return;
+        }
+        // options 1-14 map to Team enum values 1-14
+        moduleConfig.has_tak = true;
+        moduleConfig.tak.team = (meshtastic_Team)selected;
+        service->reloadConfig(SEGMENT_MODULECONFIG);
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::takRolePicker()
+{
+    static const char *optionsArray[] = {"Back",  "Team Member",  "Team Lead", "HQ", "Sniper",
+                                         "Medic", "Fwd Observer", "RTO",       "K9"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Member Role";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 9;
+    // Pre-select current role
+    meshtastic_MemberRole current = moduleConfig.tak.role;
+    if (current != meshtastic_MemberRole_Unspecifed) {
+        bannerOptions.InitialSelected = (int)current; // enum values 1-8 map to options 1-8
+    }
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuHandler::menuQueue = menuHandler::TAKMenu;
+            screen->runNow();
+            return;
+        }
+        // options 1-8 map to MemberRole enum values 1-8
+        moduleConfig.has_tak = true;
+        moduleConfig.tak.role = (meshtastic_MemberRole)selected;
+        service->reloadConfig(SEGMENT_MODULECONFIG);
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -2781,6 +2891,15 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case MessageBubblesMenu:
         messageBubblesMenu();
+        break;
+    case TAKMenu:
+        takMenu();
+        break;
+    case TAKTeamPicker:
+        takTeamPicker();
+        break;
+    case TAKRolePicker:
+        takRolePicker();
         break;
     }
     menuQueue = MenuNone;
