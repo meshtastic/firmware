@@ -120,9 +120,23 @@ void InkHUD::NodeListApplet::onRender(bool full)
     // Draw the main node list
     // ========================
 
-    // Imaginary vertical line dividing left-side and right-side info
-    // Long-name will crop here
-    const uint16_t dividerX = (width() - 1) - getTextWidth("X Hops");
+    // Leave a small gutter between long-name text and right-side card content
+    constexpr uint8_t rightContentGap = 2;
+
+    // Truncate with trailing "...", sized using the current font.
+    auto ellipsizeToWidth = [this](std::string text, uint16_t maxWidth) {
+        constexpr const char *ellipsis = "...";
+        const uint16_t ellipsisW = getTextWidth(ellipsis);
+        if (maxWidth == 0)
+            return std::string();
+        if (getTextWidth(text) <= maxWidth)
+            return text;
+        if (ellipsisW > maxWidth)
+            return std::string();
+        while (!text.empty() && (getTextWidth(text) + ellipsisW > maxWidth))
+            text.pop_back();
+        return text + ellipsis;
+    };
 
     // Y value (top) of the current card. Increases as we draw.
     uint16_t cardTopY = headerDivY + padDivH;
@@ -141,7 +155,6 @@ void InkHUD::NodeListApplet::onRender(bool full)
         SignalStrength &signal = card->signal;
         std::string longName;  // handled below
         std::string shortName; // handled below
-        std::string distance;  // handled below;
         const uint8_t &hopsAway = card->hopsAway;
 
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
@@ -169,10 +182,6 @@ void InkHUD::NodeListApplet::onRender(bool full)
             longName = hexifyNodeNum(nodeNum);
         }
 
-        // -- Distance --
-        if (card->distanceMeters != CardInfo::DISTANCE_UNKNOWN)
-            distance = localizeDistance(card->distanceMeters);
-
         // Draw the info
         // ====================================
 
@@ -185,41 +194,45 @@ void InkHUD::NodeListApplet::onRender(bool full)
         setFont(fontMedium);
         printAt(0, lineAY, shortName, LEFT, MIDDLE);
 
-        // Print the distance
+        // Right-side labels and long name are rendered in small font.
         setFont(fontSmall);
-        printAt(width() - 1, lineBY, distance, RIGHT, MIDDLE);
+        uint16_t rightContentW = 0;
 
-        // If we have a direct connection to the node, draw the signal indicator
-        if (hopsAway == 0 && signal != SIGNAL_UNKNOWN) {
-            uint16_t signalW = getTextWidth("Xkm"); // Indicator should be similar width to distance label
+        // Top row right: signal indicator whenever signal data is known.
+        if (signal != SIGNAL_UNKNOWN) {
+            uint16_t signalW = getTextWidth("Xkm"); // Indicator width tuned to a short right-side label
             uint16_t signalH = fontMedium.lineHeight() * 0.75;
             int16_t signalY = lineAY + (fontMedium.lineHeight() / 2) - (fontMedium.lineHeight() * 0.75);
             int16_t signalX = width() - signalW;
+            rightContentW = signalW;
             drawSignalIndicator(signalX, signalY, signalW, signalH, signal);
         }
-        // Otherwise, print "hops away" info, if available
-        else if (hopsAway != CardInfo::HOPS_UNKNOWN && node) {
-            std::string hopString = to_string(node->hops_away);
-            hopString += " Hop";
-            if (node->hops_away != 1)
-                hopString += "s"; // Append s for "Hops", rather than "Hop"
 
-            printAt(width() - 1, lineAY, hopString, RIGHT, MIDDLE);
+        // Bottom row right: hops only when >0.
+        if (hopsAway != CardInfo::HOPS_UNKNOWN && hopsAway > 0) {
+            std::string hopString = to_string(hopsAway) + (hopsAway == 1 ? " Hop" : " Hops");
+            rightContentW = std::max(rightContentW, getTextWidth(hopString));
+            printAt(width() - 1, lineBY, hopString, RIGHT, MIDDLE);
         }
 
-        // Print the long name, cropping to prevent overflow onto the right-side info
-        setCrop(0, 0, dividerX - 1, height());
-        printAt(0, lineBY, longName, LEFT, MIDDLE);
+        // Give long names as much room as possible while still avoiding right side signal and hop space
+        const uint16_t longNameMaxW = (rightContentW + rightContentGap < width()) ? (width() - rightContentW - rightContentGap) : 0;
+        const std::string longNameShown = ellipsizeToWidth(longName, longNameMaxW);
 
-        // GFX effect: "hatch" the right edge of longName area
-        // If a longName has been cropped, it will appear to fade out,
-        // creating a soft barrier with the right-side info
-        const int16_t hatchLeft = dividerX - 1 - (fontSmall.lineHeight());
-        const int16_t hatchWidth = fontSmall.lineHeight();
-        hatchRegion(hatchLeft, cardTopY, hatchWidth, cardH, 2, WHITE);
+        // Safety crop
+        setCrop(0, cardTopY, longNameMaxW, cardH);
+        printAt(0, lineBY, longNameShown, LEFT, MIDDLE);
+
+        resetCrop();
+
+        // Draw separator between cards
+        const int16_t separatorY = cardTopY + cardH - 1;
+        if (separatorY < height() - 1 && (card + 1) != cards.end()) {
+            for (int16_t xSep = 0; xSep < width(); xSep += 2)
+                drawPixel(xSep, separatorY, BLACK);
+        }
 
         // Prepare to draw the next card
-        resetCrop();
         cardTopY += cardH;
 
         // Once we've run out of screen, stop drawing cards
