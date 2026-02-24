@@ -1,5 +1,6 @@
 #include "NeighborInfoModule.h"
 #include "Default.h"
+#include "MeshRadio.h" // needed for region specific broadcast throttling
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -126,7 +127,7 @@ int32_t NeighborInfoModule::runOnce()
 {
     if (moduleConfig.neighbor_info.transmit_over_lora &&
         (!channels.isDefaultChannel(channels.getPrimaryIndex()) || !RadioInterface::uses_default_frequency_slot) &&
-        airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
+        airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil() && !myRegion->telemetryThrottle == 0) {
         sendNeighborInfo(NODENUM_BROADCAST, false);
     } else {
         sendNeighborInfo(NODENUM_BROADCAST_NO_LORA, false);

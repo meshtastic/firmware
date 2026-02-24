@@ -4,6 +4,7 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Default.h"
+#include "MeshRadio.h" // needed for region specific broadcast throttling
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -89,7 +90,7 @@ int32_t PowerTelemetryModule::runOnce()
             return disable();
 
         if (((lastSentToMesh == 0) || !Throttle::isWithinTimespanMs(lastSentToMesh, sendToMeshIntervalMs)) &&
-            airTime->isTxAllowedAirUtil()) {
+            airTime->isTxAllowedAirUtil() && !myRegion->telemetryThrottle == 0) {
             sendTelemetry();
             lastSentToMesh = millis();
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&

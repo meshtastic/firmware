@@ -2,6 +2,7 @@
 #include "PositionModule.h"
 #include "Default.h"
 #include "GPS.h"
+#include "MeshRadio.h" // needed for region specific position throttling
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -413,6 +414,12 @@ int32_t PositionModule::runOnce()
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (node == nullptr)
         return RUNONCE_INTERVAL;
+
+    // Routine broadcast of position isn't permitted if the region is throttled.
+    if (!myRegion->positionThrottle == 0) {
+        LOG_DEBUG("Position broadcast throttled by region");
+        return RUNONCE_INTERVAL;
+    }
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
