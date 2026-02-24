@@ -244,6 +244,7 @@ bool SEN5XSensor::idle(bool checkState)
         saveState();
     }
 
+    // TODO - Add logic for enable/disabled sensors
     if (!oneShotMode) {
         LOG_INFO("%s: Not stopping measurement, continuous mode!", sensorName);
         return true;
@@ -949,22 +950,23 @@ void SEN5XSensor::setDisables(meshtastic_SEN5XDisables setDisables)
 {
     if (setDisables.has_disable_pm) {
         moduleConfig.telemetry.sensordisables.sen5x.disable_pm = setDisables.disable_pm;
-        LOG_INFO("%s disabling PM metrics", sensorName);
+        LOG_INFO("%s %s PM metrics", sensorName, setDisables.disable_pm ? "disabling" : "enabling");
     }
     if (setDisables.has_disable_pn) {
         moduleConfig.telemetry.sensordisables.sen5x.disable_pn = setDisables.disable_pn;
-        LOG_INFO("%s disabling PN metrics", sensorName);
+        LOG_INFO("%s %s PN metrics", sensorName, setDisables.disable_pn ? "disabling" : "enabling");
     }
     if (setDisables.has_disable_trh) {
         moduleConfig.telemetry.sensordisables.sen5x.disable_trh = setDisables.disable_trh;
-        LOG_INFO("%s disabling T/RH metrics", sensorName);
+        LOG_INFO("%s %s T/RH metrics", sensorName, setDisables.disable_trh ? "disabling" : "enabling");
     }
     if (setDisables.has_disable_idx) {
         moduleConfig.telemetry.sensordisables.sen5x.disable_idx = setDisables.disable_idx;
-        LOG_INFO("%s disabling NOx and VOCs index metrics", sensorName);
+        LOG_INFO("%s %s NOx and VOCs index metrics", sensorName, setDisables.disable_idx ? "disabling" : "enabling");
     }
 
-    nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+    if (!nodeDB->saveToDisk(SEGMENT_MODULECONFIG))
+        LOG_ERROR("%s: Can't save module config", sensorName);
 }
 
 AdminMessageHandleResult SEN5XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,

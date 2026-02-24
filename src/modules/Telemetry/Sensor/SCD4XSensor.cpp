@@ -804,14 +804,15 @@ void SCD4XSensor::setDisables(meshtastic_SCD4XDisables setDisables)
 {
     if (setDisables.has_disable_co2) {
         moduleConfig.telemetry.sensordisables.scd4x.disable_co2 = setDisables.disable_co2;
-        LOG_INFO("%s disabling CO2 metric", sensorName);
+        LOG_INFO("%s %s CO2 metric", sensorName, setDisables.disable_co2 ? "disabling" : "enabling");
     }
     if (setDisables.has_disable_trh) {
         moduleConfig.telemetry.sensordisables.scd4x.disable_trh = setDisables.disable_trh;
-        LOG_INFO("%s disabling T/RH metrics", sensorName);
+        LOG_INFO("%s %s T/RH metrics", sensorName, setDisables.disable_trh ? "disabling" : "enabling");
     }
 
-    nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+    if (!nodeDB->saveToDisk(SEGMENT_MODULECONFIG))
+        LOG_ERROR("%s: Can't save module config", sensorName);
 }
 
 AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,

@@ -208,14 +208,15 @@ void SFA30Sensor::setDisables(meshtastic_SFA30Disables setDisables)
 {
     if (setDisables.has_disable_hcho) {
         moduleConfig.telemetry.sensordisables.sfa30.disable_hcho = setDisables.disable_hcho;
-        LOG_INFO("%s disabling HCHO metric", sensorName);
+        LOG_INFO("%s %s HCHO metrics", sensorName, setDisables.disable_hcho ? "disabling" : "enabling");
     }
     if (setDisables.has_disable_trh) {
         moduleConfig.telemetry.sensordisables.sfa30.disable_trh = setDisables.disable_trh;
-        LOG_INFO("%s disabling T/RH metrics", sensorName);
+        LOG_INFO("%s %s T/RH metrics", sensorName, setDisables.disable_trh ? "disabling" : "enabling");
     }
 
-    nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+    if (!nodeDB->saveToDisk(SEGMENT_MODULECONFIG))
+        LOG_ERROR("%s: Can't save module config", sensorName);
 }
 
 AdminMessageHandleResult SFA30Sensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,

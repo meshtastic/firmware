@@ -237,7 +237,8 @@ void PMSA003ISensor::setDisables(meshtastic_PMSA003IDisables setDisables)
         LOG_INFO("%s disabling PN metrics", sensorName);
     }
 
-    nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+    if (!nodeDB->saveToDisk(SEGMENT_MODULECONFIG))
+        LOG_ERROR("%s: Can't save module config", sensorName);
 }
 
 AdminMessageHandleResult PMSA003ISensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
