@@ -321,7 +321,7 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
 {
     if (currentRequest) {
-        if (isMultiHopBroadcastRequest()) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
             ignoreRequest = true;
             return NULL;
         }

@@ -217,7 +217,7 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
 meshtastic_MeshPacket *PowerTelemetryModule::allocReply()
 {
     if (currentRequest) {
-        if (isMultiHopBroadcastRequest()) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
             ignoreRequest = true;
             return NULL;
         }

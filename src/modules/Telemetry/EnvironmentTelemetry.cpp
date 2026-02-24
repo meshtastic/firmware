@@ -577,7 +577,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
 meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
 {
     if (currentRequest) {
-        if (isMultiHopBroadcastRequest()) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
             ignoreRequest = true;
             return NULL;
         }

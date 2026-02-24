@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "BaseTelemetryModule.h"
+
 #ifndef ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE
 #define ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE 0
 #endif
@@ -17,6 +19,7 @@
 
 class EnvironmentTelemetryModule : private concurrency::OSThread,
                                    public ScanI2CConsumer,
+                                   public BaseTelemetryModule,
                                    public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<EnvironmentTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
