@@ -98,8 +98,6 @@ extern struct portduino_config_struct {
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
-    bool has_gpio_detect_pa = false;
-    int gpio_detect_pa = 0;
     int num_pa_points = 1; // default to 1 point, with 0 gain
     uint16_t tx_gain_lora[22] = {0};
     pinMapping lora_cs_pin = {"Lora", "CS"};
@@ -248,9 +246,6 @@ extern struct portduino_config_struct {
             out << YAML::Key << "LR1120_MAX_POWER" << YAML::Value << lr1120_max_power;
         if (rf95_max_power != 20)
             out << YAML::Key << "RF95_MAX_POWER" << YAML::Value << rf95_max_power;
-
-        if (has_gpio_detect_pa)
-            out << YAML::Key << "GPIO_DETECT_PA" << YAML::Value << gpio_detect_pa;
 
         if (num_pa_points > 1) {
             out << YAML::Key << "TX_GAIN_LORA" << YAML::Value << YAML::Flow << YAML::BeginSeq;

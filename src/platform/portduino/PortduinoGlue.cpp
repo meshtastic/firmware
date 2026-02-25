@@ -538,7 +538,7 @@ void portduinoSetup()
     }
 
     // In one test, this dance seemed necessary to trigger the pin to detect properly.
-    if (portduino_config.has_gpio_detect_pa) {
+    if (portduino_config.lora_pa_detect_pin.enabled) {
         pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLDOWN);
         sleep(1);
         if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == LOW) {
@@ -681,11 +681,6 @@ bool loadConfig(const char *configPath)
                 portduino_config.lr1120_max_power = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
             if (yamlConfig["Lora"]["RF95_MAX_POWER"])
                 portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
-            if (yamlConfig["Lora"]["GPIO_DETECT_PA"]) {
-                portduino_config.has_gpio_detect_pa = true;
-                portduino_config.gpio_detect_pa = yamlConfig["Lora"]["GPIO_DETECT_PA"].as<int>(0);
-                portduino_config.lora_pa_detect_pin.pin = portduino_config.gpio_detect_pa;
-            }
 
             if (yamlConfig["Lora"]["TX_GAIN_LORA"]) {
                 YAML::Node tx_gain_node = yamlConfig["Lora"]["TX_GAIN_LORA"];
