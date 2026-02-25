@@ -529,6 +529,11 @@ void RadioLibInterface::pollMissedIrqs()
     }
 }
 
+void RadioLibInterface::resetAGC()
+{
+    // Base implementation: no-op. Override in chip-specific subclasses.
+}
+
 void RadioLibInterface::checkRxDoneIrqFlag()
 {
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {

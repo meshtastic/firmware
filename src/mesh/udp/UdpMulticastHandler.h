@@ -56,7 +56,7 @@ class UdpMulticastHandler final
         isRunning = false;
     }
 
-    void onReceive(AsyncUDPPacket packet)
+    void onReceive(AsyncUDPPacket &packet)
     {
         if (!isRunning) {
             return;
