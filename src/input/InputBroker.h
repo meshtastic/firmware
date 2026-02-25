@@ -70,6 +70,7 @@ class InputBroker : public Observable<const InputEvent *>
 
   public:
     InputBroker();
+    bool menuMode = true;
     void registerSource(Observable<const InputEvent *> *source);
     void injectInputEvent(const InputEvent *event) { handleInputEvent(event); }
 #if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)

@@ -183,6 +183,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int charSet = 0; // 0=ABC, 1=123
 #endif
 
+    void updateState(cannedMessageModuleRunState);
+
     bool isUpEvent(const InputEvent *event);
     bool isDownEvent(const InputEvent *event);
     bool isSelectEvent(const InputEvent *event);

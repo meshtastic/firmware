@@ -171,6 +171,13 @@ void CardputerKeyboard::released()
     uint32_t now = millis();
     last_tap = now;
 
+    if (inputBroker->menuMode && modifierFlag == 0) {
+        if (last_key == 0 || last_key == 43 || last_key == 46 || last_key == 47 ||
+            last_key == 51) { // esc, left, up, down, right key
+            modifierFlag = modifierFn;
+        }
+    }
+
     queueEvent(CardputerTapMap[last_key][modifierFlag % CardputerTapMod[last_key]]);
     if (isModifierKey(last_key) == false)
         modifierFlag = 0;
