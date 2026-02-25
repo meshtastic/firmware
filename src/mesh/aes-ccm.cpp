@@ -110,11 +110,12 @@ static void aes_ccm_encr(size_t L, const uint8_t *in, size_t len, uint8_t *out, 
         in += AES_BLOCK_SIZE;
     }
     if (last) {
+        uint8_t tmp[AES_BLOCK_SIZE];
         WPA_PUT_BE16(&a[AES_BLOCK_SIZE - 2], i);
-        crypto->aesEncrypt(a, out);
+        crypto->aesEncrypt(a, tmp);
         /* XOR zero-padded last block */
         for (i = 0; i < last; i++)
-            *out++ ^= *in++;
+            out[i] = tmp[i] ^ in[i];
     }
 }
 static void aes_ccm_encr_auth(size_t M, const uint8_t *x, uint8_t *a, uint8_t *auth)
