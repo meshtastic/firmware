@@ -5,12 +5,15 @@
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "BaseTelemetryModule.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-class PowerTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
+class PowerTelemetryModule : private concurrency::OSThread,
+                             public BaseTelemetryModule,
+                             public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<PowerTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
         CallbackObserver<PowerTelemetryModule, const meshtastic::Status *>(this, &PowerTelemetryModule::handleStatusUpdate);
