@@ -1,11 +1,14 @@
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "BaseTelemetryModule.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
+class DeviceTelemetryModule : private concurrency::OSThread,
+                              public BaseTelemetryModule,
+                              public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<DeviceTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
         CallbackObserver<DeviceTelemetryModule, const meshtastic::Status *>(this, &DeviceTelemetryModule::handleStatusUpdate);

@@ -246,7 +246,6 @@ uint32_t timeLastPowered = 0;
 static OSThread *powerFSMthread;
 OSThread *ambientLightingThread;
 
-RadioInterface *rIf = NULL;
 RadioLibHal *RadioLibHAL = NULL;
 
 /**
