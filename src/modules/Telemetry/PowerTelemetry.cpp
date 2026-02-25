@@ -194,6 +194,9 @@ bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &m
 bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
 {
     bool valid = false;
+
+    powerFSM.trigger(EVENT_WAKE_TIMER); // ensure we're not light-sleeping
+
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_power_metrics_tag;
 

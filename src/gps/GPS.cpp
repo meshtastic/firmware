@@ -811,13 +811,15 @@ bool GPS::setup()
     }
 
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
+    preflightSleepObserver.observe(&preflightSleep);
 
     return true;
 }
 
 GPS::~GPS()
 {
-    // we really should unregister our sleep observer
+    // we really should unregister our sleep observers
+    preflightSleepObserver.unobserve(&preflightSleep);
     notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
 }
 
@@ -1233,6 +1235,16 @@ int GPS::prepareDeepSleep(void *unused)
     LOG_INFO("GPS deep sleep!");
     disable();
     return 0;
+}
+
+// Prevents entering light-sleep when GPS is in active state or initialization is pending
+int GPS::preflightSleepCb(void *unused)
+{
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        return 0;
+    }
+
+    return (powerState == GPS_ACTIVE) || !GPSInitFinished;
 }
 
 static const char *PROBE_MESSAGE = "Trying %s (%s)...";
