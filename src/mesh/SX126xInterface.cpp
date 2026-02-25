@@ -93,6 +93,18 @@ template <typename T> bool SX126xInterface<T>::init()
     digitalWrite(LORA_PA_TX_EN, LOW); // Start in RX-ready state
 #endif
 
+#if defined(USE_SKY66122_FEM)
+    // SKY66122-11 FEM initialization — start in RX mode, boost off
+    // See variant.h for full pin mapping and control logic documentation
+    pinMode(SKY66122_CSD, OUTPUT);
+    digitalWrite(SKY66122_CSD, HIGH); // Enable FEM
+    pinMode(SKY66122_CPS, OUTPUT);
+    digitalWrite(SKY66122_CPS, HIGH); // Active path (required for both TX and RX)
+    pinMode(SKY66122_CTX, OUTPUT);
+    digitalWrite(SKY66122_CTX, LOW); // Boost off, RX mode
+    delay(1);                        // Settling time
+#endif
+
 #ifdef RF95_FAN_EN
     digitalWrite(RF95_FAN_EN, HIGH);
     pinMode(RF95_FAN_EN, OUTPUT);
@@ -431,6 +443,13 @@ template <typename T> bool SX126xInterface<T>::sleep()
     digitalWrite(LORA_PA_EN, LOW);
     digitalWrite(LORA_PA_TX_EN, LOW);
 #endif
+
+#if defined(USE_SKY66122_FEM)
+    // Full shutdown — all pins LOW, FEM draws <1 μA
+    digitalWrite(SKY66122_CTX, LOW);
+    digitalWrite(SKY66122_CPS, LOW);
+    digitalWrite(SKY66122_CSD, LOW);
+#endif
     return true;
 }
 
@@ -489,13 +508,19 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     startReceive();
 }
 
-/** Control PA mode for GC1109 FEM - CPS pin selects full PA (txon=true) or bypass mode (txon=false) */
+/** Control PA mode for GC1109 / SKY66122 FEM - selects TX path (txon=true) or RX path (txon=false) */
 template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
 {
 #if defined(USE_GC1109_PA)
     digitalWrite(LORA_PA_POWER, HIGH);         // Ensure LDO is on
     digitalWrite(LORA_PA_EN, HIGH);            // CSD=1: Chip enabled
     digitalWrite(LORA_PA_TX_EN, txon ? 1 : 0); // CPS: 1=full PA, 0=bypass (for RX, CPS is don't care)
+#endif
+
+#if defined(USE_SKY66122_FEM)
+    digitalWrite(SKY66122_CSD, HIGH);         // Ensure FEM is enabled
+    digitalWrite(SKY66122_CPS, HIGH);         // Enable active mode (TX and RX)
+    digitalWrite(SKY66122_CTX, txon ? 1 : 0); // HIGH=TX (boost on, PA), LOW=RX (boost off, LNA)
 #endif
 }
 
