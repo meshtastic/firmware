@@ -297,7 +297,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
                 // sensormap here.
 #ifdef HAS_RAKPROT
-            result = rak9154Sensor.runOnce();
+            if (rak9154Sensor.hasSensor())
+                result = rak9154Sensor.runOnce();
 #endif
 #endif
         }
@@ -567,9 +568,11 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
 #endif
 #ifdef HAS_RAKPROT
-    get_metrics = rak9154Sensor.getMetrics(m);
-    valid = valid || get_metrics;
-    hasSensor = true;
+    if (rak9154Sensor.hasSensor()) {
+        get_metrics = rak9154Sensor.getMetrics(m);
+        valid = valid || get_metrics;
+        hasSensor = true;
+    }
 #endif
     return valid && hasSensor;
 }
