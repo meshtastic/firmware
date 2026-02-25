@@ -54,13 +54,11 @@ class CryptoEngine
 
     static constexpr size_t AEAD_TAG_SIZE = 12;
 
-    bool encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId,
-                          size_t numBytes, const uint8_t *plaintext,
+    bool encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t numBytes, const uint8_t *plaintext,
                           uint8_t *ciphertextWithTag);
 
-    bool decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId,
-                          size_t totalBytes, const uint8_t *ciphertextWithTag,
-                          uint8_t *plaintext);
+    bool decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t totalBytes,
+                          const uint8_t *ciphertextWithTag, uint8_t *plaintext);
 
     /**
      * Set the key used for encrypt, decrypt.

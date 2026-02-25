@@ -264,8 +264,8 @@ void test_AES_CCM_AEAD(void)
         ciphertextWithTag[3] ^= 0x01;
 
         uint8_t decrypted[8];
-        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
-                                                    ciphertextWithTag, decrypted));
+        TEST_ASSERT_FALSE(
+            crypto->decryptPacketCCM(psk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
 
     // =========================================================================
@@ -288,8 +288,8 @@ void test_AES_CCM_AEAD(void)
         ciphertextWithTag[16 + CryptoEngine::AEAD_TAG_SIZE - 1] ^= 0xFF;
 
         uint8_t decrypted[16];
-        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNode, packetId, 16 + CryptoEngine::AEAD_TAG_SIZE,
-                                                    ciphertextWithTag, decrypted));
+        TEST_ASSERT_FALSE(
+            crypto->decryptPacketCCM(psk, fromNode, packetId, 16 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
 
     // =========================================================================
@@ -322,8 +322,8 @@ void test_AES_CCM_AEAD(void)
 
         // Attempt decryption with wrong key
         uint8_t decrypted[12];
-        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(pskB, fromNode, packetId, 12 + CryptoEngine::AEAD_TAG_SIZE,
-                                                    ciphertextWithTag, decrypted));
+        TEST_ASSERT_FALSE(
+            crypto->decryptPacketCCM(pskB, fromNode, packetId, 12 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
 
     // =========================================================================
@@ -342,8 +342,8 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNode, packetId, 20, plaintext, ciphertextWithTag));
 
         uint8_t decrypted[20];
-        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk, fromNode, packetId, 20 + CryptoEngine::AEAD_TAG_SIZE,
-                                                   ciphertextWithTag, decrypted));
+        TEST_ASSERT_TRUE(
+            crypto->decryptPacketCCM(psk, fromNode, packetId, 20 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
         TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, 20);
     }
 
@@ -365,8 +365,8 @@ void test_AES_CCM_AEAD(void)
 
         // Valid decrypt
         uint8_t decrypted[32];
-        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk, fromNode, packetId, 32 + CryptoEngine::AEAD_TAG_SIZE,
-                                                   ciphertextWithTag, decrypted));
+        TEST_ASSERT_TRUE(
+            crypto->decryptPacketCCM(psk, fromNode, packetId, 32 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
         TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, 32);
 
         // Tamper with each of first 4 ciphertext bytes and verify rejection
@@ -374,8 +374,8 @@ void test_AES_CCM_AEAD(void)
             uint8_t tampered[32 + CryptoEngine::AEAD_TAG_SIZE];
             memcpy(tampered, ciphertextWithTag, sizeof(tampered));
             tampered[i] ^= 0x80;
-            TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNode, packetId, 32 + CryptoEngine::AEAD_TAG_SIZE,
-                                                        tampered, decrypted));
+            TEST_ASSERT_FALSE(
+                crypto->decryptPacketCCM(psk, fromNode, packetId, 32 + CryptoEngine::AEAD_TAG_SIZE, tampered, decrypted));
         }
     }
 
@@ -415,8 +415,8 @@ void test_AES_CCM_AEAD(void)
 
         // Decrypt with different fromNode (nonce will differ)
         uint8_t decrypted[6];
-        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, fromNodeB, packetId, 6 + CryptoEngine::AEAD_TAG_SIZE,
-                                                    ciphertextWithTag, decrypted));
+        TEST_ASSERT_FALSE(
+            crypto->decryptPacketCCM(psk, fromNodeB, packetId, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
 }
 

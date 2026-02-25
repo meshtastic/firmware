@@ -198,9 +198,8 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
 
 #endif
 
-bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId,
-                                     size_t numBytes, const uint8_t *plaintext,
-                                     uint8_t *ciphertextWithTag)
+bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t numBytes,
+                                    const uint8_t *plaintext, uint8_t *ciphertextWithTag)
 {
     initNonce(fromNode, packetId);
     // AESSmall256::setKey() requires exactly 32 bytes. CryptoKey.bytes is always
@@ -208,14 +207,12 @@ bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uin
     // This effectively promotes AES-128 PSKs to AES-256 with zero-padded key.
     size_t keyLen = (psk.length > 0 && psk.length < 32) ? 32 : psk.length;
     // Output layout: [ciphertext (numBytes)] [auth_tag (AEAD_TAG_SIZE bytes)]
-    return aes_ccm_ae(psk.bytes, keyLen, nonce, AEAD_TAG_SIZE,
-                      plaintext, numBytes, nullptr, 0,
-                      ciphertextWithTag, ciphertextWithTag + numBytes) == 0;
+    return aes_ccm_ae(psk.bytes, keyLen, nonce, AEAD_TAG_SIZE, plaintext, numBytes, nullptr, 0, ciphertextWithTag,
+                      ciphertextWithTag + numBytes) == 0;
 }
 
-bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId,
-                                     size_t totalBytes, const uint8_t *ciphertextWithTag,
-                                     uint8_t *plaintext)
+bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t totalBytes,
+                                    const uint8_t *ciphertextWithTag, uint8_t *plaintext)
 {
     if (totalBytes <= AEAD_TAG_SIZE)
         return false;
@@ -223,9 +220,7 @@ bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uin
     size_t keyLen = (psk.length > 0 && psk.length < 32) ? 32 : psk.length;
     size_t crypt_len = totalBytes - AEAD_TAG_SIZE;
     const uint8_t *auth = ciphertextWithTag + crypt_len;
-    return aes_ccm_ad(psk.bytes, keyLen, nonce, AEAD_TAG_SIZE,
-                      ciphertextWithTag, crypt_len, nullptr, 0,
-                      auth, plaintext);
+    return aes_ccm_ad(psk.bytes, keyLen, nonce, AEAD_TAG_SIZE, ciphertextWithTag, crypt_len, nullptr, 0, auth, plaintext);
 }
 
 concurrency::Lock *cryptLock;
