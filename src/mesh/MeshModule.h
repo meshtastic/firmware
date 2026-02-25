@@ -106,6 +106,18 @@ class MeshModule
     /* We allow modules to ignore a request without sending an error if they have a specific reason for it. */
     bool ignoreRequest = false;
 
+    /**
+     * Check if the current request is a multi-hop broadcast. Modules should call this in allocReply()
+     * and return NULL to prevent reply storms from broadcast requests that have already been relayed.
+     */
+    bool isMultiHopBroadcastRequest()
+    {
+        if (currentRequest && isBroadcast(currentRequest->to) && currentRequest->hop_limit < currentRequest->hop_start) {
+            return true;
+        }
+        return false;
+    }
+
     /** If a bound channel name is set, we will only accept received packets that come in on that channel.
      * A special exception (FIXME, not sure if this is a good idea) - packets that arrive on the local interface
      * are allowed on any channel (this lets the local user do anything).
