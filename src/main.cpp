@@ -247,7 +247,6 @@ uint32_t timeLastPowered = 0;
 static OSThread *powerFSMthread;
 OSThread *ambientLightingThread;
 
-RadioInterface *rIf = NULL;
 RadioLibHal *RadioLibHAL = NULL;
 
 /**
@@ -1128,6 +1127,13 @@ void loop()
         if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
             lastRadioMissedIrqPoll = millis();
             RadioLibInterface::instance->pollMissedIrqs();
+        }
+
+        // Periodic AGC reset — warm sleep + recalibrate to prevent stuck AGC gain
+        static uint32_t lastAgcReset;
+        if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
+            lastAgcReset = millis();
+            RadioLibInterface::instance->resetAGC();
         }
     }
 
