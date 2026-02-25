@@ -103,8 +103,8 @@ static void test_multiple_keys_stored_independently()
     TEST_ASSERT_NOT_EQUAL(0, telemetry);
 
     // They should be in ascending order (nodeInfo oldest, telemetry newest)
-    TEST_ASSERT_LESS_OR_EQUAL(position, nodeInfo);
-    TEST_ASSERT_LESS_OR_EQUAL(telemetry, position);
+    TEST_ASSERT_LESS_OR_EQUAL(nodeInfo, position);
+    TEST_ASSERT_LESS_OR_EQUAL(position, telemetry);
 }
 
 // --- Singleton ---
