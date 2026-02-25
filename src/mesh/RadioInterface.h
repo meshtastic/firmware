@@ -16,6 +16,7 @@ typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
 #define MAX_LORA_PAYLOAD_LEN 255 // max length of 255 per Semtech's datasheets on SX12xx
 #define MESHTASTIC_HEADER_LENGTH 16
 #define MESHTASTIC_PKC_OVERHEAD 12
+#define MESHTASTIC_AEAD_OVERHEAD 12
 
 #define PACKET_FLAGS_HOP_LIMIT_MASK 0x07
 #define PACKET_FLAGS_WANT_ACK_MASK 0x08

@@ -45,6 +45,12 @@ int16_t Channels::generateHash(ChannelIndex channelNum)
 
         h ^= xorHash(k.bytes, k.length);
 
+        // Differentiate AEAD channels in routing so AEAD and non-AEAD
+        // channels with the same PSK have different hashes
+        auto &ch = getByIndex(channelNum);
+        if (ch.has_settings && ch.settings.use_aead)
+            h ^= 0xAE;
+
         return h;
     }
 }
@@ -448,6 +454,12 @@ bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
         }
     }
     return false;
+}
+
+bool Channels::isAEADEnabled(ChannelIndex chIndex)
+{
+    auto &ch = getByIndex(chIndex);
+    return ch.has_settings && ch.settings.use_aead;
 }
 
 /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)

@@ -8,7 +8,6 @@
  */
 #define AES_BLOCK_SIZE 16
 #include "aes-ccm.h"
-#if !MESHTASTIC_EXCLUDE_PKI
 
 /**
  * Constant-time comparison of two byte arrays
@@ -177,4 +176,3 @@ bool aes_ccm_ad(const uint8_t *key, size_t key_len, const uint8_t *nonce, size_t
     }
     return true;
 }
-#endif
