@@ -1209,7 +1209,7 @@ void TFTDisplay::display(bool fromBlank)
     bool somethingChanged = false;
 
     // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
-    colorTftMesh = (TFT_MESH >> 8) | ((TFT_MESH & 0xFF) << 8);
+    colorTftMesh = __builtin_bswap16(TFT_MESH);
     colorTftBlack = __builtin_bswap16(TFT_BLACK);
 
     y = 0;
