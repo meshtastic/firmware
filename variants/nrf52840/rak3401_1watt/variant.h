@@ -169,10 +169,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
  *
  * R25 (DIO2→CTX) is NC by default on the RAK13302, so the MCU must drive CTX directly.
  */
-#define USE_SKY66122_FEM
-#define SKY66122_CSD (24)
-#define SKY66122_CPS (21)
-#define SKY66122_CTX (31)
+#define USE_LORA_FEM
+#define LORA_FEM_CSD (24) // Chip enable
+#define LORA_FEM_CPS (21) // Path select (HIGH for both TX and RX)
+#define LORA_FEM_CTX (31) // TX/RX select + 5V boost (MCU-driven, R25 NC)
+#define LORA_FEM_RX_PATCH // SX1262 register 0x8B5 sensitivity fix
 
 // DIO2 configures the SX1262 internal RF switch (harmless with R25 NC)
 #define SX126X_DIO2_AS_RF_SWITCH

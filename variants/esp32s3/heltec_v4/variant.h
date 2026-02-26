@@ -47,14 +47,20 @@
 //   CSD (pin 4)  -> GPIO2: Chip enable (HIGH=on, LOW=shutdown)
 //   CPS (pin 5)  -> GPIO46: PA mode select (HIGH=full PA, LOW=bypass)
 //   VCC0/VCC1    -> Vfem via U3 LDO, controlled by GPIO7
-#define USE_GC1109_PA
-#define LORA_PA_POWER 7  // VFEM_Ctrl - GC1109 LDO power enable
-#define LORA_PA_EN 2     // CSD - GC1109 chip enable (HIGH=on)
-#define LORA_PA_TX_EN 46 // CPS - GC1109 PA mode (HIGH=full PA, LOW=bypass)
+#define USE_LORA_FEM
+#define LORA_FEM_POWER 7 // VFEM_Ctrl - LDO power enable
+#define LORA_FEM_CSD 2   // Chip enable (HIGH=on, LOW=shutdown)
+#define LORA_FEM_CPS 46  // PA mode (HIGH=full PA, LOW=bypass)
+// CTX handled by DIO2 via SX126X_DIO2_AS_RF_SWITCH
+#define LORA_FEM_RX_PATCH // SX1262 register 0x8B5 sensitivity fix
 
 // GC1109 FEM: TX/RX path switching is handled by DIO2 -> CTX pin (via SX126X_DIO2_AS_RF_SWITCH)
 // GPIO46 is CPS (PA mode), not TX control - setTransmitEnable() handles it in SX126xInterface.cpp
 // Do NOT use SX126X_TXEN/RXEN as that would cause double-control of GPIO46
+
+// Power Amps are often non-linear, so we use an array of values for the power curve
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7
 
 #if HAS_TFT
 #define USE_TFTDISPLAY 1
