@@ -96,13 +96,15 @@ template <typename T> bool SX126xInterface<T>::init()
 #if defined(USE_SKY66122_FEM)
     // SKY66122-11 FEM initialization — start in RX mode, boost off
     // See variant.h for full pin mapping and control logic documentation
+    // Drive CTX LOW first to prevent transient TX mode (Mode 2) while CSD/CPS
+    // are being enabled — the RAK13302 has no pull-downs on these pins.
+    pinMode(SKY66122_CTX, OUTPUT);
+    digitalWrite(SKY66122_CTX, LOW); // Boost off, RX mode
     pinMode(SKY66122_CSD, OUTPUT);
     digitalWrite(SKY66122_CSD, HIGH); // Enable FEM
     pinMode(SKY66122_CPS, OUTPUT);
     digitalWrite(SKY66122_CPS, HIGH); // Active path (required for both TX and RX)
-    pinMode(SKY66122_CTX, OUTPUT);
-    digitalWrite(SKY66122_CTX, LOW); // Boost off, RX mode
-    delay(1);                        // Settling time
+    delay(1);                         // Settling time
 #endif
 
 #ifdef RF95_FAN_EN
