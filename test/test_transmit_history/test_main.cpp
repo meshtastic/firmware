@@ -88,8 +88,10 @@ static void test_throttle_blocks_after_set_then_zero_does_not()
 static void test_multiple_keys_stored_independently()
 {
     transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
+    uint32_t nodeInfoInitial = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
     testDelay(20);
     transmitHistory->setLastSentToMesh(meshtastic_PortNum_POSITION_APP);
+    uint32_t positionInitial = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_POSITION_APP);
     testDelay(20);
     transmitHistory->setLastSentToMesh(meshtastic_PortNum_TELEMETRY_APP);
 
@@ -102,9 +104,9 @@ static void test_multiple_keys_stored_independently()
     TEST_ASSERT_NOT_EQUAL(0, position);
     TEST_ASSERT_NOT_EQUAL(0, telemetry);
 
-    // They should be in ascending order (nodeInfo oldest, telemetry newest)
-    TEST_ASSERT_LESS_OR_EQUAL(nodeInfo, position);
-    TEST_ASSERT_LESS_OR_EQUAL(position, telemetry);
+    // Updating other keys should not overwrite earlier key timestamps
+    TEST_ASSERT_EQUAL_UINT32(nodeInfoInitial, nodeInfo);
+    TEST_ASSERT_EQUAL_UINT32(positionInitial, position);
 }
 
 // --- Singleton ---
