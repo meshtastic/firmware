@@ -1,11 +1,12 @@
+#pragma once
+
 // Meshtastic
-#define IS_STATION 1
-#define HAS_SCREEN 1
+#define HAS_SCREEN 0
 
 // GPS
 #define HAS_GPS 0 // This variant does not have GPS support
-#define GPS_RX_PIN -1
-#define GPS_TX_PIN -1
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
 
 // Ethernet
 #define HAS_ETHERNET 1                  // This variant has Ethernet support
@@ -18,7 +19,6 @@
 
 // LoRa
 #define USE_SX1262
-#define HAS_LORA 1
 #define LORA_SCK 14  // Serial Clock
 #define LORA_MISO 12 // Master In Slave Out
 #define LORA_MOSI 15 // Master Out Slave In
@@ -34,21 +34,15 @@
 #define SX126X_BUSY LORA_BUSY
 
 // E22-900M30S
-#define LORA_RXEN -1
-#define LORA_TXEN -1
+#define SX126X_RXEN 17
+#define SX126X_TXEN RADIOLIB_NC
 #define SX126X_DIO2_AS_RF_SWITCH 1 // Uses DIO2 as RF switch control
-#define LORA_DIO3_TCXO_VOLTAGE 1.8 // DIO3 used for TCXO voltage control (1.8V)
-#define LORA_TX_CURRENT_LIMIT 140.0
-#define SX126X_MAX_POWER 30
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8 // DIO3 used for TCXO voltage control (1.8V)
+#define SX126X_MAX_POWER 22
 
 // i2c
-#define HAS_I2C 1  // This variant has I2C support
 #define I2C_SDA 32 // I2C Data
 #define I2C_SCL 33 // I2C Clock
-
-// LED
-#define LED_PIN 5      // LED pin
-#define LED_STATE_ON 1 // LED is on when pin is HIGH
 
 // Button
 #define BUTTON_PIN 35        // Button pin

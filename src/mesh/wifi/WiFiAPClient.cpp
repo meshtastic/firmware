@@ -50,7 +50,7 @@ char ourHost[16];
 static unsigned long wifiReconnectStartMillis = 0;
 static bool wifiReconnectPending = false;
 
-bool APStartupComplete = 0;
+bool APStartupComplete = false;
 
 unsigned long lastrun_ntp = 0;
 
@@ -70,15 +70,16 @@ bool initEthernet()
 #if defined(ESP32) && defined(ETH_PHY_TYPE)
     // Native ESP32 Ethernet (LAN8720, etc.)
     LOG_INFO("Starting Native Ethernet...");
+    WiFi.onEvent(WiFiEvent);
     ok = ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER, ETH_PHY_MDC, ETH_PHY_MDIO, ETH_PHY_TYPE, ETH_CLK_MODE);
 #elif defined(USE_WS5500)
     // SPI Ethernet (W5500)
     LOG_INFO("Starting W5500 Ethernet...");
+    WiFi.onEvent(WiFiEvent);
     ok = ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST, ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN);
 #endif
 
     if (ok) {
-        WiFi.onEvent(WiFiEvent);
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
 #endif

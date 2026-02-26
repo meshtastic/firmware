@@ -1,5 +1,6 @@
 #pragma once
 #include "ServerAPI.h"
+#include "variant.h"
 
 #if HAS_ETHERNET
 #if defined(ESP32) && (defined(ETH_PHY_TYPE) || defined(USE_WS5500))
