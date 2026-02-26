@@ -100,12 +100,13 @@ void InputBroker::processInputEventQueue()
 
 int InputBroker::handleInputEvent(const InputEvent *event)
 {
+#ifdef HAS_SCREEN
     bool screenWasOff = false;
     if (screen) {
         screenWasOff = !screen->isScreenOn();
     }
+#endif
     powerFSM.trigger(EVENT_INPUT);
-
 
     if (event && event->inputEvent != INPUT_BROKER_NONE && externalNotificationModule &&
         moduleConfig.external_notification.enabled && externalNotificationModule->nagging()) {
@@ -114,10 +115,12 @@ int InputBroker::handleInputEvent(const InputEvent *event)
         return 0;
     }
 
+#ifdef HAS_SCREEN
     if (screen && screenWasOff) {
         // If the screen was off, it is in the process of turning on, and we just drop the event
         return 0;
     }
+#endif
 
     this->notifyObservers(event);
     return 0;
