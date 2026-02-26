@@ -10,6 +10,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "UnitConversions.h"
 #include "buzz.h"
 #include "graphics/SharedUIDisplay.h"
@@ -144,6 +145,8 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/AddI2CSensorTemplate.h"
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
+
+static constexpr uint16_t TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY = 0x8002;
 
 void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
@@ -318,14 +321,17 @@ int32_t EnvironmentTelemetryModule::runOnce()
             }
         }
 
-        if (((lastSentToMesh == 0) ||
-             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                               moduleConfig.telemetry.environment_update_interval,
-                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+        uint32_t lastTelemetry =
+            transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY) : 0;
+        if (((lastTelemetry == 0) ||
+             !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
+                                                              moduleConfig.telemetry.environment_update_interval,
+                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = millis();
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
