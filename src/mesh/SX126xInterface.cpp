@@ -501,7 +501,10 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     startReceive();
 }
 
-/** Control PA mode for FEM - selects TX path (txon=true) or RX path (txon=false) */
+/** Control FEM PA mode.
+ *  - With MCU-driven CTX (LORA_FEM_CTX defined), txon=true selects the TX path and txon=false selects the RX path.
+ *  - With DIO2-driven CTX (no LORA_FEM_CTX), this toggles CPS (bypass vs active path); TX/RX path is controlled by the radio.
+ */
 template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
 {
 #if defined(USE_LORA_FEM)
