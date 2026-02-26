@@ -58,7 +58,7 @@ extern std::ofstream traceFile;
 extern std::ofstream JSONFile;
 
 extern Ch341Hal *ch341Hal;
-int initGPIOPin(int pinNum, std::string gpioChipname, int line);
+int initGPIOPin(int pinNum, const std::string &gpioChipname, int line);
 bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
@@ -177,8 +177,12 @@ extern struct portduino_config_struct {
     int hostMetrics_channel = 0;
 
     // config
+    bool has_config_overrides = false;
     int configDisplayMode = 0;
     bool has_configDisplayMode = false;
+    std::string statusMessage = "";
+    bool has_statusMessage = false;
+    bool enable_UDP = false;
 
     // General
     std::string mac_address = "";
@@ -220,7 +224,7 @@ extern struct portduino_config_struct {
         out << YAML::Key << "Lora" << YAML::Value << YAML::BeginMap;
         out << YAML::Key << "Module" << YAML::Value << loraModules[lora_module];
 
-        for (auto lora_pin : all_pins) {
+        for (const auto *lora_pin : all_pins) {
             if (lora_pin->config_section == "Lora" && lora_pin->enabled) {
                 out << YAML::Key << lora_pin->config_name << YAML::Value << YAML::BeginMap;
                 out << YAML::Key << "pin" << YAML::Value << lora_pin->pin;
@@ -346,11 +350,11 @@ extern struct portduino_config_struct {
         // Display
         if (displayPanel != no_screen) {
             out << YAML::Key << "Display" << YAML::Value << YAML::BeginMap;
-            for (auto &screen_name : screen_names) {
+            for (const auto &screen_name : screen_names) {
                 if (displayPanel == screen_name.first)
                     out << YAML::Key << "Module" << YAML::Value << screen_name.second;
             }
-            for (auto display_pin : all_pins) {
+            for (const auto *display_pin : all_pins) {
                 if (display_pin->config_section == "Display" && display_pin->enabled) {
                     out << YAML::Key << display_pin->config_name << YAML::Value << YAML::BeginMap;
                     out << YAML::Key << "pin" << YAML::Value << display_pin->pin;
@@ -398,7 +402,7 @@ extern struct portduino_config_struct {
             case ft5x06:
                 out << YAML::Key << "Module" << YAML::Value << "FT5x06";
             }
-            for (auto touchscreen_pin : all_pins) {
+            for (const auto *touchscreen_pin : all_pins) {
                 if (touchscreen_pin->config_section == "Touchscreen" && touchscreen_pin->enabled) {
                     out << YAML::Key << touchscreen_pin->config_name << YAML::Value << YAML::BeginMap;
                     out << YAML::Key << "pin" << YAML::Value << touchscreen_pin->pin;
@@ -421,7 +425,7 @@ extern struct portduino_config_struct {
         if (pointerDevice != "")
             out << YAML::Key << "PointerDevice" << YAML::Value << pointerDevice;
 
-        for (auto input_pin : all_pins) {
+        for (const auto *input_pin : all_pins) {
             if (input_pin->config_section == "Input" && input_pin->enabled) {
                 out << YAML::Key << input_pin->config_name << YAML::Value << YAML::BeginMap;
                 out << YAML::Key << "pin" << YAML::Value << input_pin->pin;
@@ -505,21 +509,30 @@ extern struct portduino_config_struct {
         }
 
         // config
-        if (has_configDisplayMode) {
+        if (has_config_overrides) {
             out << YAML::Key << "Config" << YAML::Value << YAML::BeginMap;
-            switch (configDisplayMode) {
-            case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
-                break;
-            case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
-                break;
-            case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
-                break;
-            case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
-                break;
+            if (has_configDisplayMode) {
+
+                switch (configDisplayMode) {
+                case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
+                    break;
+                case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
+                    break;
+                case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
+                    break;
+                case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
+                    break;
+                }
+            }
+            if (has_statusMessage) {
+                out << YAML::Key << "StatusMessage" << YAML::Value << statusMessage;
+            }
+            if (enable_UDP) {
+                out << YAML::Key << "EnableUDP" << YAML::Value << true;
             }
 
             out << YAML::EndMap; // Config

@@ -1,6 +1,7 @@
 #include "CryptoEngine.h"
 // #include "NodeDB.h"
 #include "architecture.h"
+#include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #include "NodeDB.h"
@@ -169,10 +170,9 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
-    delete aes;
     aes = nullptr;
     if (key_len != 0) {
-        aes = new AESSmall256();
+        aes = std::unique_ptr<AESSmall256>(new AESSmall256());
         aes->setKey(key_bytes, key_len);
     }
 }
@@ -231,12 +231,11 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
 // Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    delete ctr;
-    ctr = nullptr;
+    std::unique_ptr<CTRCommon> ctr;
     if (_key.length == 16)
-        ctr = new CTR<AES128>();
+        ctr = std::unique_ptr<CTRCommon>(new CTR<AES128>());
     else
-        ctr = new CTR<AES256>();
+        ctr = std::unique_ptr<CTRCommon>(new CTR<AES256>());
     ctr->setKey(_key.bytes, _key.length);
     static uint8_t scratch[MAX_BLOCKSIZE];
     memcpy(scratch, bytes, numBytes);

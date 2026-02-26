@@ -111,7 +111,7 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
 
     bool dataReady;
     error = scd4x.getDataReadyStatus(dataReady);
-    if (!dataReady) {
+    if (error != SCD4X_NO_ERROR || !dataReady) {
 #if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
         reClockI2C(currentClock, _bus, false);
 #endif
@@ -125,7 +125,7 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     reClockI2C(currentClock, _bus, false);
 #endif
 
-    LOG_DEBUG("%s readings: %u ppm, %.2f degC, %.2f %rh", sensorName, co2, temperature, humidity);
+    LOG_DEBUG("Got %s readings: co2=%u, co2_temp=%.2f, co2_hum%.2f", sensorName, co2, temperature, humidity);
     if (error != SCD4X_NO_ERROR) {
         LOG_DEBUG("%s: Error while getting measurements: %u", sensorName, error);
         if (co2 == 0) {
@@ -217,7 +217,7 @@ bool SCD4XSensor::startMeasurement()
         state = SCD4X_MEASUREMENT;
         return true;
     } else {
-        LOG_ERROR("%s: Couldn't start measurement mode", sensorName);
+        LOG_ERROR("%s: Unable to start measurement mode", sensorName);
         return false;
     }
 }
@@ -232,7 +232,7 @@ bool SCD4XSensor::stopMeasurement()
 
     error = scd4x.stopPeriodicMeasurement();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to set idle mode on SCD4X.", sensorName);
+        LOG_ERROR("%s: Unable to stop measurement.", sensorName);
         return false;
     }
 
@@ -283,11 +283,7 @@ bool SCD4XSensor::getASC(uint16_t &_ascActive)
         return false;
     }
 
-    if (_ascActive) {
-        LOG_INFO("%s: ASC is enabled", sensorName);
-    } else {
-        LOG_INFO("%s: FRC is enabled", sensorName);
-    }
+    LOG_INFO("%s ASC is %s", sensorName, _ascActive ? "enabled" : "disabled");
 
     return true;
 }
@@ -305,11 +301,7 @@ bool SCD4XSensor::setASC(bool ascEnabled)
 {
     uint16_t error;
 
-    if (ascEnabled) {
-        LOG_INFO("%s: Enabling ASC", sensorName);
-    } else {
-        LOG_INFO("%s: Disabling ASC", sensorName);
-    }
+    LOG_INFO("%s %s ASC", sensorName, ascEnabled ? "Enabling" : "Disabling");
 
     if (!stopMeasurement()) {
         return false;
@@ -333,12 +325,6 @@ bool SCD4XSensor::setASC(bool ascEnabled)
         return false;
     }
 
-    if (ascActive) {
-        LOG_INFO("%s: ASC is enabled", sensorName);
-    } else {
-        LOG_INFO("%s: ASC is disabled", sensorName);
-    }
-
     return true;
 }
 
@@ -357,8 +343,7 @@ bool SCD4XSensor::setASC(bool ascEnabled)
  */
 bool SCD4XSensor::setASCBaseline(uint32_t targetCO2)
 {
-    // TODO - Remove?
-    //  Available in library, but not described in datasheet.
+    // Available in library, but not described in datasheet.
     uint16_t error;
     LOG_INFO("%s: Setting ASC baseline to: %u", sensorName, targetCO2);
 
@@ -425,7 +410,7 @@ bool SCD4XSensor::setTemperature(float tempReference)
     LOG_INFO("%s: Setting reference temperature at: %.2f", sensorName, tempReference);
 
     error = scd4x.getDataReadyStatus(dataReady);
-    if (!dataReady) {
+    if (error != SCD4X_NO_ERROR || !dataReady) {
         LOG_ERROR("%s: Data is not ready", sensorName);
         return false;
     }
@@ -540,6 +525,7 @@ bool SCD4XSensor::setAltitude(uint32_t altitude)
     if (!stopMeasurement()) {
         return false;
     }
+    LOG_INFO("%s: setting altitude at %um", sensorName, altitude);
 
     error = scd4x.setSensorAltitude(altitude);
 
@@ -548,11 +534,15 @@ bool SCD4XSensor::setAltitude(uint32_t altitude)
         return false;
     }
 
-    error = scd4x.persistSettings();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to make settings persistent. Error code: %u", sensorName, error);
-        return false;
-    }
+    // NOTE: this gives an error if issued. Sensirion's library
+    // doesn't indicate it's needed.
+    // error = scd4x.persistSettings();
+    // if (error != SCD4X_NO_ERROR) {
+    //     LOG_ERROR("%s: Unable to make settings persistent. Error code: %u", sensorName, error);
+    //     return false;
+    // }
+
+    LOG_INFO("%s: altitude set", sensorName);
 
     return true;
 }
@@ -575,6 +565,8 @@ bool SCD4XSensor::setAmbientPressure(uint32_t ambientPressure)
 {
     uint16_t error;
 
+    LOG_INFO("%s: setting ambient pressure at %u Pa", sensorName, ambientPressure);
+
     error = scd4x.setAmbientPressure(ambientPressure);
 
     if (error != SCD4X_NO_ERROR) {
@@ -588,6 +580,8 @@ bool SCD4XSensor::setAmbientPressure(uint32_t ambientPressure)
         LOG_ERROR("%s: Unable to make settings persistent. Error code: %u", sensorName, error);
         return false;
     }
+
+    LOG_INFO("%s: ambient pressure set set", sensorName);
 
     return true;
 }
@@ -824,15 +818,28 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
 
         if (request->sensor_config.scd4x_config.has_factory_reset) {
             LOG_DEBUG("%s: Requested factory reset", sensorName);
-            this->factoryReset();
+            if (!this->factoryReset()) {
+                result = AdminMessageHandleResult::NOT_HANDLED;
+                break;
+            }
         } else {
-
             if (request->sensor_config.scd4x_config.has_set_asc) {
-                this->setASC(request->sensor_config.scd4x_config.set_asc);
+                getASC(ascActive);
+                bool currentASC = ascActive;
                 if (request->sensor_config.scd4x_config.set_asc == false) {
                     LOG_DEBUG("%s: Request for FRC", sensorName);
                     if (request->sensor_config.scd4x_config.has_set_target_co2_conc) {
-                        this->performFRC(request->sensor_config.scd4x_config.set_target_co2_conc);
+                        if (this->setASC(request->sensor_config.scd4x_config.set_asc)) {
+                            if (!this->performFRC(request->sensor_config.scd4x_config.set_target_co2_conc)) {
+                                result = AdminMessageHandleResult::NOT_HANDLED;
+                                // Set it back to ASC if failed
+                                setASC(currentASC);
+                                break;
+                            };
+                        } else {
+                            result = AdminMessageHandleResult::NOT_HANDLED;
+                            break;
+                        }
                     } else {
                         // FRC requested but no target CO2 provided
                         LOG_ERROR("%s: target CO2 not provided", sensorName);
@@ -841,12 +848,17 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
                     }
                 } else {
                     LOG_DEBUG("%s: Request for ASC", sensorName);
-                    if (request->sensor_config.scd4x_config.has_set_target_co2_conc) {
-                        LOG_DEBUG("%s: Request has target CO2", sensorName);
-                        // TODO - Remove? see setASCBaseline function
-                        this->setASCBaseline(request->sensor_config.scd4x_config.set_target_co2_conc);
+                    if (this->setASC(request->sensor_config.scd4x_config.set_asc)) {
+                        if (request->sensor_config.scd4x_config.has_set_target_co2_conc) {
+                            LOG_DEBUG("%s: Request has target CO2", sensorName);
+                            this->setASCBaseline(request->sensor_config.scd4x_config.set_target_co2_conc);
+                            // NOTE - in this situation, if we set ASC, but baseline set fails, we stay on ASC
+                        } else {
+                            LOG_DEBUG("%s: Request doesn't have target CO2", sensorName);
+                        }
                     } else {
-                        LOG_DEBUG("%s: Request doesn't have target CO2", sensorName);
+                        result = AdminMessageHandleResult::NOT_HANDLED;
+                        break;
                     }
                 }
             }
@@ -855,26 +867,35 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
             // NOTE: this requires to have a sensor working on stable environment
             // And to make it between readings
             if (request->sensor_config.scd4x_config.has_set_temperature) {
-                this->setTemperature(request->sensor_config.scd4x_config.set_temperature);
+                if (!this->setTemperature(request->sensor_config.scd4x_config.set_temperature)) {
+                    result = AdminMessageHandleResult::NOT_HANDLED;
+                    break;
+                }
             }
 
             // Check for altitude or pressure offset
             if (request->sensor_config.scd4x_config.has_set_altitude) {
-                this->setAltitude(request->sensor_config.scd4x_config.set_altitude);
+                if (!this->setAltitude(request->sensor_config.scd4x_config.set_altitude)) {
+                    result = AdminMessageHandleResult::NOT_HANDLED;
+                    break;
+                }
             } else if (request->sensor_config.scd4x_config.has_set_ambient_pressure) {
-                this->setAmbientPressure(request->sensor_config.scd4x_config.set_ambient_pressure);
+                if (!this->setAmbientPressure(request->sensor_config.scd4x_config.set_ambient_pressure)) {
+                    result = AdminMessageHandleResult::NOT_HANDLED;
+                    break;
+                }
             }
 
             // Check for low power mode
             // NOTE: to switch from one mode to another do:
             // setPowerMode -> startMeasurement
             if (request->sensor_config.scd4x_config.has_set_power_mode) {
-                this->setPowerMode(request->sensor_config.scd4x_config.set_power_mode);
+                if (!this->setPowerMode(request->sensor_config.scd4x_config.set_power_mode)) {
+                    result = AdminMessageHandleResult::NOT_HANDLED;
+                    break;
+                }
             }
         }
-
-        // Start measurement mode
-        this->startMeasurement();
 
         result = AdminMessageHandleResult::HANDLED;
         break;
@@ -882,6 +903,9 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
     default:
         result = AdminMessageHandleResult::NOT_HANDLED;
     }
+
+    // Start measurement mode
+    this->startMeasurement();
 
 #if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
     reClockI2C(currentClock, _bus, false);

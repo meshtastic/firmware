@@ -67,7 +67,7 @@
 #endif
 
 // LED
-#define LED_PIN 18
+#define LED_POWER 18
 #define LED_STATE_ON 1 // HIGH = ON
 
 // Battery ADC

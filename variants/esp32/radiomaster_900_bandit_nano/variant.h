@@ -37,7 +37,7 @@
 /*
   LED PIN setup.
 */
-#define LED_PIN 15
+#define LED_POWER 15
 
 /*
   Five way button when using ADC.

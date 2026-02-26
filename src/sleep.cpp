@@ -5,7 +5,6 @@
 #endif
 
 #include "Default.h"
-#include "Led.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -13,6 +12,7 @@
 #include "detect/LoRaRadioType.h"
 #include "error.h"
 #include "main.h"
+#include "modules/StatusLEDModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -268,8 +268,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     digitalWrite(PIN_WD_EN, LOW);
 #endif
 #endif
-    ledBlink.set(false);
-
+    statusLEDModule->setPowerLED(false);
 #ifdef RESET_OLED
     digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
 #endif
