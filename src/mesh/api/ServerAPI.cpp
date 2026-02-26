@@ -32,7 +32,7 @@ template <class T> int32_t ServerAPI<T>::runOnce()
 {
     if (client.connected()) {
         if (lastContactMsec > 0 && !Throttle::isWithinTimespanMs(lastContactMsec, TCP_IDLE_TIMEOUT_MS)) {
-            LOG_WARN("TCP connection timeout, no data for %lu ms", (unsigned long)TCP_IDLE_TIMEOUT_MS);
+            LOG_WARN("TCP connection timeout, no data for %lu ms", (unsigned long)(millis() - lastContactMsec));
             close();
             enabled = false;
             return 0;
