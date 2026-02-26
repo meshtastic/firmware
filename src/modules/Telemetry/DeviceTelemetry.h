@@ -51,7 +51,6 @@ class DeviceTelemetryModule : private concurrency::OSThread,
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000;           // Send to phone every minute
     uint32_t sendStatsToPhoneIntervalMs = 15 * SECONDS_IN_MINUTE * 1000; // Send stats to phone every 15 minutes
     uint32_t lastSentStatsToPhone = 0;
-    uint32_t lastSentToMesh = 0;
 
     void refreshUptime()
     {
