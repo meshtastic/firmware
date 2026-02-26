@@ -121,6 +121,40 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     inline uint16_t cuckooHash2(NodeNum node) const { return ((node * 2654435769u) >> (32 - cuckooHashBits())) & cacheMask(); }
     static constexpr uint8_t cuckooHashBits();
 
+    // NodeInfo cache configuration (PSRAM path):
+    // - Payload lives in PSRAM
+    // - DRAM keeps packed 12-bit tags with 4-way bucketed cuckoo hashing
+    //   (Fan et al., CoNEXT 2014). Tag value 0 is reserved as "empty".
+    static constexpr uint16_t kNodeInfoIndexMetadataBudgetBytes = 3072; // 3KB DRAM tag store
+    static constexpr uint8_t kNodeInfoTargetOccupancyPercent = 95;
+    static constexpr uint8_t kNodeInfoBucketSize = 4;
+    static constexpr uint8_t kNodeInfoTagBits = 12;
+    static constexpr uint16_t kNodeInfoTagMask = static_cast<uint16_t>((1u << kNodeInfoTagBits) - 1u);
+    static constexpr uint16_t kNodeInfoIndexSlotsRaw =
+        static_cast<uint16_t>((kNodeInfoIndexMetadataBudgetBytes * 8u) / kNodeInfoTagBits);
+    static constexpr uint16_t kNodeInfoIndexSlots =
+        static_cast<uint16_t>(kNodeInfoIndexSlotsRaw - (kNodeInfoIndexSlotsRaw % kNodeInfoBucketSize));
+    static constexpr uint16_t kNodeInfoTargetEntries =
+        static_cast<uint16_t>((kNodeInfoIndexSlots * kNodeInfoTargetOccupancyPercent) / 100u);
+    static_assert((kNodeInfoIndexSlots % kNodeInfoBucketSize) == 0, "NodeInfo slot count must align to bucket size");
+    static_assert(kNodeInfoTargetEntries < (1u << kNodeInfoTagBits), "NodeInfo tag bits must encode payload index");
+
+    static constexpr uint16_t nodeInfoTargetEntries();
+    static constexpr uint16_t nodeInfoIndexMetadataBudgetBytes();
+    static constexpr uint8_t nodeInfoTargetOccupancyPercent();
+    static constexpr uint8_t nodeInfoBucketSize();
+    static constexpr uint8_t nodeInfoTagBits();
+    static constexpr uint16_t nodeInfoTagMask();
+    static constexpr uint16_t nodeInfoIndexSlots();
+    static constexpr uint16_t nodeInfoBucketCount();
+    static constexpr uint16_t nodeInfoBucketMask();
+    static constexpr uint8_t nodeInfoBucketHashBits();
+    inline uint16_t nodeInfoHash1(NodeNum node) const { return node & nodeInfoBucketMask(); }
+    inline uint16_t nodeInfoHash2(NodeNum node) const
+    {
+        return ((node * 2246822519u) >> (32 - nodeInfoBucketHashBits())) & nodeInfoBucketMask();
+    }
+
     // =========================================================================
     // Adaptive Timestamp Resolution
     // =========================================================================
@@ -212,6 +246,17 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     UnifiedCacheEntry *cache = nullptr;  // Cuckoo hash table (unified for all platforms)
     bool cacheFromPsram = false;         // Tracks allocator for correct deallocation
 
+    struct NodeInfoPayloadEntry {
+        NodeNum node;         // 4 bytes - Node identifier (0 = empty slot)
+        meshtastic_User user; // Full User payload for direct NODEINFO_APP replies
+    };
+
+    NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads in PSRAM
+    bool nodeInfoPayloadFromPsram = false;           // Tracks allocator for correct deallocation
+    uint8_t *nodeInfoIndex = nullptr;                // Packed 12-bit NodeInfo tags in DRAM
+    uint16_t nodeInfoAllocHint = 0;
+    uint16_t nodeInfoEvictCursor = 0;
+
     meshtastic_TrafficManagementStats stats;
 
     // Flag set during alterReceived() when packet should be exhausted.
@@ -229,6 +274,21 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     // Find existing entry (no creation)
     UnifiedCacheEntry *findEntry(NodeNum node);
+
+    // NodeInfo cache operations (bucketed cuckoo index + PSRAM payloads)
+    const NodeInfoPayloadEntry *findNodeInfoEntry(NodeNum node) const;
+    NodeInfoPayloadEntry *findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmptySlot);
+    uint16_t findNodeInfoPayloadIndex(NodeNum node) const;
+    bool removeNodeInfoIndexEntry(NodeNum node, uint16_t payloadIndex);
+    uint16_t allocateNodeInfoPayloadSlot();
+    uint16_t evictNodeInfoPayloadSlot();
+    bool tryInsertNodeInfoEntryInBucket(uint16_t bucket, uint16_t tag);
+    uint16_t encodeNodeInfoTag(uint16_t payloadIndex) const;
+    uint16_t decodeNodeInfoPayloadIndex(uint16_t tag) const;
+    uint16_t getNodeInfoTag(uint16_t slot) const;
+    void setNodeInfoTag(uint16_t slot, uint16_t tag);
+    uint16_t countNodeInfoEntriesLocked() const;
+    void cacheNodeInfoPacket(const meshtastic_MeshPacket &mp);
 
     // =========================================================================
     // Traffic Management Logic
@@ -267,6 +327,12 @@ constexpr uint8_t log2Floor(uint16_t n)
 {
     return n <= 1 ? 0 : static_cast<uint8_t>(1 + log2Floor(static_cast<uint16_t>(n >> 1)));
 }
+
+// Helper: ceil(log2(n)) for n >= 1, C++11-compatible constexpr.
+constexpr uint8_t log2Ceil(uint16_t n)
+{
+    return n <= 1 ? 0 : static_cast<uint8_t>(1 + log2Floor(static_cast<uint16_t>(n - 1)));
+}
 } // namespace detail
 
 constexpr uint16_t TrafficManagementModule::cacheSize()
@@ -282,6 +348,56 @@ constexpr uint16_t TrafficManagementModule::cacheMask()
 constexpr uint8_t TrafficManagementModule::cuckooHashBits()
 {
     return detail::log2Floor(cacheSize());
+}
+
+constexpr uint16_t TrafficManagementModule::nodeInfoTargetEntries()
+{
+    return kNodeInfoTargetEntries;
+}
+
+constexpr uint16_t TrafficManagementModule::nodeInfoIndexMetadataBudgetBytes()
+{
+    return kNodeInfoIndexMetadataBudgetBytes;
+}
+
+constexpr uint8_t TrafficManagementModule::nodeInfoTargetOccupancyPercent()
+{
+    return kNodeInfoTargetOccupancyPercent;
+}
+
+constexpr uint8_t TrafficManagementModule::nodeInfoBucketSize()
+{
+    return kNodeInfoBucketSize;
+}
+
+constexpr uint8_t TrafficManagementModule::nodeInfoTagBits()
+{
+    return kNodeInfoTagBits;
+}
+
+constexpr uint16_t TrafficManagementModule::nodeInfoTagMask()
+{
+    return kNodeInfoTagMask;
+}
+
+constexpr uint16_t TrafficManagementModule::nodeInfoIndexSlots()
+{
+    return kNodeInfoIndexSlots;
+}
+
+constexpr uint16_t TrafficManagementModule::nodeInfoBucketCount()
+{
+    return static_cast<uint16_t>(nodeInfoIndexSlots() / nodeInfoBucketSize());
+}
+
+constexpr uint16_t TrafficManagementModule::nodeInfoBucketMask()
+{
+    return nodeInfoBucketCount() > 0 ? nodeInfoBucketCount() - 1 : 0;
+}
+
+constexpr uint8_t TrafficManagementModule::nodeInfoBucketHashBits()
+{
+    return detail::log2Floor(nodeInfoBucketCount());
 }
 
 extern TrafficManagementModule *trafficManagementModule;

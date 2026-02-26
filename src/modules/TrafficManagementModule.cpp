@@ -184,6 +184,33 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
 
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    TM_LOG_INFO("Allocating NodeInfo cache: target=%u occupancy=%u%% payload=%u bytes (PSRAM) tags=%u bytes (%u-bit, %u slots, "
+                "%u buckets x %u)",
+                static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoTargetOccupancyPercent()),
+                static_cast<unsigned>(nodeInfoTargetEntries() * sizeof(NodeInfoPayloadEntry)),
+                static_cast<unsigned>(nodeInfoIndexMetadataBudgetBytes()), static_cast<unsigned>(nodeInfoTagBits()),
+                static_cast<unsigned>(nodeInfoIndexSlots()), static_cast<unsigned>(nodeInfoBucketCount()),
+                static_cast<unsigned>(nodeInfoBucketSize()));
+
+    nodeInfoIndex = static_cast<uint8_t *>(calloc(nodeInfoIndexMetadataBudgetBytes(), sizeof(uint8_t)));
+    if (!nodeInfoIndex) {
+        TM_LOG_WARN("NodeInfo index allocation failed; direct responses will fall back to NodeDB");
+    } else {
+        nodeInfoPayload = static_cast<NodeInfoPayloadEntry *>(ps_calloc(nodeInfoTargetEntries(), sizeof(NodeInfoPayloadEntry)));
+        if (nodeInfoPayload) {
+            nodeInfoPayloadFromPsram = true;
+            TM_LOG_INFO("NodeInfo bucketed cuckoo cache ready");
+        } else {
+            TM_LOG_WARN("NodeInfo PSRAM payload allocation failed; direct responses will fall back to NodeDB");
+            free(nodeInfoIndex);
+            nodeInfoIndex = nullptr;
+        }
+    }
+#else
+    TM_LOG_DEBUG("NodeInfo PSRAM cache not available on this target");
+#endif
+
     setIntervalFromNow(kMaintenanceIntervalMs);
 }
 
@@ -202,6 +229,19 @@ TrafficManagementModule::~TrafficManagementModule()
         cache = nullptr;
     }
 #endif
+
+    if (nodeInfoPayload) {
+        if (nodeInfoPayloadFromPsram)
+            free(nodeInfoPayload);
+        else
+            delete[] nodeInfoPayload;
+        nodeInfoPayload = nullptr;
+    }
+
+    if (nodeInfoIndex) {
+        free(nodeInfoIndex);
+        nodeInfoIndex = nullptr;
+    }
 }
 
 // =============================================================================
@@ -372,6 +412,373 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
 #endif
 }
 
+const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findNodeInfoEntry(NodeNum node) const
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoPayload || !nodeInfoIndex || node == 0)
+        return nullptr;
+
+    uint16_t payloadIndex = findNodeInfoPayloadIndex(node);
+    if (payloadIndex >= nodeInfoTargetEntries())
+        return nullptr;
+
+    return &nodeInfoPayload[payloadIndex];
+#else
+    (void)node;
+    return nullptr;
+#endif
+}
+
+uint16_t TrafficManagementModule::encodeNodeInfoTag(uint16_t payloadIndex) const
+{
+    if (payloadIndex >= nodeInfoTargetEntries())
+        return 0;
+    return static_cast<uint16_t>(payloadIndex + 1u);
+}
+
+uint16_t TrafficManagementModule::decodeNodeInfoPayloadIndex(uint16_t tag) const
+{
+    if (tag == 0 || tag > nodeInfoTargetEntries())
+        return UINT16_MAX;
+    return static_cast<uint16_t>(tag - 1u);
+}
+
+uint16_t TrafficManagementModule::getNodeInfoTag(uint16_t slot) const
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoIndex || slot >= nodeInfoIndexSlots())
+        return 0;
+
+    const uint32_t bitOffset = static_cast<uint32_t>(slot) * nodeInfoTagBits();
+    const uint16_t byteOffset = static_cast<uint16_t>(bitOffset >> 3);
+    const uint8_t shift = static_cast<uint8_t>(bitOffset & 7u);
+    uint32_t packed = 0;
+
+    if (byteOffset < nodeInfoIndexMetadataBudgetBytes())
+        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset]);
+    if (static_cast<uint16_t>(byteOffset + 1u) < nodeInfoIndexMetadataBudgetBytes())
+        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset + 1u]) << 8;
+    if (static_cast<uint16_t>(byteOffset + 2u) < nodeInfoIndexMetadataBudgetBytes())
+        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset + 2u]) << 16;
+
+    return static_cast<uint16_t>((packed >> shift) & nodeInfoTagMask());
+#else
+    (void)slot;
+    return 0;
+#endif
+}
+
+void TrafficManagementModule::setNodeInfoTag(uint16_t slot, uint16_t tag)
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoIndex || slot >= nodeInfoIndexSlots())
+        return;
+
+    const uint16_t normalizedTag = static_cast<uint16_t>(tag & nodeInfoTagMask());
+    const uint32_t bitOffset = static_cast<uint32_t>(slot) * nodeInfoTagBits();
+    const uint16_t byteOffset = static_cast<uint16_t>(bitOffset >> 3);
+    const uint8_t shift = static_cast<uint8_t>(bitOffset & 7u);
+    uint32_t packed = 0;
+
+    if (byteOffset < nodeInfoIndexMetadataBudgetBytes())
+        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset]);
+    if (static_cast<uint16_t>(byteOffset + 1u) < nodeInfoIndexMetadataBudgetBytes())
+        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset + 1u]) << 8;
+    if (static_cast<uint16_t>(byteOffset + 2u) < nodeInfoIndexMetadataBudgetBytes())
+        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset + 2u]) << 16;
+
+    const uint32_t mask = static_cast<uint32_t>(nodeInfoTagMask()) << shift;
+    packed = (packed & ~mask) | ((static_cast<uint32_t>(normalizedTag) << shift) & mask);
+
+    if (byteOffset < nodeInfoIndexMetadataBudgetBytes())
+        nodeInfoIndex[byteOffset] = static_cast<uint8_t>(packed & 0xFFu);
+    if (static_cast<uint16_t>(byteOffset + 1u) < nodeInfoIndexMetadataBudgetBytes())
+        nodeInfoIndex[byteOffset + 1u] = static_cast<uint8_t>((packed >> 8) & 0xFFu);
+    if (static_cast<uint16_t>(byteOffset + 2u) < nodeInfoIndexMetadataBudgetBytes())
+        nodeInfoIndex[byteOffset + 2u] = static_cast<uint8_t>((packed >> 16) & 0xFFu);
+#else
+    (void)slot;
+    (void)tag;
+#endif
+}
+
+uint16_t TrafficManagementModule::findNodeInfoPayloadIndex(NodeNum node) const
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoPayload || !nodeInfoIndex || node == 0)
+        return UINT16_MAX;
+
+    const uint16_t buckets[2] = {nodeInfoHash1(node), nodeInfoHash2(node)};
+
+    for (uint8_t b = 0; b < 2; b++) {
+        const uint16_t base = static_cast<uint16_t>(buckets[b] * nodeInfoBucketSize());
+        for (uint8_t slot = 0; slot < nodeInfoBucketSize(); slot++) {
+            uint16_t tag = getNodeInfoTag(static_cast<uint16_t>(base + slot));
+            if (tag == 0)
+                continue;
+
+            uint16_t payloadIndex = decodeNodeInfoPayloadIndex(tag);
+            if (payloadIndex >= nodeInfoTargetEntries())
+                continue;
+
+            if (nodeInfoPayload[payloadIndex].node == node)
+                return payloadIndex;
+        }
+    }
+
+    return UINT16_MAX;
+#else
+    (void)node;
+    return UINT16_MAX;
+#endif
+}
+
+bool TrafficManagementModule::removeNodeInfoIndexEntry(NodeNum node, uint16_t payloadIndex)
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoIndex || node == 0 || payloadIndex >= nodeInfoTargetEntries())
+        return false;
+
+    const uint16_t payloadTag = encodeNodeInfoTag(payloadIndex);
+    if (payloadTag == 0)
+        return false;
+    const uint16_t buckets[2] = {nodeInfoHash1(node), nodeInfoHash2(node)};
+
+    for (uint8_t b = 0; b < 2; b++) {
+        const uint16_t base = static_cast<uint16_t>(buckets[b] * nodeInfoBucketSize());
+        for (uint8_t slot = 0; slot < nodeInfoBucketSize(); slot++) {
+            const uint16_t indexSlot = static_cast<uint16_t>(base + slot);
+            if (getNodeInfoTag(indexSlot) == payloadTag) {
+                setNodeInfoTag(indexSlot, 0);
+                return true;
+            }
+        }
+    }
+
+    return false;
+#else
+    (void)node;
+    (void)payloadIndex;
+    return false;
+#endif
+}
+
+uint16_t TrafficManagementModule::allocateNodeInfoPayloadSlot()
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoPayload)
+        return UINT16_MAX;
+
+    for (uint16_t tries = 0; tries < nodeInfoTargetEntries(); tries++) {
+        uint16_t idx = static_cast<uint16_t>((nodeInfoAllocHint + tries) % nodeInfoTargetEntries());
+        if (nodeInfoPayload[idx].node == 0) {
+            nodeInfoAllocHint = static_cast<uint16_t>((idx + 1u) % nodeInfoTargetEntries());
+            return idx;
+        }
+    }
+#endif
+    return UINT16_MAX;
+}
+
+uint16_t TrafficManagementModule::evictNodeInfoPayloadSlot()
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoPayload || !nodeInfoIndex)
+        return UINT16_MAX;
+
+    for (uint16_t tries = 0; tries < nodeInfoTargetEntries(); tries++) {
+        uint16_t idx = static_cast<uint16_t>(nodeInfoEvictCursor % nodeInfoTargetEntries());
+        nodeInfoEvictCursor = static_cast<uint16_t>((nodeInfoEvictCursor + 1u) % nodeInfoTargetEntries());
+
+        NodeNum oldNode = nodeInfoPayload[idx].node;
+        if (oldNode == 0)
+            continue;
+
+        removeNodeInfoIndexEntry(oldNode, idx); // best effort; cache tolerates occasional stale miss
+        nodeInfoPayload[idx].node = 0;
+        return idx;
+    }
+#endif
+    return UINT16_MAX;
+}
+
+bool TrafficManagementModule::tryInsertNodeInfoEntryInBucket(uint16_t bucket, uint16_t tag)
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoIndex || !nodeInfoPayload || bucket >= nodeInfoBucketCount() || tag == 0)
+        return false;
+
+    const uint16_t base = static_cast<uint16_t>(bucket * nodeInfoBucketSize());
+    for (uint8_t slot = 0; slot < nodeInfoBucketSize(); slot++) {
+        const uint16_t indexSlot = static_cast<uint16_t>(base + slot);
+        const uint16_t existingTag = getNodeInfoTag(indexSlot);
+        if (existingTag == 0) {
+            setNodeInfoTag(indexSlot, tag);
+            return true;
+        }
+
+        // Opportunistically reuse stale tags that point at empty/invalid payload slots.
+        const uint16_t payloadIndex = decodeNodeInfoPayloadIndex(existingTag);
+        if (payloadIndex >= nodeInfoTargetEntries() || nodeInfoPayload[payloadIndex].node == 0) {
+            setNodeInfoTag(indexSlot, tag);
+            return true;
+        }
+    }
+#else
+    (void)bucket;
+    (void)tag;
+#endif
+    return false;
+}
+
+TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node,
+                                                                                                  bool *usedEmptySlot)
+{
+    if (usedEmptySlot)
+        *usedEmptySlot = false;
+
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoPayload || !nodeInfoIndex || node == 0)
+        return nullptr;
+
+    uint16_t existing = findNodeInfoPayloadIndex(node);
+    if (existing < nodeInfoTargetEntries())
+        return &nodeInfoPayload[existing];
+
+    const uint16_t beforeCount = countNodeInfoEntriesLocked();
+
+    uint16_t payloadIndex = allocateNodeInfoPayloadSlot();
+    if (payloadIndex == UINT16_MAX) {
+        payloadIndex = evictNodeInfoPayloadSlot();
+        if (payloadIndex == UINT16_MAX)
+            return nullptr;
+    }
+
+    nodeInfoPayload[payloadIndex].node = node;
+
+    // 4-way bucketed cuckoo insertion mirrors Cuckoo Filter practice from
+    // Fan et al. (CoNEXT 2014): high occupancy with short relocation chains.
+    uint16_t pending = encodeNodeInfoTag(payloadIndex);
+    uint16_t h1 = nodeInfoHash1(node);
+    uint16_t h2 = nodeInfoHash2(node);
+
+    if (!tryInsertNodeInfoEntryInBucket(h1, pending) && !tryInsertNodeInfoEntryInBucket(h2, pending)) {
+        uint16_t currentBucket = h1;
+        for (uint8_t kicks = 0; kicks < kMaxCuckooKicks; kicks++) {
+            const uint16_t base = static_cast<uint16_t>(currentBucket * nodeInfoBucketSize());
+            const uint16_t kickSlot = static_cast<uint16_t>((node + kicks) & (nodeInfoBucketSize() - 1u));
+            const uint16_t pos = static_cast<uint16_t>(base + kickSlot);
+
+            uint16_t displaced = getNodeInfoTag(pos);
+            setNodeInfoTag(pos, pending);
+            pending = displaced;
+
+            uint16_t displacedPayload = decodeNodeInfoPayloadIndex(pending);
+            if (displacedPayload >= nodeInfoTargetEntries()) {
+                pending = 0;
+                break;
+            }
+
+            NodeNum displacedNode = nodeInfoPayload[displacedPayload].node;
+            if (displacedNode == 0) {
+                pending = 0;
+                break;
+            }
+
+            uint16_t altH1 = nodeInfoHash1(displacedNode);
+            uint16_t altH2 = nodeInfoHash2(displacedNode);
+            uint16_t altBucket = (altH1 == currentBucket) ? altH2 : altH1;
+
+            if (tryInsertNodeInfoEntryInBucket(altBucket, pending)) {
+                pending = 0;
+                break;
+            }
+
+            currentBucket = altBucket;
+        }
+
+        if (pending != 0) {
+            uint16_t droppedPayload = decodeNodeInfoPayloadIndex(pending);
+            if (droppedPayload < nodeInfoTargetEntries())
+                nodeInfoPayload[droppedPayload].node = 0;
+            TM_LOG_DEBUG("NodeInfo bucketed cuckoo overflow, dropped payload idx=%u",
+                         static_cast<unsigned>(droppedPayload < nodeInfoTargetEntries() ? droppedPayload : UINT16_MAX));
+        }
+    }
+
+    uint16_t finalIndex = findNodeInfoPayloadIndex(node);
+    if (finalIndex >= nodeInfoTargetEntries()) {
+        // New entry did not survive insertion chain.
+        if (payloadIndex < nodeInfoTargetEntries() && nodeInfoPayload[payloadIndex].node == node)
+            nodeInfoPayload[payloadIndex].node = 0;
+        return nullptr;
+    }
+
+    if (usedEmptySlot) {
+        const uint16_t afterCount = countNodeInfoEntriesLocked();
+        *usedEmptySlot = afterCount > beforeCount;
+    }
+
+    return &nodeInfoPayload[finalIndex];
+#else
+    (void)node;
+    return nullptr;
+#endif
+}
+
+uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoIndex)
+        return 0;
+
+    uint16_t count = 0;
+    for (uint16_t i = 0; i < nodeInfoIndexSlots(); i++) {
+        if (getNodeInfoTag(i) != 0)
+            count++;
+    }
+    return count;
+#else
+    return 0;
+#endif
+}
+
+void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &mp)
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoPayload || !nodeInfoIndex || mp.decoded.payload.size == 0)
+        return;
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &user))
+        return;
+
+    // Normalize user.id to the packet sender's node number.
+    snprintf(user.id, sizeof(user.id), "!%08x", getFrom(&mp));
+
+    bool usedEmptySlot = false;
+    uint16_t cachedCount = 0;
+    {
+        concurrency::LockGuard guard(&cacheLock);
+        NodeInfoPayloadEntry *entry = findOrCreateNodeInfoEntry(getFrom(&mp), &usedEmptySlot);
+        if (!entry)
+            return;
+        entry->user = user;
+        if (usedEmptySlot)
+            cachedCount = countNodeInfoEntriesLocked();
+    }
+
+    if (usedEmptySlot) {
+        TM_LOG_INFO("NodeInfo PSRAM cache entries: %u/%u target (%u packed slots, %u-bit tags, %u-byte DRAM index)",
+                    static_cast<unsigned>(cachedCount), static_cast<unsigned>(nodeInfoTargetEntries()),
+                    static_cast<unsigned>(nodeInfoIndexSlots()), static_cast<unsigned>(nodeInfoTagBits()),
+                    static_cast<unsigned>(nodeInfoIndexMetadataBudgetBytes()));
+    }
+#else
+    (void)mp;
+#endif
+}
+
 // =============================================================================
 // Epoch Management
 // =============================================================================
@@ -485,6 +892,10 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         }
         return ProcessMessage::CONTINUE;
     }
+
+    // Learn NodeInfo payloads into the dedicated PSRAM cache.
+    if (mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP)
+        cacheNodeInfoPacket(mp);
 
     // -------------------------------------------------------------------------
     // NodeInfo Direct Response
@@ -673,6 +1084,15 @@ int32_t TrafficManagementModule::runOnce()
                  static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()),
                  static_cast<unsigned long>(millis() - sweepStartMs));
 
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (nodeInfoPayload && nodeInfoIndex) {
+        TM_LOG_DEBUG("NodeInfo PSRAM cache: %u/%u target (%u packed slots, %u buckets, %u-bit tags, %u-byte index)",
+                     static_cast<unsigned>(countNodeInfoEntriesLocked()), static_cast<unsigned>(nodeInfoTargetEntries()),
+                     static_cast<unsigned>(nodeInfoIndexSlots()), static_cast<unsigned>(nodeInfoBucketCount()),
+                     static_cast<unsigned>(nodeInfoTagBits()), static_cast<unsigned>(nodeInfoIndexMetadataBudgetBytes()));
+    }
+#endif
+
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
     return kMaintenanceIntervalMs;
@@ -733,17 +1153,37 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // Caller already verified: nodeinfo_direct_response, portnum, want_response,
     // !isBroadcast, !isToUs, !isFromUs
 
-    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
-    if (!node || !node->has_user)
-        return false;
-
     if (!isMinHopsFromRequestor(p))
         return false;
+
+    meshtastic_User cachedUser = meshtastic_User_init_zero;
+    bool hasCachedUser = false;
+
+    {
+        concurrency::LockGuard guard(&cacheLock);
+        const NodeInfoPayloadEntry *entry = findNodeInfoEntry(p->to);
+        if (entry) {
+            cachedUser = entry->user;
+            hasCachedUser = true;
+        }
+    }
+
+    if (!hasCachedUser) {
+        if (nodeInfoPayload && nodeInfoIndex) {
+            TM_LOG_DEBUG("NodeInfo PSRAM cache miss for node=0x%08x", p->to);
+            return false;
+        }
+
+        // Fallback when PSRAM cache is unavailable on this target.
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+        if (!node || !node->has_user)
+            return false;
+        cachedUser = TypeConversions::ConvertToUser(node->num, node->user);
+    }
 
     if (!sendResponse)
         return true;
 
-    meshtastic_User user = TypeConversions::ConvertToUser(node->num, node->user);
     meshtastic_MeshPacket *reply = router->allocForSending();
     if (!reply) {
         TM_LOG_WARN("NodeInfo direct response dropped: no packet buffer");
@@ -752,7 +1192,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
     reply->decoded.portnum = meshtastic_PortNum_NODEINFO_APP;
     reply->decoded.payload.size =
-        pb_encode_to_bytes(reply->decoded.payload.bytes, sizeof(reply->decoded.payload.bytes), &meshtastic_User_msg, &user);
+        pb_encode_to_bytes(reply->decoded.payload.bytes, sizeof(reply->decoded.payload.bytes), &meshtastic_User_msg, &cachedUser);
     reply->decoded.want_response = false;
     // Respect the node-wide config_ok_to_mqtt setting for cached NodeInfo replies.
     // This response is spoofed from another node, so Router::perhapsEncode()
