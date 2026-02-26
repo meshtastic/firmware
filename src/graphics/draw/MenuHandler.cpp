@@ -2688,7 +2688,7 @@ void menuHandler::LoRaFEMLNAToggleMenu()
         enum optionsNumbers {Back = 0};
 
         // BannerOverlayOptions bannerOptions;
-        bannerOptions.message = "LNA Disable Unsupported";
+        bannerOptions.message = "LNA Control Unsupported";
         bannerOptions.optionsArrayPtr = optionsArray;
         bannerOptions.optionsCount = 1;
         bannerOptions.bannerCallback = [](int selected) -> void {
