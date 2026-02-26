@@ -418,6 +418,31 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_FALSE(
             crypto->decryptPacketCCM(psk, fromNodeB, packetId, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
+
+    // =========================================================================
+    // Test 11: Empty PSK — must return false, not crash
+    // =========================================================================
+    {
+        CryptoKey emptyPsk;
+        memset(&emptyPsk, 0, sizeof(emptyPsk));
+        emptyPsk.length = 0;
+
+        uint32_t fromNode = 0xDEADBEEF;
+        uint64_t packetId = 0x12345678;
+
+        uint8_t plaintext[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+        uint8_t ciphertextWithTag[8 + CryptoEngine::AEAD_TAG_SIZE];
+        uint8_t decrypted[8];
+
+        // Encrypt with empty PSK must fail gracefully
+        TEST_ASSERT_FALSE(crypto->encryptPacketCCM(emptyPsk, fromNode, packetId, 8, plaintext, ciphertextWithTag));
+
+        // Decrypt with empty PSK must fail gracefully
+        // (use dummy ciphertext since encrypt failed)
+        memset(ciphertextWithTag, 0xAA, sizeof(ciphertextWithTag));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(emptyPsk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
+                                                   ciphertextWithTag, decrypted));
+    }
 }
 
 void setup()

@@ -676,7 +676,10 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                     return meshtastic_Routing_Error_NO_CHANNEL;
 
                 CryptoKey k = channels.getKey(chIndex);
-                crypto->encryptPacketCCM(k, getFrom(p), p->id, numbytes, bytes, p->encrypted.bytes);
+                if (!crypto->encryptPacketCCM(k, getFrom(p), p->id, numbytes, bytes, p->encrypted.bytes)) {
+                    LOG_ERROR("AEAD encryption failed for ch %d", chIndex);
+                    return meshtastic_Routing_Error_BAD_REQUEST;
+                }
                 numbytes += MESHTASTIC_AEAD_OVERHEAD;
             } else {
                 // Standard AES-CTR encryption path
@@ -705,7 +708,10 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 return meshtastic_Routing_Error_NO_CHANNEL;
 
             CryptoKey k = channels.getKey(chIndex);
-            crypto->encryptPacketCCM(k, getFrom(p), p->id, numbytes, bytes, p->encrypted.bytes);
+            if (!crypto->encryptPacketCCM(k, getFrom(p), p->id, numbytes, bytes, p->encrypted.bytes)) {
+                LOG_ERROR("AEAD encryption failed for ch %d", chIndex);
+                return meshtastic_Routing_Error_BAD_REQUEST;
+            }
             numbytes += MESHTASTIC_AEAD_OVERHEAD;
         } else {
             // Standard AES-CTR encryption path
