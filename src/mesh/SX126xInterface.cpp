@@ -208,14 +208,14 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", result);
     }
 
-#ifdef USE_GC1109_PA
+#if defined(USE_GC1109_PA) || defined(USE_SKY66122_FEM)
     // Undocumented SX1262 register patch recommended by Heltec/Semtech for improved RX sensitivity
-    // on boards with the GC1109 FEM. Sets bit 0 of register 0x8B5.
+    // on boards with an external FEM (GC1109, SKY66122). Sets bit 0 of register 0x8B5.
     // Reference: https://github.com/meshcore-dev/MeshCore/pull/1398
     if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) == RADIOLIB_ERR_NONE) {
-        LOG_INFO("Applied SX1262 register 0x8B5 patch for GC1109 RX improvement");
+        LOG_INFO("Applied SX1262 register 0x8B5 patch for FEM RX improvement");
     } else {
-        LOG_WARN("Failed to apply SX1262 register 0x8B5 patch for GC1109");
+        LOG_WARN("Failed to apply SX1262 register 0x8B5 patch");
     }
 #endif
 
