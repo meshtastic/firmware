@@ -91,7 +91,7 @@ MPR121Keyboard::MPR121Keyboard() : m_wire(nullptr), m_addr(0), readCallback(null
 {
     // LOG_DEBUG("MPR121 @ %02x", m_addr);
     state = Init;
-    last_key = -1;
+    last_key = UINT8_MAX;
     last_tap = 0L;
     char_idx = 0;
     queue = "";
@@ -359,8 +359,8 @@ void MPR121Keyboard::released()
         return;
     }
     // would clear longpress callback... later.
-    if (last_key < 0 || last_key > _NUM_KEYS) { // reset to idle if last_key out of bounds
-        last_key = -1;
+    if (last_key >= _NUM_KEYS) { // reset to idle if last_key out of bounds
+        last_key = UINT8_MAX;
         state = Idle;
         return;
     }

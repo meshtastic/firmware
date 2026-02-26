@@ -496,7 +496,7 @@ void portduinoSetup()
     randomSeed(time(NULL));
 
     std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
-    for (auto i : portduino_config.all_pins) {
+    for (const auto *i : portduino_config.all_pins) {
         if (i->enabled && i->pin > max_GPIO)
             max_GPIO = i->pin;
     }
@@ -510,7 +510,7 @@ void portduinoSetup()
 
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
-    for (auto i : portduino_config.all_pins) {
+    for (const auto *i : portduino_config.all_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
         if (i->config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
@@ -535,6 +535,27 @@ void portduinoSetup()
                 exit(EXIT_FAILURE);
             }
         }
+    }
+
+    // In one test, this dance seemed necessary to trigger the pin to detect properly.
+    if (portduino_config.lora_pa_detect_pin.enabled) {
+        pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLDOWN);
+        sleep(1);
+        if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == LOW) {
+            std::cout << "Pin " << portduino_config.lora_pa_detect_pin.pin << " PULLDOWN is LOW" << std::endl;
+        }
+        pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLUP);
+        sleep(1);
+        if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == HIGH) {
+            std::cout << "Pin " << portduino_config.lora_pa_detect_pin.pin << " PULLUP is HIGH, dropping PA curve" << std::endl;
+            portduino_config.num_pa_points = 1;
+            portduino_config.tx_gain_lora[0] = 0;
+        } else {
+            std::cout << "Pin " << portduino_config.lora_pa_detect_pin.pin << " PULLUP is LOW, using PA curve" << std::endl;
+        }
+
+        // disable bias once finished
+        pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT);
     }
 
     // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
@@ -572,7 +593,7 @@ void portduinoSetup()
     return;
 }
 
-int initGPIOPin(int pinNum, const std::string gpioChipName, int line)
+int initGPIOPin(int pinNum, const std::string &gpioChipName, int line)
 {
 #ifdef PORTDUINO_LINUX_HARDWARE
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
@@ -643,7 +664,7 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Lora"]) {
 
             if (yamlConfig["Lora"]["Module"]) {
-                for (auto &loraModule : portduino_config.loraModules) {
+                for (const auto &loraModule : portduino_config.loraModules) {
                     if (yamlConfig["Lora"]["Module"].as<std::string>("") == loraModule.second) {
                         portduino_config.lora_module = loraModule.first;
                         break;
@@ -777,7 +798,7 @@ bool loadConfig(const char *configPath)
         }
         if (yamlConfig["Display"]) {
 
-            for (auto &screen_name : portduino_config.screen_names) {
+            for (const auto &screen_name : portduino_config.screen_names) {
                 if (yamlConfig["Display"]["Panel"].as<std::string>("") == screen_name.second)
                     portduino_config.displayPanel = screen_name.first;
             }
@@ -907,7 +928,7 @@ bool loadConfig(const char *configPath)
             }
             if (checkConfigPort) {
                 portduino_config.api_port = (yamlConfig["General"]["APIPort"]).as<int>(-1);
-                if (portduino_config.api_port != -1 && portduino_config.api_port > 1023 && portduino_config.api_port < 65536) {
+                if (portduino_config.api_port > 1023 && portduino_config.api_port < 65536) {
                     TCPPort = (portduino_config.api_port);
                 }
             }

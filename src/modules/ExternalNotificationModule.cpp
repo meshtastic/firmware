@@ -367,7 +367,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
+            const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
             meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
 
             // If we receive a broadcast message, apply channel mute setting
