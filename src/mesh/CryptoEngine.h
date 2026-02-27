@@ -50,7 +50,7 @@ class CryptoEngine
     virtual void aesSetKey(const uint8_t *key, size_t key_len);
 
     virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-    std::unique_ptr<AESSmall256> aes = nullptr;
+    std::unique_ptr<BlockCipher> aes = nullptr;
 
     static constexpr size_t AEAD_TAG_SIZE = 12;
 

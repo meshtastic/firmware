@@ -75,6 +75,29 @@ void test_ECB_AES256(void)
     crypto->aesEncrypt(plain, result); // Does 16 bytes at a time
     TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
 }
+void test_ECB_AES128(void)
+{
+    // https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/AES_ECB.pdf
+    uint8_t key[16] = {0};
+    uint8_t plain[16] = {0};
+    uint8_t result[16] = {0};
+    uint8_t expected[16] = {0};
+
+    HexToBytes(key, "2B7E151628AED2A6ABF7158809CF4F3C");
+
+    HexToBytes(plain, "6BC1BEE22E409F96E93D7E117393172A");
+    HexToBytes(expected, "3AD77BB40D7A3660A89ECAF32466EF97");
+    crypto->aesSetKey(key, 16);
+    crypto->aesEncrypt(plain, result);
+    TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
+
+    HexToBytes(plain, "AE2D8A571E03AC9C9EB76FAC45AF8E51");
+    HexToBytes(expected, "F5D3D58503B9699DE785895A96FDBAAF");
+    crypto->aesSetKey(key, 16);
+    crypto->aesEncrypt(plain, result);
+    TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
+}
+
 void test_DH25519(void)
 {
     // test vectors from wycheproof x25519
@@ -327,8 +350,7 @@ void test_AES_CCM_AEAD(void)
     }
 
     // =========================================================================
-    // Test 7: Round-trip with AES-128 PSK (16-byte key, zero-padded to 256)
-    // Verifies that the key promotion to AES-256 works correctly.
+    // Test 7: Round-trip with AES-128 PSK (16-byte key, true AES-128-CCM)
     // =========================================================================
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
@@ -443,6 +465,44 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_FALSE(crypto->decryptPacketCCM(emptyPsk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
                                                    ciphertextWithTag, decrypted));
     }
+
+    // =========================================================================
+    // Test 12: AES-128 vs AES-256 produce different ciphertexts
+    // Verifies that 16-byte keys use true AES-128, not AES-256 with padding.
+    // =========================================================================
+    {
+        // Same 16 bytes of key material, but one is AES-128 (16 bytes)
+        // and the other is AES-256 (32 bytes, zero-padded).
+        CryptoKey psk128 = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
+        CryptoKey psk256;
+        memset(psk256.bytes, 0, sizeof(psk256.bytes));
+        HexToBytes(psk256.bytes, "d4f1bb3a20290759f0bcffabcf4e6901");
+        psk256.length = 32; // same first 16 bytes, but treated as AES-256
+
+        uint32_t fromNode = 0x55AA55AA;
+        uint64_t packetId = 0x1234ABCD;
+
+        uint8_t plaintext[8] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80};
+        uint8_t ct128[8 + CryptoEngine::AEAD_TAG_SIZE];
+        uint8_t ct256[8 + CryptoEngine::AEAD_TAG_SIZE];
+
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk128, fromNode, packetId, 8, plaintext, ct128));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk256, fromNode, packetId, 8, plaintext, ct256));
+
+        // AES-128 and AES-256 with the same key material must produce different output
+        TEST_ASSERT_FALSE(memcmp(ct128, ct256, 8 + CryptoEngine::AEAD_TAG_SIZE) == 0);
+
+        // Both must still round-trip correctly
+        uint8_t dec128[8], dec256[8];
+        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk128, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct128, dec128));
+        TEST_ASSERT_EQUAL_MEMORY(plaintext, dec128, 8);
+        TEST_ASSERT_TRUE(crypto->decryptPacketCCM(psk256, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct256, dec256));
+        TEST_ASSERT_EQUAL_MEMORY(plaintext, dec256, 8);
+
+        // Cross-key decryption must fail
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk256, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct128, dec128));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk128, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ct256, dec256));
+    }
 }
 
 void setup()
@@ -455,6 +515,7 @@ void setup()
     initializeTestEnvironment();
     UNITY_BEGIN(); // IMPORTANT LINE!
     RUN_TEST(test_SHA256);
+    RUN_TEST(test_ECB_AES128);
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
