@@ -52,7 +52,14 @@ template <class T, class U> class APIServerPort : public U, private concurrency:
 
   public:
     explicit APIServerPort(int port);
-    ~APIServerPort() { delete openAPI; }
+    ~APIServerPort()
+    {
+        if (openAPI != nullptr)
+        {
+            delete openAPI;
+            openAPI = nullptr;
+        }
+    }
 
     void init();
 
