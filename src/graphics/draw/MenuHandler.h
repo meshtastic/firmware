@@ -163,7 +163,10 @@ using NodeNameOption = MenuOption<bool>;
 using PositionMenuOption = MenuOption<int>;
 using ManageNodeOption = MenuOption<int>;
 using ClockFaceOption = MenuOption<bool>;
+
+#if HAS_LORA_FEM
 using LoRaFEMLNAToggleOption = MenuOption<meshtastic_Config_LoRaConfig_FEM_LNA_Mode>;
+#endif
 
 } // namespace graphics
 #endif
