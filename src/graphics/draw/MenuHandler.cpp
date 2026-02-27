@@ -67,7 +67,14 @@ void menuHandler::loraMenu()
 {
 #if HAS_LORA_FEM
     static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region", "LoRa FEM LNA"};
-    enum optionsNumbers { Back = 0, DeviceRolePicker = 1, RadioPresetPicker = 2, FrequencySlot = 3, LoraPicker = 4, LoraFemLna = 5 };
+    enum optionsNumbers {
+        Back = 0,
+        DeviceRolePicker = 1,
+        RadioPresetPicker = 2,
+        FrequencySlot = 3,
+        LoraPicker = 4,
+        LoraFemLna = 5
+    };
 #else
     static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region"};
     enum optionsNumbers { Back = 0, DeviceRolePicker = 1, RadioPresetPicker = 2, FrequencySlot = 3, LoraPicker = 4 };
@@ -2654,27 +2661,28 @@ void menuHandler::LoRaFEMLNAToggleMenu()
     static std::array<const char *, toggleCount> toggleLabels{};
     BannerOverlayOptions bannerOptions;
 
-   if(loraFEMInterface.isLnaCanControl()) {
-        bannerOptions = createStaticBannerOptions("Toggle FEM LNA", femToggleOptions, toggleLabels, [](const LoRaFEMLNAToggleOption &option, int) -> void {
-            if (option.action == OptionsAction::Back) {
-                menuQueue = LoraMenu;
-                screen->runNow();
-                return;
-            }
+    if (loraFEMInterface.isLnaCanControl()) {
+        bannerOptions = createStaticBannerOptions("Toggle FEM LNA", femToggleOptions, toggleLabels,
+                                                  [](const LoRaFEMLNAToggleOption &option, int) -> void {
+                                                      if (option.action == OptionsAction::Back) {
+                                                          menuQueue = LoraMenu;
+                                                          screen->runNow();
+                                                          return;
+                                                      }
 
-            if (!option.hasValue) {
-                return;
-            }
+                                                      if (!option.hasValue) {
+                                                          return;
+                                                      }
 
-            if (config.lora.fem_lna_mode == option.value) {
-                return;
-            }
+                                                      if (config.lora.fem_lna_mode == option.value) {
+                                                          return;
+                                                      }
 
-            config.lora.fem_lna_mode = option.value;
-            service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-        });
-        
+                                                      config.lora.fem_lna_mode = option.value;
+                                                      service->reloadConfig(SEGMENT_CONFIG);
+                                                      rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+                                                  });
+
         int initialSelection = 0;
         for (size_t i = 0; i < toggleCount; ++i) {
             if (femToggleOptions[i].hasValue && config.lora.fem_lna_mode == femToggleOptions[i].value) {
@@ -2685,7 +2693,7 @@ void menuHandler::LoRaFEMLNAToggleMenu()
         bannerOptions.InitialSelected = initialSelection;
     } else {
         static const char *optionsArray[] = {"Back"};
-        enum optionsNumbers {Back = 0};
+        enum optionsNumbers { Back = 0 };
 
         // BannerOverlayOptions bannerOptions;
         bannerOptions.message = "LNA Control Unsupported";

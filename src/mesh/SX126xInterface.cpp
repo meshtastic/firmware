@@ -58,9 +58,10 @@ template <typename T> bool SX126xInterface<T>::init()
 
 #if HAS_LORA_FEM
     loraFEMInterface.init();
-    if((config.lora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED) && loraFEMInterface.isLnaCanControl()) {
+    if ((config.lora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED) && loraFEMInterface.isLnaCanControl()) {
         loraFEMInterface.setLNAEnable(true);
-    } else if ((config.lora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED) && loraFEMInterface.isLnaCanControl()) {
+    } else if ((config.lora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED) &&
+               loraFEMInterface.isLnaCanControl()) {
         loraFEMInterface.setLNAEnable(false);
     }
 #endif

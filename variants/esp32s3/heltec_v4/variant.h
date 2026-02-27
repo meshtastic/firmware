@@ -51,12 +51,12 @@
 // GPIO46 is CPS (PA mode), not TX control - setTransmitEnable() handles it in SX126xInterface.cpp
 // Do NOT use SX126X_TXEN/RXEN as that would cause double-control of GPIO46
 
-#define LORA_PA_POWER 7  // VFEM_Ctrl - GC1109 LDO power enable
+#define LORA_PA_POWER 7         // VFEM_Ctrl - GC1109 LDO power enable
 #define LORA_GC1109_PA_EN 2     // CSD - GC1109 chip enable (HIGH=on)
 #define LORA_GC1109_PA_TX_EN 46 // CPS - GC1109 PA mode (HIGH=full PA, LOW=bypass)
 
-#define LORA_KCT8103L_PA_CSD   2
-#define LORA_KCT8103L_PA_CTX   5   // enable tx
+#define LORA_KCT8103L_PA_CSD 2
+#define LORA_KCT8103L_PA_CTX 5 // enable tx
 
 #if HAS_TFT
 #define USE_TFTDISPLAY 1
