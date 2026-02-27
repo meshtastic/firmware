@@ -36,10 +36,24 @@ void initVariant()
     pinMode(PIN_LED1, OUTPUT);
     ledOff(PIN_LED1);
 
-    pinMode(PIN_LED2, OUTPUT);
-    ledOff(PIN_LED2);
-
     // 3V3 Power Rail
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
+}
+
+void variant_shutdown()
+{
+    // GPIO restores input status, otherwise there will be leakage current
+    nrf_gpio_cfg_default(TFT_BL);
+    nrf_gpio_cfg_default(TFT_DC);
+    nrf_gpio_cfg_default(TFT_CS);
+    nrf_gpio_cfg_default(TFT_SCLK);
+    nrf_gpio_cfg_default(TFT_MOSI);
+    nrf_gpio_cfg_default(TFT_MISO);
+    nrf_gpio_cfg_default(SCREEN_TOUCH_INT);
+    nrf_gpio_cfg_default(WB_I2C1_SCL);
+    nrf_gpio_cfg_default(WB_I2C1_SDA);
+
+    // nrf_gpio_cfg_default(WB_I2C2_SCL);
+    // nrf_gpio_cfg_default(WB_I2C2_SDA);
 }

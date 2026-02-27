@@ -11,6 +11,7 @@
 // Applets
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
@@ -73,7 +74,8 @@ void setupNicheGraphics()
     inkhud->addApplet("DMs", new InkHUD::DMApplet, true, false, 3);                       // Default on tile 3
     inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, false, 2); // Default on tile 2
     inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
-    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false, 1);      // Default on tile 1
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false, 1); // Default on tile 1
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet);
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false, 0); // Default on tile 0
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true);                        // Background
 

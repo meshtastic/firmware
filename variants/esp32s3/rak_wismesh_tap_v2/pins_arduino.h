@@ -22,7 +22,4 @@ static const uint8_t SCK = 13;
 #define SPI_MISO (10)
 #define SPI_CS (12)
 
-// LEDs
-#define LED_BUILTIN LED_GREEN
-
 #endif /* Pins_Arduino_h */

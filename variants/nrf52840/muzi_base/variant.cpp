@@ -63,8 +63,8 @@ void initVariant()
     pinMode(PIN_LED1, OUTPUT);
     digitalWrite(PIN_LED1, HIGH);
 
-    pinMode(PIN_LED2, OUTPUT);
-    digitalWrite(PIN_LED2, HIGH);
+    pinMode(LED_BLUE, OUTPUT);
+    digitalWrite(LED_BLUE, HIGH);
 
     // Initialize LoRa pins
     pinMode(SX126X_RESET, OUTPUT);

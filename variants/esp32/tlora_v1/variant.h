@@ -5,7 +5,7 @@
 
 #define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
 #define VEXT_ON_VALUE LOW
-#define LED_PIN 2    // If defined we will blink this LED
+#define LED_POWER 2  // If defined we will blink this LED
 #define BUTTON_PIN 0 // If defined, this will be used for user button presses
 #define BUTTON_NEED_PULLUP
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.

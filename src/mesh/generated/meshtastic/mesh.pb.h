@@ -296,6 +296,14 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_THINKNODE_M6 = 120,
     /* Elecrow Meshstick 1262 */
     meshtastic_HardwareModel_MESHSTICK_1262 = 121,
+    /* LilyGo T-Beam 1W */
+    meshtastic_HardwareModel_TBEAM_1_WATT = 122,
+    /* LilyGo T5 S3 ePaper Pro (V1 and V2) */
+    meshtastic_HardwareModel_T5_S3_EPAPER_PRO = 123,
+    /* LilyGo T-Beam BPF (144-148Mhz) */
+    meshtastic_HardwareModel_TBEAM_BPF = 124,
+    /* LilyGo T-Mini E-paper S3 Kit */
+    meshtastic_HardwareModel_MINI_EPAPER_S3 = 125,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -854,6 +862,11 @@ typedef struct _meshtastic_Waypoint {
     uint32_t icon;
 } meshtastic_Waypoint;
 
+/* Message for node status */
+typedef struct _meshtastic_StatusMessage {
+    char status[80];
+} meshtastic_StatusMessage;
+
 typedef PB_BYTES_ARRAY_T(435) meshtastic_MqttClientProxyMessage_data_t;
 /* This message will be proxied over the PhoneAPI for the client to deliver to the MQTT server */
 typedef struct _meshtastic_MqttClientProxyMessage {
@@ -1366,10 +1379,6 @@ extern "C" {
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_ARRAYSIZE ((meshtastic_StoreForwardPlusPlus_SFPP_message_type)(meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF+1))
 
-#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE
-#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF
-#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_ARRAYSIZE ((meshtastic_StoreForwardPlusPlus_SFPP_message_type)(meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF+1))
-
 #define _meshtastic_MeshPacket_Priority_MIN meshtastic_MeshPacket_Priority_UNSET
 #define _meshtastic_MeshPacket_Priority_MAX meshtastic_MeshPacket_Priority_MAX
 #define _meshtastic_MeshPacket_Priority_ARRAYSIZE ((meshtastic_MeshPacket_Priority)(meshtastic_MeshPacket_Priority_MAX+1))
@@ -1399,6 +1408,7 @@ extern "C" {
 
 
 #define meshtastic_StoreForwardPlusPlus_sfpp_message_type_ENUMTYPE meshtastic_StoreForwardPlusPlus_SFPP_message_type
+
 
 
 
@@ -1444,6 +1454,7 @@ extern "C" {
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
+#define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0}
@@ -1476,6 +1487,7 @@ extern "C" {
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
+#define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0}
@@ -1571,6 +1583,7 @@ extern "C" {
 #define meshtastic_Waypoint_name_tag             6
 #define meshtastic_Waypoint_description_tag      7
 #define meshtastic_Waypoint_icon_tag             8
+#define meshtastic_StatusMessage_status_tag      1
 #define meshtastic_MqttClientProxyMessage_topic_tag 1
 #define meshtastic_MqttClientProxyMessage_data_tag 2
 #define meshtastic_MqttClientProxyMessage_text_tag 3
@@ -1805,6 +1818,11 @@ X(a, STATIC,   SINGULAR, STRING,   description,       7) \
 X(a, STATIC,   SINGULAR, FIXED32,  icon,              8)
 #define meshtastic_Waypoint_CALLBACK NULL
 #define meshtastic_Waypoint_DEFAULT NULL
+
+#define meshtastic_StatusMessage_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   status,            1)
+#define meshtastic_StatusMessage_CALLBACK NULL
+#define meshtastic_StatusMessage_DEFAULT NULL
 
 #define meshtastic_MqttClientProxyMessage_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   topic,             1) \
@@ -2072,6 +2090,7 @@ extern const pb_msgdesc_t meshtastic_Data_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerification_msg;
 extern const pb_msgdesc_t meshtastic_StoreForwardPlusPlus_msg;
 extern const pb_msgdesc_t meshtastic_Waypoint_msg;
+extern const pb_msgdesc_t meshtastic_StatusMessage_msg;
 extern const pb_msgdesc_t meshtastic_MqttClientProxyMessage_msg;
 extern const pb_msgdesc_t meshtastic_MeshPacket_msg;
 extern const pb_msgdesc_t meshtastic_NodeInfo_msg;
@@ -2106,6 +2125,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_KeyVerification_fields &meshtastic_KeyVerification_msg
 #define meshtastic_StoreForwardPlusPlus_fields &meshtastic_StoreForwardPlusPlus_msg
 #define meshtastic_Waypoint_fields &meshtastic_Waypoint_msg
+#define meshtastic_StatusMessage_fields &meshtastic_StatusMessage_msg
 #define meshtastic_MqttClientProxyMessage_fields &meshtastic_MqttClientProxyMessage_msg
 #define meshtastic_MeshPacket_fields &meshtastic_MeshPacket_msg
 #define meshtastic_NodeInfo_fields &meshtastic_NodeInfo_msg
@@ -2161,6 +2181,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           256
 #define meshtastic_Routing_size                  259
+#define meshtastic_StatusMessage_size            81
 #define meshtastic_StoreForwardPlusPlus_size     377
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     115

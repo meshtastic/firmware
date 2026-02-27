@@ -19,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <stdexcept>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -29,6 +30,7 @@
 #include "platform/portduino/USBHal.h"
 
 portduino_config_struct portduino_config;
+portduino_status_struct portduino_status;
 std::ofstream traceFile;
 std::ofstream JSONFile;
 Ch341Hal *ch341Hal = nullptr;
@@ -55,15 +57,18 @@ void cpuDeepSleep(uint32_t msecs)
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 
 int TCPPort = SERVER_API_DEFAULT_PORT;
+bool checkConfigPort = true;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
     switch (key) {
     case 'p':
-        if (sscanf(arg, "%d", &TCPPort) < 1)
+        if (sscanf(arg, "%d", &TCPPort) < 1) {
             return ARGP_ERR_UNKNOWN;
-        else
+        } else {
+            checkConfigPort = false;
             printf("Using config file %d\n", TCPPort);
+        }
         break;
     case 'c':
         configPath = arg;
@@ -397,6 +402,11 @@ void portduinoSetup()
                 if (found_hat) {
                     product_config =
                         cleanupNameForAutoconf("lora-hat-" + std::string(hat_vendor) + "-" + autoconf_product + ".yaml");
+                    if (strncmp(hat_vendor, "RAK", strlen("RAK")) == 0 &&
+                        strncmp(autoconf_product, "6421 Pi Hat", strlen("6421 Pi Hat")) == 0) {
+                        std::cout << "autoconf: Setting hardwareModel to RAK6421" << std::endl;
+                        portduino_status.hardwareModel = meshtastic_HardwareModel_RAK6421;
+                    }
                 } else if (found_ch341) {
                     product_config = cleanupNameForAutoconf("lora-usb-" + std::string(autoconf_product) + ".yaml");
                     // look for more data after the null terminator
@@ -405,6 +415,10 @@ void portduinoSetup()
                         memcpy(portduino_config.device_id, autoconf_product + len + 1, 16);
                         if (!memfll(portduino_config.device_id, '\0', 16) && !memfll(portduino_config.device_id, 0xff, 16)) {
                             portduino_config.has_device_id = true;
+                            if (strncmp(autoconf_product, "MESHSTICK 1262", strlen("MESHSTICK 1262")) == 0) {
+                                std::cout << "autoconf: Setting hardwareModel to Meshstick 1262" << std::endl;
+                                portduino_status.hardwareModel = meshtastic_HardwareModel_MESHSTICK_1262;
+                            }
                         }
                     }
                 }
@@ -482,7 +496,7 @@ void portduinoSetup()
     randomSeed(time(NULL));
 
     std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
-    for (auto i : portduino_config.all_pins) {
+    for (const auto *i : portduino_config.all_pins) {
         if (i->enabled && i->pin > max_GPIO)
             max_GPIO = i->pin;
     }
@@ -496,7 +510,7 @@ void portduinoSetup()
 
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
-    for (auto i : portduino_config.all_pins) {
+    for (const auto *i : portduino_config.all_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
         if (i->config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
@@ -521,6 +535,27 @@ void portduinoSetup()
                 exit(EXIT_FAILURE);
             }
         }
+    }
+
+    // In one test, this dance seemed necessary to trigger the pin to detect properly.
+    if (portduino_config.lora_pa_detect_pin.enabled) {
+        pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLDOWN);
+        sleep(1);
+        if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == LOW) {
+            std::cout << "Pin " << portduino_config.lora_pa_detect_pin.pin << " PULLDOWN is LOW" << std::endl;
+        }
+        pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLUP);
+        sleep(1);
+        if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == HIGH) {
+            std::cout << "Pin " << portduino_config.lora_pa_detect_pin.pin << " PULLUP is HIGH, dropping PA curve" << std::endl;
+            portduino_config.num_pa_points = 1;
+            portduino_config.tx_gain_lora[0] = 0;
+        } else {
+            std::cout << "Pin " << portduino_config.lora_pa_detect_pin.pin << " PULLUP is LOW, using PA curve" << std::endl;
+        }
+
+        // disable bias once finished
+        pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT);
     }
 
     // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
@@ -558,7 +593,7 @@ void portduinoSetup()
     return;
 }
 
-int initGPIOPin(int pinNum, const std::string gpioChipName, int line)
+int initGPIOPin(int pinNum, const std::string &gpioChipName, int line)
 {
 #ifdef PORTDUINO_LINUX_HARDWARE
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
@@ -629,7 +664,7 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Lora"]) {
 
             if (yamlConfig["Lora"]["Module"]) {
-                for (auto &loraModule : portduino_config.loraModules) {
+                for (const auto &loraModule : portduino_config.loraModules) {
                     if (yamlConfig["Lora"]["Module"].as<std::string>("") == loraModule.second) {
                         portduino_config.lora_module = loraModule.first;
                         break;
@@ -646,6 +681,19 @@ bool loadConfig(const char *configPath)
                 portduino_config.lr1120_max_power = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
             if (yamlConfig["Lora"]["RF95_MAX_POWER"])
                 portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
+
+            if (yamlConfig["Lora"]["TX_GAIN_LORA"]) {
+                YAML::Node tx_gain_node = yamlConfig["Lora"]["TX_GAIN_LORA"];
+                if (tx_gain_node.IsSequence() && tx_gain_node.size() != 0) {
+                    portduino_config.num_pa_points = min(tx_gain_node.size(), std::size(portduino_config.tx_gain_lora));
+                    for (int i = 0; i < portduino_config.num_pa_points; i++) {
+                        portduino_config.tx_gain_lora[i] = tx_gain_node[i].as<int>();
+                    }
+                } else {
+                    portduino_config.num_pa_points = 1;
+                    portduino_config.tx_gain_lora[0] = tx_gain_node.as<int>(0);
+                }
+            }
 
             if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
                 !portduino_config.force_simradio) {
@@ -750,7 +798,7 @@ bool loadConfig(const char *configPath)
         }
         if (yamlConfig["Display"]) {
 
-            for (auto &screen_name : portduino_config.screen_names) {
+            for (const auto &screen_name : portduino_config.screen_names) {
                 if (yamlConfig["Display"]["Panel"].as<std::string>("") == screen_name.second)
                     portduino_config.displayPanel = screen_name.first;
             }
@@ -845,6 +893,7 @@ bool loadConfig(const char *configPath)
         }
 
         if (yamlConfig["Config"]) {
+            portduino_config.has_config_overrides = true;
             if (yamlConfig["Config"]["DisplayMode"]) {
                 portduino_config.has_configDisplayMode = true;
                 if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "TWOCOLOR") {
@@ -856,6 +905,13 @@ bool loadConfig(const char *configPath)
                 } else {
                     portduino_config.configDisplayMode = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
                 }
+            }
+            if (yamlConfig["Config"]["StatusMessage"]) {
+                portduino_config.has_statusMessage = true;
+                portduino_config.statusMessage = (yamlConfig["Config"]["StatusMessage"]).as<std::string>("");
+            }
+            if ((yamlConfig["Config"]["EnableUDP"]).as<bool>(false)) {
+                portduino_config.enable_UDP = true;
             }
         }
 
@@ -869,6 +925,12 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
                 std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
                 exit(EXIT_FAILURE);
+            }
+            if (checkConfigPort) {
+                portduino_config.api_port = (yamlConfig["General"]["APIPort"]).as<int>(-1);
+                if (portduino_config.api_port > 1023 && portduino_config.api_port < 65536) {
+                    TCPPort = (portduino_config.api_port);
+                }
             }
             portduino_config.mac_address = (yamlConfig["General"]["MACAddress"]).as<std::string>("");
             if (portduino_config.mac_address != "") {

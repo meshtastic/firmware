@@ -41,22 +41,15 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define PIN_LED2 -1
-#define PIN_LED3 -1
-
 // LED
 #define PIN_LED1 (32 + 6) // red
 #define LED_POWER (32 + 4)
-#define USER_LED (0 + 13) // green
+#define LED_NOTIFICATION (0 + 13) // green
 // USB_CHECK
 #define EXT_PWR_DETECT (32 + 3)
 #define ADC_V (0 + 8)
 
-#define LED_RED PIN_LED3
 #define LED_BLUE PIN_LED1
-#define LED_GREEN PIN_LED2
-#define LED_BUILTIN LED_BLUE
-#define LED_CONN PIN_GREEN
 #define LED_STATE_ON 0 // State when LED is lit  // LED灯亮时的状态
 #define PIN_BUZZER (0 + 6)
 /*
@@ -159,6 +152,8 @@ External serial flash WP25R1635FZUIL0
 #define PIN_SERIAL1_TX GPS_TX_PIN
 #define PIN_SERIAL1_RX GPS_RX_PIN
 
+#define SERIAL_PRINT_PORT 0
+
 /*
  * SPI Interfaces
  */
@@ -168,8 +163,6 @@ External serial flash WP25R1635FZUIL0
 #define PIN_SPI_MISO (0 + 23)
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
-
-#define PIN_PWR_EN (0 + 6)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER

@@ -2,7 +2,7 @@
 
 #include "ProtobufModule.h"
 #include "configuration.h"
-#if defined(ARCH_ESP32)
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_PAXCOUNTER
 #include "../mesh/generated/meshtastic/paxcount.pb.h"
 #include "NodeDB.h"
 #include <libpax_api.h>
