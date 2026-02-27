@@ -528,5 +528,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN 0
 #endif
 
+// -----------------------------------------------------------------------------
+// MESHTASTIC_LOCKDOWN — combined hardened build flag
+// Derives MESHTASTIC_PHONEAPI_ACCESS_CONTROL (PhoneAPI access control) on all platforms,
+// and MESHTASTIC_ENCRYPTED_STORAGE (CC310 flash encryption) on nRF52 only.
+// -----------------------------------------------------------------------------
+#ifdef MESHTASTIC_LOCKDOWN
+#ifdef ARCH_NRF52
+#define MESHTASTIC_PHONEAPI_ACCESS_CONTROL 1
+#define MESHTASTIC_ENCRYPTED_STORAGE 1
+#define MESHTASTIC_ENABLE_APPROTECT 1
+#define HARDENED_DEFAULTS 1
+#else
+#warning "MESHTASTIC_LOCKDOWN requires nRF52 (CC310 hardware crypto) — ignoring on this platform"
+#endif
+#endif
+
 #include "DebugConfiguration.h"
 #include "RF95Configuration.h"
