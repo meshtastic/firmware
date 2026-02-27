@@ -9,6 +9,7 @@
 #include "mesh/Router.h"
 #include "modules/TrafficManagementModule.h"
 #include <climits>
+#include <cstring>
 #include <memory>
 #include <pb_encode.h>
 #include <vector>
@@ -162,6 +163,20 @@ static meshtastic_MeshPacket makePositionPacket(NodeNum from, int32_t lat, int32
 
     packet.decoded.payload.size =
         pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes), &meshtastic_Position_msg, &pos);
+    return packet;
+}
+
+static meshtastic_MeshPacket makeNodeInfoPacket(NodeNum from, const char *longName, const char *shortName)
+{
+    meshtastic_MeshPacket packet = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, from, NODENUM_BROADCAST);
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    snprintf(user.id, sizeof(user.id), "!%08x", from);
+    strncpy(user.long_name, longName, sizeof(user.long_name) - 1);
+    strncpy(user.short_name, shortName, sizeof(user.short_name) - 1);
+
+    packet.decoded.payload.size =
+        pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes), &meshtastic_User_msg, &user);
     return packet;
 }
 
@@ -371,6 +386,7 @@ static void test_tm_nodeinfo_directResponse_respondsFromCache(void)
     moduleConfig.traffic_management.nodeinfo_direct_response = true;
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    config.lora.config_ok_to_mqtt = true;
     mockNodeDB->setCachedNode(kTargetNode);
 
     MockRouter mockRouter;
@@ -403,6 +419,8 @@ static void test_tm_nodeinfo_directResponse_respondsFromCache(void)
     TEST_ASSERT_EQUAL_UINT8(0, reply.hop_limit);
     TEST_ASSERT_EQUAL_UINT8(0, reply.hop_start);
     TEST_ASSERT_EQUAL_UINT8(mockNodeDB->getLastByteOfNodeNum(kRemoteNode), reply.next_hop);
+    TEST_ASSERT_TRUE(reply.decoded.has_bitfield);
+    TEST_ASSERT_EQUAL_UINT8(BITFIELD_OK_TO_MQTT_MASK, reply.decoded.bitfield);
 }
 
 /**
@@ -429,6 +447,129 @@ static void test_tm_nodeinfo_clientClamp_skipsWhenNotDirect(void)
     TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
     TEST_ASSERT_FALSE(module.ignoreRequestFlag());
 }
+
+#if !(defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM))
+/**
+ * Verify non-PSRAM builds require NodeDB for direct NodeInfo responses.
+ * Important because fallback should only happen through node-wide data when
+ * the dedicated PSRAM cache does not exist.
+ */
+static void test_tm_nodeinfo_directResponse_withoutNodeDbEntry_skips(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response = true;
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    ProcessMessage result = module.handleReceived(request);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+#endif
+
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+/**
+ * Verify PSRAM NodeInfo cache can answer requests without NodeDB and that
+ * shouldRespondToNodeInfo() uses cached bitfield metadata.
+ */
+static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfield(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response = true;
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    config.lora.config_ok_to_mqtt = true;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
+    observed.decoded.has_bitfield = true;
+    observed.decoded.bitfield = BITFIELD_WANT_RESPONSE_MASK;
+    observed.channel = 2;
+    observed.rx_time = 123456;
+
+    ProcessMessage observedResult = module.handleReceived(observed);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(observedResult));
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.id = 0x24681357;
+    request.channel = 1;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    ProcessMessage result = module.handleReceived(request);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(result));
+    TEST_ASSERT_TRUE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(1, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    const meshtastic_MeshPacket &reply = mockRouter.sentPackets.front();
+    TEST_ASSERT_TRUE(reply.decoded.has_bitfield);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(BITFIELD_WANT_RESPONSE_MASK | BITFIELD_OK_TO_MQTT_MASK), reply.decoded.bitfield);
+    TEST_ASSERT_EQUAL_UINT32(kTargetNode, reply.from);
+    TEST_ASSERT_EQUAL_UINT32(kRemoteNode, reply.to);
+    TEST_ASSERT_EQUAL_UINT8(request.channel, reply.channel);
+    TEST_ASSERT_EQUAL_UINT32(request.id, reply.decoded.request_id);
+}
+
+/**
+ * Verify PSRAM cache misses do not fall back to NodeDB.
+ * Important so the dedicated PSRAM index stays logically separate from
+ * NodeInfoModule/NodeDB when PSRAM is available.
+ */
+static void test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response = true;
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->setCachedNode(kTargetNode);
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    ProcessMessage result = module.handleReceived(request);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+#endif
 
 /**
  * Verify relayed telemetry broadcasts are hop-exhausted when enabled.
@@ -765,6 +906,13 @@ extern "C" void setup()
     RUN_TEST(test_tm_nodeinfo_routerClamp_skipsWhenTooManyHops);
     RUN_TEST(test_tm_nodeinfo_directResponse_respondsFromCache);
     RUN_TEST(test_tm_nodeinfo_clientClamp_skipsWhenNotDirect);
+#if !(defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM))
+    RUN_TEST(test_tm_nodeinfo_directResponse_withoutNodeDbEntry_skips);
+#endif
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    RUN_TEST(test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfield);
+    RUN_TEST(test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb);
+#endif
     RUN_TEST(test_tm_alterReceived_exhaustsRelayedTelemetryBroadcast);
     RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
     RUN_TEST(test_tm_positionDedup_allowsDuplicateAfterIntervalExpires);

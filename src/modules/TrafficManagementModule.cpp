@@ -763,7 +763,17 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         NodeInfoPayloadEntry *entry = findOrCreateNodeInfoEntry(getFrom(&mp), &usedEmptySlot);
         if (!entry)
             return;
+
+        // Cache both payload and response metadata so direct replies can use
+        // richer context than "just the user protobuf" when PSRAM is present.
+        // This path is intentionally independent from NodeInfoModule/NodeDB.
         entry->user = user;
+        entry->lastObservedMs = millis();
+        entry->lastObservedRxTime = mp.rx_time;
+        entry->sourceChannel = mp.channel;
+        entry->hasDecodedBitfield = mp.decoded.has_bitfield;
+        entry->decodedBitfield = mp.decoded.bitfield;
+
         if (usedEmptySlot)
             cachedCount = countNodeInfoEntriesLocked();
     }
@@ -1159,22 +1169,39 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     meshtastic_User cachedUser = meshtastic_User_init_zero;
     bool hasCachedUser = false;
 
+    // Extra metadata consumed only by the PSRAM-backed cache path.
+    // Defaults preserve previous behavior when cache metadata is unavailable.
+    bool cachedHasDecodedBitfield = false;
+    uint8_t cachedDecodedBitfield = 0;
+    uint8_t cachedSourceChannel = 0;
+    uint32_t cachedLastObservedMs = 0;
+    uint32_t cachedLastObservedRxTime = 0;
+
     {
         concurrency::LockGuard guard(&cacheLock);
         const NodeInfoPayloadEntry *entry = findNodeInfoEntry(p->to);
         if (entry) {
             cachedUser = entry->user;
             hasCachedUser = true;
+            cachedHasDecodedBitfield = entry->hasDecodedBitfield;
+            cachedDecodedBitfield = entry->decodedBitfield;
+            cachedSourceChannel = entry->sourceChannel;
+            cachedLastObservedMs = entry->lastObservedMs;
+            cachedLastObservedRxTime = entry->lastObservedRxTime;
         }
     }
 
     if (!hasCachedUser) {
+        // If the PSRAM cache exists but misses, we intentionally do not fall back
+        // to the node-wide table. This keeps the PSRAM direct-reply path separate
+        // from NodeInfoModule/NodeDB behavior when PSRAM is available.
         if (nodeInfoPayload && nodeInfoIndex) {
             TM_LOG_DEBUG("NodeInfo PSRAM cache miss for node=0x%08x", p->to);
             return false;
         }
 
-        // Fallback when PSRAM cache is unavailable on this target.
+        // Fallback only when PSRAM cache is unavailable on this target.
+        // In this mode we use the node-wide table maintained by NodeInfoModule.
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
         if (!node || !node->has_user)
             return false;
@@ -1194,14 +1221,31 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     reply->decoded.payload.size =
         pb_encode_to_bytes(reply->decoded.payload.bytes, sizeof(reply->decoded.payload.bytes), &meshtastic_User_msg, &cachedUser);
     reply->decoded.want_response = false;
-    // Respect the node-wide config_ok_to_mqtt setting for cached NodeInfo replies.
+
+    // Start from cached bitfield metadata when available. This lets direct
+    // responses preserve more of the original packet semantics (PSRAM path),
+    // while still enforcing local policy for OK_TO_MQTT below.
+    if (cachedHasDecodedBitfield)
+        reply->decoded.bitfield = cachedDecodedBitfield;
+    else
+        reply->decoded.bitfield = 0;
+
+    // Respect the node-wide config_ok_to_mqtt setting for direct NodeInfo replies.
     // This response is spoofed from another node, so Router::perhapsEncode()
-    // will not auto-populate the bitfield via config_ok_to_mqtt.
+    // will not auto-populate the bitfield via config_ok_to_mqtt for us.
     reply->decoded.has_bitfield = true;
-    // Only update the OK_TO_MQTT bit; preserve any other bitfield data.
+    // Update only the OK_TO_MQTT bit; keep any other cached bits intact.
     reply->decoded.bitfield &= ~BITFIELD_OK_TO_MQTT_MASK;
     if (config.lora.config_ok_to_mqtt)
         reply->decoded.bitfield |= BITFIELD_OK_TO_MQTT_MASK;
+
+    if (hasCachedUser && cachedLastObservedMs != 0) {
+        uint32_t ageMs = millis() - cachedLastObservedMs;
+        TM_LOG_DEBUG("NodeInfo PSRAM hit node=0x%08x age=%lu ms src_ch=%u req_ch=%u rx_time=%lu", p->to,
+                     static_cast<unsigned long>(ageMs), static_cast<unsigned>(cachedSourceChannel),
+                     static_cast<unsigned>(p->channel), static_cast<unsigned long>(cachedLastObservedRxTime));
+    }
+
     // Spoof the sender as the target node so the requestor sees a valid NodeInfo response.
     // hop_limit=0 ensures this reply travels only one hop (direct to requestor).
     reply->from = p->to;

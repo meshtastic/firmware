@@ -247,8 +247,32 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool cacheFromPsram = false;         // Tracks allocator for correct deallocation
 
     struct NodeInfoPayloadEntry {
-        NodeNum node;         // 4 bytes - Node identifier (0 = empty slot)
-        meshtastic_User user; // Full User payload for direct NODEINFO_APP replies
+        // Node identifier associated with this payload slot.
+        // 0 means the slot is currently unused.
+        NodeNum node;
+
+        // Cached NODEINFO_APP payload body. This is separate from NodeDB and is only
+        // used by the PSRAM-backed direct-response path in this module.
+        meshtastic_User user;
+
+        // Extra response metadata captured from the latest observed NODEINFO_APP
+        // packet for this node. shouldRespondToNodeInfo() uses this metadata when
+        // building spoofed replies for requesting clients.
+
+        // Last local uptime tick (millis) when this entry was refreshed.
+        uint32_t lastObservedMs;
+
+        // Last RTC/packet timestamp (seconds) observed for this NodeInfo frame.
+        // If unavailable in packet, remains 0.
+        uint32_t lastObservedRxTime;
+
+        // Channel where we most recently heard this node's NodeInfo.
+        uint8_t sourceChannel;
+
+        // Cached decoded bitfield metadata from the source packet.
+        // We preserve non-OK_TO_MQTT bits in direct replies when available.
+        bool hasDecodedBitfield;
+        uint8_t decodedBitfield;
     };
 
     NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads in PSRAM
