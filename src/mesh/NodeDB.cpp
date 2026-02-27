@@ -143,9 +143,8 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
     digitalWrite(rst, HIGH);
     delay(10);
 
-    uint32_t ID = 0;
-    ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
-    ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst); // ST7789 needs twice
+    readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
+    uint32_t ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst); // ST7789 needs twice
     return ID;
 }
 
@@ -322,9 +321,9 @@ NodeDB::NodeDB()
     // Uncomment below to always enable UDP broadcasts
     // config.network.enabled_protocols = meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
 
-    // If we are setup to broadcast on the default channel, ensure that the telemetry intervals are coerced to the minimum value
-    // of 30 minutes or more
-    if (channels.isDefaultChannel(channels.getPrimaryIndex())) {
+    // If we are setup to broadcast on any default channel slot (with default frequency slot semantics),
+    // ensure that the telemetry intervals are coerced to the minimum value of 30 minutes or more.
+    if (channels.hasDefaultChannel()) {
         LOG_DEBUG("Coerce telemetry to min of 30 minutes on defaults");
         moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.device_update_interval, min_default_telemetry_interval_secs);
