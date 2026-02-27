@@ -67,7 +67,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 #endif /* CAN_RECLOCK_I2C */
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
 
-    _bus->requestFrom(_address, PMSA003I_FRAME_LENGTH);
+    _bus->requestFrom(_address, (uint8_t)PMSA003I_FRAME_LENGTH);
     if (_bus->available() < PMSA003I_FRAME_LENGTH) {
         LOG_WARN("%s read failed: incomplete data (%d bytes)", sensorName, _bus->available());
         return false;
