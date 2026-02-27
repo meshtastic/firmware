@@ -530,8 +530,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // -----------------------------------------------------------------------------
 // MESHTASTIC_LOCKDOWN — combined hardened build flag
-// Derives MESHTASTIC_PHONEAPI_ACCESS_CONTROL (PhoneAPI access control) on all platforms,
-// and MESHTASTIC_ENCRYPTED_STORAGE (CC310 flash encryption) on nRF52 only.
+// On nRF52 builds, derives MESHTASTIC_PHONEAPI_ACCESS_CONTROL (PhoneAPI access control),
+// MESHTASTIC_ENCRYPTED_STORAGE (CC310 flash encryption), MESHTASTIC_ENABLE_APPROTECT,
+// and HARDENED_DEFAULTS. On non-nRF52 platforms this flag is ignored (requires CC310).
 // -----------------------------------------------------------------------------
 #ifdef MESHTASTIC_LOCKDOWN
 #ifdef ARCH_NRF52

@@ -98,12 +98,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         if (config.security.is_managed && EncryptedStorage::isUnlocked()) {
             // TAK security commands carry a non-empty private_key — always let them through.
             // The passphrase HMAC in EncryptedStorage is the security gate for those packets.
+            // Only the passphrase delivery command itself is whitelisted — it is its own auth gate.
+            // Destructive commands (factory reset, nodedb reset) require an already-authorized
+            // connection (passphrase verified or PKC admin key).
             bool isTakSecurityCmd =
                 (r->which_payload_variant == meshtastic_AdminMessage_set_config_tag &&
                  r->set_config.which_payload_variant == meshtastic_Config_security_tag &&
-                 r->set_config.payload_variant.security.private_key.size >= 1) ||
-                r->which_payload_variant == meshtastic_AdminMessage_factory_reset_config_tag ||
-                r->which_payload_variant == meshtastic_AdminMessage_nodedb_reset_tag;
+                 r->set_config.payload_variant.security.private_key.size >= 1);
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
             if (!isTakSecurityCmd && !PhoneAPI::isLocalAdminAuthorized()) {
 #else
@@ -136,8 +137,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             LOG_INFO("PKC admin payload with authorized sender key");
 
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-            // Authorize local PhoneAPI connections to dump full config
-            PhoneAPI::authorizeLocalAdmin();
+            // Only authorize local PhoneAPI connections when the PKC admin message
+            // came from a local client (from=0). A remote PKC admin (from!=0) has no
+            // business unlocking local BLE/USB config dumps.
+            if (mp.from == 0) {
+                PhoneAPI::authorizeLocalAdmin();
+            }
 #endif
 
             // Automatically favorite the node that is using the admin key

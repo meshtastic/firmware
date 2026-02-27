@@ -7,6 +7,7 @@
 #include "FSCommon.h"
 #include "RTC.h"
 #include "SPILock.h"
+#include "SafeFile.h"
 #include <Adafruit_nRFCrypto.h>
 #include <nrf.h>
 
@@ -1181,6 +1182,17 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
     }
     memset(computedHmac, 0, sizeof(computedHmac));
 
+    // plaintextLen is not covered by the HMAC, so validate it against the actual ciphertext
+    // length derived from the file size. For AES-CTR the two are always equal in a legitimate
+    // file; a mismatch means the header field was tampered independently of the ciphertext.
+    if (plaintextLen != ciphertextLen) {
+        LOG_ERROR("EncryptedStorage: plaintextLen (%d) != ciphertextLen (%d) in %s — header tampered",
+                  plaintextLen, (uint32_t)ciphertextLen, filename);
+        memset(fileBuf, 0, fileSize);
+        delete[] fileBuf;
+        return false;
+    }
+
     // Decrypt
     if (plaintextLen > outBufSize) {
         LOG_ERROR("EncryptedStorage: Output buffer too small for %s (%d > %d)", filename, plaintextLen,
@@ -1265,29 +1277,27 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
         return false;
     }
 
-    concurrency::LockGuard g(spiLock);
-    FSCom.remove(filename); // prevent O_APPEND accumulation on nRF52
-    auto f = FSCom.open(filename, FILE_O_WRITE);
-    if (!f) {
-        LOG_ERROR("EncryptedStorage: Can't create %s", filename);
-        memset(ciphertext, 0, ciphertextLen);
-        delete[] ciphertext;
-        return false;
-    }
+    // SafeFile handles remove-before-write (nRF52) and tmp+readback+rename (other platforms).
+    // fullAtomic controls whether the old file is kept until the rename succeeds.
+    SafeFile sf(filename, fullAtomic);
 
     uint32_t magic = MAGIC;
-    f.write((uint8_t *)&magic, 4);
+    sf.write((uint8_t *)&magic, 4);
     uint8_t ver = VERSION;
-    f.write(&ver, 1);
-    f.write(nonce, NONCE_SIZE);
+    sf.write(&ver, 1);
+    sf.write(nonce, NONCE_SIZE);
     uint32_t ptLen = (uint32_t)plaintextLen;
-    f.write((uint8_t *)&ptLen, 4);
-    f.write(ciphertext, ciphertextLen);
-    f.write(hmac, HMAC_SIZE);
-    f.flush();
-    f.close();
+    sf.write((uint8_t *)&ptLen, 4);
+    sf.write(ciphertext, ciphertextLen);
+    sf.write(hmac, HMAC_SIZE);
+
     memset(ciphertext, 0, ciphertextLen);
     delete[] ciphertext;
+
+    if (!sf.close()) {
+        LOG_ERROR("EncryptedStorage: Write/verify failed for %s", filename);
+        return false;
+    }
 
     LOG_INFO("EncryptedStorage: Encrypted %s (%d bytes plaintext)", filename, plaintextLen);
     return true;
