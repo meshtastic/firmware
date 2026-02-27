@@ -166,6 +166,26 @@ typedef enum _meshtastic_Config_NetworkConfig_AddressMode {
     meshtastic_Config_NetworkConfig_AddressMode_STATIC = 1
 } meshtastic_Config_NetworkConfig_AddressMode;
 
+/* Syslog log level to control which messages are sent to the rsyslog server.
+ Only messages at or above this level will be forwarded.
+ Values match LogRecord.Level for consistency. Default (UNSET) treats as INFO. */
+typedef enum _meshtastic_Config_NetworkConfig_LogLevel {
+    /* No level set, firmware defaults to INFO */
+    meshtastic_Config_NetworkConfig_LogLevel_LOG_UNSET = 0,
+    /* Trace level (most verbose) */
+    meshtastic_Config_NetworkConfig_LogLevel_LOG_TRACE = 5,
+    /* Debug level */
+    meshtastic_Config_NetworkConfig_LogLevel_LOG_DEBUG = 10,
+    /* Informational */
+    meshtastic_Config_NetworkConfig_LogLevel_LOG_INFO = 20,
+    /* Warning conditions */
+    meshtastic_Config_NetworkConfig_LogLevel_LOG_WARNING = 30,
+    /* Error conditions */
+    meshtastic_Config_NetworkConfig_LogLevel_LOG_ERROR = 40,
+    /* Critical conditions */
+    meshtastic_Config_NetworkConfig_LogLevel_LOG_CRITICAL = 50
+} meshtastic_Config_NetworkConfig_LogLevel;
+
 /* Available flags auxiliary network protocols */
 typedef enum _meshtastic_Config_NetworkConfig_ProtocolFlags {
     /* Do not broadcast packets over any network protocol */
@@ -469,6 +489,9 @@ typedef struct _meshtastic_Config_NetworkConfig {
     uint32_t enabled_protocols;
     /* Enable/Disable ipv6 support */
     bool ipv6_enabled;
+    /* Minimum severity level of log messages to send to the rsyslog server.
+ Messages below this level are filtered out. Default (UNSET) sends INFO and above. */
+    meshtastic_Config_NetworkConfig_LogLevel rsyslog_level;
 } meshtastic_Config_NetworkConfig;
 
 /* Display Config */
@@ -666,6 +689,10 @@ extern "C" {
 #define _meshtastic_Config_NetworkConfig_AddressMode_MAX meshtastic_Config_NetworkConfig_AddressMode_STATIC
 #define _meshtastic_Config_NetworkConfig_AddressMode_ARRAYSIZE ((meshtastic_Config_NetworkConfig_AddressMode)(meshtastic_Config_NetworkConfig_AddressMode_STATIC+1))
 
+#define _meshtastic_Config_NetworkConfig_LogLevel_MIN meshtastic_Config_NetworkConfig_LogLevel_LOG_UNSET
+#define _meshtastic_Config_NetworkConfig_LogLevel_MAX meshtastic_Config_NetworkConfig_LogLevel_LOG_CRITICAL
+#define _meshtastic_Config_NetworkConfig_LogLevel_ARRAYSIZE ((meshtastic_Config_NetworkConfig_LogLevel)(meshtastic_Config_NetworkConfig_LogLevel_LOG_CRITICAL+1))
+
 #define _meshtastic_Config_NetworkConfig_ProtocolFlags_MIN meshtastic_Config_NetworkConfig_ProtocolFlags_NO_BROADCAST
 #define _meshtastic_Config_NetworkConfig_ProtocolFlags_MAX meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST
 #define _meshtastic_Config_NetworkConfig_ProtocolFlags_ARRAYSIZE ((meshtastic_Config_NetworkConfig_ProtocolFlags)(meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST+1))
@@ -711,6 +738,7 @@ extern "C" {
 
 
 #define meshtastic_Config_NetworkConfig_address_mode_ENUMTYPE meshtastic_Config_NetworkConfig_AddressMode
+#define meshtastic_Config_NetworkConfig_rsyslog_level_ENUMTYPE meshtastic_Config_NetworkConfig_LogLevel
 
 
 #define meshtastic_Config_DisplayConfig_gps_format_ENUMTYPE meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat
@@ -732,7 +760,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
 #define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0}
+#define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0, _meshtastic_Config_NetworkConfig_LogLevel_MIN}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
@@ -743,7 +771,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0}
+#define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0, _meshtastic_Config_NetworkConfig_LogLevel_MIN}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
@@ -800,6 +828,7 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_rsyslog_server_tag 9
 #define meshtastic_Config_NetworkConfig_enabled_protocols_tag 10
 #define meshtastic_Config_NetworkConfig_ipv6_enabled_tag 11
+#define meshtastic_Config_NetworkConfig_rsyslog_level_tag 12
 #define meshtastic_Config_DisplayConfig_screen_on_secs_tag 1
 #define meshtastic_Config_DisplayConfig_gps_format_tag 2
 #define meshtastic_Config_DisplayConfig_auto_screen_carousel_secs_tag 3
@@ -934,7 +963,8 @@ X(a, STATIC,   SINGULAR, UENUM,    address_mode,      7) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  ipv4_config,       8) \
 X(a, STATIC,   SINGULAR, STRING,   rsyslog_server,    9) \
 X(a, STATIC,   SINGULAR, UINT32,   enabled_protocols,  10) \
-X(a, STATIC,   SINGULAR, BOOL,     ipv6_enabled,     11)
+X(a, STATIC,   SINGULAR, BOOL,     ipv6_enabled,     11) \
+X(a, STATIC,   SINGULAR, UENUM,    rsyslog_level,    12)
 #define meshtastic_Config_NetworkConfig_CALLBACK NULL
 #define meshtastic_Config_NetworkConfig_DEFAULT NULL
 #define meshtastic_Config_NetworkConfig_ipv4_config_MSGTYPE meshtastic_Config_NetworkConfig_IpV4Config
@@ -1042,12 +1072,12 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 #define meshtastic_Config_DisplayConfig_size     36
 #define meshtastic_Config_LoRaConfig_size        85
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
-#define meshtastic_Config_NetworkConfig_size     204
+#define meshtastic_Config_NetworkConfig_size     206
 #define meshtastic_Config_PositionConfig_size    62
 #define meshtastic_Config_PowerConfig_size       52
 #define meshtastic_Config_SecurityConfig_size    178
 #define meshtastic_Config_SessionkeyConfig_size  0
-#define meshtastic_Config_size                   207
+#define meshtastic_Config_size                   209
 
 #ifdef __cplusplus
 } /* extern "C" */

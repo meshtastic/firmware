@@ -199,4 +199,23 @@ class Syslog
 
 }; // namespace meshtastic
 
+inline uint8_t syslogLevelToMask(int configLevel)
+{
+    switch (configLevel) {
+    case 5:  // meshtastic_Config_NetworkConfig_LogLevel_LOG_TRACE
+    case 10: // meshtastic_Config_NetworkConfig_LogLevel_LOG_DEBUG
+        return LOG_UPTO(SYSLOG_DEBUG);
+    case 30: // meshtastic_Config_NetworkConfig_LogLevel_LOG_WARNING
+        return LOG_UPTO(SYSLOG_WARN);
+    case 40: // meshtastic_Config_NetworkConfig_LogLevel_LOG_ERROR
+        return LOG_UPTO(SYSLOG_ERR);
+    case 50: // meshtastic_Config_NetworkConfig_LogLevel_LOG_CRITICAL
+        return LOG_UPTO(SYSLOG_CRIT);
+    case 0:  // meshtastic_Config_NetworkConfig_LogLevel_LOG_UNSET (default to INFO)
+    case 20: // meshtastic_Config_NetworkConfig_LogLevel_LOG_INFO
+    default:
+        return LOG_UPTO(SYSLOG_INFO);
+    }
+}
+
 #endif // HAS_NETWORKING
