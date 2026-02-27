@@ -1,6 +1,6 @@
-#define HAS_GPS 0
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
+#define HAS_GPS 
+#define GPS_RX_PIN 44
+#define GPS_TX_PIN 43
 
 // #define HAS_SCREEN 0
 // #define HAS_SDCARD
@@ -21,8 +21,8 @@
 #define BUTTON_NEED_PULLUP
 
 // #define USE_RF95 // RFM95/SX127x
-// #define USE_SX1262
-#define USE_SX1280
+#define USE_SX1262
+// #define USE_SX1280
 
 #define LORA_MISO 3
 #define LORA_SCK 5
