@@ -1,17 +1,20 @@
 #include "configuration.h"
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
-#ifdef ARCH_NRF52
 
+// Common includes — available for all platform implementations
 #include "EncryptedStorage.h"
 #include "FSCommon.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "SafeFile.h"
+
+#ifdef ARCH_NRF52
+
+// nRF52 CC310 hardware crypto
 #include <Adafruit_nRFCrypto.h>
 #include <nrf.h>
 
-// CC310 hardware AES and HMAC APIs
 extern "C" {
 #include "nrf_cc310/include/crys_hmac.h"
 #include "nrf_cc310/include/ssi_aes.h"
@@ -861,7 +864,8 @@ uint32_t getBackoffSecondsRemaining()
 bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_t bootsRemaining,
                          uint32_t validUntilEpoch)
 {
-    if (passphraseLen == 0 || passphraseLen > 64) {
+    // MED-8: proto private_key field is 32 bytes; cap to match (was incorrectly 64)
+    if (passphraseLen == 0 || passphraseLen > 32) {
         LOG_ERROR("EncryptedStorage: Invalid passphrase length %d", passphraseLen);
         return false;
     }
@@ -924,7 +928,8 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_
 bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_t bootsRemaining,
                           uint32_t validUntilEpoch)
 {
-    if (passphraseLen == 0 || passphraseLen > 64) {
+    // MED-8: proto private_key field is 32 bytes; cap to match (was incorrectly 64)
+    if (passphraseLen == 0 || passphraseLen > 32) {
         LOG_ERROR("EncryptedStorage: Invalid passphrase length %d", passphraseLen);
         return false;
     }
@@ -1044,7 +1049,12 @@ void lockNow()
 #endif
     memset(dek, 0, sizeof(dek));
     dekLoaded = false;
-    LOG_INFO("EncryptedStorage: Device locked — token deleted, DEK zeroed");
+    // HIGH-2: zero all derived key material so it is not recoverable from a RAM dump
+    memset(kek, 0, sizeof(kek));
+    kekDerived = false;
+    memset(ephemeralKek, 0, sizeof(ephemeralKek));
+    ephemeralKekDerived = false;
+    LOG_INFO("EncryptedStorage: Device locked — token deleted, DEK and KEK material zeroed");
 }
 
 bool isProvisioned()
@@ -1086,44 +1096,73 @@ bool isEncrypted(const char *filename)
 
 bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, size_t &outLen)
 {
+    outLen = 0; // MED-6: initialise before any early return so callers never see stale length
+
     if (!dekLoaded) {
         LOG_ERROR("EncryptedStorage: Not unlocked");
         return false;
     }
 
+    // MED-1: snapshot DEK before any lock acquisition so a concurrent lockNow() cannot
+    // zero dek[] mid-operation. If lockNow() races and zeros dek[] before we copy, the
+    // snapshot will be zero and the HMAC will fail — a secure failure mode.
+    uint8_t dekSnapshot[AES_KEY_SIZE];
+    memcpy(dekSnapshot, dek, AES_KEY_SIZE);
+
 #ifdef FSCom
-    concurrency::LockGuard g(spiLock);
-    auto f = FSCom.open(filename, FILE_O_READ);
-    if (!f) {
-        LOG_ERROR("EncryptedStorage: Can't open %s", filename);
-        return false;
-    }
+    uint8_t *fileBuf = nullptr;
+    size_t fileSize = 0;
 
-    size_t fileSize = f.size();
-    if (fileSize < OVERHEAD) {
-        LOG_ERROR("EncryptedStorage: File %s too small (%d bytes)", filename, fileSize);
+    // MED-3: hold spiLock only for file I/O; release it before any crypto operation.
+    // spiLock is a non-recursive binary semaphore — re-entry from the same task deadlocks.
+    {
+        concurrency::LockGuard g(spiLock);
+        auto f = FSCom.open(filename, FILE_O_READ);
+        if (!f) {
+            LOG_ERROR("EncryptedStorage: Can't open %s", filename);
+            memset(dekSnapshot, 0, sizeof(dekSnapshot));
+            return false;
+        }
+
+        fileSize = f.size();
+        if (fileSize < OVERHEAD) {
+            LOG_ERROR("EncryptedStorage: File %s too small (%d bytes)", filename, fileSize);
+            f.close();
+            memset(dekSnapshot, 0, sizeof(dekSnapshot));
+            return false;
+        }
+
+        // L-1: upper-bound check to prevent OOM / integer overflow on corrupt or oversized files.
+        // Meshtastic proto files are well under 64 KB; anything larger is treated as corrupt.
+        static constexpr size_t MAX_PROTO_FILE_SIZE = 65536 + OVERHEAD;
+        if (fileSize > MAX_PROTO_FILE_SIZE) {
+            LOG_ERROR("EncryptedStorage: File %s too large (%d bytes), refusing", filename, fileSize);
+            f.close();
+            memset(dekSnapshot, 0, sizeof(dekSnapshot));
+            return false;
+        }
+
+        fileBuf = new uint8_t[fileSize];
+        if (!fileBuf) {
+            LOG_ERROR("EncryptedStorage: OOM reading %s", filename);
+            f.close();
+            memset(dekSnapshot, 0, sizeof(dekSnapshot));
+            return false;
+        }
+
+        size_t bytesRead = f.read(fileBuf, fileSize);
         f.close();
-        return false;
-    }
 
-    uint8_t *fileBuf = new uint8_t[fileSize];
-    if (!fileBuf) {
-        LOG_ERROR("EncryptedStorage: OOM reading %s", filename);
-        f.close();
-        return false;
-    }
+        if (bytesRead != fileSize) {
+            LOG_ERROR("EncryptedStorage: Short read on %s", filename);
+            memset(fileBuf, 0, fileSize);
+            delete[] fileBuf;
+            memset(dekSnapshot, 0, sizeof(dekSnapshot));
+            return false;
+        }
+    } // spiLock released here — MED-3
 
-    size_t bytesRead = f.read(fileBuf, fileSize);
-    f.close();
-
-    if (bytesRead != fileSize) {
-        LOG_ERROR("EncryptedStorage: Short read on %s", filename);
-        memset(fileBuf, 0, fileSize);
-        delete[] fileBuf;
-        return false;
-    }
-
-    // Parse header
+    // Parse header (outside spiLock)
     size_t pos = 0;
     uint32_t magic;
     memcpy(&magic, fileBuf + pos, 4);
@@ -1132,6 +1171,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
         LOG_ERROR("EncryptedStorage: Bad magic in %s", filename);
         memset(fileBuf, 0, fileSize);
         delete[] fileBuf;
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
 
@@ -1140,6 +1180,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
         LOG_ERROR("EncryptedStorage: Unsupported version %d in %s", version, filename);
         memset(fileBuf, 0, fileSize);
         delete[] fileBuf;
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
 
@@ -1155,12 +1196,14 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
     const uint8_t *ciphertext = fileBuf + pos;
     const uint8_t *storedHmac = fileBuf + fileSize - HMAC_SIZE;
 
-    // Verify HMAC-SHA256(DEK, nonce || ciphertext)
+    // Verify HMAC-SHA256(dekSnapshot, nonce || ciphertext) — MED-1: use snapshot
     size_t hmacDataLen = NONCE_SIZE + ciphertextLen;
     uint8_t *hmacData = new uint8_t[hmacDataLen];
     if (!hmacData) {
         LOG_ERROR("EncryptedStorage: OOM for HMAC data");
+        memset(fileBuf, 0, fileSize); // MED-5: zero before delete on this error path
         delete[] fileBuf;
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
     memcpy(hmacData, nonce, NONCE_SIZE);
@@ -1168,7 +1211,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
 
     uint8_t computedHmac[HMAC_SIZE];
     nRFCrypto.begin();
-    bool hmacOk = computeHMAC(dek, AES_KEY_SIZE, hmacData, hmacDataLen, computedHmac);
+    bool hmacOk = computeHMAC(dekSnapshot, AES_KEY_SIZE, hmacData, hmacDataLen, computedHmac);
     nRFCrypto.end();
     memset(hmacData, 0, hmacDataLen);
     delete[] hmacData;
@@ -1178,6 +1221,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
         memset(computedHmac, 0, sizeof(computedHmac));
         memset(fileBuf, 0, fileSize);
         delete[] fileBuf;
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
     memset(computedHmac, 0, sizeof(computedHmac));
@@ -1190,26 +1234,30 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
                   plaintextLen, (uint32_t)ciphertextLen, filename);
         memset(fileBuf, 0, fileSize);
         delete[] fileBuf;
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
 
-    // Decrypt
+    // Decrypt using dekSnapshot — MED-1
     if (plaintextLen > outBufSize) {
         LOG_ERROR("EncryptedStorage: Output buffer too small for %s (%d > %d)", filename, plaintextLen,
                   outBufSize);
         memset(fileBuf, 0, fileSize);
         delete[] fileBuf;
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
 
     nRFCrypto.begin();
-    bool decOk = aesCtr128(dek, nonce, NONCE_SIZE, ciphertext, ciphertextLen, outBuf);
+    bool decOk = aesCtr128(dekSnapshot, nonce, NONCE_SIZE, ciphertext, ciphertextLen, outBuf);
     nRFCrypto.end();
     memset(fileBuf, 0, fileSize);
     delete[] fileBuf;
+    memset(dekSnapshot, 0, sizeof(dekSnapshot));
 
     if (!decOk) {
         LOG_ERROR("EncryptedStorage: Decrypt failed for %s", filename);
+        memset(outBuf, 0, ciphertextLen); // MED-7: clear any partial plaintext written to caller's buffer
         return false;
     }
 
@@ -1217,6 +1265,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
     LOG_INFO("EncryptedStorage: Decrypted %s (%d bytes)", filename, outLen);
     return true;
 #else
+    memset(dekSnapshot, 0, sizeof(dekSnapshot));
     return false;
 #endif
 }
@@ -1228,44 +1277,55 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
         return false;
     }
 
+    // MED-1: snapshot DEK so a concurrent lockNow() cannot zero dek[] mid-operation.
+    uint8_t dekSnapshot[AES_KEY_SIZE];
+    memcpy(dekSnapshot, dek, AES_KEY_SIZE);
+
 #ifdef FSCom
     uint8_t nonce[NONCE_SIZE];
     nRFCrypto.begin();
     if (!nRFCrypto.Random.generate(nonce, NONCE_SIZE)) {
         LOG_ERROR("EncryptedStorage: TRNG failed for file nonce");
         nRFCrypto.end();
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
 
     size_t ciphertextLen = plaintextLen;
-    uint8_t *ciphertext = new uint8_t[ciphertextLen];
+    uint8_t *ciphertext = new uint8_t[ciphertextLen > 0 ? ciphertextLen : 1];
     if (!ciphertext) {
         LOG_ERROR("EncryptedStorage: OOM for ciphertext");
         nRFCrypto.end();
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
 
-    bool encOk = aesCtr128(dek, nonce, NONCE_SIZE, plaintext, plaintextLen, ciphertext);
+    bool encOk = aesCtr128(dekSnapshot, nonce, NONCE_SIZE, plaintext, plaintextLen, ciphertext);
     if (!encOk) {
         LOG_ERROR("EncryptedStorage: Encrypt failed for %s", filename);
+        memset(ciphertext, 0, ciphertextLen);
         delete[] ciphertext;
         nRFCrypto.end();
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
 
     size_t hmacDataLen = NONCE_SIZE + ciphertextLen;
-    uint8_t *hmacData = new uint8_t[hmacDataLen];
+    uint8_t *hmacData = new uint8_t[hmacDataLen > 0 ? hmacDataLen : 1];
     if (!hmacData) {
         LOG_ERROR("EncryptedStorage: OOM for HMAC data");
+        memset(ciphertext, 0, ciphertextLen);
         delete[] ciphertext;
         nRFCrypto.end();
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
     memcpy(hmacData, nonce, NONCE_SIZE);
-    memcpy(hmacData + NONCE_SIZE, ciphertext, ciphertextLen);
+    if (ciphertextLen > 0)
+        memcpy(hmacData + NONCE_SIZE, ciphertext, ciphertextLen);
 
     uint8_t hmac[HMAC_SIZE];
-    bool hmacOk = computeHMAC(dek, AES_KEY_SIZE, hmacData, hmacDataLen, hmac);
+    bool hmacOk = computeHMAC(dekSnapshot, AES_KEY_SIZE, hmacData, hmacDataLen, hmac);
     nRFCrypto.end();
     memset(hmacData, 0, hmacDataLen);
     delete[] hmacData;
@@ -1274,8 +1334,11 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
         LOG_ERROR("EncryptedStorage: HMAC computation failed for %s", filename);
         memset(ciphertext, 0, ciphertextLen);
         delete[] ciphertext;
+        memset(dekSnapshot, 0, sizeof(dekSnapshot));
         return false;
     }
+
+    memset(dekSnapshot, 0, sizeof(dekSnapshot)); // MED-1: no longer needed after HMAC computed
 
     // SafeFile handles remove-before-write (nRF52) and tmp+readback+rename (other platforms).
     // fullAtomic controls whether the old file is kept until the rename succeeds.
@@ -1302,12 +1365,16 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
     LOG_INFO("EncryptedStorage: Encrypted %s (%d bytes plaintext)", filename, plaintextLen);
     return true;
 #else
+    memset(dekSnapshot, 0, sizeof(dekSnapshot));
     return false;
 #endif
 }
 
 bool migrateFile(const char *filename)
 {
+    // L-2: Precondition — spiLock must NOT be held by the calling task when this function
+    // is called. Both isEncrypted() and encryptAndWrite() (called internally) acquire
+    // spiLock; since it is a non-recursive binary semaphore, re-entry deadlocks the task.
 #ifdef FSCom
     if (isEncrypted(filename)) {
         LOG_DEBUG("EncryptedStorage: %s already encrypted, skip migration", filename);
@@ -1423,30 +1490,141 @@ bool init()
 
 } // namespace EncryptedStorage
 
-#else
+#elif defined(ARCH_ESP32)
+
 // ---------------------------------------------------------------------------
-// Non-NRF52 stub implementations
+// ESP32 stub implementation
+//
+// Crypto not yet ported (mbedTLS AES-CTR + HMAC-SHA256 TODO).
+// Key management functions are no-ops; file I/O is plaintext pass-through.
+//
+// What still works on ESP32 LOCKDOWN today:
+//   - MESHTASTIC_PHONEAPI_ACCESS_CONTROL — channel PSKs, private key, admin
+//     keys are redacted from any unauthenticated BLE/USB/TCP client
+//   - PKC admin key auth — client sends a PKC-encrypted admin packet matching
+//     config.security.admin_key[0..2]; AdminModule calls authorizeLocalAdmin()
+//   - HARDENED_DEFAULTS — is_managed=true, RANDOM_PIN, TAK role at first boot
+//   - Module exclusions + DEBUG_MUTE — attack-surface reduction
+//
+// What is not yet available on ESP32:
+//   - At-rest encryption of proto files (plaintext on flash)
+//   - Passphrase-based unlock / boot-count token
+//   - APPROTECT (configure via espsecure.py + eFuse burn at provisioning)
+//
+// To implement: replace this block with mbedTLS calls and esp_efuse chip ID.
 // ---------------------------------------------------------------------------
+
+#include "concurrency/LockGuard.h"
+
+// When mbedTLS crypto is implemented, add:
+// #include <mbedtls/aes.h>
+// #include <mbedtls/md.h>
+// #include <esp_system.h>   // esp_fill_random()
+// #include <esp_efuse.h>    // esp_efuse_mac_get_default()
 
 namespace EncryptedStorage {
 
-void initLocked() {}
-bool provisionPassphrase(const uint8_t *, size_t, uint8_t, uint32_t) { return false; }
-bool unlockWithPassphrase(const uint8_t *, size_t, uint8_t, uint32_t) { return false; }
-void lockNow() {}
-bool isProvisioned() { return false; }
-bool isUnlocked() { return false; }
-const char *getLockReason() { return "not_provisioned"; }
-uint8_t getBootsRemaining() { return 0; }
+// Storage level is always "unlocked" on ESP32 (no crypto gate yet).
+// Per-connection access control is still enforced by PhoneAPI via PKC admin key.
+static bool s_unlocked = true;
+
+void initLocked()
+{
+    s_unlocked = true;
+    LOG_INFO("EncryptedStorage(ESP32): no crypto implemented, plaintext pass-through");
+}
+
+// Passphrase management — no-ops until mbedTLS is wired up.
+// Return true so AdminModule doesn't report a failure to the client.
+bool provisionPassphrase(const uint8_t *, size_t, uint8_t, uint32_t) { return true; }
+bool unlockWithPassphrase(const uint8_t *, size_t, uint8_t, uint32_t) { return true; }
+void lockNow() {} // can't lock without crypto; PKC revocation handles per-connection auth
+bool isProvisioned() { return true; }
+bool isUnlocked() { return s_unlocked; }
+const char *getLockReason() { return "ok"; }
+uint8_t getBootsRemaining() { return 0xFF; }
 uint32_t getValidUntilEpoch() { return 0; }
 uint32_t getBackoffSecondsRemaining() { return 0; }
-bool init() { return false; }
-bool isEncrypted(const char *) { return false; }
-bool readAndDecrypt(const char *, uint8_t *, size_t, size_t &) { return false; }
-bool encryptAndWrite(const char *, const uint8_t *, size_t, bool) { return false; }
-bool migrateFile(const char *) { return false; }
+bool init() { return true; }
+
+bool isEncrypted(const char *filename)
+{
+    // We never write MENC-wrapped files on ESP32, but check the magic in case
+    // a file was transferred from an nRF52 image (which we cannot decrypt here).
+#ifdef FSCom
+    concurrency::LockGuard g(spiLock);
+    auto f = FSCom.open(filename, FILE_O_READ);
+    if (!f || f.size() < 4) {
+        if (f)
+            f.close();
+        return false;
+    }
+    uint32_t magic = 0;
+    f.read((uint8_t *)&magic, 4);
+    f.close();
+    return magic == MAGIC;
+#else
+    return false;
+#endif
+}
+
+bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, size_t &outLen)
+{
+    // Plaintext pass-through — no decryption.
+#ifdef FSCom
+    concurrency::LockGuard g(spiLock);
+    auto f = FSCom.open(filename, FILE_O_READ);
+    if (!f) {
+        LOG_WARN("EncryptedStorage(ESP32): cannot open %s", filename);
+        outLen = 0;
+        return false;
+    }
+    size_t fileSize = f.size();
+    if (fileSize > outBufSize) {
+        LOG_WARN("EncryptedStorage(ESP32): %s too large (%d > %d)", filename, fileSize, outBufSize);
+        f.close();
+        outLen = 0;
+        return false;
+    }
+    size_t n = f.read(outBuf, fileSize);
+    f.close();
+    outLen = n;
+    return n == fileSize;
+#else
+    outLen = 0;
+    return false;
+#endif
+}
+
+bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plaintextLen, bool fullAtomic)
+{
+    // Plaintext pass-through — no encryption.
+    SafeFile sf(filename, fullAtomic);
+    sf.write(plaintext, plaintextLen);
+    if (!sf.close()) {
+        LOG_ERROR("EncryptedStorage(ESP32): write failed for %s", filename);
+        return false;
+    }
+    LOG_INFO("EncryptedStorage(ESP32): wrote %s (%d bytes, plaintext)", filename, plaintextLen);
+    return true;
+}
+
+bool migrateFile(const char *filename)
+{
+    // No encryption on ESP32 yet — nothing to migrate.
+    // If an MENC file is found (e.g. transferred from an nRF52 image), we
+    // cannot decrypt it, so leave it alone and let the caller fail gracefully.
+    if (isEncrypted(filename)) {
+        LOG_WARN("EncryptedStorage(ESP32): MENC file at %s — no crypto, skipping", filename);
+        return false;
+    }
+    return true;
+}
 
 } // namespace EncryptedStorage
 
-#endif // ARCH_NRF52
+#else
+#error "MESHTASTIC_ENCRYPTED_STORAGE requires ARCH_NRF52 or ARCH_ESP32"
+#endif // arch
+
 #endif // MESHTASTIC_ENCRYPTED_STORAGE

@@ -908,6 +908,15 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             const uint8_t *pp = sec.private_key.bytes;
             size_t ppLen = sec.private_key.size;
 
+            // MED-4: helper to zero the passphrase bytes in the decoded proto scratch buffer
+            // before returning. Uses volatile to prevent the compiler from eliding the wipe.
+            // const_cast is safe here: the underlying buffer is the mutable toRadioScratch member.
+            auto zeroPassphrase = [&]() {
+                volatile uint8_t *ppVol = const_cast<volatile uint8_t *>(pp);
+                for (size_t zi = 0; zi < ppLen; zi++)
+                    ppVol[zi] = 0;
+            };
+
             // LOCK NOW sentinel — always honoured regardless of lock state
             if (ppLen == 1 && pp[0] == 0xFF) {
                 LOG_INFO("AdminModule: TAK LOCK NOW command received");
@@ -918,11 +927,13 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                 PhoneAPI::revokeAllAuth();
 #endif
                 sendWarning("TAK_LOCKED");
+                zeroPassphrase(); // MED-4
                 reboot(DEFAULT_REBOOT_SECONDS);
                 return; // No config changed; skip saveChanges entirely
             }
 
-            if (ppLen >= 1 && ppLen <= 64) {
+            // MED-8: cap to 32 bytes to match the proto private_key field size
+            if (ppLen >= 1 && ppLen <= 32) {
                 uint8_t boots = EncryptedStorage::TOKEN_DEFAULT_BOOTS;
                 if (sec.admin_key[1].size >= 1 && sec.admin_key[1].bytes[0] != 0)
                     boots = sec.admin_key[1].bytes[0];
@@ -985,6 +996,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                     sendWarning(failMsg);
                     LOG_WARN("AdminModule: TAK passphrase verification failed");
                 }
+                zeroPassphrase(); // MED-4: wipe passphrase from scratch buffer before returning
                 return; // Passphrase handled; no config changed, skip saveChanges
             }
         }

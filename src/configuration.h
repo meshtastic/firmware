@@ -530,20 +530,67 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // -----------------------------------------------------------------------------
 // MESHTASTIC_LOCKDOWN — combined hardened build flag
-// On nRF52 builds, derives MESHTASTIC_PHONEAPI_ACCESS_CONTROL (PhoneAPI access control),
-// MESHTASTIC_ENCRYPTED_STORAGE (CC310 flash encryption), MESHTASTIC_ENABLE_APPROTECT,
-// and HARDENED_DEFAULTS. On non-nRF52 platforms this flag is ignored (requires CC310).
+//
+// All targets:
+//   DEBUG_MUTE                         — suppress serial/USB log output
+//   MESHTASTIC_EXCLUDE_*               — strip non-essential modules
+//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL — redact keys from unauthenticated BLE/USB/TCP clients
+//   HARDENED_DEFAULTS                  — set is_managed, RANDOM_PIN, TAK role at first boot
+//
+// nRF52 (CC310 hardware crypto):
+//   MESHTASTIC_ENCRYPTED_STORAGE       — AES-128-CTR + HMAC-SHA256 at-rest encryption
+//   MESHTASTIC_ENABLE_APPROTECT        — write UICR APPROTECT to block debug probe
+//
+// ESP32 (stub — mbedTLS crypto TODO):
+//   MESHTASTIC_ENCRYPTED_STORAGE       — same API, plaintext pass-through until ported
+//   APPROTECT equivalent               — burn JTAG_DISABLE + flash encryption via espsecure.py
 // -----------------------------------------------------------------------------
 #ifdef MESHTASTIC_LOCKDOWN
-#ifdef ARCH_NRF52
+
+// Suppress all serial/USB-CDC log output — prevents info leakage via physical access
+#define DEBUG_MUTE
+
+// Strip non-essential modules to reduce attack surface
+#define MESHTASTIC_EXCLUDE_DETECTIONSENSOR 1
+#define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1
+#define MESHTASTIC_EXCLUDE_AIR_QUALITY 1
+#define MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY 1
+#define MESHTASTIC_EXCLUDE_POWER_TELEMETRY 1
+#define MESHTASTIC_EXCLUDE_RANGETEST 1
+#define MESHTASTIC_EXCLUDE_REMOTEHARDWARE 1
+#define MESHTASTIC_EXCLUDE_STOREFORWARD 1
+#define MESHTASTIC_EXCLUDE_CANNEDMESSAGES 1
+#define MESHTASTIC_EXCLUDE_SERIAL 1
+#define MESHTASTIC_EXCLUDE_POWERSTRESS 1
+#define MESHTASTIC_EXCLUDE_DROPZONE 1
+#define MESHTASTIC_EXCLUDE_REPLYBOT 1
+#define MESHTASTIC_EXCLUDE_PAXCOUNTER 1
+#define MESHTASTIC_EXCLUDE_AUDIO 1
+#define MESHTASTIC_EXCLUDE_STATUS 1
+#define MESHTASTIC_EXCLUDE_GENERIC_THREAD_MODULE 1
+#define MESHTASTIC_EXCLUDE_POWERMON 1
+#define MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION 1
+
+// Access control and hardened defaults are pure C++ — no platform-specific deps.
 #define MESHTASTIC_PHONEAPI_ACCESS_CONTROL 1
-#define MESHTASTIC_ENCRYPTED_STORAGE 1
-#define MESHTASTIC_ENABLE_APPROTECT 1
 #define HARDENED_DEFAULTS 1
+
+// Platform-specific security features:
+#if defined(ARCH_NRF52)
+// Full encrypted storage via CC310 hardware AES-128-CTR + HMAC-SHA256.
+#define MESHTASTIC_ENCRYPTED_STORAGE 1
+// Hardware JTAG/SWD lockout: firmware writes NRF_UICR->APPROTECT = 0x00 once.
+#define MESHTASTIC_ENABLE_APPROTECT 1
+#elif defined(ARCH_ESP32)
+// Encrypted storage stub: plaintext pass-through, same API, crypto TODO (mbedTLS).
+// APPROTECT equivalent: burn JTAG_DISABLE eFuse and enable flash encryption
+// via espsecure.py at provisioning time — not firmware-controlled.
+#define MESHTASTIC_ENCRYPTED_STORAGE 1
 #else
-#warning "MESHTASTIC_LOCKDOWN requires nRF52 (CC310 hardware crypto) — ignoring on this platform"
+#warning "MESHTASTIC_LOCKDOWN: encrypted storage not available on this platform; access control and hardened defaults still active"
 #endif
-#endif
+
+#endif // MESHTASTIC_LOCKDOWN
 
 #include "DebugConfiguration.h"
 #include "RF95Configuration.h"

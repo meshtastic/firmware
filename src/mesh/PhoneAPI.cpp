@@ -59,12 +59,14 @@ void PhoneAPI::handleStartConfig()
         observe(&xModem.packetReady);
 #endif
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-        // New physical connection: reset auth so the client must present the passphrase.
+        // New physical connection: reset per-connection PKC auth.
         // Do NOT reset here on re-requests (want_config_id sent again within the same
         // connection after auth) — that would strip auth from a client who just unlocked
         // and is re-fetching the full unredacted config.
         isAdminAuthorized = false;
-        s_localAdminAuthorized = false;
+        // MED-2: s_localAdminAuthorized (device-level passphrase auth) is intentionally
+        // NOT reset here. It persists until an explicit Lock Now (revokeAllAuth()).
+        // Resetting it on every new connection would cause an auth DoS.
 #endif
     }
 
@@ -140,7 +142,10 @@ void PhoneAPI::close()
         heartbeatReceived = false;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         isAdminAuthorized = false;
-        s_localAdminAuthorized = false;
+        // MED-2: do NOT reset s_localAdminAuthorized on disconnect.
+        // It represents device-level passphrase auth and must persist across connections
+        // until an explicit Lock Now (revokeAllAuth()). Resetting it here would revoke
+        // any passphrase-authenticated session the moment a second client connects.
 #endif
     }
 }
@@ -978,22 +983,23 @@ int PhoneAPI::onNotify(uint32_t newValue)
 }
 
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-bool PhoneAPI::s_localAdminAuthorized = false;
+// HIGH-3: static atomic so BLE-task writes and main-loop reads are race-free.
+std::atomic<bool> PhoneAPI::s_localAdminAuthorized{false};
 
 void PhoneAPI::authorizeLocalAdmin()
 {
-    s_localAdminAuthorized = true;
+    s_localAdminAuthorized.store(true);
     LOG_INFO("TAK: Local admin authorized via PKC");
 }
 
 bool PhoneAPI::isLocalAdminAuthorized()
 {
-    return s_localAdminAuthorized;
+    return s_localAdminAuthorized.load();
 }
 
 void PhoneAPI::revokeAllAuth()
 {
-    s_localAdminAuthorized = false;
+    s_localAdminAuthorized.store(false);
     LOG_INFO("TAK: All connection auth revoked (Lock Now)");
 }
 #endif

@@ -100,7 +100,7 @@ void initLocked();
  * preserving all previously encrypted config files.
  *
  * @param passphrase      Raw passphrase bytes (need not be NUL-terminated)
- * @param passphraseLen   Length in bytes (1–64)
+ * @param passphraseLen   Length in bytes (1–32; matches the proto private_key field size)
  * @param bootsRemaining   Token valid for this many boots (default TOKEN_DEFAULT_BOOTS)
  * @param validUntilEpoch  Absolute Unix timestamp after which token expires (0 = no time limit)
  * @return true on success
@@ -113,7 +113,7 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen,
  * unwrap the stored DEK, and create a fresh unlock token.
  *
  * @param passphrase       Raw passphrase bytes
- * @param passphraseLen    Length in bytes (1–64)
+ * @param passphraseLen    Length in bytes (1–32; matches the proto private_key field size)
  * @param bootsRemaining   New token valid for this many boots
  * @param validUntilEpoch  Absolute Unix timestamp after which token expires (0 = no time limit)
  * @return true if passphrase was correct and DEK is now loaded

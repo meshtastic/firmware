@@ -4,6 +4,7 @@
 #include "concurrency/Lock.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
+#include <atomic>
 #include <deque>
 #include <iterator>
 #include <string>
@@ -193,8 +194,10 @@ class PhoneAPI
     APIType api_type = TYPE_NONE;
 
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-    bool isAdminAuthorized = false;
-    static bool s_localAdminAuthorized;
+    // HIGH-3: both flags are accessed from multiple tasks (main loop + NimBLE BLE callback
+    // task), so they must be atomic to prevent data races on read-modify-write sequences.
+    std::atomic<bool> isAdminAuthorized{false};
+    static std::atomic<bool> s_localAdminAuthorized;
 #endif
 
   private:
