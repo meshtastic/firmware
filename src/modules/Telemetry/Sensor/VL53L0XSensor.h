@@ -12,6 +12,15 @@ class VL53L0XSensor : public TelemetrySensor
 
     Adafruit_VL53L0X vl53l0x;
 
+  protected:
+    const char *VL53L0XStateFileName = "/prefs/vl53l0x.dat";
+    meshtastic_VL53L0XState vl53state = meshtastic_VL53L0XState_init_zero;
+
+    Adafruit_VL53L0X::VL53L0X_Sense_config_t mode;
+
+    bool loadState();
+    bool saveState();
+
   public:
     VL53L0XSensor();
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;

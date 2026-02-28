@@ -116,6 +116,13 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_VL53L0X = 50
 } meshtastic_TelemetrySensorType;
 
+typedef enum _meshtastic_VL53L0XState_RangingMode {
+    meshtastic_VL53L0XState_RangingMode_Default = 0,
+    meshtastic_VL53L0XState_RangingMode_LongRange = 1,
+    meshtastic_VL53L0XState_RangingMode_HighSpeed = 2,
+    meshtastic_VL53L0XState_RangingMode_HighAccuracy = 3
+} meshtastic_VL53L0XState_RangingMode;
+
 /* Struct definitions */
 /* Key native device metrics such as battery level */
 typedef struct _meshtastic_DeviceMetrics {
@@ -484,6 +491,11 @@ typedef struct _meshtastic_SEN5XState {
     uint64_t voc_state_array;
 } meshtastic_SEN5XState;
 
+typedef struct _meshtastic_VL53L0XState {
+    /* Current Ranging Mode */
+    meshtastic_VL53L0XState_RangingMode mode;
+} meshtastic_VL53L0XState;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -494,6 +506,9 @@ extern "C" {
 #define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_VL53L0X
 #define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_VL53L0X+1))
 
+#define _meshtastic_VL53L0XState_RangingMode_MIN meshtastic_VL53L0XState_RangingMode_Default
+#define _meshtastic_VL53L0XState_RangingMode_MAX meshtastic_VL53L0XState_RangingMode_HighAccuracy
+#define _meshtastic_VL53L0XState_RangingMode_ARRAYSIZE ((meshtastic_VL53L0XState_RangingMode)(meshtastic_VL53L0XState_RangingMode_HighAccuracy+1))
 
 
 
@@ -504,6 +519,9 @@ extern "C" {
 
 
 
+
+
+#define meshtastic_VL53L0XState_mode_ENUMTYPE meshtastic_VL53L0XState_RangingMode
 
 
 /* Initializer values for message structs */
@@ -518,6 +536,7 @@ extern "C" {
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
 #define meshtastic_SEN5XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
+#define meshtastic_VL53L0XState_init_default     {_meshtastic_VL53L0XState_RangingMode_MIN}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
@@ -529,6 +548,7 @@ extern "C" {
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 #define meshtastic_Nau7802Config_init_zero       {0, 0}
 #define meshtastic_SEN5XState_init_zero          {0, 0, 0, false, 0, false, 0, false, 0}
+#define meshtastic_VL53L0XState_init_zero        {_meshtastic_VL53L0XState_RangingMode_MIN}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_DeviceMetrics_battery_level_tag 1
@@ -650,6 +670,7 @@ extern "C" {
 #define meshtastic_SEN5XState_voc_state_time_tag 4
 #define meshtastic_SEN5XState_voc_state_valid_tag 5
 #define meshtastic_SEN5XState_voc_state_array_tag 6
+#define meshtastic_VL53L0XState_mode_tag         1
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceMetrics_FIELDLIST(X, a) \
@@ -823,6 +844,11 @@ X(a, STATIC,   OPTIONAL, FIXED64,  voc_state_array,   6)
 #define meshtastic_SEN5XState_CALLBACK NULL
 #define meshtastic_SEN5XState_DEFAULT NULL
 
+#define meshtastic_VL53L0XState_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    mode,              1)
+#define meshtastic_VL53L0XState_CALLBACK NULL
+#define meshtastic_VL53L0XState_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_DeviceMetrics_msg;
 extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
 extern const pb_msgdesc_t meshtastic_PowerMetrics_msg;
@@ -834,6 +860,7 @@ extern const pb_msgdesc_t meshtastic_HostMetrics_msg;
 extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
+extern const pb_msgdesc_t meshtastic_VL53L0XState_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_DeviceMetrics_fields &meshtastic_DeviceMetrics_msg
@@ -847,6 +874,7 @@ extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 #define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
 #define meshtastic_Nau7802Config_fields &meshtastic_Nau7802Config_msg
 #define meshtastic_SEN5XState_fields &meshtastic_SEN5XState_msg
+#define meshtastic_VL53L0XState_fields &meshtastic_VL53L0XState_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
@@ -861,6 +889,7 @@ extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 #define meshtastic_SEN5XState_size               27
 #define meshtastic_Telemetry_size                272
 #define meshtastic_TrafficManagementStats_size   42
+#define meshtastic_VL53L0XState_size             2
 
 #ifdef __cplusplus
 } /* extern "C" */

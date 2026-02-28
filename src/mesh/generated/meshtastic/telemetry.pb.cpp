@@ -39,6 +39,11 @@ PB_BIND(meshtastic_Nau7802Config, meshtastic_Nau7802Config, AUTO)
 PB_BIND(meshtastic_SEN5XState, meshtastic_SEN5XState, AUTO)
 
 
+PB_BIND(meshtastic_VL53L0XState, meshtastic_VL53L0XState, AUTO)
+
+
+
+
 
 
 
