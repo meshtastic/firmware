@@ -9,3 +9,5 @@ Lora:
   DIO3_TCXO_VOLTAGE: true
   DIO2_AS_RF_SWITCH: true
   spidev: spidev0.0
+  GPIO_DETECT_PA: 13
+  TX_GAIN_LORA: [8, 8, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 8, 8, 7]
