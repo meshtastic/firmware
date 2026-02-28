@@ -453,7 +453,9 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
+#if !IS_RUNNING_TESTS
             publishNodeInfo();
+#endif
         }
         // preflightSleepObserver.observe(&preflightSleep);
     } else {
