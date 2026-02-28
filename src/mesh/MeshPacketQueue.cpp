@@ -184,6 +184,28 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
         }
     }
 
+    if (backPacket->tx_after) {
+        // Check if there's a late packet at the queue end
+        auto now = millis();
+        if (backPacket->tx_after < now && (!p->tx_after || backPacket->tx_after > p->tx_after)) {
+            if (p->tx_after) {
+                LOG_WARN("Dropping late packet 0x%08x with TX delay %dms to make room in the TX queue for packet 0x%08x with "
+                         "TX delay %ums",
+                         backPacket->id, backPacket->tx_after - now, p->id, p->tx_after - now);
+
+            } else {
+                LOG_WARN("Dropping late packet 0x%08x with TX delay %dms to make room in the TX queue for packet 0x%08x "
+                         "with no TX delay",
+                         backPacket->id, backPacket->tx_after - now, p->id);
+            }
+            queue.pop_back();
+            packetPool.release(backPacket);
+            // Insert the new packet in the correct order
+            enqueue(p);
+            return true;
+        }
+    }
+
     // If the back packet's priority is not lower, no replacement occurs
     return false;
 }
