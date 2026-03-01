@@ -1,6 +1,6 @@
 /**************************************************************************/
 /*!
-    @file     BLEDfu.h
+    @file     BLEDfuSecure.h
     @author   hathach (tinyusb.org)
 
     @section LICENSE
