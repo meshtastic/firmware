@@ -164,6 +164,7 @@ extern struct portduino_config_struct {
     bool ascii_logs_explicit = false;
 
     std::string JSONFilename;
+    int JSONFileRotate = 0;
     meshtastic_PortNum JSONFilter = (_meshtastic_PortNum)0;
 
     // Webserver
@@ -469,6 +470,9 @@ extern struct portduino_config_struct {
             out << YAML::Key << "TraceFile" << YAML::Value << traceFilename;
         if (JSONFilename != "") {
             out << YAML::Key << "JSONFile" << YAML::Value << JSONFilename;
+            if (JSONFileRotate != 0)
+                out << YAML::Key << "JSONFileRotate" << YAML::Value << JSONFileRotate;
+
             if (JSONFilter == meshtastic_PortNum_TEXT_MESSAGE_APP)
                 out << YAML::Key << "JSONFilter" << YAML::Value << "textmessage";
             else if (JSONFilter == meshtastic_PortNum_TELEMETRY_APP)
