@@ -48,6 +48,23 @@ uint32_t secsToMs(uint32_t secs)
 }
 
 /**
+ * Clamp precision to a valid dedup range.
+ * Invalid values use the module default precision.
+ */
+uint8_t sanitizePositionPrecision(uint8_t precision)
+{
+    if (precision > 0 && precision <= 32)
+        return precision;
+
+    const uint8_t defaultPrecision = static_cast<uint8_t>(default_traffic_mgmt_position_precision_bits);
+    if (defaultPrecision > 0 && defaultPrecision <= 32)
+        return defaultPrecision;
+
+    // Someone done messed up if we reach here
+    return 32;
+}
+
+/**
  * Check if a timestamp is within a time window.
  * Handles wrap-around correctly using unsigned subtraction.
  */
@@ -846,9 +863,7 @@ void TrafficManagementModule::resetEpoch(uint32_t nowMs)
  */
 uint8_t TrafficManagementModule::computePositionFingerprint(int32_t lat_truncated, int32_t lon_truncated, uint8_t precision)
 {
-    // Guard: no truncation means no fingerprint
-    if (precision == 0 || precision >= 32)
-        return 0;
+    precision = sanitizePositionPrecision(precision);
 
     // Guard: if precision < 4, we have fewer bits to work with
     // Take min(precision, 4) bits from each coordinate
@@ -1130,8 +1145,7 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
 
     uint8_t precision = Default::getConfiguredOrDefault(moduleConfig.traffic_management.position_precision_bits,
                                                         default_traffic_mgmt_position_precision_bits);
-    if (precision > 32)
-        precision = 32;
+    precision = sanitizePositionPrecision(precision);
 
     const int32_t lat_truncated = truncateLatLon(pos->latitude_i, precision);
     const int32_t lon_truncated = truncateLatLon(pos->longitude_i, precision);

@@ -670,10 +670,10 @@ static void test_tm_positionDedup_intervalZero_neverDrops(void)
 }
 
 /**
- * Verify precision values above 32 are clamped safely.
- * Important to keep dedup behavior deterministic under invalid config input.
+ * Verify precision values above 32 fall back to default precision.
+ * Important so invalid config uses the documented default behavior.
  */
-static void test_tm_positionDedup_precisionAbove32_clamps(void)
+static void test_tm_positionDedup_precisionAbove32_usesDefaultPrecision(void)
 {
     moduleConfig.traffic_management.position_dedup_enabled = true;
     moduleConfig.traffic_management.position_precision_bits = 99;
@@ -681,15 +681,61 @@ static void test_tm_positionDedup_precisionAbove32_clamps(void)
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
-    meshtastic_MeshPacket second = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket second = makePositionPacket(kRemoteNode, 384221234, -1210845678);
 
     ProcessMessage r1 = module.handleReceived(first);
     ProcessMessage r2 = module.handleReceived(second);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
-    TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_UINT32(0, stats.position_dedup_drops);
+}
+
+/**
+ * Verify precision=32 does not collapse all positions to one fingerprint.
+ * Important to prevent false duplicate drops at the full-precision boundary.
+ */
+static void test_tm_positionDedup_precision32_allowsDistinctPositions(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 32;
+    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket second = makePositionPacket(kRemoteNode, 374221235, -1220845677);
+
+    ProcessMessage r1 = module.handleReceived(first);
+    ProcessMessage r2 = module.handleReceived(second);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_UINT32(0, stats.position_dedup_drops);
+}
+
+/**
+ * Verify invalid precision=0 is treated as full precision.
+ * Important so invalid config does not collapse all positions into one fingerprint.
+ */
+static void test_tm_positionDedup_precisionZero_allowsDistinctPositions(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 0;
+    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket second = makePositionPacket(kRemoteNode, 374221235, -1220845677);
+
+    ProcessMessage r1 = module.handleReceived(first);
+    ProcessMessage r2 = module.handleReceived(second);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_UINT32(0, stats.position_dedup_drops);
 }
 
 /**
@@ -942,7 +988,9 @@ extern "C" void setup()
     RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
     RUN_TEST(test_tm_positionDedup_allowsDuplicateAfterIntervalExpires);
     RUN_TEST(test_tm_positionDedup_intervalZero_neverDrops);
-    RUN_TEST(test_tm_positionDedup_precisionAbove32_clamps);
+    RUN_TEST(test_tm_positionDedup_precisionAbove32_usesDefaultPrecision);
+    RUN_TEST(test_tm_positionDedup_precision32_allowsDistinctPositions);
+    RUN_TEST(test_tm_positionDedup_precisionZero_allowsDistinctPositions);
     RUN_TEST(test_tm_rateLimit_resetsAfterWindowExpires);
     RUN_TEST(test_tm_rateLimit_thresholdAbove255_clamps);
     RUN_TEST(test_tm_unknownPackets_resetAfterWindowExpires);
