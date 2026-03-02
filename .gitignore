@@ -33,6 +33,7 @@ __pycache__
 *~
 
 venv/
+.venv/
 release/
 .vscode/extensions.json
 /compile_commands.json
@@ -50,3 +51,6 @@ idf_component.yml
 CMakeLists.txt
 /sdkconfig.*
 .dummy/*
+
+# PYTHONPATH used by the Nix shell
+.python3

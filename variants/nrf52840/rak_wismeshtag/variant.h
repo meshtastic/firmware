@@ -45,13 +45,10 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (35)
-#define PIN_LED2 (36)
-
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
+#define LED_BLUE (36)
 
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_NOTIFICATION LED_BLUE
 
 #define LED_STATE_ON 1 // State when LED is litted
 
@@ -62,8 +59,6 @@ extern "C" {
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
 #define PIN_BUTTON2 12
-#define PIN_BUTTON3 24
-#define PIN_BUTTON4 25
 
 /*
  * Analog pins

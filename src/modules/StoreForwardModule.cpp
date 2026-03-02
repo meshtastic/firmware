@@ -131,9 +131,7 @@ void StoreForwardModule::historySend(uint32_t secAgo, uint32_t to)
 uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_time)
 {
     uint32_t count = 0;
-    if (lastRequest.find(dest) == lastRequest.end()) {
-        lastRequest.emplace(dest, 0);
-    }
+    lastRequest.emplace(dest, 0);
     for (uint32_t i = lastRequest[dest]; i < this->packetHistoryTotalCount; i++) {
         if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
             // Client is only interested in packets not from itself and only in broadcast packets or packets towards it.
@@ -513,7 +511,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             LOG_DEBUG("StoreAndForward_RequestResponse_ROUTER_BUSY");
             // retry in messages_saved * packetTimeMax ms
             retry_delay = millis() + getNumAvailablePackets(this->busyTo, this->last_time) * packetTimeMax *
-                                         (meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
+                                         (p->rr == meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
         }
         break;
 

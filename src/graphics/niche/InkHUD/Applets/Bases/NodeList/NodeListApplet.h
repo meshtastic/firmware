@@ -46,7 +46,7 @@ class NodeListApplet : public Applet, public MeshModule
   public:
     NodeListApplet(const char *name);
 
-    void onRender() override;
+    void onRender(bool full) override;
 
     bool wantPacket(const meshtastic_MeshPacket *p) override;
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;

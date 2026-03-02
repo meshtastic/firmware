@@ -1,5 +1,5 @@
 // LED - status indication
-#define LED_PIN 37
+#define LED_POWER 37
 
 // Button - user interface
 #define BUTTON_PIN 0 // This is the BOOT button, and it has its own pull-up resistor

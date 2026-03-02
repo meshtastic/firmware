@@ -35,4 +35,7 @@ bool isOneOf(int item, int count, ...);
 
 const std::string vformat(const char *const zcFormat, ...);
 
+// Get actual string length for nanopb char array fields.
+size_t pb_string_length(const char *str, size_t max_len);
+
 #define IS_ONE_OF(item, ...) isOneOf(item, sizeof((int[]){__VA_ARGS__}) / sizeof(int), __VA_ARGS__)

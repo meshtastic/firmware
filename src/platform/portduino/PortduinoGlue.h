@@ -1,14 +1,21 @@
 #pragma once
 #include <fstream>
 #include <map>
+#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
 #include "LR11x0Interface.h"
 #include "Module.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
-#include "platform/portduino/USBHal.h"
 #include "yaml-cpp/yaml.h"
+
+extern struct portduino_status_struct {
+    bool LoRa_in_error = false;
+    _meshtastic_HardwareModel hardwareModel = meshtastic_HardwareModel_PORTDUINO;
+} portduino_status;
+
+#include "platform/portduino/USBHal.h"
 
 // Product strings for auto-configuration
 // {"PRODUCT_STRING", "CONFIG.YAML"}
@@ -51,7 +58,7 @@ extern std::ofstream traceFile;
 extern std::ofstream JSONFile;
 
 extern Ch341Hal *ch341Hal;
-int initGPIOPin(int pinNum, std::string gpioChipname, int line);
+int initGPIOPin(int pinNum, const std::string &gpioChipname, int line);
 bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
@@ -100,6 +107,7 @@ extern struct portduino_config_struct {
     pinMapping lora_txen_pin = {"Lora", "TXen"};
     pinMapping lora_rxen_pin = {"Lora", "RXen"};
     pinMapping lora_sx126x_ant_sw_pin = {"Lora", "SX126X_ANT_SW"};
+    pinMapping lora_pa_detect_pin = {"Lora", "GPIO_DETECT_PA"};
     std::vector<pinMapping> extra_pins = {};
 
     // GPS
@@ -170,8 +178,12 @@ extern struct portduino_config_struct {
     int hostMetrics_channel = 0;
 
     // config
+    bool has_config_overrides = false;
     int configDisplayMode = 0;
     bool has_configDisplayMode = false;
+    std::string statusMessage = "";
+    bool has_statusMessage = false;
+    bool enable_UDP = false;
 
     // General
     std::string mac_address = "";
@@ -183,13 +195,14 @@ extern struct portduino_config_struct {
     int maxtophone = 100;
     int MaxNodes = 200;
 
-    pinMapping *all_pins[20] = {&lora_cs_pin,
+    pinMapping *all_pins[21] = {&lora_cs_pin,
                                 &lora_irq_pin,
                                 &lora_busy_pin,
                                 &lora_reset_pin,
                                 &lora_txen_pin,
                                 &lora_rxen_pin,
                                 &lora_sx126x_ant_sw_pin,
+                                &lora_pa_detect_pin,
                                 &displayDC,
                                 &displayCS,
                                 &displayBacklight,
@@ -213,7 +226,7 @@ extern struct portduino_config_struct {
         out << YAML::Key << "Lora" << YAML::Value << YAML::BeginMap;
         out << YAML::Key << "Module" << YAML::Value << loraModules[lora_module];
 
-        for (auto lora_pin : all_pins) {
+        for (const auto *lora_pin : all_pins) {
             if (lora_pin->config_section == "Lora" && lora_pin->enabled) {
                 out << YAML::Key << lora_pin->config_name << YAML::Value << YAML::BeginMap;
                 out << YAML::Key << "pin" << YAML::Value << lora_pin->pin;
@@ -244,18 +257,23 @@ extern struct portduino_config_struct {
             out << YAML::Key << "TX_GAIN_LORA" << YAML::Value << tx_gain_lora[0];
         }
 
-        out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
+        if (dio2_as_rf_switch)
+            out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
         if (lora_usb_pid != 0x5512)
             out << YAML::Key << "USB_PID" << YAML::Value << YAML::Hex << lora_usb_pid;
         if (lora_usb_vid != 0x1A86)
             out << YAML::Key << "USB_VID" << YAML::Value << YAML::Hex << lora_usb_vid;
-        if (lora_spi_dev != "")
+        if (lora_spi_dev != "" && !(lora_spi_dev == "/dev/spidev0.0" && lora_module == use_autoconf)) {
+            if (lora_spi_dev.find("/dev/") != std::string::npos)
+                lora_spi_dev = lora_spi_dev.substr(5);
             out << YAML::Key << "spidev" << YAML::Value << lora_spi_dev;
+        }
         if (lora_usb_serial_num != "")
             out << YAML::Key << "USB_Serialnum" << YAML::Value << lora_usb_serial_num;
-        out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
+        if (spiSpeed != 2000000)
+            out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
         if (rfswitch_dio_pins[0] != RADIOLIB_NC) {
             out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
@@ -339,11 +357,11 @@ extern struct portduino_config_struct {
         // Display
         if (displayPanel != no_screen) {
             out << YAML::Key << "Display" << YAML::Value << YAML::BeginMap;
-            for (auto &screen_name : screen_names) {
+            for (const auto &screen_name : screen_names) {
                 if (displayPanel == screen_name.first)
                     out << YAML::Key << "Module" << YAML::Value << screen_name.second;
             }
-            for (auto display_pin : all_pins) {
+            for (const auto *display_pin : all_pins) {
                 if (display_pin->config_section == "Display" && display_pin->enabled) {
                     out << YAML::Key << display_pin->config_name << YAML::Value << YAML::BeginMap;
                     out << YAML::Key << "pin" << YAML::Value << display_pin->pin;
@@ -391,7 +409,7 @@ extern struct portduino_config_struct {
             case ft5x06:
                 out << YAML::Key << "Module" << YAML::Value << "FT5x06";
             }
-            for (auto touchscreen_pin : all_pins) {
+            for (const auto *touchscreen_pin : all_pins) {
                 if (touchscreen_pin->config_section == "Touchscreen" && touchscreen_pin->enabled) {
                     out << YAML::Key << touchscreen_pin->config_name << YAML::Value << YAML::BeginMap;
                     out << YAML::Key << "pin" << YAML::Value << touchscreen_pin->pin;
@@ -414,7 +432,7 @@ extern struct portduino_config_struct {
         if (pointerDevice != "")
             out << YAML::Key << "PointerDevice" << YAML::Value << pointerDevice;
 
-        for (auto input_pin : all_pins) {
+        for (const auto *input_pin : all_pins) {
             if (input_pin->config_section == "Input" && input_pin->enabled) {
                 out << YAML::Key << input_pin->config_name << YAML::Value << YAML::BeginMap;
                 out << YAML::Key << "pin" << YAML::Value << input_pin->pin;
@@ -498,21 +516,30 @@ extern struct portduino_config_struct {
         }
 
         // config
-        if (has_configDisplayMode) {
+        if (has_config_overrides) {
             out << YAML::Key << "Config" << YAML::Value << YAML::BeginMap;
-            switch (configDisplayMode) {
-            case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
-                break;
-            case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
-                break;
-            case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
-                break;
-            case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
-                out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
-                break;
+            if (has_configDisplayMode) {
+
+                switch (configDisplayMode) {
+                case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
+                    break;
+                case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
+                    break;
+                case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
+                    break;
+                case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
+                    break;
+                }
+            }
+            if (has_statusMessage) {
+                out << YAML::Key << "StatusMessage" << YAML::Value << statusMessage;
+            }
+            if (enable_UDP) {
+                out << YAML::Key << "EnableUDP" << YAML::Value << true;
             }
 
             out << YAML::EndMap; // Config

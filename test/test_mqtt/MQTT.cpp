@@ -289,13 +289,23 @@ class MQTTUnitTest : public MQTT
         mqtt = unitTest = new MQTTUnitTest();
         mqtt->start();
 
+        auto clearStartupOutput = []() {
+            pubsub->published_.clear();
+            if (mockMeshService != nullptr) {
+                mockMeshService->messages_.clear();
+                mockMeshService->notifications_.clear();
+            }
+        };
+
         if (!moduleConfig.mqtt.enabled || moduleConfig.mqtt.proxy_to_client_enabled || *moduleConfig.mqtt.root) {
             loopUntil([] { return true; }); // Loop once
+            clearStartupOutput();
             return;
         }
         // Wait for MQTT to subscribe to all topics.
         TEST_ASSERT_TRUE(loopUntil(
             [] { return pubsub->subscriptions_.count("msh/2/e/test/+") && pubsub->subscriptions_.count("msh/2/e/PKI/+"); }));
+        clearStartupOutput();
     }
     PubSubClient &getPubSub() { return pubSub; }
 };
@@ -334,7 +344,7 @@ void setUp(void)
     owner = meshtastic_User{.id = "!12345678"};
     myNodeInfo = meshtastic_MyNodeInfo{.my_node_num = 0x12345678}; // Match the expected gateway ID in topic
     localPosition =
-        meshtastic_Position{.has_latitude_i = true, .latitude_i = 7 * 1e7, .has_longitude_i = true, .longitude_i = 3 * 1e7};
+        meshtastic_Position{.has_latitude_i = true, .latitude_i = 700000000, .has_longitude_i = true, .longitude_i = 300000000};
 
     router = mockRouter = new MockRouter();
     service = mockMeshService = new MockMeshService();

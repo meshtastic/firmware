@@ -41,7 +41,7 @@ extern uint32_t lastSetFromPhoneNtpOrGps;
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
 RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate = false);
-RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t);
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t);
 
 /// Return a string name for the quality
 const char *RtcName(RTCQuality quality);
@@ -54,7 +54,7 @@ uint32_t getValidTime(RTCQuality minQuality, bool local = false);
 
 RTCSetResult readFromRTC();
 
-time_t gm_mktime(struct tm *tm);
+time_t gm_mktime(const struct tm *tm);
 
 #define SEC_PER_DAY 86400
 #define SEC_PER_HOUR 3600

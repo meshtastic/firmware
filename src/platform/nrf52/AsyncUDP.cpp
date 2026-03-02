@@ -36,6 +36,13 @@ bool AsyncUDP::writeTo(const uint8_t *data, size_t len, IPAddress ip, uint16_t p
     return udp.endPacket();
 }
 
+void AsyncUDP::close()
+{
+    udp.stop();
+    localPort = 0;
+    _onPacket = nullptr;
+}
+
 // AsyncUDPPacket
 AsyncUDPPacket::AsyncUDPPacket(EthernetUDP &source) : _udp(source), _remoteIP(source.remoteIP()), _remotePort(source.remotePort())
 {
