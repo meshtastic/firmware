@@ -765,8 +765,27 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                 p_encrypted->pki_encrypted = true;
             // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
             if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
-                !isFromUs(p) && mqtt)
-                mqtt->onSend(*p_encrypted, *p, p->channel);
+                !isFromUs(p) && mqtt) {
+                // Fix #8713 start
+                if (decodedState == DecodeState::DECODE_SUCCESS) {
+                    if (p->decoded.portnum ==  meshtastic_PortNum_TRACEROUTE_APP) {
+                        // For TRACEROUTE_APP packets release the original encrypted packet. Allocate a new from the changed packet
+                        packetPool.release(p_encrypted);
+			p_encrypted = packetPool.allocCopy(*p);
+                        auto encodeResult = perhapsEncode(p_encrypted);
+                        if (encodeResult != meshtastic_Routing_Error_NONE) {
+                            LOG_WARN("Re encryption of TR packet failed, skipping MQTT publish");
+                        }
+                        else
+                            mqtt->onSend(*p_encrypted, *p, p->channel);
+                    }
+                    else
+                        mqtt->onSend(*p_encrypted, *p, p->channel);
+                }
+                else
+                    // Fix #9713 end
+                    mqtt->onSend(*p_encrypted, *p, p->channel);
+             }
         }
 #endif
     }
