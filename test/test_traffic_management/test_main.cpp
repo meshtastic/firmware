@@ -1,6 +1,12 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+#if defined(ARCH_PORTDUINO)
+#define TM_TEST_ENTRY extern "C"
+#else
+#define TM_TEST_ENTRY
+#endif
+
 #if HAS_TRAFFIC_MANAGEMENT
 
 #include "mesh/CryptoEngine.h"
@@ -985,7 +991,7 @@ void setUp(void)
 }
 void tearDown(void) {}
 
-void setup()
+TM_TEST_ENTRY void setup()
 {
     delay(10);
     delay(2000);
@@ -1033,20 +1039,20 @@ void setup()
     exit(UNITY_END());
 }
 
-void loop() {}
+TM_TEST_ENTRY void loop() {}
 
 #else
 
 void setUp(void) {}
 void tearDown(void) {}
 
-void setup()
+TM_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
     UNITY_BEGIN();
     exit(UNITY_END());
 }
 
-void loop() {}
+TM_TEST_ENTRY void loop() {}
 
 #endif
