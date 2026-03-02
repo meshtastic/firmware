@@ -158,6 +158,7 @@ void InkHUD::NodeListApplet::onRender(bool full)
         SignalStrength &signal = card->signal;
         std::string longName;  // handled below
         std::string shortName; // handled below
+        std::string distance;  // handled below
         const uint8_t &hopsAway = card->hopsAway;
 
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
@@ -185,6 +186,10 @@ void InkHUD::NodeListApplet::onRender(bool full)
             longName = hexifyNodeNum(nodeNum);
         }
 
+        // -- Distance --
+        if (card->distanceMeters != CardInfo::DISTANCE_UNKNOWN)
+            distance = localizeDistance(card->distanceMeters);
+
         // Draw the info
         // ====================================
 
@@ -201,21 +206,24 @@ void InkHUD::NodeListApplet::onRender(bool full)
         setFont(fontSmall);
         uint16_t rightContentW = 0;
 
-        // Top row right: signal indicator whenever signal data is known.
-        if (signal != SIGNAL_UNKNOWN) {
+        // Bottom row right: distance.
+        if (!distance.empty()) {
+            rightContentW = std::max(rightContentW, getTextWidth(distance));
+            printAt(width() - 1, lineBY, distance, RIGHT, MIDDLE);
+        }
+
+        // Top row right: direct-link signal only.
+        if (hopsAway == 0 && signal != SIGNAL_UNKNOWN) {
             uint16_t signalW = getTextWidth("Xkm"); // Indicator width tuned to a short right-side label
             uint16_t signalH = fontMedium.lineHeight() * 0.75;
             int16_t signalY = lineAY + (fontMedium.lineHeight() / 2) - (fontMedium.lineHeight() * 0.75);
             int16_t signalX = width() - signalW;
-            rightContentW = signalW;
+            rightContentW = std::max(rightContentW, signalW);
             drawSignalIndicator(signalX, signalY, signalW, signalH, signal);
-        }
-
-        // Bottom row right: hops only when >0.
-        if (hopsAway != CardInfo::HOPS_UNKNOWN && hopsAway > 0) {
+        } else if (hopsAway != CardInfo::HOPS_UNKNOWN) {
             std::string hopString = to_string(hopsAway) + (hopsAway == 1 ? " Hop" : " Hops");
             rightContentW = std::max(rightContentW, getTextWidth(hopString));
-            printAt(width() - 1, lineBY, hopString, RIGHT, MIDDLE);
+            printAt(width() - 1, lineAY, hopString, RIGHT, MIDDLE);
         }
 
         // Give long names as much room as possible while still avoiding right side signal and hop space
