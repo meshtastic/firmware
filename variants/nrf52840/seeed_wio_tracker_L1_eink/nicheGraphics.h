@@ -9,8 +9,10 @@
 #include "graphics/niche/InkHUD/InkHUD.h"
 
 // Applets
+#include "graphics/niche/InkHUD/Applets/Examples/UserAppletInputExample/UserAppletInputExample.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
@@ -63,6 +65,7 @@ void setupNicheGraphics()
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
     inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
     inkhud->persistence->settings.userTiles.maxCount = 2; // Two applets side-by-side
+    inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
@@ -74,6 +77,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
 
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // -
     //  Start running InkHUD
     inkhud->begin();
 

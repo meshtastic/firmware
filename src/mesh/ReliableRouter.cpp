@@ -17,12 +17,6 @@
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
     if (p->want_ack) {
-        // If someone asks for acks on broadcast, we need the hop limit to be at least one, so that first node that receives our
-        // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop
-        // counts and we want this message to get through the whole mesh, so use the default.
-        if (p->hop_limit == 0) {
-            p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-        }
         DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("ReliableRouter::send", copy);

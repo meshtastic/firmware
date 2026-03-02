@@ -1,5 +1,5 @@
-#define LED_PIN 33
-#define LED_PIN2 34
+#define LED_POWER 33
+#define LED_POWER2 34
 #define EXT_PWR_DETECT 35
 
 #define BUTTON_PIN 18

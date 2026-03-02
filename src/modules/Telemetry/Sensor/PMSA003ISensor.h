@@ -3,6 +3,7 @@
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "RTC.h"
 #include "TelemetrySensor.h"
 
 #define PMSA003I_I2C_CLOCK_SPEED 100000
@@ -19,6 +20,9 @@ class PMSA003ISensor : public TelemetrySensor
     virtual bool isActive() override;
     virtual void sleep() override;
     virtual uint32_t wakeUp() override;
+    virtual bool canSleep() override;
+    virtual int32_t wakeUpTimeMs() override;
+    virtual int32_t pendingForReadyMs() override;
 
   private:
     enum class State { IDLE, ACTIVE };
@@ -26,6 +30,7 @@ class PMSA003ISensor : public TelemetrySensor
 
     uint16_t computedChecksum = 0;
     uint16_t receivedChecksum = 0;
+    uint32_t pmMeasureStarted = 0;
 
     uint8_t buffer[PMSA003I_FRAME_LENGTH]{};
     TwoWire *_bus{};

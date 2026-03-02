@@ -10,7 +10,7 @@ EInkDynamicDisplay::EInkDynamicDisplay(uint8_t address, int sda, int scl, OLEDDI
 {
     // If tracking ghost pixels, grab memory
 #ifdef EINK_LIMIT_GHOSTING_PX
-    dirtyPixels = new uint8_t[EInkDisplay::displayBufferSize](); // Init with zeros
+    dirtyPixels = std::unique_ptr<uint8_t[]>(new uint8_t[EInkDisplay::displayBufferSize]()); // Init with zeros
 #endif
 }
 
@@ -19,7 +19,7 @@ EInkDynamicDisplay::~EInkDynamicDisplay()
 {
     // If we were tracking ghost pixels, free the memory
 #ifdef EINK_LIMIT_GHOSTING_PX
-    delete[] dirtyPixels;
+    dirtyPixels = nullptr;
 #endif
 }
 
@@ -454,7 +454,7 @@ void EInkDynamicDisplay::checkExcessiveGhosting()
 void EInkDynamicDisplay::resetGhostPixelTracking()
 {
     // Copy the current frame into dirtyPixels[] from the display buffer
-    memcpy(dirtyPixels, EInkDisplay::buffer, EInkDisplay::displayBufferSize);
+    memcpy(dirtyPixels.get(), EInkDisplay::buffer, EInkDisplay::displayBufferSize);
 }
 #endif // EINK_LIMIT_GHOSTING_PX
 
