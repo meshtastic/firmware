@@ -52,7 +52,6 @@
 #define LORA_FEM_CSD 2   // Chip enable (HIGH=on, LOW=shutdown)
 #define LORA_FEM_CPS 46  // PA mode (HIGH=full PA, LOW=bypass)
 // CTX handled by DIO2 via SX126X_DIO2_AS_RF_SWITCH
-#define LORA_FEM_RX_PATCH // SX1262 register 0x8B5 sensitivity fix
 
 // GC1109 FEM: TX/RX path switching is handled by DIO2 -> CTX pin (via SX126X_DIO2_AS_RF_SWITCH)
 // GPIO46 is CPS (PA mode), not TX control - setTransmitEnable() handles it in SX126xInterface.cpp

@@ -173,7 +173,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define LORA_FEM_CSD (24) // Chip enable
 #define LORA_FEM_CPS (21) // Path select (HIGH for both TX and RX)
 #define LORA_FEM_CTX (31) // TX/RX select + 5V boost (MCU-driven, R25 NC)
-#define LORA_FEM_RX_PATCH // SX1262 register 0x8B5 sensitivity fix
 
 // Configure SX1262 DIO2 as RF-switch control output (not connected on this module, R25 NC)
 #define SX126X_DIO2_AS_RF_SWITCH
