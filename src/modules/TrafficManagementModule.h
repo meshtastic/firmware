@@ -39,11 +39,14 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     void recordRouterHopPreserved();
 
     /**
-     * Check if the current packet should have its hops exhausted.
+     * Check if this packet should have its hops exhausted.
      * Called from perhapsRebroadcast() to force hop_limit = 0 regardless of
      * router_preserve_hops or favorite node logic.
      */
-    bool shouldExhaustHops() const { return exhaustRequested; }
+    bool shouldExhaustHops(const meshtastic_MeshPacket &mp) const
+    {
+        return exhaustRequested && exhaustRequestedFrom == getFrom(&mp) && exhaustRequestedId == mp.id;
+    }
 
   protected:
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
@@ -284,9 +287,11 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     meshtastic_TrafficManagementStats stats;
 
     // Flag set during alterReceived() when packet should be exhausted.
-    // Checked by perhapsRebroadcast() to force hop_limit = 0.
-    // Reset at start of handleReceived().
+    // Checked by perhapsRebroadcast() to force hop_limit = 0 only for the
+    // matching packet key (from + id). Reset at start of handleReceived().
     bool exhaustRequested = false;
+    NodeNum exhaustRequestedFrom = 0;
+    PacketId exhaustRequestedId = 0;
 
     // =========================================================================
     // Cache Operations

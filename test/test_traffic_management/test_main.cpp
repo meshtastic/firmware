@@ -588,7 +588,7 @@ static void test_tm_alterReceived_exhaustsRelayedTelemetryBroadcast(void)
 
     TEST_ASSERT_EQUAL_UINT8(0, packet.hop_limit);
     TEST_ASSERT_EQUAL_UINT8(3, packet.hop_start);
-    TEST_ASSERT_TRUE(module.shouldExhaustHops());
+    TEST_ASSERT_TRUE(module.shouldExhaustHops(packet));
     TEST_ASSERT_EQUAL_UINT32(1, stats.hop_exhausted_packets);
 }
 
@@ -606,14 +606,14 @@ static void test_tm_alterReceived_skipsLocalAndUnicast(void)
     unicast.hop_limit = 3;
     module.alterReceived(unicast);
     TEST_ASSERT_EQUAL_UINT8(3, unicast.hop_limit);
-    TEST_ASSERT_FALSE(module.shouldExhaustHops());
+    TEST_ASSERT_FALSE(module.shouldExhaustHops(unicast));
 
     meshtastic_MeshPacket fromUs = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kLocalNode, NODENUM_BROADCAST);
     fromUs.hop_start = 5;
     fromUs.hop_limit = 3;
     module.alterReceived(fromUs);
     TEST_ASSERT_EQUAL_UINT8(3, fromUs.hop_limit);
-    TEST_ASSERT_FALSE(module.shouldExhaustHops());
+    TEST_ASSERT_FALSE(module.shouldExhaustHops(fromUs));
 
     meshtastic_TrafficManagementStats stats = module.getStats();
     TEST_ASSERT_EQUAL_UINT32(0, stats.hop_exhausted_packets);
@@ -802,7 +802,7 @@ static void test_tm_alterReceived_exhaustsRelayedPositionBroadcast(void)
 
     TEST_ASSERT_EQUAL_UINT8(0, packet.hop_limit);
     TEST_ASSERT_EQUAL_UINT8(4, packet.hop_start);
-    TEST_ASSERT_TRUE(module.shouldExhaustHops());
+    TEST_ASSERT_TRUE(module.shouldExhaustHops(packet));
     TEST_ASSERT_EQUAL_UINT32(1, stats.hop_exhausted_packets);
 }
 
@@ -823,7 +823,7 @@ static void test_tm_alterReceived_skipsUndecodedPackets(void)
 
     TEST_ASSERT_EQUAL_UINT8(5, packet.hop_start);
     TEST_ASSERT_EQUAL_UINT8(3, packet.hop_limit);
-    TEST_ASSERT_FALSE(module.shouldExhaustHops());
+    TEST_ASSERT_FALSE(module.shouldExhaustHops(packet));
     TEST_ASSERT_EQUAL_UINT32(0, stats.hop_exhausted_packets);
 }
 
@@ -840,15 +840,40 @@ static void test_tm_alterReceived_resetExhaustFlagOnNextPacket(void)
     telemetry.hop_start = 5;
     telemetry.hop_limit = 3;
     module.alterReceived(telemetry);
-    TEST_ASSERT_TRUE(module.shouldExhaustHops());
+    TEST_ASSERT_TRUE(module.shouldExhaustHops(telemetry));
 
     meshtastic_MeshPacket text = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
     ProcessMessage result = module.handleReceived(text);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
-    TEST_ASSERT_FALSE(module.shouldExhaustHops());
+    TEST_ASSERT_FALSE(module.shouldExhaustHops(telemetry));
     TEST_ASSERT_EQUAL_UINT32(1, stats.hop_exhausted_packets);
+}
+
+/**
+ * Verify exhaust requests are packet-scoped (from + id).
+ * Important so stale state from one packet cannot influence unrelated packets
+ * that pass through duplicate/rebroadcast paths before handleReceived().
+ */
+static void test_tm_alterReceived_exhaustFlag_isPacketScoped(void)
+{
+    moduleConfig.traffic_management.exhaust_hop_telemetry = true;
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket exhausted = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, NODENUM_BROADCAST);
+    exhausted.id = 0x1010;
+    exhausted.hop_start = 5;
+    exhausted.hop_limit = 3;
+    module.alterReceived(exhausted);
+
+    meshtastic_MeshPacket unrelated = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kTargetNode, NODENUM_BROADCAST);
+    unrelated.id = 0x2020;
+    unrelated.hop_start = 4;
+    unrelated.hop_limit = 0;
+
+    TEST_ASSERT_TRUE(module.shouldExhaustHops(exhausted));
+    TEST_ASSERT_FALSE(module.shouldExhaustHops(unrelated));
 }
 
 /**
@@ -925,6 +950,7 @@ extern "C" void setup()
     RUN_TEST(test_tm_alterReceived_exhaustsRelayedPositionBroadcast);
     RUN_TEST(test_tm_alterReceived_skipsUndecodedPackets);
     RUN_TEST(test_tm_alterReceived_resetExhaustFlagOnNextPacket);
+    RUN_TEST(test_tm_alterReceived_exhaustFlag_isPacketScoped);
     RUN_TEST(test_tm_runOnce_disabledReturnsMaxInterval);
     RUN_TEST(test_tm_runOnce_enabledReturnsMaintenanceInterval);
     exit(UNITY_END());

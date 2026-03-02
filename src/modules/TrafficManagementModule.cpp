@@ -880,6 +880,8 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
 
     ignoreRequest = false;
     exhaustRequested = false; // Reset per-packet; may be set by alterReceived() below
+    exhaustRequestedFrom = 0;
+    exhaustRequestedId = 0;
     incrementStat(&stats.packets_inspected);
 
     const auto &cfg = moduleConfig.traffic_management;
@@ -1000,9 +1002,12 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
         mp.hop_limit = 0;
         // Signal perhapsRebroadcast() to allow one final relay with hop_limit=0.
         // Without this flag, perhapsRebroadcast() would skip the packet since hop_limit==0.
-        // The flag is checked in NextHopRouter::perhapsRebroadcast() which forces
-        // tosend->hop_limit=0, ensuring no further propagation beyond the next node.
+        // The packet-scoped flag is checked in NextHopRouter::perhapsRebroadcast()
+        // and forces tosend->hop_limit=0, ensuring no further propagation beyond the
+        // next node.
         exhaustRequested = true;
+        exhaustRequestedFrom = getFrom(&mp);
+        exhaustRequestedId = mp.id;
         incrementStat(&stats.hop_exhausted_packets);
     }
 }

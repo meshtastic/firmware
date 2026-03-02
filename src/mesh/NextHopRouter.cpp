@@ -132,7 +132,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
     // Check if traffic management wants to exhaust this packet's hops
     bool exhaustHops = false;
 #if HAS_TRAFFIC_MANAGEMENT
-    if (trafficManagementModule && trafficManagementModule->shouldExhaustHops()) {
+    if (trafficManagementModule && trafficManagementModule->shouldExhaustHops(*p)) {
         exhaustHops = true;
     }
 #endif
