@@ -910,10 +910,10 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
                 chUtilFillColor = TFTPalette::Medium;
             }
             setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, TFTPalette::Black);
-            registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x, chUtil_y, fillRight,
-                                   chutil_bar_height);
+            registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
+                                   chutil_bar_height - 2);
         }
-        display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
+        display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
     }
 
     display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line],
@@ -1502,13 +1502,11 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 #else
     const uint16_t navBgColor = TFTPalette::DarkGray;
 #endif
-    if (applyTFTColorRoles) {
-        setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, navBgColor);
-        registerTFTColorRegion(TFTColorRole::HeaderStatus, bgX, rectY, bgWidth, rectHeight);
-    }
 
     display->setColor(BLACK);
     if (applyTFTColorRoles) {
+        setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, navBgColor);
+        registerTFTColorRegion(TFTColorRole::HeaderStatus, bgX, rectY, bgWidth, rectHeight);
         display->fillRect(bgX, rectY, bgWidth, rectHeight);
     } else {
         // Keep legacy OLED behavior untouched.
@@ -1604,8 +1602,17 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         drawArrow(false);
     }
 
-    // Knock the corners off the square (monochrome styling only)
-    if (!applyTFTColorRoles) {
+    // Knock the corners off the square
+    if (isTFTColoringEnabled()) {
+        // Full TFT styling only
+        // This won't compile because I did not commit drawNavigation
+        // setTFTColorRole(TFTColorRole::drawNavigation, TFTPalette::Black, TFTPalette::Black);
+        // registerTFTColorRegion(TFTColorRole::drawNavigation, rectX, rectY, 1, 1);
+        // registerTFTColorRegion(TFTColorRole::drawNavigation, rectX + rectWidth - 1, rectY, 1, 1);
+        display->fillRect(rectX, rectY, 1, 1);
+        display->fillRect(rectX + rectWidth - 1, rectY, 1, 1);
+    } else {
+        // monochrome styling only
         display->setColor(BLACK);
         display->drawRect(rectX, rectY, 1, 1);
         display->drawRect(rectX + rectWidth - 1, rectY, 1, 1);
