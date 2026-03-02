@@ -127,14 +127,17 @@ void InkHUD::NodeListApplet::onRender(bool full)
     auto ellipsizeToWidth = [this](std::string text, uint16_t maxWidth) {
         constexpr const char *ellipsis = "...";
         const uint16_t ellipsisW = getTextWidth(ellipsis);
+        uint16_t textW = getTextWidth(text);
         if (maxWidth == 0)
             return std::string();
-        if (getTextWidth(text) <= maxWidth)
+        if (textW <= maxWidth)
             return text;
         if (ellipsisW > maxWidth)
             return std::string();
-        while (!text.empty() && (getTextWidth(text) + ellipsisW > maxWidth))
+        while (!text.empty() && (textW + ellipsisW > maxWidth)) {
             text.pop_back();
+            textW = getTextWidth(text);
+        }
         return text + ellipsis;
     };
 
