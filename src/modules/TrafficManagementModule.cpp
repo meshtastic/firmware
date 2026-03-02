@@ -814,7 +814,7 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
  * Reset the timestamp epoch when relative offsets approach overflow.
  *
  * Called when epoch age exceeds ~19 hours (approaching 8-bit minute overflow).
- * Invalidates all cached timestamps while preserving node associations.
+ * Invalidates all cached per-node traffic state.
  */
 void TrafficManagementModule::resetEpoch(uint32_t nowMs)
 {
@@ -822,14 +822,8 @@ void TrafficManagementModule::resetEpoch(uint32_t nowMs)
     TM_LOG_DEBUG("Resetting cache epoch");
     cacheEpochMs = nowMs;
 
-    // Invalidate all relative timestamps
-    for (uint16_t i = 0; i < cacheSize(); i++) {
-        cache[i].pos_time = 0;
-        cache[i].rate_time = 0;
-        cache[i].unknown_time = 0;
-        cache[i].rate_count = 0;
-        cache[i].unknown_count = 0;
-    }
+    // Full flush avoids stale dedup identity/counters surviving epoch rollover.
+    memset(cache, 0, static_cast<size_t>(cacheSize()) * sizeof(UnifiedCacheEntry));
 #else
     (void)nowMs;
 #endif

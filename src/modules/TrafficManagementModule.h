@@ -53,6 +53,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool wantPacket(const meshtastic_MeshPacket *p) override { return true; }
     void alterReceived(meshtastic_MeshPacket &mp) override;
     int32_t runOnce() override;
+    // Protected so test shims can force epoch rollover behavior.
+    void resetEpoch(uint32_t nowMs);
 
   private:
     // =========================================================================
@@ -222,8 +224,6 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
             maxRes = unknownTimeResolution;
         return (nowMs - cacheEpochMs) > (200UL * maxRes * 1000UL);
     }
-    void resetEpoch(uint32_t nowMs);
-
     // =========================================================================
     // Position Fingerprint
     // =========================================================================

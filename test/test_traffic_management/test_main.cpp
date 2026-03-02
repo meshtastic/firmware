@@ -96,6 +96,7 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
   public:
     using TrafficManagementModule::alterReceived;
     using TrafficManagementModule::handleReceived;
+    using TrafficManagementModule::resetEpoch;
     using TrafficManagementModule::runOnce;
 
     bool ignoreRequestFlag() const { return ignoreRequest; }
@@ -739,6 +740,33 @@ static void test_tm_positionDedup_precisionZero_allowsDistinctPositions(void)
 }
 
 /**
+ * Verify epoch reset invalidates stale position identity for dedup.
+ * Important so reset paths cannot leak prior packet identity into new windows.
+ */
+static void test_tm_positionDedup_epochReset_doesNotDropFirstPacketAfterReset(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 16;
+    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket afterReset = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket duplicate = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+
+    ProcessMessage r1 = module.handleReceived(first);
+    module.resetEpoch(millis());
+    ProcessMessage r2 = module.handleReceived(afterReset);
+    ProcessMessage r3 = module.handleReceived(duplicate);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r3));
+    TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
+}
+
+/**
  * Verify rate-limit counters reset after the window expires.
  * Important so temporary bursts do not cause persistent throttling.
  */
@@ -957,7 +985,7 @@ void setUp(void)
 }
 void tearDown(void) {}
 
-extern "C" void setup()
+void setup()
 {
     delay(10);
     delay(2000);
@@ -991,6 +1019,7 @@ extern "C" void setup()
     RUN_TEST(test_tm_positionDedup_precisionAbove32_usesDefaultPrecision);
     RUN_TEST(test_tm_positionDedup_precision32_allowsDistinctPositions);
     RUN_TEST(test_tm_positionDedup_precisionZero_allowsDistinctPositions);
+    RUN_TEST(test_tm_positionDedup_epochReset_doesNotDropFirstPacketAfterReset);
     RUN_TEST(test_tm_rateLimit_resetsAfterWindowExpires);
     RUN_TEST(test_tm_rateLimit_thresholdAbove255_clamps);
     RUN_TEST(test_tm_unknownPackets_resetAfterWindowExpires);
@@ -1004,20 +1033,20 @@ extern "C" void setup()
     exit(UNITY_END());
 }
 
-extern "C" void loop() {}
+void loop() {}
 
 #else
 
 void setUp(void) {}
 void tearDown(void) {}
 
-extern "C" void setup()
+void setup()
 {
     initializeTestEnvironment();
     UNITY_BEGIN();
     exit(UNITY_END());
 }
 
-extern "C" void loop() {}
+void loop() {}
 
 #endif
