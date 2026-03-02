@@ -235,5 +235,5 @@ int32_t AirTime::runOnce()
             lastUtilPeriodTX = utilPeriodTX;
         }
     }
-    return 100;
+    return 1000;
 }
