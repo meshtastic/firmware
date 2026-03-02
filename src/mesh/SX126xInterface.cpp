@@ -194,6 +194,14 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", result);
     }
 
+    // Undocumented SX1262 register patch recommended by Heltec/Semtech for improved RX sensitivity.
+    // Sets bit 0 of register 0x8B5.
+    if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) == RADIOLIB_ERR_NONE) {
+        LOG_INFO("Applied SX1262 register 0x8B5 patch for GC1109 RX improvement");
+    } else {
+        LOG_WARN("Failed to apply SX1262 register 0x8B5 patch for GC1109");
+    }
+
 #if 0
     // Read/write a register we are not using (only used for FSK mode) to test SPI comms
     uint8_t crcLSB = 0;
@@ -351,6 +359,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag();
 #endif
 }
 
@@ -420,6 +429,61 @@ template <typename T> bool SX126xInterface<T>::sleep()
     digitalWrite(LORA_PA_TX_EN, LOW);
 #endif
     return true;
+}
+
+template <typename T> void SX126xInterface<T>::resetAGC()
+{
+    // Safety: don't reset mid-packet
+    if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
+        return;
+
+    LOG_DEBUG("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
+
+    // 1. Warm sleep — powers down the entire analog frontend, resetting AGC state.
+    //    A plain standby→startReceive cycle does NOT reset the AGC.
+    lora.sleep(true);
+
+    // 2. Wake to RC standby for stable calibration
+    lora.standby(RADIOLIB_SX126X_STANDBY_RC, true);
+
+    // 3. Calibrate all blocks (ADC, PLL, image, RC oscillators)
+    uint8_t calData = RADIOLIB_SX126X_CALIBRATE_ALL;
+    module.SPIwriteStream(RADIOLIB_SX126X_CMD_CALIBRATE, &calData, 1, true, false);
+
+    // 4. Wait for calibration to complete (BUSY pin goes low)
+    module.hal->delay(5);
+    uint32_t start = millis();
+    while (module.hal->digitalRead(module.getGpio())) {
+        if (millis() - start > 50)
+            break;
+        module.hal->yield();
+    }
+
+    if (module.hal->digitalRead(module.getGpio())) {
+        LOG_WARN("SX126x AGC reset: calibration did not complete within 50ms");
+        startReceive();
+        return;
+    }
+
+    // 5. Re-calibrate image rejection for actual operating frequency
+    //    Calibrate(0x7F) defaults to 902-928 MHz which is wrong for other regions.
+    lora.calibrateImage(getFreq());
+
+    // Re-apply settings that calibration may have reset
+
+    // DIO2 as RF switch
+#ifdef SX126X_DIO2_AS_RF_SWITCH
+    lora.setDio2AsRfSwitch(true);
+#elif defined(ARCH_PORTDUINO)
+    if (portduino_config.dio2_as_rf_switch)
+        lora.setDio2AsRfSwitch(true);
+#endif
+
+    // RX boosted gain mode
+    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+
+    // 6. Resume receiving
+    startReceive();
 }
 
 /** Control PA mode for GC1109 FEM - CPS pin selects full PA (txon=true) or bypass mode (txon=false) */
