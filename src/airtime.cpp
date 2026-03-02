@@ -97,7 +97,7 @@ uint32_t AirTime::getSecondsPerPeriod()
 
 uint32_t AirTime::getSecondsSinceBoot()
 {
-    return millis() / 1000;
+    return this->secSinceBoot;
 }
 
 float AirTime::channelUtilizationPercent()
@@ -161,6 +161,10 @@ AirTime::AirTime() : concurrency::OSThread("AirTime"), airtimes({}) {}
 
 int32_t AirTime::runOnce()
 {
+    // set internal counter once per thread call
+    // to ensure period won't change during its execution
+    this->secSinceBoot = millis() / 1000;
+
     uint8_t utilPeriod = this->getPeriodUtilMinute();
     uint8_t utilPeriodTX = this->getPeriodUtilHour();
 
