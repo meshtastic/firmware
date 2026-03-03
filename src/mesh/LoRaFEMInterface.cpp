@@ -156,12 +156,13 @@ int8_t LoRaFEMInterface::powerConversion(int8_t loraOutputPower)
 #ifdef HELTEC_V4
     const uint16_t gc1109_tx_gain[] = {11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7};
     const uint16_t kct8103l_tx_gain[] = {13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 12, 12, 11, 11, 10, 9, 8, 7};
-    uint16_t *tx_gain, tx_gain_num;
+    const uint16_t *tx_gain;
+    uint16_t tx_gain_num;
     if (fem_type == GC1109_PA) {
-        tx_gain = (uint16_t *)gc1109_tx_gain;
+        tx_gain = gc1109_tx_gain;
         tx_gain_num = sizeof(gc1109_tx_gain) / sizeof(gc1109_tx_gain[0]);
     } else if (fem_type == KCT8103L_PA) {
-        tx_gain = (uint16_t *)kct8103l_tx_gain;
+        tx_gain = kct8103l_tx_gain;
         tx_gain_num = sizeof(kct8103l_tx_gain) / sizeof(kct8103l_tx_gain[0]);
     } else {
         return loraOutputPower;
