@@ -48,8 +48,7 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
 {
     // Clean up previous connection if its client already disconnected
     if (openAPI && !openAPI->isConnected()) {
-        delete openAPI;
-        openAPI = nullptr;
+        openAPI.reset();
     }
 
 #ifdef ARCH_ESP32
@@ -77,11 +76,10 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
             }
 #endif
             LOG_INFO("Force close previous TCP connection");
-            delete openAPI;
-            openAPI = nullptr;
+            openAPI.reset();
         }
 
-        openAPI = new T(client);
+        openAPI.reset(new T(client));
     }
 
 #if RAK_4631

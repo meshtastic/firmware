@@ -1,6 +1,7 @@
 #pragma once
 
 #include "StreamAPI.h"
+#include <memory>
 
 #define SERVER_API_DEFAULT_PORT 4403
 
@@ -42,7 +43,7 @@ template <class T, class U> class APIServerPort : public U, private concurrency:
      * FIXME: We currently only allow one open TCP connection at a time, because we depend on the loop() call in this class to
      * delegate to the worker.  Once coroutines are implemented we can relax this restriction.
      */
-    T *openAPI = NULL;
+    std::unique_ptr<T> openAPI;
 #if defined(RAK_4631) || defined(RAK11310)
     // Track wait time for RAK13800 Ethernet requests
     int32_t waitTime = 100;
