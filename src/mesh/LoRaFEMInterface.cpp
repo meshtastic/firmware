@@ -171,7 +171,7 @@ int8_t LoRaFEMInterface::powerConversion(int8_t loraOutputPower)
 #ifdef ARCH_PORTDUINO
     size_t num_pa_points = portduino_config.num_pa_points;
     const uint16_t *tx_gain = portduino_config.tx_gain_lora;
-    uint16_t tx_gain_num = NUM_PA_POINTS;
+    uint16_t tx_gain_num = num_pa_points;
 #else
     size_t num_pa_points = NUM_PA_POINTS;
     const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
