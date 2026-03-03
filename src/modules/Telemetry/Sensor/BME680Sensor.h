@@ -28,7 +28,7 @@ class BME680Sensor : public TelemetrySensor
 #else
     using BME680Ptr = std::unique_ptr<Adafruit_BME680>;
 
-    static BME680Ptr makeBME680(TwoWire *bus) { return std::make_unique<Adafruit_BME680>(bus); }
+    static BME680Ptr makeBME680(TwoWire *bus) { return BME680Ptr(new Adafruit_BME680(bus)); }
 
     BME680Ptr bme680;
 #endif
