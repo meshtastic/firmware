@@ -2695,7 +2695,6 @@ void menuHandler::LoRaFEMLNAToggleMenu()
         static const char *optionsArray[] = {"Back"};
         enum optionsNumbers { Back = 0 };
 
-        // BannerOverlayOptions bannerOptions;
         bannerOptions.message = "LNA Control Unsupported";
         bannerOptions.optionsArrayPtr = optionsArray;
         bannerOptions.optionsCount = 1;
