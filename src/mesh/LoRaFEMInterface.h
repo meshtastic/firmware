@@ -1,5 +1,5 @@
-#if HAS_LORA_FEM
 #pragma once
+#if HAS_LORA_FEM
 #include "configuration.h"
 #include <stdint.h>
 
