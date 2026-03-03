@@ -11,20 +11,17 @@ void LoRaFEMInterface::init(void)
 {
     setLnaCanControl(false); // Default is uncontrollable
 #ifdef HELTEC_V4
-    rtc_gpio_hold_dis((gpio_num_t)LORA_PA_POWER);
-    rtc_gpio_hold_dis((gpio_num_t)LORA_GC1109_PA_EN);
-    rtc_gpio_hold_dis((gpio_num_t)LORA_GC1109_PA_TX_EN);
-    rtc_gpio_hold_dis((gpio_num_t)LORA_KCT8103L_PA_CSD);
-    rtc_gpio_hold_dis((gpio_num_t)LORA_KCT8103L_PA_CTX);
-
     pinMode(LORA_PA_POWER, OUTPUT);
     digitalWrite(LORA_PA_POWER, HIGH);
+    rtc_gpio_hold_dis((gpio_num_t)LORA_PA_POWER);
     delay(1);
+    rtc_gpio_hold_dis((gpio_num_t)LORA_KCT8103L_PA_CSD);
     pinMode(LORA_KCT8103L_PA_CSD, INPUT); // detect which FEM is used
     delay(1);
     if (digitalRead(LORA_KCT8103L_PA_CSD) == HIGH) {
         // FEM is KCT8103L
         fem_type = KCT8103L_PA;
+        rtc_gpio_hold_dis((gpio_num_t)LORA_KCT8103L_PA_CTX);
         pinMode(LORA_KCT8103L_PA_CSD, OUTPUT);
         digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
         pinMode(LORA_KCT8103L_PA_CTX, OUTPUT);
@@ -33,6 +30,8 @@ void LoRaFEMInterface::init(void)
     } else if (digitalRead(LORA_KCT8103L_PA_CSD) == LOW) {
         // FEM is GC1109
         fem_type = GC1109_PA;
+        // LORA_GC1109_PA_EN and LORA_KCT8103L_PA_CSD are the same pin and do not need to be repeatedly turned off and held.
+        //  rtc_gpio_hold_dis((gpio_num_t)LORA_GC1109_PA_EN);
         pinMode(LORA_GC1109_PA_EN, OUTPUT);
         digitalWrite(LORA_GC1109_PA_EN, HIGH);
         pinMode(LORA_GC1109_PA_TX_EN, OUTPUT);
