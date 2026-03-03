@@ -15,6 +15,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#include "detect/LoRaRadioType.h"
 #ifdef ARCH_NRF52
 #include "main.h"
 #endif
@@ -761,7 +762,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             validatedLora.coding_rate = 5;
         }
 
-        if (validatedLora.spread_factor < 5 || validatedLora.spread_factor > 12) {
+        // SF5 and SF6 are only supported on 2nd gen radios (SX126x, SX128x, LR11xx, etc)
+        // 1st gen radios (SX127x/RF95) either don't support them, or have limitations like implicit header.
+        if (validatedLora.spread_factor > 12 || validatedLora.spread_factor < 5 ||
+            (radioType == RF95_RADIO && validatedLora.spread_factor < 7)) {
             LOG_WARN("Invalid spread_factor %d, setting to 11", validatedLora.spread_factor);
             validatedLora.spread_factor = 11;
         }
