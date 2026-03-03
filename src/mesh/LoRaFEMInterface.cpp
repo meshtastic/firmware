@@ -62,7 +62,7 @@ void LoRaFEMInterface::setSleepModeEnable(void)
     if (fem_type == GC1109_PA) {
         /*
          * Do not switch the power on and off frequently.
-         * After turning off LORA_PA_EN, the power consumption has dropped to the uA level.
+         * After turning off LORA_GC1109_PA_EN, the power consumption has dropped to the uA level.
          */
         digitalWrite(LORA_GC1109_PA_EN, LOW);
         digitalWrite(LORA_GC1109_PA_TX_EN, LOW);
