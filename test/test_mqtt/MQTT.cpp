@@ -291,11 +291,16 @@ class MQTTUnitTest : public MQTT
 
         if (!moduleConfig.mqtt.enabled || moduleConfig.mqtt.proxy_to_client_enabled || *moduleConfig.mqtt.root) {
             loopUntil([] { return true; }); // Loop once
-            return;
+        } else {
+            // Wait for MQTT to subscribe to all topics.
+            TEST_ASSERT_TRUE(loopUntil(
+                [] { return pubsub->subscriptions_.count("msh/2/e/test/+") && pubsub->subscriptions_.count("msh/2/e/PKI/+"); }));
         }
-        // Wait for MQTT to subscribe to all topics.
-        TEST_ASSERT_TRUE(loopUntil(
-            [] { return pubsub->subscriptions_.count("msh/2/e/test/+") && pubsub->subscriptions_.count("msh/2/e/PKI/+"); }));
+        // Clear any side effects from startup (e.g. map report triggered by runOnce)
+        mockMeshService->messages_.clear();
+        mockMeshService->notifications_.clear();
+        mockRouter->packets_.clear();
+        mockRoutingModule->ackNacks_.clear();
     }
     PubSubClient &getPubSub() { return pubSub; }
 };
