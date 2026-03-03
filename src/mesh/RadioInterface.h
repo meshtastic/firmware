@@ -8,7 +8,7 @@
 #include "error.h"
 #include <memory>
 
-#ifdef HAS_LORA_FEM
+#if HAS_LORA_FEM
 #include "LoRaFEMInterface.h"
 #endif
 
