@@ -20,12 +20,10 @@ template <class T> class ServerAPI : public StreamAPI, private concurrency::OSTh
     virtual ~ServerAPI();
 
     /// override close to also shutdown the TCP link
-    virtual void
+    virtual void close();
 
-        /// Check the current underlying physical link to see if the client is currently connected
-        virtual bool
-        checkIsConnected() override;
-    close();
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() override;
 
   protected:
     /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to
