@@ -771,7 +771,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                     if (p->decoded.portnum ==  meshtastic_PortNum_TRACEROUTE_APP) {
                         // For TRACEROUTE_APP packets release the original encrypted packet. Allocate a new from the changed packet
                         packetPool.release(p_encrypted);
-			p_encrypted = packetPool.allocCopy(*p);
+                        p_encrypted = packetPool.allocCopy(*p);
                         auto encodeResult = perhapsEncode(p_encrypted);
                         if (encodeResult != meshtastic_Routing_Error_NONE) {
                             LOG_WARN("Re encryption of TR packet failed, skipping MQTT publish");
