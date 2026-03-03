@@ -47,7 +47,7 @@ template <class T, class U> void APIServerPort<T, U>::init()
 template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
 {
     // Clean up previous connection if its client already disconnected
-    if (openAPI && !openAPI->isConnected()) {
+    if (openAPI && !openAPI->checkIsConnected()) {
         openAPI.reset();
     }
 
