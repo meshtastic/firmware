@@ -6,6 +6,7 @@
 #include "main.h"
 #include "memGet.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
+#include <cctype>
 #include <assert.h>
 #include <cstring>
 #include <memory>
@@ -54,7 +55,7 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
     static char printBuf[512];
 #else
-    static char printBuf[160];
+    static char printBuf[320];  // Increased from 160 to 320 for longer log messages
 #endif
 
 #ifdef ARCH_PORTDUINO
@@ -74,9 +75,59 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
         len = sizeof(printBuf) - 1;
         printBuf[sizeof(printBuf) - 2] = '\n';
     }
-    for (size_t f = 0; f < len; f++) {
-        if (!std::isprint(static_cast<unsigned char>(printBuf[f])) && printBuf[f] != '\n')
-            printBuf[f] = '#';
+    auto validUtf8Len = [](const char *buf, size_t remaining) -> size_t {
+        unsigned char lead = static_cast<unsigned char>(buf[0]);
+        if (lead < 0x80)
+            return 1;
+        if (lead >= 0xC2 && lead <= 0xDF) {
+            if (remaining < 2)
+                return 0;
+            if ((static_cast<unsigned char>(buf[1]) & 0xC0) != 0x80)
+                return 0;
+            return 2;
+        }
+        if (lead >= 0xE0 && lead <= 0xEF) {
+            if (remaining < 3)
+                return 0;
+            if ((static_cast<unsigned char>(buf[1]) & 0xC0) != 0x80 || (static_cast<unsigned char>(buf[2]) & 0xC0) != 0x80)
+                return 0;
+            // Disallow overlongs for E0/ED ranges
+            if (lead == 0xE0 && static_cast<unsigned char>(buf[1]) < 0xA0)
+                return 0;
+            if (lead == 0xED && static_cast<unsigned char>(buf[1]) >= 0xA0)
+                return 0;
+            return 3;
+        }
+        if (lead >= 0xF0 && lead <= 0xF4) {
+            if (remaining < 4)
+                return 0;
+            if ((static_cast<unsigned char>(buf[1]) & 0xC0) != 0x80 || (static_cast<unsigned char>(buf[2]) & 0xC0) != 0x80 ||
+                (static_cast<unsigned char>(buf[3]) & 0xC0) != 0x80)
+                return 0;
+            // Disallow overlongs for F0, and values beyond UTF-8 max for F4
+            if (lead == 0xF0 && static_cast<unsigned char>(buf[1]) < 0x90)
+                return 0;
+            if (lead == 0xF4 && static_cast<unsigned char>(buf[1]) > 0x8F)
+                return 0;
+            return 4;
+        }
+        return 0;
+    };
+    for (size_t f = 0; f < len;) {
+        unsigned char ch = static_cast<unsigned char>(printBuf[f]);
+        if (ch < 0x80) {
+            if (!std::isprint(ch) && printBuf[f] != '\n')
+                printBuf[f] = '#';
+            f++;
+            continue;
+        }
+        size_t utfLen = validUtf8Len(&printBuf[f], len - f);
+        if (utfLen > 0) {
+            f += utfLen;
+            continue;
+        }
+        printBuf[f] = '#';
+        f++;
     }
     if (color && logLevel != nullptr) {
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
