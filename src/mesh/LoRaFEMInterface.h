@@ -1,6 +1,5 @@
 #if HAS_LORA_FEM
 #pragma once
-#include "NodeDB.h"
 #include "configuration.h"
 #include <stdint.h>
 
