@@ -106,7 +106,7 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
         return false;
     }
 
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+    if (isClientBaseRole(config.device.role)) {
         // CLIENT_BASE: if the packet is from or to a favorited node,
         // we should act like a ROUTER and should never cancel a rebroadcast (i.e. we should always rebroadcast),
         // even if we've heard another station rebroadcast it already.
@@ -128,15 +128,14 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
     }
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && iface && nodeDB &&
-        nodeDB->isFromOrToFavoritedNode(*p)) {
+    if (isClientBaseRole(config.device.role) && iface && nodeDB && nodeDB->isFromOrToFavoritedNode(*p)) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
     }
 }
 
 bool FloodingRouter::isRebroadcaster()
 {
-    return config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
+    return !isClientMuteRole(config.device.role) &&
            config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
 }
 

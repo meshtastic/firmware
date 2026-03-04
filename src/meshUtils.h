@@ -56,3 +56,49 @@ inline bool isTrackerRole(meshtastic_Config_DeviceConfig_Role role)
 {
     return role == meshtastic_Config_DeviceConfig_Role_TRACKER || role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER;
 }
+
+inline bool isSensorRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return role == meshtastic_Config_DeviceConfig_Role_SENSOR;
+}
+
+inline bool isTrackerOrSensorRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return isTrackerRole(role) || isSensorRole(role);
+}
+
+inline bool isTakLikeRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return role == meshtastic_Config_DeviceConfig_Role_TAK || role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER;
+}
+
+inline bool isSensorOrRouterRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return isSensorRole(role) || isRouterRole(role);
+}
+
+inline bool isClientMuteRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE;
+}
+
+inline bool isClientHiddenRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN;
+}
+
+inline bool isClientBaseRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+}
+
+inline bool isLostAndFoundRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND;
+}
+
+inline bool isClientRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return role == meshtastic_Config_DeviceConfig_Role_CLIENT || role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE ||
+           role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN || role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+}

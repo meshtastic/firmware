@@ -716,8 +716,7 @@ void setup()
     router = new ReliableRouter();
 
     // only play start melody when role is not tracker or sensor
-    if (config.power.is_power_saving == true &&
-        (isTrackerRole(config.device.role) || config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR))
+    if (config.power.is_power_saving == true && isTrackerOrSensorRole(config.device.role))
         LOG_DEBUG("Tracker/Sensor: Skip start melody");
     else
         playStartMelody();

@@ -579,8 +579,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
     // Restrict ROUTER*, LOST AND FOUND roles for security reasons
-    if (IS_ONE_OF(USERPREFS_CONFIG_DEVICE_ROLE, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND)) {
+    if (isRouterRole(USERPREFS_CONFIG_DEVICE_ROLE) || isLostAndFoundRole(USERPREFS_CONFIG_DEVICE_ROLE)) {
         LOG_WARN("ROUTER roles are restricted, falling back to CLIENT role");
         config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     } else {
@@ -667,7 +666,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = default_broadcast_smart_minimum_interval_secs;
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
+    if (!isRouterRole(config.device.role))
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.security.serial_enabled = true;
     config.security.admin_channel_enabled = false;
@@ -1783,7 +1782,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
          * nodeinfo because it has: !is_favorite && last_heard==0. To keep this from happening when we addFromContact, we set the
          * new node as a favorite, and we leave last_heard alone (even if it's zero).
          */
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+        if (isClientBaseRole(config.device.role)) {
             // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
             // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to add
             // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll set

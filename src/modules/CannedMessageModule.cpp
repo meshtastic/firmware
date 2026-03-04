@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "meshUtils.h"
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
@@ -1073,7 +1074,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         sm.dest = dest;
         sm.type = MessageType::DM_TO_US;
         // Only add as favorite if our role is NOT CLIENT_BASE
-        if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+        if (!isClientBaseRole(config.device.role)) {
             LOG_INFO("Proactively adding %x as favorite node", dest);
             nodeDB->set_favorite(true, dest);
         } else {

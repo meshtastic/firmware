@@ -16,6 +16,7 @@
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
 #include "main.h"
+#include "meshUtils.h"
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>
@@ -608,8 +609,8 @@ uint32_t RadioInterface::getTxDelayMsecWeightedWorst(float snr)
 /** Returns true if we should rebroadcast early like a ROUTER */
 bool RadioInterface::shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p)
 {
-    // If we are a ROUTER, we always rebroadcast early
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
+    // If we are a router-like role, we always rebroadcast early
+    if (isRouterLikeRole(config.device.role)) {
         return true;
     }
 
