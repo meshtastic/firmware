@@ -65,24 +65,12 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-#if HAS_LORA_FEM
-    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region", "LoRa FEM LNA"};
-    enum optionsNumbers {
-        Back = 0,
-        DeviceRolePicker = 1,
-        RadioPresetPicker = 2,
-        FrequencySlot = 3,
-        LoraPicker = 4,
-        LoraFemLna = 5
-    };
-#else
     static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region"};
     enum optionsNumbers { Back = 0, DeviceRolePicker = 1, RadioPresetPicker = 2, FrequencySlot = 3, LoraPicker = 4 };
-#endif
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = sizeof(optionsArray) / sizeof((optionsArray)[0]);
+    bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             // No action
@@ -95,11 +83,6 @@ void menuHandler::loraMenu()
         } else if (selected == LoraPicker) {
             menuHandler::menuQueue = menuHandler::LoraPicker;
         }
-#if HAS_LORA_FEM
-        else if (selected == LoraFemLna) {
-            menuHandler::menuQueue = menuHandler::LoraFemLnaToggleMenu;
-        }
-#endif
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -2649,67 +2632,6 @@ void menuHandler::messageBubblesMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-#if HAS_LORA_FEM
-void menuHandler::LoRaFEMLNAToggleMenu()
-{
-    static const LoRaFEMLNAToggleOption femToggleOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"Enabled", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED},
-        {"Disabled", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED},
-    };
-    constexpr size_t toggleCount = sizeof(femToggleOptions) / sizeof(femToggleOptions[0]);
-    static std::array<const char *, toggleCount> toggleLabels{};
-    BannerOverlayOptions bannerOptions;
-
-    if (loraFEMInterface.isLnaCanControl()) {
-        bannerOptions = createStaticBannerOptions("Toggle FEM LNA", femToggleOptions, toggleLabels,
-                                                  [](const LoRaFEMLNAToggleOption &option, int) -> void {
-                                                      if (option.action == OptionsAction::Back) {
-                                                          menuQueue = LoraMenu;
-                                                          screen->runNow();
-                                                          return;
-                                                      }
-
-                                                      if (!option.hasValue) {
-                                                          return;
-                                                      }
-
-                                                      if (config.lora.fem_lna_mode == option.value) {
-                                                          return;
-                                                      }
-
-                                                      config.lora.fem_lna_mode = option.value;
-                                                      service->reloadConfig(SEGMENT_CONFIG);
-                                                      rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-                                                  });
-
-        int initialSelection = 0;
-        for (size_t i = 0; i < toggleCount; ++i) {
-            if (femToggleOptions[i].hasValue && config.lora.fem_lna_mode == femToggleOptions[i].value) {
-                initialSelection = static_cast<int>(i);
-                break;
-            }
-        }
-        bannerOptions.InitialSelected = initialSelection;
-    } else {
-        static const char *optionsArray[] = {"Back"};
-        enum optionsNumbers { Back = 0 };
-
-        bannerOptions.message = "LNA Control Unsupported";
-        bannerOptions.optionsArrayPtr = optionsArray;
-        bannerOptions.optionsCount = 1;
-        bannerOptions.bannerCallback = [](int selected) -> void {
-            if (selected == Back) {
-                // No action
-            }
-        };
-        LOG_INFO("LNA cannot be disabled on this device");
-    }
-
-    screen->showOverlayBanner(bannerOptions);
-}
-#endif
-
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != MenuNone)
@@ -2860,11 +2782,6 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case MessageBubblesMenu:
         messageBubblesMenu();
         break;
-#if HAS_LORA_FEM
-    case LoraFemLnaToggleMenu:
-        LoRaFEMLNAToggleMenu();
-        break;
-#endif
     }
     menuQueue = MenuNone;
 }

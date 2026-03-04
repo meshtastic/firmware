@@ -55,8 +55,7 @@ class menuHandler
         NodeNameLengthMenu,
         FrameToggles,
         DisplayUnits,
-        MessageBubblesMenu,
-        LoraFemLnaToggleMenu
+        MessageBubblesMenu
     };
     static screenMenus menuQueue;
     static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
@@ -112,9 +111,6 @@ class menuHandler
     static void displayUnitsMenu();
     static void messageBubblesMenu();
     static void textMessageMenu();
-#if HAS_LORA_FEM
-    static void LoRaFEMLNAToggleMenu();
-#endif
 
   private:
     static void saveUIConfig();
@@ -163,10 +159,6 @@ using NodeNameOption = MenuOption<bool>;
 using PositionMenuOption = MenuOption<int>;
 using ManageNodeOption = MenuOption<int>;
 using ClockFaceOption = MenuOption<bool>;
-
-#if HAS_LORA_FEM
-using LoRaFEMLNAToggleOption = MenuOption<meshtastic_Config_LoRaConfig_FEM_LNA_Mode>;
-#endif
 
 } // namespace graphics
 #endif
