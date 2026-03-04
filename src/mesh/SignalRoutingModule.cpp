@@ -1029,7 +1029,8 @@ void SignalRoutingModule::logNetworkTopology()
 
             // Get downstream nodes that route through this neighbor
             NodeNum dsBuf[NEIGHBOR_GRAPH_MAX_DOWNSTREAM];
-            size_t dsCount = routingGraph->getDownstreamNodesForRelay(edge.to, dsBuf, NEIGHBOR_GRAPH_MAX_DOWNSTREAM);
+            uint16_t dsCosts[NEIGHBOR_GRAPH_MAX_DOWNSTREAM];
+            size_t dsCount = routingGraph->getDownstreamNodesForRelay(edge.to, dsBuf, dsCosts, NEIGHBOR_GRAPH_MAX_DOWNSTREAM);
 
             if (dsCount > 0) {
                 LOG_INFO("[SR]   %s %s%s: %s (ETX=%.1f, %ss ago, relay for %u downstream)",
@@ -1054,7 +1055,8 @@ void SignalRoutingModule::logNetworkTopology()
 
                 bool dsLast = (d == dsCount - 1);
                 const char* dsBranch = dsLast ? "\\-" : "+-";
-                LOG_INFO("[SR]   %s    %s %s%s", cont, dsBranch, dsprefix, dsName);
+                float dsCost = dsCosts[d] / 100.0f;
+                LOG_INFO("[SR]   %s    %s %s%s (ETX=%.1f)", cont, dsBranch, dsprefix, dsName, dsCost);
             }
         }
     }
@@ -1194,7 +1196,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             if (myEdges) {
                 for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
                     NodeNum neighbor = myEdges->edges[i].to;
-                    if ((neighbor & 0xFF) == mp.relay_node) {
+                    if ((neighbor & 0xFF) == mp.relay_node && !isPlaceholderNode(neighbor)) {
                         inferredRelayer = neighbor;
                         // Remember this mapping for future use
                         rememberRelayIdentity(neighbor, mp.relay_node);
@@ -2822,7 +2824,7 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
         const NodeEdgesLite *myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
         if (myEdges) {
             for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
-                if ((myEdges->edges[i].to & 0xFF) == p->relay_node) {
+                if ((myEdges->edges[i].to & 0xFF) == p->relay_node && !isPlaceholderNode(myEdges->edges[i].to)) {
                     // Remember this mapping for future use
                     const_cast<SignalRoutingModule*>(this)->rememberRelayIdentity(myEdges->edges[i].to, p->relay_node);
                     return myEdges->edges[i].to;

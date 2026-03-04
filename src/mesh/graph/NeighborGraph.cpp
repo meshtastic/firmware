@@ -462,15 +462,11 @@ void NeighborGraph::updateDownstream(NodeNum destination, NodeNum relay, float t
 
     uint16_t costFixed = static_cast<uint16_t>(std::min(totalCost * 100.0f, 65535.0f));
 
-    // Update existing entry
+    // Update existing entry for the same (destination, relay) pair
     for (uint8_t i = 0; i < downstreamCount; i++) {
-        if (downstream[i].destination == destination) {
-            // Update if this relay is better or same relay refreshing
-            if (downstream[i].relay == relay || costFixed < downstream[i].costFixed) {
-                downstream[i].relay = relay;
-                downstream[i].costFixed = costFixed;
-                downstream[i].lastUpdate = timestamp;
-            }
+        if (downstream[i].destination == destination && downstream[i].relay == relay) {
+            downstream[i].costFixed = costFixed;
+            downstream[i].lastUpdate = timestamp;
             return;
         }
     }
@@ -502,14 +498,17 @@ void NeighborGraph::updateDownstream(NodeNum destination, NodeNum relay, float t
 NodeNum NeighborGraph::getDownstreamRelay(NodeNum destination) const
 {
     uint32_t now = millis() / 1000;
+    NodeNum bestRelay = 0;
+    uint16_t bestCost = UINT16_MAX;
     for (uint8_t i = 0; i < downstreamCount; i++) {
-        if (downstream[i].destination == destination) {
-            if ((now - downstream[i].lastUpdate) < EDGE_AGING_TIMEOUT_SECS) {
-                return downstream[i].relay;
+        if (downstream[i].destination == destination && (now - downstream[i].lastUpdate) < EDGE_AGING_TIMEOUT_SECS) {
+            if (downstream[i].costFixed < bestCost) {
+                bestCost = downstream[i].costFixed;
+                bestRelay = downstream[i].relay;
             }
         }
     }
-    return 0;
+    return bestRelay;
 }
 
 bool NeighborGraph::isDownstream(NodeNum destination) const
@@ -529,13 +528,15 @@ size_t NeighborGraph::getDownstreamCountForRelay(NodeNum relay) const
     return count;
 }
 
-size_t NeighborGraph::getDownstreamNodesForRelay(NodeNum relay, NodeNum *outArray, size_t maxCount) const
+size_t NeighborGraph::getDownstreamNodesForRelay(NodeNum relay, NodeNum *outArray, uint16_t *outCosts, size_t maxCount) const
 {
     size_t count = 0;
     uint32_t now = millis() / 1000;
     for (uint8_t i = 0; i < downstreamCount && count < maxCount; i++) {
         if (downstream[i].relay == relay && (now - downstream[i].lastUpdate) < EDGE_AGING_TIMEOUT_SECS) {
-            outArray[count++] = downstream[i].destination;
+            outArray[count] = downstream[i].destination;
+            if (outCosts) outCosts[count] = downstream[i].costFixed;
+            count++;
         }
     }
     return count;
@@ -708,7 +709,22 @@ void NeighborGraph::removeNode(NodeNum nodeId)
             }
             neighborCount--;
 
-            // Clear downstream entries referencing this node
+            // Clear edges pointing TO the removed node from all other nodes
+            for (uint8_t m = 0; m < neighborCount; m++) {
+                for (uint8_t e = 0; e < neighbors[m].edgeCount;) {
+                    if (neighbors[m].edges[e].to == nodeId) {
+                        if (e < neighbors[m].edgeCount - 1) {
+                            neighbors[m].edges[e] = neighbors[m].edges[neighbors[m].edgeCount - 1];
+                        }
+                        neighbors[m].edgeCount--;
+                    } else {
+                        e++;
+                    }
+                }
+            }
+
+            // Clear downstream entries referencing this node as relay or destination.
+            // With multi-relay support, other relay entries for the same destination survive.
             for (uint8_t i = 0; i < downstreamCount;) {
                 if (downstream[i].relay == nodeId || downstream[i].destination == nodeId) {
                     if (i < downstreamCount - 1) {
