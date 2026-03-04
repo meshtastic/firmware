@@ -1902,6 +1902,8 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
             info->last_heard = mp.rx_time;
+        else
+            info->last_heard = getTime(); // Fallback: use uptime-based time so node doesn't get evicted as stale
 
         if (mp.rx_snr)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
