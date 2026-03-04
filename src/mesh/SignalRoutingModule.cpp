@@ -1568,19 +1568,8 @@ bool SignalRoutingModule::shouldRelay(const meshtastic_MeshPacket *p)
         // If the node exists in NodeDB, fall back to broadcast-style relay
         // This handles legacy/stock nodes not in the SR graph
         if (nodeDB->getMeshNode(p->to)) {
-            LOG_DEBUG("[SR] Unicast to %s not routable via SR, falling back to broadcast relay", destName);
-            // Use broadcast relay algorithm directly — can't go through shouldRelayBroadcast()
-            // because it redirects unicast packets back to shouldRelayUnicastForCoordination()
-            NodeNum myNode = nodeDB->getNodeNum();
-            NodeNum sourceNode = p->from;
-            NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
-            uint32_t now = millis() / 1000;
-            bool relay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, now, p->id, now);
-            LOG_INFO("[SR] Broadcast fallback for unicast to %s: %s relay", destName, relay ? "SHOULD" : "should NOT");
-            if (relay) {
-                routingGraph->recordNodeTransmission(myNode, p->id, now);
-            }
-            return relay;
+            LOG_INFO("[SR] Unicast to %s not routable via SR, relaying as known NodeDB node", destName);
+            return true;
         }
         LOG_DEBUG("[SR] Not relaying unicast to unknown destination %s", destName);
         return false;
