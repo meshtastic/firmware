@@ -101,7 +101,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     return true;
 }
 
-// End the update process - virtual method, overriden in derived class
+// End the update process - virtual method, overridden in derived class
 void EInkDisplay::endUpdate()
 {
     // Power off display hardware, then deep-sleep (Except Wireless Paper V1.1, no deep-sleep)

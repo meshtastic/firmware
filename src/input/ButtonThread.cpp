@@ -271,8 +271,8 @@ int32_t ButtonThread::runOnce()
             break;
         } // end multipress event
 
-            // Do actual shutdown when button released, otherwise the button release
-        // may wake the board immediatedly.
+        // Do actual shutdown when button released, otherwise the button release
+        // may wake the board immediately.
         case BUTTON_EVENT_LONG_RELEASED: {
 
             LOG_INFO("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
