@@ -66,9 +66,22 @@ class Default
         if (numOnlineNodes <= 40) {
             return 1.0;
         } else {
-            // Get bandwidth in kHz - convert from code if not using preset
-            float bwKHz =
-                config.lora.use_preset ? modemPresetToBwKHz(config.lora.modem_preset, false) : bwCodeToKHz(config.lora.bandwidth);
+            // Resolve SF and BW from preset or manual config
+            // When use_preset is true, config.lora.spread_factor and bandwidth may be 0
+            // because applyModemConfig() sets them on RadioInterface, not on config.lora
+            float bwKHz;
+            uint8_t sf;
+            uint8_t cr;
+            if (config.lora.use_preset) {
+                modemPresetToParams(config.lora.modem_preset, false, bwKHz, sf, cr);
+            } else {
+                sf = config.lora.spread_factor;
+                bwKHz = bwCodeToKHz(config.lora.bandwidth);
+            }
+
+            // Guard against invalid values
+            sf = clampSpreadFactor(sf);
+            bwKHz = clampBandwidthKHz(bwKHz);
 
             // throttlingFactor = 2^SF / (BW_in_kHz * scaling_divisor)
             // With scaling_divisor=100:
@@ -76,11 +89,11 @@ class Default
             // In SF10 and BW=250khz (mediumslow), this gives 0.04096 rather than the original 0.04
             // In SF9 and BW=250khz (mediumfast), this gives 0.02048 rather than the original 0.02
             // In SF7 and BW=250khz (shortfast), this gives 0.00512 rather than the original 0.01
-            float throttlingFactor = static_cast<float>(pow_of_2(config.lora.spread_factor)) / (bwKHz * 100.0f);
+            float throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 100.0f);
 
 #if USERPREFS_EVENT_MODE
             // If we are in event mode, scale down the throttling factor by 4
-            throttlingFactor = static_cast<float>(pow_of_2(config.lora.spread_factor)) / (bwKHz * 25.0f);
+            throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 25.0f);
 #endif
 
             // Scaling up traffic based on number of nodes over 40
