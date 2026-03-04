@@ -53,7 +53,7 @@ class Renderer : protected concurrency::OSThread
     uint16_t height();
 
   private:
-    // Make attemps to render / update, once triggered by requestUpdate or forceUpdate
+    // Make attempts to render / update, once triggered by requestUpdate or forceUpdate
     int32_t runOnce() override;
 
     // Apply the display rotation to handled pixels
