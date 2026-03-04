@@ -77,4 +77,9 @@ static inline bool isAPIConnected(uint8_t state)
     return state < sizeof(connectedStates) ? connectedStates[state] : false;
 }
 
+static inline bool isAnyAPIConnected(uint32_t mask)
+{
+    return mask != 0;
+}
+
 } // namespace graphics

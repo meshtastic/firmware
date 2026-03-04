@@ -681,18 +681,31 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         }
         snprintf(api_state, sizeof(api_state), "No %ss Connected", clientWord);
 
-        if (service->api_state == service->STATE_BLE) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (BLE)", clientWord);
-        } else if (service->api_state == service->STATE_WIFI) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (WiFi)", clientWord);
-        } else if (service->api_state == service->STATE_SERIAL) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (Serial)", clientWord);
-        } else if (service->api_state == service->STATE_PACKET) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (Internal)", clientWord);
-        } else if (service->api_state == service->STATE_HTTP) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (HTTP)", clientWord);
-        } else if (service->api_state == service->STATE_ETH) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (Ethernet)", clientWord);
+        if (service->api_state_mask != 0) {
+            char activeApis[64] = "";
+            auto appendApi = [&activeApis](const char *name) {
+                if (activeApis[0] != '\0') {
+                    strlcat(activeApis, "+", sizeof(activeApis));
+                }
+                strlcat(activeApis, name, sizeof(activeApis));
+            };
+
+            if (service->api_state_mask & MeshService::apiStateBit(MeshService::STATE_BLE))
+                appendApi("BLE");
+            if (service->api_state_mask & MeshService::apiStateBit(MeshService::STATE_WIFI))
+                appendApi("WiFi");
+            if (service->api_state_mask & MeshService::apiStateBit(MeshService::STATE_SERIAL))
+                appendApi("Serial");
+            if (service->api_state_mask & MeshService::apiStateBit(MeshService::STATE_PACKET))
+                appendApi("Internal");
+            if (service->api_state_mask & MeshService::apiStateBit(MeshService::STATE_HTTP))
+                appendApi("HTTP");
+            if (service->api_state_mask & MeshService::apiStateBit(MeshService::STATE_ETH))
+                appendApi("Ethernet");
+
+            if (activeApis[0] != '\0') {
+                snprintf(api_state, sizeof(api_state), "%s Connected (%s)", clientWord, activeApis);
+            }
         }
         if (api_state[0] != '\0') {
             display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],

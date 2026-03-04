@@ -1,4 +1,5 @@
 #pragma once
+#include <Arduino.h>
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer);
 
 // Declare some handler functions for the various URLs on the server
@@ -27,10 +28,18 @@ class HttpAPI : public PhoneAPI
   public:
     HttpAPI() { api_type = TYPE_HTTP; }
 
+    void markActivity() { lastActivityMsec = millis(); }
+
   private:
-    // Nothing here yet
+    uint32_t lastActivityMsec = 0;
+    static constexpr uint32_t HTTP_ACTIVITY_TIMEOUT_MS = 30 * 1000UL;
 
   protected:
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
+    virtual bool checkIsConnected() override
+    {
+        if (lastActivityMsec == 0)
+            return false;
+        return (millis() - lastActivityMsec) <= HTTP_ACTIVITY_TIMEOUT_MS;
+    }
 };

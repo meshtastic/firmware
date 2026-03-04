@@ -427,7 +427,7 @@ const int *getTextPositions(OLEDDisplay *display)
 // *************************
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 {
-    if (!isAPIConnected(service->api_state))
+    if (!isAnyAPIConnected(service->api_state_mask))
         return;
 
     const int scale = (currentResolution == ScreenResolution::High) ? 2 : 1;
