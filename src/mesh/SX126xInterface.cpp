@@ -164,9 +164,9 @@ template <typename T> bool SX126xInterface<T>::init()
     // Undocumented SX1262 register patch recommended by Heltec/Semtech for improved RX sensitivity.
     // Sets bit 0 of register 0x8B5.
     if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) == RADIOLIB_ERR_NONE) {
-        LOG_INFO("Applied SX1262 register 0x8B5 patch for GC1109 RX improvement");
+        LOG_INFO("Applied SX1262 register 0x8B5 patch for RX improvement");
     } else {
-        LOG_WARN("Failed to apply SX1262 register 0x8B5 patch for GC1109");
+        LOG_WARN("Failed to apply SX1262 register 0x8B5 patch for RX improvement");
     }
 
 #if 0

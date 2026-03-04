@@ -66,7 +66,7 @@ jobs:
           jq -c 'with_entries(.value |= (. | tostring + "1" | tonumber))' pio/core/.cache/downloads/usage.db.bak > pio/core/.cache/downloads/usage.db
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: platformio-deps-${{ inputs.pio_env }}-${{ steps.version.outputs.long }}
           overwrite: true
