@@ -92,9 +92,9 @@
 //   CPS (pin 5)  -> GPIO46: PA mode select (HIGH=full PA, LOW=bypass)
 //   VCC0/VCC1    -> Vfem via U3 LDO, controlled by GPIO7
 #define USE_GC1109_PA
-#define LORA_PA_POWER 7  // VFEM_Ctrl - GC1109 LDO power enable
-#define LORA_PA_EN 4     // CSD - GC1109 chip enable (HIGH=on)
-#define LORA_PA_TX_EN 46 // CPS - GC1109 PA mode (HIGH=full PA, LOW=bypass)
+#define LORA_PA_POWER 7         // VFEM_Ctrl - GC1109 LDO power enable
+#define LORA_GC1109_PA_EN 4     // CSD - GC1109 chip enable (HIGH=on)
+#define LORA_GC1109_PA_TX_EN 46 // CPS - GC1109 PA mode (HIGH=full PA, LOW=bypass)
 
 // GC1109 FEM: TX/RX path switching is handled by DIO2 -> CTX pin (via SX126X_DIO2_AS_RF_SWITCH)
 // GPIO46 is CPS (PA mode), not TX control - setTransmitEnable() handles it in SX126xInterface.cpp
