@@ -327,8 +327,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
              !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
                                                               moduleConfig.telemetry.environment_update_interval,
                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil()) {
+            airTime->isTxAllowedChannelUtil(!isSensorRole(config.device.role)) && airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY);
@@ -586,7 +585,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
 meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
 {
     if (currentRequest) {
-        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouter()) {
             ignoreRequest = true;
             return NULL;
         }
@@ -640,7 +639,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;
         p->decoded.want_response = false;
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+        if (isSensorRole(config.device.role))
             p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
         else
             p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -656,7 +655,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+            if (isSensorRole(config.device.role) && config.power.is_power_saving) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
                 notification->level = meshtastic_LogRecord_Level_INFO;
                 notification->time = getValidTime(RTCQualityFromNet);

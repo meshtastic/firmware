@@ -6,6 +6,7 @@
 #include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
+#include "meshUtils.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
@@ -314,7 +315,7 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+    if (isSensorRole(config.device.role)) {
         p->want_ack = true;
         p->priority = meshtastic_MeshPacket_Priority_HIGH;
     } else {

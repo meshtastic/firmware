@@ -121,8 +121,7 @@ int32_t AirQualityTelemetryModule::runOnce()
                                                       Default::getConfiguredOrDefaultMsScaled(
                                                           moduleConfig.telemetry.air_quality_interval,
                                                           default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-                       airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-                       airTime->isTxAllowedAirUtil()) {
+                       airTime->isTxAllowedChannelUtil(!isSensorRole(config.device.role)) && airTime->isTxAllowedAirUtil()) {
                 if (!sensor->isActive()) {
                     LOG_DEBUG("Waking up: %s", sensor->sensorName);
                     return sensor->wakeUp();
@@ -140,8 +139,7 @@ int32_t AirQualityTelemetryModule::runOnce()
              !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
                                                               moduleConfig.telemetry.air_quality_interval,
                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil()) {
+            airTime->isTxAllowedChannelUtil(!isSensorRole(config.device.role)) && airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
@@ -327,7 +325,7 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
 {
     if (currentRequest) {
-        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouter()) {
             ignoreRequest = true;
             return NULL;
         }
@@ -397,7 +395,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;
         p->decoded.want_response = false;
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+        if (isSensorRole(config.device.role))
             p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
         else
             p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -414,7 +412,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             LOG_INFO("Sending packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+            if (isSensorRole(config.device.role) && config.power.is_power_saving) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
                 notification->level = meshtastic_LogRecord_Level_INFO;
                 notification->time = getValidTime(RTCQualityFromNet);
@@ -428,7 +426,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                 setIntervalFromNow(FIVE_SECONDS_MS);
             }
 
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+            if (isSensorRole(config.device.role) && config.power.is_power_saving) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
                 notification->level = meshtastic_LogRecord_Level_INFO;
                 notification->time = getValidTime(RTCQualityFromNet);

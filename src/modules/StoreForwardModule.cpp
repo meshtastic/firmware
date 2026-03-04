@@ -23,6 +23,7 @@
 #include "memGet.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/storeforward.pb.h"
+#include "meshUtils.h"
 #include "modules/ModuleDev.h"
 #include <Arduino.h>
 #include <iterator>
@@ -588,7 +589,7 @@ StoreForwardModule::StoreForwardModule()
     if (moduleConfig.store_forward.enabled) {
 
         // Router
-        if ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER || moduleConfig.store_forward.is_server)) {
+        if ((isRouterRole(config.device.role) || moduleConfig.store_forward.is_server)) {
             LOG_INFO("Init Store & Forward Module in Server mode");
             if (memGet.getPsramSize() > 0) {
                 if (memGet.getFreePsram() >= 1024 * 1024) {

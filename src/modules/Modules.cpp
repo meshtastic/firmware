@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "meshUtils.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "buzz/BuzzerFeedbackThread.h"
 #include "modules/SystemCommandsModule.h"
@@ -149,8 +150,7 @@ void setupModules()
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_ATAK
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+    if (isTakLikeRole(config.device.role)) {
         atakPluginModule = new AtakPluginModule();
     }
 #endif

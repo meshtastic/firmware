@@ -288,8 +288,7 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
 
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentReply &&
-        Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
+    if (!isLostAndFoundRole(config.device.role) && lastSentReply && Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
         LOG_DEBUG("Skip Position reply since we sent a reply <3min ago");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return nullptr;
@@ -389,9 +388,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
-                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
-        config.power.is_power_saving) {
+    if (isTrackerRole(config.device.role) && config.power.is_power_saving) {
         meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
         notification->level = meshtastic_LogRecord_Level_INFO;
         notification->time = getValidTime(RTCQualityFromNet);
@@ -426,8 +423,7 @@ int32_t PositionModule::runOnce()
                                                                   default_broadcast_interval_secs, numOnlineNodes);
     uint32_t msSinceLastSend = now - lastGpsSend;
     // Only send packets if the channel util. is less than 25% utilized or we're a tracker with less than 40% utilized.
-    if (!airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
-                                         config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)) {
+    if (!airTime->isTxAllowedChannelUtil(!isTrackerRole(config.device.role))) {
         return RUNONCE_INTERVAL;
     }
 
@@ -447,7 +443,7 @@ int32_t PositionModule::runOnce()
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(meshtastic_PortNum_POSITION_APP);
             sendOurPosition();
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
+            if (isLostAndFoundRole(config.device.role)) {
                 sendLostAndFoundText();
             }
         }

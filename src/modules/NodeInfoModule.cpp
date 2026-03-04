@@ -96,8 +96,7 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 
     if (p) { // Check whether we didn't ignore it
         p->to = dest;
-        bool requestWantResponse =
-            !isTrackerRole(config.device.role) && config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR && wantReplies;
+        bool requestWantResponse = !isTrackerOrSensorRole(config.device.role) && wantReplies;
 
         p->decoded.want_response = requestWantResponse;
         if (_shorterTimeout)
@@ -204,7 +203,7 @@ int32_t NodeInfoModule::runOnce()
     bool requestReplies = currentGeneration != radioGeneration;
     currentGeneration = radioGeneration;
 
-    if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+    if (airTime->isTxAllowedAirUtil() && !isClientHiddenRole(config.device.role)) {
         LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);
         sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
     }
