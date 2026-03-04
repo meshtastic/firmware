@@ -308,5 +308,5 @@ private:
     /**
      * Calculate weighted ETX cost including stability
      */
-    float getWeightedCost(const Edge& edge, uint32_t currentTime);
+    float getWeightedCost(const Edge& edge, uint32_t currentTime) const;
 };

@@ -162,6 +162,10 @@ private:
     // Last topology version received from each node (for deduplication)
     std::unordered_map<NodeNum, uint8_t> lastTopologyVersion;
 
+    // Track which (node, version) pairs were already processed by preProcessSignalRoutingPacket
+    // so handleReceivedProtobuf can skip redundant edge clearing and rebuilding
+    std::unordered_map<NodeNum, uint8_t> lastPreProcessedVersion;
+
     /**
      * Check if a node has been excluded from relaying a specific packet
      */

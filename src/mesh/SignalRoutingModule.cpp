@@ -491,7 +491,7 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
 
         neighbor.node_id = edge.to;
         // Scale variance from uint32 (0-3000) to uint8 (0-255)
-        uint32_t scaledVar = edge.variance / 12;
+        uint32_t scaledVar = (edge.variance + 6) / 12;
         neighbor.position_variance = scaledVar > 255 ? 255 : static_cast<uint8_t>(scaledVar);
         // Mark neighbor based on local knowledge of their SR capability
         CapabilityStatus neighborStatus = getCapabilityStatus(edge.to);
@@ -698,6 +698,9 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
     // Update last processed version (minimal state tracking)
     lastTopologyVersion[p->from] = receivedVersion;
 
+    // Record that this version was pre-processed so handleReceivedProtobuf can skip redundant work
+    lastPreProcessedVersion[p->from] = receivedVersion;
+
 }
 bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_SignalRoutingInfo *p)
 {
@@ -760,78 +763,72 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
         LOG_DEBUG("[SR] Received topology from passive SR node %08x - storing edges for direct connection detection", mp.from);
     }
 
-    // Clear all existing edges for this node before adding the new ones from the broadcast
-    // This ensures our view of the sender's connectivity matches exactly what it reported
+    // Check if preProcessSignalRoutingPacket already handled edge clearing and rebuilding
+    // for this exact version — skip redundant work if so
+    auto preProcessIt = lastPreProcessedVersion.find(mp.from);
+    bool alreadyPreProcessed = (preProcessIt != lastPreProcessedVersion.end() &&
+                                preProcessIt->second == p->routing_version);
+
+    if (!alreadyPreProcessed) {
+        // Clear all existing edges for this node before adding the new ones from the broadcast
+        // This ensures our view of the sender's connectivity matches exactly what it reported
+        routingGraph->clearEdgesForNode(mp.from);
+        // Also clear any inferred connectivity edges pointing TO this node that were created
+        // before we knew it was SR-capable
+        routingGraph->clearInferredEdgesToNode(mp.from);
+
+        // Add edges from each neighbor TO the sender
+        uint32_t rxTime = millis() / 1000;
+        for (pb_size_t i = 0; i < p->neighbors_count; i++) {
+            const meshtastic_SignalNeighbor& neighbor = p->neighbors[i];
+
+            if (neighbor.node_id == 0 || isPlaceholderNode(neighbor.node_id)) {
+                continue;
+            }
+
+            float etx =
 #ifdef SIGNAL_ROUTING_LITE_MODE
-    routingGraph->clearEdgesForNode(mp.from);
-    // Also clear any inferred connectivity edges pointing TO this node that were created
-    // before we knew it was SR-capable
-    routingGraph->clearInferredEdgesToNode(mp.from);
+                GraphLite::calculateETX(neighbor.rssi, neighbor.snr);
 #else
-    routingGraph->clearEdgesForNode(mp.from);
-    // Also clear any inferred connectivity edges pointing TO this node that were created
-    // before we knew it was SR-capable
-    routingGraph->clearInferredEdgesToNode(mp.from);
+                Graph::calculateETX(neighbor.rssi, neighbor.snr);
 #endif
 
-    // Add edges from each neighbor TO the sender
-    // The RSSI/SNR describes how well the sender hears the neighbor,
-    // which characterizes the neighbor→sender transmission quality
-    // Use reliable time-from-boot for internal timing
-    // (This may be redundant if preProcessSignalRoutingPacket already ran, but it's idempotent)
-    uint32_t rxTime = millis() / 1000;
+            uint32_t scaledVariance = static_cast<uint32_t>(neighbor.position_variance) * 12;
+
+#ifdef SIGNAL_ROUTING_LITE_MODE
+            routingGraph->updateEdge(neighbor.node_id, mp.from, etx, rxTime, scaledVariance,
+                                     EdgeLite::Source::Reported);
+            routingGraph->updateEdge(mp.from, neighbor.node_id, etx, rxTime, scaledVariance,
+                                     EdgeLite::Source::Mirrored);
+#else
+            routingGraph->updateEdge(neighbor.node_id, mp.from, etx, rxTime, scaledVariance,
+                                     Edge::Source::Reported);
+            routingGraph->updateEdge(mp.from, neighbor.node_id, etx, rxTime, scaledVariance,
+                                     Edge::Source::Mirrored);
+#endif
+        }
+    } else {
+        LOG_DEBUG("[SR] Skipping redundant edge rebuild for %s (already pre-processed version %u)",
+                 senderName, p->routing_version);
+    }
+
+    // Always process gateway relations and logging (even if edges were already built)
     for (pb_size_t i = 0; i < p->neighbors_count; i++) {
         const meshtastic_SignalNeighbor& neighbor = p->neighbors[i];
 
-        // Reject neighbors with invalid node IDs (0 or placeholders)
         if (neighbor.node_id == 0 || isPlaceholderNode(neighbor.node_id)) {
-            LOG_DEBUG("[SR] Skipping invalid neighbor node ID: %08x", neighbor.node_id);
             continue;
         }
 
         char neighborName[64];
         getNodeDisplayName(neighbor.node_id, neighborName, sizeof(neighborName));
 
-        // Don't update neighbor capability based on broadcast reports
-        // Only mark nodes as SR-capable when they send their own broadcasts
-
-        // Note: We intentionally do NOT resolve placeholders from topology merging
-        // to avoid conflicts. Placeholders are only resolved from:
-        // 1. Direct contact (nodes we hear directly)
-        // 2. Traceroute packets (confirmed routing paths)
-
-        // Calculate ETX from the received RSSI/SNR
         float etx =
 #ifdef SIGNAL_ROUTING_LITE_MODE
             GraphLite::calculateETX(neighbor.rssi, neighbor.snr);
 #else
             Graph::calculateETX(neighbor.rssi, neighbor.snr);
 #endif
-
-        // Scale position_variance from uint8 (0-255) back to full range (0-3000) for graph storage
-        uint32_t scaledVariance = static_cast<uint32_t>(neighbor.position_variance) * 12;
-
-        // Add edge: neighbor -> sender (the direction of the transmission that produced the RSSI)
-#ifdef SIGNAL_ROUTING_LITE_MODE
-        int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, rxTime, scaledVariance,
-                                                  EdgeLite::Source::Reported);
-        routingGraph->updateEdge(mp.from, neighbor.node_id, etx, rxTime, scaledVariance,
-                                 EdgeLite::Source::Mirrored);
-#else
-        int edgeChange = routingGraph->updateEdge(neighbor.node_id, mp.from, etx, rxTime, scaledVariance,
-                                                  Edge::Source::Reported);
-        routingGraph->updateEdge(mp.from, neighbor.node_id, etx, rxTime, scaledVariance,
-                                 Edge::Source::Mirrored);
-#endif
-
-        // Note: Neighbor nodes from topology broadcasts are not automatically added to NodeDB
-        // They remain "unknown" for unicast routing unless heard directly
-        // This is by design to avoid filling NodeDB with remote nodes
-
-        // Log topology if this is a new edge or significant change
-        if (edgeChange == Graph::EDGE_NEW || edgeChange == Graph::EDGE_SIGNIFICANT_CHANGE) {
-            logNetworkTopology();
-        }
 
         // Classify signal quality for user-friendly display
         const char* quality;

@@ -85,7 +85,7 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
 
         // Check for significant change
         float oldEtx = it->etx;
-        float change = fabs(etx - oldEtx) / oldEtx;
+        float change = (oldEtx > 0.0f) ? fabs(etx - oldEtx) / oldEtx : 1.0f;
 
         // Update existing edge
         it->etx = etx;
@@ -99,11 +99,18 @@ int Graph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, u
     } else {
         // Check edge limit per node
         if (edges.size() >= MAX_EDGES_PER_NODE) {
-            // Find the worst edge (highest ETX) and replace if new one is better
+            // Find the worst edge using composite score: etx + age penalty
+            // Fresh edges compete fairly against stale ones
             auto worstIt = std::max_element(edges.begin(), edges.end(),
-                [](const Edge& a, const Edge& b) { return a.etx < b.etx; });
-            
-            if (etx < worstIt->etx) {
+                [timestamp](const Edge& a, const Edge& b) {
+                    float scoreA = a.etx + (timestamp - a.lastUpdate) / 300.0f;
+                    float scoreB = b.etx + (timestamp - b.lastUpdate) / 300.0f;
+                    return scoreA < scoreB;
+                });
+            float worstScore = worstIt->etx + (timestamp - worstIt->lastUpdate) / 300.0f;
+            float newScore = etx; // New edge has age=0
+
+            if (newScore < worstScore) {
                 // Replace worst edge with new better one
                 worstIt->to = to;
                 worstIt->etx = etx;
@@ -133,6 +140,7 @@ void Graph::updateNodeActivity(NodeNum nodeId, uint32_t timestamp)
 
 void Graph::ageEdges(uint32_t currentTime, std::function<uint32_t(NodeNum)> getTtlForNode) {
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+    bool edgesRemoved = false;
 
     // Age individual edges - use node-specific TTL if callback provided
     for (auto& pair : adjacencyList) {
@@ -145,12 +153,16 @@ void Graph::ageEdges(uint32_t currentTime, std::function<uint32_t(NodeNum)> getT
         uint32_t nodeTtl = getTtlForNode ? getTtlForNode(pair.first) : EDGE_AGING_TIMEOUT_SECS;
 
         auto& edges = pair.second;
+        size_t sizeBefore = edges.size();
         edges.erase(
             std::remove_if(edges.begin(), edges.end(),
                 [currentTime, nodeTtl](const Edge& e) {
                     return (currentTime - e.lastUpdate) > nodeTtl;
                 }),
             edges.end());
+        if (edges.size() < sizeBefore) {
+            edgesRemoved = true;
+        }
     }
 
     // Clear empty adjacency lists (nodes with no edges), but keep nodes that are still active
@@ -220,12 +232,17 @@ void Graph::ageEdges(uint32_t currentTime, std::function<uint32_t(NodeNum)> getT
         }
     }
 
-    // Proactively clean expired route cache entries to prevent unbounded growth
-    for (auto it = routeCache.begin(); it != routeCache.end();) {
-        if ((currentTime - it->second.timestamp) > ROUTE_CACHE_TIMEOUT_SECS) {
-            it = routeCache.erase(it);
-        } else {
-            ++it;
+    // If any edges were removed, cached routes may point to dead links — invalidate all
+    if (edgesRemoved) {
+        routeCache.clear();
+    } else {
+        // Proactively clean expired route cache entries to prevent unbounded growth
+        for (auto it = routeCache.begin(); it != routeCache.end();) {
+            if ((currentTime - it->second.timestamp) > ROUTE_CACHE_TIMEOUT_SECS) {
+                it = routeCache.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 }
@@ -274,34 +291,44 @@ void Graph::clearCache() {
 }
 
 float Graph::calculateETX(int32_t rssi, float snr) {
-    // ETX calculation based on RSSI and SNR
-    // This is a simplified model - in practice, this would be based on
-    // empirical measurements of delivery probability
+    // 6-breakpoint piecewise-linear RSSI→deliveryProb model
+    // Breakpoints: (-110, 0.05), (-100, 0.15), (-90, 0.40), (-80, 0.65), (-70, 0.85), (-60, 0.95)
+    // No exp() or trig — only basic arithmetic, safe for constrained devices
+    static constexpr int32_t rssiBreak[] = { -110, -100, -90, -80, -70, -60 };
+    static constexpr float   probBreak[] = { 0.05f, 0.15f, 0.40f, 0.65f, 0.85f, 0.95f };
+    static constexpr int N = 6;
 
-    // Convert RSSI to delivery probability (simplified model)
-    float deliveryProb = 1.0f;
-    if (rssi < -100) {
-        deliveryProb = 0.1f;
-    } else if (rssi < -80) {
-        deliveryProb = 0.5f;
-    } else if (rssi < -60) {
-        deliveryProb = 0.8f;
+    float deliveryProb;
+    if (rssi <= rssiBreak[0]) {
+        deliveryProb = probBreak[0];
+    } else if (rssi >= rssiBreak[N - 1]) {
+        deliveryProb = probBreak[N - 1];
     } else {
-        deliveryProb = 0.95f;
+        // Find the segment
+        int seg = 0;
+        for (int i = 1; i < N; i++) {
+            if (rssi < rssiBreak[i]) { seg = i - 1; break; }
+        }
+        float t = static_cast<float>(rssi - rssiBreak[seg]) / static_cast<float>(rssiBreak[seg + 1] - rssiBreak[seg]);
+        deliveryProb = probBreak[seg] + t * (probBreak[seg + 1] - probBreak[seg]);
     }
 
-    // Factor in SNR (now correctly a float)
-    if (snr < 5.0f) {
-        deliveryProb *= 0.5f;
-    } else if (snr < 10.0f) {
-        deliveryProb *= 0.8f;
+    // Continuous SNR ramp: 0.5 at SNR<=0, linear to 1.0 at SNR>=10
+    float snrFactor;
+    if (snr <= 0.0f) {
+        snrFactor = 0.5f;
+    } else if (snr >= 10.0f) {
+        snrFactor = 1.0f;
+    } else {
+        snrFactor = 0.5f + snr * 0.05f;
     }
+    deliveryProb *= snrFactor;
 
     // ETX = 1 / delivery_probability
     if (deliveryProb > 0.0f) {
         return 1.0f / deliveryProb;
     } else {
-        return std::numeric_limits<float>::infinity();
+        return 100.0f;
     }
 }
 
@@ -372,13 +399,15 @@ Route Graph::dijkstra(NodeNum source, NodeNum destination, uint32_t currentTime,
     return Route(destination, nextHop, distances[destination], currentTime);
 }
 
-float Graph::getWeightedCost(const Edge& edge, uint32_t currentTime) {
+float Graph::getWeightedCost(const Edge& edge, uint32_t currentTime) const {
     // Age factor - older edges cost more (up to 2x penalty at timeout)
     uint32_t age = currentTime - edge.lastUpdate;
     float ageFactor = 1.0f + (age / static_cast<float>(EDGE_AGING_TIMEOUT_SECS));
 
     // Stability weighting (historical reliability)
-    float stabilityFactor = 1.0f / edge.stability;
+    // Floor stability at 0.1 to prevent division approaching infinity
+    float clampedStability = std::max(edge.stability, 0.1f);
+    float stabilityFactor = std::min(1.0f / clampedStability, 5.0f);
 
     // Variance factor - mobile/unreliable nodes get penalized
     // variance of 0 = no penalty, variance of 1000+ = significant penalty
@@ -398,27 +427,49 @@ const std::vector<Edge>* Graph::getEdgesFrom(NodeNum node) const {
 }
 
 void Graph::etxToSignal(float etx, int32_t &rssi, int32_t &snr) {
-    // Reverse the ETX calculation (approximate)
-    // Original: etx = 1.0 / (prr * prr) where prr depends on rssi/snr
-    // This is an approximation - we'll estimate reasonable values
+    // Inverse of calculateETX using the same breakpoint tables
+    // Assumes SNR=10 (snrFactor=1.0) so deliveryProb = 1/etx directly maps to RSSI breakpoints
+    // Then derive SNR to improve round-trip accuracy for high-ETX values
 
-    // ETX of 1.0 = perfect link (RSSI ~ -60, SNR ~ 10)
-    // ETX of 2.0 = 50% packet loss (RSSI ~ -90, SNR ~ 0)
-    // ETX of 4.0 = 75% packet loss (RSSI ~ -110, SNR ~ -5)
+    // Same breakpoints as calculateETX
+    static constexpr int32_t rssiBreak[] = { -110, -100, -90, -80, -70, -60 };
+    static constexpr float   probBreak[] = { 0.05f, 0.15f, 0.40f, 0.65f, 0.85f, 0.95f };
+    static constexpr int N = 6;
 
-    if (etx <= 1.0f) {
-        rssi = -60;
-        snr = 10;
-    } else if (etx <= 2.0f) {
-        // Linear interpolation between good and medium
-        float t = (etx - 1.0f);
-        rssi = -60 - static_cast<int32_t>(t * 30);
-        snr = 10 - static_cast<int32_t>(t * 10);
+    // ETX breakpoints (at SNR=10, snrFactor=1.0): etx = 1/prob
+    // probBreak: 0.05  0.15  0.40  0.65  0.85  0.95
+    // etxBreak:  20.0  6.67  2.50  1.54  1.18  1.05
+
+    float prob = 1.0f / std::max(etx, 1.0f);
+
+    // Find the segment in probBreak (ascending order)
+    if (prob <= probBreak[0]) {
+        rssi = rssiBreak[0];
+    } else if (prob >= probBreak[N - 1]) {
+        rssi = rssiBreak[N - 1];
     } else {
-        // Linear interpolation between medium and poor
-        float t = std::min((etx - 2.0f) / 2.0f, 1.0f);
-        rssi = -90 - static_cast<int32_t>(t * 20);
-        snr = 0 - static_cast<int32_t>(t * 5);
+        int seg = 0;
+        for (int i = 1; i < N; i++) {
+            if (prob < probBreak[i]) { seg = i - 1; break; }
+        }
+        float t = (prob - probBreak[seg]) / (probBreak[seg + 1] - probBreak[seg]);
+        rssi = rssiBreak[seg] + static_cast<int32_t>(t * (rssiBreak[seg + 1] - rssiBreak[seg]));
+    }
+
+    // Derive SNR: for moderate links, use SNR to encode remaining ETX information
+    // At the RSSI we computed, calculateETX(rssi, 10) gives etx_at_snr10
+    // If actual etx > etx_at_snr10, the difference is due to lower SNR
+    float etxAtSnr10 = calculateETX(rssi, 10.0f);
+    if (etx <= etxAtSnr10 * 1.05f) {
+        snr = 10; // Good SNR
+    } else {
+        // snrFactor = etxAtSnr10 / etx, and snrFactor = 0.5 + snr*0.05
+        float snrFactor = etxAtSnr10 / etx;
+        if (snrFactor < 0.5f) snrFactor = 0.5f;
+        float snrFloat = (snrFactor - 0.5f) / 0.05f;
+        snr = static_cast<int32_t>(snrFloat);
+        if (snr < -5) snr = -5;
+        if (snr > 10) snr = 10;
     }
 }
 
@@ -553,13 +604,7 @@ float Graph::getEdgeCost(NodeNum from, NodeNum to, uint32_t currentTime) const {
 
     for (const Edge& edge : it->second) {
         if (edge.to == to) {
-            // Calculate weighted cost (same as in dijkstra)
-            uint32_t age = currentTime - edge.lastUpdate;
-            float ageFactor = 1.0f + (age / static_cast<float>(EDGE_AGING_TIMEOUT_SECS));
-            float stabilityFactor = 1.0f / edge.stability;
-            float varianceFactor = 1.0f + (edge.variance / 500.0f);
-            if (varianceFactor > 3.0f) varianceFactor = 3.0f;
-            return edge.etx * ageFactor * stabilityFactor * varianceFactor;
+            return getWeightedCost(edge, currentTime);
         }
     }
 

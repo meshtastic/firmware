@@ -38,7 +38,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /**
      * Get the radio interface (public accessor for modules that need it)
      */
-    RadioInterface *getRadioInterface() const { return iface; }
+    RadioInterface *getRadioInterface() const { return iface.get(); }
 
     /**
      * do idle processing

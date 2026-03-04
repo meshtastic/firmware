@@ -129,13 +129,13 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
 
         // Update existing edge
         float oldEtx = edge->getEtx();
-        float change = fabs(etx - oldEtx) / oldEtx;
+        float change = (oldEtx > 0.0f) ? fabs(etx - oldEtx) / oldEtx : 1.0f;
 
         edge->setEtx(etx);
         if (updateTimestamp) {
             edge->lastUpdate = timestamp;
         }
-        edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12); // Scale variance
+        edge->variance = ((variance + 6) / 12 > 255) ? 255 : static_cast<uint8_t>((variance + 6) / 12); // Scale variance
         edge->source = source;
 
         return (change > Graph::ETX_CHANGE_THRESHOLD) ? Graph::EDGE_SIGNIFICANT_CHANGE : Graph::EDGE_NO_CHANGE;
@@ -147,28 +147,32 @@ int GraphLite::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestam
         edge->to = to;
         edge->setEtx(etx);
         edge->lastUpdate = timestamp;
-        edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12);
+        edge->variance = ((variance + 6) / 12 > 255) ? 255 : static_cast<uint8_t>((variance + 6) / 12);
         edge->source = source;
         return Graph::EDGE_NEW;
     }
 
-    // Edge list full - replace worst edge if new one is better
+    // Edge list full - replace worst edge using composite score (etx + age penalty)
+    // Fresh edges compete fairly against stale ones
     uint8_t worstIdx = 0;
-    uint16_t worstEtx = 0;
+    float worstScore = 0;
     for (uint8_t i = 0; i < node->edgeCount; i++) {
-        if (node->edges[i].etxFixed > worstEtx) {
-            worstEtx = node->edges[i].etxFixed;
+        float edgeEtx = node->edges[i].getEtx();
+        float ageSeconds = static_cast<float>(timestamp - node->edges[i].lastUpdate);
+        float score = edgeEtx + ageSeconds / 300.0f;
+        if (score > worstScore) {
+            worstScore = score;
             worstIdx = i;
         }
     }
 
-    uint16_t newEtxFixed = static_cast<uint16_t>(etx * 100.0f);
-    if (newEtxFixed < worstEtx) {
+    float newScore = etx; // New edge has age=0
+    if (newScore < worstScore) {
         edge = &node->edges[worstIdx];
         edge->to = to;
         edge->setEtx(etx);
         edge->lastUpdate = timestamp;
-        edge->variance = (variance / 12 > 255) ? 255 : static_cast<uint8_t>(variance / 12);
+        edge->variance = ((variance + 6) / 12 > 255) ? 255 : static_cast<uint8_t>((variance + 6) / 12);
         edge->source = source;
         return Graph::EDGE_SIGNIFICANT_CHANGE;
     }
@@ -188,6 +192,7 @@ void GraphLite::ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(NodeNu
 {
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
     uint16_t currentLo = static_cast<uint16_t>(currentTimeSecs & 0xFFFF);
+    bool edgesRemoved = false;
 
     for (uint8_t n = 0; n < nodeCount;) {
         NodeEdgesLite *node = &nodes[n];
@@ -201,11 +206,19 @@ void GraphLite::ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(NodeNu
         // Get TTL for this node (capability-based if callback provided)
         uint32_t nodeTtl = getTtlForNode ? getTtlForNode(node->nodeId) : EDGE_AGING_TIMEOUT_SECS;
 
-        // Age individual edges within this node
-        // For GraphLite, use a simpler approach: if the node's last update is old,
-        // assume all its edges are stale and clear them
-        if (currentTimeSecs - node->lastFullUpdate > nodeTtl) {
-            node->edgeCount = 0; // Clear all edges for stale nodes
+        // Age individual edges based on per-edge lastUpdate timestamps
+        uint8_t writeIdx = 0;
+        for (uint8_t i = 0; i < node->edgeCount; i++) {
+            if ((currentTimeSecs - node->edges[i].lastUpdate) <= nodeTtl) {
+                if (writeIdx != i) {
+                    node->edges[writeIdx] = node->edges[i];
+                }
+                writeIdx++;
+            }
+        }
+        if (writeIdx < node->edgeCount) {
+            edgesRemoved = true;
+            node->edgeCount = writeIdx;
         }
 
         // Check if entire node is stale (no recent updates) or has no edges left
@@ -218,6 +231,7 @@ void GraphLite::ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(NodeNu
                 nodes[n] = nodes[nodeCount - 1];
             }
             nodeCount--;
+            edgesRemoved = true;
             continue; // Don't increment n, check swapped node
         }
         n++;
@@ -236,44 +250,82 @@ void GraphLite::ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(NodeNu
         }
         i++;
     }
+
+    // If any edges were removed, cached routes may point to dead links — invalidate all
+    if (edgesRemoved) {
+        routeCacheCount = 0;
+    }
 }
 
 float GraphLite::calculateETX(int32_t rssi, float snr)
 {
-    // Simplified ETX calculation
-    float deliveryProb = 1.0f;
-    if (rssi < -100) {
-        deliveryProb = 0.1f;
-    } else if (rssi < -80) {
-        deliveryProb = 0.5f;
-    } else if (rssi < -60) {
-        deliveryProb = 0.8f;
+    // 6-breakpoint piecewise-linear RSSI→deliveryProb model
+    // Matches Graph::calculateETX for consistency
+    static constexpr int32_t rssiBreak[] = { -110, -100, -90, -80, -70, -60 };
+    static constexpr float   probBreak[] = { 0.05f, 0.15f, 0.40f, 0.65f, 0.85f, 0.95f };
+    static constexpr int N = 6;
+
+    float deliveryProb;
+    if (rssi <= rssiBreak[0]) {
+        deliveryProb = probBreak[0];
+    } else if (rssi >= rssiBreak[N - 1]) {
+        deliveryProb = probBreak[N - 1];
     } else {
-        deliveryProb = 0.95f;
+        int seg = 0;
+        for (int i = 1; i < N; i++) {
+            if (rssi < rssiBreak[i]) { seg = i - 1; break; }
+        }
+        float t = static_cast<float>(rssi - rssiBreak[seg]) / static_cast<float>(rssiBreak[seg + 1] - rssiBreak[seg]);
+        deliveryProb = probBreak[seg] + t * (probBreak[seg + 1] - probBreak[seg]);
     }
 
-    if (snr < 5.0f) {
-        deliveryProb *= 0.5f;
-    } else if (snr < 10.0f) {
-        deliveryProb *= 0.8f;
+    // Continuous SNR ramp: 0.5 at SNR<=0, linear to 1.0 at SNR>=10
+    float snrFactor;
+    if (snr <= 0.0f) {
+        snrFactor = 0.5f;
+    } else if (snr >= 10.0f) {
+        snrFactor = 1.0f;
+    } else {
+        snrFactor = 0.5f + snr * 0.05f;
     }
+    deliveryProb *= snrFactor;
 
     return (deliveryProb > 0.0f) ? (1.0f / deliveryProb) : 100.0f;
 }
 
 void GraphLite::etxToSignal(float etx, int32_t &rssi, int32_t &snr)
 {
-    if (etx <= 1.0f) {
-        rssi = -60;
-        snr = 10;
-    } else if (etx <= 2.0f) {
-        float t = (etx - 1.0f);
-        rssi = -60 - static_cast<int32_t>(t * 30);
-        snr = 10 - static_cast<int32_t>(t * 10);
+    // Inverse of calculateETX using the same breakpoint tables
+    static constexpr int32_t rssiBreak[] = { -110, -100, -90, -80, -70, -60 };
+    static constexpr float   probBreak[] = { 0.05f, 0.15f, 0.40f, 0.65f, 0.85f, 0.95f };
+    static constexpr int N = 6;
+
+    float prob = 1.0f / std::max(etx, 1.0f);
+
+    if (prob <= probBreak[0]) {
+        rssi = rssiBreak[0];
+    } else if (prob >= probBreak[N - 1]) {
+        rssi = rssiBreak[N - 1];
     } else {
-        float t = std::min((etx - 2.0f) / 2.0f, 1.0f);
-        rssi = -90 - static_cast<int32_t>(t * 20);
-        snr = 0 - static_cast<int32_t>(t * 5);
+        int seg = 0;
+        for (int i = 1; i < N; i++) {
+            if (prob < probBreak[i]) { seg = i - 1; break; }
+        }
+        float t = (prob - probBreak[seg]) / (probBreak[seg + 1] - probBreak[seg]);
+        rssi = rssiBreak[seg] + static_cast<int32_t>(t * (rssiBreak[seg + 1] - rssiBreak[seg]));
+    }
+
+    // Derive SNR from remaining ETX difference
+    float etxAtSnr10 = calculateETX(rssi, 10.0f);
+    if (etx <= etxAtSnr10 * 1.05f) {
+        snr = 10;
+    } else {
+        float snrFactor = etxAtSnr10 / etx;
+        if (snrFactor < 0.5f) snrFactor = 0.5f;
+        float snrFloat = (snrFactor - 0.5f) / 0.05f;
+        snr = static_cast<int32_t>(snrFloat);
+        if (snr < -5) snr = -5;
+        if (snr > 10) snr = 10;
     }
 }
 
