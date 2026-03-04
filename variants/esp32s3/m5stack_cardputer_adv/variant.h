@@ -8,8 +8,8 @@
 #define ST7789_MISO -1
 #define ST7789_BUSY -1
 // #define VTFT_CTRL 38
-// #define VTFT_LEDA 15
-//  #define ST7789_BL (32+6)
+#define VTFT_LEDA 38
+// #define ST7789_BL (32+6)
 #define ST7789_SPI_HOST SPI2_HOST
 // #define TFT_BL (32+6)
 #define SPI_FREQUENCY 40000000
@@ -21,7 +21,7 @@
 #define HAS_PHYSICAL_KEYBOARD 1
 
 // Backlight is controlled to power rail on this board, this also powers the neopixel
-#define PIN_POWER_EN 38
+// #define PIN_POWER_EN 38
 
 #define BUTTON_PIN 0
 

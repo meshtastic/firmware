@@ -466,8 +466,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             ui->init();
 #endif
 #if defined(USE_ST7789) && defined(VTFT_LEDA)
+#ifdef VTFT_CTRL
             pinMode(VTFT_CTRL, OUTPUT);
             digitalWrite(VTFT_CTRL, LOW);
+#endif
             ui->init();
 #ifdef ESP_PLATFORM
             analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
@@ -511,6 +513,8 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #if defined(ARCH_ESP32)
 #ifdef VTFT_LEDA
             pinMode(VTFT_LEDA, ANALOG);
+#endif
+#ifdef VTFT_CTRL
             pinMode(VTFT_CTRL, ANALOG);
 #endif
             pinMode(ST7789_RESET, ANALOG);
