@@ -23,6 +23,7 @@
 #endif
 
 #include "Default.h"
+#include "MeshRadio.h"
 #include "TypeConversions.h"
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -756,20 +757,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Set config: LoRa");
         config.has_lora = true;
 
-        if (validatedLora.coding_rate < 4 || validatedLora.coding_rate > 8) {
-            LOG_WARN("Invalid coding_rate %d, setting to 5", validatedLora.coding_rate);
-            validatedLora.coding_rate = 5;
+        if (validatedLora.coding_rate != clampCodingRate(validatedLora.coding_rate)) {
+            LOG_WARN("Invalid coding_rate %d, setting to %d", validatedLora.coding_rate, LORA_CR_DEFAULT);
+            validatedLora.coding_rate = LORA_CR_DEFAULT;
         }
 
-        if (validatedLora.spread_factor < 7 || validatedLora.spread_factor > 12) {
-            LOG_WARN("Invalid spread_factor %d, setting to 11", validatedLora.spread_factor);
-            validatedLora.spread_factor = 11;
-        }
-
-        if (validatedLora.bandwidth == 0) {
-            int originalBandwidth = validatedLora.bandwidth;
-            validatedLora.bandwidth = myRegion->wideLora ? 800 : 250;
-            LOG_WARN("Invalid bandwidth %d, setting to default", originalBandwidth);
+        if (validatedLora.spread_factor != clampSpreadFactor(validatedLora.spread_factor)) {
+            LOG_WARN("Invalid spread_factor %d, setting to %d", validatedLora.spread_factor, LORA_SF_DEFAULT);
+            validatedLora.spread_factor = LORA_SF_DEFAULT;
         }
 
         // If no lora radio parameters change, don't need to reboot
