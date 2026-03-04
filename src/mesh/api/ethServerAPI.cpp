@@ -17,6 +17,15 @@ void initApiServer(int port)
     }
 }
 
+void deInitApiServer()
+{
+    if (apiPort) {
+        LOG_INFO("Deinit API server");
+        delete apiPort;
+        apiPort = nullptr;
+    }
+}
+
 ethServerAPI::ethServerAPI(EthernetClient &_client) : ServerAPI(_client)
 {
     LOG_INFO("Incoming ethernet connection");

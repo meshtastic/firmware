@@ -24,4 +24,5 @@ class ethServerPort : public APIServerPort<ethServerAPI, EthernetServer>
 };
 
 void initApiServer(int port = SERVER_API_DEFAULT_PORT);
+void deInitApiServer();
 #endif

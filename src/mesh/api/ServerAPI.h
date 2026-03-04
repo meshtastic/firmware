@@ -21,6 +21,8 @@ template <class T> class ServerAPI : public StreamAPI, private concurrency::OSTh
     /// override close to also shutdown the TCP link
     virtual void close();
 
+    bool isClientConnected() { return client.connected(); }
+
   protected:
     /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to
     /// stay in the POWERED state to prevent disabling wifi)
@@ -50,6 +52,14 @@ template <class T, class U> class APIServerPort : public U, private concurrency:
 
   public:
     explicit APIServerPort(int port);
+    ~APIServerPort()
+    {
+        if (openAPI != nullptr)
+        {
+            delete openAPI;
+            openAPI = nullptr;
+        }
+    }
 
     void init();
 
