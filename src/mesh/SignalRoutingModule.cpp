@@ -978,58 +978,24 @@ void SignalRoutingModule::logNetworkTopology()
         LOG_INFO("[SR] Network Topology: No nodes in graph yet");
         return;
     }
-    LOG_INFO("[SR] Network Topology: %d nodes total", nodeCount);
 
-    // Sort in place using fixed array (avoid std::vector heap allocation)
-    std::sort(nodeBuf, nodeBuf + nodeCount);
+    NodeNum ourNode = nodeDB->getNodeNum();
+    char ourName[48];
+    getNodeDisplayName(ourNode, ourName, sizeof(ourName));
 
-    // Display each node and its neighbors
-    for (size_t nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
-        NodeNum nodeId = nodeBuf[nodeIdx];
-        char nodeName[48];
-        getNodeDisplayName(nodeId, nodeName, sizeof(nodeName));
+    // Get our direct edges
+    const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
+    uint8_t directCount = ourEdges ? ourEdges->edgeCount : 0;
 
-        CapabilityStatus status = getCapabilityStatus(nodeId);
-        const char* prefix = "";
-        const char* statusStr = "unknown";
-        if (status == CapabilityStatus::SRactive) {
-            prefix = "[SR-active] ";
-            statusStr = "SR-active";
-        } else if (status == CapabilityStatus::Passive) {
-            prefix = "[SR-passive] ";
-            statusStr = "passive";
-        } else if (status == CapabilityStatus::Legacy) {
-            statusStr = "legacy";
-        }
+    LOG_INFO("[SR] Network Topology: %d nodes, %u direct neighbors", nodeCount, directCount);
+    LOG_INFO("[SR] %s (us)", ourName);
 
-        const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeId);
-        if (!edges || edges->edgeCount == 0) {
-            LOG_INFO("[SR] +- %s%s: no neighbors (%s)", prefix, nodeName, statusStr);
-            continue;
-        }
-
-        // Count direct radio connections and downstream count for this relay
-        uint8_t directConnectionCount = 0;
-        for (uint8_t i = 0; i < edges->edgeCount; i++) {
-            if (edges->edges[i].source == EdgeLite::Source::Reported) {
-                directConnectionCount++;
-            }
-        }
-        size_t dsCount = routingGraph->getDownstreamCountForRelay(nodeId);
-
-        if (dsCount > 0) {
-            LOG_INFO("[SR] +- %s%s (%u edges, relay for %u downstream)", prefix, nodeName,
-                     edges->edgeCount, static_cast<unsigned int>(dsCount));
-        } else {
-            LOG_INFO("[SR] +- %s%s (%u edges)", prefix, nodeName, edges->edgeCount);
-        }
-
-        // Display direct connections (Reported source edges)
-        for (uint8_t i = 0; i < edges->edgeCount; i++) {
-            const EdgeLite& edge = edges->edges[i];
-            if (edge.source != EdgeLite::Source::Reported) {
-                continue;
-            }
+    if (!ourEdges || ourEdges->edgeCount == 0) {
+        LOG_INFO("[SR]   (no direct neighbors)");
+    } else {
+        // Display each direct neighbor and their downstream nodes
+        for (uint8_t i = 0; i < ourEdges->edgeCount; i++) {
+            const EdgeLite& edge = ourEdges->edges[i];
 
             char neighborName[48];
             getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
@@ -1057,8 +1023,39 @@ void SignalRoutingModule::logNetworkTopology()
                 snprintf(ageBuf, sizeof(ageBuf), "%d", age);
             }
 
-            LOG_INFO("[SR] |    +- %s%s: %s link (ETX=%.1f, %s sec ago)",
-                    nprefix, neighborName, quality, etx, ageBuf);
+            bool isLast = (i == ourEdges->edgeCount - 1);
+            const char* branch = isLast ? "\\-" : "+-";
+            const char* cont = isLast ? " " : "|";
+
+            // Get downstream nodes that route through this neighbor
+            NodeNum dsBuf[NEIGHBOR_GRAPH_MAX_DOWNSTREAM];
+            size_t dsCount = routingGraph->getDownstreamNodesForRelay(edge.to, dsBuf, NEIGHBOR_GRAPH_MAX_DOWNSTREAM);
+
+            if (dsCount > 0) {
+                LOG_INFO("[SR]   %s %s%s: %s (ETX=%.1f, %ss ago, relay for %u downstream)",
+                         branch, nprefix, neighborName, quality, etx, ageBuf, static_cast<unsigned int>(dsCount));
+            } else {
+                LOG_INFO("[SR]   %s %s%s: %s (ETX=%.1f, %ss ago)",
+                         branch, nprefix, neighborName, quality, etx, ageBuf);
+            }
+
+            // Show downstream nodes nested under this relay
+            for (size_t d = 0; d < dsCount; d++) {
+                char dsName[48];
+                getNodeDisplayName(dsBuf[d], dsName, sizeof(dsName));
+
+                CapabilityStatus dsStatus = getCapabilityStatus(dsBuf[d]);
+                const char* dsprefix = "";
+                if (dsStatus == CapabilityStatus::SRactive) {
+                    dsprefix = "[SR-active] ";
+                } else if (dsStatus == CapabilityStatus::Passive) {
+                    dsprefix = "[SR-passive] ";
+                }
+
+                bool dsLast = (d == dsCount - 1);
+                const char* dsBranch = dsLast ? "\\-" : "+-";
+                LOG_INFO("[SR]   %s    %s %s%s", cont, dsBranch, dsprefix, dsName);
+            }
         }
     }
 
@@ -1572,7 +1569,18 @@ bool SignalRoutingModule::shouldRelay(const meshtastic_MeshPacket *p)
         // This handles legacy/stock nodes not in the SR graph
         if (nodeDB->getMeshNode(p->to)) {
             LOG_DEBUG("[SR] Unicast to %s not routable via SR, falling back to broadcast relay", destName);
-            return shouldRelayBroadcast(p);
+            // Use broadcast relay algorithm directly — can't go through shouldRelayBroadcast()
+            // because it redirects unicast packets back to shouldRelayUnicastForCoordination()
+            NodeNum myNode = nodeDB->getNodeNum();
+            NodeNum sourceNode = p->from;
+            NodeNum heardFrom = resolveHeardFrom(p, sourceNode);
+            uint32_t now = millis() / 1000;
+            bool relay = routingGraph->shouldRelayEnhanced(myNode, sourceNode, heardFrom, now, p->id, now);
+            LOG_INFO("[SR] Broadcast fallback for unicast to %s: %s relay", destName, relay ? "SHOULD" : "should NOT");
+            if (relay) {
+                routingGraph->recordNodeTransmission(myNode, p->id, now);
+            }
+            return relay;
         }
         LOG_DEBUG("[SR] Not relaying unicast to unknown destination %s", destName);
         return false;

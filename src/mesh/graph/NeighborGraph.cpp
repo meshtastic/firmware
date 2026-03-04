@@ -529,6 +529,18 @@ size_t NeighborGraph::getDownstreamCountForRelay(NodeNum relay) const
     return count;
 }
 
+size_t NeighborGraph::getDownstreamNodesForRelay(NodeNum relay, NodeNum *outArray, size_t maxCount) const
+{
+    size_t count = 0;
+    uint32_t now = millis() / 1000;
+    for (uint8_t i = 0; i < downstreamCount && count < maxCount; i++) {
+        if (downstream[i].relay == relay && (now - downstream[i].lastUpdate) < EDGE_AGING_TIMEOUT_SECS) {
+            outArray[count++] = downstream[i].destination;
+        }
+    }
+    return count;
+}
+
 bool NeighborGraph::isRelayFor(NodeNum myNode, NodeNum destination) const
 {
     for (uint8_t i = 0; i < downstreamCount; i++) {

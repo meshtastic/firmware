@@ -157,6 +157,8 @@ class NeighborGraph {
 
     size_t getDownstreamCountForRelay(NodeNum relay) const;
 
+    size_t getDownstreamNodesForRelay(NodeNum relay, NodeNum *outArray, size_t maxCount) const;
+
     bool isRelayFor(NodeNum myNode, NodeNum destination) const;
 
     void clearDownstreamForRelay(NodeNum relay);
