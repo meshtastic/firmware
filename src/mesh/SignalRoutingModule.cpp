@@ -501,7 +501,7 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
         // Process this neighbor directly - no need for protobuf handler since we already validated the main packet
         // This is just for graph updates, capability status was already handled for the main sender
         updateGraphWithNeighbor(p->from, neighbor);
-        
+
         // Create gateway relationship ONLY for nodes we cannot hear directly
         // This ensures remote nodes appear as downstream of the SR broadcaster node,
         // but nodes we can hear directly are not incorrectly marked as downstream
@@ -941,14 +941,11 @@ bool SignalRoutingModule::isDownstreamOfHeardRelay(NodeNum destination, NodeNum 
 
 uint32_t SignalRoutingModule::getNodeTtlSeconds(CapabilityStatus status) const
 {
-    // Only known SR-active/inactive nodes get shorter TTL (they send regular broadcasts)
-    // Stock nodes, legacy routers, and unknown nodes need longer TTL since they
-    // transmit less frequently and we don't want to age them out prematurely
     if (status == CapabilityStatus::SRactive || status == CapabilityStatus::Passive) {
-        return ACTIVE_NODE_TTL_SECS;  // 5 minutes for known SR nodes
+        return ACTIVE_NODE_TTL_SECS;  // 30 min for known SR nodes
     }
     // Legacy, Unknown, and any other status get longer TTL
-    return MUTE_NODE_TTL_SECS;  // 30 minutes for stock/unknown nodes
+    return MUTE_NODE_TTL_SECS;  // 1 hr for stock/unknown nodes
 }
 
 void SignalRoutingModule::logNetworkTopology()
@@ -1208,11 +1205,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             }
         }
 
-        // If we can't resolve the relay identity, create a placeholder node
+        // If we still can't resolve the relay identity, create a placeholder node
         if (inferredRelayer == 0) {
             inferredRelayer = createPlaceholderNode(mp.relay_node);
-            // Don't remember placeholders in relay identity cache - only remember real nodes
-            // rememberRelayIdentity(inferredRelayer, mp.relay_node);
             LOG_DEBUG("[SR] Created placeholder %08x for unknown relay 0x%02x",
                      inferredRelayer, mp.relay_node);
         }
@@ -1398,7 +1393,23 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
     }
 
     // If I'm the next hop in the route, I should relay this unicast
+    // But first check relay byte — if the packet was received from a node that IS
+    // a relay for the destination, that relay already transmitted and we shouldn't duplicate.
+    // This catches cases where getNextHop() returns myNode because it couldn't verify
+    // connectivity to the real next hop (e.g. stock/placeholder node), but the relay byte
+    // tells us the real next hop already transmitted.
     if (myNextHop == myNode) {
+        if (p->relay_node != 0) {
+            NodeNum relayForDest = routingGraph->getDownstreamRelay(destination);
+            if (relayForDest != 0 && (relayForDest & 0xFF) == p->relay_node &&
+                routingGraph->getEdgesFrom(relayForDest) != nullptr) {
+                char relayName[64];
+                getNodeDisplayName(relayForDest, relayName, sizeof(relayName));
+                LOG_DEBUG("[SR] UNICAST RELAY: Relay byte 0x%02x matches direct neighbor %s (downstream relay for %s) - already relayed",
+                         p->relay_node, relayName, destName);
+                return false;
+            }
+        }
         LOG_INFO("[SR] UNICAST RELAY: I am the next hop to %s - relaying unicast", destName);
         return true;
     }
@@ -1406,7 +1417,14 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
     // If we received the packet FROM the calculated next hop, the next hop already transmitted.
     // Since the next hop can reach the destination (that's why it's our next hop), the destination
     // should have received the packet directly from the next hop - no need for us to relay.
-    if (heardFrom == myNextHop && heardFrom != 0) {
+    // Also check via raw relay byte — if resolveHeardFrom couldn't resolve the relay identity
+    // (e.g. edge aged out), the relay byte still tells us who transmitted last.
+    bool receivedFromNextHop = (heardFrom == myNextHop && heardFrom != 0);
+    if (!receivedFromNextHop && p->relay_node != 0 && (myNextHop & 0xFF) == p->relay_node &&
+        routingGraph->getEdgesFrom(myNextHop) != nullptr) {
+        receivedFromNextHop = true;
+    }
+    if (receivedFromNextHop) {
         LOG_DEBUG("[SR] UNICAST RELAY: Received from next hop %s who can reach %s - destination should have it",
                  nextHopName, destName);
         return false;  // Next hop already transmitted, destination should have received it
@@ -1415,11 +1433,23 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
     // Check if heardFrom is ALSO a relay for the destination.
     // If we received the packet from ANY relay that leads to the destination,
     // that relay should deliver it - we don't need to relay.
+    // Also check via raw relay byte for unresolved relay identities.
     if (heardFrom != 0 && heardFrom != sourceNode) {
         NodeNum relayForDest = routingGraph->getDownstreamRelay(destination);
         if (relayForDest == heardFrom) {
             LOG_DEBUG("[SR] UNICAST RELAY: Received from relay %s which leads to %s - no relay needed",
                      heardFromName, destName);
+            return false;
+        }
+    }
+    if (p->relay_node != 0) {
+        NodeNum relayForDest = routingGraph->getDownstreamRelay(destination);
+        if (relayForDest != 0 && (relayForDest & 0xFF) == p->relay_node &&
+            routingGraph->getEdgesFrom(relayForDest) != nullptr) {
+            char relayName[64];
+            getNodeDisplayName(relayForDest, relayName, sizeof(relayName));
+            LOG_DEBUG("[SR] UNICAST RELAY: Relay byte 0x%02x matches direct neighbor %s (downstream relay for %s) - no relay needed",
+                     p->relay_node, relayName, destName);
             return false;
         }
     }

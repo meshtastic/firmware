@@ -122,7 +122,7 @@ struct DownstreamEntry {
 class NeighborGraph {
   public:
     static uint32_t getContentionWindowMs();
-    static constexpr uint32_t EDGE_AGING_TIMEOUT_SECS = 600;
+    static constexpr uint32_t EDGE_AGING_TIMEOUT_SECS = 1800; // 30 min default (matches SR node TTL)
 
     NeighborGraph();
 

@@ -263,7 +263,7 @@ void NeighborGraph::ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(No
         }
 
         bool isPlaceholder = (node->nodeId & 0xFF000000) == 0xFF000000;
-        uint32_t ttl = isPlaceholder ? 60 : nodeTtl;
+        uint32_t ttl = isPlaceholder ? 300 : nodeTtl; // Placeholders: 5 min
 
         if (currentTimeSecs - node->lastFullUpdate > ttl || node->edgeCount == 0) {
             // Remove downstream entries that reference this neighbor as relay

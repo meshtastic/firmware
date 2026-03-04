@@ -13,8 +13,8 @@
 // Maximum neighbors we track/broadcast (optimized to fit 14 in 233 byte payload)
 #define MAX_SIGNAL_ROUTING_NEIGHBORS 14
 
-// Broadcast interval for signal routing info (2 minutes)
-#define SIGNAL_ROUTING_BROADCAST_SECS 120
+// Broadcast interval for signal routing info (3 minutes)
+#define SIGNAL_ROUTING_BROADCAST_SECS 180
 
 class SignalRoutingModule : public ProtobufModule<meshtastic_SignalRoutingInfo>, private concurrency::OSThread
 {
@@ -52,10 +52,10 @@ private:
     uint32_t lastGraphUpdate = 0;
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_SECS = 300;
     static constexpr uint32_t EARLY_BROADCAST_DELAY_MS = 15 * 1000;
-    static constexpr uint32_t ACTIVE_NODE_TTL_SECS = 300;
-    static constexpr uint32_t MUTE_NODE_TTL_SECS = 1800;
-    static constexpr uint32_t CAPABILITY_TTL_SECS = 300;
-    static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 120 * 1000;
+    static constexpr uint32_t ACTIVE_NODE_TTL_SECS = 1800;   // 30 min for SR nodes (was 5 min)
+    static constexpr uint32_t MUTE_NODE_TTL_SECS = 3600;    // 1 hr for legacy/stock nodes (was 30 min)
+    static constexpr uint32_t CAPABILITY_TTL_SECS = 1800;   // 30 min
+    static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 600 * 1000;  // 10 min
 
     bool signalBasedRoutingEnabled = true;
     uint32_t lastBroadcast = 0;
