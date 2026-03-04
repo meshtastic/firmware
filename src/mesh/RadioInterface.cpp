@@ -609,8 +609,8 @@ uint32_t RadioInterface::getTxDelayMsecWeightedWorst(float snr)
 /** Returns true if we should rebroadcast early like a ROUTER */
 bool RadioInterface::shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p)
 {
-    // If we are a router-like role, we always rebroadcast early
-    if (isRouterLikeRole(config.device.role)) {
+    // If we are a ROUTER role, we always rebroadcast early
+    if (isRouterRole(config.device.role)) {
         return true;
     }
 

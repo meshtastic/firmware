@@ -1073,12 +1073,12 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     } else {
         sm.dest = dest;
         sm.type = MessageType::DM_TO_US;
-        // Only add as favorite if our role is NOT CLIENT_BASE
-        if (!isClientBaseRole(config.device.role)) {
+        // Only add as favorite if our role is not router-like.
+        if (!isRouterLikeRole(config.device.role)) {
             LOG_INFO("Proactively adding %x as favorite node", dest);
             nodeDB->set_favorite(true, dest);
         } else {
-            LOG_DEBUG("Not favoriting node %x as we are CLIENT_BASE role", dest);
+            LOG_DEBUG("Not favoriting node %x because role is router-like", dest);
         }
     }
     sm.ackStatus = AckStatus::NONE;
