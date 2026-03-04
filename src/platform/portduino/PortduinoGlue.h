@@ -52,6 +52,7 @@ struct pinMapping {
     int gpiochip;
     int line;
     bool enabled = false;
+    bool default_high = false;
 };
 
 extern std::ofstream traceFile;

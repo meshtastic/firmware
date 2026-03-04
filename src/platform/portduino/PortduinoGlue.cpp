@@ -19,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <set>
 #include <stdexcept>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -496,14 +497,19 @@ void portduinoSetup()
     randomSeed(time(NULL));
 
     std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
+
+    std::set<int> used_pins;
+
     for (const auto *i : portduino_config.all_pins) {
-        if (i->enabled && i->pin > max_GPIO)
+        if (i->enabled && i->pin > max_GPIO) {
             max_GPIO = i->pin;
+        }
     }
 
     for (auto i : portduino_config.extra_pins) {
-        if (i.enabled && i.pin > max_GPIO)
+        if (i.enabled && i.pin > max_GPIO) {
             max_GPIO = i.pin;
+        }
     }
 
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
@@ -517,12 +523,18 @@ void portduinoSetup()
             continue;
         }
         if (i->enabled) {
-            if (initGPIOPin(i->pin, gpioChipName + std::to_string(i->gpiochip), i->line) != ERRNO_OK) {
-                printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i->line);
-                exit(EXIT_FAILURE);
+            if (used_pins.find(i->pin) != used_pins.end()) {
+                printf("Pin %d is in use for multiple purposes\n", i->pin);
+            } else {
+                if (initGPIOPin(i->pin, gpioChipName + std::to_string(i->gpiochip), i->line) != ERRNO_OK) {
+                    printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i->line);
+                    exit(EXIT_FAILURE);
+                }
+                used_pins.insert(i->pin);
             }
         }
     }
+    printf("Initializing extra pins\n");
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
@@ -530,9 +542,14 @@ void portduinoSetup()
             continue;
         }
         if (i.enabled) {
-            if (initGPIOPin(i.pin, gpioChipName + std::to_string(i.gpiochip), i.line) != ERRNO_OK) {
-                printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i.line);
-                exit(EXIT_FAILURE);
+            if (used_pins.find(i.pin) != used_pins.end()) {
+                printf("Pin %d is in use for multiple purposes\n", i.pin);
+            } else {
+                if (initGPIOPin(i.pin, gpioChipName + std::to_string(i.gpiochip), i.line) != ERRNO_OK) {
+                    printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i.line);
+                    exit(EXIT_FAILURE);
+                }
+                used_pins.insert(i.pin);
             }
         }
     }
@@ -556,6 +573,18 @@ void portduinoSetup()
 
         // disable bias once finished
         pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT);
+    }
+
+    for (auto i : portduino_config.extra_pins) {
+        // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
+        // Those GPIO are handled in our usermode driver instead.
+        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+            continue;
+        }
+        if (i.enabled && i.default_high) {
+            pinMode(i.pin, OUTPUT);
+            digitalWrite(i.pin, HIGH);
+        }
     }
 
     // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
@@ -709,6 +738,17 @@ bool loadConfig(const char *configPath)
                     if (this_pin->config_section == "Lora") {
                         readGPIOFromYaml(yamlConfig["Lora"][this_pin->config_name], *this_pin);
                     }
+                }
+            }
+
+            if (yamlConfig["Lora"]["Enable_Pins"]) {
+                for (auto extra_pin : yamlConfig["Lora"]["Enable_Pins"]) {
+                    portduino_config.extra_pins.push_back(pinMapping());
+                    portduino_config.extra_pins.back().config_section = "Lora";
+                    portduino_config.extra_pins.back().config_name = "Enable_Pins";
+                    portduino_config.extra_pins.back().enabled = true;
+                    portduino_config.extra_pins.back().default_high = true;
+                    readGPIOFromYaml(extra_pin, portduino_config.extra_pins.back());
                 }
             }
 
