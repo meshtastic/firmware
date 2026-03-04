@@ -668,7 +668,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = BMI270;
                     logFoundDevice("BMI270", (uint8_t)addr.address);
                     break;
-                } else if (addr.address == BMX160_ADDR) {
+                } else if (registerValue == 0xD8) { // BMX160 chip ID at register 0x00
                     type = BMX160;
                     logFoundDevice("BMX160", (uint8_t)addr.address);
                     break;
