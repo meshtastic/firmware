@@ -204,8 +204,11 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
         return;
     }
     if (curSelected == static_cast<int8_t>(numDigits)) {
-        alertBannerCallback(currentNumber);
+        auto callback = alertBannerCallback;
+        auto value = currentNumber;
         resetBanner();
+        if (callback)
+            callback(value);
         return;
     }
 
@@ -270,8 +273,11 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
                inEvent.inputEvent == INPUT_BROKER_USER_PRESS || inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
         curSelected++;
     } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
-        alertBannerCallback(selectedNodenum);
+        auto callback = alertBannerCallback;
+        auto value = selectedNodenum;
         resetBanner();
+        if (callback)
+            callback(value);
         return;
     } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                alertBannerUntil != 0) {
@@ -387,13 +393,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
                    inEvent.inputEvent == INPUT_BROKER_USER_PRESS || inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
             curSelected++;
         } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
-            if (optionsEnumPtr != nullptr) {
-                alertBannerCallback(optionsEnumPtr[curSelected]);
-                optionsEnumPtr = nullptr;
-            } else {
-                alertBannerCallback(curSelected);
-            }
+            auto callback = alertBannerCallback;
+            int selectedValue = (optionsEnumPtr != nullptr) ? optionsEnumPtr[curSelected] : curSelected;
             resetBanner();
+            if (callback)
+                callback(selectedValue);
             return;
         } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                    alertBannerUntil != 0) {

@@ -34,6 +34,12 @@
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
+#include "mapps/AppLibrary.h"
+#include "modules/AppModule/AppModule.h"
+#include "modules/AppModule/FlashFileBackend.h"
+#include "modules/AppModule/SDFileBackend.h"
+#include "modules/AppModule/AppState.h"
+#include "mapps/MappTrustStore.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <memory>
@@ -136,6 +142,8 @@ AudioThread *audioThread = nullptr;
 #include "ExtensionIOXL9555.hpp"
 ExtensionIOXL9555 io;
 #endif
+
+AppLibrary *appLibrary = nullptr;
 
 #if HAS_TFT
 extern void tftSetup(void);
@@ -461,6 +469,17 @@ void setup()
 
     fsInit();
 
+    {
+        auto flashFs = std::make_shared<FlashFileBackend>();
+        std::shared_ptr<FileBackend> sdFs;
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
+        sdFs = std::make_shared<SDFileBackend>();
+#endif
+        auto trust = std::make_shared<MappTrustStore>();
+        appLibrary = new AppLibrary(flashFs, sdFs, trust);
+        appLibrary->setAppStateBackend(getFlashAppStateBackend());
+    }
+
 #if !MESHTASTIC_EXCLUDE_I2C
 #if defined(I2C_SDA1) && defined(ARCH_RP2040)
     Wire1.setSDA(I2C_SDA1);
@@ -681,6 +700,9 @@ void setup()
 
 #ifdef HAS_SDCARD
     setupSDCard();
+    if (appLibrary) {
+        appLibrary->discoverSDApps();
+    }
 #endif
 
     // Hello
@@ -894,6 +916,10 @@ void setup()
 
     // Now that the mesh service is created, create any modules
     setupModules();
+
+    // Start background handlers for all previously approved apps
+    if (appModule)
+        appModule->startApprovedHandlers();
 
 #if !MESHTASTIC_EXCLUDE_I2C
     // Inform modules about I2C devices

@@ -23,6 +23,8 @@
 #include "modules/ExternalNotificationModule.h"
 #include "modules/KeyVerificationModule.h"
 #include "modules/TraceRouteModule.h"
+#include "mapps/AppLibrary.h"
+#include "modules/AppModule/AppModule.h"
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -1039,7 +1041,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Apps, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -1068,6 +1070,11 @@ void menuHandler::systemBaseMenu()
     }
     optionsEnumArray[options++] = PowerMenu;
 
+    if (appLibrary && !appLibrary->getApps().empty()) {
+        optionsArray[options] = "Apps";
+        optionsEnumArray[options++] = Apps;
+    }
+
     if (test_enabled) {
         optionsArray[options] = "Test Menu";
         optionsEnumArray[options++] = Test;
@@ -1093,6 +1100,9 @@ void menuHandler::systemBaseMenu()
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::TestMenu;
+            screen->runNow();
+        } else if (selected == Apps) {
+            menuQueue = AppsMenu;
             screen->runNow();
         } else if (selected == Bluetooth) {
             menuQueue = BluetoothToggleMenu;
@@ -2632,6 +2642,107 @@ void menuHandler::messageBubblesMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::appsMenu()
+{
+    if (!appLibrary) {
+        screen->showSimpleBanner("App framework\nnot available.", 3000);
+        return;
+    }
+
+    const auto &apps = appLibrary->getApps();
+    if (apps.empty()) {
+        screen->showSimpleBanner("No apps found.", 3000);
+        return;
+    }
+
+    // Build dynamic options list: Back + each discovered app
+    static const int MAX_APP_OPTIONS = 8;
+    static const char *optionsArray[MAX_APP_OPTIONS + 1]; // +1 for Back
+    static int optionsEnumArray[MAX_APP_OPTIONS + 1];
+    static std::string appSlugs[MAX_APP_OPTIONS];
+    int options = 0;
+
+    optionsArray[options] = "Back";
+    optionsEnumArray[options] = -1;
+    options++;
+
+    int appCount = (int)apps.size();
+    if (appCount > MAX_APP_OPTIONS)
+        appCount = MAX_APP_OPTIONS;
+
+    for (int i = 0; i < appCount; i++) {
+        optionsArray[options] = apps[i].manifest.name.c_str();
+        optionsEnumArray[options] = i;
+        appSlugs[i] = apps[i].manifest.slug;
+        options++;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Apps";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected >= 0 && selected < MAX_APP_OPTIONS && appModule) {
+            appModule->startApprovalFlow(appSlugs[selected]);
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::appRunningMenu()
+{
+    // Build options dynamically: Back, [custom items...], Exit App
+    static const int MAX_MENU_ITEMS = 8;
+    static const char *options[MAX_MENU_ITEMS + 2]; // +2 for Back and Exit App
+    static int optionsEnum[MAX_MENU_ITEMS + 2];
+    static std::string menuItemStorage[MAX_MENU_ITEMS]; // keep strings alive
+
+    int count = 0;
+
+    // "Back" always first — enum -1 means dismiss
+    options[count] = "Back";
+    optionsEnum[count] = -1;
+    count++;
+
+    // Custom items from the running app
+    if (appModule) {
+        const auto &items = appModule->getAppMenuItems();
+        for (size_t i = 0; i < items.size() && (int)i < MAX_MENU_ITEMS; i++) {
+            menuItemStorage[i] = items[i];
+            options[count] = menuItemStorage[i].c_str();
+            optionsEnum[count] = (int)i; // 0-based custom item index
+            count++;
+        }
+    }
+
+    // "Exit App" always last — enum -2 means exit
+    options[count] = "Exit App";
+    optionsEnum[count] = -2;
+    count++;
+
+    BannerOverlayOptions bannerOptions;
+    static std::string appName;
+    appName = appModule ? appModule->getCurrentAppName() : "App";
+    bannerOptions.message = appName.c_str();
+    bannerOptions.optionsArrayPtr = options;
+    bannerOptions.optionsCount = count;
+    bannerOptions.optionsEnumPtr = optionsEnum;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (!appModule)
+            return;
+        if (selected == -1) {
+            // Back — dismiss overlay (no action needed)
+        } else if (selected == -2) {
+            appModule->stopCurrentApp();
+        } else {
+            // Custom menu item
+            appModule->callMenuHandler(selected);
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != MenuNone)
@@ -2781,6 +2892,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case MessageBubblesMenu:
         messageBubblesMenu();
+        break;
+    case AppsMenu:
+        appsMenu();
         break;
     }
     menuQueue = MenuNone;
