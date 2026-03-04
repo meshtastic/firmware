@@ -6,6 +6,10 @@
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
+#if defined(ARCH_ESP32)
+#include <driver/rtc_io.h>
+#include <esp_sleep.h>
+#endif
 
 #include "Throttle.h"
 
@@ -52,22 +56,12 @@ template <typename T> bool SX126xInterface<T>::init()
     pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
 
-#if defined(USE_GC1109_PA)
-    // GC1109 FEM chip initialization
-    // See variant.h for full pin mapping and control logic documentation
-
-    // VFEM_Ctrl (LORA_PA_POWER): Power enable for GC1109 LDO (always on)
-    pinMode(LORA_PA_POWER, OUTPUT);
-    digitalWrite(LORA_PA_POWER, HIGH);
-
-    // CSD (LORA_PA_EN): Chip enable - must be HIGH to enable GC1109 for both RX and TX
-    pinMode(LORA_PA_EN, OUTPUT);
-    digitalWrite(LORA_PA_EN, HIGH);
-
-    // CPS (LORA_PA_TX_EN): PA mode select - HIGH enables full PA during TX, LOW for RX (don't care)
-    // Note: TX/RX path switching (CTX) is handled by DIO2 via SX126X_DIO2_AS_RF_SWITCH
-    pinMode(LORA_PA_TX_EN, OUTPUT);
-    digitalWrite(LORA_PA_TX_EN, LOW); // Start in RX-ready state
+#if HAS_LORA_FEM
+    loraFEMInterface.init();
+    // Apply saved FEM LNA mode from config
+    if (loraFEMInterface.isLnaCanControl()) {
+        loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED);
+    }
 #endif
 
 #ifdef RF95_FAN_EN
@@ -169,6 +163,14 @@ template <typename T> bool SX126xInterface<T>::init()
     } else {
         uint16_t result = lora.setRxBoostedGainMode(false);
         LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", result);
+    }
+
+    // Undocumented SX1262 register patch recommended by Heltec/Semtech for improved RX sensitivity.
+    // Sets bit 0 of register 0x8B5.
+    if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) == RADIOLIB_ERR_NONE) {
+        LOG_INFO("Applied SX1262 register 0x8B5 patch for RX improvement");
+    } else {
+        LOG_WARN("Failed to apply SX1262 register 0x8B5 patch for RX improvement");
     }
 
 #if 0
@@ -328,6 +330,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag();
 #endif
 }
 
@@ -387,25 +390,77 @@ template <typename T> bool SX126xInterface<T>::sleep()
     digitalWrite(SX126X_POWER_EN, LOW);
 #endif
 
-#if defined(USE_GC1109_PA)
-    /*
-     * Do not switch the power on and off frequently.
-     * After turning off LORA_PA_EN, the power consumption has dropped to the uA level.
-     *  // digitalWrite(LORA_PA_POWER, LOW);
-     */
-    digitalWrite(LORA_PA_EN, LOW);
-    digitalWrite(LORA_PA_TX_EN, LOW);
+#if HAS_LORA_FEM
+    loraFEMInterface.setSleepModeEnable();
 #endif
+
     return true;
+}
+
+template <typename T> void SX126xInterface<T>::resetAGC()
+{
+    // Safety: don't reset mid-packet
+    if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
+        return;
+
+    LOG_DEBUG("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
+
+    // 1. Warm sleep — powers down the entire analog frontend, resetting AGC state.
+    //    A plain standby→startReceive cycle does NOT reset the AGC.
+    lora.sleep(true);
+
+    // 2. Wake to RC standby for stable calibration
+    lora.standby(RADIOLIB_SX126X_STANDBY_RC, true);
+
+    // 3. Calibrate all blocks (ADC, PLL, image, RC oscillators)
+    uint8_t calData = RADIOLIB_SX126X_CALIBRATE_ALL;
+    module.SPIwriteStream(RADIOLIB_SX126X_CMD_CALIBRATE, &calData, 1, true, false);
+
+    // 4. Wait for calibration to complete (BUSY pin goes low)
+    module.hal->delay(5);
+    uint32_t start = millis();
+    while (module.hal->digitalRead(module.getGpio())) {
+        if (millis() - start > 50)
+            break;
+        module.hal->yield();
+    }
+
+    if (module.hal->digitalRead(module.getGpio())) {
+        LOG_WARN("SX126x AGC reset: calibration did not complete within 50ms");
+        startReceive();
+        return;
+    }
+
+    // 5. Re-calibrate image rejection for actual operating frequency
+    //    Calibrate(0x7F) defaults to 902-928 MHz which is wrong for other regions.
+    lora.calibrateImage(getFreq());
+
+    // Re-apply settings that calibration may have reset
+
+    // DIO2 as RF switch
+#ifdef SX126X_DIO2_AS_RF_SWITCH
+    lora.setDio2AsRfSwitch(true);
+#elif defined(ARCH_PORTDUINO)
+    if (portduino_config.dio2_as_rf_switch)
+        lora.setDio2AsRfSwitch(true);
+#endif
+
+    // RX boosted gain mode
+    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+
+    // 6. Resume receiving
+    startReceive();
 }
 
 /** Control PA mode for GC1109 FEM - CPS pin selects full PA (txon=true) or bypass mode (txon=false) */
 template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
 {
-#if defined(USE_GC1109_PA)
-    digitalWrite(LORA_PA_POWER, HIGH);         // Ensure LDO is on
-    digitalWrite(LORA_PA_EN, HIGH);            // CSD=1: Chip enabled
-    digitalWrite(LORA_PA_TX_EN, txon ? 1 : 0); // CPS: 1=full PA, 0=bypass (for RX, CPS is don't care)
+#if HAS_LORA_FEM
+    if (txon) {
+        loraFEMInterface.setTxModeEnable();
+    } else {
+        loraFEMInterface.setRxModeEnable();
+    }
 #endif
 }
 

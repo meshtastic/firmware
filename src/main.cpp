@@ -9,6 +9,7 @@
 #include "PowerMon.h"
 #include "RadioLibInterface.h"
 #include "ReliableRouter.h"
+#include "TransmitHistory.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "power/PowerHAL.h"
@@ -192,8 +193,6 @@ bool kb_found = false;
 // global bool to record that on-screen keyboard (OSK) is present
 bool osk_found = false;
 
-unsigned long last_listen = 0;
-
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the Accelerometer (if found)
@@ -248,9 +247,7 @@ uint32_t timeLastPowered = 0;
 static OSThread *powerFSMthread;
 OSThread *ambientLightingThread;
 
-#ifdef ARCH_PORTDUINO
 RadioLibHal *RadioLibHAL = NULL;
-#endif
 
 /**
  * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
@@ -392,8 +389,8 @@ void setup()
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
 #ifndef SENSECAP_INDICATOR
-    // use PSRAM for malloc calls > 256 bytes
-    heap_caps_malloc_extmem_enable(256);
+    // use PSRAM for malloc calls > 2048 bytes
+    heap_caps_malloc_extmem_enable(2048);
 #endif
 #endif
 
@@ -707,6 +704,9 @@ void setup()
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
+
+    // Initialize transmit history to persist broadcast throttle timers across reboots
+    TransmitHistory::getInstance()->loadFromDisk();
 #if HAS_TFT
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         tftSetup();
@@ -724,17 +724,15 @@ void setup()
         playStartMelody();
 
 #if HAS_SCREEN
-    // fixed screen override?
-    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
-        screen_model = config.display.oled;
-
+        // fixed screen override?
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
     screen_geometry = GEOMETRY_128_128;
-#endif
-
-#if defined(USE_SH1107_128_64)
+#elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+#else
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
+        screen_model = config.display.oled;
 #endif
 #endif
 
@@ -1178,10 +1176,19 @@ void loop()
 #endif
     power->powerCommandsCheck();
 
-    if (RadioLibInterface::instance != nullptr && !Throttle::isWithinTimespanMs(last_listen, 1000 * 60) &&
-        !(RadioLibInterface::instance->isSending() || RadioLibInterface::instance->isActivelyReceiving())) {
-        RadioLibInterface::instance->startReceive();
-        LOG_DEBUG("attempting AGC reset");
+    if (RadioLibInterface::instance != nullptr) {
+        static uint32_t lastRadioMissedIrqPoll;
+        if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
+            lastRadioMissedIrqPoll = millis();
+            RadioLibInterface::instance->pollMissedIrqs();
+        }
+
+        // Periodic AGC reset — warm sleep + recalibrate to prevent stuck AGC gain
+        static uint32_t lastAgcReset;
+        if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
+            lastAgcReset = millis();
+            RadioLibInterface::instance->resetAGC();
+        }
     }
 
 #ifdef DEBUG_STACK

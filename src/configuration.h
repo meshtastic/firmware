@@ -163,6 +163,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 0
 #endif
 
+#ifndef HAS_LORA_FEM
+#define HAS_LORA_FEM 0
+#endif
+
 // -----------------------------------------------------------------------------
 // Feature toggles
 // -----------------------------------------------------------------------------
@@ -244,6 +248,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BQ25896_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
 #define SEN5X_ADDR 0x69
+#define SCD30_ADDR 0x61
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER

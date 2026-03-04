@@ -9,6 +9,7 @@
 #include "MeshService.h"
 #include "Filesystem/NodeDB.h"
 #include "PowerMon.h"
+#include "TransmitHistory.h"
 #include "detect/LoRaRadioType.h"
 #include "error.h"
 #include "main.h"
@@ -237,6 +238,10 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     if (!skipSaveNodeDb) {
         nodeDB->saveToDisk();
     }
+
+    // Persist broadcast transmit times so throttle survives reboot
+    if (transmitHistory)
+        transmitHistory->saveToDisk();
 
 #ifdef PIN_POWER_EN
     digitalWrite(PIN_POWER_EN, LOW);
@@ -555,10 +560,8 @@ void enableLoraInterrupt()
     gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
 
-#if defined(USE_GC1109_PA)
-    gpio_pullup_en((gpio_num_t)LORA_PA_POWER);
-    gpio_pullup_en((gpio_num_t)LORA_PA_EN);
-    gpio_pulldown_en((gpio_num_t)LORA_PA_TX_EN);
+#if HAS_LORA_FEM
+    loraFEMInterface.setRxModeEnableWhenMCUSleep();
 #endif
 
     LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);

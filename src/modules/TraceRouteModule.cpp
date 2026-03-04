@@ -266,7 +266,7 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
     }
 }
 
-void TraceRouteModule::updateNextHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
+void TraceRouteModule::updateNextHops(const meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
     // E.g. if the route is A->B->C->D and we are B, we can set C as next-hop for C and D
     // Similarly, if we are C, we can set D as next-hop for D

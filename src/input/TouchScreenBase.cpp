@@ -43,7 +43,7 @@ int32_t TouchScreenBase::runOnce()
     // process touch events
     int16_t x, y;
     bool touched = getTouch(x, y);
-    if (x < 0 || y < 0) // T-deck can emit phantom touch events with a negative value when turing off the screen
+    if (x < 0 || y < 0) // T-deck can emit phantom touch events with a negative value when turning off the screen
         touched = false;
     if (touched) {
         this->setInterval(20);
@@ -123,7 +123,7 @@ int32_t TouchScreenBase::runOnce()
         }
     }
 #else
-    // fire TAP event when no 2nd tap occured within time
+    // fire TAP event when no 2nd tap occurred within time
     if (_tapped) {
         _tapped = false;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
