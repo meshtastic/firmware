@@ -1073,7 +1073,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         sm.dest = dest;
         sm.type = MessageType::DM_TO_US;
         // Only add as favorite if our role is NOT CLIENT_BASE
-        if (config.device.role != 12) {
+        if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
             LOG_INFO("Proactively adding %x as favorite node", dest);
             nodeDB->set_favorite(true, dest);
         } else {
