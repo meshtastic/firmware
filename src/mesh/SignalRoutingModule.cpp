@@ -769,6 +769,7 @@ bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum real
         }
 
         // Remove the placeholder node from the graph
+        // (downstream entries already transferred by replaceGatewayNode above)
         routingGraph->removeNode(placeholderId);
 
         LOG_INFO("[SR] Resolved placeholder %08x -> real node %08x", placeholderId, realNodeId);
@@ -785,15 +786,22 @@ NodeNum SignalRoutingModule::getPlaceholderForRelay(uint8_t relayId) const
 
 void SignalRoutingModule::replaceGatewayNode(NodeNum oldNode, NodeNum newNode)
 {
-    if (oldNode == newNode) return;
+    if (oldNode == newNode || !routingGraph) return;
 
-    // The downstream table in NeighborGraph is private, so we can't directly iterate it.
-    // Clear downstream entries for the old node - the table will self-correct
-    // via aging and new topology broadcasts.
-    if (routingGraph) {
-        routingGraph->clearDownstreamForRelay(oldNode);
-        routingGraph->clearDownstreamForDestination(oldNode);
+    // Transfer downstream entries from old relay to new relay
+    NodeNum dsBuf[NEIGHBOR_GRAPH_MAX_DOWNSTREAM];
+    uint16_t dsCosts[NEIGHBOR_GRAPH_MAX_DOWNSTREAM];
+    size_t dsCount = routingGraph->getDownstreamNodesForRelay(oldNode, dsBuf, dsCosts, NEIGHBOR_GRAPH_MAX_DOWNSTREAM);
+    if (dsCount > 0) {
+        uint32_t now = millis() / 1000;
+        for (size_t i = 0; i < dsCount; i++) {
+            routingGraph->updateDownstream(dsBuf[i], newNode, dsCosts[i] / 100.0f, now);
+        }
+        LOG_DEBUG("[SR] Transferred %u downstream entries from %08x to %08x",
+                 (unsigned)dsCount, oldNode, newNode);
     }
+    routingGraph->clearDownstreamForRelay(oldNode);
+    routingGraph->clearDownstreamForDestination(oldNode);
 }
 
 bool SignalRoutingModule::isPlaceholderConnectedToUs(NodeNum placeholderId) const
