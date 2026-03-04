@@ -915,6 +915,12 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
         power = maxPower;
     }
 
+#if HAS_LORA_FEM
+    if (!devicestate.owner.is_licensed) {
+        power = loraFEMInterface.powerConversion(power);
+    }
+#else
+// todo:All entries containing "lora fem" are grouped together above.
 #ifdef ARCH_PORTDUINO
     size_t num_pa_points = portduino_config.num_pa_points;
     const uint16_t *tx_gain = portduino_config.tx_gain_lora;
@@ -940,7 +946,7 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
             }
         }
     }
-
+#endif
     if (power > loraMaxPower) // Clamp power to maximum defined level
         power = loraMaxPower;
 
