@@ -1566,8 +1566,14 @@ bool SignalRoutingModule::shouldRelay(const meshtastic_MeshPacket *p)
     LOG_DEBUG("[SR] Considering unicast relay from %s to %s (hop_limit=%d)",
              senderName, destName, p->hop_limit);
 
-    // Check if destination is known - don't relay to unknown destinations
+    // Check if destination is reachable through SR topology
     if (!topologyHealthyForUnicast(p->to)) {
+        // If the node exists in NodeDB, fall back to broadcast-style relay
+        // This handles legacy/stock nodes not in the SR graph
+        if (nodeDB->getMeshNode(p->to)) {
+            LOG_DEBUG("[SR] Unicast to %s not routable via SR, falling back to broadcast relay", destName);
+            return shouldRelayBroadcast(p);
+        }
         LOG_DEBUG("[SR] Not relaying unicast to unknown destination %s", destName);
         return false;
     }
