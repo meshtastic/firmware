@@ -41,8 +41,7 @@
 #define default_mqtt_encryption_enabled true
 #define default_mqtt_tls_enabled false
 
-#define IF_ROUTER(routerVal, normalVal)                                                                                          \
-    ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
+#define IF_ROUTER(routerVal, normalVal) (isRouterRole(config.device.role) ? (routerVal) : (normalVal))
 
 class Default
 {

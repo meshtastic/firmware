@@ -13,6 +13,7 @@
 #include "detect/LoRaRadioType.h"
 #include "error.h"
 #include "main.h"
+#include "meshUtils.h"
 #include "modules/StatusLEDModule.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -546,7 +547,7 @@ void enableModemSleep()
 
 bool shouldLoraWake(uint32_t msecToWake)
 {
-    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER);
+    return msecToWake < portMAX_DELAY && isRouterRole(config.device.role);
 }
 
 void enableLoraInterrupt()
