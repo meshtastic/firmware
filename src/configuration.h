@@ -163,6 +163,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 0
 #endif
 
+#ifndef HAS_LORA_FEM
+#define HAS_LORA_FEM 0
+#endif
+
 // -----------------------------------------------------------------------------
 // Feature toggles
 // -----------------------------------------------------------------------------

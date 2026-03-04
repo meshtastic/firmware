@@ -139,7 +139,7 @@ jobs:
         id: tags
 
       - name: Docker login
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: meshtastic
           password: ${{ secrets.DOCKER_FIRMWARE_TOKEN }}

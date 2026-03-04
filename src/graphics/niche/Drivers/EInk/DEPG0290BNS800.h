@@ -35,7 +35,7 @@ class DEPG0290BNS800 : public SSD16XX
     void configWaveform() override;
     void configUpdateSequence() override;
     void detachFromUpdate() override;
-    void finalizeUpdate() override; // Only overriden for a slight optimization
+    void finalizeUpdate() override; // Only overridden for a slight optimization
 };
 
 } // namespace NicheGraphics::Drivers
