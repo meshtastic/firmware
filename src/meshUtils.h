@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdarg>
 #include <iterator>
+#include <mesh/generated/meshtastic/config.pb.h>
 #include <stdint.h>
 
 /// C++ v17+ clamp function, limits a given value to a range defined by lo and hi
@@ -39,3 +40,19 @@ const std::string vformat(const char *const zcFormat, ...);
 size_t pb_string_length(const char *str, size_t max_len);
 
 #define IS_ONE_OF(item, ...) isOneOf(item, sizeof((int[]){__VA_ARGS__}) / sizeof(int), __VA_ARGS__)
+
+inline bool isRouterRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return role == meshtastic_Config_DeviceConfig_Role_ROUTER || role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE;
+}
+
+inline bool isRouterLikeRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return role == meshtastic_Config_DeviceConfig_Role_ROUTER || role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE ||
+           role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+}
+
+inline bool isTrackerRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    return role == meshtastic_Config_DeviceConfig_Role_TRACKER || role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER;
+}

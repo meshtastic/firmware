@@ -85,9 +85,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     }
 
     // Check if both local device and previous relay are routers (including CLIENT_BASE)
-    bool localIsRouter =
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                  meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
+    bool localIsRouter = isRouterLikeRole(config.device.role);
 
     // If local device isn't a router, always decrement
     if (!localIsRouter) {
@@ -111,8 +109,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
             continue;
 
         // Check 3: role check (moderate cost - multiple comparisons)
-        if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+        if (!isRouterLikeRole(static_cast<meshtastic_Config_DeviceConfig_Role>(node->user.role))) {
             continue;
         }
 

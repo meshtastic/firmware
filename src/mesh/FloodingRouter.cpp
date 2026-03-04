@@ -100,8 +100,7 @@ void FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 {
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+    if (isRouterRole(config.device.role)) {
         // ROUTER, ROUTER_LATE should never cancel relaying a packet (i.e. we should always rebroadcast),
         // even if we've heard another station rebroadcast it already.
         return false;

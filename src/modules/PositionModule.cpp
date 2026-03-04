@@ -37,15 +37,12 @@ PositionModule::PositionModule()
         }
     }
 
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+    if (!isTrackerRole(config.device.role)) {
         setIntervalFromNow(setStartDelay());
     }
 
     // Power saving trackers should clear their position on startup to avoid waking up and sending a stale position
-    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
-         config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
-        config.power.is_power_saving) {
+    if (isTrackerRole(config.device.role) && config.power.is_power_saving) {
         LOG_DEBUG("Clear position on startup for sleepy tracker (ー。ー) zzz");
         nodeDB->clearLocalPosition();
     }
@@ -381,8 +378,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
     p->to = dest;
     p->decoded.want_response = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ? false : wantReplies;
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
+    if (isTrackerRole(config.device.role))
         p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
     else
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
