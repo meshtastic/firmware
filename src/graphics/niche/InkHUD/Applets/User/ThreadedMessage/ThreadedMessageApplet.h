@@ -7,7 +7,7 @@ Displays a thread-view of incoming and outgoing message for a specific channel
 The channel for this applet is set in the constructor,
 when the applet is added to WindowManager in the setupNicheGraphics method.
 
-Several messages are saved to flash at shutdown, to preseve applet between reboots.
+Several messages are saved to flash at shutdown, to preserve applet between reboots.
 This class has its own internal method for saving and loading to fs, which interacts directly with the FSCommon layer.
 If the amount of flash usage is unacceptable, we could keep these in RAM only.
 
