@@ -164,7 +164,7 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     currentMessageIndex = selectDestination;
 
     // This triggers the canned message list
-    updateState(CANNED_MESSAGE_RUN_STATE_ACTIVE);
+    updateState(CANNED_MESSAGE_RUN_STATE_ACTIVE, true);
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
@@ -193,7 +193,7 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     lastChannel = channel;
     lastDestSet = true;
 
-    updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT);
+    updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
@@ -388,7 +388,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     // Matrix keypad: If matrix key, trigger action select for canned message
     if (event->inputEvent == INPUT_BROKER_MATRIXKEY) {
-        updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT);
+        updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT, true);
         payload = INPUT_BROKER_MATRIXKEY;
         currentMessageIndex = event->kbchar - 1;
         lastTouchMillis = millis();
@@ -429,7 +429,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         }
         // Printable char (ASCII) opens free text compose
         if (event->kbchar >= 32 && event->kbchar <= 126) {
-            updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT);
+            updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             notifyObservers(&e);
@@ -453,7 +453,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     return 0;
 }
 
-void CannedMessageModule::updateState(cannedMessageModuleRunState newState)
+void CannedMessageModule::updateState(cannedMessageModuleRunState newState, bool shouldRequestFocus)
 {
     runState = newState;
     if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
@@ -462,8 +462,7 @@ void CannedMessageModule::updateState(cannedMessageModuleRunState newState)
     } else {
         inputBroker->menuMode = true; // Re-enable menu navigation for destination selection
     }
-    if (runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
-        runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
+    if (shouldRequestFocus) {
         requestFocus();
     }
 }
@@ -500,6 +499,10 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
     // RESTORE THIS!
     if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
         updateDestinationSelectionList();
+
+    updateState((runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) ? CANNED_MESSAGE_RUN_STATE_FREETEXT
+                                                                             : CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION,
+                true);
 
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -605,7 +608,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
             }
         }
 
-        updateState(returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT);
+        updateState(returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
         returnToCannedList = false;
         screen->forceDisplay(true);
         return 1;
@@ -613,7 +616,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 
     // CANCEL
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
-        updateState(returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT);
+        updateState(returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
         returnToCannedList = false;
         searchQuery = "";
 
@@ -673,7 +676,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         // [Select Destination] triggers destination selection UI
         if (strcmp(current, "[Select Destination]") == 0) {
             returnToCannedList = true;
-            updateState(CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION);
+            updateState(CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION, true);
             destIndex = 0;
             scrollIndex = 0;
             updateDestinationSelectionList(); // Make sure list is fresh
@@ -698,7 +701,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         // [Free Text] triggers the free text input (virtual keyboard)
 #if defined(USE_VIRTUAL_KEYBOARD)
         if (strcmp(current, "[-- Free Text --]") == 0) {
-            updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT);
+            updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             notifyObservers(&e);
@@ -987,14 +990,14 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
             freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
         }
         cursor += emoteInsert.length();
-        updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT);
+        updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
         screen->forceDisplay();
         return 1;
     }
 
     // Cancel returns to freetext
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
-        updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT);
+        updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
         screen->forceDisplay();
         return 1;
     }
