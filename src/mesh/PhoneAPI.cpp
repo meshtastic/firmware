@@ -269,7 +269,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_OWN_NODEINFO: {
         LOG_DEBUG("Send My NodeInfo");
-        auto us = nodeDB->readNextMeshNode(readIndex);
+        auto us = nodeDB->getMeshNode(nodeDB->getNodeNum());
         if (us) {
             auto info = TypeConversions::ConvertToNodeInfo(us);
             info.has_hops_away = false;
@@ -280,7 +280,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             }
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = info;
-            // Should allow us to resume sending NodeInfo in STATE_SEND_OTHER_NODEINFOS
             {
                 concurrency::LockGuard guard(&nodeInfoMutex);
                 nodeInfoForPhone.num = 0;
@@ -639,13 +638,11 @@ void PhoneAPI::prefetchNodeInfos()
             if (!nextNode)
                 break;
 
+            // Own node already sent in STATE_SEND_OWN_NODEINFO
+            if (nextNode->num == nodeDB->getNodeNum())
+                continue;
+
             auto info = TypeConversions::ConvertToNodeInfo(nextNode);
-            bool isUs = info.num == nodeDB->getNodeNum();
-            info.hops_away = isUs ? 0 : info.hops_away;
-            info.last_heard = isUs ? getValidTime(RTCQualityFromNet) : info.last_heard;
-            info.snr = isUs ? 0 : info.snr;
-            info.via_mqtt = isUs ? false : info.via_mqtt;
-            info.is_favorite = info.is_favorite || isUs;
             nodeInfoQueue.push_back(info);
             added = true;
         }
