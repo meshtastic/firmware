@@ -13,7 +13,7 @@ class FlashFileBackend : public FileBackend
     {
         std::vector<DirEntry> result;
 
-        File root = FSCom.open(path);
+        File root = FSCom.open(path, FILE_O_READ);
         if (!root || !root.isDirectory())
             return result;
 
@@ -32,7 +32,7 @@ class FlashFileBackend : public FileBackend
 
     std::string readFile(const char *path) override
     {
-        File file = FSCom.open(path);
+        File file = FSCom.open(path, FILE_O_READ);
         if (!file)
             return "";
 
