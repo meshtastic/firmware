@@ -191,11 +191,11 @@ SignalRouting calculates unicast routes and coordinates delivery for reliable pa
 ```cpp
 NodeNum SignalRoutingModule::getNextHop(NodeNum destination, ...) {
     // 1. Check direct connection (1-hop route)
-    const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
+    const NodeEdges* myEdges = routingGraph->getEdgesFrom(myNode);
     for each direct neighbor:
         if (neighbor == destination) return destination; // Direct route
 
-    // 2. Find multi-hop routes using Dijkstra (full mode) or simplified routing (lite mode)
+    // 2. Find multi-hop routes using Dijkstra on the NeighborGraph
     Route route = routingGraph->calculateRoute(destination, currentTime);
     if (route.nextHop != 0) {
         return route.nextHop; // Multi-hop route found
@@ -302,7 +302,7 @@ Unicast coordination can occur once a destination is known through any of these 
 SignalRouting uses an iterative algorithm to coordinate broadcast relays, ensuring coverage while minimizing redundancy. The algorithm prioritizes legacy routers/repeaters and uses timeout-based candidate selection. **Note**: This iterative approach is used only for broadcast coordination, not for unicast relay coordination.
 
 ```cpp
-bool Graph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime, uint32_t packetId) {
+bool NeighborGraph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime, uint32_t packetId) {
     // Start with all nodes that can hear the transmitter
     std::unordered_set<NodeNum> candidates = getNodesThatHeardTransmitter(heardFrom);
 
@@ -433,74 +433,91 @@ SignalRouting considerations:
 - Uses timeout-based relay selection to allow backup relays when primary relays fail
 - Coordination effectiveness depends on network topology knowledge and node participation
 
-## Graph vs GraphLite Implementation
+## NeighborGraph Implementation
 
-### Graph (Full Mode)
+### Graph Architecture
+
+The `NeighborGraph` class uses fixed-size arrays (~24 KB heap) and runs on all platforms including ESP32-C3, supporting 400+ mesh nodes with no dynamic allocation.
 
 **Memory Structure:**
 ```cpp
-class Graph {
-    std::unordered_map<NodeNum, std::vector<Edge>> adjacencyList;
-    // Dynamic allocation, hash table overhead
-    // ~64 bytes per node + ~32 bytes per edge
+class NeighborGraph {
+    NodeEdges neighbors[24];              // Direct neighbor slots (24 nodes × 16 edges each)
+    DownstreamEntry downstream[1100];     // Remote node routing table
+    RelayState relayStates[32];           // Transmission tracking for contention
+    Route routeCache[32];                 // Cached Dijkstra results
+    // Total: ~24 KB fixed allocation
 };
 ```
 
+**Core Data Types:**
+
+| Struct | Purpose |
+|--------|---------|
+| `Edge` | Link to a neighbor with ETX (fixed-point ×100), variance, source (Reported/Mirrored), timestamp |
+| `NodeEdges` | A neighbor slot: nodeId + up to 16 edges + last full update time |
+| `DownstreamEntry` | Remote node routing: (destination, relay, cost, lastUpdate) |
+| `Route` | Cached route result: (destination, nextHop, cost, timestamp) |
+| `RelayCandidate` | Relay selection: (nodeId, coverageCount, avgCost, tier) |
+| `RelayState` | Tracks which nodes transmitted which packets for contention windows |
+
+**Graph Limits (compile-time configurable):**
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `NEIGHBOR_GRAPH_MAX_NEIGHBORS` | 24 | Direct neighbor slots |
+| `NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE` | 16 | Max edges per neighbor |
+| `NEIGHBOR_GRAPH_MAX_DOWNSTREAM` | 1100 | Remote node routing entries |
+| `NEIGHBOR_GRAPH_MAX_RELAY_STATES` | 32 | Transmission tracking slots |
+| `NEIGHBOR_GRAPH_MAX_CACHED_ROUTES` | 32 | Dijkstra result cache |
+
 **Features:**
-- Full Dijkstra algorithm for route calculation
+- Full Dijkstra algorithm for multi-hop route calculation
 - Enhanced relay coordination with coverage analysis
-- Dynamic memory allocation (grows with network)
-- Support for 100+ nodes in large networks
+- Downstream routing table for multi-hop node reachability
+- Fixed memory footprint, no heap fragmentation
+- Runs on all platforms including ESP32-C3 (272 KB RAM)
 
-**Hardware Requirements:**
-- **RAM**: 25-35KB for graph storage (100 nodes, 6 edges each)
-- **Flash**: ~15KB additional code space
-- **CPU**: Higher processing for complex algorithms
-- **Best for**: ESP32, larger microcontrollers
+### Downstream Routing Table
 
-### GraphLite (Lite Mode)
+The downstream table tracks which remote (multi-hop) nodes are reachable through which direct neighbor (relay):
 
-**Memory Structure:**
 ```cpp
-class GraphLite {
-    static constexpr size_t MAX_NODES = 100;
-    static constexpr size_t MAX_EDGES_PER_NODE = 8;
-    NodeEdgesLite nodes[MAX_NODES]; // Fixed-size arrays
+struct DownstreamEntry {
+    NodeNum destination; // Remote node
+    NodeNum relay;       // Which direct neighbor reaches it
+    uint16_t costFixed;  // Cumulative ETX × 100
+    uint32_t lastUpdate; // For aging
 };
 ```
 
-**Features:**
-- Simplified routing (direct + 1-hop-through-neighbor)
-- Basic relay coordination with contention windows
-- Fixed memory footprint, no dynamic allocation
-- Optimized for memory-constrained devices
+- Updated when SR topology broadcasts report neighbor lists from relay nodes
+- Supports multiple relays per destination (entries with different relay fields)
+- Used by `getNextHop()` to find routes beyond direct neighbors
+- During placeholder resolution, entries are transferred to the real node via `transferDownstream()`
 
-**Hardware Requirements:**
-- **RAM**: ~8-12KB fixed usage (predictable memory)
-- **Flash**: ~10KB additional code space
-- **CPU**: Lower processing requirements
-- **Best for**: ESP32-C3, RP2040, STM32WL, constrained devices
+### Placeholder System
 
-### Key Differences
+When a relayed packet arrives from an unknown node (identified only by its 8-bit relay byte), SR creates a **placeholder node** (ID `0xFF0000XX` where `XX` is the relay byte) to preserve topology relationships until the real identity is discovered:
 
-| Aspect | Graph (Full) | GraphLite (Lite) |
-|--------|-------------|------------------|
-| **Route Length** | Multi-hop (full Dijkstra) | 1-2 hops only |
-| **Relay Coordination** | Advanced coverage analysis | Simple contention windows |
-| **Memory Usage** | Variable (grows with network) | Fixed (~8-12KB) |
-| **Node Capacity** | 100+ nodes | ~50-60 nodes practical |
-| **CPU Usage** | Higher (complex algorithms) | Lower (simplified logic) |
-| **Memory Safety** | Dynamic allocation risks | Fixed arrays (safer) |
-| **Scalability** | Better for large networks | Optimized for small networks |
+1. **Creation**: When we directly hear a packet relayed by an unknown node
+2. **Resolution**: When we later hear that same relay byte from a node whose full ID we now know (via direct contact)
+3. **Transfer**: On resolution, all downstream entries are transferred from the placeholder to the real node via `transferDownstream()`, preserving routing continuity
+4. **TTL**: Placeholders age out after 5 minutes if never resolved
 
-### Automatic Mode Selection
+Placeholders are only created for nodes **we** hear directly — not for nodes reported by others in SR broadcasts.
+
+### Relay Byte Matching
+
+Unicast relay coordination uses relay byte matching (last byte of `p->relay_node`) to detect when the designated relay has already transmitted a packet. To prevent false positives from byte collisions across distant nodes, relay byte checks are **guarded by direct-edge verification**:
 
 ```cpp
-#ifdef SIGNAL_ROUTING_LITE_MODE
-    routingGraph = new GraphLite();  // Always lite mode
-#else
-    routingGraph = new Graph();       // Full mode by default
-#endif
+// Only match relay bytes against nodes we have direct edges to
+if (relayForDest != 0 && (relayForDest & 0xFF) == p->relay_node &&
+    routingGraph->getEdgesFrom(relayForDest) != nullptr) {
+    // Relay already transmitted — don't duplicate
+    return false;
+}
 ```
 
 ### Timing and Synchronization
@@ -508,17 +525,16 @@ class GraphLite {
 SignalRouting uses **monotonic time** (time since boot) for all graph operations to ensure consistency:
 
 - **Graph aging**: Edge expiration and node cleanup
-- **Route caching**: Cache validity and expiration
+- **Route caching**: Cache validity and expiration (5 min)
 - **Transmission tracking**: Contention window timing
 - **Edge timestamps**: Connection update times
 
 This prevents issues with RTC updates that could cause time jumps, ensuring reliable graph maintenance and routing decisions.
 
-**Automatic Hardware Adaptation:**
-- **STM32WL**: Disabled entirely (64KB RAM limit)
+**Hardware Adaptation:**
+- **STM32WL**: SR disabled entirely (64KB RAM limit)
 - **RP2040**: RAM guard (< 30KB free disables SR)
-- **ESP32-C3**: Uses GraphLite automatically
-- **ESP32/others**: Uses full Graph mode
+- **ESP32-C3/ESP32/all others**: NeighborGraph (~24 KB)
 
 ## Configuration and Tuning
 
@@ -526,14 +542,36 @@ This prevents issues with RTC updates that could cause time jumps, ensuring reli
 
 ```cpp
 // Broadcast interval for topology updates
-#define SIGNAL_ROUTING_BROADCAST_SECS 120
+#define SIGNAL_ROUTING_BROADCAST_SECS 180     // 3 minutes
 
-// Maximum neighbors tracked per node
-#define MAX_SIGNAL_ROUTING_NEIGHBORS 14
-
-// Speculative retransmission timeout
-#define SPECULATIVE_RETRANSMIT_TIMEOUT_MS 600
+// Maximum neighbors tracked per broadcast payload
+#define MAX_SIGNAL_ROUTING_NEIGHBORS 14       // Fits 14 in 233 byte payload
 ```
+
+### Timeout Values
+
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| SR broadcast interval | 180s (3 min) | Topology update frequency |
+| SR node TTL | 1800s (30 min) | How long active SR nodes stay in graph |
+| Legacy/stock node TTL | 3600s (1 hr) | How long legacy nodes stay in graph |
+| Edge aging timeout | 1800s (30 min) | Default edge expiration (matches SR node TTL) |
+| Placeholder TTL | 300s (5 min) | How long unresolved placeholders survive |
+| Relay ID cache TTL | 600s (10 min) | Relay byte → NodeNum mapping cache |
+| Capability cache TTL | 1800s (30 min) | Node capability status cache |
+| Route cache timeout | 300s (5 min) | Dijkstra result cache validity |
+| ETX change threshold | 0.50 | Minimum ETX change to trigger update |
+
+### Node Capability Tracking
+
+SR tracks each node's capability status to make informed routing decisions:
+
+| Status | Description | TTL |
+|--------|-------------|-----|
+| `SRactive` | Node runs SR and actively participates | 30 min |
+| `Passive` | Node runs SR but in passive mode (TRACKER, SENSOR, etc.) | 30 min |
+| `Legacy` | Stock firmware node, no SR participation | 1 hr |
+| `Unknown` | Not yet classified | — |
 
 ### Topology Health Assessment
 
@@ -546,6 +584,10 @@ bool topologyHealthy = capableNeighbors >= 1;
 // For unicast: requires knowledge of destination node
 bool topologyHealthy = nodeDB->getMeshNode(destination) != nullptr;
 ```
+
+### Unicast Fallback for Unknown Routes
+
+When a unicast packet targets a node not reachable through the SR topology graph, SR checks whether the node exists in NodeDB. If it does (e.g., a legacy node not participating in SR), the packet falls back to broadcast-style relay to give it a chance to reach its destination. Truly unknown nodes (not in NodeDB at all) are dropped to prevent flooding.
 
 ## Real-World Examples
 
@@ -632,7 +674,9 @@ SignalRouting implements sophisticated unicast relay coordination to optimize pa
 ```cpp
 bool shouldRelayUnicastForCoordination(const meshtastic_MeshPacket *p) {
     // Complex coordination logic including all the above checks
-    // Determines if this node should relay the coordinated unicast packet
+    // Plus relay byte deduplication: if the designated relay for the destination
+    // has already transmitted (detected via relay_node byte match against direct
+    // edges only), don't duplicate the relay
 }
 ```
 
@@ -659,13 +703,11 @@ bool shouldRelayUnicastForCoordination(const meshtastic_MeshPacket *p) {
 - Degrades to contention-based approaches when coordination isn't possible
 - Works with mixed legacy/SignalRouting networks but coordination is limited by legacy node behavior
 
-## Implementation Notes
-
 ### Fallback Mechanisms
 
 SignalRouting gracefully degrades when coordination isn't possible:
 
-1. **Unknown Destinations**: Does not broadcast unicast packets for unknown nodes to prevent flooding (discovery occurs via any received packet)
+1. **Unknown Destinations**: Unicasts to nodes in NodeDB but not in SR topology fall back to broadcast-style relay; truly unknown nodes are dropped
 2. **Topology Incomplete**: Uses traditional unicast routing for known but poorly connected destinations
 3. **Legacy Node Priority**: Gives priority to legacy routers/repeaters for compatibility
 4. **Memory/CPU Constraints**: Automatic feature disabling for constrained devices
@@ -678,23 +720,25 @@ SignalRouting gracefully degrades when coordination isn't possible:
 - **Gateway Integration**: Special handling for nodes bridging network segments
 - **Mute Node Intelligence**: CLIENT_MUTE nodes contribute topology information without relay participation
 
-## Future Considerations
+## Implementation Notes
 
-Potential areas for improvement:
+### NodeDB Integration
 
-1. **Topology Update Optimization**: Reduce broadcast frequency while maintaining accuracy
-2. **Legacy Node Coordination**: Better integration with existing router behaviors
-3. **Dynamic Timeout Adjustment**: Adapt contention windows based on network conditions
-4. **Route Caching Improvements**: Better handling of topology changes
-5. **Memory Optimization**: Further reduce RAM usage for constrained devices
+SR relies on NodeDB for node existence checks (e.g., unicast fallback decisions). When NodeDB is full (100 nodes), the least-recently-heard node is evicted. The `last_heard` field is set from `rx_time` when available, or from `getTime()` when `rx_time` is 0 (no NTP/GPS), ensuring active nodes are not evicted as stale.
+
+### Stack Safety
+
+Large buffers are stored in the heap-allocated NeighborGraph class, not on the stack. Stack-allocated display buffers are capped to small sizes:
+- `transferDownstream()` operates directly on the private downstream array
+- `logNetworkTopology()` caps display buffers to 64 entries with "... and N more" truncation
 
 ## Troubleshooting
 
 ### Common Issues
 
 **"SR disabled - insufficient RAM"**
-- Device has <30KB free RAM
-- Switch to GraphLite mode or upgrade hardware
+- Device has <30KB free RAM (RP2040 guard)
+- SR is disabled entirely on STM32WL (64KB RAM limit)
 
 **"Topology unhealthy - flooding only"**
 - Too few SR-capable nodes or incomplete topology information
@@ -702,23 +746,27 @@ Potential areas for improvement:
 
 **"No route found for unicast"**
 - Destination not in topology graph
+- If node exists in NodeDB, SR will fall back to broadcast-style relay
 - Wait for topology convergence or use opportunistic forwarding
-
-**High CPU usage**
-- Large network with Graph mode
-- Consider switching to GraphLite or reducing network size
 
 **"Packet not relayed despite good coverage"**
 - Iterative algorithm may have excluded the node or found better candidates
 - Legacy nodes may have priority and relayed instead
+- Relay byte matching may have detected the designated relay already transmitted
 - Unique coverage requirements may not be met
 
 **"Unexpected relays from legacy nodes"**
 - Legacy routers/repeaters are prioritized and may relay independently
 - This is expected behavior for compatibility with existing infrastructure
 
-**"Coordinated unicast relays being used"**
-- SignalRouting only uses coordinated relay selection for unicast packets to known destinations with good routes
-- Unknown destinations use traditional unicast routing to prevent network flooding
+**"Unresolved placeholder nodes (ff0000XX)"**
+- Placeholder created for unknown relay byte, not yet resolved via direct contact
+- Placeholders age out after 5 minutes if never resolved
+- Only created for directly-heard relay nodes, not nodes reported by others
+
+**"Nodes disappearing from topology"**
+- Check if nodes are being evicted from NodeDB (100 node limit)
+- Verify `last_heard` is being updated (uses `rx_time` or `getTime()` when no NTP/GPS)
+- Check edge aging timeouts: SR nodes expire after 30 min, legacy after 1 hr
 
 SignalRouting provides an alternative to traditional flooding-based mesh networking, offering basic coordination for packet relay decisions. It works alongside existing routing approaches and provides benefits in networks with sufficient SignalRouting-capable nodes, while maintaining compatibility with legacy devices through prioritized relay handling.
