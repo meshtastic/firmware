@@ -278,6 +278,24 @@ void portduinoSetup()
                 std::cout << "autoconf: Found Pi HAT+ " << hat_vendor << " " << autoconf_product << " at /proc/device-tree/hat"
                           << std::endl;
 
+                // check for custom data fields
+                int i = 0;
+                while (access(("/proc/device-tree/hat/custom_" + std::to_string(i)).c_str(), R_OK) == 0) {
+                    std::ifstream customFieldFile(("/proc/device-tree/hat/custom_" + std::to_string(i)).c_str());
+                    if (customFieldFile.is_open()) {
+                        std::string customFieldName;
+                        std::string customFieldValue;
+                        getline(customFieldFile, customFieldName, ' ');
+                        getline(customFieldFile, customFieldValue, ' ');
+                        customFieldFile.close();
+
+                        printf("autoconf: Found hat+ custom field %s: %s\n", customFieldName.c_str(), customFieldValue.c_str());
+                        portduino_config.hat_plus_custom_fields[customFieldName] = customFieldValue;
+                    }
+
+                    i++;
+                }
+
                 // potential TODO: Validate that this is a real UUID
                 std::ifstream hatUUID("/proc/device-tree/hat/uuid");
                 char uuid[38] = {0};
@@ -573,6 +591,13 @@ void portduinoSetup()
 
         // disable bias once finished
         pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT);
+    } else if (portduino_config.hat_plus_custom_fields.find("io_slot1") != portduino_config.hat_plus_custom_fields.end()) {
+        printf("Hat+ io_slot1 is %s\n", portduino_config.hat_plus_custom_fields["io_slot1"].c_str());
+        if (portduino_config.hat_plus_custom_fields["io_slot1"] != "RAK13302") {
+            std::cout << "Hat+ io_slot1 is not RAK13302, skipping PA curve" << std::endl;
+            portduino_config.num_pa_points = 1;
+            portduino_config.tx_gain_lora[0] = 0;
+        }
     }
 
     for (auto i : portduino_config.extra_pins) {
