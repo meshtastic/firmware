@@ -1072,12 +1072,14 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     } else {
         sm.dest = dest;
         sm.type = MessageType::DM_TO_US;
-        // Only add as favorite if our role is NOT CLIENT_BASE
-        if (config.device.role != 12) {
+        // Only add as favorite if our role is not router-like (ROUTER, ROUTER_LATE, CLIENT_BASE)
+        if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
+            config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE &&
+            config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
             LOG_INFO("Proactively adding %x as favorite node", dest);
             nodeDB->set_favorite(true, dest);
         } else {
-            LOG_DEBUG("Not favoriting node %x as we are CLIENT_BASE role", dest);
+            LOG_DEBUG("Not favoriting node %x because role is router-like", dest);
         }
     }
     sm.ackStatus = AckStatus::NONE;
@@ -1209,14 +1211,13 @@ int32_t CannedMessageModule::runOnce()
                 this->cursor = 0;
 
                 // Tell Screen to jump straight to the TextMessage frame
-                UIFrameEvent e;
                 e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
                 this->notifyObservers(&e);
 
                 // Now deactivate this module
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 
-                return INT32_MAX; // don’t fall back into canned list
+                return INT32_MAX; // don't fall back into canned list
             } else {
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
@@ -1237,14 +1238,13 @@ int32_t CannedMessageModule::runOnce()
                     this->cursor = 0;
 
                     // Tell Screen to jump straight to the TextMessage frame
-                    UIFrameEvent e;
                     e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
                     this->notifyObservers(&e);
 
                     // Now deactivate this module
                     this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 
-                    return INT32_MAX; // don’t fall back into canned list
+                    return INT32_MAX; // don't fall back into canned list
                 }
             } else {
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
@@ -1255,11 +1255,10 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = "";
         this->cursor = 0;
 
-        UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->notifyObservers(&e);
 
-        // Immediately stop, don’t linger on canned screen
+        // Immediately stop, don't linger on canned screen
         return INT32_MAX;
     }
     // Highlight [Select Destination] initially when entering the message list
@@ -2070,7 +2069,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             // Draw lines with emotes
             int rowHeight = FONT_HEIGHT_SMALL;
             int yLine = inputY;
-            for (auto &line : lines) {
+            for (const auto &line : lines) {
                 int nextX = x;
                 for (const auto &token : line) {
                     if (token.first) {

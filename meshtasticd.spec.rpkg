@@ -49,6 +49,7 @@ BuildRequires: pkgconfig(libulfius)
 BuildRequires: pkgconfig(x11)
 BuildRequires: pkgconfig(libinput)
 BuildRequires: pkgconfig(xkbcommon-x11)
+BuildRequires: pkgconfig(sdl2)
 
 # libbsd is needed on older Fedora/RHEL to provide 'strlcpy'
 %if 0%{?fedora} >= 39 || 0%{?rhel} >= 10

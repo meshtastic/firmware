@@ -4,7 +4,7 @@ cli:
 plugins:
   sources:
     - id: trunk
-      ref: v1.7.4
+      ref: v1.7.5
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
@@ -14,15 +14,15 @@ lint:
     - prettier@3.8.1
     - trufflehog@3.93.1
     - yamllint@1.38.0
-    - bandit@1.9.3
-    - trivy@0.69.1
+    - bandit@1.9.4
+    - trivy@0.69.3
     - taplo@0.10.0
-    - ruff@0.15.0
-    - isort@7.0.0
-    - markdownlint@0.47.0
+    - ruff@0.15.4
+    - isort@8.0.1
+    - markdownlint@0.48.0
     - oxipng@10.1.0
     - svgo@4.0.0
-    - actionlint@1.7.10
+    - actionlint@1.7.11
     - flake8@7.3.0
     - hadolint@2.14.0
     - shfmt@3.6.0
