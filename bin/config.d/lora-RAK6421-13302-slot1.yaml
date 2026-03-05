@@ -13,4 +13,4 @@ Lora:
   DIO2_AS_RF_SWITCH: true
   spidev: spidev0.0
   # CS: 8
-  TX_GAIN_LORA: [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8]
+  TX_GAIN_LORA: [8]
