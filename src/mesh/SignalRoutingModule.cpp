@@ -1025,41 +1025,58 @@ void SignalRoutingModule::logNetworkTopology()
             const char* branch = isLast ? "\\-" : "+-";
             const char* cont = isLast ? " " : "|";
 
-            // Get downstream nodes that route through this neighbor (cap display to avoid stack overflow)
+            // Get the neighbor's own edges (nodes that can hear them = their coverage)
+            const NodeEdges* neighborEdges = routingGraph->getEdgesFrom(edge.to);
+            uint8_t listenerCount = neighborEdges ? neighborEdges->edgeCount : 0;
+
+            // Get downstream nodes that route through this neighbor
             static constexpr size_t MAX_DS_DISPLAY = 64;
             NodeNum dsBuf[MAX_DS_DISPLAY];
             uint16_t dsCosts[MAX_DS_DISPLAY];
             size_t totalDsCount = routingGraph->getDownstreamCountForRelay(edge.to);
             size_t dsCount = routingGraph->getDownstreamNodesForRelay(edge.to, dsBuf, dsCosts, MAX_DS_DISPLAY);
 
-            if (totalDsCount > 0) {
-                LOG_INFO("[SR]   %s %s%s: %s (ETX=%.1f, %ss ago, relay for %u downstream)",
-                         branch, nprefix, neighborName, quality, etx, ageBuf, static_cast<unsigned int>(totalDsCount));
-            } else {
-                LOG_INFO("[SR]   %s %s%s: %s (ETX=%.1f, %ss ago)",
-                         branch, nprefix, neighborName, quality, etx, ageBuf);
-            }
+            LOG_INFO("[SR]   %s %s%s: %s (ETX=%.1f, %ss ago, covers %u nodes, relay for %u downstream)",
+                     branch, nprefix, neighborName, quality, etx, ageBuf,
+                     static_cast<unsigned int>(listenerCount), static_cast<unsigned int>(totalDsCount));
 
-            // Show downstream nodes nested under this relay
-            for (size_t d = 0; d < dsCount; d++) {
-                char dsName[48];
-                getNodeDisplayName(dsBuf[d], dsName, sizeof(dsName));
+            // Show nodes that can hear this neighbor (their topology-reported edges)
+            if (listenerCount > 0) {
+                for (uint8_t n = 0; n < listenerCount; n++) {
+                    const Edge& nEdge = neighborEdges->edges[n];
+                    char lName[48];
+                    getNodeDisplayName(nEdge.to, lName, sizeof(lName));
 
-                CapabilityStatus dsStatus = getCapabilityStatus(dsBuf[d]);
-                const char* dsprefix = "";
-                if (dsStatus == CapabilityStatus::SRactive) {
-                    dsprefix = "[SR-active] ";
-                } else if (dsStatus == CapabilityStatus::Passive) {
-                    dsprefix = "[SR-passive] ";
+                    CapabilityStatus lStatus = getCapabilityStatus(nEdge.to);
+                    const char* lprefix = "";
+                    if (lStatus == CapabilityStatus::SRactive) lprefix = "[SR-active] ";
+                    else if (lStatus == CapabilityStatus::Passive) lprefix = "[SR-passive] ";
+
+                    bool lLast = (n == listenerCount - 1) && (totalDsCount == 0);
+                    const char* lBranch = lLast ? "\\-" : "+-";
+                    LOG_INFO("[SR]   %s    %s %s%s (ETX=%.1f)", cont, lBranch, lprefix, lName, nEdge.getEtx());
                 }
-
-                bool dsLast = (d == dsCount - 1) && (dsCount == totalDsCount);
-                const char* dsBranch = dsLast ? "\\-" : "+-";
-                float dsCost = dsCosts[d] / 100.0f;
-                LOG_INFO("[SR]   %s    %s %s%s (ETX=%.1f)", cont, dsBranch, dsprefix, dsName, dsCost);
             }
-            if (dsCount < totalDsCount) {
-                LOG_INFO("[SR]   %s    \\- ... and %u more", cont, static_cast<unsigned int>(totalDsCount - dsCount));
+
+            // Show downstream nodes (inferred relay relationships) separately
+            if (totalDsCount > 0) {
+                for (size_t d = 0; d < dsCount; d++) {
+                    char dsName[48];
+                    getNodeDisplayName(dsBuf[d], dsName, sizeof(dsName));
+
+                    CapabilityStatus dsStatus = getCapabilityStatus(dsBuf[d]);
+                    const char* dsprefix = "";
+                    if (dsStatus == CapabilityStatus::SRactive) dsprefix = "[SR-active] ";
+                    else if (dsStatus == CapabilityStatus::Passive) dsprefix = "[SR-passive] ";
+
+                    bool dsLast = (d == dsCount - 1) && (dsCount == totalDsCount);
+                    const char* dsBranch = dsLast ? "\\-" : "+-";
+                    float dsCost = dsCosts[d] / 100.0f;
+                    LOG_INFO("[SR]   %s    %s [downstream] %s%s (ETX=%.1f)", cont, dsBranch, dsprefix, dsName, dsCost);
+                }
+                if (dsCount < totalDsCount) {
+                    LOG_INFO("[SR]   %s    \\- ... and %u more downstream", cont, static_cast<unsigned int>(totalDsCount - dsCount));
+                }
             }
         }
     }

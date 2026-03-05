@@ -22,7 +22,7 @@
 #endif
 
 #ifndef NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE
-#define NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE 16
+#define NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE 32
 #endif
 
 #ifndef NEIGHBOR_GRAPH_MAX_DOWNSTREAM
@@ -122,7 +122,7 @@ struct DownstreamEntry {
 class NeighborGraph {
   public:
     static uint32_t getContentionWindowMs();
-    static constexpr uint32_t EDGE_AGING_TIMEOUT_SECS = 1800; // 30 min default (matches SR node TTL)
+    static constexpr uint32_t EDGE_AGING_TIMEOUT_SECS = 2700; // 45 min default (matches SR node TTL)
 
     NeighborGraph();
 

@@ -52,9 +52,9 @@ private:
     uint32_t lastGraphUpdate = 0;
     static constexpr uint32_t GRAPH_UPDATE_INTERVAL_SECS = 300;
     static constexpr uint32_t EARLY_BROADCAST_DELAY_MS = 15 * 1000;
-    static constexpr uint32_t ACTIVE_NODE_TTL_SECS = 1800;   // 30 min for SR nodes (was 5 min)
-    static constexpr uint32_t MUTE_NODE_TTL_SECS = 3600;    // 1 hr for legacy/stock nodes (was 30 min)
-    static constexpr uint32_t CAPABILITY_TTL_SECS = 1800;   // 30 min
+    static constexpr uint32_t ACTIVE_NODE_TTL_SECS = 2700;   // 45 min for SR nodes
+    static constexpr uint32_t MUTE_NODE_TTL_SECS = 5400;    // 90 min for legacy/stock nodes
+    static constexpr uint32_t CAPABILITY_TTL_SECS = 2700;   // 45 min
     static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 600 * 1000;  // 10 min
 
     bool signalBasedRoutingEnabled = true;
