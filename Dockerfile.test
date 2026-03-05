@@ -1,0 +1,26 @@
+# Lightweight container for running native PlatformIO tests on non-Linux hosts
+FROM python:3.14-slim-trixie
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_ROOT_USER_ACTION=ignore
+
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install --no-install-recommends -y \
+        g++ git ca-certificates pkg-config \
+        libgpiod-dev libyaml-cpp-dev libbluetooth-dev libi2c-dev libuv1-dev \
+        libusb-1.0-0-dev libulfius-dev liborcania-dev libssl-dev \
+        libx11-dev libinput-dev libxkbcommon-x11-dev libsqlite3-dev libsdl2-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir platformio==6.1.19 \
+        && useradd --create-home --shell /usr/sbin/nologin meshtastic
+
+WORKDIR /firmware
+RUN chown -R meshtastic:meshtastic /firmware
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD platformio --version || exit 1
+
+USER meshtastic
+
+# Run tests by default; override with docker run args for specific filters
+CMD ["platformio", "test", "-e", "coverage", "-v"]
