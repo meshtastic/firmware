@@ -22,9 +22,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.*/
 
+#include "SerialConsole.h"
 #include "configuration.h"
 
 #include "DebugConfiguration.h"
+
+#include <memory>
 
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -120,26 +123,23 @@ bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
 
 bool Syslog::vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args)
 {
-    char *message;
     size_t initialLen;
     size_t len;
     bool result;
 
     initialLen = strlen(fmt);
 
-    message = new char[initialLen + 1];
+    auto message = std::unique_ptr<char[]>(new char[initialLen + 1]);
 
-    len = vsnprintf(message, initialLen + 1, fmt, args);
+    len = vsnprintf(message.get(), initialLen + 1, fmt, args);
     if (len > initialLen) {
-        delete[] message;
-        message = new char[len + 1];
+        message = std::unique_ptr<char[]>(new char[len + 1]);
 
-        vsnprintf(message, len + 1, fmt, args);
+        vsnprintf(message.get(), len + 1, fmt, args);
     }
 
-    result = this->_sendLog(pri, appName, message);
+    result = this->_sendLog(pri, appName, message.get());
 
-    delete[] message;
     return result;
 }
 
