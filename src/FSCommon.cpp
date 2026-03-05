@@ -11,6 +11,7 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "configuration.h"
+#include <assert.h>
 
 // Software SPI is used by MUI so disable SD card here until it's also implemented
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
@@ -136,10 +137,16 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
         } else {
             meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
 #ifdef ARCH_ESP32
-            strcpy(fileInfo.file_name, file.path());
+            const char *fname = file.path();
 #else
-            strcpy(fileInfo.file_name, file.name());
+            const char *fname = file.name();
 #endif
+            size_t fnameLen = strlen(fname);
+            if (fnameLen >= sizeof(fileInfo.file_name))
+                LOG_WARN("File path truncated: %s", fname);
+            assert(fnameLen < sizeof(fileInfo.file_name));
+            strncpy(fileInfo.file_name, fname, sizeof(fileInfo.file_name) - 1);
+            fileInfo.file_name[sizeof(fileInfo.file_name) - 1] = '\0';
             if (!String(fileInfo.file_name).endsWith(".")) {
                 filenames.push_back(fileInfo);
             }

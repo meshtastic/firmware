@@ -7,6 +7,7 @@
 #include "meshUtils.h"
 #include "modules/AdminModule.h"
 #include <SHA256.h>
+#include <assert.h>
 
 KeyVerificationModule *keyVerificationModule;
 
@@ -69,12 +70,19 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_WARNING;
-        sprintf(cn->message, "Enter Security Number for Key Verification");
+        int written = snprintf(cn->message, sizeof(cn->message), "Enter Security Number for Key Verification");
+        assert(written >= 0 && (size_t)written < sizeof(cn->message)); // 43 chars << 400 bytes
         cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_request_tag;
         cn->payload_variant.key_verification_number_request.nonce = currentNonce;
-        strncpy(cn->payload_variant.key_verification_number_request.remote_longname, // should really check for nulls, etc
-                nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
-                sizeof(cn->payload_variant.key_verification_number_request.remote_longname));
+        char *dst1 = cn->payload_variant.key_verification_number_request.remote_longname;
+        const size_t dst1Size = sizeof(cn->payload_variant.key_verification_number_request.remote_longname);
+        const char *src1 = nodeDB->getMeshNode(currentRemoteNode)->user.long_name;
+        size_t len1 = strlen(src1);
+        if (len1 >= dst1Size)
+            LOG_ERROR("remote_longname truncated for number_request");
+        assert(len1 < dst1Size); // both are char[40]
+        strncpy(dst1, src1, dst1Size);
+        dst1[dst1Size - 1] = '\0';
         service->sendClientNotification(cn);
         LOG_INFO("Received hash2");
         currentState = KEY_VERIFICATION_SENDER_AWAITING_NUMBER;
@@ -83,7 +91,8 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
     } else if (currentState == KEY_VERIFICATION_RECEIVER_AWAITING_HASH1 && r->hash1.size == 32 && r->nonce == currentNonce) {
         if (memcmp(hash1, r->hash1.bytes, 32) == 0) {
             memset(message, 0, sizeof(message));
-            sprintf(message, "Verification: \n");
+            int written = snprintf(message, sizeof(message), "Verification: \n");
+            assert(written >= 0 && (size_t)written < sizeof(message)); // 16 chars << 40 bytes
             generateVerificationCode(message + 15);
             LOG_INFO("Hash1 matches!");
             static const char *optionsArray[] = {"Reject", "Accept"};
@@ -101,12 +110,22 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                       screen->showOverlayBanner(options);)
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->level = meshtastic_LogRecord_Level_WARNING;
-            sprintf(cn->message, "Final confirmation for incoming manual key verification %s", message);
+            written =
+                snprintf(cn->message, sizeof(cn->message), "Final confirmation for incoming manual key verification %s", message);
+            if (written < 0 || (size_t)written >= sizeof(cn->message))
+                LOG_ERROR("Final confirmation message truncated");
+            assert(written >= 0 && (size_t)written < sizeof(cn->message));
             cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
             cn->payload_variant.key_verification_final.nonce = currentNonce;
-            strncpy(cn->payload_variant.key_verification_final.remote_longname, // should really check for nulls, etc
-                    nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
-                    sizeof(cn->payload_variant.key_verification_final.remote_longname));
+            char *dst2 = cn->payload_variant.key_verification_final.remote_longname;
+            const size_t dst2Size = sizeof(cn->payload_variant.key_verification_final.remote_longname);
+            const char *src2 = nodeDB->getMeshNode(currentRemoteNode)->user.long_name;
+            size_t len2 = strlen(src2);
+            if (len2 >= dst2Size)
+                LOG_ERROR("remote_longname truncated for key_verification_final");
+            assert(len2 < dst2Size); // both are char[40]
+            strncpy(dst2, src2, dst2Size);
+            dst2[dst2Size - 1] = '\0';
             cn->payload_variant.key_verification_final.isSender = false;
             service->sendClientNotification(cn);
 
@@ -194,17 +213,29 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     responsePacket = allocDataProtobuf(response);
 
     responsePacket->pki_encrypted = true;
-    IF_SCREEN(snprintf(message, 25, "Security Number \n%03u %03u", currentSecurityNumber / 1000, currentSecurityNumber % 1000);
-              screen->showSimpleBanner(message, 30000); LOG_WARN("%s", message);)
+    IF_SCREEN({
+        int w = snprintf(message, sizeof(message), "Security Number \n%03u %03u", currentSecurityNumber / 1000,
+                         currentSecurityNumber % 1000);
+        assert(w >= 0 && (size_t)w < sizeof(message)); // 24 chars << 40 bytes
+        screen->showSimpleBanner(message, 30000);
+        LOG_WARN("%s", message);
+    })
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     cn->level = meshtastic_LogRecord_Level_WARNING;
-    sprintf(cn->message, "Incoming Key Verification.\nSecurity Number\n%03u %03u", currentSecurityNumber / 1000,
-            currentSecurityNumber % 1000);
+    int written = snprintf(cn->message, sizeof(cn->message), "Incoming Key Verification.\nSecurity Number\n%03u %03u",
+                           currentSecurityNumber / 1000, currentSecurityNumber % 1000);
+    assert(written >= 0 && (size_t)written < sizeof(cn->message)); // ~56 chars << 400 bytes
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_inform_tag;
     cn->payload_variant.key_verification_number_inform.nonce = currentNonce;
-    strncpy(cn->payload_variant.key_verification_number_inform.remote_longname, // should really check for nulls, etc
-            nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
-            sizeof(cn->payload_variant.key_verification_number_inform.remote_longname));
+    char *dst = cn->payload_variant.key_verification_number_inform.remote_longname;
+    const size_t dstSize = sizeof(cn->payload_variant.key_verification_number_inform.remote_longname);
+    const char *src = nodeDB->getMeshNode(currentRemoteNode)->user.long_name;
+    size_t srcLen = strlen(src);
+    if (srcLen >= dstSize)
+        LOG_ERROR("remote_longname truncated for number_inform");
+    assert(srcLen < dstSize); // both are char[40]
+    strncpy(dst, src, dstSize);
+    dst[dstSize - 1] = '\0';
     cn->payload_variant.key_verification_number_inform.security_number = currentSecurityNumber;
     service->sendClientNotification(cn);
     LOG_WARN("Security Number %04u, nonce %llu", currentSecurityNumber, currentNonce);
@@ -262,12 +293,22 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     IF_SCREEN(screen->requestMenu(graphics::menuHandler::KeyVerificationFinalPrompt);)
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     cn->level = meshtastic_LogRecord_Level_WARNING;
-    sprintf(cn->message, "Final confirmation for outgoing manual key verification %s", message);
+    int written =
+        snprintf(cn->message, sizeof(cn->message), "Final confirmation for outgoing manual key verification %s", message);
+    if (written < 0 || (size_t)written >= sizeof(cn->message))
+        LOG_ERROR("Final confirmation message truncated");
+    assert(written >= 0 && (size_t)written < sizeof(cn->message));
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
     cn->payload_variant.key_verification_final.nonce = currentNonce;
-    strncpy(cn->payload_variant.key_verification_final.remote_longname, // should really check for nulls, etc
-            nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
-            sizeof(cn->payload_variant.key_verification_final.remote_longname));
+    char *dst = cn->payload_variant.key_verification_final.remote_longname;
+    const size_t dstSize = sizeof(cn->payload_variant.key_verification_final.remote_longname);
+    const char *src = nodeDB->getMeshNode(currentRemoteNode)->user.long_name;
+    size_t srcLen = strlen(src);
+    if (srcLen >= dstSize)
+        LOG_ERROR("remote_longname truncated for key_verification_final");
+    assert(srcLen < dstSize); // both are char[40]
+    strncpy(dst, src, dstSize);
+    dst[dstSize - 1] = '\0';
     cn->payload_variant.key_verification_final.isSender = true;
     service->sendClientNotification(cn);
     LOG_INFO(message);

@@ -32,13 +32,15 @@ ProcessMessage DropzoneModule::handleReceived(const meshtastic_MeshPacket &mp)
     auto &p = mp.decoded;
     char matchCompare[54];
     auto incomingMessage = reinterpret_cast<const char *>(p.payload.bytes);
-    sprintf(matchCompare, "%s conditions", owner.short_name);
+    int written = snprintf(matchCompare, sizeof(matchCompare), "%s conditions", owner.short_name);
+    assert(written >= 0 && (size_t)written < sizeof(matchCompare)); // short_name max 4 chars + " conditions" = 15 << 54
     if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
         startSendConditions = millis();
     }
 
-    sprintf(matchCompare, "%s conditions", owner.long_name);
+    written = snprintf(matchCompare, sizeof(matchCompare), "%s conditions", owner.long_name);
+    assert(written >= 0 && (size_t)written < sizeof(matchCompare)); // long_name max 39 chars + " conditions" = 50 < 54
     if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
         startSendConditions = millis();
@@ -70,6 +72,7 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
     auto reply = allocDataPacket();
 
     auto node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    int written;
     if (sensor.hasSensor()) {
         meshtastic_Telemetry telemetry = meshtastic_Telemetry_init_zero;
         sensor.getMetrics(&telemetry);
@@ -77,12 +80,15 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
         auto windDirection = telemetry.variant.environment_metrics.wind_direction;
         auto temp = telemetry.variant.environment_metrics.temperature;
         auto baro = UnitConversions::HectoPascalToInchesOfMercury(telemetry.variant.environment_metrics.barometric_pressure);
-        sprintf(replyStr, "%s @ %02d:%02d:%02dz\nWind %.2f kts @ %d°\nBaro %.2f inHg %.2f°C", dropzoneStatus, hour, min, sec,
-                windSpeed, windDirection, baro, temp);
+        written = snprintf(replyStr, sizeof(replyStr), "%s @ %02d:%02d:%02dz\nWind %.2f kts @ %d°\nBaro %.2f inHg %.2f°C",
+                           dropzoneStatus, hour, min, sec, windSpeed, windDirection, baro, temp);
     } else {
         LOG_ERROR("No sensor found");
-        sprintf(replyStr, "%s @ %02d:%02d:%02d\nNo sensor found", dropzoneStatus, hour, min, sec);
+        written = snprintf(replyStr, sizeof(replyStr), "%s @ %02d:%02d:%02d\nNo sensor found", dropzoneStatus, hour, min, sec);
     }
+    if (written < 0 || (size_t)written >= sizeof(replyStr))
+        LOG_ERROR("replyStr truncated (wrote %d, buf %u)", written, sizeof(replyStr));
+    assert(written >= 0 && (size_t)written < sizeof(replyStr));
     LOG_DEBUG("Conditions reply: %s", replyStr);
     reply->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply
     memcpy(reply->decoded.payload.bytes, replyStr, reply->decoded.payload.size);
