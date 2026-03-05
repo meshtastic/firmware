@@ -39,6 +39,7 @@ void tftSetup(void)
 #ifndef ARCH_PORTDUINO
     deviceScreen = &DeviceScreen::create();
     PacketAPI::create(PacketServer::init());
+    deviceScreen->init(new PacketClient);
 #else
     if (portduino_config.displayPanel != no_screen) {
         DisplayDriverConfig displayConfig;
@@ -116,6 +117,7 @@ void tftSetup(void)
         }
         deviceScreen = &DeviceScreen::create(&displayConfig);
         PacketAPI::create(PacketServer::init());
+        deviceScreen->init(new PacketClient);
     } else {
         LOG_INFO("Running without TFT display!");
     }
