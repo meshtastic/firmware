@@ -151,8 +151,10 @@ RTCSetResult readFromRTC()
         uint32_t now = millis();
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
         LOG_DEBUG("Read RTC time as %ld", printableEpoch);
-        timeStartMsec = now;
-        zeroOffsetSecs = tv.tv_sec;
+        if (currentQuality == RTCQualityNone) {
+            timeStartMsec = now;
+            zeroOffsetSecs = tv.tv_sec;
+        }
         return RTCSetResultSuccess;
     }
 #endif
