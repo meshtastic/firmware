@@ -1,6 +1,6 @@
 #pragma once
 
-#if HAS_WIFI
+#if HAS_WIFI && defined(ARCH_ESP32)
 
 #include <string>
 
@@ -19,4 +19,4 @@ void app_http_cleanup();
 // Check if WiFi is connected and available.
 bool app_http_is_connected();
 
-#endif // HAS_WIFI
+#endif // HAS_WIFI && ARCH_ESP32

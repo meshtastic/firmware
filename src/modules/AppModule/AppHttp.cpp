@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if HAS_WIFI
+#if HAS_WIFI && defined(ARCH_ESP32)
 
 #include "modules/AppModule/AppHttp.h"
 #include "mesh/wifi/WiFiAPClient.h"
@@ -153,4 +153,4 @@ bool app_http_is_connected()
     return isWifiAvailable();
 }
 
-#endif // HAS_WIFI
+#endif // HAS_WIFI && ARCH_ESP32

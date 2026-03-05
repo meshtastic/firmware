@@ -11,7 +11,7 @@
 #include "graphics/Screen.h"
 #endif
 
-#if HAS_WIFI
+#if HAS_WIFI && defined(ARCH_ESP32)
 #include "modules/AppModule/AppHttp.h"
 #endif
 
@@ -318,7 +318,7 @@ bool AppModule::launchApp(const std::string &slug)
     buiRuntime->addBindings("display", displayBindings);
 
     std::map<std::string, NativeAppFunction> httpBindings;
-#if HAS_WIFI
+#if HAS_WIFI && defined(ARCH_ESP32)
     httpBindings["request"] = [this](const std::vector<AppValue> &args) -> AppValue {
         if (!buiRuntime->hasPermission("http-client"))
             return AppValue(false);
@@ -402,7 +402,7 @@ void AppModule::callMenuHandler(int index)
 
 void AppModule::stopCurrentApp()
 {
-#if HAS_WIFI
+#if HAS_WIFI && defined(ARCH_ESP32)
     app_http_cleanup();
 #endif
     // Stop BUI only — handler persists in background
