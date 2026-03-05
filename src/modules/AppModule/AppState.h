@@ -4,7 +4,7 @@
 #include <memory>
 
 // Flash-filesystem-backed AppStateBackend.
-// Stores each app's state as a JSON file at /apps_state/<slug>.json.
+// Stores each app's state as a key-value file at /apps_state/<slug>.state.
 class FlashAppStateBackend : public AppStateBackend
 {
   public:
@@ -16,9 +16,9 @@ class FlashAppStateBackend : public AppStateBackend
   private:
     static std::string statePath(const std::string &appSlug);
 
-    // Read/write the entire JSON object for a slug
-    bool readState(const std::string &appSlug, std::string &json);
-    bool writeState(const std::string &appSlug, const std::string &json);
+    // Read/write the entire state for a slug
+    bool readState(const std::string &appSlug, std::string &content);
+    bool writeState(const std::string &appSlug, const std::string &content);
 };
 
 // Singleton shared across all runtimes

@@ -1,19 +1,22 @@
 #include "configuration.h"
 
 #include "modules/AppModule/AppState.h"
-#include "serialization/JSON.h"
 #include "FSCommon.h"
 
 #ifdef FSCom
 
 static const char *STATE_DIR = "/apps_state";
 
+// Simple line-based key=value storage to avoid dependency on serialization/ (excluded on nrf52).
+// Each line is: key\tvalue\n
+// Keys and values must not contain \t or \n.
+
 std::string FlashAppStateBackend::statePath(const std::string &appSlug)
 {
-    return std::string(STATE_DIR) + "/" + appSlug + ".json";
+    return std::string(STATE_DIR) + "/" + appSlug + ".state";
 }
 
-bool FlashAppStateBackend::readState(const std::string &appSlug, std::string &json)
+bool FlashAppStateBackend::readState(const std::string &appSlug, std::string &content)
 {
     std::string path = statePath(appSlug);
     File f = FSCom.open(path.c_str(), FILE_O_READ);
@@ -26,13 +29,13 @@ bool FlashAppStateBackend::readState(const std::string &appSlug, std::string &js
         return false;
     }
 
-    json.resize(size);
-    f.read((uint8_t *)json.data(), size);
+    content.resize(size);
+    f.read((uint8_t *)content.data(), size);
     f.close();
     return true;
 }
 
-bool FlashAppStateBackend::writeState(const std::string &appSlug, const std::string &json)
+bool FlashAppStateBackend::writeState(const std::string &appSlug, const std::string &content)
 {
     FSCom.mkdir(STATE_DIR);
     std::string path = statePath(appSlug);
@@ -40,82 +43,76 @@ bool FlashAppStateBackend::writeState(const std::string &appSlug, const std::str
     if (!f)
         return false;
 
-    f.write((const uint8_t *)json.data(), json.size());
+    f.write((const uint8_t *)content.data(), content.size());
     f.close();
     return true;
+}
+
+// Parse "key\tvalue\n" lines into a map
+static std::map<std::string, std::string> parseState(const std::string &content)
+{
+    std::map<std::string, std::string> m;
+    size_t pos = 0;
+    while (pos < content.size()) {
+        size_t nl = content.find('\n', pos);
+        if (nl == std::string::npos)
+            nl = content.size();
+        size_t tab = content.find('\t', pos);
+        if (tab != std::string::npos && tab < nl) {
+            m[content.substr(pos, tab - pos)] = content.substr(tab + 1, nl - tab - 1);
+        }
+        pos = nl + 1;
+    }
+    return m;
+}
+
+// Serialize a map back to "key\tvalue\n" format
+static std::string serializeState(const std::map<std::string, std::string> &m)
+{
+    std::string out;
+    for (const auto &kv : m) {
+        out += kv.first;
+        out += '\t';
+        out += kv.second;
+        out += '\n';
+    }
+    return out;
 }
 
 std::string FlashAppStateBackend::get(const std::string &appSlug, const std::string &key, bool &found)
 {
     found = false;
-    std::string jsonStr;
-    if (!readState(appSlug, jsonStr))
+    std::string content;
+    if (!readState(appSlug, content))
         return "";
 
-    std::unique_ptr<JSONValue> root(JSON::Parse(jsonStr.c_str()));
-    if (!root || !root->IsObject())
-        return "";
-
-    if (!root->HasChild(key.c_str()))
-        return "";
-
-    const JSONValue *val = root->Child(key.c_str());
-    if (!val || !val->IsString())
+    auto m = parseState(content);
+    auto it = m.find(key);
+    if (it == m.end())
         return "";
 
     found = true;
-    return val->AsString();
+    return it->second;
 }
 
 bool FlashAppStateBackend::set(const std::string &appSlug, const std::string &key, const std::string &value)
 {
-    // Read existing state or start fresh
-    std::string jsonStr;
-    JSONObject obj;
-
-    if (readState(appSlug, jsonStr)) {
-        std::unique_ptr<JSONValue> root(JSON::Parse(jsonStr.c_str()));
-        if (root && root->IsObject()) {
-            // Copy existing keys
-            auto keys = root->ObjectKeys();
-            for (const auto &k : keys) {
-                const JSONValue *v = root->Child(k.c_str());
-                if (v && v->IsString())
-                    obj[k] = new JSONValue(v->AsString());
-            }
-        }
-    }
-
-    obj[key] = new JSONValue(value);
-
-    JSONValue rootVal(obj);
-    std::string out = rootVal.Stringify(false);
-    return writeState(appSlug, out);
+    std::string content;
+    readState(appSlug, content);
+    auto m = parseState(content);
+    m[key] = value;
+    return writeState(appSlug, serializeState(m));
 }
 
 bool FlashAppStateBackend::remove(const std::string &appSlug, const std::string &key)
 {
-    std::string jsonStr;
-    if (!readState(appSlug, jsonStr))
-        return true; // nothing to remove
-
-    std::unique_ptr<JSONValue> root(JSON::Parse(jsonStr.c_str()));
-    if (!root || !root->IsObject())
+    std::string content;
+    if (!readState(appSlug, content))
         return true;
 
-    JSONObject obj;
-    auto keys = root->ObjectKeys();
-    for (const auto &k : keys) {
-        if (k == key)
-            continue;
-        const JSONValue *v = root->Child(k.c_str());
-        if (v && v->IsString())
-            obj[k] = new JSONValue(v->AsString());
-    }
-
-    JSONValue rootVal(obj);
-    std::string out = rootVal.Stringify(false);
-    return writeState(appSlug, out);
+    auto m = parseState(content);
+    m.erase(key);
+    return writeState(appSlug, serializeState(m));
 }
 
 bool FlashAppStateBackend::clear(const std::string &appSlug)
