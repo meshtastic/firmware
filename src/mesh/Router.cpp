@@ -766,25 +766,31 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
             if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
                 !isFromUs(p) && mqtt) {
-                // Fix #8713 start
-                if (decodedState == DecodeState::DECODE_SUCCESS) {
-                    if (p->decoded.portnum ==  meshtastic_PortNum_TRACEROUTE_APP) {
-                        // For TRACEROUTE_APP packets release the original encrypted packet. Allocate a new from the changed packet
-                        packetPool.release(p_encrypted);
-                        p_encrypted = packetPool.allocCopy(*p);
-                        auto encodeResult = perhapsEncode(p_encrypted);
+                if (decodedState == DecodeState::DECODE_SUCCESS && p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP &&
+                    moduleConfig.mqtt.encryption_enabled) {
+                    // For TRACEROUTE_APP packets release the original encrypted packet. Allocate a new from the changed packet
+                    // Only release the original after successful allocation to avoid losing an incomplete but valid packet
+                    auto *p_encrypted_new = packetPool.allocCopy(*p);
+                    if (p_encrypted_new) {
+                        auto encodeResult = perhapsEncode(p_encrypted_new);
                         if (encodeResult != meshtastic_Routing_Error_NONE) {
-                            LOG_WARN("Re encryption of TR packet failed, skipping MQTT publish");
+                            // Encryption failed, release the new packet and fall back to sending the original encrypted packet to MQTT
+                            LOG_WARN("Encryption of new TR packet failed, sending original TR to MQTT");
+                            packetPool.release(p_encrypted_new);
+                            p_encrypted_new = nullptr;
                         }
-                        else
-                            mqtt->onSend(*p_encrypted, *p, p->channel);
+                        else {
+                            // Successfully re-encrypted, release the original encrypted packet and use the new one for MQTT
+                            packetPool.release(p_encrypted);
+                            p_encrypted = p_encrypted_new;
+                        }
                     }
-                    else
-                        mqtt->onSend(*p_encrypted, *p, p->channel);
+                    else {
+                        // Allocation failed, log a warning and fall back to sending the original encrypted packet to MQTT
+                        LOG_WARN("Failed to allocate new encrypted packet for TR, sending original TR to");
+                    }
                 }
-                else
-                    // Fix #9713 end
-                    mqtt->onSend(*p_encrypted, *p, p->channel);
+                mqtt->onSend(*p_encrypted, *p, p->channel);
              }
         }
 #endif
