@@ -1,9 +1,9 @@
 #include "configuration.h"
 #if defined(ARCH_ESP32) && defined(USE_SX1280)
 #include "AudioModule.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
 

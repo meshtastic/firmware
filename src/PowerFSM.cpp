@@ -10,7 +10,7 @@
 #include "PowerFSM.h"
 #include "Default.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerMon.h"
 #include "configuration.h"
 #include "graphics/Screen.h"

@@ -1,10 +1,10 @@
 #include "CryptoEngine.h"
-// #include "NodeDB.h"
+// #include "Filesystem/NodeDB.h"
 #include "architecture.h"
 #include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "aes-ccm.h"
 #include "meshUtils.h"
 #include <Crypto.h>

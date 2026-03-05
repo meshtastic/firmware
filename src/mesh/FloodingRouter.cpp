@@ -1,6 +1,6 @@
 #include "FloodingRouter.h"
 #include "MeshTypes.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"

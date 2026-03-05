@@ -3,7 +3,7 @@
 #include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
-#include "mesh/NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #ifdef LR11X0_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
 #elif ARCH_PORTDUINO

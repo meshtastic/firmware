@@ -6,17 +6,17 @@
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "Default.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
+#include "Filesystem/NodeDB.h"
+#include "Filesystem/SafeFile.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "RadioInterface.h"
 #include "Router.h"
 #include "SPILock.h"
-#include "SafeFile.h"
 #include "TypeConversions.h"
 #include "error.h"
 #include "main.h"
@@ -25,6 +25,9 @@
 #include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
+#include <cstring>
+#include <memory>
+#include <new>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <power/PowerHAL.h>
@@ -50,6 +53,7 @@
 #endif
 
 #ifdef ARCH_NRF52
+#include "InternalFileSystem.h"
 #include <bluefruit.h>
 #include <utility/bonding.h>
 #endif
@@ -190,12 +194,194 @@ meshtastic_CriticalErrorCode error_code =
     meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
 uint32_t error_address = 0;
 
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+#ifndef FILE_O_READ
+#define FILE_O_READ 0
+#endif
+#ifndef FILE_O_WRITE
+#define FILE_O_WRITE 1
+#endif
+namespace
+{ // nRF52 builds with an external SPI/QSPI flash use that as primary storage. We use the internal flash
+  // as a mirror for critical config backups.
+  // The directory and filenames match those normally used by the firmware even when external flash isn't present.
+  // This makes the firmware with USE_EXTERNAL_FLASH interchangeable with normal or older builds and makes updating seamless.
+  // We define USE_EXTERNAL_FLASH in platformio.ini instead of reusing EXTERNAL_FLASH_DEVICES because some boards don't
+  // have external flash actually mounted but it is still defined in EXTERNAL_FLASH_DEVICES (for example RAK4631).
+
+using InternalFsOpenResult = decltype(InternalFS.open("/prefs/example.proto", FILE_O_READ));
+// Type helper: deduce the InternalFS file handle type using an example path; runtime calls still pass the actual filename
+// (config/devicestate/channels/etc). The example path is only to get the return type from InternalFS.open at compile time.
+// The example path in decltype never affects which files are actually opened.
+// We need that type so we can:
+// -Store the handle in stream->state and cast it correctly in internalFsStreamRead/Write.
+// -Avoid guessing or duplicating the InternalFS handle type, which could change per platform.
+
+bool internalFsStreamRead(pb_istream_t *stream, pb_byte_t *buf, size_t count)
+{
+    auto file = static_cast<InternalFsOpenResult *>(stream->state); // retrieve the file handle from stream state
+    if (!file)
+        return false; // no file handle means failure
+
+    if (buf == nullptr) {
+        // Skip count bytes; fail if any short read.
+        size_t skipped = 0;
+        while (skipped < count && file->read() != EOF) { // read() returns EOF on failure or end-of-file
+            skipped++;                                   // count bytes successfully skipped
+        }
+        return skipped == count;
+    }
+
+    int readCount = file->read(buf, count); // read up to count bytes into buf
+    bool status = readCount == (int)count;  // success if we read exactly count bytes
+    return status;
+}
+
+bool internalFsStreamWrite(pb_ostream_t *stream, const pb_byte_t *buf, size_t count)
+{
+    spiLock->lock();
+    auto file = static_cast<InternalFsOpenResult *>(stream->state); // retrieve the file handle from stream state
+    if (!file)                                                      // no file handle means failure
+        return false;
+
+    bool status = file->write(buf, count) == count; // success if we wrote exactly count bytes
+    spiLock->unlock();
+    return status;
+}
+
+bool ensureInternalBackupStorageMounted()
+{ // mount internal flash filesystem once
+    static bool attemptedMount = false;
+    static bool mounted = false;
+    if (!attemptedMount) {
+        attemptedMount = true;
+        mounted = InternalFS.begin();
+        if (!mounted) {
+            LOG_ERROR("Failed to mount internal flash storage for config backups");
+        } else {
+            LOG_INFO("Internal backup storage mounted: %d", mounted);
+        }
+    }
+    return mounted;
+}
+
+bool ensureInternalDirExists(const char *filepath)
+{ // ensure the directory path for filepath exists in internal flash
+    const char *lastSlash = strrchr(filepath, '/');
+    if (!lastSlash || lastSlash == filepath) {
+        return true; // root or no directory component needed
+    }
+
+    constexpr size_t DirBufLen = 256;
+    char dirPath[DirBufLen];
+    size_t dirLen = static_cast<size_t>(lastSlash - filepath); // length of directory part
+    if (dirLen >= sizeof(dirPath)) {
+        LOG_ERROR("Internal backup dir path too long (%u bytes): %s", static_cast<unsigned>(dirLen), filepath);
+        return false; // avoid overflow
+    }
+    memcpy(dirPath, filepath, dirLen); // copy directory part
+    dirPath[dirLen] = '\0';
+
+    if (InternalFS.exists(dirPath)) {
+        return true; // directory already exists
+    }
+
+    bool created = InternalFS.mkdir(dirPath); // create directory path
+    if (!created) {
+        LOG_ERROR("Failed to create internal mirror dir %s", dirPath);
+    }
+    return created;
+}
+
+LoadFileResult loadProtoFromInternal(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
+                                     void *dest_struct)
+{
+    (void)protoSize;
+    // Reads a nanopb payload straight out of the internal filesystem so we can rebuild
+    // preferences even if the external flash filesystem partition was wiped.
+    if (!ensureInternalBackupStorageMounted()) {
+        return LoadFileResult::NO_FILESYSTEM; // can't mount internal flash
+    }
+
+    constexpr int kMaxDecodeAttempts = 2; // try twice before giving up and deleting the backup
+    for (int attempt = 1; attempt <= kMaxDecodeAttempts; ++attempt) {
+        InternalFsOpenResult file = InternalFS.open(filename, FILE_O_READ);
+        if (!file) {
+            return LoadFileResult::OTHER_FAILURE; // file doesn't exist or can't be opened
+        }
+
+        size_t fileSize = file.size();
+        if (fileSize == 0) { // empty file can't be valid
+            LOG_ERROR("Internal file %s is empty", filename);
+            file.close();
+            return LoadFileResult::OTHER_FAILURE;
+        }
+
+        pb_istream_t stream = {&internalFsStreamRead, &file, fileSize}; // setup stream for reading from internal flash file
+        if (fields != &meshtastic_NodeDatabase_msg) // special case: clear dest_struct only for non-NodeDatabase loads
+            memset(dest_struct, 0, objSize);        // clear destination struct before decoding
+
+        bool decoded = pb_decode(&stream, fields, dest_struct); // decode the protobuf into dest_struct
+        file.close();
+
+        if (decoded) {
+            return LoadFileResult::LOAD_SUCCESS;
+        }
+
+        LOG_ERROR("Internal decode failed for %s (attempt %d/%d, size=%u): %s", filename, attempt, kMaxDecodeAttempts,
+                  static_cast<unsigned>(fileSize), PB_GET_ERROR(&stream));
+
+        if (attempt == kMaxDecodeAttempts) {
+            InternalFS.remove(filename); // drop corrupt mirror after retries to avoid repeated failures
+            LOG_ERROR("Deleted corrupt internal backup file %s after %d failed decode attempts", filename, kMaxDecodeAttempts);
+            return LoadFileResult::DECODE_FAILED;
+        }
+    }
+
+    return LoadFileResult::DECODE_FAILED;
+}
+
+bool saveProtoToInternal(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *src_struct)
+{ // Saves a nanopb payload straight into the internal filesystem as a backup mirror.
+    (void)protoSize;
+    if (!ensureInternalBackupStorageMounted()) {
+        return false;
+    }
+
+    if (!ensureInternalDirExists(filename)) {
+        LOG_ERROR("Failed to create internal backup dir for %s", filename);
+        return false;
+    }
+
+    InternalFS.remove(filename);                                         // remove existing file if any
+    InternalFsOpenResult file = InternalFS.open(filename, FILE_O_WRITE); // create new file for writing
+    if (!file) {
+        return false;
+    }
+
+    pb_ostream_t stream = {&internalFsStreamWrite, &file, (size_t)-1}; // setup stream for writing to internal flash file
+    bool encoded = pb_encode(&stream, fields, src_struct);             // encode the protobuf from src_struct into the stream
+    file.flush();                                                      // ensure all data is written
+    file.close();
+
+    if (!encoded) {
+        LOG_ERROR("Internal encode failed for %s: %s", filename, PB_GET_ERROR(&stream));
+        return false;
+    }
+
+    LOG_INFO("Saved %s to internal flash mirror(%u bytes)", filename, static_cast<unsigned>(stream.bytes_written));
+    return true;
+}
+} // namespace
+
+#endif
+
 static uint8_t ourMacAddr[6];
 
 NodeDB::NodeDB()
 {
     LOG_INFO("Init NodeDB");
-    loadFromDisk();
+    int saveWhat = loadFromDisk();
     cleanupMeshDB();
 
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
@@ -203,7 +389,6 @@ NodeDB::NodeDB()
     uint32_t configCRC = crc32Buffer(&config, sizeof(config));
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
-    int saveWhat = 0;
     // Get device unique id
 #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     uint32_t unique_id[4];
@@ -301,7 +486,11 @@ NodeDB::NodeDB()
     info->has_user = true;
 
     // If node database has not been saved for the first time, save it now
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    if (!externalFS.exists(nodeDatabaseFileName)) {
+        saveNodeDatabaseToDisk();
+    }
+#elif defined(FSCom)
     if (!FSCom.exists(nodeDatabaseFileName)) {
         saveNodeDatabaseToDisk();
     }
@@ -501,9 +690,18 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     LOG_INFO("Perform factory reset!");
     // first, remove the "/prefs" (this removes most prefs)
     spiLock->lock();
-    rmDir("/prefs"); // this uses spilock internally...
+    rmDir("/prefs");
 
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    // Also remove rangetest.csv if it exists
+    if (externalFSMounted && flashInitialized) {
+        if (externalFS.exists("/static/rangetest.csv")) {
+            if (!externalFS.remove("/static/rangetest.csv")) {
+                LOG_ERROR("Could not remove rangetest.csv file");
+            }
+        }
+    }
+#elif defined(FSCom)
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file");
     }
@@ -1153,14 +1351,27 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
                                  void *dest_struct)
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     concurrency::LockGuard g(spiLock);
-
+#ifdef USE_EXTERNAL_FLASH
+    if (!externalFSMounted) {
+        LOG_WARN("External filesystem unavailable, skipping load of %s", filename);
+        return LoadFileResult::OTHER_FAILURE;
+    }
+    auto f = externalFS.open(filename, FILE_O_READ);
+#else
     auto f = FSCom.open(filename, FILE_O_READ);
-
+#endif
     if (f) {
         LOG_INFO("Load %s", filename);
-        pb_istream_t stream = {&readcb, &f, protoSize};
+        size_t fileSize = f.size();
+        if (fileSize == 0) {
+            // Treat zero-length files as unusable to avoid nanopb decode errors.
+            LOG_ERROR("Error: empty file %s", filename);
+            f.close();
+            return LoadFileResult::OTHER_FAILURE;
+        }
+        pb_istream_t stream = {&readcb, &f, fileSize};
         if (fields != &meshtastic_NodeDatabase_msg) // contains a vector object
             memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
@@ -1181,13 +1392,27 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     return state;
 }
 
-void NodeDB::loadFromDisk()
+int NodeDB::loadFromDisk()
 {
+    int saveWhat = 0;
+    bool anyExternalLoadFailed = false;
+    externalFlashRecoveredFromInternalMask = 0;
+    externalFlashDefaultedMask = 0;
     // Mark the current device state as completely unusable, so that if we fail reading the entire file from
     // disk we will still factoryReset to restore things.
     devicestate.version = 0;
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
+
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    // If a stale node database remains on internal flash from older builds, drop it so we don't waste space or
+    // accidentally load it. External flash is the source of truth when USE_EXTERNAL_FLASH is set.
+    if (ensureInternalBackupStorageMounted()) {
+        if (InternalFS.exists(nodeDatabaseFileName)) {
+            InternalFS.remove(nodeDatabaseFileName);
+        }
+    }
+#endif
 
 #ifdef ARCH_ESP32
     spiLock->lock();
@@ -1196,11 +1421,41 @@ void NodeDB::loadFromDisk()
         rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
     spiLock->unlock();
 #endif
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
 #ifdef FACTORY_INSTALL
+#ifdef USE_EXTERNAL_FLASH
+    if (externalFSMounted) {
+        spiLock->lock();
+        bool needsFactoryReset = !externalFS.exists("/prefs/" xstr(BUILD_EPOCH));
+        spiLock->unlock();
+        if (needsFactoryReset) {
+            LOG_WARN("Factory Install Reset!");
+            if (!formatExternalFS()) {
+                LOG_ERROR("Factory format failed");
+            } else if (!checkExternalFS()) {
+                LOG_ERROR("Factory check failed");
+            } else {
+                concurrency::LockGuard g(spiLock);
+                externalFS.mkdir("/prefs");
+                ExternalFSFile f2 = externalFS.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
+                if (f2) {
+                    f2.flush();
+                    f2.close();
+                }
+                LOG_INFO("Created factory install marker file");
+                factoryReset(false);
+            }
+        }
+    } else {
+        LOG_WARN("Skipping FACTORY_INSTALL marker check: external filesystem unavailable");
+    }
+#else
     spiLock->lock();
-    if (!FSCom.exists("/prefs/" xstr(BUILD_EPOCH))) {
+    bool needsFactoryReset = !FSCom.exists("/prefs/" xstr(BUILD_EPOCH));
+    spiLock->unlock();
+    if (needsFactoryReset) {
         LOG_WARN("Factory Install Reset!");
+        spiLock->lock();
         FSCom.format();
         FSCom.mkdir("/prefs");
         File f2 = FSCom.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
@@ -1208,11 +1463,20 @@ void NodeDB::loadFromDisk()
             f2.flush();
             f2.close();
         }
+        spiLock->unlock();
+        LOG_INFO("Created factory install marker file");
+        defaultPrefs();
+        factoryReset(false);
     }
-    spiLock->unlock();
+#endif
 #endif
     spiLock->lock();
+#ifdef USE_EXTERNAL_FLASH
+    bool hasLegacyPrefs = externalFSMounted && externalFS.exists(legacyPrefFileName);
+    if (hasLegacyPrefs) {
+#else
     if (FSCom.exists(legacyPrefFileName)) {
+#endif
         spiLock->unlock();
         LOG_WARN("Legacy prefs version found, factory resetting");
         if (loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
@@ -1234,33 +1498,49 @@ void NodeDB::loadFromDisk()
     if (nodeDatabase.version < DEVICESTATE_MIN_VER) {
         LOG_WARN("NodeDatabase %d is old, discard", nodeDatabase.version);
         installDefaultNodeDatabase();
+        // Persist defaults later since primary storage was missing/invalid.
+        saveWhat |= SEGMENT_NODEDATABASE;
     } else {
         meshNodes = &nodeDatabase.nodes;
         numMeshNodes = nodeDatabase.nodes.size();
         LOG_INFO("Loaded saved nodedatabase version %d, with nodes count: %d", nodeDatabase.version, nodeDatabase.nodes.size());
     }
-
     if (numMeshNodes > MAX_NUM_NODES) {
         LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
     meshNodes->resize(MAX_NUM_NODES);
 
-    // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
-                      &meshtastic_DeviceState_msg, &devicestate);
-
     // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
     // It is very important to try and use the saved prefs even if we fail to read meshtastic_DeviceState.  Because most of our
     // critical config may still be valid (in the other files - loaded next).
     // Also, if we did fail on reading we probably failed on the enormous (and non critical) nodeDB.  So DO NOT install default
-    // device state.
-    // if (state != LoadFileResult::LOAD_SUCCESS) {
-    //    installDefaultDeviceState(); // Our in RAM copy might now be corrupt
-    //} else {
-    if ((state != LoadFileResult::LOAD_SUCCESS) || (devicestate.version < DEVICESTATE_MIN_VER)) {
+    // device state. Only fall back to defaults after we have tried the internal backups below (if used) and still failed.
+
+    LoadFileResult deviceStateResult = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
+                                                 &meshtastic_DeviceState_msg, &devicestate);
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    const bool deviceStateExternalFailed = (deviceStateResult != LoadFileResult::LOAD_SUCCESS);
+    anyExternalLoadFailed |= deviceStateExternalFailed;
+#endif
+    bool deviceStateLoaded = deviceStateResult == LoadFileResult::LOAD_SUCCESS; // Successfully loaded from primary storage
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    if (!deviceStateLoaded) { // if we failed, try internal flash backup
+        auto internalState = loadProtoFromInternal(deviceStateFileName, meshtastic_DeviceState_size,
+                                                   sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
+        deviceStateLoaded = internalState == LoadFileResult::LOAD_SUCCESS; // Successfully loaded from internal flash
+        if (deviceStateLoaded) {
+            LOG_WARN("Loaded devicestate from internal flash mirror");
+            externalFlashRecoveredFromInternalMask |= ExternalLoadSegment_DeviceState;
+            saveToDisk(SEGMENT_DEVICESTATE); // Save back to external flash
+        }
+    }
+#endif
+    if (!deviceStateLoaded || (devicestate.version < DEVICESTATE_MIN_VER)) {
         LOG_WARN("Devicestate %d is old or invalid, discard", devicestate.version);
         installDefaultDeviceState();
+        // Persist defaults later since primary storage was missing/invalid.
+        saveWhat |= SEGMENT_DEVICESTATE;
 
         // Attempt recovery of owner fields from our own NodeDB entry if available.
         meshtastic_NodeInfoLite *us = getMeshNode(getNodeNum());
@@ -1278,18 +1558,50 @@ void NodeDB::loadFromDisk()
             // Save the recovered owner to device state on disk
             saveToDisk(SEGMENT_DEVICESTATE);
         }
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+        if (deviceStateExternalFailed) {
+            externalFlashDefaultedMask |= ExternalLoadSegment_DeviceState;
+        }
+#endif
     } else {
         LOG_INFO("Loaded saved devicestate version %d", devicestate.version);
     }
 
-    state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
-                      &config);
-    if (state != LoadFileResult::LOAD_SUCCESS) {
+    LoadFileResult configState = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig),
+                                           &meshtastic_LocalConfig_msg, &config);
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    const bool configExternalFailed = (configState != LoadFileResult::LOAD_SUCCESS);
+    anyExternalLoadFailed |= configExternalFailed;
+#endif
+    bool configLoaded = configState == LoadFileResult::LOAD_SUCCESS;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    if (!configLoaded) {
+        auto internalState = loadProtoFromInternal(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig),
+                                                   &meshtastic_LocalConfig_msg, &config);
+        configLoaded = internalState == LoadFileResult::LOAD_SUCCESS;
+        if (configLoaded) {
+            LOG_WARN("Loaded config from internal flash mirror");
+            externalFlashRecoveredFromInternalMask |= ExternalLoadSegment_Config;
+            saveToDisk(SEGMENT_CONFIG);
+        }
+    }
+#endif
+    if (!configLoaded) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
+        configLoaded = true;
+        // Persist defaults later since primary storage was missing/invalid.
+        saveWhat |= SEGMENT_CONFIG;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+        if (configExternalFailed) {
+            externalFlashDefaultedMask |= ExternalLoadSegment_Config;
+        }
+#endif
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
             LOG_WARN("config %d is old, discard", config.version);
             installDefaultConfig(true);
+            // Persist defaults later since primary storage was missing/invalid.
+            saveWhat |= SEGMENT_CONFIG;
         } else {
             LOG_INFO("Loaded saved config version %d", config.version);
         }
@@ -1358,27 +1670,80 @@ void NodeDB::loadFromDisk()
         saveToDisk(SEGMENT_CONFIG);
     }
 
-    state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
-                      &meshtastic_LocalModuleConfig_msg, &moduleConfig);
-    if (state != LoadFileResult::LOAD_SUCCESS) {
+    LoadFileResult moduleConfigState =
+        loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
+                  &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    const bool moduleConfigExternalFailed = (moduleConfigState != LoadFileResult::LOAD_SUCCESS);
+    anyExternalLoadFailed |= moduleConfigExternalFailed;
+#endif
+    bool moduleConfigLoaded = moduleConfigState == LoadFileResult::LOAD_SUCCESS;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    if (!moduleConfigLoaded) {
+        auto internalState =
+            loadProtoFromInternal(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
+                                  &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+        moduleConfigLoaded = internalState == LoadFileResult::LOAD_SUCCESS;
+        if (moduleConfigLoaded) {
+            LOG_WARN("Loaded module config from internal flash mirror");
+            externalFlashRecoveredFromInternalMask |= ExternalLoadSegment_ModuleConfig;
+            saveToDisk(SEGMENT_MODULECONFIG);
+        }
+    }
+#endif
+    if (!moduleConfigLoaded) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
+        // Persist defaults later since primary storage was missing/invalid.
+        saveWhat |= SEGMENT_MODULECONFIG;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+        if (moduleConfigExternalFailed) {
+            externalFlashDefaultedMask |= ExternalLoadSegment_ModuleConfig;
+        }
+#endif
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
             LOG_WARN("moduleConfig %d is old, discard", moduleConfig.version);
             installDefaultModuleConfig();
+            // Persist defaults later since primary storage was missing/invalid.
+            saveWhat |= SEGMENT_MODULECONFIG;
         } else {
             LOG_INFO("Loaded saved moduleConfig version %d", moduleConfig.version);
         }
     }
-
-    state = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
-                      &channelFile);
-    if (state != LoadFileResult::LOAD_SUCCESS) {
+    LoadFileResult ChannelState = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile),
+                                            &meshtastic_ChannelFile_msg, &channelFile);
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    const bool channelExternalFailed = (ChannelState != LoadFileResult::LOAD_SUCCESS);
+    anyExternalLoadFailed |= channelExternalFailed;
+#endif
+    bool channelConfigLoaded = ChannelState == LoadFileResult::LOAD_SUCCESS;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    if (!channelConfigLoaded) {
+        auto internalState = loadProtoFromInternal(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile),
+                                                   &meshtastic_ChannelFile_msg, &channelFile);
+        channelConfigLoaded = internalState == LoadFileResult::LOAD_SUCCESS;
+        if (channelConfigLoaded) {
+            LOG_WARN("Loaded channel config from internal flash mirror");
+            externalFlashRecoveredFromInternalMask |= ExternalLoadSegment_Channels;
+            saveToDisk(SEGMENT_CHANNELS);
+        }
+    }
+#endif
+    if (!channelConfigLoaded) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
+        // Persist defaults later since primary storage was missing/invalid.
+        saveWhat |= SEGMENT_CHANNELS;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+        if (channelExternalFailed) {
+            externalFlashDefaultedMask |= ExternalLoadSegment_Channels;
+        }
+#endif
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {
             LOG_WARN("channelFile %d is old, discard", channelFile.version);
             installDefaultChannels();
+            // Persist defaults later since primary storage was missing/invalid.
+            saveWhat |= SEGMENT_CHANNELS;
         } else {
             LOG_INFO("Loaded saved channelFile version %d", channelFile.version);
         }
@@ -1388,6 +1753,10 @@ void NodeDB::loadFromDisk()
                       &meshtastic_DeviceUIConfig_msg, &uiconfig);
     if (state == LoadFileResult::LOAD_SUCCESS) {
         LOG_INFO("Loaded UIConfig");
+    }
+    // If UIConfig was missing/invalid, leave defaults and mark for save
+    if (state != LoadFileResult::LOAD_SUCCESS) {
+        saveWhat |= SEGMENT_CONFIG; // uiconfig stored alongside config; persist
     }
 
     // 2.4.X - configuration migration to update new default intervals
@@ -1425,6 +1794,12 @@ void NodeDB::loadFromDisk()
     }
 
 #endif
+
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+    externalFlashLoadFailed = externalFlashLoadFailed || anyExternalLoadFailed;
+#endif
+
+    return saveWhat;
 }
 
 /** Save a protobuf from a file, return true for success */
@@ -1440,9 +1815,8 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     }
 
     bool okay = false;
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     auto f = SafeFile(filename, fullAtomic);
-
     LOG_INFO("Save %s", filename);
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&f), protoSize};
 
@@ -1460,6 +1834,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 #else
     LOG_ERROR("ERROR: Filesystem not implemented");
 #endif
+
     return okay;
 }
 
@@ -1473,7 +1848,18 @@ bool NodeDB::saveChannelsToDisk()
         return false;
     }
 
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    if (!externalFSMounted) {
+        LOG_ERROR("Cannot save channels: external filesystem unavailable");
+        return false;
+    }
+    spiLock->lock();
+    if (!externalFS.exists("/prefs")) {
+        LOG_WARN("Creating missing /prefs directory in external flash");
+        externalFS.mkdir("/prefs");
+    }
+    spiLock->unlock();
+#elif defined(FSCom)
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
@@ -1491,7 +1877,18 @@ bool NodeDB::saveDeviceStateToDisk()
         return false;
     }
 
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    if (!externalFSMounted) {
+        LOG_ERROR("Cannot save devicestate: external filesystem unavailable");
+        return false;
+    }
+    spiLock->lock();
+    if (!externalFS.exists("/prefs")) {
+        LOG_WARN("Creating missing /prefs directory in external flash");
+        externalFS.mkdir("/prefs");
+    }
+    spiLock->unlock();
+#elif defined(FSCom)
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
@@ -1511,7 +1908,18 @@ bool NodeDB::saveNodeDatabaseToDisk()
         return false;
     }
 
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    if (!externalFSMounted) {
+        LOG_ERROR("Cannot save nodedatabase: external filesystem unavailable");
+        return false;
+    }
+    spiLock->lock();
+    if (!externalFS.exists("/prefs")) {
+        LOG_WARN("Creating missing /prefs directory in external flash");
+        externalFS.mkdir("/prefs");
+    }
+    spiLock->unlock();
+#elif defined(FSCom)
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
@@ -1532,7 +1940,18 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     }
 
     bool success = true;
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    if (!externalFSMounted) {
+        LOG_ERROR("Cannot save prefs: external filesystem unavailable");
+        return false;
+    }
+    spiLock->lock();
+    if (!externalFS.exists("/prefs")) {
+        LOG_WARN("Creating missing /prefs directory in external flash");
+        externalFS.mkdir("/prefs");
+    }
+    spiLock->unlock();
+#elif defined(FSCom)
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
@@ -1547,7 +1966,14 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         config.has_bluetooth = true;
         config.has_security = true;
 
-        success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        bool configSaved = saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        success &= configSaved;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+        if (configSaved) {
+            InternalFS.mkdir("/prefs");
+            saveProtoToInternal(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        }
+#endif
     }
 
     if (saveWhat & SEGMENT_MODULECONFIG) {
@@ -1565,20 +1991,42 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_paxcounter = true;
         moduleConfig.has_statusmessage = true;
 
-        success &=
+        bool moduleConfigSaved =
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+        success &= moduleConfigSaved;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+        if (moduleConfigSaved) {
+            InternalFS.mkdir("/prefs");
+            saveProtoToInternal(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg,
+                                &moduleConfig);
+        }
+#endif
     }
 
     if (saveWhat & SEGMENT_CHANNELS) {
-        success &= saveChannelsToDisk();
+        bool channelsSaved = saveChannelsToDisk();
+        success &= channelsSaved;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+        if (channelsSaved) {
+            InternalFS.mkdir("/prefs");
+            saveProtoToInternal(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
+        }
+#endif
     }
 
     if (saveWhat & SEGMENT_DEVICESTATE) {
-        success &= saveDeviceStateToDisk();
+        bool deviceStateSaved = saveDeviceStateToDisk();
+        success &= deviceStateSaved;
+#if defined(ARCH_NRF52) && defined(USE_EXTERNAL_FLASH)
+        if (deviceStateSaved) {
+            InternalFS.mkdir("/prefs");
+            saveProtoToInternal(deviceStateFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate);
+        }
+#endif
     }
 
     if (saveWhat & SEGMENT_NODEDATABASE) {
-        success &= saveNodeDatabaseToDisk();
+        success &= saveNodeDatabaseToDisk(); // node database is not mirrored to internal flash because of low importance and size
     }
 
     return success;
@@ -1600,15 +2048,60 @@ bool NodeDB::saveToDisk(int saveWhat)
     if (!success) {
         LOG_ERROR("Failed to save to disk, retrying");
 #ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
+#ifdef USE_EXTERNAL_FLASH
+        if (!externalFSMounted) {
+            if (!externalFS.begin(&flash)) {
+                LOG_ERROR("Error, failed to mount filesystem!");
+                // Continue to format recovery below.
+            } else {
+                externalFSMounted = true;
+                LOG_INFO("Filesystem mounted!");
+            }
+        }
+
+        externalFSMounted = false;
+        LOG_INFO("Formatting filesystem...");
+        if (!formatExternalFS()) {
+            LOG_ERROR("Filesystem format failed");
+            return false;
+        }
+        if (!checkExternalFS()) {
+            LOG_ERROR("Filesystem check after format failed");
+            return false;
+        }
+
+        if (!externalFS.begin(&flash)) {
+            LOG_ERROR("Error, failed to mount filesystem after format!");
+            return false;
+        }
+        LOG_INFO("Filesystem mounted!");
+        externalFSMounted = true;
+#else
         spiLock->lock();
         FSCom.format();
         spiLock->unlock();
 
 #endif
+#endif
         success = saveToDiskNoRetry(saveWhat);
-
-        RECORD_CRITICALERROR(success ? meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE
-                                     : meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
+        static bool flashRecoveryNotifiedThisBoot = false;
+        if (success) {
+            LOG_WARN("Recovered from external flash corruption after format");
+            if (!flashRecoveryNotifiedThisBoot && service) {
+                meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+                if (cn) {
+                    cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->time = getValidTime(RTCQualityFromNet);
+                    snprintf(cn->message, sizeof(cn->message),
+                             "Failed to save to external flash. Recovered after format. Config still intact from internal flash "
+                             "mirror.");
+                    service->sendClientNotification(cn);
+                    flashRecoveryNotifiedThisBoot = true;
+                }
+            }
+        } else {
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
+        }
     }
 
     return success;
@@ -2153,27 +2646,37 @@ bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
     bool success = false;
     lastBackupAttempt = millis();
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     if (location == meshtastic_AdminMessage_BackupLocation_FLASH) {
-        meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
-        backup.version = DEVICESTATE_CUR_VER;
-        backup.timestamp = getValidTime(RTCQuality::RTCQualityDevice, false);
-        backup.has_config = true;
-        backup.config = config;
-        backup.has_module_config = true;
-        backup.module_config = moduleConfig;
-        backup.has_channels = true;
-        backup.channels = channelFile;
-        backup.has_owner = true;
-        backup.owner = owner;
+        std::unique_ptr<meshtastic_BackupPreferences> backup(new (std::nothrow) meshtastic_BackupPreferences());
+        meshtastic_BackupPreferences *rawBackup = backup.get();
+        if (!rawBackup) {
+            LOG_ERROR("Failed to allocate backup container");
+            return false;
+        }
+        memset(rawBackup, 0, sizeof(*rawBackup));
+        rawBackup->version = DEVICESTATE_CUR_VER;
+        rawBackup->timestamp = getValidTime(RTCQuality::RTCQualityDevice, false);
+        rawBackup->has_config = true;
+        rawBackup->config = config;
+        rawBackup->has_module_config = true;
+        rawBackup->module_config = moduleConfig;
+        rawBackup->has_channels = true;
+        rawBackup->channels = channelFile;
+        rawBackup->has_owner = true;
+        rawBackup->owner = owner;
 
         size_t backupSize;
-        pb_get_encoded_size(&backupSize, meshtastic_BackupPreferences_fields, &backup);
+        pb_get_encoded_size(&backupSize, meshtastic_BackupPreferences_fields, rawBackup);
 
         spiLock->lock();
+#ifdef USE_EXTERNAL_FLASH
+        externalFS.mkdir("/backups");
+#else
         FSCom.mkdir("/backups");
+#endif
         spiLock->unlock();
-        success = saveProto(backupFileName, backupSize, &meshtastic_BackupPreferences_msg, &backup);
+        success = saveProto(backupFileName, backupSize, &meshtastic_BackupPreferences_msg, backup.get());
 
         if (success) {
             LOG_INFO("Saved backup preferences");
@@ -2190,34 +2693,48 @@ bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location, int restoreWhat)
 {
     bool success = false;
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
     if (location == meshtastic_AdminMessage_BackupLocation_FLASH) {
         spiLock->lock();
+#ifdef USE_EXTERNAL_FLASH
+        if (!externalFS.exists(backupFileName)) {
+            spiLock->unlock();
+            LOG_WARN("Could not restore. No backup file found");
+            return false;
+        }
+#else
         if (!FSCom.exists(backupFileName)) {
             spiLock->unlock();
             LOG_WARN("Could not restore. No backup file found");
             return false;
-        } else {
-            spiLock->unlock();
         }
-        meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
+#endif
+        spiLock->unlock();
+
+        std::unique_ptr<meshtastic_BackupPreferences> backup(new (std::nothrow) meshtastic_BackupPreferences());
+        meshtastic_BackupPreferences *rawBackup = backup.get();
+        if (!rawBackup) {
+            LOG_ERROR("Failed to allocate backup container");
+            return false;
+        }
+        memset(rawBackup, 0, sizeof(*rawBackup));
         success = loadProto(backupFileName, meshtastic_BackupPreferences_size, sizeof(meshtastic_BackupPreferences),
-                            &meshtastic_BackupPreferences_msg, &backup);
+                            &meshtastic_BackupPreferences_msg, rawBackup);
         if (success) {
             if (restoreWhat & SEGMENT_CONFIG) {
-                config = backup.config;
+                config = rawBackup->config;
                 LOG_DEBUG("Restored config");
             }
             if (restoreWhat & SEGMENT_MODULECONFIG) {
-                moduleConfig = backup.module_config;
+                moduleConfig = rawBackup->module_config;
                 LOG_DEBUG("Restored module config");
             }
             if (restoreWhat & SEGMENT_DEVICESTATE) {
-                devicestate.owner = backup.owner;
+                devicestate.owner = rawBackup->owner;
                 LOG_DEBUG("Restored device state");
             }
             if (restoreWhat & SEGMENT_CHANNELS) {
-                channelFile = backup.channels;
+                channelFile = rawBackup->channels;
                 LOG_DEBUG("Restored channels");
             }
 

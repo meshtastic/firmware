@@ -4,10 +4,10 @@
 
 #include "../detect/reClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
+#include "Filesystem/SafeFile.h"
 #include "SEN5XSensor.h"
 #include "SPILock.h"
-#include "SafeFile.h"
 #include "TelemetrySensor.h"
 #include <float.h> // FLT_MAX
 #include <pb_decode.h>

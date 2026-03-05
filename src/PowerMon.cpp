@@ -1,5 +1,5 @@
 #include "PowerMon.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 
 // Use the 'live' config flag to figure out if we should be showing this message
 bool PowerMon::is_power_enabled(uint64_t m)

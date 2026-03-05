@@ -21,7 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "Screen.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
 #include "configuration.h"
@@ -44,7 +44,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #include "buzz.h"
 #endif
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "RadioLibInterface.h"
@@ -699,7 +699,7 @@ void Screen::setup()
 
     // Load persisted messages into RAM
     messageStore.loadFromFlash();
-    LOG_INFO("MessageStore loaded from flash");
+    
 
     // Notify modules that support UI events
     MeshModule::observeUIEvents(&uiFrameEventObserver);

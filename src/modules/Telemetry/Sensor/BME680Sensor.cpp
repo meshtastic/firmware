@@ -4,7 +4,7 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "BME680Sensor.h"
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "SPILock.h"
 #include "TelemetrySensor.h"
 
@@ -129,9 +129,15 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
 #if __has_include(<bsec2.h>)
 void BME680Sensor::loadState()
 {
-#ifdef FSCom
+#ifdef USE_EXTERNAL_FLASH
+    // Load BSEC state from external flash
+    spiLock->lock();
+    auto file = externalFS.open(bsecConfigFileName, FILE_O_READ);
+#elif defined(FSCom)
     spiLock->lock();
     auto file = FSCom.open(bsecConfigFileName, FILE_O_READ);
+#endif
+#if defined(USE_EXTERNAL_FLASH) || defined(FSCom)
     if (file) {
         file.read((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
         file.close();
@@ -148,7 +154,7 @@ void BME680Sensor::loadState()
 
 void BME680Sensor::updateState()
 {
-#ifdef FSCom
+#if defined(USE_EXTERNAL_FLASH) || defined(FSCom)
     spiLock->lock();
     bool update = false;
     if (stateUpdateCounter == 0) {
@@ -172,10 +178,20 @@ void BME680Sensor::updateState()
 
     if (update) {
         bme680.getState(bsecState);
-        if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName)) {
+#endif
+#ifdef USE_EXTERNAL_FLASH
+        // Save BSEC state to external flash
+        if (externalFS.exists(bsecConfigFileName) && !externalFS.remove(bsecConfigFileName)) {
             LOG_WARN("Can't remove old state file");
         }
-        auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
+        auto file = externalFS.open(bsecConfigFileName, FILE_O_WRITE);
+#elif defined(FSCom)
+    if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName)) {
+        LOG_WARN("Can't remove old state file");
+    }
+    auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
+#endif
+#if defined(USE_EXTERNAL_FLASH) || defined(FSCom)
         if (file) {
             LOG_INFO("%s state write to %s", sensorName, bsecConfigFileName);
             file.write((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);

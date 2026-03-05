@@ -1,9 +1,9 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "CompassRenderer.h"
+#include "Filesystem/NodeDB.h"
 #include "GPSStatus.h"
 #include "MeshService.h"
-#include "NodeDB.h"
 #include "NodeListRenderer.h"
 #include "UIRenderer.h"
 #include "airtime.h"

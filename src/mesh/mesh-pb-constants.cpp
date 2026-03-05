@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#include "FSCommon.h"
+#include "Filesystem/FSCommon.h"
 #include "SPILock.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
@@ -32,20 +32,20 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
     }
 }
 
-#ifdef FSCom
 /// Read from an Arduino File
+// Edited so that functions that used readcb for internal flash also work for external flash
+// without modifying all those functions to use the external filesystem API directly
 bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 {
     bool status = false;
-    File *file = (File *)stream->state;
-
+    Stream *file = static_cast<Stream *>(stream->state);
     if (buf == NULL) {
         while (count-- && file->read() != EOF)
             ;
         return count == 0;
     }
 
-    status = (file->read(buf, count) == (int)count);
+    status = (file->readBytes(reinterpret_cast<char *>(buf), count) == count);
 
     if (file->available() == 0)
         stream->bytes_left = 0;
@@ -54,6 +54,8 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 }
 
 /// Write to an arduino file
+// Edited so that functions that used writecb for internal flash also work for external flash
+// without modifying all those functions to use the external filesystem API directly
 bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 {
     spiLock->lock();
@@ -63,7 +65,6 @@ bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
     spiLock->unlock();
     return status;
 }
-#endif
 
 bool is_in_helper(uint32_t n, const uint32_t *array, pb_size_t count)
 {

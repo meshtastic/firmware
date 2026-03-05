@@ -51,11 +51,16 @@
 #include "xmodem.h"
 #include "SPILock.h"
 
-#ifdef FSCom
+#if defined(FSCom) || defined(USE_EXTERNAL_FLASH)
 
 XModemAdapter xModem;
 
-XModemAdapter::XModemAdapter() {}
+XModemAdapter::XModemAdapter()
+#if defined(USE_EXTERNAL_FLASH)
+    : file(externalFS)
+#endif
+{
+}
 
 /**
  * Calculates the CRC-16 CCITT checksum of the given buffer.
@@ -123,8 +128,13 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
                 spiLock->lock();
+#if defined(USE_EXTERNAL_FLASH)
+                file = externalFS.open(filename, FILE_O_WRITE);
+                spiLock->unlock();
+#elif defined(FSCom)
                 file = FSCom.open(filename, FILE_O_WRITE);
                 spiLock->unlock();
+#endif
                 if (file) {
                     sendControl(meshtastic_XModem_Control_ACK);
                     isReceiving = true;
@@ -137,8 +147,20 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             } else { // Transmit this file from Flash
                 LOG_INFO("XModem: Transmit file %s", filename);
                 spiLock->lock();
+#if defined(USE_EXTERNAL_FLASH)
+                if (!flashInitialized || !externalFSMounted) {
+                    LOG_ERROR("External flash not ready, cannot transmit file %s", filename);
+                    sendControl(meshtastic_XModem_Control_NAK);
+                    isReceiving = false;
+                    spiLock->unlock();
+                    break;
+                }
+                file = externalFS.open(filename, FILE_O_READ);
+                spiLock->unlock();
+#elif defined(FSCom)
                 file = FSCom.open(filename, FILE_O_READ);
                 spiLock->unlock();
+#endif
                 if (file) {
                     packetno = 1;
                     isTransmitting = true;
@@ -200,8 +222,11 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         spiLock->lock();
         file.flush();
         file.close();
-
+#if defined(USE_EXTERNAL_FLASH)
+        externalFS.remove(filename);
+#elif defined(FSCom)
         FSCom.remove(filename);
+#endif
         spiLock->unlock();
         isReceiving = false;
         break;
@@ -254,6 +279,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             xmodemStore.control = meshtastic_XModem_Control_SOH;
             xmodemStore.seq = packetno;
             spiLock->lock();
+            // Rewind to the start of the packet we need to retransmit
             file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
 
             xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));

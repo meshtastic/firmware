@@ -1,6 +1,6 @@
 #include "PowerStressModule.h"
 #include "MeshService.h"
-#include "NodeDB.h"
+#include "Filesystem/NodeDB.h"
 #include "PowerMon.h"
 #include "RTC.h"
 #include "Router.h"

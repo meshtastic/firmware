@@ -5,7 +5,6 @@
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "mesh/generated/meshtastic/localonly.pb.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
-
 // this file defines constants which come from mesh.options
 
 // Tricky macro to let you find the sizeof a type member
@@ -45,8 +44,13 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increas
 #ifndef MAX_NUM_NODES
 #if defined(ARCH_STM32WL)
 #define MAX_NUM_NODES 10
+
+// #elif defined(USE_EXTERNAL_FLASH)
+// #define MAX_NUM_NODES 250
+
 #elif defined(ARCH_NRF52)
 #define MAX_NUM_NODES 80
+
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 #include "Esp.h"
 static inline int get_max_num_nodes()
