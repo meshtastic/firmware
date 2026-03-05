@@ -63,6 +63,110 @@ uint32_t pow_of_10(uint32_t n)
     return ret;
 }
 
+char graphics::NotificationRenderer::alertBannerLines[MAX_LINES + 1][64] = {};
+uint8_t graphics::NotificationRenderer::alertBannerLineCount = 0;
+graphics::NotificationRenderer::BannerFont graphics::NotificationRenderer::alertBannerLineFonts[MAX_LINES + 1] = {};
+
+static inline graphics::NotificationRenderer::BannerFont parseFontTagPrefix(const char *&p)
+{
+    // Tags must be at the start of the line:
+    // [S] small, [M] medium, [L] large
+    if (p && p[0] == '[' && p[2] == ']' && p[1] != '\0') {
+        char t = p[1];
+        if (t == 'S') {
+            p += 3;
+            return graphics::NotificationRenderer::BANNER_FONT_SMALL;
+        }
+        if (t == 'M') {
+            p += 3;
+            return graphics::NotificationRenderer::BANNER_FONT_MEDIUM;
+        }
+        if (t == 'L') {
+            p += 3;
+            return graphics::NotificationRenderer::BANNER_FONT_LARGE;
+        }
+    }
+    return graphics::NotificationRenderer::BANNER_FONT_DEFAULT;
+}
+
+static inline const uint8_t *fontForBannerLine(graphics::NotificationRenderer::BannerFont f)
+{
+    switch (f) {
+    case graphics::NotificationRenderer::BANNER_FONT_SMALL:
+        return FONT_SMALL;
+    case graphics::NotificationRenderer::BANNER_FONT_MEDIUM:
+        return FONT_MEDIUM;
+    case graphics::NotificationRenderer::BANNER_FONT_LARGE:
+        return FONT_LARGE;
+    case graphics::NotificationRenderer::BANNER_FONT_DEFAULT:
+    default:
+        return FONT_SMALL;
+    }
+}
+
+static inline uint8_t effectiveLineHeightForBannerLine(graphics::NotificationRenderer::BannerFont f)
+{
+    uint8_t height = FONT_HEIGHT_SMALL;
+    switch (f) {
+    case graphics::NotificationRenderer::BANNER_FONT_MEDIUM:
+        height = FONT_HEIGHT_MEDIUM;
+        break;
+    case graphics::NotificationRenderer::BANNER_FONT_LARGE:
+        height = FONT_HEIGHT_LARGE;
+        break;
+    case graphics::NotificationRenderer::BANNER_FONT_SMALL:
+    case graphics::NotificationRenderer::BANNER_FONT_DEFAULT:
+    default:
+        height = FONT_HEIGHT_SMALL;
+        break;
+    }
+    return (height > 3) ? (height - 3) : height;
+}
+
+void graphics::NotificationRenderer::parseBannerMessageWithFonts(const char *message)
+{
+    alertBannerLineCount = 0;
+    for (uint8_t i = 0; i < (MAX_LINES + 1); i++) {
+        alertBannerLines[i][0] = '\0';
+        alertBannerLineFonts[i] = BANNER_FONT_DEFAULT;
+    }
+
+    if (!message || !message[0]) {
+        return;
+    }
+
+    const char *p = message;
+
+    while (*p && alertBannerLineCount < (MAX_LINES + 1)) {
+        const char *lineStart = p;
+        while (*p && *p != '\n') {
+            p++;
+        }
+
+        char tmp[64] = {0};
+        size_t len = (size_t)(p - lineStart);
+        if (len > (sizeof(tmp) - 1)) {
+            len = sizeof(tmp) - 1;
+        }
+        memcpy(tmp, lineStart, len);
+        tmp[len] = '\0';
+
+        // Tag at start
+        const char *tp = tmp;
+        BannerFont f = parseFontTagPrefix(tp);
+        alertBannerLineFonts[alertBannerLineCount] = f;
+
+        // Store stripped text
+        strncpy(alertBannerLines[alertBannerLineCount], tp, sizeof(alertBannerLines[0]) - 1);
+        alertBannerLines[alertBannerLineCount][sizeof(alertBannerLines[0]) - 1] = '\0';
+        alertBannerLineCount++;
+
+        if (*p == '\n') {
+            p++;
+        }
+    }
+}
+
 // Used on boot when a certificate is being created
 void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -353,23 +457,37 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     const char *lineStarts[MAX_LINES + 1] = {0};
     uint16_t lineCount = 0;
     char lineBuffer[40] = {0};
+    bool useTaggedTextBanner =
+        (current_notification_type == notificationTypeEnum::text_banner && alertBannerOptions == 0 && alertBannerLineCount > 0);
 
-    // Parse lines
-    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
-    lineStarts[lineCount] = alertBannerMessage;
+    if (useTaggedTextBanner) {
+        lineCount = std::min<uint8_t>(alertBannerLineCount, MAX_LINES);
+        for (uint16_t i = 0; i < lineCount; i++) {
+            lineStarts[i] = alertBannerLines[i];
+            lineLengths[i] = strlen(lineStarts[i]);
+            display->setFont(fontForBannerLine(alertBannerLineFonts[i]));
+            lineWidths[i] = display->getStringWidth(lineStarts[i], lineLengths[i], true);
+            if (lineWidths[i] > maxWidth)
+                maxWidth = lineWidths[i];
+        }
+    } else {
+        char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
+        lineStarts[lineCount] = alertBannerMessage;
 
-    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
-        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
-        lineLengths[lineCount] = lineStarts[lineCount + 1] - lineStarts[lineCount];
-        if (lineStarts[lineCount + 1][0] == '\n')
-            lineStarts[lineCount + 1] += 1;
-        lineWidths[lineCount] = display->getStringWidth(lineStarts[lineCount], lineLengths[lineCount], true);
-        if (lineWidths[lineCount] > maxWidth)
-            maxWidth = lineWidths[lineCount];
-        lineCount++;
+        while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
+            lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
+            lineLengths[lineCount] = lineStarts[lineCount + 1] - lineStarts[lineCount];
+            if (lineStarts[lineCount + 1][0] == '\n')
+                lineStarts[lineCount + 1] += 1;
+            lineWidths[lineCount] = display->getStringWidth(lineStarts[lineCount], lineLengths[lineCount], true);
+            if (lineWidths[lineCount] > maxWidth)
+                maxWidth = lineWidths[lineCount];
+            lineCount++;
+        }
     }
 
     // Measure option widths
+    display->setFont(FONT_SMALL);
     for (int i = 0; i < alertBannerOptions; i++) {
         optionWidths[i] = display->getStringWidth(optionsArrayPtr[i], strlen(optionsArrayPtr[i]), true);
         if (optionWidths[i] > maxWidth)
@@ -483,6 +601,10 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     bool needs_bell = false;
     uint16_t lineWidths[totalLines] = {0};
     uint16_t lineLengths[totalLines] = {0};
+    BannerFont lineFonts[totalLines] = {};
+    uint8_t lineEffectiveHeights[totalLines] = {0};
+    const char *renderLines[totalLines] = {0};
+    bool useTaggedBannerFonts = (current_notification_type == notificationTypeEnum::text_banner && alertBannerOptions == 0);
 
     if (maxWidth != 0)
         is_picker = true;
@@ -495,17 +617,28 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     uint16_t widestLineWithBars = 0;
 
     while (lines[lineCount] != nullptr) {
-        auto newlinePointer = strchr(lines[lineCount], '\n');
-        if (newlinePointer)
-            lineLengths[lineCount] = (newlinePointer - lines[lineCount]); // Check for newlines first
-        else // if the newline wasn't found, then pull string length from strlen
-            lineLengths[lineCount] = strlen(lines[lineCount]);
+        const char *renderText = lines[lineCount];
+        BannerFont lineFont = BANNER_FONT_DEFAULT;
+        if (useTaggedBannerFonts && lineCount < alertBannerLineCount) {
+            renderText = alertBannerLines[lineCount];
+            lineFont = alertBannerLineFonts[lineCount];
+        }
+        renderLines[lineCount] = renderText;
+        lineFonts[lineCount] = lineFont;
+        lineEffectiveHeights[lineCount] = effectiveLineHeightForBannerLine(lineFont);
+        display->setFont(fontForBannerLine(lineFont));
 
-        lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
+        auto newlinePointer = strchr(renderText, '\n');
+        if (newlinePointer)
+            lineLengths[lineCount] = (newlinePointer - renderText);
+        else
+            lineLengths[lineCount] = strlen(renderText);
+
+        lineWidths[lineCount] = display->getStringWidth(renderText, lineLengths[lineCount], true);
 
         // Consider extra width for signal bars on lines that contain "Signal:"
         uint16_t potentialWidth = lineWidths[lineCount];
-        if (graphics::bannerSignalBars >= 0 && strncmp(lines[lineCount], "Signal:", 7) == 0) {
+        if (graphics::bannerSignalBars >= 0 && strncmp(renderText, "Signal:", 7) == 0) {
             const int totalBars = 5;
             const int barWidth = 3;
             const int barSpacing = 2;
@@ -541,8 +674,21 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
     uint16_t screenHeight = display->height();
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
-    uint8_t visibleTotalLines = std::min<uint8_t>(lineCount, (screenHeight - vPadding * 2) / effectiveLineHeight);
-    uint16_t contentHeight = visibleTotalLines * effectiveLineHeight;
+    uint8_t visibleTotalLines = 0;
+    uint16_t contentHeight = 0;
+    const uint16_t availableHeight = (screenHeight > (vPadding * 2)) ? (screenHeight - vPadding * 2) : 0;
+    for (uint8_t i = 0; i < lineCount; i++) {
+        uint8_t thisLineHeight = lineEffectiveHeights[i] ? lineEffectiveHeights[i] : effectiveLineHeight;
+        if (contentHeight + thisLineHeight > availableHeight) {
+            break;
+        }
+        contentHeight += thisLineHeight;
+        visibleTotalLines++;
+    }
+    if (visibleTotalLines == 0 && lineCount > 0) {
+        visibleTotalLines = 1;
+        contentHeight = lineEffectiveHeights[0] ? lineEffectiveHeights[0] : effectiveLineHeight;
+    }
     uint16_t boxHeight = contentHeight + vPadding * 2;
     if (visibleTotalLines == 1) {
         boxHeight += (currentResolution == ScreenResolution::High) ? 4 : 3;
@@ -585,15 +731,18 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
     // Draw Content
     int16_t lineY = boxTop + vPadding;
-    for (int i = 0; i < lineCount; i++) {
+    for (int i = 0; i < visibleTotalLines; i++) {
+        display->setFont(fontForBannerLine(lineFonts[i]));
+        int16_t thisLineHeight = lineEffectiveHeights[i] ? lineEffectiveHeights[i] : effectiveLineHeight;
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
         if (needs_bell && i == 0) {
-            int bellY = lineY + (FONT_HEIGHT_SMALL - 8) / 2;
+            int fontHeight = thisLineHeight + 3;
+            int bellY = lineY + (fontHeight - 8) / 2;
             display->drawXbm(textX - 10, bellY, 8, 8, bell_alert);
             display->drawXbm(textX + lineWidths[i] + 2, bellY, 8, 8, bell_alert);
         }
         char lineBuffer[lineLengths[i] + 1];
-        strncpy(lineBuffer, lines[i], lineLengths[i]);
+        strncpy(lineBuffer, renderLines[i], lineLengths[i]);
         lineBuffer[lineLengths[i]] = '\0';
         // Determine if this is a pop-up or a pick list
         if (alertBannerOptions > 0 && i == 0) {
@@ -609,7 +758,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             int yOffset = 3;
             display->drawString(textX, lineY - yOffset, lineBuffer);
             display->setColor(WHITE);
-            lineY += (effectiveLineHeight - 2 - background_yOffset);
+            lineY += (thisLineHeight - 2 - background_yOffset);
         } else {
             // Pop-up
             // If this is the Signal line, center text + bars as one group
@@ -629,7 +778,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                 display->drawString(groupStartX, lineY, lineBuffer);
 
                 int baseX = groupStartX + textWidth + gap;
-                int baseY = lineY + effectiveLineHeight - 1;
+                int baseY = lineY + thisLineHeight - 1;
                 for (int b = 0; b < totalBars; b++) {
                     int barHeight = (b + 1) * barHeightStep;
                     int x = baseX + b * (barWidth + barSpacing);
@@ -644,7 +793,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             } else {
                 display->drawString(textX, lineY, lineBuffer);
             }
-            lineY += (effectiveLineHeight);
+            lineY += thisLineHeight;
         }
     }
 
