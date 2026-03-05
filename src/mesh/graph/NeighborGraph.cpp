@@ -480,9 +480,54 @@ void NeighborGraph::updateDownstream(NodeNum destination, NodeNum relay, float t
         entry.lastUpdate = timestamp;
     } else {
         // Replace oldest entry
-        uint8_t oldestIdx = 0;
+        uint16_t oldestIdx = 0;
         uint32_t oldestTime = downstream[0].lastUpdate;
-        for (uint8_t i = 1; i < downstreamCount; i++) {
+        for (uint16_t i = 1; i < downstreamCount; i++) {
+            if (downstream[i].lastUpdate < oldestTime) {
+                oldestTime = downstream[i].lastUpdate;
+                oldestIdx = i;
+            }
+        }
+        downstream[oldestIdx].destination = destination;
+        downstream[oldestIdx].relay = relay;
+        downstream[oldestIdx].costFixed = costFixed;
+        downstream[oldestIdx].lastUpdate = timestamp;
+    }
+}
+
+void NeighborGraph::updateDownstreamExclusive(NodeNum destination, NodeNum relay, float totalCost, uint32_t timestamp)
+{
+    if (destination == 0 || relay == 0 || destination == relay)
+        return;
+
+    NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
+    if (destination == myNode)
+        return;
+
+    uint16_t costFixed = static_cast<uint16_t>(std::min(totalCost * 100.0f, 65535.0f));
+
+    // Find and update/replace any existing entry for this destination (regardless of relay)
+    for (uint16_t i = 0; i < downstreamCount; i++) {
+        if (downstream[i].destination == destination) {
+            downstream[i].relay = relay;
+            downstream[i].costFixed = costFixed;
+            downstream[i].lastUpdate = timestamp;
+            return;
+        }
+    }
+
+    // No existing entry — add new
+    if (downstreamCount < NEIGHBOR_GRAPH_MAX_DOWNSTREAM) {
+        DownstreamEntry &entry = downstream[downstreamCount++];
+        entry.destination = destination;
+        entry.relay = relay;
+        entry.costFixed = costFixed;
+        entry.lastUpdate = timestamp;
+    } else {
+        // Replace oldest entry
+        uint16_t oldestIdx = 0;
+        uint32_t oldestTime = downstream[0].lastUpdate;
+        for (uint16_t i = 1; i < downstreamCount; i++) {
             if (downstream[i].lastUpdate < oldestTime) {
                 oldestTime = downstream[i].lastUpdate;
                 oldestIdx = i;

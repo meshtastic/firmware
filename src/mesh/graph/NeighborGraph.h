@@ -151,6 +151,10 @@ class NeighborGraph {
 
     void updateDownstream(NodeNum destination, NodeNum relay, float totalCost, uint32_t timestamp);
 
+    // Like updateDownstream, but ensures each destination has exactly one relay entry.
+    // If the destination already exists with a different relay, the relay is replaced.
+    void updateDownstreamExclusive(NodeNum destination, NodeNum relay, float totalCost, uint32_t timestamp);
+
     NodeNum getDownstreamRelay(NodeNum destination) const;
 
     bool isDownstream(NodeNum destination) const;

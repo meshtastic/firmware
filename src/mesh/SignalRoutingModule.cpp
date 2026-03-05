@@ -1239,25 +1239,31 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             // But only if:
             // 1. We have a direct connection to inferredRelayer (can hear them directly)
             // 2. We don't have a direct connection to mp.from ourselves
+            // 3. We haven't already seen this source recently via a different relay
+            //    (prevents inflated downstream counts when SR cluster nodes re-relay the same traffic)
             bool hasDirectConnectionToRelay = false;
             bool hasDirectConnectionToSender = false;
             const NodeEdges* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
             if (edges) {
                 for (uint8_t i = 0; i < edges->edgeCount; i++) {
-                    if (edges->edges[i].to == inferredRelayer && 
+                    if (edges->edges[i].to == inferredRelayer &&
                         edges->edges[i].source == Edge::Source::Reported) {
                         hasDirectConnectionToRelay = true;
                     }
-                    if (edges->edges[i].to == mp.from && 
+                    if (edges->edges[i].to == mp.from &&
                         edges->edges[i].source == Edge::Source::Reported) {
                         hasDirectConnectionToSender = true;
                     }
                 }
             }
-            // Only record downstream relationship if we hear the relay directly and don't hear sender directly
+
             if (hasDirectConnectionToRelay && !hasDirectConnectionToSender) {
                 float inferredEtx = NeighborGraph::calculateETX(-70, 5.0f); // Default for inferred
-                routingGraph->updateDownstream(mp.from, inferredRelayer, inferredEtx, millis() / 1000);
+                // Update downstream, replacing any existing relay for this source.
+                // This ensures each source is tracked via exactly one relay at a time,
+                // preventing inflated downstream counts from SR cluster re-relaying,
+                // while still adapting when a node moves to a different relay path.
+                routingGraph->updateDownstreamExclusive(mp.from, inferredRelayer, inferredEtx, millis() / 1000);
             }
 
             // Infer direct connectivity between relayer and sender only for stock firmware nodes
