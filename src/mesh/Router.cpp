@@ -768,7 +768,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                 !isFromUs(p) && mqtt) {
                 if (decodedState == DecodeState::DECODE_SUCCESS && p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP &&
                     moduleConfig.mqtt.encryption_enabled) {
-                    // For TRACEROUTE_APP packets release the original encrypted packet. Allocate a new from the changed packet
+                    // For TRACEROUTE_APP packets release the original encrypted packet and encrypt a new from the changed packet
                     // Only release the original after successful allocation to avoid losing an incomplete but valid packet
                     auto *p_encrypted_new = packetPool.allocCopy(*p);
                     if (p_encrypted_new) {
