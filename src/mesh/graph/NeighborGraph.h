@@ -163,6 +163,9 @@ class NeighborGraph {
 
     void clearDownstreamForRelay(NodeNum relay);
 
+    // Transfer all downstream entries from oldRelay to newRelay, then clear oldRelay
+    size_t transferDownstream(NodeNum oldRelay, NodeNum newRelay);
+
     void clearDownstreamForDestination(NodeNum destination);
 
     // --- Relay decisions ---

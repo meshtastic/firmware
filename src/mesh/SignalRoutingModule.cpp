@@ -789,18 +789,11 @@ void SignalRoutingModule::replaceGatewayNode(NodeNum oldNode, NodeNum newNode)
     if (oldNode == newNode || !routingGraph) return;
 
     // Transfer downstream entries from old relay to new relay
-    NodeNum dsBuf[NEIGHBOR_GRAPH_MAX_DOWNSTREAM];
-    uint16_t dsCosts[NEIGHBOR_GRAPH_MAX_DOWNSTREAM];
-    size_t dsCount = routingGraph->getDownstreamNodesForRelay(oldNode, dsBuf, dsCosts, NEIGHBOR_GRAPH_MAX_DOWNSTREAM);
-    if (dsCount > 0) {
-        uint32_t now = millis() / 1000;
-        for (size_t i = 0; i < dsCount; i++) {
-            routingGraph->updateDownstream(dsBuf[i], newNode, dsCosts[i] / 100.0f, now);
-        }
+    size_t transferred = routingGraph->transferDownstream(oldNode, newNode);
+    if (transferred > 0) {
         LOG_DEBUG("[SR] Transferred %u downstream entries from %08x to %08x",
-                 (unsigned)dsCount, oldNode, newNode);
+                 (unsigned)transferred, oldNode, newNode);
     }
-    routingGraph->clearDownstreamForRelay(oldNode);
     routingGraph->clearDownstreamForDestination(oldNode);
 }
 
@@ -1032,14 +1025,16 @@ void SignalRoutingModule::logNetworkTopology()
             const char* branch = isLast ? "\\-" : "+-";
             const char* cont = isLast ? " " : "|";
 
-            // Get downstream nodes that route through this neighbor
-            NodeNum dsBuf[NEIGHBOR_GRAPH_MAX_DOWNSTREAM];
-            uint16_t dsCosts[NEIGHBOR_GRAPH_MAX_DOWNSTREAM];
-            size_t dsCount = routingGraph->getDownstreamNodesForRelay(edge.to, dsBuf, dsCosts, NEIGHBOR_GRAPH_MAX_DOWNSTREAM);
+            // Get downstream nodes that route through this neighbor (cap display to avoid stack overflow)
+            static constexpr size_t MAX_DS_DISPLAY = 64;
+            NodeNum dsBuf[MAX_DS_DISPLAY];
+            uint16_t dsCosts[MAX_DS_DISPLAY];
+            size_t totalDsCount = routingGraph->getDownstreamCountForRelay(edge.to);
+            size_t dsCount = routingGraph->getDownstreamNodesForRelay(edge.to, dsBuf, dsCosts, MAX_DS_DISPLAY);
 
-            if (dsCount > 0) {
+            if (totalDsCount > 0) {
                 LOG_INFO("[SR]   %s %s%s: %s (ETX=%.1f, %ss ago, relay for %u downstream)",
-                         branch, nprefix, neighborName, quality, etx, ageBuf, static_cast<unsigned int>(dsCount));
+                         branch, nprefix, neighborName, quality, etx, ageBuf, static_cast<unsigned int>(totalDsCount));
             } else {
                 LOG_INFO("[SR]   %s %s%s: %s (ETX=%.1f, %ss ago)",
                          branch, nprefix, neighborName, quality, etx, ageBuf);
@@ -1058,10 +1053,13 @@ void SignalRoutingModule::logNetworkTopology()
                     dsprefix = "[SR-passive] ";
                 }
 
-                bool dsLast = (d == dsCount - 1);
+                bool dsLast = (d == dsCount - 1) && (dsCount == totalDsCount);
                 const char* dsBranch = dsLast ? "\\-" : "+-";
                 float dsCost = dsCosts[d] / 100.0f;
                 LOG_INFO("[SR]   %s    %s %s%s (ETX=%.1f)", cont, dsBranch, dsprefix, dsName, dsCost);
+            }
+            if (dsCount < totalDsCount) {
+                LOG_INFO("[SR]   %s    \\- ... and %u more", cont, static_cast<unsigned int>(totalDsCount - dsCount));
             }
         }
     }

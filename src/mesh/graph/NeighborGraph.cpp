@@ -569,6 +569,22 @@ void NeighborGraph::clearDownstreamForRelay(NodeNum relay)
     }
 }
 
+size_t NeighborGraph::transferDownstream(NodeNum oldRelay, NodeNum newRelay)
+{
+    uint32_t now = millis() / 1000;
+    size_t count = 0;
+    // First pass: add entries under newRelay
+    for (uint16_t i = 0; i < downstreamCount; i++) {
+        if (downstream[i].relay == oldRelay) {
+            updateDownstream(downstream[i].destination, newRelay, downstream[i].costFixed / 100.0f, now);
+            count++;
+        }
+    }
+    // Second pass: remove old entries
+    clearDownstreamForRelay(oldRelay);
+    return count;
+}
+
 void NeighborGraph::clearDownstreamForDestination(NodeNum destination)
 {
     for (uint16_t i = 0; i < downstreamCount;) {
