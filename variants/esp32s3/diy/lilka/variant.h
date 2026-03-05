@@ -1,0 +1,74 @@
+#define PIN_BUZZER 11
+// #define BUTTON_PIN 4
+#define BATTERY_PIN 3
+#define ADC_MULTIPLIER 1.2
+#define ADC_CHANNEL ADC1_GPIO3_CHANNEL
+#define I2C_SCL 42
+#define I2C_SDA 2
+
+// trackball
+#define HAS_TRACKBALL 1
+#define TB_UP 38
+#define TB_DOWN 41
+#define TB_LEFT 39
+#define TB_RIGHT 40
+#define TB_PRESS 10 // C (A, B and D will stay to be used for canned messages)
+#define TB_DIRECTION FALLING
+
+// IPS 1.69 280х240 ST7789
+#define USE_TFTDISPLAY 1
+#define ST7789_CS 7
+#define ST7789_RS 15
+#define ST7789_SDA 17
+#define ST7789_SCK 18
+#define ST7789_RESET -1
+#define ST7789_MISO -1
+#define ST7789_BUSY -1
+#define ST7789_BL 46
+#define ST7789_SPI_HOST SPI3_HOST
+#define TFT_BL 46
+#define SPI_FREQUENCY 40000000
+#define SPI_READ_FREQUENCY 16000000
+#define TFT_HEIGHT 280
+#define TFT_WIDTH 240
+#define TFT_OFFSET_X 0
+#define TFT_OFFSET_Y -20
+#define TFT_OFFSET_ROTATION 0
+#define SCREEN_ROTATE
+#define SCREEN_TRANSITION_FRAMERATE 5
+#define BRIGHTNESS_DEFAULT 130
+
+// E22 400M30S
+#define E22_DIO1 44
+#define E22_BUSY 43
+#define E22_NRST 48
+#define E22_MISO 47
+#define E22_MOSI 21
+#define E22_SCK 14
+#define E22_NSS 13
+#define E22_RXEN 12
+#define SX126X_CS E22_NSS
+#define LORA_SCK E22_SCK
+#define LORA_MOSI E22_MOSI
+#define LORA_MISO E22_MISO
+#define SX126X_RESET E22_NRST
+#define SX126X_BUSY E22_BUSY
+#define SX126X_DIO1 E22_DIO1
+#define SX126X_RXEN E22_RXEN
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_TXEN RADIOLIB_NC
+#define SX126X_MAX_POWER 22
+#define USE_SX1268
+#define USE_SX1262
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#define TCXO_OPTIONAL
+#define LORA_CS SX126X_CS
+#define LORA_DIO1 SX126X_DIO1
+
+// sd-card
+// #define HAS_SDCARD
+// #define SDCARD_USE_SPI1
+// #define SDCARD_CS 16
+// #define SPI_MISO  8
+// #define SPI_MOSI  17
+// #define SPI_SCK   18
