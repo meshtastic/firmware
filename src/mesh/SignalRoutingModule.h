@@ -58,6 +58,7 @@ private:
     static constexpr uint32_t RELAY_ID_CACHE_TTL_MS = 600 * 1000;  // 10 min
 
     bool signalBasedRoutingEnabled = true;
+    bool topologyDirty = false; // Set when topology changes; log dump deferred to runOnce
     uint32_t lastBroadcast = 0;
     uint8_t currentTopologyVersion = 0;
     std::unordered_map<NodeNum, uint8_t> lastTopologyVersion;

@@ -14,7 +14,41 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
-#include <unordered_set>
+
+// Fixed-size node set — replaces std::unordered_set<NodeNum> to avoid heap allocations.
+// Capacity: enough for one node's edges + some margin. Keeps stack usage predictable.
+static constexpr size_t NODE_SET_MAX = 48;
+
+struct NodeSet {
+    NodeNum nodes[NODE_SET_MAX];
+    uint16_t count = 0;
+
+    void clear() { count = 0; }
+
+    bool contains(NodeNum n) const {
+        for (uint16_t i = 0; i < count; i++)
+            if (nodes[i] == n) return true;
+        return false;
+    }
+
+    bool insert(NodeNum n) {
+        if (contains(n)) return false;
+        if (count < NODE_SET_MAX) { nodes[count++] = n; return true; }
+        return false;
+    }
+
+    void erase(NodeNum n) {
+        for (uint16_t i = 0; i < count; i++) {
+            if (nodes[i] == n) {
+                nodes[i] = nodes[--count];
+                return;
+            }
+        }
+    }
+
+    bool empty() const { return count == 0; }
+    uint16_t size() const { return count; }
+};
 
 // Compile-time configuration
 #ifndef NEIGHBOR_GRAPH_MAX_NEIGHBORS
@@ -22,7 +56,7 @@
 #endif
 
 #ifndef NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE
-#define NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE 32
+#define NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE 24
 #endif
 
 #ifndef NEIGHBOR_GRAPH_MAX_DOWNSTREAM
@@ -184,9 +218,8 @@ class NeighborGraph {
 
     bool shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const;
 
-    RelayCandidate findBestRelayCandidate(const std::unordered_set<NodeNum> &candidates,
-                                              const std::unordered_set<NodeNum> &alreadyCovered, uint32_t currentTime,
-                                              uint32_t packetId) const;
+    RelayCandidate findBestRelayCandidate(const NodeSet &candidates, const NodeSet &alreadyCovered,
+                                          uint32_t currentTime, uint32_t packetId) const;
 
     size_t getCoverageIfRelays(NodeNum relay, NodeNum *coveredNodes, size_t maxNodes, const NodeNum *alreadyCovered,
                                size_t alreadyCoveredCount) const;

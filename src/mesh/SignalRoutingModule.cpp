@@ -134,11 +134,12 @@ int32_t SignalRoutingModule::runOnce()
             sendSignalRoutingInfo();
         }
 
-        // Periodic topology logging
+        // Topology logging: periodic (every 60s) or when topology changed
         static uint32_t lastTopologyLog = 0;
-        if (nowMs - lastTopologyLog >= 60 * 1000) {
+        if (topologyDirty || nowMs - lastTopologyLog >= 60 * 1000) {
             logNetworkTopology();
             lastTopologyLog = nowMs;
+            topologyDirty = false;
         }
     }
 
@@ -1414,6 +1415,17 @@ bool SignalRoutingModule::shouldRelayUnicastForCoordination(const meshtastic_Mes
     char nextHopName[64];
     getNodeDisplayName(myNextHop, nextHopName, sizeof(nextHopName));
 
+    // If both source and destination are downstream of the same relay, that relay
+    // handles delivery directly — we shouldn't insert ourselves into the path.
+    NodeNum sourceRelay = routingGraph->getDownstreamRelay(sourceNode);
+    NodeNum destRelay = routingGraph->getDownstreamRelay(destination);
+    if (sourceRelay != 0 && sourceRelay == destRelay && sourceRelay != myNode) {
+        char relayName[64];
+        getNodeDisplayName(sourceRelay, relayName, sizeof(relayName));
+        LOG_DEBUG("[SR] UNICAST RELAY: Source and destination both downstream of %s - not our relay path", relayName);
+        return false;
+    }
+
     // If next hop IS the destination, it means destination is a direct neighbor.
     // We should deliver directly, not wait for destination to "relay to itself".
     if (myNextHop == destination) {
@@ -2111,12 +2123,12 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
             // Set green for new neighbor (operation start)
             setRgbLed(0, 255, 0);
             LOG_INFO("[SR] Topology changed: new neighbor %s (total nodes: %u)", neighborName, static_cast<unsigned int>(routingGraph->getNodeCount()));
-            logNetworkTopology();
+            topologyDirty = true;
         } else if (changeType == EDGE_SIGNIFICANT_CHANGE) {
             // Set blue for signal quality change (operation start)
             setRgbLed(0, 0, 255);
             LOG_INFO("[SR] Topology changed: ETX change for %s (total nodes: %u)", neighborName, static_cast<unsigned int>(routingGraph->getNodeCount()));
-            logNetworkTopology();
+            topologyDirty = true;
         }
 
         // Trigger early broadcast if we haven't sent recently (rate limit: 60s)

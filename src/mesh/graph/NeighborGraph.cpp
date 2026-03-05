@@ -188,6 +188,17 @@ int NeighborGraph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t time
         edge->lastUpdate = timestamp;
         edge->variance = ((variance + 6) / 12 > 255) ? 255 : static_cast<uint8_t>((variance + 6) / 12);
         edge->source = source;
+
+        // Remove redundant downstream entry now that we have a proper edge
+        for (uint16_t i = 0; i < downstreamCount; i++) {
+            if (downstream[i].destination == to && downstream[i].relay == from) {
+                if (i < downstreamCount - 1)
+                    downstream[i] = downstream[downstreamCount - 1];
+                downstreamCount--;
+                break;
+            }
+        }
+
         return EDGE_NEW;
     }
 
@@ -460,6 +471,11 @@ void NeighborGraph::updateDownstream(NodeNum destination, NodeNum relay, float t
     if (destination == myNode)
         return;
 
+    // Skip if the relay already has this destination as a topology edge — no need to duplicate
+    const NodeEdges *relayNode = findNeighbor(relay);
+    if (relayNode && findEdge(relayNode, destination))
+        return;
+
     uint16_t costFixed = static_cast<uint16_t>(std::min(totalCost * 100.0f, 65535.0f));
 
     // Update existing entry for the same (destination, relay) pair
@@ -502,6 +518,11 @@ void NeighborGraph::updateDownstreamExclusive(NodeNum destination, NodeNum relay
 
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
     if (destination == myNode)
+        return;
+
+    // Skip if the relay already has this destination as a topology edge — no need to duplicate
+    const NodeEdges *relayNode = findNeighbor(relay);
+    if (relayNode && findEdge(relayNode, destination))
         return;
 
     uint16_t costFixed = static_cast<uint16_t>(std::min(totalCost * 100.0f, 65535.0f));
@@ -895,24 +916,24 @@ size_t NeighborGraph::getCoverageIfRelays(NodeNum relay, NodeNum *coveredNodes, 
     return coveredCount;
 }
 
-RelayCandidate NeighborGraph::findBestRelayCandidate(const std::unordered_set<NodeNum> &candidates,
-                                                          const std::unordered_set<NodeNum> &alreadyCovered,
+RelayCandidate NeighborGraph::findBestRelayCandidate(const NodeSet &candidates,
+                                                          const NodeSet &alreadyCovered,
                                                           uint32_t currentTime, uint32_t packetId) const
 {
     RelayCandidate bestCandidate(0, 0, 0, 0);
 
-    for (NodeNum candidate : candidates) {
+    for (uint16_t ci = 0; ci < candidates.count; ci++) {
+        NodeNum candidate = candidates.nodes[ci];
         if (hasNodeTransmitted(candidate, packetId, currentTime)) {
             continue;
         }
 
-        NodeNum newCoverage[NEIGHBOR_GRAPH_MAX_NEIGHBORS * NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE];
-        size_t maxCoverage = sizeof(newCoverage) / sizeof(newCoverage[0]);
-        size_t coverageCount = getCoverageIfRelays(candidate, newCoverage, maxCoverage, nullptr, 0);
+        NodeNum newCoverage[NODE_SET_MAX];
+        size_t coverageCount = getCoverageIfRelays(candidate, newCoverage, NODE_SET_MAX, nullptr, 0);
 
         size_t uniqueCoverageCount = 0;
         for (size_t i = 0; i < coverageCount; i++) {
-            if (alreadyCovered.find(newCoverage[i]) == alreadyCovered.end()) {
+            if (!alreadyCovered.contains(newCoverage[i])) {
                 newCoverage[uniqueCoverageCount++] = newCoverage[i];
             }
         }
@@ -988,7 +1009,7 @@ bool NeighborGraph::isGatewayNode(NodeNum nodeId, NodeNum sourceNode) const
 bool NeighborGraph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime,
                                          uint32_t packetId, uint32_t packetRxTime) const
 {
-    std::unordered_set<NodeNum> alreadyCovered;
+    NodeSet alreadyCovered;
     alreadyCovered.insert(sourceNode);
     alreadyCovered.insert(heardFrom);
 
@@ -999,7 +1020,7 @@ bool NeighborGraph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, Node
         }
     }
 
-    std::unordered_set<NodeNum> candidates;
+    NodeSet candidates;
     if (transmittingEdges) {
         for (uint8_t i = 0; i < transmittingEdges->edgeCount; i++) {
             candidates.insert(transmittingEdges->edges[i].to);
@@ -1035,8 +1056,9 @@ bool NeighborGraph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, Node
             return false;
         }
 
-        std::unordered_set<NodeNum> relayCoverage;
-        for (NodeNum candidate : candidates) {
+        NodeSet relayCoverage;
+        for (uint16_t ci = 0; ci < candidates.count; ci++) {
+            NodeNum candidate = candidates.nodes[ci];
             if (hasNodeTransmitted(candidate, packetId, currentTime)) {
                 const NodeEdges *candidateEdges = findNeighbor(candidate);
                 if (candidateEdges) {
@@ -1052,8 +1074,8 @@ bool NeighborGraph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, Node
             bool haveUniqueCoverage = false;
             for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
                 NodeNum neighbor = myEdges->edges[i].to;
-                if (alreadyCovered.find(neighbor) == alreadyCovered.end() &&
-                    relayCoverage.find(neighbor) == relayCoverage.end()) {
+                if (!alreadyCovered.contains(neighbor) &&
+                    !relayCoverage.contains(neighbor)) {
                     haveUniqueCoverage = true;
                     break;
                 }
@@ -1112,7 +1134,7 @@ bool NeighborGraph::shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNu
         return false;
     }
 
-    std::unordered_set<NodeNum> alreadyCovered;
+    NodeSet alreadyCovered;
     alreadyCovered.insert(sourceNode);
     alreadyCovered.insert(heardFrom);
 
@@ -1123,7 +1145,7 @@ bool NeighborGraph::shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNu
     uint8_t uniqueNeighbors = 0;
     for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
         NodeNum neighbor = myEdges->edges[i].to;
-        if (alreadyCovered.find(neighbor) == alreadyCovered.end()) {
+        if (!alreadyCovered.contains(neighbor)) {
             uniqueNeighbors++;
         }
     }
