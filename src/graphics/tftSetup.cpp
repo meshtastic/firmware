@@ -8,9 +8,6 @@
 #include "comms/PacketServer.h"
 #include "graphics/DeviceScreen.h"
 #include "graphics/driver/DisplayDriverConfig.h"
-#include "mapps/AppLibrary.h"
-
-extern AppLibrary *appLibrary;
 
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
@@ -42,7 +39,6 @@ void tftSetup(void)
 #ifndef ARCH_PORTDUINO
     deviceScreen = &DeviceScreen::create();
     PacketAPI::create(PacketServer::init());
-    deviceScreen->init(new PacketClient, appLibrary);
 #else
     if (portduino_config.displayPanel != no_screen) {
         DisplayDriverConfig displayConfig;
@@ -120,7 +116,6 @@ void tftSetup(void)
         }
         deviceScreen = &DeviceScreen::create(&displayConfig);
         PacketAPI::create(PacketServer::init());
-        deviceScreen->init(new PacketClient, appLibrary);
     } else {
         LOG_INFO("Running without TFT display!");
     }
