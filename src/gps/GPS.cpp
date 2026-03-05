@@ -93,7 +93,7 @@ static const char *getGPSPowerStateString(GPSPowerState state)
 
 #ifdef PIN_GPS_SWITCH
 // If we have a hardware switch, define a periodic watcher outside of the GPS runOnce thread, since this can be sleeping
-// idefinitely
+// indefinitely
 
 int lastState = LOW;
 bool firstrun = true;
@@ -586,14 +586,14 @@ bool GPS::setup()
             _serial_gps->write("$PMTK301,2*2E\r\n");
             delay(250);
         } else if (gnssModel == GNSS_MODEL_ATGM336H) {
-            // Set the intial configuration of the device - these _should_ work for most AT6558 devices
+            // Set the initial configuration of the device - these _should_ work for most AT6558 devices
             msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x07, 250) != GNSS_RESPONSE_OK) {
                 LOG_WARN("ATGM336H: Could not set Config");
             }
 
-            // Set the update frequence to 1Hz
+            // Set the update frequency to 1Hz
             msglen = makeCASPacket(0x06, 0x04, sizeof(_message_CAS_CFG_RATE_1HZ), _message_CAS_CFG_RATE_1HZ);
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x04, 250) != GNSS_RESPONSE_OK) {
@@ -700,7 +700,7 @@ bool GPS::setup()
                 } else { // 8,9
                     LOG_INFO("GPS+SBAS+GLONASS+Galileo configured");
                 }
-                // Documentation say, we need wait atleast 0.5s after reconfiguration of GNSS module, before sending next
+                // Documentation say, we need wait at least 0.5s after reconfiguration of GNSS module, before sending next
                 // commands for the M8 it tends to be more... 1 sec should be enough ;>)
                 delay(1000);
             }
@@ -733,7 +733,7 @@ bool GPS::setup()
                 SEND_UBX_PACKET(0x06, 0x86, _message_PMS, "enable powersave for GPS", 500);
                 SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "enable powersave details for GPS", 500);
 
-                // For M8 we want to enable NMEA vserion 4.10 so we can see the additional sats.
+                // For M8 we want to enable NMEA version 4.10 so we can see the additional sats.
                 if (gnssModel == GNSS_MODEL_UBLOX8) {
                     clearBuffer();
                     SEND_UBX_PACKET(0x06, 0x17, _message_NMEA, "enable NMEA 4.10", 500);
@@ -1211,7 +1211,7 @@ int32_t GPS::runOnce()
         return disable(); // This should trigger when we have a fixed position, and get that first position
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
-    // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
+    // if not awake we can run super infrequently (once every 5 secs?) to see if we need to wake.
     return (powerState == GPS_ACTIVE) ? GPS_THREAD_INTERVAL : 5000;
 }
 
