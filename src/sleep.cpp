@@ -18,8 +18,6 @@
 #include "target_specific.h"
 
 #ifdef ARCH_ESP32
-// "esp_pm_config_esp32_t is deprecated, please include esp_pm.h and use esp_pm_config_t instead"
-#include "esp32/pm.h"
 #include "esp_pm.h"
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -146,15 +144,31 @@ void initDeepSleep()
     // If we booted because our timer ran out or the user pressed reset, send those as fake events
     RESET_REASON hwReason = rtc_get_reset_reason(0);
 
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+    if (hwReason == BROWN_OUT_RESET)
+        reason = "brownout";
+    else if (hwReason == HP_CORE_HP_WDT_RESET)
+        reason = "taskWatchdog";
+    else if (hwReason == HP_CORE_LP_WDT_RESET)
+        reason = "intWatchdog";
+    else if (hwReason == CHIP_LP_WDT_RESET)
+        reason = "chipWatchdog";
+    else if (hwReason == SUPER_WDT_RESET)
+        reason = "superWatchdog";
+    else if (hwReason == HP_SYS_HP_WDT_RESET)
+        reason = "systemWatchdog";
+    else if (hwReason == HP_SYS_LP_WDT_RESET)
+        reason = "systemLowPowerWatchdog";
+#else
     if (hwReason == RTCWDT_BROWN_OUT_RESET)
         reason = "brownout";
-
-    if (hwReason == TG0WDT_SYS_RESET)
+    else if (hwReason == RTCWDT_RTC_RESET)
+        reason = "rtcWatchdog";
+    else if (hwReason == TG0WDT_SYS_RESET)
         reason = "taskWatchdog";
-
-    if (hwReason == TG1WDT_SYS_RESET)
+    else if (hwReason == TG1WDT_SYS_RESET)
         reason = "intWatchdog";
-
+#endif
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s", wakeCause, bootCount, reason);
 #endif
 
@@ -392,8 +406,10 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 
     // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
 
+#if SOC_PM_SUPPORT_RTC_PERIPH_PD
     // We want RTC peripherals to stay on
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+#endif
 
 #if defined(BUTTON_PIN) && defined(BUTTON_NEED_PULLUP)
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
@@ -515,11 +531,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
  */
 void enableModemSleep()
 {
-#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
     static esp_pm_config_t esp32_config; // filled with zeros because bss
-#else
-    static esp_pm_config_esp32_t esp32_config; // filled with zeros because bss
-#endif
 #if CONFIG_IDF_TARGET_ESP32S3
     esp32_config.max_freq_mhz = CONFIG_ESP32S3_DEFAULT_CPU_FREQ_MHZ;
 #elif CONFIG_IDF_TARGET_ESP32S2
@@ -528,6 +540,12 @@ void enableModemSleep()
     esp32_config.max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
 #elif CONFIG_IDF_TARGET_ESP32C3
     esp32_config.max_freq_mhz = CONFIG_ESP32C3_DEFAULT_CPU_FREQ_MHZ;
+#elif CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_ESP32P4_REV_MIN_FULL < 300
+    esp32_config.max_freq_mhz = 360;
+#else
+    esp32_config.max_freq_mhz = 400;
+#endif
 #else
     esp32_config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
 #endif
@@ -544,8 +562,8 @@ bool shouldLoraWake(uint32_t msecToWake)
 
 void enableLoraInterrupt()
 {
-    esp_err_t res;
 #if SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+    esp_err_t res;
     res = gpio_pulldown_en((gpio_num_t)LORA_DIO1);
     if (res != ESP_OK) {
         LOG_ERROR("gpio_pulldown_en(LORA_DIO1) result %d", res);

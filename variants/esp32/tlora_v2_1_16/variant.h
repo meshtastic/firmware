@@ -1,5 +1,5 @@
 #define BATTERY_PIN 35
-#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_7
 #define BATTERY_SENSE_SAMPLES 30
 
 // ratio of voltage divider = 2.0 (R42=100k, R43=100k)

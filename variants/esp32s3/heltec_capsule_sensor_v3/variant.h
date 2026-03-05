@@ -7,7 +7,7 @@
 #define BUTTON_ACTIVE_PULLUP false
 
 #define BATTERY_PIN 7 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO7_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_6
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER (4.9 * 1.045)
 #define ADC_CTRL 36 // active HIGH, powers the voltage divider. Only on 1.1

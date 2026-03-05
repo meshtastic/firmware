@@ -8,7 +8,7 @@
     "extra_flags": [
       "-DHELTEC_WIRELESS_TRACKER",
       "-DARDUINO_USB_CDC_ON_BOOT=1",
-      "-DARDUINO_USB_MODE=0",
+      "-DARDUINO_USB_MODE=1",
       "-DARDUINO_RUNNING_CORE=1",
       "-DARDUINO_EVENT_RUNNING_CORE=1"
     ],
