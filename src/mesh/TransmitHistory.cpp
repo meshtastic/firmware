@@ -29,10 +29,10 @@ void TransmitHistory::loadFromDisk()
                 if (file.read((uint8_t *)&entry, sizeof(entry)) == sizeof(entry)) {
                     if (entry.epochSeconds > 0) {
                         history[entry.key] = entry.epochSeconds;
-                        // Seed in-memory millis so throttle works even without RTC/GPS.
-                        // Treating stored entries as "just sent" is safe — worst case the
-                        // node waits one full interval before its first broadcast.
-                        lastMillis[entry.key] = millis();
+                        // Don't seed lastMillis here — let getLastSentToMeshMillis()
+                        // use the epoch-based fallback path, which correctly converts
+                        // stored timestamps relative to current time (or returns 0 if
+                        // no RTC is available yet, allowing immediate send after reboot).
                     }
                 }
             }
