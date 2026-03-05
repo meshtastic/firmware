@@ -1137,9 +1137,15 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     
     // Check if packet has been relayed by comparing hopStart to hopLimit
     // If they match, the sender transmitted directly (not relayed yet)
-    bool isDirectFromSender = (mp.hop_start == mp.hop_limit);
-    
+    // However, stock nodes may not decrement hop_limit when relaying, so also
+    // check relay_node: if relay_node differs from the sender's last byte,
+    // the packet was relayed by a different node and is NOT direct.
     uint8_t fromLastByte = mp.from & 0xFF;
+    bool isDirectFromSender = (mp.hop_start == mp.hop_limit);
+    if (isDirectFromSender && mp.relay_node != 0 && mp.relay_node != fromLastByte) {
+        // relay_node indicates a different node relayed this — not a direct reception
+        isDirectFromSender = false;
+    }
     
     // Debug logging to understand packet reception and relay state
     if (hasSignalData && notViaMqtt) {
