@@ -59,7 +59,7 @@ std::string FlashAppStateBackend::get(const std::string &appSlug, const std::str
     if (!root->HasChild(key.c_str()))
         return "";
 
-    JSONValue *val = root->Child(key.c_str());
+    const JSONValue *val = root->Child(key.c_str());
     if (!val || !val->IsString())
         return "";
 
@@ -79,7 +79,7 @@ bool FlashAppStateBackend::set(const std::string &appSlug, const std::string &ke
             // Copy existing keys
             auto keys = root->ObjectKeys();
             for (const auto &k : keys) {
-                JSONValue *v = root->Child(k.c_str());
+                const JSONValue *v = root->Child(k.c_str());
                 if (v && v->IsString())
                     obj[k] = new JSONValue(v->AsString());
             }
@@ -108,7 +108,7 @@ bool FlashAppStateBackend::remove(const std::string &appSlug, const std::string 
     for (const auto &k : keys) {
         if (k == key)
             continue;
-        JSONValue *v = root->Child(k.c_str());
+        const JSONValue *v = root->Child(k.c_str());
         if (v && v->IsString())
             obj[k] = new JSONValue(v->AsString());
     }
