@@ -718,11 +718,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (len == 5 && memcmp(expectedInfo, info, len) == 0) {
                     LOG_INFO("NXP SE050 crypto chip found");
                     type = NXP_SE050;
-
-                } else {
-                    LOG_INFO("FT6336U touchscreen found");
-                    type = FT6336U;
+                    break;
                 }
+
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
+                if (registerValue == 0x8583 || registerValue == 0x8580) {
+                    type = ADS1115;
+                    logFoundDevice("ADS1115 ADC", (uint8_t)addr.address);
+                    break;
+                }
+
+                LOG_INFO("FT6336U touchscreen found");
+                type = FT6336U;
                 break;
             }
 
