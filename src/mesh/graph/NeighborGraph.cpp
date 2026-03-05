@@ -7,7 +7,7 @@ NeighborGraph::NeighborGraph() : neighborCount(0), downstreamCount(0), relayStat
 
 // --- Private helpers ---
 
-NodeEdgesLite *NeighborGraph::findNeighbor(NodeNum nodeId)
+NodeEdges *NeighborGraph::findNeighbor(NodeNum nodeId)
 {
     for (uint8_t i = 0; i < neighborCount; i++) {
         if (neighbors[i].nodeId == nodeId) {
@@ -17,7 +17,7 @@ NodeEdgesLite *NeighborGraph::findNeighbor(NodeNum nodeId)
     return nullptr;
 }
 
-const NodeEdgesLite *NeighborGraph::findNeighbor(NodeNum nodeId) const
+const NodeEdges *NeighborGraph::findNeighbor(NodeNum nodeId) const
 {
     for (uint8_t i = 0; i < neighborCount; i++) {
         if (neighbors[i].nodeId == nodeId) {
@@ -27,9 +27,9 @@ const NodeEdgesLite *NeighborGraph::findNeighbor(NodeNum nodeId) const
     return nullptr;
 }
 
-NodeEdgesLite *NeighborGraph::findOrCreateNeighbor(NodeNum nodeId)
+NodeEdges *NeighborGraph::findOrCreateNeighbor(NodeNum nodeId)
 {
-    NodeEdgesLite *node = findNeighbor(nodeId);
+    NodeEdges *node = findNeighbor(nodeId);
     if (node) {
         return node;
     }
@@ -69,7 +69,7 @@ NodeEdgesLite *NeighborGraph::findOrCreateNeighbor(NodeNum nodeId)
 
     // Also remove downstream entries that reference the evicted node as relay
     NodeNum evictedNode = neighbors[evictIdx].nodeId;
-    for (uint8_t i = 0; i < downstreamCount;) {
+    for (uint16_t i = 0; i < downstreamCount;) {
         if (downstream[i].relay == evictedNode) {
             if (i < downstreamCount - 1) {
                 downstream[i] = downstream[downstreamCount - 1];
@@ -87,7 +87,7 @@ NodeEdgesLite *NeighborGraph::findOrCreateNeighbor(NodeNum nodeId)
     return node;
 }
 
-EdgeLite *NeighborGraph::findEdge(NodeEdgesLite *node, NodeNum to)
+Edge *NeighborGraph::findEdge(NodeEdges *node, NodeNum to)
 {
     if (!node)
         return nullptr;
@@ -99,7 +99,7 @@ EdgeLite *NeighborGraph::findEdge(NodeEdgesLite *node, NodeNum to)
     return nullptr;
 }
 
-const EdgeLite *NeighborGraph::findEdge(const NodeEdgesLite *node, NodeNum to) const
+const Edge *NeighborGraph::findEdge(const NodeEdges *node, NodeNum to) const
 {
     if (!node)
         return nullptr;
@@ -114,7 +114,7 @@ const EdgeLite *NeighborGraph::findEdge(const NodeEdgesLite *node, NodeNum to) c
 bool NeighborGraph::isOurDirectNeighbor(NodeNum nodeId) const
 {
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
-    const NodeEdgesLite *myEdges = findNeighbor(myNode);
+    const NodeEdges *myEdges = findNeighbor(myNode);
     if (!myEdges)
         return false;
     for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
@@ -128,7 +128,7 @@ bool NeighborGraph::isOurDirectNeighbor(NodeNum nodeId) const
 // --- Core methods ---
 
 int NeighborGraph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t timestamp, uint32_t variance,
-                              EdgeLite::Source source, bool updateTimestamp)
+                              Edge::Source source, bool updateTimestamp)
 {
     NodeNum myNode = nodeDB ? nodeDB->getNodeNum() : 0;
 
@@ -138,7 +138,7 @@ int NeighborGraph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t time
     // If 'from' is NOT in neighbors[]: only create a slot if 'from' is our direct neighbor
     //   or if we're adding an edge FROM our node
     bool isOurNode = (from == myNode);
-    NodeEdgesLite *existing = findNeighbor(from);
+    NodeEdges *existing = findNeighbor(from);
 
     if (!existing && !isOurNode) {
         // Check if 'from' is one of our direct neighbors (has an edge from us)
@@ -147,7 +147,7 @@ int NeighborGraph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t time
         }
     }
 
-    NodeEdgesLite *node = findOrCreateNeighbor(from);
+    NodeEdges *node = findOrCreateNeighbor(from);
     if (!node) {
         return EDGE_NO_CHANGE;
     }
@@ -161,9 +161,9 @@ int NeighborGraph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t time
         findOrCreateNeighbor(to);
     }
 
-    EdgeLite *edge = findEdge(node, to);
+    Edge *edge = findEdge(node, to);
     if (edge) {
-        if (edge->source == EdgeLite::Source::Reported && source == EdgeLite::Source::Mirrored) {
+        if (edge->source == Edge::Source::Reported && source == Edge::Source::Mirrored) {
             return EDGE_NO_CHANGE;
         }
 
@@ -218,14 +218,14 @@ int NeighborGraph::updateEdge(NodeNum from, NodeNum to, float etx, uint32_t time
     return EDGE_NO_CHANGE;
 }
 
-const NodeEdgesLite *NeighborGraph::getEdgesFrom(NodeNum node) const
+const NodeEdges *NeighborGraph::getEdgesFrom(NodeNum node) const
 {
     return findNeighbor(node);
 }
 
 void NeighborGraph::updateNodeActivity(NodeNum nodeId, uint32_t timestamp)
 {
-    NodeEdgesLite *node = findOrCreateNeighbor(nodeId);
+    NodeEdges *node = findOrCreateNeighbor(nodeId);
     if (node) {
         node->lastFullUpdate = timestamp;
     }
@@ -238,7 +238,7 @@ void NeighborGraph::ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(No
     bool edgesRemoved = false;
 
     for (uint8_t n = 0; n < neighborCount;) {
-        NodeEdgesLite *node = &neighbors[n];
+        NodeEdges *node = &neighbors[n];
 
         if (node->nodeId == myNode) {
             n++;
@@ -268,7 +268,7 @@ void NeighborGraph::ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(No
         if (currentTimeSecs - node->lastFullUpdate > ttl || node->edgeCount == 0) {
             // Remove downstream entries that reference this neighbor as relay
             NodeNum removedNode = node->nodeId;
-            for (uint8_t i = 0; i < downstreamCount;) {
+            for (uint16_t i = 0; i < downstreamCount;) {
                 if (downstream[i].relay == removedNode) {
                     if (i < downstreamCount - 1) {
                         downstream[i] = downstream[downstreamCount - 1];
@@ -290,7 +290,7 @@ void NeighborGraph::ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(No
     }
 
     // Age downstream entries
-    for (uint8_t i = 0; i < downstreamCount;) {
+    for (uint16_t i = 0; i < downstreamCount;) {
         uint32_t dsTtl = getTtlForNode ? getTtlForNode(downstream[i].destination) : EDGE_AGING_TIMEOUT_SECS;
         if ((currentTimeSecs - downstream[i].lastUpdate) > dsTtl) {
             if (i < downstreamCount - 1) {
@@ -330,15 +330,15 @@ void NeighborGraph::ageEdges(uint32_t currentTimeSecs, std::function<uint32_t(No
     }
 }
 
-RouteLite NeighborGraph::calculateRoute(NodeNum destination, uint32_t currentTime, std::function<bool(NodeNum)> nodeFilter)
+Route NeighborGraph::calculateRoute(NodeNum destination, uint32_t currentTime, std::function<bool(NodeNum)> nodeFilter)
 {
     // Check cache first
-    RouteLite cached = getCachedRoute(destination, currentTime);
+    Route cached = getCachedRoute(destination, currentTime);
     if (cached.nextHop != 0) {
         return cached;
     }
 
-    RouteLite result;
+    Route result;
     result.destination = destination;
     result.nextHop = 0;
     result.costFixed = 0xFFFF;
@@ -350,7 +350,7 @@ RouteLite NeighborGraph::calculateRoute(NodeNum destination, uint32_t currentTim
     }
 
     // 1. Direct neighbor check (1-hop)
-    const NodeEdgesLite *myEdges = findNeighbor(myNode);
+    const NodeEdges *myEdges = findNeighbor(myNode);
     if (myEdges) {
         for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
             if (myEdges->edges[i].to == destination) {
@@ -375,7 +375,7 @@ RouteLite NeighborGraph::calculateRoute(NodeNum destination, uint32_t currentTim
 
             uint16_t costToNeighbor = myEdges->edges[i].etxFixed;
 
-            const NodeEdgesLite *neighborEdges = findNeighbor(neighbor);
+            const NodeEdges *neighborEdges = findNeighbor(neighbor);
             if (neighborEdges) {
                 for (uint8_t j = 0; j < neighborEdges->edgeCount; j++) {
                     if (neighborEdges->edges[j].to == destination) {
@@ -392,7 +392,7 @@ RouteLite NeighborGraph::calculateRoute(NodeNum destination, uint32_t currentTim
 
     // 3. Downstream table lookup (if no route found yet or found route is expensive)
     if (result.nextHop == 0) {
-        for (uint8_t i = 0; i < downstreamCount; i++) {
+        for (uint16_t i = 0; i < downstreamCount; i++) {
             if (downstream[i].destination == destination) {
                 // Verify the relay is still our neighbor and passes filter
                 if (nodeFilter && !nodeFilter(downstream[i].relay)) {
@@ -433,14 +433,14 @@ RouteLite NeighborGraph::calculateRoute(NodeNum destination, uint32_t currentTim
     return result;
 }
 
-RouteLite NeighborGraph::getCachedRoute(NodeNum destination, uint32_t currentTime)
+Route NeighborGraph::getCachedRoute(NodeNum destination, uint32_t currentTime)
 {
     for (uint8_t i = 0; i < routeCacheCount; i++) {
         if (routeCache[i].destination == destination && (currentTime - routeCache[i].timestamp) < ROUTE_CACHE_TIMEOUT_SECS) {
             return routeCache[i];
         }
     }
-    return RouteLite();
+    return Route();
 }
 
 void NeighborGraph::clearCache()
@@ -463,7 +463,7 @@ void NeighborGraph::updateDownstream(NodeNum destination, NodeNum relay, float t
     uint16_t costFixed = static_cast<uint16_t>(std::min(totalCost * 100.0f, 65535.0f));
 
     // Update existing entry for the same (destination, relay) pair
-    for (uint8_t i = 0; i < downstreamCount; i++) {
+    for (uint16_t i = 0; i < downstreamCount; i++) {
         if (downstream[i].destination == destination && downstream[i].relay == relay) {
             downstream[i].costFixed = costFixed;
             downstream[i].lastUpdate = timestamp;
@@ -500,7 +500,7 @@ NodeNum NeighborGraph::getDownstreamRelay(NodeNum destination) const
     uint32_t now = millis() / 1000;
     NodeNum bestRelay = 0;
     uint16_t bestCost = UINT16_MAX;
-    for (uint8_t i = 0; i < downstreamCount; i++) {
+    for (uint16_t i = 0; i < downstreamCount; i++) {
         if (downstream[i].destination == destination && (now - downstream[i].lastUpdate) < EDGE_AGING_TIMEOUT_SECS) {
             if (downstream[i].costFixed < bestCost) {
                 bestCost = downstream[i].costFixed;
@@ -520,7 +520,7 @@ size_t NeighborGraph::getDownstreamCountForRelay(NodeNum relay) const
 {
     size_t count = 0;
     uint32_t now = millis() / 1000;
-    for (uint8_t i = 0; i < downstreamCount; i++) {
+    for (uint16_t i = 0; i < downstreamCount; i++) {
         if (downstream[i].relay == relay && (now - downstream[i].lastUpdate) < EDGE_AGING_TIMEOUT_SECS) {
             count++;
         }
@@ -532,7 +532,7 @@ size_t NeighborGraph::getDownstreamNodesForRelay(NodeNum relay, NodeNum *outArra
 {
     size_t count = 0;
     uint32_t now = millis() / 1000;
-    for (uint8_t i = 0; i < downstreamCount && count < maxCount; i++) {
+    for (uint16_t i = 0; i < downstreamCount && count < maxCount; i++) {
         if (downstream[i].relay == relay && (now - downstream[i].lastUpdate) < EDGE_AGING_TIMEOUT_SECS) {
             outArray[count] = downstream[i].destination;
             if (outCosts) outCosts[count] = downstream[i].costFixed;
@@ -544,7 +544,7 @@ size_t NeighborGraph::getDownstreamNodesForRelay(NodeNum relay, NodeNum *outArra
 
 bool NeighborGraph::isRelayFor(NodeNum myNode, NodeNum destination) const
 {
-    for (uint8_t i = 0; i < downstreamCount; i++) {
+    for (uint16_t i = 0; i < downstreamCount; i++) {
         if (downstream[i].destination == destination && downstream[i].relay == myNode) {
             uint32_t now = millis() / 1000;
             if ((now - downstream[i].lastUpdate) < EDGE_AGING_TIMEOUT_SECS) {
@@ -557,7 +557,7 @@ bool NeighborGraph::isRelayFor(NodeNum myNode, NodeNum destination) const
 
 void NeighborGraph::clearDownstreamForRelay(NodeNum relay)
 {
-    for (uint8_t i = 0; i < downstreamCount;) {
+    for (uint16_t i = 0; i < downstreamCount;) {
         if (downstream[i].relay == relay) {
             if (i < downstreamCount - 1) {
                 downstream[i] = downstream[downstreamCount - 1];
@@ -571,7 +571,7 @@ void NeighborGraph::clearDownstreamForRelay(NodeNum relay)
 
 void NeighborGraph::clearDownstreamForDestination(NodeNum destination)
 {
-    for (uint8_t i = 0; i < downstreamCount;) {
+    for (uint16_t i = 0; i < downstreamCount;) {
         if (downstream[i].destination == destination) {
             if (i < downstreamCount - 1) {
                 downstream[i] = downstream[downstreamCount - 1];
@@ -687,7 +687,7 @@ uint32_t NeighborGraph::getContentionWindowMs()
 
 uint8_t NeighborGraph::getNeighborCount(NodeNum node) const
 {
-    const NodeEdgesLite *n = findNeighbor(node);
+    const NodeEdges *n = findNeighbor(node);
     return n ? n->edgeCount : 0;
 }
 
@@ -725,7 +725,7 @@ void NeighborGraph::removeNode(NodeNum nodeId)
 
             // Clear downstream entries referencing this node as relay or destination.
             // With multi-relay support, other relay entries for the same destination survive.
-            for (uint8_t i = 0; i < downstreamCount;) {
+            for (uint16_t i = 0; i < downstreamCount;) {
                 if (downstream[i].relay == nodeId || downstream[i].destination == nodeId) {
                     if (i < downstreamCount - 1) {
                         downstream[i] = downstream[downstreamCount - 1];
@@ -754,11 +754,11 @@ void NeighborGraph::removeNode(NodeNum nodeId)
 
 void NeighborGraph::clearEdgesForNode(NodeNum nodeId)
 {
-    NodeEdgesLite *node = findNeighbor(nodeId);
+    NodeEdges *node = findNeighbor(nodeId);
     if (node) {
         uint8_t writeIdx = 0;
         for (uint8_t i = 0; i < node->edgeCount; i++) {
-            if (node->edges[i].source == EdgeLite::Source::Reported) {
+            if (node->edges[i].source == Edge::Source::Reported) {
                 if (writeIdx != i) {
                     node->edges[writeIdx] = node->edges[i];
                 }
@@ -783,13 +783,13 @@ void NeighborGraph::clearEdgesForNode(NodeNum nodeId)
 void NeighborGraph::clearInferredEdgesToNode(NodeNum nodeId)
 {
     for (uint8_t nodeIdx = 0; nodeIdx < neighborCount; nodeIdx++) {
-        NodeEdgesLite *node = &neighbors[nodeIdx];
+        NodeEdges *node = &neighbors[nodeIdx];
         if (node->nodeId == 0)
             continue;
 
         uint8_t writeIdx = 0;
         for (uint8_t i = 0; i < node->edgeCount; i++) {
-            if (!(node->edges[i].to == nodeId && node->edges[i].source == EdgeLite::Source::Mirrored)) {
+            if (!(node->edges[i].to == nodeId && node->edges[i].source == Edge::Source::Mirrored)) {
                 if (writeIdx != i) {
                     node->edges[writeIdx] = node->edges[i];
                 }
@@ -811,7 +811,7 @@ size_t NeighborGraph::getCoverageIfRelays(NodeNum relay, NodeNum *coveredNodes, 
         return 0;
 
     size_t coveredCount = 0;
-    const NodeEdgesLite *relayEdges = findNeighbor(relay);
+    const NodeEdges *relayEdges = findNeighbor(relay);
     if (!relayEdges)
         return 0;
 
@@ -834,11 +834,11 @@ size_t NeighborGraph::getCoverageIfRelays(NodeNum relay, NodeNum *coveredNodes, 
     return coveredCount;
 }
 
-RelayCandidateLite NeighborGraph::findBestRelayCandidate(const std::unordered_set<NodeNum> &candidates,
+RelayCandidate NeighborGraph::findBestRelayCandidate(const std::unordered_set<NodeNum> &candidates,
                                                           const std::unordered_set<NodeNum> &alreadyCovered,
                                                           uint32_t currentTime, uint32_t packetId) const
 {
-    RelayCandidateLite bestCandidate(0, 0, 0, 0);
+    RelayCandidate bestCandidate(0, 0, 0, 0);
 
     for (NodeNum candidate : candidates) {
         if (hasNodeTransmitted(candidate, packetId, currentTime)) {
@@ -863,10 +863,10 @@ RelayCandidateLite NeighborGraph::findBestRelayCandidate(const std::unordered_se
         float totalCost = 0;
         size_t validCosts = 0;
 
-        const NodeEdgesLite *candidateEdges = findNeighbor(candidate);
+        const NodeEdges *candidateEdges = findNeighbor(candidate);
         if (candidateEdges) {
             for (size_t j = 0; j < uniqueCoverageCount; j++) {
-                const EdgeLite *edge = findEdge(candidateEdges, newCoverage[j]);
+                const Edge *edge = findEdge(candidateEdges, newCoverage[j]);
                 if (edge) {
                     totalCost += edge->getEtx();
                     validCosts++;
@@ -882,7 +882,7 @@ RelayCandidateLite NeighborGraph::findBestRelayCandidate(const std::unordered_se
 
         if (uniqueCoverageCount > bestCandidate.coverageCount ||
             (uniqueCoverageCount == bestCandidate.coverageCount && avgCostFixed < bestCandidate.avgCostFixed)) {
-            bestCandidate = RelayCandidateLite(candidate, uniqueCoverageCount, avgCostFixed, 0);
+            bestCandidate = RelayCandidate(candidate, uniqueCoverageCount, avgCostFixed, 0);
         }
     }
 
@@ -891,8 +891,8 @@ RelayCandidateLite NeighborGraph::findBestRelayCandidate(const std::unordered_se
 
 bool NeighborGraph::isGatewayNode(NodeNum nodeId, NodeNum sourceNode) const
 {
-    const NodeEdgesLite *nodeEdges = findNeighbor(nodeId);
-    const NodeEdgesLite *sourceEdges = findNeighbor(sourceNode);
+    const NodeEdges *nodeEdges = findNeighbor(nodeId);
+    const NodeEdges *sourceEdges = findNeighbor(sourceNode);
 
     if (!nodeEdges || nodeEdges->edgeCount == 0) {
         return false;
@@ -914,7 +914,7 @@ bool NeighborGraph::isGatewayNode(NodeNum nodeId, NodeNum sourceNode) const
         }
 
         if (!sourceHasNeighbor) {
-            const NodeEdgesLite *neighborEdges = findNeighbor(neighbor);
+            const NodeEdges *neighborEdges = findNeighbor(neighbor);
             if (neighborEdges && neighborEdges->edgeCount > 1) {
                 return true;
             }
@@ -931,7 +931,7 @@ bool NeighborGraph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, Node
     alreadyCovered.insert(sourceNode);
     alreadyCovered.insert(heardFrom);
 
-    const NodeEdgesLite *transmittingEdges = findNeighbor(heardFrom);
+    const NodeEdges *transmittingEdges = findNeighbor(heardFrom);
     if (transmittingEdges) {
         for (uint8_t i = 0; i < transmittingEdges->edgeCount; i++) {
             alreadyCovered.insert(transmittingEdges->edges[i].to);
@@ -946,7 +946,7 @@ bool NeighborGraph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, Node
     }
 
     while (!candidates.empty()) {
-        RelayCandidateLite bestCandidate = findBestRelayCandidate(candidates, alreadyCovered, currentTime, packetId);
+        RelayCandidate bestCandidate = findBestRelayCandidate(candidates, alreadyCovered, currentTime, packetId);
 
         if (bestCandidate.nodeId == 0) {
             break;
@@ -977,7 +977,7 @@ bool NeighborGraph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, Node
         std::unordered_set<NodeNum> relayCoverage;
         for (NodeNum candidate : candidates) {
             if (hasNodeTransmitted(candidate, packetId, currentTime)) {
-                const NodeEdgesLite *candidateEdges = findNeighbor(candidate);
+                const NodeEdges *candidateEdges = findNeighbor(candidate);
                 if (candidateEdges) {
                     for (uint8_t i = 0; i < candidateEdges->edgeCount; i++) {
                         relayCoverage.insert(candidateEdges->edges[i].to);
@@ -986,7 +986,7 @@ bool NeighborGraph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, Node
             }
         }
 
-        const NodeEdgesLite *myEdges = findNeighbor(myNode);
+        const NodeEdges *myEdges = findNeighbor(myNode);
         if (myEdges) {
             bool haveUniqueCoverage = false;
             for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
@@ -1006,7 +1006,7 @@ bool NeighborGraph::shouldRelayEnhanced(NodeNum myNode, NodeNum sourceNode, Node
         return false;
     }
 
-    const NodeEdgesLite *myEdges = findNeighbor(myNode);
+    const NodeEdges *myEdges = findNeighbor(myNode);
     if (myEdges && myEdges->edgeCount > 0) {
         return true;
     }
@@ -1018,13 +1018,13 @@ bool NeighborGraph::shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sour
                                                      uint32_t currentTime, uint32_t packetId,
                                                      uint32_t packetRxTime) const
 {
-    const NodeEdgesLite *myEdges = findNeighbor(myNode);
+    const NodeEdges *myEdges = findNeighbor(myNode);
     if (!myEdges)
         return false;
 
     bool hasStockGateways = false;
     for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
-        const NodeEdgesLite *neighborEdges = findNeighbor(myEdges->edges[i].to);
+        const NodeEdges *neighborEdges = findNeighbor(myEdges->edges[i].to);
         if (neighborEdges && neighborEdges->edgeCount >= 8) {
             hasStockGateways = true;
             break;
@@ -1040,8 +1040,8 @@ bool NeighborGraph::shouldRelayEnhancedConservative(NodeNum myNode, NodeNum sour
 
 bool NeighborGraph::shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t currentTime) const
 {
-    const NodeEdgesLite *myEdges = findNeighbor(myNode);
-    const NodeEdgesLite *transmittingEdges = findNeighbor(heardFrom);
+    const NodeEdges *myEdges = findNeighbor(myNode);
+    const NodeEdges *transmittingEdges = findNeighbor(heardFrom);
 
     if (!myEdges || myEdges->edgeCount == 0) {
         return false;
@@ -1073,8 +1073,8 @@ bool NeighborGraph::shouldRelaySimple(NodeNum myNode, NodeNum sourceNode, NodeNu
 bool NeighborGraph::shouldRelaySimpleConservative(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom,
                                                    uint32_t currentTime) const
 {
-    const NodeEdgesLite *myEdges = findNeighbor(myNode);
-    const NodeEdgesLite *transmittingEdges = findNeighbor(heardFrom);
+    const NodeEdges *myEdges = findNeighbor(myNode);
+    const NodeEdges *transmittingEdges = findNeighbor(heardFrom);
 
     if (!myEdges || myEdges->edgeCount == 0) {
         return false;
@@ -1122,9 +1122,9 @@ bool NeighborGraph::shouldRelaySimpleConservative(NodeNum myNode, NodeNum source
 bool NeighborGraph::shouldRelayWithContention(NodeNum myNode, NodeNum sourceNode, NodeNum heardFrom, uint32_t packetId,
                                                uint32_t currentTime) const
 {
-    const NodeEdgesLite *myEdges = findNeighbor(myNode);
-    const NodeEdgesLite *sourceEdges = findNeighbor(sourceNode);
-    const NodeEdgesLite *relayEdges = (heardFrom == sourceNode) ? nullptr : findNeighbor(heardFrom);
+    const NodeEdges *myEdges = findNeighbor(myNode);
+    const NodeEdges *sourceEdges = findNeighbor(sourceNode);
+    const NodeEdges *relayEdges = (heardFrom == sourceNode) ? nullptr : findNeighbor(heardFrom);
 
     if (!myEdges || myEdges->edgeCount == 0) {
         return false;

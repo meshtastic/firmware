@@ -217,30 +217,30 @@ void SignalRoutingModule::collectNeighborsForBroadcast(std::vector<meshtastic_Si
 {
     if (!routingGraph || !nodeDB) return;
 
-    const NodeEdgesLite* nodeEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    const NodeEdges* nodeEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
     if (!nodeEdges || nodeEdges->edgeCount == 0) {
         return;
     }
 
     // Prefer reported edges (peer perspective) over mirrored estimates, then order by ETX
-    std::vector<const EdgeLite*> allEdges;
+    std::vector<const Edge*> allEdges;
     for (uint8_t i = 0; i < nodeEdges->edgeCount; i++) {
-        const EdgeLite* e = &nodeEdges->edges[i];
+        const Edge* e = &nodeEdges->edges[i];
         if (!isPlaceholderNode(e->to)) {  // Filter out placeholders
             allEdges.push_back(e);
         }
     }
 
     // Sort by quality (reported first, then by ETX)
-    std::sort(allEdges.begin(), allEdges.end(), [](const EdgeLite* a, const EdgeLite* b) {
+    std::sort(allEdges.begin(), allEdges.end(), [](const Edge* a, const Edge* b) {
         if (a->source != b->source) {
-            return a->source == EdgeLite::Source::Reported; // Reported edges first
+            return a->source == Edge::Source::Reported; // Reported edges first
         }
         return a->getEtx() < b->getEtx(); // Then by ETX
     });
 
     // Convert to SignalNeighbor format
-    for (const EdgeLite* edge : allEdges) {
+    for (const Edge* edge : allEdges) {
         meshtastic_SignalNeighbor neighbor = meshtastic_SignalNeighbor_init_zero;
 
         neighbor.node_id = edge->to;
@@ -295,31 +295,31 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
 
     if (!routingGraph || !nodeDB) return;
 
-    const NodeEdgesLite* nodeEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    const NodeEdges* nodeEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
     if (!nodeEdges || nodeEdges->edgeCount == 0) {
         return;
     }
 
     // Prefer reported edges (peer perspective) over mirrored estimates, then order by ETX
-    const EdgeLite* reported[NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE];
-    const EdgeLite* mirrored[NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE];
+    const Edge* reported[NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE];
+    const Edge* mirrored[NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE];
     uint8_t reportedCount = 0;
     uint8_t mirroredCount = 0;
 
     for (uint8_t i = 0; i < nodeEdges->edgeCount; i++) {
-        const EdgeLite* e = &nodeEdges->edges[i];
-        if (e->source == EdgeLite::Source::Reported) {
+        const Edge* e = &nodeEdges->edges[i];
+        if (e->source == Edge::Source::Reported) {
             reported[reportedCount++] = e;
         } else {
             mirrored[mirroredCount++] = e;
         }
     }
 
-    auto sortByEtxLite = [](const EdgeLite* a, const EdgeLite* b) { return a->getEtx() < b->getEtx(); };
+    auto sortByEtxLite = [](const Edge* a, const Edge* b) { return a->getEtx() < b->getEtx(); };
     std::sort(reported, reported + reportedCount, sortByEtxLite);
     std::sort(mirrored, mirrored + mirroredCount, sortByEtxLite);
 
-    const EdgeLite* selected[MAX_SIGNAL_ROUTING_NEIGHBORS];
+    const Edge* selected[MAX_SIGNAL_ROUTING_NEIGHBORS];
     size_t selectedCount = 0;
 
     // For non-active nodes, only broadcast directly heard neighbors (Reported edges)
@@ -338,7 +338,7 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
     }
 
     // Filter out placeholders before assigning to neighbors array
-    const EdgeLite* filteredSelected[NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE];
+    const Edge* filteredSelected[NEIGHBOR_GRAPH_MAX_EDGES_PER_NODE];
     size_t filteredCount = 0;
     size_t placeholdersFiltered = 0;
 
@@ -357,7 +357,7 @@ void SignalRoutingModule::buildSignalRoutingInfo(meshtastic_SignalRoutingInfo &i
     info.neighbors_count = filteredCount;
 
     for (size_t i = 0; i < filteredCount; i++) {
-        const EdgeLite& edge = *filteredSelected[i];
+        const Edge& edge = *filteredSelected[i];
         meshtastic_SignalNeighbor& neighbor = info.neighbors[i];
 
         neighbor.node_id = edge.to;
@@ -516,11 +516,11 @@ void SignalRoutingModule::preProcessSignalRoutingPacket(const meshtastic_MeshPac
             // A direct connection exists if we have a Reported edge FROM us TO the neighbor
             // This represents our actual reception of their signal with RSSI/SNR data
             // Check edges FROM us TO neighbor with Reported source (actual direct radio connection)
-            const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
+            const NodeEdges* ourEdges = routingGraph->getEdgesFrom(ourNode);
             if (ourEdges) {
                 for (uint8_t j = 0; j < ourEdges->edgeCount; j++) {
                     if (ourEdges->edges[j].to == neighbor.node_id &&
-                        ourEdges->edges[j].source == EdgeLite::Source::Reported) {
+                        ourEdges->edges[j].source == Edge::Source::Reported) {
                         hasDirectConnection = true;
                         break;
                     }
@@ -646,9 +646,9 @@ bool SignalRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp
             uint32_t scaledVariance = static_cast<uint32_t>(neighbor.position_variance) * 12;
 
             routingGraph->updateEdge(neighbor.node_id, mp.from, etx, rxTime, scaledVariance,
-                                     EdgeLite::Source::Reported);
+                                     Edge::Source::Reported);
             routingGraph->updateEdge(mp.from, neighbor.node_id, etx, rxTime, scaledVariance,
-                                     EdgeLite::Source::Mirrored);
+                                     Edge::Source::Mirrored);
         }
     } else {
         LOG_DEBUG("[SR] Skipping redundant edge rebuild for %s (already pre-processed version %u)",
@@ -757,7 +757,7 @@ bool SignalRoutingModule::resolvePlaceholder(NodeNum placeholderId, NodeNum real
 
         // Only transfer reverse edges (where our node had a direct link to the placeholder)
         // These represent actual radio connectivity that should be preserved
-        const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
+        const NodeEdges* ourEdges = routingGraph->getEdgesFrom(ourNode);
         if (ourEdges) {
             for (uint8_t i = 0; i < ourEdges->edgeCount; i++) {
                 if (ourEdges->edges[i].to == placeholderId) {
@@ -813,7 +813,7 @@ bool SignalRoutingModule::isPlaceholderConnectedToUs(NodeNum placeholderId) cons
     // Check if the placeholder has edges connected to our node
     NodeNum ourNode = nodeDB->getNodeNum();
 
-    const NodeEdgesLite* edges = routingGraph->getEdgesFrom(placeholderId);
+    const NodeEdges* edges = routingGraph->getEdgesFrom(placeholderId);
     if (edges) {
         for (uint8_t i = 0; i < edges->edgeCount; i++) {
             if (edges->edges[i].to == ourNode) {
@@ -835,7 +835,7 @@ bool SignalRoutingModule::shouldRelayForStockNeighbors(NodeNum myNode, NodeNum s
     std::vector<NodeNum> stockNeighbors;
 
     // Check our direct neighbors for stock firmware nodes
-    const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
+    const NodeEdges* myEdges = routingGraph->getEdgesFrom(myNode);
     if (myEdges) {
         for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
             NodeNum neighbor = myEdges->edges[i].to;
@@ -864,7 +864,7 @@ bool SignalRoutingModule::shouldRelayForStockNeighbors(NodeNum myNode, NodeNum s
         bool heardDirectly = false;
 
         // Check if original source can reach stock neighbor
-        const NodeEdgesLite* sourceEdges = routingGraph->getEdgesFrom(sourceNode);
+        const NodeEdges* sourceEdges = routingGraph->getEdgesFrom(sourceNode);
         if (sourceEdges) {
             for (uint8_t i = 0; i < sourceEdges->edgeCount; i++) {
                 if (sourceEdges->edges[i].to == stockNeighbor) {
@@ -876,7 +876,7 @@ bool SignalRoutingModule::shouldRelayForStockNeighbors(NodeNum myNode, NodeNum s
 
         // If not heard from source, check if heard from relaying SR node
         if (!heardDirectly) {
-            const NodeEdgesLite* heardFromEdges = routingGraph->getEdgesFrom(heardFrom);
+            const NodeEdges* heardFromEdges = routingGraph->getEdgesFrom(heardFrom);
             if (heardFromEdges) {
                 for (uint8_t i = 0; i < heardFromEdges->edgeCount; i++) {
                     if (heardFromEdges->edges[i].to == stockNeighbor) {
@@ -894,7 +894,7 @@ bool SignalRoutingModule::shouldRelayForStockNeighbors(NodeNum myNode, NodeNum s
             LOG_DEBUG("[SR] Stock neighbor %08x did not hear transmission directly", stockNeighbor);
 
             // Check if we're the best positioned to reach this stock neighbor
-            const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
+            const NodeEdges* myEdges = routingGraph->getEdgesFrom(myNode);
             if (myEdges) {
                 for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
                     if (myEdges->edges[i].to == stockNeighbor) {
@@ -933,7 +933,7 @@ bool SignalRoutingModule::isDownstreamOfHeardRelay(NodeNum destination, NodeNum 
     NodeNum relay = routingGraph->getDownstreamRelay(destination);
     if (relay != 0) {
         // Check if we have a direct connection to this relay
-        const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
+        const NodeEdges* myEdges = routingGraph->getEdgesFrom(myNode);
         if (myEdges) {
             for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
                 if (myEdges->edges[i].to == relay) {
@@ -971,7 +971,7 @@ void SignalRoutingModule::logNetworkTopology()
         // Filter to only nodes with edges
         size_t filteredCount = 0;
         for (size_t i = 0; i < rawNodeCount; i++) {
-            const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeBuf[i]);
+            const NodeEdges* edges = routingGraph->getEdgesFrom(nodeBuf[i]);
             if (edges && edges->edgeCount > 0) {
                 nodeBuf[filteredCount++] = nodeBuf[i];
             }
@@ -989,7 +989,7 @@ void SignalRoutingModule::logNetworkTopology()
     getNodeDisplayName(ourNode, ourName, sizeof(ourName));
 
     // Get our direct edges
-    const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
+    const NodeEdges* ourEdges = routingGraph->getEdgesFrom(ourNode);
     uint8_t directCount = ourEdges ? ourEdges->edgeCount : 0;
 
     LOG_INFO("[SR] Network Topology: %d nodes, %u direct neighbors", nodeCount, directCount);
@@ -1000,7 +1000,7 @@ void SignalRoutingModule::logNetworkTopology()
     } else {
         // Display each direct neighbor and their downstream nodes
         for (uint8_t i = 0; i < ourEdges->edgeCount; i++) {
-            const EdgeLite& edge = ourEdges->edges[i];
+            const Edge& edge = ourEdges->edges[i];
 
             char neighborName[48];
             getNodeDisplayName(edge.to, neighborName, sizeof(neighborName));
@@ -1197,7 +1197,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
         // We need to check ALL edges, not just Reported ones, because the relay might be
         // a node we only know through topology broadcasts (Mirrored edges)
         if (inferredRelayer == 0 && routingGraph && nodeDB) {
-            const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            const NodeEdges* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
             if (myEdges) {
                 for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
                     NodeNum neighbor = myEdges->edges[i].to;
@@ -1243,15 +1243,15 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
             // 2. We don't have a direct connection to mp.from ourselves
             bool hasDirectConnectionToRelay = false;
             bool hasDirectConnectionToSender = false;
-            const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            const NodeEdges* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
             if (edges) {
                 for (uint8_t i = 0; i < edges->edgeCount; i++) {
                     if (edges->edges[i].to == inferredRelayer && 
-                        edges->edges[i].source == EdgeLite::Source::Reported) {
+                        edges->edges[i].source == Edge::Source::Reported) {
                         hasDirectConnectionToRelay = true;
                     }
                     if (edges->edges[i].to == mp.from && 
-                        edges->edges[i].source == EdgeLite::Source::Reported) {
+                        edges->edges[i].source == Edge::Source::Reported) {
                         hasDirectConnectionToSender = true;
                     }
                 }
@@ -1277,9 +1277,9 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
                 float defaultSnr = 5.0f;  // default SNR for inferred connectivity
 
                 routingGraph->updateEdge(mp.from, inferredRelayer, NeighborGraph::calculateETX(defaultRssi, defaultSnr),
-                                         monotonicTimestamp, 0, EdgeLite::Source::Mirrored);
+                                         monotonicTimestamp, 0, Edge::Source::Mirrored);
                 routingGraph->updateEdge(inferredRelayer, mp.from, NeighborGraph::calculateETX(defaultRssi, defaultSnr),
-                                         monotonicTimestamp, 0, EdgeLite::Source::Mirrored);
+                                         monotonicTimestamp, 0, Edge::Source::Mirrored);
             } else {
                 LOG_DEBUG("[SR] Skipping direct connectivity inference for SR-aware node %08x (capability: %d)",
                          inferredRelayer, (int)getCapabilityStatus(inferredRelayer));
@@ -1290,7 +1290,7 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
                 updateNeighborInfo(inferredRelayer, mp.rx_rssi, mp.rx_snr, mp.rx_time);
             } else {
                 // No direct signal data available - preserve existing edge or create with defaults
-                const NodeEdgesLite *relayEdges = routingGraph->getEdgesFrom(inferredRelayer);
+                const NodeEdges *relayEdges = routingGraph->getEdgesFrom(inferredRelayer);
                 bool hasExistingEdge = false;
                 int32_t existingRssi = -70; // default
                 int32_t existingSnr = 5;   // default
@@ -1624,7 +1624,7 @@ bool SignalRoutingModule::shouldRelay(const meshtastic_MeshPacket *p)
         if (nextHop != 0 && nextHop != nodeDB->getNodeNum()) {
             // Check if source and next hop are neighbors
             bool nextHopHeardFromSource = false;
-            const NodeEdgesLite* sourceEdges = routingGraph->getEdgesFrom(sourceNode);
+            const NodeEdges* sourceEdges = routingGraph->getEdgesFrom(sourceNode);
             if (sourceEdges) {
                 for (uint8_t i = 0; i < sourceEdges->edgeCount; i++) {
                     if (sourceEdges->edges[i].to == nextHop) {
@@ -1634,7 +1634,7 @@ bool SignalRoutingModule::shouldRelay(const meshtastic_MeshPacket *p)
                 }
             }
             if (!nextHopHeardFromSource) {
-                const NodeEdgesLite* nextHopEdges = routingGraph->getEdgesFrom(nextHop);
+                const NodeEdges* nextHopEdges = routingGraph->getEdgesFrom(nextHop);
                 if (nextHopEdges) {
                     for (uint8_t i = 0; i < nextHopEdges->edgeCount; i++) {
                         if (nextHopEdges->edges[i].to == sourceNode) {
@@ -1810,7 +1810,7 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
     char destName[64];
     getNodeDisplayName(destination, destName, sizeof(destName));
 
-    RouteLite route = routingGraph->calculateRoute(destination, currentTime,
+    Route route = routingGraph->calculateRoute(destination, currentTime,
                         [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
 
     float routeCost = route.getCost();
@@ -1901,7 +1901,7 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
 
         // Only use relay if we can verify connectivity (be conservative with stock nodes)
         if (relayCanHearTransmitter && !connectivityUnknown) {
-            const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+            const NodeEdges* myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
             if (myEdges) {
                 for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
                     if (myEdges->edges[i].to == relayForDest) {
@@ -1942,7 +1942,7 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
         bool isDirectNeighbor = false;
         float directEtx = 1e9f;
 
-        const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
+        const NodeEdges* myEdges = routingGraph->getEdgesFrom(myNode);
         if (myEdges) {
             for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
                 if (myEdges->edges[i].to == destination) {
@@ -1973,7 +1973,7 @@ NodeNum SignalRoutingModule::getNextHop(NodeNum destination, NodeNum sourceNode,
     // we should try to deliver directly even without formal relay designation
     // This handles cases like FMC6 where a node only connects through us
     if (routingGraph && nodeDB) {
-        const NodeEdgesLite *destEdges = routingGraph->getEdgesFrom(destination);
+        const NodeEdges *destEdges = routingGraph->getEdgesFrom(destination);
         if (destEdges && destEdges->edgeCount == 1 && destEdges->edges[0].to == myNode) {
             LOG_INFO("[SR] %s only connects through us (effective relay) - delivering directly", destName);
             // Record ourselves as relay for this destination since we're the only connection
@@ -1996,7 +1996,7 @@ NodeNum SignalRoutingModule::findBetterPositionedNeighbor(NodeNum destination, N
     NodeNum bestNeighbor = 0;
     float bestNeighborRouteCost = ourRouteCost;
 
-    const NodeEdgesLite* myEdges = routingGraph->getEdgesFrom(myNode);
+    const NodeEdges* myEdges = routingGraph->getEdgesFrom(myNode);
     if (!myEdges) {
         return 0;
     }
@@ -2021,7 +2021,7 @@ NodeNum SignalRoutingModule::findBetterPositionedNeighbor(NodeNum destination, N
         }
 
         // Check if this neighbor has a direct connection to the destination
-        const NodeEdgesLite* neighborEdges = routingGraph->getEdgesFrom(neighbor);
+        const NodeEdges* neighborEdges = routingGraph->getEdgesFrom(neighbor);
         if (neighborEdges) {
             for (uint8_t j = 0; j < neighborEdges->edgeCount; j++) {
                 if (neighborEdges->edges[j].to == destination) {
@@ -2068,13 +2068,13 @@ void SignalRoutingModule::updateNeighborInfo(NodeNum nodeId, int32_t rssi, float
     // Store edge: nodeId → us (the direction of the transmission we measured)
     // This is used for routing decisions when traffic needs to reach us
     int changeType =
-        routingGraph->updateEdge(nodeId, myNode, etx, monotonicTimestamp, variance, EdgeLite::Source::Reported);
+        routingGraph->updateEdge(nodeId, myNode, etx, monotonicTimestamp, variance, Edge::Source::Reported);
 
     // Also store reverse edge: us → nodeId (assuming approximately symmetric link)
     // Since we directly measured the link quality (even if in the opposite direction),
     // mark this as Reported source, not Mirrored
     routingGraph->updateEdge(myNode, nodeId, etx, monotonicTimestamp, variance
-                             , EdgeLite::Source::Reported
+                             , Edge::Source::Reported
                              );
 
     // If significant change, consider sending an update sooner
@@ -2157,7 +2157,7 @@ float SignalRoutingModule::getDirectNeighborsSignalActivePercentage() const
     size_t totalNeighbors = 0;
     size_t activeNeighbors = 0;
 
-    const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    const NodeEdges* edges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
     if (edges) {
         totalNeighbors = edges->edgeCount;
         for (uint8_t i = 0; i < edges->edgeCount; i++) {
@@ -2370,10 +2370,10 @@ void SignalRoutingModule::handleRoutingControlPacket(const meshtastic_MeshPacket
                     // Additional check: the hop node must be a direct neighbor of ours (Reported edge)
                     bool isDirectNeighbor = false;
                     NodeNum ourNode = nodeDB->getNodeNum();
-                    const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
+                    const NodeEdges* ourEdges = routingGraph->getEdgesFrom(ourNode);
                     if (ourEdges) {
                         for (uint8_t j = 0; j < ourEdges->edgeCount; j++) {
-                            if (ourEdges->edges[j].to == hopNode && ourEdges->edges[j].source == EdgeLite::Source::Reported) {
+                            if (ourEdges->edges[j].to == hopNode && ourEdges->edges[j].source == Edge::Source::Reported) {
                                 isDirectNeighbor = true;
                                 break;
                             }
@@ -2405,10 +2405,10 @@ void SignalRoutingModule::handleRoutingControlPacket(const meshtastic_MeshPacket
                     // Additional check: the hop node must be a direct neighbor of ours (Reported edge)
                     bool isDirectNeighbor = false;
                     NodeNum ourNode = nodeDB->getNodeNum();
-                    const NodeEdgesLite* ourEdges = routingGraph->getEdgesFrom(ourNode);
+                    const NodeEdges* ourEdges = routingGraph->getEdgesFrom(ourNode);
                     if (ourEdges) {
                         for (uint8_t j = 0; j < ourEdges->edgeCount; j++) {
-                            if (ourEdges->edges[j].to == hopNode && ourEdges->edges[j].source == EdgeLite::Source::Reported) {
+                            if (ourEdges->edges[j].to == hopNode && ourEdges->edges[j].source == Edge::Source::Reported) {
                                 isDirectNeighbor = true;
                                 break;
                             }
@@ -2653,7 +2653,7 @@ bool SignalRoutingModule::topologyHealthyForBroadcast() const
     // Check if we have direct SR-capable neighbors for intelligent broadcast routing
     LOG_DEBUG("[SR] Checking direct neighbors");
 
-    const NodeEdgesLite* nodeEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+    const NodeEdges* nodeEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
     if (!nodeEdges || nodeEdges->edgeCount == 0) {
         LOG_DEBUG("[SR] No edges found, returning false");
         return false;
@@ -2689,7 +2689,7 @@ bool SignalRoutingModule::topologyHealthyForUnicast(NodeNum destination) const
         return false;
     }
 
-    RouteLite route = routingGraph->calculateRoute(destination, millis() / 1000,
+    Route route = routingGraph->calculateRoute(destination, millis() / 1000,
         [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
 
     if (route.nextHop != 0) {
@@ -2702,7 +2702,7 @@ bool SignalRoutingModule::topologyHealthyForUnicast(NodeNum destination) const
     NodeNum relay = routingGraph->getDownstreamRelay(destination);
     if (relay != 0) {
         // Check if we can reach the relay (relay must be routable)
-        RouteLite relayRoute = routingGraph->calculateRoute(relay, millis() / 1000,
+        Route relayRoute = routingGraph->calculateRoute(relay, millis() / 1000,
             [this](NodeNum nodeId) { return isNodeRoutable(nodeId); });
         if (relayRoute.nextHop != 0) {
             LOG_DEBUG("[SR] Node %08x is reachable via relay %08x (nextHop=%08x, cost=%.2f)",
@@ -2859,7 +2859,7 @@ NodeNum SignalRoutingModule::resolveHeardFrom(const meshtastic_MeshPacket *p, No
     // Check ALL known nodes (both Reported and Mirrored edges), not just direct neighbors,
     // because the relay might be a node we only know through topology broadcasts
     if (routingGraph && nodeDB) {
-        const NodeEdgesLite *myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
+        const NodeEdges *myEdges = routingGraph->getEdgesFrom(nodeDB->getNodeNum());
         if (myEdges) {
             for (uint8_t i = 0; i < myEdges->edgeCount; i++) {
                 if ((myEdges->edges[i].to & 0xFF) == p->relay_node && !isPlaceholderNode(myEdges->edges[i].to)) {
@@ -3008,7 +3008,7 @@ bool SignalRoutingModule::hasDirectConnectivity(NodeNum nodeA, NodeNum nodeB)
     }
 
     // Check if nodeA has a direct edge to nodeB
-    const NodeEdgesLite* edges = routingGraph->getEdgesFrom(nodeA);
+    const NodeEdges* edges = routingGraph->getEdgesFrom(nodeA);
     if (edges) {
         for (uint8_t i = 0; i < edges->edgeCount; i++) {
             if (edges->edges[i].to == nodeB) {
