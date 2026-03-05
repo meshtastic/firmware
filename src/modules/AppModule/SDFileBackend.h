@@ -29,8 +29,7 @@ class SDFileBackend : public FileBackend
             return result;
         }
 
-        File entry;
-        while ((entry = root.openNextFile())) {
+        for (File entry = root.openNextFile(); entry; entry = root.openNextFile()) {
             DirEntry de;
             de.name = entry.name();
             de.isDirectory = entry.isDirectory();

@@ -17,8 +17,7 @@ class FlashFileBackend : public FileBackend
         if (!root || !root.isDirectory())
             return result;
 
-        File entry;
-        while ((entry = root.openNextFile())) {
+        for (File entry = root.openNextFile(); entry; entry = root.openNextFile()) {
             DirEntry de;
             de.name = entry.name();
             de.isDirectory = entry.isDirectory();

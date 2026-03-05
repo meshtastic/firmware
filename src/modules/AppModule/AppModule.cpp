@@ -11,7 +11,7 @@
 #include "graphics/Screen.h"
 #endif
 
-#if HAS_WIFI && defined(ARCH_ESP32)
+#if HAS_WIFI && defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 #include "modules/AppModule/AppHttp.h"
 #endif
 
@@ -175,7 +175,7 @@ void AppModule::startApprovedHandlers()
 
     // Direct filesystem diagnostic — bypass AppLibrary to see what FSCom returns
     {
-        File root = FSCom.open("/apps");
+        File root = FSCom.open("/apps", FILE_O_READ);
         if (!root) {
             LOG_WARN("[AppModule] FSCom.open('/apps') FAILED");
         } else if (!root.isDirectory()) {
@@ -183,13 +183,12 @@ void AppModule::startApprovedHandlers()
             root.close();
         } else {
             LOG_INFO("[AppModule] FSCom '/apps' directory listing:");
-            File entry;
-            while ((entry = root.openNextFile())) {
+            for (File entry = root.openNextFile(); entry; entry = root.openNextFile()) {
                 LOG_INFO("[AppModule]   name='%s' isDir=%d size=%u", entry.name(), entry.isDirectory(), (unsigned)entry.size());
                 if (entry.isDirectory()) {
                     // Try reading app.json inside
                     std::string jsonPath = std::string("/apps/") + entry.name() + "/app.json";
-                    File manifest = FSCom.open(jsonPath.c_str());
+                    File manifest = FSCom.open(jsonPath.c_str(), FILE_O_READ);
                     if (manifest) {
                         LOG_INFO("[AppModule]   -> app.json found (%u bytes)", (unsigned)manifest.size());
                         manifest.close();
@@ -318,7 +317,7 @@ bool AppModule::launchApp(const std::string &slug)
     buiRuntime->addBindings("display", displayBindings);
 
     std::map<std::string, NativeAppFunction> httpBindings;
-#if HAS_WIFI && defined(ARCH_ESP32)
+#if HAS_WIFI && defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C6)
     httpBindings["request"] = [this](const std::vector<AppValue> &args) -> AppValue {
         if (!buiRuntime->hasPermission("http-client"))
             return AppValue(false);
@@ -402,7 +401,7 @@ void AppModule::callMenuHandler(int index)
 
 void AppModule::stopCurrentApp()
 {
-#if HAS_WIFI && defined(ARCH_ESP32)
+#if HAS_WIFI && defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C6)
     app_http_cleanup();
 #endif
     // Stop BUI only — handler persists in background
@@ -540,11 +539,11 @@ void AppModule::showDeveloperTrustPrompt(int appIndex)
 
     std::string author = entry->manifest.author;
     if (author.size() > 20)
-        author = author.substr(0, 20);
+        author.resize(20);
 
     std::string fingerprint = entry->pubKeyFingerprint;
     if (fingerprint.size() > 16)
-        fingerprint = fingerprint.substr(0, 16);
+        fingerprint.resize(16);
 
     if (author.empty()) {
         approvalBannerMsg = "Do you trust\ndeveloper\n" + fingerprint + "?";
@@ -595,8 +594,10 @@ void AppModule::showPermissionsPrompt(int appIndex)
             perms += ", ";
         perms += entry->manifest.permissions[i];
     }
-    if (perms.size() > 180)
-        perms = perms.substr(0, 177) + "...";
+    if (perms.size() > 180) {
+        perms.resize(177);
+        perms += "...";
+    }
 
     approvalBannerMsg = entry->manifest.name + " requests:\n" + perms + "\nApprove?";
 

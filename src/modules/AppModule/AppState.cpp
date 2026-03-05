@@ -16,7 +16,7 @@ std::string FlashAppStateBackend::statePath(const std::string &appSlug)
 bool FlashAppStateBackend::readState(const std::string &appSlug, std::string &json)
 {
     std::string path = statePath(appSlug);
-    File f = FSCom.open(path.c_str());
+    File f = FSCom.open(path.c_str(), FILE_O_READ);
     if (!f)
         return false;
 
