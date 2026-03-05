@@ -672,7 +672,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = default_broadcast_smart_minimum_interval_secs;
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
+        config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.security.serial_enabled = true;
     config.security.admin_channel_enabled = false;
