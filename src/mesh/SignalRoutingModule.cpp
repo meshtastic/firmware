@@ -2944,6 +2944,13 @@ void SignalRoutingModule::scheduleContentionWindowCheck(NodeNum expectedRelay, P
         return; // No room for more checks
     }
 
+    // Keep a pool copy so we can relay the packet if the contention window expires
+    meshtastic_MeshPacket *copy = packetPool.allocCopy(*packet);
+    if (!copy) {
+        LOG_WARN("[SR] scheduleContentionWindowCheck: failed to allocate packet copy");
+        return;
+    }
+
     ContentionCheck& check = contentionChecks[contentionCheckCount++];
     check.expectedRelay = expectedRelay;
     check.packetId = packetId;
@@ -2954,6 +2961,7 @@ void SignalRoutingModule::scheduleContentionWindowCheck(NodeNum expectedRelay, P
     check.hopStart = packet->hop_start;
     check.expiryMs = millis() + contentionWindowMs;
     check.needsRelay = false;
+    check.packetCopy = copy;
 }
 
 void SignalRoutingModule::excludeNodeFromRelay(NodeNum nodeId, PacketId packetId)
@@ -3018,9 +3026,17 @@ void SignalRoutingModule::processContentionWindows(uint32_t nowMs)
             // Re-evaluate: find next best candidate or relay ourselves
             bool shouldRelayNow = evaluateContentionExpiry(check, myNode);
 
-            if (shouldRelayNow && check.hopLimit > 0) {
+            if (shouldRelayNow && check.hopLimit > 0 && check.packetCopy) {
                 LOG_INFO("[SR] Contention re-evaluation: relaying packet %08x to %s ourselves", check.packetId, destName);
                 queueUnicastRelay(check);
+                // queueUnicastRelay takes ownership of packetCopy
+                check.packetCopy = nullptr;
+            }
+
+            // Free packet copy if not consumed by relay
+            if (check.packetCopy) {
+                packetPool.release(check.packetCopy);
+                check.packetCopy = nullptr;
             }
 
             // Remove this check by shifting the rest
@@ -3165,26 +3181,27 @@ bool SignalRoutingModule::evaluateContentionExpiry(const ContentionCheck& check,
     return true;
 }
 
-void SignalRoutingModule::queueUnicastRelay(const ContentionCheck& check)
+void SignalRoutingModule::queueUnicastRelay(ContentionCheck& check)
 {
-    if (!router || !nodeDB) return;
+    if (!router || !nodeDB || !check.packetCopy) {
+        clearRelayExclusionsForPacket(check.packetId);
+        return;
+    }
 
-    // Create a minimal packet for relay
-    // Note: We don't have the full payload, so we can only attempt to trigger
-    // a "delayed relay" by notifying the router. However, the original packet
-    // may have already been delivered/discarded.
+    meshtastic_MeshPacket *p = check.packetCopy;
+    check.packetCopy = nullptr; // Take ownership
 
-    // For now, log that we would have relayed - the original packet is no longer available
-    // This is a limitation: once we decide not to relay, we can't recover the packet.
-
-    // The real fix is that the initial decision in shouldRelayUnicastForCoordination
-    // should be more conservative and not wait for unreliable candidates.
-    // The contention window expiry is a fallback for when we did wait but shouldn't have.
+    // Decrement hop limit for the relay
+    if (p->hop_limit > 0) {
+        p->hop_limit--;
+    }
 
     char destName[64];
     getNodeDisplayName(check.destination, destName, sizeof(destName));
-    LOG_WARN("[SR] queueUnicastRelay: Packet %08x to %s - original packet no longer available for relay",
-             check.packetId, destName);
+    LOG_INFO("[SR] queueUnicastRelay: Relaying packet %08x to %s (hop_limit=%d)", check.packetId, destName, p->hop_limit);
+
+    // Send via router — this handles encryption, radio queueing, etc.
+    router->send(p);
 
     // Clear exclusions for this packet since we've handled it
     clearRelayExclusionsForPacket(check.packetId);

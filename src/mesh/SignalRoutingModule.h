@@ -134,6 +134,7 @@ private:
         uint8_t hopStart;
         uint32_t expiryMs;
         bool needsRelay;
+        meshtastic_MeshPacket *packetCopy; // Pool copy retained for deferred relay
     };
     ContentionCheck contentionChecks[4];
     uint8_t contentionCheckCount = 0;
@@ -171,7 +172,7 @@ private:
     bool isNodeRoutable(NodeNum nodeId) const;
     void logNetworkTopology();
     bool evaluateContentionExpiry(const ContentionCheck& check, NodeNum myNode);
-    void queueUnicastRelay(const ContentionCheck& check);
+    void queueUnicastRelay(ContentionCheck& check);
 };
 
 extern SignalRoutingModule *signalRoutingModule;
