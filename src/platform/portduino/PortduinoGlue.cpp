@@ -630,7 +630,9 @@ void portduinoSetup()
         }
     } else if (portduino_config.JSONFilename != "") {
         try {
-            JSONFile.open(portduino_config.JSONFilename, std::ios::out | std::ios::app);
+            if (portduino_config.JSONFileRotate == 0) {
+                JSONFile.open(portduino_config.JSONFilename, std::ios::out | std::ios::app);
+            }
         } catch (std::ofstream::failure &e) {
             std::cout << "*** JSONFile Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
@@ -687,6 +689,7 @@ bool loadConfig(const char *configPath)
             }
             portduino_config.traceFilename = yamlConfig["Logging"]["TraceFile"].as<std::string>("");
             portduino_config.JSONFilename = yamlConfig["Logging"]["JSONFile"].as<std::string>("");
+            portduino_config.JSONFileRotate = yamlConfig["Logging"]["JSONFileRotate"].as<int>(0);
             portduino_config.JSONFilter = (_meshtastic_PortNum)yamlConfig["Logging"]["JSONFilter"].as<int>(0);
             if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "textmessage")
                 portduino_config.JSONFilter = meshtastic_PortNum_TEXT_MESSAGE_APP;
