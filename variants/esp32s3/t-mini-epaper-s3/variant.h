@@ -27,6 +27,7 @@
 #define PIN_EINK_RES 11
 #define PIN_EINK_SCLK 14
 #define PIN_EINK_MOSI 15
+#define DISPLAY_FORCE_SMALL_FONTS
 
 // Rocker-style input (left/right + boot as press)
 #define INPUTDRIVER_ENCODER_TYPE 2
