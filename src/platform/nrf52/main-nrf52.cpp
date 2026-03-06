@@ -450,6 +450,15 @@ void cpuDeepSleep(uint32_t msecToWake)
         (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                    meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR) &&
          config.power.is_power_saving == true)) {
+#if defined(BUTTON_PIN) && (BUTTON_PIN >= 0)
+        // Allow button press to wake device from low-power sleep by triggering an immediate reset
+#ifndef BUTTON_ACTIVE_LOW
+#define BUTTON_ACTIVE_LOW true
+#endif
+        detachInterrupt(BUTTON_PIN);
+        attachInterrupt(
+            BUTTON_PIN, []() { NVIC_SystemReset(); }, BUTTON_ACTIVE_LOW ? FALLING : RISING);
+#endif
         sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
         delay(msecToWake);
         NVIC_SystemReset();
