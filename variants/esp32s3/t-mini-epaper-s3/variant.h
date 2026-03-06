@@ -13,6 +13,12 @@
 #define I2C_SDA 18
 #define I2C_SCL 9
 
+// Battery voltage monitoring
+#define BATTERY_PIN 2 // A battery voltage measurement pin, voltage divider connected here to
+// measure battery voltage ratio of voltage divider = 2.0 (assumption)
+#define ADC_MULTIPLIER 2.11 // 2.0 + 10% for correction of display undervoltage.
+#define ADC_CHANNEL ADC1_GPIO2_CHANNEL
+
 // Display (E-Ink)
 #define PIN_EINK_EN 42
 #define PIN_EINK_CS 13

@@ -5,6 +5,10 @@
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
+#if defined(T_MINI_EPAPER_S3)
+#include "GxEPD2_102_Meshtastic.h"
+#endif
+
 #ifdef GXEPD2_DRIVER_0 // If variant has multiple possible display models
 #include "GxEPD2Multi.h"
 #endif
@@ -89,7 +93,8 @@ class EInkDisplay : public OLEDDisplay
     // If display uses HSPI
 #if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
     defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \
-    defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) || defined(ELECROW_ThinkNode_M5)
+    defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) || defined(ELECROW_ThinkNode_M5) ||               \
+    defined(T_MINI_EPAPER_S3)
     SPIClass *hspi = NULL;
 #endif
 

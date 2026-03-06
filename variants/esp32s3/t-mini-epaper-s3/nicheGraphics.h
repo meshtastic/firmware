@@ -35,15 +35,17 @@ void setupNicheGraphics()
     SPIClass *hspi = new SPIClass(HSPI);
     hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
 
-    Drivers::GDEW0102T4 *driver = new Drivers::GDEW0102T4;
-    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
-    // Runtime default: chosen preset #1.
-    driver->setFastConfig({0x13, 0xD2, 0x12, 0x0E, 0x14});
+    Drivers::GDEW0102T4 *displayDriver = new Drivers::GDEW0102T4;
+    displayDriver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
+    // FAST refresh profile A tuned for the tiny 80x128 panel:
+    // keep white cleanup strength, black reinforcement set to an in-between level.
+    displayDriver->setFastConfig({0x05, 0xF2, 0x00, 0x0F, 0x09});
+    Drivers::EInk *driver = displayDriver;
 
     InkHUD::InkHUD *inkhud = InkHUD::InkHUD::getInstance();
     inkhud->setDriver(driver);
-    // Stronger anti-ghosting profile: fewer FAST updates before enforcing FULL cleanup.
-    inkhud->setDisplayResilience(3, 3);
+    // Allow many FAST refreshes, similar to other InkHUD targets.
+    inkhud->setDisplayResilience(15, 1.5);
     inkhud->twoWayRocker = true;
 
     // Fonts

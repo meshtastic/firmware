@@ -143,6 +143,10 @@ bool EInkDisplay::connect()
 #ifdef ELECROW_ThinkNode_M1
     // ThinkNode M1 has a hardware dimmable backlight. Start enabled
     digitalWrite(PIN_EINK_EN, HIGH);
+#elif defined(T_MINI_EPAPER_S3)
+    // T-Mini Epaper S3 requires panel power rail enabled before SPI transfer.
+    digitalWrite(PIN_EINK_EN, HIGH);
+    delay(10);
 #else
     digitalWrite(PIN_EINK_EN, LOW);
 #endif
@@ -202,7 +206,8 @@ bool EInkDisplay::connect()
     }
 
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) ||                 \
-    defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER)
+    defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) ||         \
+    defined(T_MINI_EPAPER_S3)
     {
         // Start HSPI
         hspi = new SPIClass(HSPI);
@@ -216,9 +221,13 @@ bool EInkDisplay::connect()
 
         // Init GxEPD2
         adafruitDisplay->init();
+#if defined(T_MINI_EPAPER_S3)
+        adafruitDisplay->setRotation(0);
+#else
         adafruitDisplay->setRotation(3);
 #if defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER)
         adafruitDisplay->setRotation(0);
+#endif
 #endif
     }
 #elif defined(PCA10059) || defined(ME25LS01)

@@ -51,9 +51,9 @@ GDEW0102T4::GDEW0102T4() : UC8175(width, height, supported) {}
 
 void GDEW0102T4::setFastConfig(FastConfig cfg)
 {
-    // Very low clock values make transitions "melt"/bleed on this panel.
-    if (cfg.reg30 < 0x10)
-        cfg.reg30 = 0x10;
+    // Clamp out only clearly invalid PLL settings.
+    if (cfg.reg30 < 0x05)
+        cfg.reg30 = 0x05;
     fastConfig = cfg;
 }
 
