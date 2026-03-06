@@ -74,7 +74,7 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 // ---- KCT8103L RF FRONT END CONFIGURATION ----
-// The Heltec V4.3 uses a KCT8103L FEM chip with integrated PA and LNA
+// The heltec_wireless_tracker_v2 uses a KCT8103L FEM chip with integrated PA and LNA
 // RF path: SX1262 -> Pi attenuator -> KCT8103L PA -> Antenna
 // Control logic (from KCT8103L datasheet):
 //   Transmit PA:     CSD=1, CTX=1, CPS=1
@@ -82,13 +82,13 @@
 //   Receive bypass:  CSD=1, CTX=1, CPS=0
 //   Shutdown:        CSD=0, CTX=X, CPS=X
 // Pin mapping:
-//   CPS (pin 5)  -> SX1262 DIO2: TX/RX path select (automatic via SX126X_DIO2_AS_RF_SWITCH)
+//   CPS (pin  5)  -> SX1262 DIO2: TX/RX path select (automatic via SX126X_DIO2_AS_RF_SWITCH)
 //   CSD (pin 4)  -> GPIO4: Chip enable (HIGH=on, LOW=shutdown)
-//   CTX (pin 6)  -> GPIO5: Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=bypass PA, LOW=LNA)
+//   CTX (pin 6)  -> GPIO5: Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=RX bypass, LOW=RX LNA)
 //   VCC0/VCC1    -> Vfem via U3 LDO, controlled by GPIO7
 // KCT8103L FEM: TX/RX path switching is handled by DIO2 -> CPS pin (via SX126X_DIO2_AS_RF_SWITCH)
 
 #define USE_KCT8103L_PA
 #define LORA_PA_POWER 7        // VFEM_Ctrl - KCT8103L LDO power enable
 #define LORA_KCT8103L_PA_CSD 4 // CSD - KCT8103L chip enable (HIGH=on)
-#define LORA_KCT8103L_PA_CTX 5 // CTX - Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=bypass PA, LOW=LNA)
+#define LORA_KCT8103L_PA_CTX 5 // CTX - Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=RX bypass, LOW=RX LNA)
