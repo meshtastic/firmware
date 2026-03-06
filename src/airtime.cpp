@@ -161,7 +161,9 @@ AirTime::AirTime() : concurrency::OSThread("AirTime"), airtimes({}) {}
 
 int32_t AirTime::runOnce()
 {
-    secSinceBoot++;
+    // set internal counter once per thread call
+    // to ensure period won't change during its execution
+    this->secSinceBoot = millis() / 1000;
 
     uint8_t utilPeriod = this->getPeriodUtilMinute();
     uint8_t utilPeriodTX = this->getPeriodUtilHour();
@@ -169,12 +171,12 @@ int32_t AirTime::runOnce()
     if (firstTime) {
 
         // Init utilizationTX window to all 0
-        for (uint32_t i = 0; i < MINUTES_IN_HOUR; i++) {
+        for (int i = 0; i < MINUTES_IN_HOUR; i++) {
             this->utilizationTX[i] = 0;
         }
 
         // Init channelUtilization window to all 0
-        for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
+        for (int i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
             this->channelUtilization[i] = 0;
         }
 
@@ -193,18 +195,49 @@ int32_t AirTime::runOnce()
     } else {
         this->airtimeRotatePeriod();
 
-        // Reset the channelUtilization window when we roll over
+        // reset windows when channel utilization period increased
         if (lastUtilPeriod != utilPeriod) {
-            lastUtilPeriod = utilPeriod;
+            // initially assume period got increased by 1
+            lastUtilPeriod = (lastUtilPeriod + 1) % CHANNEL_UTILIZATION_PERIODS;
 
-            this->channelUtilization[utilPeriod] = 0;
+            // detect wrap-around and clear all periods up to CHANNEL_UTILIZATION_PERIODS
+            if (lastUtilPeriod > utilPeriod) {
+                for (uint8_t i = lastUtilPeriod; i < CHANNEL_UTILIZATION_PERIODS; i++)
+                    this->channelUtilization[i] = 0;
+
+                // then continue from 0
+                lastUtilPeriod = 0;
+            }
+
+            // clear all periods between (but not including) previous one and (including) new one
+            // not including previous one as it got increased by 1
+            for (uint8_t i = lastUtilPeriod; i <= utilPeriod; i++)
+                this->channelUtilization[i] = 0;
+
+            lastUtilPeriod = utilPeriod;
         }
 
+        // reset windows when TX utilization period increased
         if (lastUtilPeriodTX != utilPeriodTX) {
-            lastUtilPeriodTX = utilPeriodTX;
+            // initially assume period got increased by 1
+            lastUtilPeriodTX = (lastUtilPeriodTX + 1) % MINUTES_IN_HOUR;
 
-            this->utilizationTX[utilPeriodTX] = 0;
+            // detect wrap-around and clear all periods up to MINUTES_IN_HOUR
+            if (lastUtilPeriodTX > utilPeriodTX) {
+                for (int i = lastUtilPeriodTX; i < MINUTES_IN_HOUR; i++)
+                    this->utilizationTX[i] = 0;
+
+                // then continue from 0
+                lastUtilPeriodTX = 0;
+            }
+
+            // clear all periods between (but not including) previous one and (including) a new one
+            // not including previous one as it got increased by 1
+            for (int i = lastUtilPeriodTX; i <= utilPeriodTX; i++)
+                this->utilizationTX[i] = 0;
+
+            lastUtilPeriodTX = utilPeriodTX;
         }
     }
-    return (1000 * 1);
+    return 1000;
 }
