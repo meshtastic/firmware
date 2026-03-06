@@ -194,6 +194,9 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_DECK_PRO
 #elif defined(T_BEAM_1W)
 #define HW_VENDOR meshtastic_HardwareModel_TBEAM_1_WATT
+// Awaiting protobuf merge
+// #elif defined(T_BEAM_BPF)
+// #define HW_VENDOR meshtastic_HardwareModel_TBEAM_BPF
 #elif defined(T_LORA_PAGER)
 #define HW_VENDOR meshtastic_HardwareModel_T_LORA_PAGER
 #elif defined(HELTEC_V4)
