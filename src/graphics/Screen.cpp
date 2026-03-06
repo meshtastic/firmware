@@ -1731,19 +1731,11 @@ int Screen::handleInputEvent(const InputEvent *event)
                 return 0;
             }
 #endif
-#ifdef T_MINI_EPAPER_S3
-            if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
-                showFrame(FrameDirection::PREVIOUS);
-            } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_ALT_PRESS) {
-                showFrame(FrameDirection::NEXT);
-            } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
-#else
             if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS) {
                 showFrame(FrameDirection::PREVIOUS);
             } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
                 showFrame(FrameDirection::NEXT);
             } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
-#endif
                 this->ui->switchToFrame(0);
                 lastScreenTransition = millis();
                 setFastFramerate();
