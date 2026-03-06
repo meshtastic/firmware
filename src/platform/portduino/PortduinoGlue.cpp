@@ -181,9 +181,10 @@ void portduinoSetup()
     // Force stdout to be line buffered
     setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
 
-    if (portduino_config.force_simradio == true) {
-        portduino_config.lora_module = use_simradio;
-    } else if (configPath != nullptr) {
+    // Load config YAML first (independent of simradio flag).
+    // The -s flag forces simradio mode but should NOT prevent config loading,
+    // since the YAML may contain non-radio settings (EnableUDP, display, etc.).
+    if (configPath != nullptr) {
         if (loadConfig(configPath)) {
             if (!yamlOnly)
                 std::cout << "Using " << configPath << " as config file" << std::endl;
@@ -210,6 +211,11 @@ void portduinoSetup()
     } else {
         if (!yamlOnly)
             std::cout << "No 'config.yaml' found..." << std::endl;
+        portduino_config.lora_module = use_simradio;
+    }
+
+    // Apply -s flag override after config loading so YAML settings are preserved
+    if (portduino_config.force_simradio) {
         portduino_config.lora_module = use_simradio;
     }
 

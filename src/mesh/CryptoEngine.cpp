@@ -1,11 +1,11 @@
 #include "CryptoEngine.h"
 // #include "NodeDB.h"
+#include "aes-ccm.h"
 #include "architecture.h"
 #include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #include "NodeDB.h"
-#include "aes-ccm.h"
 #include "meshUtils.h"
 #include <Crypto.h>
 #include <Curve25519.h>
@@ -171,8 +171,11 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
     aes = nullptr;
-    if (key_len != 0) {
-        aes = std::unique_ptr<AESSmall256>(new AESSmall256());
+    if (key_len == 16) {
+        aes = std::unique_ptr<BlockCipher>(new AESSmall128());
+        aes->setKey(key_bytes, 16);
+    } else if (key_len != 0) {
+        aes = std::unique_ptr<BlockCipher>(new AESSmall256());
         aes->setKey(key_bytes, key_len);
     }
 }
@@ -197,6 +200,35 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
 }
 
 #endif
+
+bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t numBytes,
+                                    const uint8_t *plaintext, uint8_t *ciphertextWithTag)
+{
+    if (psk.length == 0) {
+        LOG_ERROR("AEAD encryption requires a non-empty PSK");
+        return false;
+    }
+    initNonce(fromNode, packetId);
+    // Output layout: [ciphertext (numBytes)] [auth_tag (AEAD_TAG_SIZE bytes)]
+    return aes_ccm_ae(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, plaintext, numBytes, nullptr, 0, ciphertextWithTag,
+                      ciphertextWithTag + numBytes) == 0;
+}
+
+bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t totalBytes,
+                                    const uint8_t *ciphertextWithTag, uint8_t *plaintext)
+{
+    if (psk.length == 0) {
+        LOG_ERROR("AEAD decryption requires a non-empty PSK");
+        return false;
+    }
+    if (totalBytes <= AEAD_TAG_SIZE)
+        return false;
+    initNonce(fromNode, packetId);
+    size_t crypt_len = totalBytes - AEAD_TAG_SIZE;
+    const uint8_t *auth = ciphertextWithTag + crypt_len;
+    return aes_ccm_ad(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, ciphertextWithTag, crypt_len, nullptr, 0, auth, plaintext);
+}
+
 concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
