@@ -5,10 +5,6 @@
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
-#if defined(T_MINI_EPAPER_S3)
-#include "GxEPD2_102_Meshtastic.h"
-#endif
-
 #ifdef GXEPD2_DRIVER_0 // If variant has multiple possible display models
 #include "GxEPD2Multi.h"
 #endif

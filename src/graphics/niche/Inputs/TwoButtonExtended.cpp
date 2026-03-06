@@ -134,14 +134,6 @@ void TwoButtonExtended::setWiring(uint8_t whichButton, uint8_t pin, bool interna
     pinMode(buttons[whichButton].pin, internalPullup ? INPUT_PULLUP : INPUT);
 }
 
-// Configures a button so short and long press use the same callback
-void TwoButtonExtended::setUnifiedPressHandler(uint8_t whichButton, Callback onShortOrLongPress)
-{
-    assert(whichButton < 2);
-    buttons[whichButton].onPress = onShortOrLongPress;
-    buttons[whichButton].onLongPress = onShortOrLongPress;
-}
-
 // Configures the wiring and logic of the joystick buttons
 // Called when outlining your NicheGraphics implementation, in variant/nicheGraphics.cpp
 void TwoButtonExtended::setJoystickWiring(uint8_t uPin, uint8_t dPin, uint8_t lPin, uint8_t rPin, bool internalPullup)
