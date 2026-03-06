@@ -23,8 +23,10 @@
 #include "modules/ExternalNotificationModule.h"
 #include "modules/KeyVerificationModule.h"
 #include "modules/TraceRouteModule.h"
+#if !MESHTASTIC_EXCLUDE_APPS
 #include "mapps/AppLibrary.h"
 #include "modules/AppModule/AppModule.h"
+#endif
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -1070,10 +1072,12 @@ void menuHandler::systemBaseMenu()
     }
     optionsEnumArray[options++] = PowerMenu;
 
+#if !MESHTASTIC_EXCLUDE_APPS
     if (appLibrary && !appLibrary->getApps().empty()) {
         optionsArray[options] = "Apps";
         optionsEnumArray[options++] = Apps;
     }
+#endif
 
     if (test_enabled) {
         optionsArray[options] = "Test Menu";
@@ -2642,6 +2646,7 @@ void menuHandler::messageBubblesMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+#if !MESHTASTIC_EXCLUDE_APPS
 void menuHandler::appsMenu()
 {
     if (!appLibrary) {
@@ -2742,6 +2747,7 @@ void menuHandler::appRunningMenu()
     };
     screen->showOverlayBanner(bannerOptions);
 }
+#endif
 
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
@@ -2893,9 +2899,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case MessageBubblesMenu:
         messageBubblesMenu();
         break;
+#if !MESHTASTIC_EXCLUDE_APPS
     case AppsMenu:
         appsMenu();
         break;
+#endif
     }
     menuQueue = MenuNone;
 }

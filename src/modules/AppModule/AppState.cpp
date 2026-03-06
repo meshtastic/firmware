@@ -1,7 +1,10 @@
 #include "configuration.h"
 
+#if !MESHTASTIC_EXCLUDE_APPS
+
 #include "modules/AppModule/AppState.h"
 #include "FSCommon.h"
+#include <map>
 
 #ifdef FSCom
 
@@ -132,3 +135,5 @@ std::shared_ptr<FlashAppStateBackend> getFlashAppStateBackend()
 }
 
 #endif // FSCom
+
+#endif // !MESHTASTIC_EXCLUDE_APPS

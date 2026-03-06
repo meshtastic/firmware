@@ -111,8 +111,10 @@ class menuHandler
     static void frameTogglesMenu();
     static void displayUnitsMenu();
     static void messageBubblesMenu();
+#if !MESHTASTIC_EXCLUDE_APPS
     static void appsMenu();
     static void appRunningMenu();
+#endif
     static void textMessageMenu();
 
   private:

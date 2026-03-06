@@ -77,8 +77,10 @@ uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
+#if !MESHTASTIC_EXCLUDE_APPS
 #include "mapps/AppLibrary.h"
 #include "modules/AppModule/AppModule.h"
+#endif
 
 #ifdef ARCH_ESP32
 #endif
@@ -1140,11 +1142,13 @@ void Screen::setFrames(FrameFocus focus)
     }
 #endif
 
+#if !MESHTASTIC_EXCLUDE_APPS
     if (::appLibrary && !::appLibrary->getApps().empty()) {
         fsi.positions.apps = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawAppsFrame;
         indicatorIcons.push_back(icon_apps);
     }
+#endif
 
     // Beware of what changes you make in this code!
     // We pass numframes into GetMeshModulesWithUIFrames() which is highly important!
@@ -1811,10 +1815,12 @@ int Screen::handleInputEvent(const InputEvent *event)
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
                     menuHandler::wifiBaseMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.apps) {
+#if !MESHTASTIC_EXCLUDE_APPS
                     if (appModule && appModule->isAppRunning())
                         menuHandler::appRunningMenu();
                     else
                         menuHandler::appsMenu();
+#endif
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showFrame(FrameDirection::PREVIOUS);

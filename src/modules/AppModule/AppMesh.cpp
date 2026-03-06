@@ -1,5 +1,7 @@
 #include "configuration.h"
 
+#if !MESHTASTIC_EXCLUDE_APPS
+
 #include "modules/AppModule/AppMesh.h"
 #include "FSCommon.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
@@ -205,3 +207,5 @@ std::string serializeMeshEvent(const meshtastic_MeshPacket &mp)
 }
 
 #endif // FSCom
+
+#endif // !MESHTASTIC_EXCLUDE_APPS

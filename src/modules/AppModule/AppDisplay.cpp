@@ -1,5 +1,7 @@
 #include "configuration.h"
 
+#if !MESHTASTIC_EXCLUDE_APPS
+
 #if HAS_SCREEN
 
 #include "modules/AppModule/AppDisplay.h"
@@ -89,3 +91,5 @@ int app_display_height()
 }
 
 #endif // HAS_SCREEN
+
+#endif // !MESHTASTIC_EXCLUDE_APPS

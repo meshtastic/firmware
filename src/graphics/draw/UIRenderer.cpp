@@ -17,8 +17,10 @@
 #include <RTC.h>
 #include <cstring>
 
+#if !MESHTASTIC_EXCLUDE_APPS
 #include "mapps/AppLibrary.h"
 #include "modules/AppModule/AppModule.h"
+#endif
 
 // External variables
 extern graphics::Screen *screen;
@@ -1561,6 +1563,7 @@ std::string UIRenderer::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t mi
     return uptime;
 }
 
+#if !MESHTASTIC_EXCLUDE_APPS
 static const char *appStatusLabel(AppStatus status)
 {
     switch (status) {
@@ -1580,11 +1583,13 @@ case AppStatus::Ready:
         return "unknown";
     }
 }
+#endif
 
 void UIRenderer::drawAppsFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->clear();
 
+#if !MESHTASTIC_EXCLUDE_APPS
     // If an app is running, draw it inside this frame instead of the app list
     if (appModule && appModule->isAppRunning()) {
         appModule->drawFrame(display, state, x, y);
@@ -1629,6 +1634,7 @@ void UIRenderer::drawAppsFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         snprintf(moreStr, sizeof(moreStr), "+%d more", (int)apps.size() - maxVisible);
         display->drawString(x + 4, y + yPos, moreStr);
     }
+#endif
 }
 
 } // namespace graphics

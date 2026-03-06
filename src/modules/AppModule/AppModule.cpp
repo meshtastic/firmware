@@ -1,5 +1,7 @@
 #include "configuration.h"
 
+#if !MESHTASTIC_EXCLUDE_APPS
+
 #include "modules/AppModule/AppModule.h"
 #include "modules/AppModule/AppState.h"
 #include "main.h"
@@ -631,3 +633,5 @@ void AppModule::completeApprovalAndLaunch(const std::string &slug)
 #endif // HAS_SCREEN
 
 #endif // FSCom
+
+#endif // !MESHTASTIC_EXCLUDE_APPS
