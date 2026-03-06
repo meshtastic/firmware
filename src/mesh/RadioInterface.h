@@ -127,7 +127,7 @@ class RadioInterface
      * Coerce LoRa config fields (bandwidth/spread_factor) derived from presets.
      * This is used during early bootstrapping so UIs that display these fields directly remain consistent.
      */
-    static void bootstrapLoRaConfigFromPreset(meshtastic_Config_LoRaConfig &loraConfig);
+    static void bootstrapLoRaConfigFromPreset(meshtastic_Config_LoRaConfig &loraConfig); // maybe superseded?
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
