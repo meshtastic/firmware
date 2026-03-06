@@ -157,7 +157,7 @@
 
 #endif
 
-#ifdef PIN_LED1
+#if defined(PIN_LED1) && !defined(LED_POWER)
 #define LED_POWER PIN_LED1 // LED1 on nrf52840-DK
 #endif
 
