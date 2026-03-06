@@ -5,11 +5,12 @@ Lora:
   IRQ: 22 #IO6
   Reset: 16 # IO4
   Busy: 24 # IO5
+  # Ant_sw: 13 # IO3 
   Enable_Pins:
     - 12
     - 13
   DIO3_TCXO_VOLTAGE: true
   DIO2_AS_RF_SWITCH: true
   spidev: spidev0.0
-  # GPIO_DETECT_PA: 13
+  # CS: 8
   TX_GAIN_LORA: [8]
