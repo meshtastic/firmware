@@ -140,6 +140,9 @@ typedef enum _meshtastic_PortNum {
     meshtastic_PortNum_MAP_REPORT_APP = 73,
     /* PowerStress based monitoring support (for automated power consumption testing) */
     meshtastic_PortNum_POWERSTRESS_APP = 74,
+    /* LoraWAN Payload Transport
+ ENCODING: compact binary LoRaWAN uplink (10-byte RF metadata + PHY payload) - see LoRaWANBridgeModule */
+    meshtastic_PortNum_LORAWAN_BRIDGE = 75,
     /* Reticulum Network Stack Tunnel App
  ENCODING: Fragmented RNS Packet. Handled by Meshtastic RNS interface */
     meshtastic_PortNum_RETICULUM_TUNNEL_APP = 76,
