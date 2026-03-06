@@ -787,7 +787,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                     }
                     else {
                         // Allocation failed, log a warning and fall back to sending the original encrypted packet to MQTT
-                        LOG_WARN("Failed to allocate new encrypted packet for TR, sending original TR to");
+                        LOG_WARN("Failed to allocate new encrypted packet for TR, sending original TR to MQTT");
                     }
                 }
                 mqtt->onSend(*p_encrypted, *p, p->channel);
