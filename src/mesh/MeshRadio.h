@@ -10,12 +10,21 @@ struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
     float freqStart;
     float freqEnd;
-    float dutyCycle;
-    float spacing;
+    float dutyCycle;    // modified by getEffectiveDutyCycle
+    float spacing;      // gaps between radio channels
+    float padding;      // padding at each side of the "operating channel"
     uint8_t powerLimit; // Or zero for not set
     bool audioPermitted;
     bool freqSwitching;
     bool wideLora;
+    bool licensedOnly;        // Only allow in HAM mode
+    int8_t textThrottle;      // text broadcast throttle - signed to allow future changes
+    int8_t positionThrottle;  // position broadcast throttle - signed to allow future changes
+    int8_t telemetryThrottle; // telemetry broadcast throttle - signed to allow future changes
+    uint8_t overrideSlot;     // default frequency slot if not using channel hashing
+    meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
+    // static list of available presets
+    const meshtastic_Config_LoRaConfig_ModemPreset *availablePresets;
     const char *name; // EU433 etc
 };
 
@@ -23,6 +32,14 @@ extern const RegionInfo regions[];
 extern const RegionInfo *myRegion;
 
 extern void initRegion();
+
+// modem presets for each region.
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[];
+// extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[];
+// extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[];
+// extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[];
+extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[];
 
 // Valid LoRa spread factor range and defaults
 constexpr uint8_t LORA_SF_MIN = 7;
