@@ -714,6 +714,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case 0x48: {
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
+                if (registerValue == 0x8583 || registerValue == 0x8580) {
+                    type = ADS1X15;
+                    logFoundDevice("ADS1X15 ADC", (uint8_t)addr.address);
+                    break;
+                }
+
                 i2cBus->beginTransmission(addr.address);
                 uint8_t getInfo[] = {0x5A, 0xC0, 0x00, 0xFF, 0xFC};
                 uint8_t expectedInfo[] = {0xa5, 0xE0, 0x00, 0x3F, 0x19};
@@ -728,15 +735,21 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     break;
                 }
 
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
-                if (registerValue == 0x8583 || registerValue == 0x8580) {
-                    type = ADS1115;
-                    logFoundDevice("ADS1115 ADC", (uint8_t)addr.address);
-                    break;
-                }
-
                 LOG_INFO("FT6336U touchscreen found");
                 type = FT6336U;
+                break;
+            }
+
+            case ADS1X15_ADDR_ALT1:
+            case ADS1X15_ADDR_ALT2:
+            case ADS1X15_ADDR_ALT3: {
+                // ADS1X15 default config register is 8583h
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
+                if (registerValue == 0x8583 || registerValue == 0x8580) {
+                    type = ADS1X15_ALT;
+                    logFoundDevice("ADS1X15_ALT", (uint8_t)addr.address);
+                    break;
+                }
                 break;
             }
 

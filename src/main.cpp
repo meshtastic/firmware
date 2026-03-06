@@ -677,6 +677,8 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ADS1X15, meshtastic_TelemetrySensorType_ADS1X15);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ADS1X15_ALT, meshtastic_TelemetrySensorType_ADS1X15_ALT);
 #endif
 
 #ifdef HAS_SDCARD
