@@ -52,6 +52,7 @@ struct pinMapping {
     int gpiochip;
     int line;
     bool enabled = false;
+    bool default_high = false;
 };
 
 extern std::ofstream traceFile;
@@ -164,6 +165,7 @@ extern struct portduino_config_struct {
     bool ascii_logs_explicit = false;
 
     std::string JSONFilename;
+    int JSONFileRotate = 0;
     meshtastic_PortNum JSONFilter = (_meshtastic_PortNum)0;
 
     // Webserver
@@ -194,6 +196,8 @@ extern struct portduino_config_struct {
     std::string available_directory = "/etc/meshtasticd/available.d/";
     int maxtophone = 100;
     int MaxNodes = 200;
+
+    std::unordered_map<std::string, std::string> hat_plus_custom_fields;
 
     pinMapping *all_pins[21] = {&lora_cs_pin,
                                 &lora_irq_pin,
@@ -469,6 +473,9 @@ extern struct portduino_config_struct {
             out << YAML::Key << "TraceFile" << YAML::Value << traceFilename;
         if (JSONFilename != "") {
             out << YAML::Key << "JSONFile" << YAML::Value << JSONFilename;
+            if (JSONFileRotate != 0)
+                out << YAML::Key << "JSONFileRotate" << YAML::Value << JSONFileRotate;
+
             if (JSONFilter == meshtastic_PortNum_TEXT_MESSAGE_APP)
                 out << YAML::Key << "JSONFilter" << YAML::Value << "textmessage";
             else if (JSONFilter == meshtastic_PortNum_TELEMETRY_APP)

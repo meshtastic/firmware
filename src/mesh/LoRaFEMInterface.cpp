@@ -41,18 +41,33 @@ void LoRaFEMInterface::init(void)
     }
 #elif defined(USE_GC1109_PA)
     fem_type = GC1109_PA;
+    pinMode(LORA_PA_POWER, OUTPUT);
+    digitalWrite(LORA_PA_POWER, HIGH);
 #if defined(ARCH_ESP32)
     rtc_gpio_hold_dis((gpio_num_t)LORA_PA_POWER);
     rtc_gpio_hold_dis((gpio_num_t)LORA_GC1109_PA_EN);
     rtc_gpio_hold_dis((gpio_num_t)LORA_GC1109_PA_TX_EN);
 #endif
-    pinMode(LORA_PA_POWER, OUTPUT);
-    digitalWrite(LORA_PA_POWER, HIGH);
     delay(1);
     pinMode(LORA_GC1109_PA_EN, OUTPUT);
     digitalWrite(LORA_GC1109_PA_EN, HIGH);
     pinMode(LORA_GC1109_PA_TX_EN, OUTPUT);
     digitalWrite(LORA_GC1109_PA_TX_EN, LOW);
+#elif defined(USE_KCT8103L_PA)
+    fem_type = KCT8103L_PA;
+    pinMode(LORA_PA_POWER, OUTPUT);
+    digitalWrite(LORA_PA_POWER, HIGH);
+#if defined(ARCH_ESP32)
+    rtc_gpio_hold_dis((gpio_num_t)LORA_PA_POWER);
+    rtc_gpio_hold_dis((gpio_num_t)LORA_KCT8103L_PA_CSD);
+    rtc_gpio_hold_dis((gpio_num_t)LORA_KCT8103L_PA_CTX);
+#endif
+    delay(1);
+    pinMode(LORA_KCT8103L_PA_CSD, OUTPUT);
+    digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
+    pinMode(LORA_KCT8103L_PA_CTX, OUTPUT);
+    digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
+    setLnaCanControl(true);
 #endif
 }
 
@@ -73,6 +88,9 @@ void LoRaFEMInterface::setSleepModeEnable(void)
 #elif defined(USE_GC1109_PA)
     digitalWrite(LORA_GC1109_PA_EN, LOW);
     digitalWrite(LORA_GC1109_PA_TX_EN, LOW);
+#elif defined(USE_KCT8103L_PA)
+    // shutdown the PA
+    digitalWrite(LORA_KCT8103L_PA_CSD, LOW);
 #endif
 }
 
@@ -89,6 +107,9 @@ void LoRaFEMInterface::setTxModeEnable(void)
 #elif defined(USE_GC1109_PA)
     digitalWrite(LORA_GC1109_PA_EN, HIGH);    // CSD=1: Chip enabled
     digitalWrite(LORA_GC1109_PA_TX_EN, HIGH); // CPS: 1=full PA, 0=bypass (for RX, CPS is don't care)
+#elif defined(USE_KCT8103L_PA)
+    digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
+    digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
 #endif
 }
 
@@ -109,6 +130,13 @@ void LoRaFEMInterface::setRxModeEnable(void)
 #elif defined(USE_GC1109_PA)
     digitalWrite(LORA_GC1109_PA_EN, HIGH);    // CSD=1: Chip enabled
     digitalWrite(LORA_GC1109_PA_TX_EN, LOW);
+#elif defined(USE_KCT8103L_PA)
+    digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
+    if (lna_enabled) {
+        digitalWrite(LORA_KCT8103L_PA_CTX, LOW);
+    } else {
+        digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
+    }
 #endif
 }
 
@@ -143,6 +171,15 @@ void LoRaFEMInterface::setRxModeEnableWhenMCUSleep(void)
     rtc_gpio_hold_en((gpio_num_t)LORA_GC1109_PA_EN);
     gpio_pulldown_en((gpio_num_t)LORA_GC1109_PA_TX_EN);
 #endif
+#elif defined(USE_KCT8103L_PA)
+    digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
+    rtc_gpio_hold_en((gpio_num_t)LORA_KCT8103L_PA_CSD);
+    if (lna_enabled) {
+        digitalWrite(LORA_KCT8103L_PA_CTX, LOW);
+    } else {
+        digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
+    }
+    rtc_gpio_hold_en((gpio_num_t)LORA_KCT8103L_PA_CTX);
 #endif
 }
 
@@ -169,11 +206,9 @@ int8_t LoRaFEMInterface::powerConversion(int8_t loraOutputPower)
     }
 #else
 #ifdef ARCH_PORTDUINO
-    size_t num_pa_points = portduino_config.num_pa_points;
     const uint16_t *tx_gain = portduino_config.tx_gain_lora;
-    uint16_t tx_gain_num = num_pa_points;
+    uint16_t tx_gain_num = portduino_config.num_pa_points;
 #else
-    size_t num_pa_points = NUM_PA_POINTS;
     const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
     uint16_t tx_gain_num = NUM_PA_POINTS;
 #endif
