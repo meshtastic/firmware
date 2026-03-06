@@ -8,7 +8,7 @@ UpDownInterruptImpl1::UpDownInterruptImpl1() : UpDownInterruptBase("upDown1") {}
 
 bool UpDownInterruptImpl1::init()
 {
-#if defined(INPUTDRIVER_ENCODER_LEFT) && defined(INPUTDRIVER_ENCODER_RIGHT)
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER) && defined(INPUTDRIVER_ENCODER_LEFT) && defined(INPUTDRIVER_ENCODER_RIGHT)
     // Two-way rocker boards can provide direct pin mapping via variant macros.
     // Use that mapping when config-backed inputbroker pins are unset/disabled.
     if (!moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.inputbroker_pin_a == 0 ||
@@ -31,8 +31,13 @@ bool UpDownInterruptImpl1::init()
     uint8_t pinDown = moduleConfig.canned_message.inputbroker_pin_b;
     uint8_t pinPress = moduleConfig.canned_message.inputbroker_pin_press;
 
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER)
+    input_broker_event eventDown = INPUT_BROKER_RIGHT;
+    input_broker_event eventUp = INPUT_BROKER_LEFT;
+#else
     input_broker_event eventDown = INPUT_BROKER_USER_PRESS; // acts like RIGHT/DOWN
     input_broker_event eventUp = INPUT_BROKER_ALT_PRESS;    // acts like LEFT/UP
+#endif
     input_broker_event eventPressed = INPUT_BROKER_SELECT;
     input_broker_event eventPressedLong = INPUT_BROKER_SELECT_LONG;
     input_broker_event eventUpLong = INPUT_BROKER_UP_LONG;

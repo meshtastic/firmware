@@ -31,6 +31,7 @@
 #define DISPLAY_FORCE_SMALL_FONTS
 
 // Two-Way Rocker input (left/right + boot as press)
+#define INPUTDRIVER_TWO_WAY_ROCKER
 #define INPUTDRIVER_ENCODER_TYPE 2
 #define INPUTDRIVER_ENCODER_LEFT 3
 #define INPUTDRIVER_ENCODER_RIGHT 4
