@@ -10,6 +10,7 @@
 
 // Built-in RTC (I2C)
 #define PCF8563_RTC 0x51
+#define HAS_RTC 1
 #define I2C_SDA 18
 #define I2C_SCL 9
 
@@ -47,7 +48,7 @@
 #define LORA_SCK 8
 #define LORA_MISO 6
 #define LORA_MOSI 17
-#define LORA_CS 7
+#define LORA_CS 7 // CS not connected; IO7 is free
 #define LORA_RESET 21
 #define LORA_DIO2 16
 
