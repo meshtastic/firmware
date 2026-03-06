@@ -3,6 +3,9 @@ export DEBEMAIL="jbennett@incomsystems.biz"
 export PLATFORMIO_LIBDEPS_DIR=pio/libdeps
 export PLATFORMIO_PACKAGES_DIR=pio/packages
 export PLATFORMIO_CORE_DIR=pio/core
+export PLATFORMIO_SETTING_ENABLE_TELEMETRY=0
+export PLATFORMIO_SETTING_CHECK_PLATFORMIO_INTERVAL=3650
+export PLATFORMIO_SETTING_CHECK_PRUNE_SYSTEM_THRESHOLD=10240
 
 # Download libraries to `pio`
 platformio pkg install -e native-tft

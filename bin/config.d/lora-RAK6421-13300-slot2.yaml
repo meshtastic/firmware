@@ -4,5 +4,8 @@ Lora:
   Reset: 24 # IO4
   Busy: 19 # IO5
   # Ant_sw: 23 # IO3 
+  Enable_Pins:
+    - 26
+    - 23
   spidev: spidev0.1
   # CS: 7
