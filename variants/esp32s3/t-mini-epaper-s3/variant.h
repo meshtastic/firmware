@@ -30,15 +30,12 @@
 #define PIN_EINK_MOSI 15
 #define DISPLAY_FORCE_SMALL_FONTS
 
-// Rocker-style input (left/right + boot as press)
+// Two-Way Rocker input (left/right + boot as press)
 #define INPUTDRIVER_ENCODER_TYPE 2
-#define INPUTDRIVER_ENCODER_UP 4
-#define INPUTDRIVER_ENCODER_DOWN 3
+#define INPUTDRIVER_ENCODER_RIGHT 3
+#define INPUTDRIVER_ENCODER_LEFT 4
 #define INPUTDRIVER_ENCODER_BTN 0
 #define UPDOWN_LONG_PRESS_REPEAT_INTERVAL 150
-
-// Deep-sleep wake source
-#define BUTTON_PIN INPUTDRIVER_ENCODER_BTN
 
 // LoRa (SX1262)
 #define USE_SX1262
