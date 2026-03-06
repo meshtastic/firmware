@@ -2028,7 +2028,7 @@ void InkHUD::MenuApplet::sendText(NodeNum dest, ChannelIndex channel, const char
     service->sendToMesh(p, RX_SRC_LOCAL, true); // Send to mesh, cc to phone
 }
 
-// Free up any heap mmemory we'd used while selecting / sending canned messages
+// Free up any heap memory we'd used while selecting / sending canned messages
 void InkHUD::MenuApplet::freeCannedMessageResources()
 {
     cm.selectedMessageItem = nullptr;

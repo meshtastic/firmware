@@ -655,7 +655,7 @@ void InkHUD::WindowManager::refocusTile()
     }
 }
 
-// Seach for any applets which believe they are foreground, but no longer have a valid tile
+// Search for any applets which believe they are foreground, but no longer have a valid tile
 // Tidies up after layout changes at runtime
 void InkHUD::WindowManager::findOrphanApplets()
 {
