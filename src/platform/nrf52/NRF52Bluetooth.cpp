@@ -261,6 +261,12 @@ void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
     LOG_INFO("Init the Bluefruit nRF52 module");
+    // Ensure LFXO crystal is fully started before enabling SoftDevice.
+    // The framework starts LFXO in init() but doesn't wait for it.
+    while (!NRF_CLOCK->EVENTS_LFCLKSTARTED) {
+        delay(1);
+    }
+
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     Bluefruit.begin();
