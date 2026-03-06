@@ -8,18 +8,13 @@ UpDownInterruptImpl1::UpDownInterruptImpl1() : UpDownInterruptBase("upDown1") {}
 
 bool UpDownInterruptImpl1::init()
 {
-#if defined(INPUTDRIVER_ENCODER_LEFT) && defined(INPUTDRIVER_ENCODER_RIGHT)
-    // Two-way rocker boards can provide direct pin mapping via variant macros.
-    // Use that mapping when config-backed inputbroker pins are unset/disabled.
-    if (!moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.inputbroker_pin_a == 0 ||
-        moduleConfig.canned_message.inputbroker_pin_b == 0) {
-        moduleConfig.canned_message.updown1_enabled = true;
-        moduleConfig.canned_message.inputbroker_pin_a = INPUTDRIVER_ENCODER_RIGHT;
-        moduleConfig.canned_message.inputbroker_pin_b = INPUTDRIVER_ENCODER_LEFT;
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER) && defined(INPUTDRIVER_ENCODER_LEFT) && defined(INPUTDRIVER_ENCODER_RIGHT)
+    moduleConfig.canned_message.updown1_enabled = true;
+    moduleConfig.canned_message.inputbroker_pin_a = INPUTDRIVER_ENCODER_LEFT;
+    moduleConfig.canned_message.inputbroker_pin_b = INPUTDRIVER_ENCODER_RIGHT;
 #if defined(INPUTDRIVER_ENCODER_BTN)
-        moduleConfig.canned_message.inputbroker_pin_press = INPUTDRIVER_ENCODER_BTN;
+    moduleConfig.canned_message.inputbroker_pin_press = INPUTDRIVER_ENCODER_BTN;
 #endif
-    }
 #endif
 
     if (!moduleConfig.canned_message.updown1_enabled) {
