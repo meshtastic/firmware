@@ -48,4 +48,5 @@ class TipsApplet : public SystemApplet
 };
 
 } // namespace NicheGraphics::InkHUD
+
 #endif
