@@ -778,14 +778,12 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                             LOG_WARN("Encryption of new TR packet failed, sending original TR to MQTT");
                             packetPool.release(p_encrypted_new);
                             p_encrypted_new = nullptr;
-                        }
-                        else {
+                        } else {
                             // Successfully re-encrypted, release the original encrypted packet and use the new one for MQTT
                             packetPool.release(p_encrypted);
                             p_encrypted = p_encrypted_new;
                         }
-                    }
-                    else {
+                    } else {
                         // Allocation failed, log a warning and fall back to sending the original encrypted packet to MQTT
                         LOG_WARN("Failed to allocate new encrypted packet for TR, sending original TR to MQTT");
                     }
