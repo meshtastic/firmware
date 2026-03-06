@@ -52,6 +52,7 @@ struct pinMapping {
     int gpiochip;
     int line;
     bool enabled = false;
+    bool default_high = false;
 };
 
 extern std::ofstream traceFile;
@@ -194,6 +195,8 @@ extern struct portduino_config_struct {
     std::string available_directory = "/etc/meshtasticd/available.d/";
     int maxtophone = 100;
     int MaxNodes = 200;
+
+    std::unordered_map<std::string, std::string> hat_plus_custom_fields;
 
     pinMapping *all_pins[21] = {&lora_cs_pin,
                                 &lora_irq_pin,
