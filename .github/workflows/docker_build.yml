@@ -86,7 +86,7 @@ jobs:
           flavor: latest=false
 
       - name: Docker build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         id: docker_variant
         with:
           context: .
