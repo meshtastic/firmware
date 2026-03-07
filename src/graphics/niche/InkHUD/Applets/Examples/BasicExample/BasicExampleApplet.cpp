@@ -6,7 +6,7 @@ using namespace NicheGraphics;
 
 // All drawing happens here
 // Our basic example doesn't do anything useful. It just passively prints some text.
-void InkHUD::BasicExampleApplet::onRender()
+void InkHUD::BasicExampleApplet::onRender(bool full)
 {
     printAt(0, 0, "Hello, World!");
 

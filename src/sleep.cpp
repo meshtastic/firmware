@@ -5,20 +5,20 @@
 #endif
 
 #include "Default.h"
-#include "Led.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "TransmitHistory.h"
 #include "detect/LoRaRadioType.h"
 #include "error.h"
 #include "main.h"
+#include "modules/StatusLEDModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 
 #ifdef ARCH_ESP32
-// Note: esp_pm_config_esp32_t was deprecated in ESP-IDF 5.x, replaced by
-// esp_pm_config_t See enableModemSleep() for version-conditional handling
+// "esp_pm_config_esp32_t is deprecated, please include esp_pm.h and use esp_pm_config_t instead"
 #include "esp32/pm.h"
 #include "esp_pm.h"
 #if HAS_WIFI
@@ -47,12 +47,10 @@ extern XPowersPPM *PPM;
 #define INCLUDE_vTaskSuspend 0
 #endif
 
-/// Called to ask any observers if they want to veto sleep. Return 1 to veto or
-/// 0 to allow sleep to happen
+/// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
 Observable<void *> preflightSleep;
 
-/// Called to tell observers we are now entering (deep) sleep and you should
-/// prepare.  Must return 0
+/// Called to tell observers we are now entering (deep) sleep and you should prepare.  Must return 0
 Observable<void *> notifyDeepSleep;
 
 /// Called to tell observers we are rebooting ASAP.  Must return 0
@@ -76,8 +74,7 @@ RTC_DATA_ATTR int bootCount = 0;
 /**
  * Control CPU core speed (80MHz vs 240MHz)
  *
- * We leave CPU at full speed during init, but once loop is called switch to low
- * speed (for a 50% power savings)
+ * We leave CPU at full speed during init, but once loop is called switch to low speed (for a 50% power savings)
  *
  */
 void setCPUFast(bool on)
@@ -101,8 +98,7 @@ void setCPUFast(bool on)
         return;
     }
 
-// The Heltec LORA32 V1 runs at 26 MHz base frequency and doesn't react well to
-// switching to 80 MHz...
+// The Heltec LORA32 V1 runs at 26 MHz base frequency and doesn't react well to switching to 80 MHz...
 #if !defined(ARDUINO_HELTEC_WIFI_LORA_32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
     setCpuFrequencyMhz(on ? 240 : 80);
 #endif
@@ -141,16 +137,13 @@ void initDeepSleep()
     /*
       Not using yet because we are using wake on all buttons being low
 
-      wakeButtons = esp_sleep_get_ext1_wakeup_status();       // If one of these
-      buttons is set it was the reason we woke if (wakeCause ==
-      ESP_SLEEP_WAKEUP_EXT1 && !wakeButtons) // we must have been using the 'all
-      buttons rule for waking' to support busted boards, assume button one was
-      pressed wakeButtons = ((uint64_t)1) << buttons.gpios[0];
+      wakeButtons = esp_sleep_get_ext1_wakeup_status();       // If one of these buttons is set it was the reason we woke
+      if (wakeCause == ESP_SLEEP_WAKEUP_EXT1 && !wakeButtons) // we must have been using the 'all buttons rule for waking' to
+      support busted boards, assume button one was pressed wakeButtons = ((uint64_t)1) << buttons.gpios[0];
       */
 
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
-    // If we booted because our timer ran out or the user pressed reset, send
-    // those as fake events
+    // If we booted because our timer ran out or the user pressed reset, send those as fake events
     RESET_REASON hwReason = rtc_get_reset_reason(0);
 
     if (hwReason == RTCWDT_BROWN_OUT_RESET)
@@ -197,12 +190,10 @@ static void waitEnterSleep(bool skipPreflight = false)
     if (!skipPreflight) {
         uint32_t now = millis();
         while (!doPreflightSleep()) {
-            delay(100); // Kinda yucky - wait until radio says say we can shutdown
-                        // (finished in process sends/receives)
+            delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
             if (!Throttle::isWithinTimespanMs(now,
-                                              THIRTY_SECONDS_MS)) { // If we wait too long just report an error
-                                                                    // and go to sleep
+                                              THIRTY_SECONDS_MS)) { // If we wait too long just report an error and go to sleep
                 RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_SLEEP_ENTER_WAIT);
                 assert(0); // FIXME - for now we just restart, need to fix bug #167
                 break;
@@ -248,10 +239,13 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
         nodeDB->saveToDisk();
     }
 
+    // Persist broadcast transmit times so throttle survives reboot
+    if (transmitHistory)
+        transmitHistory->saveToDisk();
+
 #ifdef PIN_POWER_EN
     digitalWrite(PIN_POWER_EN, LOW);
     pinMode(PIN_POWER_EN, INPUT); // power off peripherals
-                                  // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
 
 #ifdef RAK_WISMESH_TAP_V2
@@ -279,11 +273,9 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     digitalWrite(PIN_WD_EN, LOW);
 #endif
 #endif
-    ledBlink.set(false);
-
+    statusLEDModule->setPowerLED(false);
 #ifdef RESET_OLED
-    digitalWrite(RESET_OLED,
-                 1); // put the display in reset before killing its power
+    digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
 #endif
 
 #if defined(VEXT_ENABLE)
@@ -332,19 +324,16 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 
 #ifdef HAS_PMU
     if (pmu_found && PMU) {
-        // Obsolete comment: from back when we we used to receive lora packets while
-        // CPU was in deep sleep. We no longer do that, because our light-sleep
-        // current draws are low enough and it provides fast start/low cost wake. We
-        // currently use deep sleep only for 'we want our device to actually be off
-        // - because our battery is critically low'.  So in deep sleep we DO shut
-        // down power to LORA (and when we boot later we completely reinit it)
+        // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
+        // We no longer do that, because our light-sleep current draws are low enough and it provides fast start/low cost
+        // wake.  We currently use deep sleep only for 'we want our device to actually be off - because our battery is
+        // critically low'.  So in deep sleep we DO shut down power to LORA (and when we boot later we completely reinit it)
         //
-        // No need to turn this off if the power draw in sleep mode really is just
-        // 0.2uA and turning it off would leave floating input for the IRQ line If
-        // we want to leave the radio receiving in would be 11.5mA current draw, but
-        // most of the time it is just waiting in its sequencer (true?) so the
-        // average power draw should be much lower even if we were listening for
-        // packets all the time.
+        // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
+        // leave floating input for the IRQ line
+        // If we want to leave the radio receiving in would be 11.5mA current draw, but most of the time it is just waiting
+        // in its sequencer (true?) so the average power draw should be much lower even if we were listening for packets
+        // all the time.
         PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
 
         uint8_t model = PMU->getChipModel();
@@ -384,15 +373,14 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 /**
  * enter light sleep (preserves ram but stops everything about CPU).
  *
- * Returns (after restoring hw state) when the user presses a button or we get a
- * LoRa interrupt
+ * Returns (after restoring hw state) when the user presses a button or we get a LoRa interrupt
  */
-esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec)
+esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
 {
     // LOG_DEBUG("Enter light sleep");
 
-    // LORA_DIO1 is an extended IO pin. Setting it as a wake-up pin will cause
-    // problems, such as the indicator device not entering LightSleep.
+    // LORA_DIO1 is an extended IO pin. Setting it as a wake-up pin will cause problems, such as the indicator device not entering
+    // LightSleep.
 #if defined(SENSECAP_INDICATOR)
     return ESP_SLEEP_WAKEUP_TIMER;
 #endif
@@ -412,28 +400,26 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec)
 #endif
 
 #ifdef SERIAL0_RX_GPIO
-    // We treat the serial port as a GPIO for a fast/low power way of waking, if
-    // we see a rising edge that means someone started to send something
+    // We treat the serial port as a GPIO for a fast/low power way of waking, if we see a rising edge that means
+    // someone started to send something
 
     // gpio 3 is RXD for serialport 0 on ESP32
     // Send a few Z characters to wake the port
 
-    // this doesn't work on TBEAMs when the USB is depowered (causes bogus
-    // interrupts) So we disable this "wake on serial" feature - because now when
-    // a TBEAM (only) has power connected it never tries to go to sleep if the
-    // user is using the API gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO,
-    // GPIO_INTR_LOW_LEVEL);
+    // this doesn't work on TBEAMs when the USB is depowered (causes bogus interrupts)
+    // So we disable this "wake on serial" feature - because now when a TBEAM (only) has power connected it
+    // never tries to go to sleep if the user is using the API
+    // gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO, GPIO_INTR_LOW_LEVEL);
 
-    // doesn't help - I think the USB-UART chip losing power is pulling the signal
-    // low gpio_pullup_en((gpio_num_t)SERIAL0_RX_GPIO);
+    // doesn't help - I think the USB-UART chip losing power is pulling the signal low
+    // gpio_pullup_en((gpio_num_t)SERIAL0_RX_GPIO);
 
-    // alas - can only work if using the refclock, which is limited to about 9600
-    // bps assert(uart_set_wakeup_threshold(UART_NUM_0, 3) == ESP_OK);
+    // alas - can only work if using the refclock, which is limited to about 9600 bps
+    // assert(uart_set_wakeup_threshold(UART_NUM_0, 3) == ESP_OK);
     // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef ROTARY_PRESS
-    // The enableLoraInterrupt() method is using ext0_wakeup, so we are forced to
-    // use GPIO wakeup
+    // The enableLoraInterrupt() method is using ext0_wakeup, so we are forced to use GPIO wakeup
     gpio_wakeup_enable((gpio_num_t)ROTARY_PRESS, GPIO_INTR_LOW_LEVEL);
 #endif
 #ifdef KB_INT
@@ -451,8 +437,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec)
 #endif
     enableLoraInterrupt();
 #ifdef PMU_IRQ
-    // wake due to PMU can happen repeatedly if there is no battery installed or
-    // the battery fills
+    // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
     if (pmu_found)
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
@@ -474,8 +459,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec)
         LOG_ERROR("esp_light_sleep_start result %d", res);
     }
     // commented out because it's not that crucial;
-    // if it sporadically happens the node will go into light sleep during the
-    // next round assert(res == ESP_OK);
+    // if it sporadically happens the node will go into light sleep during the next round
+    // assert(res == ESP_OK);
 #ifdef ROTARY_PRESS
     gpio_wakeup_disable((gpio_num_t)ROTARY_PRESS);
 #endif
@@ -522,14 +507,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec)
 // not legal on the stock android ESP build
 
 /**
- * enable modem sleep mode as needed and available.  Should lower our CPU
- * current draw to an average of about 20mA.
+ * enable modem sleep mode as needed and available.  Should lower our CPU current draw to an average of about 20mA.
  *
- * per
- * https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/system/power_management.html
+ * per https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/system/power_management.html
  *
- * supposedly according to https://github.com/espressif/arduino-esp32/issues/475
- * this is already done in arduino
+ * supposedly according to https://github.com/espressif/arduino-esp32/issues/475 this is already done in arduino
  */
 void enableModemSleep()
 {
@@ -557,7 +539,8 @@ void enableModemSleep()
 
 bool shouldLoraWake(uint32_t msecToWake)
 {
-    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER);
+    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+                                          config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE);
 }
 
 void enableLoraInterrupt()
@@ -578,10 +561,8 @@ void enableLoraInterrupt()
     gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
 
-#if defined(USE_GC1109_PA)
-    gpio_pullup_en((gpio_num_t)LORA_PA_POWER);
-    gpio_pullup_en((gpio_num_t)LORA_PA_EN);
-    gpio_pulldown_en((gpio_num_t)LORA_PA_TX_EN);
+#if HAS_LORA_FEM
+    loraFEMInterface.setRxModeEnableWhenMCUSleep();
 #endif
 
     LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);
@@ -590,15 +571,13 @@ void enableLoraInterrupt()
 #elif defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     if (radioType != RF95_RADIO) {
         LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);
-        gpio_wakeup_enable((gpio_num_t)LORA_DIO1,
-                           GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
+        gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
     }
 #endif
 #if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
     if (radioType == RF95_RADIO) {
         LOG_INFO("setup RF95_IRQ (GPIO%02d) with wakeup by gpio interrupt", RF95_IRQ);
-        gpio_wakeup_enable((gpio_num_t)RF95_IRQ,
-                           GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+        gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
     }
 #endif
 }

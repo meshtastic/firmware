@@ -39,16 +39,15 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define PIN_LED1 (0 + 4)  // green (confirmed on 1.0 board)
-#define LED_BLUE PIN_LED1 // fake for bluefruit library
+#define PIN_LED1 (32 + 15) // green (confirmed on 1.0 board)
+#define LED_BLUE PIN_LED1  // fake for bluefruit library
 #define LED_GREEN PIN_LED1
-#define LED_BUILTIN LED_GREEN
 #define LED_STATE_ON 0 // State when LED is lit
 
-#define HAS_NEOPIXEL                         // Enable the use of neopixels
-#define NEOPIXEL_COUNT 1                     // How many neopixels are connected
-#define NEOPIXEL_DATA (32 + 15)              // gpio pin used to send data to the neopixels
-#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
+// #define HAS_NEOPIXEL                         // Enable the use of neopixels
+// #define NEOPIXEL_COUNT 1                     // How many neopixels are connected
+// #define NEOPIXEL_DATA (32 + 15)              // gpio pin used to send data to the neopixels
+// #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
 
 /*
  * Buttons
@@ -60,8 +59,8 @@ extern "C" {
 /*
 No longer populated on PCB
 */
-#define PIN_SERIAL2_RX (0 + 9)
-#define PIN_SERIAL2_TX (0 + 10)
+#define PIN_SERIAL2_RX (-1)
+#define PIN_SERIAL2_TX (-1)
 
 /*
  * I2C
@@ -133,14 +132,20 @@ No longer populated on PCB
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
 
-// #define PIN_PWR_EN (0 + 6)
-
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
+
+// Hardware watchdog
+#define HAS_HARDWARE_WATCHDOG
+#define HARDWARE_WATCHDOG_DONE (0 + 9)
+#define HARDWARE_WATCHDOG_WAKE (0 + 10)
+#define HARDWARE_WATCHDOG_TIMEOUT_MS (6 * 60 * 1000) // 6 minute watchdog
 
 #define BQ4050_SDA_PIN (32 + 1)                // I2C data line pin
 #define BQ4050_SCL_PIN (32 + 0)                // I2C clock line pin
 #define BQ4050_EMERGENCY_SHUTDOWN_PIN (32 + 3) // Emergency shutdown pin
+
+#define SERIAL_PRINT_PORT 0
 
 #ifdef __cplusplus
 }

@@ -74,7 +74,6 @@ extern "C" {
 #define PIN_LED1 (32 + 3) // green (confirmed on 1.0 board)
 #define LED_BLUE PIN_LED1 // fake for bluefruit library
 #define LED_GREEN PIN_LED1
-#define LED_BUILTIN LED_GREEN
 #define LED_STATE_ON 0 // State when LED is lit
 
 #define HAS_NEOPIXEL                         // Enable the use of neopixels
@@ -151,6 +150,14 @@ No longer populated on PCB
 #define PIN_SPI1_SCK ST7789_SCK
 
 /*
+ * Bluetooth
+ */
+
+// The bluetooth transmit power on the nRF52840 is adjustable from -20dB to +8dB in steps of 4dB
+// so NRF52_BLE_TX_POWER can be set to -20, -16, -12, -8, -4, 0 (default), 4, and 8.
+// #define NRF52_BLE_TX_POWER 8
+
+/*
  * GPS pins
  */
 
@@ -185,8 +192,6 @@ No longer populated on PCB
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
 
-// #define PIN_PWR_EN (0 + 6)
-
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
 
@@ -218,7 +223,6 @@ No longer populated on PCB
 // VBAT=4.04V
 #define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_2_8
 
-#define HAS_RTC 0
 #ifdef __cplusplus
 }
 #endif

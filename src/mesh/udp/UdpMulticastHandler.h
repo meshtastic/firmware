@@ -22,10 +22,14 @@
 class UdpMulticastHandler final
 {
   public:
-    UdpMulticastHandler() { udpIpAddress = IPAddress(224, 0, 0, 69); }
+    UdpMulticastHandler() : isRunning(false) { udpIpAddress = IPAddress(224, 0, 0, 69); }
 
     void start()
     {
+        if (isRunning) {
+            LOG_DEBUG("UDP multicast already running");
+            return;
+        }
         if (udp.listenMulticast(udpIpAddress, UDP_MULTICAST_DEFAUL_PORT, 64)) {
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
             LOG_DEBUG("UDP Listening on IP: %u.%u.%u.%u:%u", udpIpAddress[0], udpIpAddress[1], udpIpAddress[2], udpIpAddress[3],
@@ -34,13 +38,29 @@ class UdpMulticastHandler final
             LOG_DEBUG("UDP Listening on IP: %s", WiFi.localIP().toString().c_str());
 #endif
             udp.onPacket([this](AsyncUDPPacket packet) { onReceive(packet); });
+            isRunning = true;
         } else {
             LOG_DEBUG("Failed to listen on UDP");
         }
     }
 
-    void onReceive(AsyncUDPPacket packet)
+    void stop()
     {
+        if (!isRunning) {
+            return;
+        }
+        LOG_DEBUG("Stopping UDP multicast");
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+        udp.close();
+#endif
+        isRunning = false;
+    }
+
+    void onReceive(AsyncUDPPacket &packet)
+    {
+        if (!isRunning) {
+            return;
+        }
         size_t packetLength = packet.length();
 #if defined(ARCH_NRF52)
         IPAddress ip = packet.remoteIP();
@@ -67,7 +87,7 @@ class UdpMulticastHandler final
 
     bool onSend(const meshtastic_MeshPacket *mp)
     {
-        if (!mp || !udp) {
+        if (!isRunning || !mp || !udp) {
             return false;
         }
 #if defined(ARCH_NRF52)
@@ -85,12 +105,12 @@ class UdpMulticastHandler final
         LOG_DEBUG("Broadcasting packet over UDP (id=%u)", mp->id);
         uint8_t buffer[meshtastic_MeshPacket_size];
         size_t encodedLength = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
-        udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
-        return true;
+        return udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
     }
 
   private:
     IPAddress udpIpAddress;
     AsyncUDP udp;
+    bool isRunning;
 };
 #endif // HAS_UDP_MULTICAST

@@ -45,9 +45,9 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     // Mute
     case INPUT_BROKER_MSG_MUTE_TOGGLE:
         if (moduleConfig.external_notification.enabled && externalNotificationModule) {
-            externalNotificationModule->setMute(externalNotificationModule->getMute());
+            externalNotificationModule->setMute(!externalNotificationModule->getMute());
             IF_SCREEN(if (!externalNotificationModule->getMute()) externalNotificationModule->stopNow(); screen->showSimpleBanner(
-                externalNotificationModule->getMute() ? "Notifications\nEnabled" : "Notifications\nDisabled", 3000);)
+                externalNotificationModule->getMute() ? "Notifications\nDisabled" : "Notifications\nEnabled", 3000);)
         }
         return 0;
     // Bluetooth

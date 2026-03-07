@@ -1,3 +1,5 @@
+#include "graphics/niche/InkHUD/Tile.h"
+#include <cstdint>
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
 #include "./Applet.h"
@@ -32,7 +34,7 @@ void InkHUD::Applet::drawPixel(int16_t x, int16_t y, uint16_t color)
 {
     // Only render pixels if they fall within user's cropped region
     if (x >= cropLeft && x < (cropLeft + cropWidth) && y >= cropTop && y < (cropTop + cropHeight))
-        assignedTile->handleAppletPixel(x, y, (Color)color);
+        assignedTile->handleAppletPixel(x, y, static_cast<Color>(color));
 }
 
 // Link our applet to a tile
@@ -55,7 +57,7 @@ InkHUD::Tile *InkHUD::Applet::getTile()
 }
 
 // Draw the applet
-void InkHUD::Applet::render()
+void InkHUD::Applet::render(bool full)
 {
     assert(assignedTile);                              // Ensure that we have a tile
     assert(assignedTile->getAssignedApplet() == this); // Ensure that we have a reciprocal link with the tile
@@ -65,10 +67,11 @@ void InkHUD::Applet::render()
     wantRender = false;                                       // Flag set by requestUpdate
     wantAutoshow = false;                                     // Flag set by requestAutoShow. May or may not have been honored.
     wantUpdateType = Drivers::EInk::UpdateTypes::UNSPECIFIED; // Update type we wanted. May on may not have been granted.
+    wantFullRender = true;                                    // Default to a full render
 
     updateDimensions();
     resetDrawingSpace();
-    onRender(); // Derived applet's drawing takes place here
+    onRender(full); // Draw the applet
 
     // Handle "Tile Highlighting"
     // Some devices may use an auxiliary button to switch between tiles
@@ -115,6 +118,11 @@ Drivers::EInk::UpdateTypes InkHUD::Applet::wantsUpdateType()
     return wantUpdateType;
 }
 
+bool InkHUD::Applet::wantsFullRender()
+{
+    return wantFullRender;
+}
+
 // Get size of the applet's drawing space from its tile
 // Performed immediately before derived applet's drawing code runs
 void InkHUD::Applet::updateDimensions()
@@ -136,16 +144,32 @@ void InkHUD::Applet::resetDrawingSpace()
     setFont(fontSmall);
 }
 
+// Sets one or more inputs to enabled/disabled for this applet and if they should be sent to it
+void InkHUD::Applet::setInputsSubscribed(uint8_t input, bool captured)
+{
+    if (captured)
+        subscribedInputs |= input;
+    else
+        subscribedInputs &= ~input;
+}
+
+// Checks if a specific input is enabled for this applet and should be sent to it
+bool InkHUD::Applet::isInputSubscribed(InputMask input)
+{
+    return (subscribedInputs & input) == input;
+}
+
 // Tell InkHUD::Renderer that we want to render now
 // Applets should internally listen for events they are interested in, via MeshModule, CallbackObserver etc
 // When an applet decides it has heard something important, and wants to redraw, it calls this method
 // Once the renderer has given other applets a chance to process whatever event we just detected,
 // it will run Applet::render(), which may draw our applet to screen, if it is shown (foreground)
 // We should requestUpdate even if our applet is currently background, because this might be changed by autoshow
-void InkHUD::Applet::requestUpdate(Drivers::EInk::UpdateTypes type)
+void InkHUD::Applet::requestUpdate(Drivers::EInk::UpdateTypes type, bool full)
 {
     wantRender = true;
     wantUpdateType = type;
+    wantFullRender = full;
     inkhud->requestUpdate();
 }
 
@@ -303,7 +327,7 @@ void InkHUD::Applet::printAt(int16_t x, int16_t y, const char *text, HorizontalA
 }
 
 // Print text, specifying the position of any edge / corner of the textbox
-void InkHUD::Applet::printAt(int16_t x, int16_t y, std::string text, HorizontalAlignment ha, VerticalAlignment va)
+void InkHUD::Applet::printAt(int16_t x, int16_t y, const std::string &text, HorizontalAlignment ha, VerticalAlignment va)
 {
     printAt(x, y, text.c_str(), ha, va);
 }
@@ -325,7 +349,7 @@ InkHUD::AppletFont InkHUD::Applet::getFont()
 
 // Parse any text which might have "special characters"
 // Re-encodes UTF-8 characters to match our 8-bit encoded fonts
-std::string InkHUD::Applet::parse(std::string text)
+std::string InkHUD::Applet::parse(const std::string &text)
 {
     return getFont().decodeUTF8(text);
 }
@@ -352,10 +376,10 @@ std::string InkHUD::Applet::parseShortName(meshtastic_NodeInfoLite *node)
 }
 
 // Determine if all characters of a string are printable using the current font
-bool InkHUD::Applet::isPrintable(std::string text)
+bool InkHUD::Applet::isPrintable(const std::string &text)
 {
     // Scan for SUB (0x1A), which is the value assigned by AppletFont::applyEncoding if a unicode character is not handled
-    for (char &c : text) {
+    for (const char &c : text) {
         if (c == '\x1A')
             return false;
     }
@@ -378,7 +402,7 @@ uint16_t InkHUD::Applet::getTextWidth(const char *text)
 
 // Gets rendered width of a string
 // Wrapper for getTextBounds
-uint16_t InkHUD::Applet::getTextWidth(std::string text)
+uint16_t InkHUD::Applet::getTextWidth(const std::string &text)
 {
     return getTextWidth(text.c_str());
 }
@@ -426,7 +450,7 @@ std::string InkHUD::Applet::hexifyNodeNum(NodeNum num)
 
 // Print text, with word wrapping
 // Avoids splitting words in half, instead moving the entire word to a new line wherever possible
-void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std::string text)
+void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, const std::string &text)
 {
     // Place the AdafruitGFX cursor to suit our "top" coord
     setCursor(left, top + getFont().heightAboveCursor());
@@ -483,15 +507,15 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
 
                 // Todo: rewrite making use of AdafruitGFX native text wrapping
                 char cstr[] = {0, 0};
-                int16_t l, t;
-                uint16_t w, h;
+                int16_t bx, by;
+                uint16_t bw, bh;
                 for (uint16_t c = 0; c < word.length(); c++) {
                     // Shove next char into a c string
                     cstr[0] = word[c];
-                    getTextBounds(cstr, getCursorX(), getCursorY(), &l, &t, &w, &h);
+                    getTextBounds(cstr, getCursorX(), getCursorY(), &bx, &by, &bw, &bh);
 
                     // Manual newline, if next character will spill beyond screen edge
-                    if ((l + w) > left + width)
+                    if ((bx + bw) > left + width)
                         setCursor(left, getCursorY() + getFont().lineHeight());
 
                     // Print next character
@@ -510,7 +534,7 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
 
 // Simulate running printWrapped, to determine how tall the block of text will be.
 // This is a wasteful way of handling things. Maybe some way to optimize in future?
-uint32_t InkHUD::Applet::getWrappedTextHeight(int16_t left, uint16_t width, std::string text)
+uint32_t InkHUD::Applet::getWrappedTextHeight(int16_t left, uint16_t width, const std::string &text)
 {
     // Cache the current crop region
     int16_t cL = cropLeft;
@@ -640,7 +664,7 @@ uint16_t InkHUD::Applet::getActiveNodeCount()
 
     // For each node in db
     for (uint16_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
 
         // Check if heard recently, and not our own node
         if (sinceLastSeen(node) < settings->recentlyActiveSeconds && node->num != nodeDB->getNodeNum())
@@ -693,7 +717,7 @@ std::string InkHUD::Applet::localizeDistance(uint32_t meters)
 }
 
 // Print text with a "faux bold" effect, by drawing it multiple times, offsetting slightly
-void InkHUD::Applet::printThick(int16_t xCenter, int16_t yCenter, std::string text, uint8_t thicknessX, uint8_t thicknessY)
+void InkHUD::Applet::printThick(int16_t xCenter, int16_t yCenter, const std::string &text, uint8_t thicknessX, uint8_t thicknessY)
 {
     // How many times to draw along x axis
     int16_t xStart;
@@ -761,7 +785,7 @@ bool InkHUD::Applet::approveNotification(NicheGraphics::InkHUD::Notification &n)
 │                               │
 └───────────────────────────────┘
 */
-void InkHUD::Applet::drawHeader(std::string text)
+void InkHUD::Applet::drawHeader(const std::string &text)
 {
     // Y position for divider
     // - between header text and messages
@@ -777,6 +801,16 @@ void InkHUD::Applet::drawHeader(std::string text)
     for (int16_t x = 0; x < width(); x += 2) {
         drawPixel(x, 0, BLACK);
         drawPixel(x, headerDivY, BLACK); // Dotted 50%
+    }
+
+    // Dither near battery
+    if (settings->optionalFeatures.batteryIcon) {
+        constexpr uint16_t ditherSizePx = 4;
+        Tile *batteryTile = ((Applet *)inkhud->getSystemApplet("BatteryIcon"))->getTile();
+        const uint16_t batteryTileLeft = batteryTile->getLeft();
+        const uint16_t batteryTileTop = batteryTile->getTop();
+        const uint16_t batteryTileHeight = batteryTile->getHeight();
+        hatchRegion(batteryTileLeft - ditherSizePx, batteryTileTop, ditherSizePx, batteryTileHeight, 2, WHITE);
     }
 }
 

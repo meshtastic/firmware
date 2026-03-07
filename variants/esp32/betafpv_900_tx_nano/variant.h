@@ -20,7 +20,7 @@
 #define LORA_DIO2
 #define LORA_DIO3
 
-#define LED_PIN 16 // green - blue is at 17
+#define LED_POWER 16 // green - blue is at 17
 
 #define BUTTON_PIN 25
 #define BUTTON_NEED_PULLUP

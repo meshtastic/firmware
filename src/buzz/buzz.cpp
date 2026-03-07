@@ -35,6 +35,14 @@ struct ToneDuration {
 #define NOTE_G6 1568
 #define NOTE_E7 2637
 
+#define NOTE_C4 262
+#define NOTE_E4 330
+#define NOTE_G4 392
+#define NOTE_A4 440
+#define NOTE_C5 523
+#define NOTE_E5 659
+#define NOTE_G5 784
+
 const int DURATION_1_16 = 62;  // 1/16 note
 const int DURATION_1_8 = 125;  // 1/8 note
 const int DURATION_1_4 = 250;  // 1/4 note
@@ -65,7 +73,7 @@ void playTones(const ToneDuration *tone_durations, int size)
 
 void playBeep()
 {
-    ToneDuration melody[] = {{NOTE_B3, DURATION_1_8}};
+    ToneDuration melody[] = {{NOTE_B3, DURATION_1_16}};
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
@@ -187,5 +195,19 @@ void playComboTune()
         {NOTE_CS4, 60}, // Quick trill up
         {NOTE_B3, 120}  // Ending chirp
     };
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
+
+void play4ClickDown()
+{
+    ToneDuration melody[] = {{NOTE_G5, 55}, {NOTE_E5, 55}, {NOTE_C5, 60},  {NOTE_A4, 55},  {NOTE_G4, 55},
+                             {NOTE_E4, 65}, {NOTE_C4, 80}, {NOTE_G3, 120}, {NOTE_E3, 160}, {NOTE_SILENT, 120}};
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
+
+void play4ClickUp()
+{
+    // Quick high-pitched notes with trills
+    ToneDuration melody[] = {{NOTE_F5, 50}, {NOTE_G6, 45}, {NOTE_E7, 60}};
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }

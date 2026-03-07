@@ -5,8 +5,13 @@
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "main.h"
 #include <Arduino.h>
 #include <functional>
+
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+#include "input/InputBroker.h"
+#endif
 
 class StatusLEDModule : private concurrency::OSThread
 {
@@ -16,6 +21,11 @@ class StatusLEDModule : private concurrency::OSThread
     StatusLEDModule();
 
     int handleStatusUpdate(const meshtastic::Status *);
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+    int handleInputEvent(const InputEvent *arg);
+#endif
+
+    void setPowerLED(bool);
 
   protected:
     unsigned int my_interval = 1000; // interval in millisconds
@@ -25,12 +35,17 @@ class StatusLEDModule : private concurrency::OSThread
         CallbackObserver<StatusLEDModule, const meshtastic::Status *>(this, &StatusLEDModule::handleStatusUpdate);
     CallbackObserver<StatusLEDModule, const meshtastic::Status *> powerStatusObserver =
         CallbackObserver<StatusLEDModule, const meshtastic::Status *>(this, &StatusLEDModule::handleStatusUpdate);
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+    CallbackObserver<StatusLEDModule, const InputEvent *> inputObserver =
+        CallbackObserver<StatusLEDModule, const InputEvent *>(this, &StatusLEDModule::handleInputEvent);
+#endif
 
   private:
     bool CHARGE_LED_state = LED_STATE_OFF;
     bool PAIRING_LED_state = LED_STATE_OFF;
 
     uint32_t PAIRING_LED_starttime = 0;
+    uint32_t lastUserbuttonTime = 0;
     uint32_t POWER_LED_starttime = 0;
     bool doing_fast_blink = false;
 
@@ -44,3 +59,7 @@ class StatusLEDModule : private concurrency::OSThread
 };
 
 extern StatusLEDModule *statusLEDModule;
+#ifdef RGB_LED_POWER
+#include "AmbientLightingThread.h"
+extern AmbientLightingThread *ambientLightingThread;
+#endif

@@ -22,6 +22,7 @@ class AsyncUDP : public Print, private concurrency::OSThread
 
     bool listenMulticast(IPAddress multicastIP, uint16_t port, uint8_t ttl = 64);
     bool writeTo(const uint8_t *data, size_t len, IPAddress ip, uint16_t port);
+    void close();
 
     size_t write(uint8_t b) override;
     size_t write(const uint8_t *data, size_t len) override;
@@ -30,6 +31,7 @@ class AsyncUDP : public Print, private concurrency::OSThread
   private:
     EthernetUDP udp;
     uint16_t localPort;
+    volatile bool isSending = false;
     std::function<void(AsyncUDPPacket)> _onPacket;
     virtual int32_t runOnce() override;
 };
@@ -37,7 +39,7 @@ class AsyncUDP : public Print, private concurrency::OSThread
 class AsyncUDPPacket
 {
   public:
-    AsyncUDPPacket(EthernetUDP &source);
+    explicit AsyncUDPPacket(EthernetUDP &source);
 
     IPAddress remoteIP();
     uint16_t length();

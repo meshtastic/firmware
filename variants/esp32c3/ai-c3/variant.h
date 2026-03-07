@@ -4,7 +4,7 @@
 #define I2C_SCL SCL
 
 #define BUTTON_PIN 9 // BOOT button
-#define LED_PIN 30   // RGB LED
+#define LED_POWER 30 // RGB LED
 
 #define USE_RF95
 #define LORA_SCK 4
