@@ -12,7 +12,7 @@
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 namespace graphics
 {
-enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker, text_input };
+enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker, signed_decimal_picker, text_input };
 
 struct BannerOverlayOptions {
     const char *message;
@@ -312,6 +312,8 @@ class Screen : public concurrency::OSThread
 
     void showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback);
     void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, std::function<void(uint32_t)> bannerCallback);
+    void showSignedDecimalPicker(const char *message, uint32_t durationMs, int initialValueTenths, int minValueTenths,
+                                 int maxValueTenths, std::function<void(int)> bannerCallback);
     void showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                        std::function<void(const std::string &)> textCallback);
 
@@ -701,6 +703,7 @@ class Screen : public concurrency::OSThread
             uint8_t firstFavorite = 255;
             uint8_t lastFavorite = 255;
             uint8_t lora = 255;
+            uint8_t environment = 255;
         } positions;
 
         uint8_t frameCount = 0;
