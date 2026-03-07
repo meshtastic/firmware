@@ -19,7 +19,8 @@ void initApiServer(int port)
 
 ethServerAPI::ethServerAPI(EthernetClient &_client) : ServerAPI(_client)
 {
-    LOG_INFO("Incoming ethernet connection");
+    auto ip = _client.remoteIP();
+    LOG_INFO("Incoming ethernet connection from %u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
     api_type = TYPE_ETH;
 }
 

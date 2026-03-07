@@ -5,7 +5,8 @@
 template <typename T>
 ServerAPI<T>::ServerAPI(T &_client) : StreamAPI(&client), concurrency::OSThread("ServerAPI"), client(_client)
 {
-    LOG_INFO("Incoming API connection");
+    auto ip = client.remoteIP();
+    LOG_INFO("Incoming API connection from %u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
 }
 
 template <typename T> ServerAPI<T>::~ServerAPI()
