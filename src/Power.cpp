@@ -710,14 +710,14 @@ bool Power::setup()
 #endif
     }
 #ifdef T_WATCH_S3   // I don't know if this particular modification is disruptive on other devices, so better keep this here
-#ifdef AXP2101_IRQ
+#ifdef PMU_IRQ
     /*
         This particular piece of code reacts to the pressing of the Power/Corona button by generating an interrupt that resets the counter of the run_once() function
         allowing me to use the function to make my button do whatever I want (in my case switching on or off the screen) whenever I want.
     */
-    pinMode(AXP2101_IRQ, INPUT_PULLUP);
+    pinMode(PMU_IRQ, INPUT_PULLUP);
     attachInterrupt(
-        AXP2101_IRQ,
+        PMU_IRQ,
         []() {//lambda that wakes the power thread
             power->setIntervalFromNow(0);
             runASAP = true;
