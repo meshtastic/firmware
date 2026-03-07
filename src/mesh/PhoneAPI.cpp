@@ -3,6 +3,9 @@
 #include "GPS.h"
 #endif
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
 #include "Channels.h"
 #include "Default.h"
 #include "FSCommon.h"
@@ -54,6 +57,16 @@ void PhoneAPI::handleStartConfig()
         observe(&service->fromNumChanged);
 #ifdef FSCom
         observe(&xModem.packetReady);
+#endif
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+        // New physical connection: reset per-connection PKC auth.
+        // Do NOT reset here on re-requests (want_config_id sent again within the same
+        // connection after auth) — that would strip auth from a client who just unlocked
+        // and is re-fetching the full unredacted config.
+        isAdminAuthorized = false;
+        // MED-2: s_localAdminAuthorized (device-level passphrase auth) is intentionally
+        // NOT reset here. It persists until an explicit Lock Now (revokeAllAuth()).
+        // Resetting it on every new connection would cause an auth DoS.
 #endif
     }
 
@@ -129,6 +142,13 @@ void PhoneAPI::close()
         config_state = 0;
         pauseBluetoothLogging = false;
         heartbeatReceived = false;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+        isAdminAuthorized = false;
+        // MED-2: do NOT reset s_localAdminAuthorized on disconnect.
+        // It represents device-level passphrase auth and must persist across connections
+        // until an explicit Lock Now (revokeAllAuth()). Resetting it here would revoke
+        // any passphrase-authenticated session the moment a second client connects.
+#endif
     }
 }
 
@@ -157,6 +177,21 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     if (pb_decode_from_bytes(buf, bufLength, &meshtastic_ToRadio_msg, &toRadioScratch)) {
         switch (toRadioScratch.which_payload_variant) {
         case meshtastic_ToRadio_packet_tag:
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!isAdminAuthorized && !s_localAdminAuthorized) {
+                // Allow admin messages addressed to this device — passphrase delivery must get through.
+                // AdminModule handles its own is_managed gate for those.
+                // Block everything else — unauthorized clients cannot inject mesh traffic.
+                // Require the packet to carry a decoded (not encrypted) payload so portnum is valid.
+                bool isLocalAdmin = toRadioScratch.packet.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                                    toRadioScratch.packet.decoded.portnum == meshtastic_PortNum_ADMIN_APP &&
+                                    toRadioScratch.packet.to == nodeDB->getNodeNum();
+                if (!isLocalAdmin) {
+                    LOG_INFO("TAK: Dropping non-admin ToRadio packet from unauthorized client");
+                    return false;
+                }
+            }
+#endif
             return handleToRadioPacket(toRadioScratch.packet);
         case meshtastic_ToRadio_want_config_id_tag:
             config_nonce = toRadioScratch.want_config_id;
@@ -168,6 +203,12 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             close();
             break;
         case meshtastic_ToRadio_xmodemPacket_tag:
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!isAdminAuthorized && !s_localAdminAuthorized) {
+                LOG_INFO("TAK: Dropping xmodem packet from unauthorized client");
+                break;
+            }
+#endif
             LOG_INFO("Got xmodem packet");
 #ifdef FSCom
             xModem.handlePacket(toRadioScratch.xmodemPacket);
@@ -288,8 +329,15 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         }
         if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
             // If client only wants node info, jump directly to sending nodes
-            state = STATE_SEND_OTHER_NODEINFOS;
-            onNowHasData(0);
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!isAdminAuthorized && !s_localAdminAuthorized) {
+                state = STATE_SEND_COMPLETE_ID; // Unauthorized: skip node DB
+            } else
+#endif
+            {
+                state = STATE_SEND_OTHER_NODEINFOS;
+                onNowHasData(0);
+            }
         } else {
             state = STATE_SEND_METADATA;
         }
@@ -305,7 +353,17 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_CHANNELS:
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_channel_tag;
-        fromRadioScratch.channel = channels.getByIndex(config_state);
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+        if (!isAdminAuthorized && !s_localAdminAuthorized) {
+            // Send channel structure but zero out PSK to prevent key extraction
+            fromRadioScratch.channel = channels.getByIndex(config_state);
+            memset(fromRadioScratch.channel.settings.psk.bytes, 0, sizeof(fromRadioScratch.channel.settings.psk.bytes));
+            fromRadioScratch.channel.settings.psk.size = 0;
+        } else
+#endif
+        {
+            fromRadioScratch.channel = channels.getByIndex(config_state);
+        }
         config_state++;
         // Advance when we have sent all of our Channels
         if (config_state >= MAX_NUM_CHANNELS) {
@@ -338,6 +396,13 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Send config: network");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_network_tag;
             fromRadioScratch.config.payload_variant.network = config.network;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!isAdminAuthorized && !s_localAdminAuthorized) {
+                // Redact wifi PSK
+                memset(fromRadioScratch.config.payload_variant.network.wifi_psk, 0,
+                       sizeof(fromRadioScratch.config.payload_variant.network.wifi_psk));
+            }
+#endif
             break;
         case meshtastic_Config_display_tag:
             LOG_DEBUG("Send config: display");
@@ -358,6 +423,30 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Send config: security");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_security_tag;
             fromRadioScratch.config.payload_variant.security = config.security;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!isAdminAuthorized && !s_localAdminAuthorized) {
+                // Redact private key
+                memset(fromRadioScratch.config.payload_variant.security.private_key.bytes, 0,
+                       sizeof(fromRadioScratch.config.payload_variant.security.private_key.bytes));
+                fromRadioScratch.config.payload_variant.security.private_key.size = 0;
+                // Redact admin keys
+                for (int i = 0; i < 3; i++) {
+                    memset(fromRadioScratch.config.payload_variant.security.admin_key[i].bytes, 0,
+                           sizeof(fromRadioScratch.config.payload_variant.security.admin_key[i].bytes));
+                    fromRadioScratch.config.payload_variant.security.admin_key[i].size = 0;
+                }
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+                // Signal provisioning state via admin_key[0] so the client knows
+                // whether to show "Set passphrase" vs "Enter passphrase":
+                //   admin_key[0].size == 0 → not provisioned (first time setup)
+                //   admin_key[0].size == 1, bytes[0] == 0x01 → provisioned, locked
+                if (EncryptedStorage::isProvisioned()) {
+                    fromRadioScratch.config.payload_variant.security.admin_key[0].bytes[0] = 0x01;
+                    fromRadioScratch.config.payload_variant.security.admin_key[0].size = 1;
+                }
+#endif
+            }
+#endif
             break;
         case meshtastic_Config_sessionkey_tag:
             LOG_DEBUG("Send config: sessionkey");
@@ -456,6 +545,12 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!isAdminAuthorized && !s_localAdminAuthorized) {
+                // Unauthorized client: skip node DB and file manifest — only send config complete
+                state = STATE_SEND_COMPLETE_ID;
+            } else
+#endif
             // Handle special nonce behaviors:
             // - SPECIAL_NONCE_ONLY_CONFIG: Skip node info, go directly to file manifest
             // - SPECIAL_NONCE_ONLY_NODES: After sending nodes, skip to complete
@@ -546,24 +641,46 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
             releaseQueueStatusPhonePacket();
         } else if (mqttClientProxyMessageForPhone) {
-            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_mqttClientProxyMessage_tag;
-            fromRadioScratch.mqttClientProxyMessage = *mqttClientProxyMessageForPhone;
-            releaseMqttClientProxyPhonePacket();
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!isAdminAuthorized && !s_localAdminAuthorized) {
+                releaseMqttClientProxyPhonePacket(); // Discard — unauthorized client
+            } else
+#endif
+            {
+                fromRadioScratch.which_payload_variant = meshtastic_FromRadio_mqttClientProxyMessage_tag;
+                fromRadioScratch.mqttClientProxyMessage = *mqttClientProxyMessageForPhone;
+                releaseMqttClientProxyPhonePacket();
+            }
         } else if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL) {
-            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_xmodemPacket_tag;
-            fromRadioScratch.xmodemPacket = xmodemPacketForPhone;
-            xmodemPacketForPhone = meshtastic_XModem_init_zero;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!isAdminAuthorized && !s_localAdminAuthorized) {
+                xmodemPacketForPhone = meshtastic_XModem_init_zero; // Discard — unauthorized client
+            } else
+#endif
+            {
+                fromRadioScratch.which_payload_variant = meshtastic_FromRadio_xmodemPacket_tag;
+                fromRadioScratch.xmodemPacket = xmodemPacketForPhone;
+                xmodemPacketForPhone = meshtastic_XModem_init_zero;
+            }
         } else if (clientNotification) {
+            // Always deliver clientNotification — required for TAK_UNLOCKED/TAK_LOCKED to reach client
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_clientNotification_tag;
             fromRadioScratch.clientNotification = *clientNotification;
             releaseClientNotification();
         } else if (packetForPhone) {
-            printPacket("phone downloaded packet", packetForPhone);
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!isAdminAuthorized && !s_localAdminAuthorized) {
+                releasePhonePacket(); // Discard mesh traffic — unauthorized client
+            } else
+#endif
+            {
+                printPacket("phone downloaded packet", packetForPhone);
 
-            // Encapsulate as a FromRadio packet
-            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_packet_tag;
-            fromRadioScratch.packet = *packetForPhone;
-            releasePhonePacket();
+                // Encapsulate as a FromRadio packet
+                fromRadioScratch.which_payload_variant = meshtastic_FromRadio_packet_tag;
+                fromRadioScratch.packet = *packetForPhone;
+                releasePhonePacket();
+            }
         }
         break;
 
@@ -605,6 +722,28 @@ void PhoneAPI::sendConfigComplete()
     } else if (api_type == TYPE_ETH) {
         service->api_state = service->STATE_ETH;
     }
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Immediately after config_complete_id, notify the client if it hasn't authenticated.
+    // Gate on client auth state (not storage lock state) — storage may be auto-unlocked via
+    // boot token, but each new BLE/USB connection must still present the passphrase.
+    if (!isAdminAuthorized && !s_localAdminAuthorized) {
+        char msg[48];
+        if (!EncryptedStorage::isProvisioned()) {
+            strncpy(msg, "TAK_NEEDS_PROVISION", sizeof(msg));
+        } else {
+            // Provisioned: client must authenticate. Use lock reason if storage is hard-locked,
+            // otherwise signal that passphrase auth is required for this connection.
+            if (!EncryptedStorage::isUnlocked()) {
+                snprintf(msg, sizeof(msg), "TAK_LOCKED:%s", EncryptedStorage::getLockReason());
+            } else {
+                strncpy(msg, "TAK_LOCKED:needs_auth", sizeof(msg));
+            }
+        }
+        sendNotification(meshtastic_LogRecord_Level_WARNING, 0, msg);
+        LOG_INFO("PhoneAPI: sent %s to client", msg);
+    }
+#endif
 
     // Allow subclasses to know we've entered steady-state so they can lower power consumption
     onConfigComplete();
@@ -844,3 +983,25 @@ int PhoneAPI::onNotify(uint32_t newValue)
 
     return timeout ? -1 : 0; // If we timed out, MeshService should stop iterating through observers as we just removed one
 }
+
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+// HIGH-3: static atomic so BLE-task writes and main-loop reads are race-free.
+std::atomic<bool> PhoneAPI::s_localAdminAuthorized{false};
+
+void PhoneAPI::authorizeLocalAdmin()
+{
+    s_localAdminAuthorized.store(true);
+    LOG_INFO("TAK: Local admin authorized via PKC");
+}
+
+bool PhoneAPI::isLocalAdminAuthorized()
+{
+    return s_localAdminAuthorized.load();
+}
+
+void PhoneAPI::revokeAllAuth()
+{
+    s_localAdminAuthorized.store(false);
+    LOG_INFO("TAK: All connection auth revoked (Lock Now)");
+}
+#endif

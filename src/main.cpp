@@ -59,6 +59,13 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
+#ifdef MESHTASTIC_ENABLE_APPROTECT
+#include "security/APProtect.h"
+#endif
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
+
 #if HAS_WIFI || defined(USE_WS5500)
 #include "mesh/api/WiFiServerAPI.h"
 #include "mesh/wifi/WiFiAPClient.h"
@@ -364,6 +371,10 @@ void setup()
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
 
+#ifdef MESHTASTIC_ENABLE_APPROTECT
+    enableAPProtect();
+#endif
+
 #ifdef UNPHONE
     unphone.printStore();
 #endif
@@ -460,6 +471,17 @@ void setup()
     OSThread::setup();
 
     fsInit();
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    EncryptedStorage::initLocked();
+    if (!EncryptedStorage::isUnlocked()) {
+        if (!EncryptedStorage::isProvisioned()) {
+            LOG_WARN("TAK: Device not provisioned — connect and set a passphrase to unlock storage");
+        } else {
+            LOG_WARN("TAK: Device locked — connect and provide passphrase to unlock storage");
+        }
+    }
+#endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #if defined(I2C_SDA1) && defined(ARCH_RP2040)

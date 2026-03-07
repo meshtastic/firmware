@@ -30,6 +30,10 @@
 #include <power/PowerHAL.h>
 #include <vector>
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
+
 #ifdef ARCH_ESP32
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -650,6 +654,20 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.security.private_key.size = 0;
     }
     config.security.public_key.size = 0;
+
+#ifdef HARDENED_DEFAULTS
+    config.security.serial_enabled = false;          // Disable USB serial PhoneAPI — no auth, physical access only
+    config.security.debug_log_api_enabled = false;   // No debug log leaks
+    config.security.admin_channel_enabled = false;   // No legacy admin channel
+    config.security.is_managed = true;               // Block all from=0 admin when unlocked;
+                                                     // operator must use PKC admin key to configure.
+                                                     // Passphrase delivery still works when locked
+                                                     // (AdminModule special-cases !isUnlocked()).
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
+    // FIXED_PIN allows the operator to connect via BLE and provision the passphrase.
+    config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
+#endif
+
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
@@ -716,7 +734,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_FIXED_BLUETOOTH
     config.bluetooth.fixed_pin = USERPREFS_FIXED_BLUETOOTH;
     config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
-#else
+#elif !defined(HARDENED_DEFAULTS)
+    // Default: use RANDOM_PIN only if device has a screen (to display the PIN).
+    // set FIXED_PIN in the HARDENED_DEFAULTS block above.
     config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
 #endif
@@ -1154,6 +1174,37 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
                                  void *dest_struct)
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // check if the file is encrypted and decrypt before protobuf decode
+    if (EncryptedStorage::isEncrypted(filename)) {
+        uint8_t *decBuf = new uint8_t[protoSize];
+        if (!decBuf) {
+            LOG_ERROR("OOM decrypting %s", filename);
+            return LoadFileResult::OTHER_FAILURE;
+        }
+        size_t decLen = 0;
+        if (EncryptedStorage::readAndDecrypt(filename, decBuf, protoSize, decLen)) {
+            LOG_INFO("Load encrypted %s", filename);
+            pb_istream_t stream = pb_istream_from_buffer(decBuf, decLen);
+            if (fields != &meshtastic_NodeDatabase_msg)
+                memset(dest_struct, 0, objSize);
+            if (!pb_decode(&stream, fields, dest_struct)) {
+                LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+                state = LoadFileResult::DECODE_FAILED;
+            } else {
+                LOG_INFO("Loaded encrypted %s successfully", filename);
+                state = LoadFileResult::LOAD_SUCCESS;
+            }
+        } else {
+            LOG_ERROR("Decrypt failed for %s, treating as corrupt", filename);
+            state = LoadFileResult::DECODE_FAILED;
+        }
+        delete[] decBuf;
+        return state;
+    }
+#endif
+
 #ifdef FSCom
     concurrency::LockGuard g(spiLock);
 
@@ -1230,6 +1281,21 @@ void NodeDB::loadFromDisk()
     }
 
 #endif
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    if (!EncryptedStorage::isUnlocked()) {
+        // Encrypted storage is locked — install defaults and wait for passphrase via BLE/serial.
+        // reloadFromDisk() will be called by AdminModule once the device is unlocked.
+        LOG_WARN("NodeDB: Encrypted storage locked, using default config until unlocked");
+        installDefaultNodeDatabase();
+        installDefaultDeviceState();
+        installDefaultConfig();
+        installDefaultModuleConfig();
+        installDefaultChannels();
+        return;
+    }
+#endif
+
     auto state = loadProto(nodeDatabaseFileName, getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
     if (nodeDatabase.version < DEVICESTATE_MIN_VER) {
@@ -1391,6 +1457,35 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded UIConfig");
     }
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Ensure all config segments are persisted to encrypted storage.
+    // installDefaultConfig/installDefaultModuleConfig only set in-memory structs
+    // without saving to disk, so we force a save here to ensure encrypted files exist.
+    {
+        const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
+                                      nodeDatabaseFileName};
+        int segments[] = {SEGMENT_CONFIG, SEGMENT_MODULECONFIG, SEGMENT_CHANNELS, SEGMENT_DEVICESTATE, SEGMENT_NODEDATABASE};
+        int toSave = 0;
+        for (int i = 0; i < 5; i++) {
+            if (!EncryptedStorage::isEncrypted(filesToCheck[i])) {
+                toSave |= segments[i];
+            }
+        }
+        if (toSave) {
+            LOG_INFO("TAK: Saving unencrypted segments to encrypted storage (mask=0x%x)", toSave);
+            saveToDisk(toSave);
+        }
+
+        // Migrate any remaining plaintext proto files (from standard firmware upgrade)
+        for (const char *fn : filesToCheck) {
+            if (!EncryptedStorage::isEncrypted(fn)) {
+                LOG_INFO("Migrating %s to encrypted storage", fn);
+                EncryptedStorage::migrateFile(fn);
+            }
+        }
+    }
+#endif
+
     // 2.4.X - configuration migration to update new default intervals
     if (moduleConfig.version < 23) {
         LOG_DEBUG("ModuleConfig version %d is stale, upgrading to new default intervals", moduleConfig.version);
@@ -1426,7 +1521,20 @@ void NodeDB::loadFromDisk()
     }
 
 #endif
+
 }
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+/**
+ * Re-run loadFromDisk() after encrypted storage is unlocked at runtime.
+ * Called by AdminModule after a successful provisionPassphrase / unlockWithPassphrase.
+ */
+void NodeDB::reloadFromDisk()
+{
+    LOG_INFO("NodeDB: Reloading config from encrypted storage after unlock");
+    loadFromDisk();
+}
+#endif
 
 /** Save a protobuf from a file, return true for success */
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
@@ -1439,6 +1547,34 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         LOG_ERROR("Error: trying to saveProto() on unsafe device power level.");
         return false;
     }
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Encrypt all files except uiconfig (no secrets) and the DEK file (self-encrypted)
+    if (strcmp(filename, uiconfigFileName) != 0) {
+        // First encode protobuf to a temporary buffer
+        uint8_t *pbBuf = new uint8_t[protoSize];
+        if (!pbBuf) {
+            LOG_ERROR("OOM encoding %s for encryption", filename);
+            return false;
+        }
+
+        pb_ostream_t stream = pb_ostream_from_buffer(pbBuf, protoSize);
+        if (!pb_encode(&stream, fields, dest_struct)) {
+            LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+            delete[] pbBuf;
+            return false;
+        }
+
+        size_t encodedSize = stream.bytes_written;
+        bool ok = EncryptedStorage::encryptAndWrite(filename, pbBuf, encodedSize, fullAtomic);
+        delete[] pbBuf;
+
+        if (!ok) {
+            LOG_ERROR("EncryptedStorage: Failed to encrypt and write %s", filename);
+        }
+        return ok;
+    }
+#endif
 
     bool okay = false;
 #ifdef FSCom
@@ -1531,6 +1667,16 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         LOG_ERROR("Error: trying to saveToDiskNoRetry() on unsafe device power level.");
         return false;
     }
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // When encrypted storage is locked, encryptAndWrite() returns false for every file.
+    // That would cause saveToDisk()'s nRF52 retry path to call FSCom.format(), wiping all
+    // encrypted proto files from flash. Return true here — "nothing to save, not an error."
+    if (!EncryptedStorage::isUnlocked()) {
+        LOG_WARN("NodeDB: saveToDisk skipped — encrypted storage locked");
+        return true;
+    }
+#endif
 
     bool success = true;
 #ifdef FSCom

@@ -25,6 +25,12 @@
 #include "Default.h"
 #include "MeshRadio.h"
 #include "TypeConversions.h"
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+#include "mesh/PhoneAPI.h"
+#endif
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
 
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -83,11 +89,39 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // and only allowing responses from that remote.
     if (messageIsResponse(r)) {
         LOG_DEBUG("Allow admin response message");
-    } else if (mp.from == 0) {
+    } else if (mp.from == 0 && !mp.pki_encrypted) {
+        // Plain (non-PKC) local admin from BLE/USB client.
+        // When locked: always allow through — passphrase delivery and LOCK NOW must work.
+        // When unlocked and is_managed: block unless this is a TAK security command
+        //   (passphrase re-verify / LOCK NOW) or the connection is already passphrase-authorized.
+        // from=0 + pki_encrypted is NOT matched here and falls through to the PKC check below.
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+        if (config.security.is_managed && EncryptedStorage::isUnlocked()) {
+            // TAK security commands carry a non-empty private_key — always let them through.
+            // The passphrase HMAC in EncryptedStorage is the security gate for those packets.
+            // Only the passphrase delivery command itself is whitelisted — it is its own auth gate.
+            // Destructive commands (factory reset, nodedb reset) require an already-authorized
+            // connection (passphrase verified or PKC admin key).
+            bool isTakSecurityCmd =
+                (r->which_payload_variant == meshtastic_AdminMessage_set_config_tag &&
+                 r->set_config.which_payload_variant == meshtastic_Config_security_tag &&
+                 r->set_config.payload_variant.security.private_key.size >= 1);
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!isTakSecurityCmd && !PhoneAPI::isLocalAdminAuthorized()) {
+#else
+            if (!isTakSecurityCmd) {
+#endif
+                LOG_INFO("Ignore local admin payload because is_managed");
+                myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+                return handled;
+            }
+        }
+#else
         if (config.security.is_managed) {
             LOG_INFO("Ignore local admin payload because is_managed");
             return handled;
         }
+#endif
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
             LOG_INFO("Ignore admin channel, legacy admin is disabled");
@@ -102,6 +136,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             (config.security.admin_key[2].size == 32 &&
              memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
             LOG_INFO("PKC admin payload with authorized sender key");
+
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            // Only authorize local PhoneAPI connections when the PKC admin message
+            // came from a local client (from=0). A remote PKC admin (from!=0) has no
+            // business unlocking local BLE/USB config dumps.
+            if (mp.from == 0) {
+                PhoneAPI::authorizeLocalAdmin();
+            }
+#endif
 
             // Automatically favorite the node that is using the admin key
             auto remoteNode = nodeDB->getMeshNode(mp.from);
@@ -860,6 +903,113 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.bluetooth = c.payload_variant.bluetooth;
         break;
     case meshtastic_Config_security_tag:
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+        // set_config(security) doubles as the TAK passphrase transport (no schema changes).
+        // private_key field encodes the command:
+        //   private_key.bytes/size          — raw passphrase (1–64 bytes)
+        //   size==1, bytes[0]==0xFF          — LOCK NOW sentinel
+        //   admin_key[1].bytes[0]           — boots_remaining for new token (0 → default)
+        //   admin_key[2].bytes[0..3] LE u32 — valid_until_epoch (absolute Unix timestamp; 0 → no time limit)
+        {
+            const auto &sec = c.payload_variant.security;
+            const uint8_t *pp = sec.private_key.bytes;
+            size_t ppLen = sec.private_key.size;
+
+            // MED-4: helper to zero the passphrase bytes in the decoded proto scratch buffer
+            // before returning. Uses volatile to prevent the compiler from eliding the wipe.
+            // const_cast is safe here: the underlying buffer is the mutable toRadioScratch member.
+            auto zeroPassphrase = [&]() {
+                volatile uint8_t *ppVol = const_cast<volatile uint8_t *>(pp);
+                for (size_t zi = 0; zi < ppLen; zi++)
+                    ppVol[zi] = 0;
+            };
+
+            // LOCK NOW sentinel — always honoured regardless of lock state
+            if (ppLen == 1 && pp[0] == 0xFF) {
+                LOG_INFO("AdminModule: TAK LOCK NOW command received");
+                EncryptedStorage::lockNow();
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+                // Immediately revoke all connection-level auth so that any config
+                // re-request in the window before reboot gets redacted data.
+                PhoneAPI::revokeAllAuth();
+#endif
+                sendWarning("TAK_LOCKED");
+                zeroPassphrase(); // MED-4
+                reboot(DEFAULT_REBOOT_SECONDS);
+                return; // No config changed; skip saveChanges entirely
+            }
+
+            // MED-8: cap to 32 bytes to match the proto private_key field size
+            if (ppLen >= 1 && ppLen <= 32) {
+                uint8_t boots = EncryptedStorage::TOKEN_DEFAULT_BOOTS;
+                if (sec.admin_key[1].size >= 1 && sec.admin_key[1].bytes[0] != 0)
+                    boots = sec.admin_key[1].bytes[0];
+
+                uint32_t validUntilEpoch = 0;
+                if (sec.admin_key[2].size >= 4)
+                    memcpy(&validUntilEpoch, sec.admin_key[2].bytes, 4);
+
+                bool ok = false;
+                if (!EncryptedStorage::isUnlocked()) {
+                    // Locked: provision on first boot, otherwise unlock
+                    if (!EncryptedStorage::isProvisioned()) {
+                        LOG_INFO("AdminModule: TAK first-time provisioning with passphrase");
+                        ok = EncryptedStorage::provisionPassphrase(pp, ppLen, boots, validUntilEpoch);
+                    } else {
+                        LOG_INFO("AdminModule: TAK unlock with passphrase");
+                        ok = EncryptedStorage::unlockWithPassphrase(pp, ppLen, boots, validUntilEpoch);
+                    }
+                    if (ok) {
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+                        PhoneAPI::authorizeLocalAdmin();
+#endif
+                        nodeDB->reloadFromDisk();
+                        {
+                            char unlockedMsg[64];
+                            snprintf(unlockedMsg, sizeof(unlockedMsg), "TAK_UNLOCKED:boots=%d:until=%u",
+                                     (int)EncryptedStorage::getBootsRemaining(),
+                                     (unsigned)EncryptedStorage::getValidUntilEpoch());
+                            sendWarning(unlockedMsg);
+                        }
+                        LOG_INFO("AdminModule: TAK storage unlocked, config reloaded");
+                    }
+                } else {
+                    // Already unlocked: verify passphrase to authorize this connection for admin.
+                    // unlockWithPassphrase() re-derives KEK, unwraps DEK, refreshes the token.
+                    LOG_INFO("AdminModule: TAK passphrase re-verify for admin authorization");
+                    ok = EncryptedStorage::unlockWithPassphrase(pp, ppLen, boots, validUntilEpoch);
+                    if (ok) {
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+                        PhoneAPI::authorizeLocalAdmin();
+#endif
+                        {
+                            char unlockedMsg[64];
+                            snprintf(unlockedMsg, sizeof(unlockedMsg), "TAK_UNLOCKED:boots=%d:until=%u",
+                                     (int)EncryptedStorage::getBootsRemaining(),
+                                     (unsigned)EncryptedStorage::getValidUntilEpoch());
+                            sendWarning(unlockedMsg);
+                        }
+                        LOG_INFO("AdminModule: TAK passphrase verified, local admin authorized");
+                    }
+                }
+
+                if (!ok) {
+                    uint32_t backoff = EncryptedStorage::getBackoffSecondsRemaining();
+                    char failMsg[64];
+                    if (backoff > 0)
+                        snprintf(failMsg, sizeof(failMsg), "TAK_UNLOCK_FAILED:backoff=%u", backoff);
+                    else
+                        snprintf(failMsg, sizeof(failMsg), "TAK_UNLOCK_FAILED:wrong_passphrase");
+                    sendWarning(failMsg);
+                    LOG_WARN("AdminModule: TAK passphrase verification failed");
+                }
+                zeroPassphrase(); // MED-4: wipe passphrase from scratch buffer before returning
+                return; // Passphrase handled; no config changed, skip saveChanges
+            }
+        }
+        // No passphrase (private_key absent or empty): fall through to normal security config.
+        // Reachable only when is_managed=false or device is locked (gate allows it in those states).
+#endif
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)

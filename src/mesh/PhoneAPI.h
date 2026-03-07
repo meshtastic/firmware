@@ -4,6 +4,7 @@
 #include "concurrency/Lock.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
+#include <atomic>
 #include <deque>
 #include <iterator>
 #include <string>
@@ -138,6 +139,19 @@ class PhoneAPI
     bool isConnected() { return state != STATE_SEND_NOTHING; }
     bool isSendingPackets() { return state == STATE_SEND_PACKETS; }
 
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    /// Set by AdminModule after successful PKC admin key validation.
+    /// When true, config dumps include full unredacted secrets.
+    void setAdminAuthorized(bool authorized) { isAdminAuthorized = authorized; }
+    bool getAdminAuthorized() const { return isAdminAuthorized; }
+
+    /// Static: authorize all local PhoneAPI instances (called by AdminModule)
+    static void authorizeLocalAdmin();
+    static bool isLocalAdminAuthorized();
+    /// Static: immediately revoke all connection-level auth (called on Lock Now)
+    static void revokeAllAuth();
+#endif
+
   protected:
     /// Our fromradio packet while it is being assembled
     meshtastic_FromRadio fromRadioScratch = {};
@@ -178,6 +192,13 @@ class PhoneAPI
     };
 
     APIType api_type = TYPE_NONE;
+
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    // HIGH-3: both flags are accessed from multiple tasks (main loop + NimBLE BLE callback
+    // task), so they must be atomic to prevent data races on read-modify-write sequences.
+    std::atomic<bool> isAdminAuthorized{false};
+    static std::atomic<bool> s_localAdminAuthorized;
+#endif
 
   private:
     void releasePhonePacket();

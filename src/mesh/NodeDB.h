@@ -307,6 +307,12 @@ class NodeDB
         newStatus.notifyObservers(&status);
     }
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    /// Re-run loadFromDisk() after the encrypted storage is unlocked at runtime.
+    /// Called by AdminModule after a successful provisionPassphrase / unlockWithPassphrase.
+    void reloadFromDisk();
+#endif
+
   private:
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
