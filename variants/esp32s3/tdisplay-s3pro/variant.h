@@ -33,14 +33,14 @@
 
 #define PIN_POWER_EN 42
 
-// GNNS
+// GNSS
 #define GPS_DEFAULT_NOT_PRESENT 1
 
 // PCF85063 RTC Module
 #define PCF85063_RTC 0x51
 
 // SY6970 battery charger
-#define SY6970_Address 0x6A
+#define SY6970_ADDR 0x6A
 #define SY6970_INT 21
 
 // MAX98357A PCM amplifier

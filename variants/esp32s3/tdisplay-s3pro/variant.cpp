@@ -14,7 +14,7 @@ void earlyInitVariant()
     digitalWrite(MAX98357A_EN, HIGH);
 }
 
-#ifdef HAS_CST226SE // only for BUI
+#ifdef HAS_CST226SE // only for BaseUI
 
 #include "TouchDrvCSTXXX.hpp"
 #include "input/TouchScreenImpl1.h"
