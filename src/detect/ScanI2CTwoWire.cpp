@@ -448,22 +448,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     }
                     break;
                 }
-            case SHT31_4x_ADDR:     // same as OPT3001_ADDR_ALT
-            case SHT31_4x_ADDR_ALT: // same as OPT3001_ADDR
+            case SHTXX_ADDR:     // same as OPT3001_ADDR_ALT
+            case SHTXX_ADDR_ALT: // same as OPT3001_ADDR
                 if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
                     type = OPT3001;
                     logFoundDevice("OPT3001", (uint8_t)addr.address);
-                } else if (i2cCommandResponseLength(addr, 0x89, 6)) { // SHT4x serial number (6 bytes inc. CRC)
-                    type = SHT4X;
-                    logFoundDevice("SHT4X", (uint8_t)addr.address);
-                } else {
-                    type = SHT31;
-                    logFoundDevice("SHT31", (uint8_t)addr.address);
+                } else { // SHTXX
+                    type = SHTXX;
+                    logFoundDevice("SHTXX", (uint8_t)addr.address);
                 }
 
                 break;
 
-                SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTC3, "SHTC3", (uint8_t)addr.address)
+                SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTXX, "SHTXX", (uint8_t)addr.address)
             case RCWL9620_ADDR:
                 // get MAX30102 PARTID
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 1);
