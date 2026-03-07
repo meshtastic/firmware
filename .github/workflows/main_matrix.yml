@@ -238,47 +238,150 @@ jobs:
           description: "Download firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip. This artifact will be available for 90 days from creation"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-  shame:
+  firmware-size-report:
     if: github.repository == 'meshtastic/firmware'
     continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
     runs-on: ubuntu-latest
     needs: [build]
     steps:
       - uses: actions/checkout@v6
-        if: github.event_name == 'pull_request_target'
         with:
-          filter: blob:none # means we download all the git history but none of the commit (except ones with checkout like the head)
-          fetch-depth: 0
-      - name: Download the current manifests
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Download current manifests
         uses: actions/download-artifact@v8
         with:
-          path: ./manifests-new/
+          path: ./manifests/
           pattern: manifest-*
           merge-multiple: true
-      - name: Upload combined manifests for later commit and global stats crunching.
+
+      - name: Collect current firmware sizes
+        run: python3 bin/collect_sizes.py ./manifests/ ./current-sizes.json
+
+      - name: Upload size report artifact
         uses: actions/upload-artifact@v7
-        id: upload-manifest
         with:
-          name: manifests-${{ github.sha }}
+          name: firmware-sizes-${{ github.sha }}
           overwrite: true
-          path: manifests-new/*.mt.json
-      - name: Find the merge base
+          path: ./current-sizes.json
+          retention-days: 90
+
+      - name: Download baseline sizes from develop
         if: github.event_name == 'pull_request_target'
-        run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
+        continue-on-error: true
+        id: baseline-develop
         env:
-          base: ${{ github.base_ref }}
-          head: ${{ github.sha }}
-      # Currently broken (for-loop through EVERY artifact -- rate limiting)
-      # - name: Download the old manifests
-      #   if: github.event_name == 'pull_request_target'
-      #   run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
-      #   env:
-      #     GH_TOKEN: ${{ github.token }}
-      #     merge_base: ${{ env.MERGE_BASE }}
-      #     repo: ${{ github.repository }}
-      # - name: Do scan and post comment
-      #   if: github.event_name == 'pull_request_target'
-      #   run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Find the latest successful CI run on develop and get its firmware-sizes artifact
+          RUN_ID=$(gh run list -R "${{ github.repository }}" \
+            --workflow CI --branch develop --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$RUN_ID" ]; then
+            ARTIFACT_NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
+              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | .name' | head -1)
+            if [ -n "$ARTIFACT_NAME" ]; then
+              gh run download "$RUN_ID" -R "${{ github.repository }}" \
+                --name "$ARTIFACT_NAME" --dir ./baseline-develop/
+              cp ./baseline-develop/current-sizes.json ./develop-sizes.json
+              echo "found=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "found=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download baseline sizes from master
+        if: github.event_name == 'pull_request_target'
+        continue-on-error: true
+        id: baseline-master
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list -R "${{ github.repository }}" \
+            --workflow CI --branch master --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$RUN_ID" ]; then
+            ARTIFACT_NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
+              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | .name' | head -1)
+            if [ -n "$ARTIFACT_NAME" ]; then
+              gh run download "$RUN_ID" -R "${{ github.repository }}" \
+                --name "$ARTIFACT_NAME" --dir ./baseline-master/
+              cp ./baseline-master/current-sizes.json ./master-sizes.json
+              echo "found=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "found=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate size comparison report
+        if: github.event_name == 'pull_request_target'
+        id: report
+        run: |
+          ARGS="./current-sizes.json"
+          if [ -f ./develop-sizes.json ]; then
+            ARGS="$ARGS --baseline develop:./develop-sizes.json"
+          fi
+          if [ -f ./master-sizes.json ]; then
+            ARGS="$ARGS --baseline master:./master-sizes.json"
+          fi
+          REPORT=$(python3 bin/size_report.py $ARGS)
+          if [ -z "$REPORT" ]; then
+            echo "has_report=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_report=true" >> "$GITHUB_OUTPUT"
+            {
+              echo '<!-- firmware-size-report -->'
+              echo '# Firmware Size Report'
+              echo ''
+              echo "$REPORT"
+              echo ''
+              echo '---'
+              echo "*Updated for ${{ github.sha }}*"
+            } > ./size-report.md
+            cat ./size-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Post or update PR comment
+        if: github.event_name == 'pull_request_target' && steps.report.outputs.has_report == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- firmware-size-report -->';
+            const body = fs.readFileSync('./size-report.md', 'utf8');
+            const prNumber = context.payload.pull_request.number;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
 
   release-artifacts:
     runs-on: ubuntu-latest
