@@ -44,7 +44,7 @@ InputEvent NotificationRenderer::inEvent;
 int8_t NotificationRenderer::curSelected = 0;
 char NotificationRenderer::alertBannerMessage[256] = {0};
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
-uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are seelctable options
+uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are selectable options
 const char **NotificationRenderer::optionsArrayPtr = nullptr;
 const int *NotificationRenderer::optionsEnumPtr = nullptr;
 std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
@@ -372,7 +372,7 @@ void NotificationRenderer::resetBanner()
     inEvent.inputEvent = INPUT_BROKER_NONE;
     inEvent.kbchar = 0;
     curSelected = 0;
-    alertBannerOptions = 0; // last x lines are seelctable options
+    alertBannerOptions = 0; // last x lines are selectable options
     optionsArrayPtr = nullptr;
     optionsEnumPtr = nullptr;
     alertBannerCallback = NULL;

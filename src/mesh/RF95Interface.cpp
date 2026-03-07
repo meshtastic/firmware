@@ -301,6 +301,7 @@ void RF95Interface::startReceive()
 
     // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag();
 }
 
 bool RF95Interface::isChannelActive()
