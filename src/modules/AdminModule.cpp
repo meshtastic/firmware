@@ -15,6 +15,9 @@
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 #include "WiFiOTA.h"
 #endif
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
+#include "MeshtasticOTA.h"
+#endif
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
@@ -28,7 +31,7 @@
 #include "Default.h"
 #include "MeshRadio.h"
 
-#if HAS_NETWORKING
+#if HAS_NETWORKING && !defined(ARCH_PORTDUINO)
 extern Syslog syslog;
 #endif
 #include "TypeConversions.h"
@@ -1442,7 +1445,9 @@ void AdminModule::handleGetDeviceConnectionStatus(
 #ifndef MESHTASTIC_EXCLUDE_MQTT
     conn.wifi.status.is_mqtt_connected = mqtt && mqtt->isConnectedDirectly();
 #endif
+#if HAS_NETWORKING && !defined(ARCH_PORTDUINO)
     conn.wifi.status.is_syslog_connected = syslog.isConnected();
+#endif
   }
 #endif
 
@@ -1456,7 +1461,9 @@ void AdminModule::handleGetDeviceConnectionStatus(
     conn.ethernet.status.is_mqtt_connected =
         mqtt && mqtt->isConnectedDirectly();
 #endif
+#if HAS_NETWORKING && !defined(ARCH_PORTDUINO)
     conn.ethernet.status.is_syslog_connected = syslog.isConnected();
+#endif
   } else {
     conn.ethernet.status.is_connected = false;
   }
@@ -1710,11 +1717,14 @@ void AdminModule::handleSendInputEvent(
 #endif
 }
 
-void AdminModule::sendWarning(const char *message) {
+void AdminModule::sendWarning(const char *format, ...) {
   meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
   cn->level = meshtastic_LogRecord_Level_WARNING;
   cn->time = getValidTime(RTCQualityFromNet);
-  strncpy(cn->message, message, sizeof(cn->message));
+  va_list args;
+  va_start(args, format);
+  vsnprintf(cn->message, sizeof(cn->message), format, args);
+  va_end(args);
   service->sendClientNotification(cn);
 }
 
