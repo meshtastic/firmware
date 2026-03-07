@@ -8,12 +8,12 @@ UpDownInterruptImpl1::UpDownInterruptImpl1() : UpDownInterruptBase("upDown1") {}
 
 bool UpDownInterruptImpl1::init()
 {
-#if defined(INPUTDRIVER_TWO_WAY_ROCKER) && defined(INPUTDRIVER_ENCODER_LEFT) && defined(INPUTDRIVER_ENCODER_RIGHT)
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER) && defined(INPUTDRIVER_TWO_WAY_ROCKER_LEFT) && defined(INPUTDRIVER_TWO_WAY_ROCKER_RIGHT)
     moduleConfig.canned_message.updown1_enabled = true;
-    moduleConfig.canned_message.inputbroker_pin_a = INPUTDRIVER_ENCODER_LEFT;
-    moduleConfig.canned_message.inputbroker_pin_b = INPUTDRIVER_ENCODER_RIGHT;
-#if defined(INPUTDRIVER_ENCODER_BTN)
-    moduleConfig.canned_message.inputbroker_pin_press = INPUTDRIVER_ENCODER_BTN;
+    moduleConfig.canned_message.inputbroker_pin_a = INPUTDRIVER_TWO_WAY_ROCKER_LEFT;
+    moduleConfig.canned_message.inputbroker_pin_b = INPUTDRIVER_TWO_WAY_ROCKER_RIGHT;
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
+    moduleConfig.canned_message.inputbroker_pin_press = INPUTDRIVER_TWO_WAY_ROCKER_BTN;
 #endif
 #endif
 

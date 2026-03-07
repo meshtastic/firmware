@@ -82,14 +82,14 @@ void setupNicheGraphics()
     Inputs::TwoButtonExtended *buttons = Inputs::TwoButtonExtended::getInstance();
 
     // Center press (boot button)
-    buttons->setWiring(0, INPUTDRIVER_ENCODER_BTN, true);
+    buttons->setWiring(0, INPUTDRIVER_TWO_WAY_ROCKER_BTN, true);
     // Match baseUI encoder long-press feel.
     buttons->setTiming(0, 75, 300);
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
-    // LEFT rocker pin is IO3; RIGHT rocker pin is IO4.
-    buttons->setTwoWayRockerWiring(INPUTDRIVER_ENCODER_LEFT, INPUTDRIVER_ENCODER_RIGHT, true);
+    // LEFT rocker pin is IO4; RIGHT rocker pin is IO3.
+    buttons->setTwoWayRockerWiring(INPUTDRIVER_TWO_WAY_ROCKER_LEFT, INPUTDRIVER_TWO_WAY_ROCKER_RIGHT, true);
     buttons->setJoystickDebounce(50);
 
     // Two-way rocker behavior:
