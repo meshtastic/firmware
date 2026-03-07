@@ -60,9 +60,7 @@
 
 #define BUTTON_PIN 0 // only for Plus version
 
-//These are the same but they seem to be using both labels. Both of these are the interrupt pin for the PMU of the watch.
-#define AXP2101_IRQ 21
-#define PMU_IRQ 21
+#define PMU_IRQ 21 // Interrupt pin for the PMU
 
 #define USE_SX1262
 #define USE_SX1268
