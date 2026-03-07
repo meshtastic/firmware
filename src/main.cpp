@@ -114,7 +114,7 @@ ButtonThread *TouchButtonThread = nullptr;
 #endif
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
-ButtonThread *UserButtonThread = nullptr;
+extern ButtonThread *UserButtonThread;
 #endif
 
 #if defined(ALT_BUTTON_PIN)
@@ -217,8 +217,8 @@ ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
 Adafruit_DRV2605 drv;
 #endif
 
-// Global LoRa radio type
-LoRaRadioType radioType = NO_RADIO;
+// Global LoRa radio type (defined in RadioInterface.cpp)
+extern LoRaRadioType radioType;
 
 bool isVibrating = false;
 
@@ -1573,13 +1573,16 @@ void setup() {
   if (!rIf)
     RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
   else {
-    router->addInterface(rIf);
+    // Capture packet time before transferring ownership
+    auto packetTime = rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN);
+    router->addInterface(std::unique_ptr<RadioInterface>(rIf));
+    rIf = nullptr;
 
     // Log bit rate to debug output
     LOG_DEBUG(
         "LoRA bitrate = %f bytes / sec",
         (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
-         (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
+         (float(packetTime))) *
             1000);
   }
 
