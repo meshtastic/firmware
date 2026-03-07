@@ -766,7 +766,11 @@ class Screen : public concurrency::OSThread
     DebugInfo debugInfo;
 
     /// Display device
+#ifdef USE_ST7789
+    ST7789Spi *dispdev;
+#else
     OLEDDisplay *dispdev;
+#endif
 
     /// UI helper for rendering to frames and switching between them
     OLEDDisplayUi *ui;

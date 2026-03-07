@@ -65,7 +65,7 @@ class NodeListApplet : public Applet, public MeshModule
 
     // Card Dimensions
     // - for rendering and for maxCards calc
-    uint8_t cardMarginH = fontSmall.lineHeight() / 2;                                // Gap between cards
+    uint8_t cardMarginH = 1; // Gap between cards (minimal to fit more rows)
     uint16_t cardH = fontMedium.lineHeight() + fontSmall.lineHeight() + cardMarginH; // Height of card
 };
 

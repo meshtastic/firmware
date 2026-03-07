@@ -33,7 +33,10 @@ bool AsyncUDP::writeTo(const uint8_t *data, size_t len, IPAddress ip, uint16_t p
     if (!udp.beginPacket(ip, port))
         return false;
     udp.write(data, len);
-    return udp.endPacket();
+    isSending = true;
+    bool ok = udp.endPacket();
+    isSending = false;
+    return ok;
 }
 
 void AsyncUDP::close()
@@ -70,7 +73,7 @@ const uint8_t *AsyncUDPPacket::data()
 
 int32_t AsyncUDP::runOnce()
 {
-    if (_onPacket && udp.parsePacket() > 0) {
+    if (_onPacket && !isSending && udp.parsePacket() > 0) {
         AsyncUDPPacket packet(udp);
         _onPacket(packet);
     }
