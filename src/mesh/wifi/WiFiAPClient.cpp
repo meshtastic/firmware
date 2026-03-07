@@ -128,6 +128,7 @@ static void onNetworkConnected()
             syslog.deviceHostname(getDeviceName());
             syslog.appName("Meshtastic");
             syslog.defaultPriority(LOGLEVEL_USER);
+            syslog.logMask(syslogLevelToMask(config.network.rsyslog_level));
             syslog.enable();
         }
 
