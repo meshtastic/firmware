@@ -663,7 +663,11 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         }
         std::unique_ptr<PubSubClient> pubSub(new PubSubClient);
         if (isConnectedToNetwork()) {
-            return connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection);
+            bool result = connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection);
+            if (client == nullptr) {
+                pubSub->disconnect();
+            }
+            return result;
         }
 #else
         const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
