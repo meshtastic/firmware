@@ -30,6 +30,7 @@ class MenuItem
     MenuAction action = NO_ACTION;
     MenuPage nextPage = EXIT;
     bool *checkState = nullptr;
+    bool isHeader = false; // Non-selectable section label
 
     // Various constructors, depending on the intended function of the item
 
@@ -39,6 +40,12 @@ class MenuItem
     MenuItem(const char *label, MenuAction action, MenuPage nextPage, bool *checkState)
         : label(label), action(action), nextPage(nextPage), checkState(checkState)
     {
+    }
+    static MenuItem Header(const char *label)
+    {
+        MenuItem item(label, NO_ACTION, EXIT);
+        item.isHeader = true;
+        return item;
     }
 };
 

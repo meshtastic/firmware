@@ -49,4 +49,4 @@ if (echo $1 | grep -q "rak4631"); then
 fi
 
 echo "Copying manifest"
-cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json
+cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json || true

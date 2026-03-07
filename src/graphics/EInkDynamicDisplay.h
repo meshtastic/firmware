@@ -1,6 +1,7 @@
 #pragma once
 
 #include "configuration.h"
+#include <memory>
 
 #if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
 
@@ -116,11 +117,11 @@ class EInkDynamicDisplay : public EInkDisplay, protected concurrency::NotifiedWo
     // Optional - track ghosting, pixel by pixel
     // May 2024: no longer used by any display. Kept for possible future use.
 #ifdef EINK_LIMIT_GHOSTING_PX
-    void countGhostPixels();        // Count any pixels which have moved from black to white since last full-refresh
-    void checkExcessiveGhosting();  // Check if ghosting exceeds defined limit
-    void resetGhostPixelTracking(); // Clear the dirty pixels array. Call when full-refresh cleans the display.
-    uint8_t *dirtyPixels;           // Any pixels that have been black since last full-refresh (dynamically allocated mem)
-    uint32_t ghostPixelCount = 0;   // Number of pixels with problematic ghosting. Retained here for LOG_DEBUG use
+    void countGhostPixels();                // Count any pixels which have moved from black to white since last full-refresh
+    void checkExcessiveGhosting();          // Check if ghosting exceeds defined limit
+    void resetGhostPixelTracking();         // Clear the dirty pixels array. Call when full-refresh cleans the display.
+    std::unique_ptr<uint8_t[]> dirtyPixels; // Any pixels that have been black since last full-refresh (dynamically allocated mem)
+    uint32_t ghostPixelCount = 0;           // Number of pixels with problematic ghosting. Retained here for LOG_DEBUG use
 #endif
 
     // Conditional - async full refresh - only with modified meshtastic/GxEPD2

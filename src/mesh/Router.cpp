@@ -7,7 +7,6 @@
 #include "RTC.h"
 
 #include "configuration.h"
-#include "detect/LoRaRadioType.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
@@ -17,6 +16,7 @@
 #endif
 #include "Default.h"
 #if ARCH_PORTDUINO
+#include "Throttle.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
@@ -265,6 +265,13 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
                 p->channel = node->channel;
                 LOG_DEBUG("localSend to channel %d", p->channel);
             }
+        }
+
+        // If someone asks for acks on broadcast, we need the hop limit to be at least one, so that first node that receives our
+        // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop
+        // counts and we want this message to get through the whole mesh, so use the default.
+        if (src == RX_SRC_USER && p->want_ack && p->hop_limit == 0) {
+            p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
         }
 
         return send(p);
@@ -526,6 +533,25 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
         } else if (portduino_config.JSONFilename != "") {
+            if (portduino_config.JSONFileRotate != 0) {
+                static uint32_t fileage = 0;
+
+                if (portduino_config.JSONFileRotate != 0 &&
+                    (fileage == 0 || !Throttle::isWithinTimespanMs(fileage, portduino_config.JSONFileRotate * 60 * 1000))) {
+                    time_t timestamp = time(NULL);
+                    struct tm *timeinfo;
+                    char buffer[80];
+                    timeinfo = localtime(&timestamp);
+                    strftime(buffer, 80, "%Y%m%d-%H%M%S", timeinfo);
+
+                    std::string datetime(buffer);
+                    if (JSONFile.is_open()) {
+                        JSONFile.close();
+                    }
+                    JSONFile.open(portduino_config.JSONFilename + "_" + datetime, std::ios::out | std::ios::app);
+                    fileage = millis();
+                }
+            }
             if (portduino_config.JSONFilter == (_meshtastic_PortNum)0 || portduino_config.JSONFilter == p->decoded.portnum) {
                 JSONFile << MeshPacketSerializer::JsonSerialize(p, false) << std::endl;
             }
@@ -614,15 +640,19 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
                                            strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
             // Check for valid keys and single node destination
-            config.security.private_key.size == 32 && !isBroadcast(p->to) && node != nullptr &&
-            // Check for a known public key for the destination
-            (node->user.public_key.size == 32) &&
+            config.security.private_key.size == 32 && !isBroadcast(p->to) &&
             // Some portnums either make no sense to send with PKC
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
             p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
             LOG_DEBUG("Use PKI!");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
+            // Check for a known public key for the destination
+            if (node == nullptr || node->user.public_key.size != 32) {
+                LOG_WARN("Unknown public key for destination node 0x%08x (portnum %d), refusing to send legacy DM", p->to,
+                         p->decoded.portnum);
+                return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
+            }
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
                 memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
                 LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,

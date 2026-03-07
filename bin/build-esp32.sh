@@ -38,4 +38,4 @@ cp bin/device-install.* $OUTDIR/
 cp bin/device-update.* $OUTDIR/
 
 echo "Copying manifest"
-cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json
+cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json || true

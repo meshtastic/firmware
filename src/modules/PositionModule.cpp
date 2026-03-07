@@ -6,6 +6,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "TypeConversions.h"
 #include "airtime.h"
 #include "configuration.h"
@@ -26,6 +27,15 @@ PositionModule::PositionModule()
     precision = 0;        // safe starting value
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
+
+    // Seed throttle timer from persisted transmit history so we don't re-broadcast immediately after reboot
+    if (transmitHistory) {
+        uint32_t restored = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_POSITION_APP);
+        if (restored != 0) {
+            lastGpsSend = restored;
+            LOG_INFO("Position: restored lastGpsSend from transmit history");
+        }
+    }
 
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
@@ -438,6 +448,8 @@ int32_t PositionModule::runOnce()
             lastGpsLatitude = node->position.latitude_i;
             lastGpsLongitude = node->position.longitude_i;
 
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(meshtastic_PortNum_POSITION_APP);
             sendOurPosition();
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
                 sendLostAndFoundText();

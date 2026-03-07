@@ -10,7 +10,7 @@ EInkDynamicDisplay::EInkDynamicDisplay(uint8_t address, int sda, int scl, OLEDDI
 {
     // If tracking ghost pixels, grab memory
 #ifdef EINK_LIMIT_GHOSTING_PX
-    dirtyPixels = new uint8_t[EInkDisplay::displayBufferSize](); // Init with zeros
+    dirtyPixels = std::unique_ptr<uint8_t[]>(new uint8_t[EInkDisplay::displayBufferSize]()); // Init with zeros
 #endif
 }
 
@@ -19,7 +19,7 @@ EInkDynamicDisplay::~EInkDynamicDisplay()
 {
     // If we were tracking ghost pixels, free the memory
 #ifdef EINK_LIMIT_GHOSTING_PX
-    delete[] dirtyPixels;
+    dirtyPixels = nullptr;
 #endif
 }
 
@@ -95,7 +95,7 @@ void EInkDynamicDisplay::adjustRefreshCounters()
 // Trigger the display update by calling base class
 bool EInkDynamicDisplay::update()
 {
-    // Detemine the refresh mode to use, and start the update
+    // Determine the refresh mode to use, and start the update
     bool refreshApproved = determineMode();
     if (refreshApproved) {
         EInkDisplay::forceDisplay(0); // Bypass base class' own rate-limiting system
@@ -317,7 +317,7 @@ void EInkDynamicDisplay::checkFrameMatchesPrevious()
     LOG_DEBUG("refresh=SKIPPED, reason=FRAME_MATCHED_PREVIOUS, frameFlags=0x%x", frameFlags);
 }
 
-// Have too many fast-refreshes occured consecutively, since last full refresh?
+// Have too many fast-refreshes occurred consecutively, since last full refresh?
 void EInkDynamicDisplay::checkConsecutiveFastRefreshes()
 {
     // If a decision was already reached, don't run the check
@@ -454,7 +454,7 @@ void EInkDynamicDisplay::checkExcessiveGhosting()
 void EInkDynamicDisplay::resetGhostPixelTracking()
 {
     // Copy the current frame into dirtyPixels[] from the display buffer
-    memcpy(dirtyPixels, EInkDisplay::buffer, EInkDisplay::displayBufferSize);
+    memcpy(dirtyPixels.get(), EInkDisplay::buffer, EInkDisplay::displayBufferSize);
 }
 #endif // EINK_LIMIT_GHOSTING_PX
 

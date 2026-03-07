@@ -32,15 +32,14 @@ const uint32_t g_ADigitalPinMap[] = {
 
 void initVariant()
 {
-    // LED1 & LED2
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, LOW);
-
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
 
     pinMode(PIN_3V3_ACC_EN, OUTPUT);
     digitalWrite(PIN_3V3_ACC_EN, HIGH);
+
+    pinMode(T1000X_SENSOR_EN_PIN, OUTPUT);
+    digitalWrite(T1000X_SENSOR_EN_PIN, HIGH);
 
     pinMode(BUZZER_EN_PIN, OUTPUT);
     digitalWrite(BUZZER_EN_PIN, HIGH);

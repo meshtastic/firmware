@@ -26,23 +26,25 @@ class AppletFont
         WINDOWS_1250,
         WINDOWS_1251,
         WINDOWS_1252,
+        WINDOWS_1253,
     };
 
     AppletFont();
-    AppletFont(const GFXfont &adafruitGFXFont, Encoding encoding = ASCII, int8_t paddingTop = 0, int8_t paddingBottom = 0);
+    explicit AppletFont(const GFXfont &adafruitGFXFont, Encoding encoding = ASCII, int8_t paddingTop = 0,
+                        int8_t paddingBottom = 0);
 
     uint8_t lineHeight();
     uint8_t heightAboveCursor();
     uint8_t heightBelowCursor();
     uint8_t widthBetweenWords(); // Width of the space character
 
-    std::string decodeUTF8(std::string encoded);
+    std::string decodeUTF8(const std::string &encoded);
 
-    const GFXfont *gfxFont = NULL; // Default value: in-built AdafruitGFX font
+    const GFXfont *gfxFont = nullptr; // Default value: in-built AdafruitGFX font
 
   private:
-    uint32_t toUtf32(std::string utf8);
-    char applyEncoding(std::string utf8);
+    uint32_t toUtf32(const std::string &utf8);
+    char applyEncoding(const std::string &utf8);
 
     uint8_t height = 8;          // Default value: in-built AdafruitGFX font
     uint8_t ascenderHeight = 0;  // Default value: in-built AdafruitGFX font
@@ -83,5 +85,13 @@ class AppletFont
 #define FREESANS_12PT_WIN1252 InkHUD::AppletFont(FreeSans12pt_Win1252, InkHUD::AppletFont::WINDOWS_1252, -3, 1)
 #define FREESANS_9PT_WIN1252 InkHUD::AppletFont(FreeSans9pt_Win1252, InkHUD::AppletFont::WINDOWS_1252, -2, -1)
 #define FREESANS_6PT_WIN1252 InkHUD::AppletFont(FreeSans6pt_Win1252, InkHUD::AppletFont::WINDOWS_1252, -1, -2)
+
+// Greek
+#include "graphics/niche/Fonts/FreeSans12pt_Win1253.h"
+#include "graphics/niche/Fonts/FreeSans6pt_Win1253.h"
+#include "graphics/niche/Fonts/FreeSans9pt_Win1253.h"
+#define FREESANS_12PT_WIN1253 InkHUD::AppletFont(FreeSans12pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -3, 1)
+#define FREESANS_9PT_WIN1253 InkHUD::AppletFont(FreeSans9pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -2, -1)
+#define FREESANS_6PT_WIN1253 InkHUD::AppletFont(FreeSans6pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -1, -2)
 
 #endif

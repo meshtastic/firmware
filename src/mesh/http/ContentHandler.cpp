@@ -9,7 +9,6 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
-#include "Led.h"
 #include "SPILock.h"
 #include "power.h"
 #include "serialization/JSON.h"
@@ -46,10 +45,6 @@
 using namespace httpsserver;
 
 #include "mesh/http/ContentHandler.h"
-
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
-HTTPClient httpClient;
 
 #define DEST_FS_USES_LITTLEFS
 
@@ -92,7 +87,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
 
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
-    ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
     ResourceNode *nodeJsonNodes = new ResourceNode("/json/nodes", "GET", &handleNodes);
     ResourceNode *nodeJsonFsBrowseStatic = new ResourceNode("/json/fs/browse/static", "GET", &handleFsBrowseStatic);
@@ -110,7 +104,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeRestart);
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
-    secureServer->registerNode(nodeJsonBlinkLED);
     secureServer->registerNode(nodeJsonFsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
@@ -133,7 +126,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeRestart);
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
-    insecureServer->registerNode(nodeJsonBlinkLED);
     insecureServer->registerNode(nodeJsonFsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
@@ -173,7 +165,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
-        // res->print(""); @todo remove
+        res->print("");
         return;
     }
 
@@ -223,7 +215,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
-        // res->print(""); @todo remove
+        res->print("");
         return;
     }
 
@@ -348,11 +340,6 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->print(jsonString.c_str());
 
     delete value;
-
-    // Clean up the fileList to prevent memory leak
-    for (auto *val : fileList) {
-        delete val;
-    }
 }
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
@@ -547,6 +534,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         if (name != "file") {
             LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
+            delete parser;
             return;
         }
 
@@ -554,6 +542,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         if (filename == "") {
             LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
+            delete parser;
             return;
         }
 
@@ -627,7 +616,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     }
 
     // Helper lambda to create JSON array and clean up memory properly
-    auto createJSONArrayFromLog = [](uint32_t *logArray, int count) -> JSONValue * {
+    auto createJSONArrayFromLog = [](const uint32_t *logArray, int count) -> JSONValue * {
         JSONArray tempArray;
         for (int i = 0; i < count; i++) {
             tempArray.push_back(new JSONValue((int)logArray[i]));
@@ -787,11 +776,6 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     std::string jsonString = value->Stringify();
     res->print(jsonString.c_str());
     delete value;
-
-    // Clean up the nodesArray to prevent memory leak
-    for (auto *val : nodesArray) {
-        delete val;
-    }
 }
 
 /*
@@ -904,45 +888,6 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     webServerThread->requestRestart = (millis() / 1000) + 5;
 }
 
-void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "application/json");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "POST");
-
-    ResourceParameters *params = req->getParams();
-    std::string blink_target;
-
-    if (!params->getQueryParameter("blink_target", blink_target)) {
-        // if no blink_target was supplied in the URL parameters of the
-        // POST request, then assume we should blink the LED
-        blink_target = "LED";
-    }
-
-    if (blink_target == "LED") {
-        uint8_t count = 10;
-        while (count > 0) {
-            ledBlink.set(true);
-            delay(50);
-            ledBlink.set(false);
-            delay(50);
-            count = count - 1;
-        }
-    } else {
-#if HAS_SCREEN
-        if (screen)
-            screen->blink();
-#endif
-    }
-
-    JSONObject jsonObjOuter;
-    jsonObjOuter["status"] = new JSONValue("ok");
-    JSONValue *value = new JSONValue(jsonObjOuter);
-    std::string jsonString = value->Stringify();
-    res->print(jsonString.c_str());
-    delete value;
-}
-
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "application/json");
@@ -984,10 +929,5 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
     std::string jsonString = value->Stringify();
     res->print(jsonString.c_str());
     delete value;
-
-    // Clean up the networkObjs to prevent memory leak
-    for (auto *val : networkObjs) {
-        delete val;
-    }
 }
 #endif

@@ -65,7 +65,7 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
     return 0;
 }
 
-void InkHUD::NotificationApplet::onRender()
+void InkHUD::NotificationApplet::onRender(bool full)
 {
     // Clear the region beneath the tile
     // Most applets are drawing onto an empty frame buffer and don't need to do this
@@ -139,54 +139,47 @@ void InkHUD::NotificationApplet::onForeground()
 void InkHUD::NotificationApplet::onBackground()
 {
     handleInput = false;
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
 }
 
 void InkHUD::NotificationApplet::onButtonShortPress()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onButtonLongPress()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onExitShort()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onExitLong()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavUp()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavDown()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavLeft()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavRight()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 // Ask the WindowManager to check whether any displayed applets are already displaying the info from this notification
@@ -235,17 +228,17 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
                   Notification::Type::NOTIFICATION_MESSAGE_BROADCAST)) {
 
         // Although we are handling DM and broadcast notifications together, we do need to treat them slightly differently
-        bool isBroadcast = currentNotification.type == Notification::Type::NOTIFICATION_MESSAGE_BROADCAST;
+        bool msgIsBroadcast = currentNotification.type == Notification::Type::NOTIFICATION_MESSAGE_BROADCAST;
 
         // Pick source of message
-        MessageStore::Message *message =
-            isBroadcast ? &inkhud->persistence->latestMessage.broadcast : &inkhud->persistence->latestMessage.dm;
+        const MessageStore::Message *message =
+            msgIsBroadcast ? &inkhud->persistence->latestMessage.broadcast : &inkhud->persistence->latestMessage.dm;
 
         // Find info about the sender
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(message->sender);
 
         // Leading tag (channel vs. DM)
-        text += isBroadcast ? "From:" : "DM: ";
+        text += msgIsBroadcast ? "From:" : "DM: ";
 
         // Sender id
         if (node && node->has_user)
@@ -259,7 +252,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
             text.clear();
 
             // Leading tag (channel vs. DM)
-            text += isBroadcast ? "Msg from " : "DM from ";
+            text += msgIsBroadcast ? "Msg from " : "DM from ";
 
             // Sender id
             if (node && node->has_user)

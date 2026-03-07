@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-// static const uint8_t LED_BUILTIN = -1;
-
 // static const uint8_t TX = 43;
 // static const uint8_t RX = 44;
 

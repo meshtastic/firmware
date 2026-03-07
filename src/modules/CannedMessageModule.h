@@ -27,10 +27,6 @@ enum CannedMessageModuleIconType { shift, backspace, space, enter };
 #define CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT 50
 #define CANNED_MESSAGE_MODULE_MESSAGES_SIZE 800
 
-#ifndef CANNED_MESSAGE_MODULE_ENABLE
-#define CANNED_MESSAGE_MODULE_ENABLE 0
-#endif
-
 // ============================
 //        Data Structures
 // ============================
@@ -186,6 +182,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool shift = false;
     int charSet = 0; // 0=ABC, 1=123
 #endif
+
+    void updateState(cannedMessageModuleRunState, bool shouldRequestFocus = false);
 
     bool isUpEvent(const InputEvent *event);
     bool isDownEvent(const InputEvent *event);

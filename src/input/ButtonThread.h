@@ -13,6 +13,9 @@ struct ButtonConfig {
     bool activePullup = true;
     uint32_t pullupSense = 0;
     voidFuncPtr intRoutine = nullptr;
+    voidFuncPtr onPress = nullptr;   // Optional edge callbacks
+    voidFuncPtr onRelease = nullptr; // Optional edge callbacks
+    bool suppressLeadUpSound = false;
     input_broker_event singlePress = INPUT_BROKER_NONE;
     input_broker_event longPress = INPUT_BROKER_NONE;
     uint16_t longPressTime = 500;
@@ -94,6 +97,9 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     input_broker_event _shortLong = INPUT_BROKER_NONE;
 
     voidFuncPtr _intRoutine = nullptr;
+    voidFuncPtr _pressHandler = nullptr;
+    voidFuncPtr _releaseHandler = nullptr;
+    bool _suppressLeadUp = false;
     uint16_t _longPressTime = 500;
     uint16_t _longLongPressTime = 3900;
     int _pinNum = 0;

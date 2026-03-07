@@ -33,9 +33,6 @@
 #ifndef HAS_RADIO
 #define HAS_RADIO 1
 #endif
-#ifndef HAS_RTC
-#define HAS_RTC 1
-#endif
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 1
 #endif
@@ -195,6 +192,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_LINK_32
 #elif defined(T_DECK_PRO)
 #define HW_VENDOR meshtastic_HardwareModel_T_DECK_PRO
+#elif defined(T_BEAM_1W)
+#define HW_VENDOR meshtastic_HardwareModel_TBEAM_1_WATT
 #elif defined(T_LORA_PAGER)
 #define HW_VENDOR meshtastic_HardwareModel_T_LORA_PAGER
 #elif defined(HELTEC_V4)
@@ -203,6 +202,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_C6L
 #elif defined(HELTEC_WIRELESS_TRACKER_V2)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
+#elif defined(M5STACK_CARDPUTER_ADV)
+#define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif

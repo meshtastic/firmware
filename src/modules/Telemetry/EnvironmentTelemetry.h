@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "BaseTelemetryModule.h"
+
 #ifndef ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE
 #define ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE 0
 #endif
@@ -17,6 +19,7 @@
 
 class EnvironmentTelemetryModule : private concurrency::OSThread,
                                    public ScanI2CConsumer,
+                                   public BaseTelemetryModule,
                                    public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<EnvironmentTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
@@ -65,9 +68,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
     bool firstTime = 1;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
-    uint32_t lastSentToMesh = 0;
     uint32_t lastSentToPhone = 0;
-    uint32_t sensor_read_error_count = 0;
 };
 
 #endif

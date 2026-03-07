@@ -27,7 +27,7 @@ int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
 /**
  * Read any rx chars from the link and call handleRecStream
  */
-int32_t StreamAPI::readStream(char *buf, uint16_t bufLen)
+int32_t StreamAPI::readStream(const char *buf, uint16_t bufLen)
 {
     if (bufLen < 1) {
         // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
@@ -56,7 +56,7 @@ void StreamAPI::writeStream()
     }
 }
 
-int32_t StreamAPI::handleRecStream(char *buf, uint16_t bufLen)
+int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
 {
     uint16_t index = 0;
     while (bufLen > index) { // Currently we never want to block

@@ -171,11 +171,12 @@ unsigned long getModeCycleIntervalMs()
 
 int calculateMaxScroll(int totalEntries, int visibleRows)
 {
-    return std::max(0, (totalEntries - 1) / (visibleRows * 2));
+    return max(0, (totalEntries - 1) / (visibleRows * 2));
 }
 
 void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_t yEnd)
 {
+    x = (currentResolution == ScreenResolution::High) ? x - 2 : (currentResolution == ScreenResolution::Low) ? x - 1 : x;
     for (int y = yStart; y <= yEnd; y += 2) {
         display->setPixel(x, y);
     }
@@ -186,13 +187,12 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
     if (totalEntries <= visibleNodeRows * columns)
         return;
 
-    int scrollbarX = display->getWidth() - 2;
     int scrollbarHeight = display->getHeight() - scrollStartY - 10;
-    int thumbHeight = std::max(4, (scrollbarHeight * visibleNodeRows * columns) / totalEntries);
-    int perPage = visibleNodeRows * columns;
-    int maxScroll = std::max(0, (totalEntries - 1) / perPage);
-    int thumbY = scrollStartY + (scrollIndex * (scrollbarHeight - thumbHeight)) / std::max(1, maxScroll);
+    int thumbHeight = max(4, (scrollbarHeight * visibleNodeRows * columns) / totalEntries);
+    int thumbY = scrollStartY + (scrollIndex * (scrollbarHeight - thumbHeight)) /
+                                    max(1, max(0, (totalEntries - 1) / (visibleNodeRows * columns)));
 
+    int scrollbarX = display->getWidth() - 2;
     for (int i = 0; i < thumbHeight; i++) {
         display->setPixel(scrollbarX, thumbY + i);
     }
@@ -205,9 +205,11 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
 void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
+    int nameMaxWidth = columnWidth - 25;
     int timeOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 7 : 10) : (isLeftCol ? 3 : 7);
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     char timeStr[10];
     uint32_t seconds = sinceLastSeen(node);
@@ -234,6 +236,13 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
         }
     }
+    if (node->is_ignored || isMuted) {
+        if (currentResolution == ScreenResolution::High) {
+            display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
+        } else {
+            display->drawLine(x + 4, y + 6, (isLeftCol ? 0 : x - 3) + nameMaxWidth - 4, y + 6);
+        }
+    }
 
     int rightEdge = x + columnWidth - timeOffset;
     if (timeStr[strlen(timeStr) - 1] == 'm') // Fix the fact that our fonts don't line up well all the time
@@ -253,6 +262,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     int barsXOffset = columnWidth - barsOffset;
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -263,6 +273,13 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
+        }
+    }
+    if (node->is_ignored || isMuted) {
+        if (currentResolution == ScreenResolution::High) {
+            display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
+        } else {
+            display->drawLine(x + 4, y + 6, (isLeftCol ? 0 : x - 3) + nameMaxWidth - 4, y + 6);
         }
     }
 
@@ -298,6 +315,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
     char distStr[10] = "";
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -358,6 +376,13 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
         }
     }
+    if (node->is_ignored || isMuted) {
+        if (currentResolution == ScreenResolution::High) {
+            display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
+        } else {
+            display->drawLine(x + 4, y + 6, (isLeftCol ? 0 : x - 3) + nameMaxWidth - 4, y + 6);
+        }
+    }
 
     if (strlen(distStr) > 0) {
         int offset = (currentResolution == ScreenResolution::High)
@@ -392,6 +417,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
     const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -401,6 +427,13 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
+        }
+    }
+    if (node->is_ignored || isMuted) {
+        if (currentResolution == ScreenResolution::High) {
+            display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
+        } else {
+            display->drawLine(x + 4, y + 6, (isLeftCol ? 0 : x - 3) + nameMaxWidth - 4, y + 6);
         }
     }
 }
@@ -522,13 +555,13 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     int maxScroll = 0;
     if (perPage > 0) {
-        maxScroll = std::max(0, (totalEntries - 1) / perPage);
+        maxScroll = max(0, (totalEntries - 1) / perPage);
     }
 
     if (scrollIndex > maxScroll)
         scrollIndex = maxScroll;
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
-    int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
+    int endIndex = min(startIndex + visibleNodeRows * totalColumns, totalEntries);
     int yOffset = 0;
     int col = 0;
     int lastNodeY = y;
@@ -546,7 +579,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         if (extras)
             extras(display, node, xPos, yPos, columnWidth, heading, lat, lon);
 
-        lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
+        lastNodeY = max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;
         shownCount++;
         rowCount++;
@@ -579,13 +612,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     if (millis() - popupTime < POPUP_DURATION_MS) {
         popupTotal = totalEntries;
 
-        int perPage = visibleNodeRows * totalColumns;
-
         popupStart = startIndex + 1;
-        popupEnd = std::min(startIndex + perPage, totalEntries);
+        popupEnd = min(startIndex + perPage, totalEntries);
 
         popupPage = (scrollIndex + 1);
-        popupMaxPage = std::max(1, (totalEntries + perPage - 1) / perPage);
+        popupMaxPage = max(1, (totalEntries + perPage - 1) / perPage);
 
         char buf[32];
         snprintf(buf, sizeof(buf), "%d-%d/%d  Pg %d/%d", popupStart, popupEnd, popupTotal, popupPage, popupMaxPage);

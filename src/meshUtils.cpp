@@ -107,3 +107,14 @@ const std::string vformat(const char *const zcFormat, ...)
     va_end(vaArgs);
     return std::string(zc.data(), iLen);
 }
+
+size_t pb_string_length(const char *str, size_t max_len)
+{
+    size_t len = 0;
+    for (size_t i = 0; i < max_len; i++) {
+        if (str[i] != '\0') {
+            len = i + 1;
+        }
+    }
+    return len;
+}

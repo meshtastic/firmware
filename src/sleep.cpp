@@ -5,14 +5,15 @@
 #endif
 
 #include "Default.h"
-#include "Led.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "TransmitHistory.h"
 #include "detect/LoRaRadioType.h"
 #include "error.h"
 #include "main.h"
+#include "modules/StatusLEDModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -248,10 +249,13 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
         nodeDB->saveToDisk();
     }
 
+    // Persist broadcast transmit times so throttle survives reboot
+    if (transmitHistory)
+        transmitHistory->saveToDisk();
+
 #ifdef PIN_POWER_EN
     digitalWrite(PIN_POWER_EN, LOW);
     pinMode(PIN_POWER_EN, INPUT); // power off peripherals
-                                  // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
 
 #ifdef RAK_WISMESH_TAP_V2
@@ -279,8 +283,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     digitalWrite(PIN_WD_EN, LOW);
 #endif
 #endif
-    ledBlink.set(false);
-
+    statusLEDModule->setPowerLED(false);
 #ifdef RESET_OLED
     digitalWrite(RESET_OLED,
                  1); // put the display in reset before killing its power
@@ -557,7 +560,8 @@ void enableModemSleep()
 
 bool shouldLoraWake(uint32_t msecToWake)
 {
-    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER);
+    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+                                          config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE);
 }
 
 void enableLoraInterrupt()
@@ -578,10 +582,8 @@ void enableLoraInterrupt()
     gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
 
-#if defined(USE_GC1109_PA)
-    gpio_pullup_en((gpio_num_t)LORA_PA_POWER);
-    gpio_pullup_en((gpio_num_t)LORA_PA_EN);
-    gpio_pulldown_en((gpio_num_t)LORA_PA_TX_EN);
+#if HAS_LORA_FEM
+    loraFEMInterface.setRxModeEnableWhenMCUSleep();
 #endif
 
     LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);

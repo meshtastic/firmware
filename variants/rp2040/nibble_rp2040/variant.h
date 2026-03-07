@@ -2,7 +2,7 @@
 
 #define BUTTON_PIN -1 // Pin 17 used for antenna switching via DIO4
 
-#define LED_PIN 1
+#define LED_POWER 1
 
 #define HAS_CPU_SHUTDOWN 1
 

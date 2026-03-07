@@ -26,6 +26,7 @@
 #endif
 
 #include "Default.h"
+#include "MeshRadio.h"
 
 #if HAS_NETWORKING
 extern Syslog syslog;
@@ -279,6 +280,55 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
     rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
     break;
   }
+  case meshtastic_AdminMessage_ota_request_tag: {
+#if defined(ARCH_ESP32)
+    LOG_INFO("OTA Requested");
+
+    if (r->ota_request.ota_hash.size != 32) {
+      suppressRebootBanner = true;
+      sendWarningAndLog("Cannot start OTA: Invalid `ota_hash` provided.");
+      break;
+    }
+
+    meshtastic_OTAMode mode = r->ota_request.reboot_ota_mode;
+    const char *mode_name = (mode == METHOD_OTA_BLE ? "BLE" : "WiFi");
+
+    // Check that we have an OTA partition
+    const esp_partition_t *part = MeshtasticOTA::getAppPartition();
+    if (part == NULL) {
+      suppressRebootBanner = true;
+      sendWarningAndLog("Cannot start OTA: Cannot find OTA Loader partition.");
+      break;
+    }
+
+    static esp_app_desc_t app_desc;
+    if (!MeshtasticOTA::getAppDesc(part, &app_desc)) {
+      suppressRebootBanner = true;
+      sendWarningAndLog("Cannot start OTA: Device does have a valid OTA Loader.");
+      break;
+    }
+
+    if (!MeshtasticOTA::checkOTACapability(&app_desc, mode)) {
+      suppressRebootBanner = true;
+      sendWarningAndLog("OTA Loader does not support %s", mode_name);
+      break;
+    }
+
+    if (MeshtasticOTA::trySwitchToOTA()) {
+      suppressRebootBanner = true;
+      if (screen)
+        screen->startFirmwareUpdateScreen();
+      MeshtasticOTA::saveConfig(&config.network, mode, r->ota_request.ota_hash.bytes);
+      sendWarningAndLog("Rebooting to %s OTA", mode_name);
+    } else {
+      sendWarningAndLog("Unable to switch to the OTA partition.");
+    }
+#endif
+    int s = 1; // Reboot in 1 second, hard coded
+    LOG_INFO("Reboot in %d seconds", s);
+    rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+    break;
+  }
   case meshtastic_AdminMessage_shutdown_seconds_tag: {
     int32_t s = r->shutdown_seconds;
     LOG_INFO("Shutdown in %d seconds", s);
@@ -395,7 +445,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
       node->has_device_metrics = false;
       node->has_position = false;
       node->user.public_key.size = 0;
-      node->user.public_key.bytes[0] = 0;
+      memset(node->user.public_key.bytes, 0, sizeof(node->user.public_key.bytes));
       saveChanges(SEGMENT_NODEDATABASE, false);
     }
     break;
@@ -405,6 +455,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_ignored_node);
     if (node != NULL) {
       node->is_ignored = false;
+      saveChanges(SEGMENT_NODEDATABASE, false);
+    }
+    break;
+  }
+  case meshtastic_AdminMessage_toggle_muted_node_tag: {
+    LOG_INFO("Client received toggle_muted_node command");
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->toggle_muted_node);
+    if (node != NULL) {
+      node->bitfield ^= (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT);
       saveChanges(SEGMENT_NODEDATABASE, false);
     }
     break;
