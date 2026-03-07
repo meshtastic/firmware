@@ -798,7 +798,6 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
         cn->level = meshtastic_LogRecord_Level_ERROR;
         snprintf(cn->message, sizeof(cn->message), "%s", err_string);
         service->sendClientNotification(cn);
-        return false;
         LOG_WARN("Region code %s not permitted without license, reverting", newRegion->name);
         return false;
     }
@@ -831,14 +830,10 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
             snprintf(cn->message, sizeof(cn->message), "%s", err_string);
             service->sendClientNotification(cn);
             return false;
-        } else {
-            bw = loraConfig.bandwidth;
         }
     } // end if use_preset
 
-    // this is probably wrong (?) as you can still select last channel in a band, set
-    // wide bandwidth and transmit outside the band and the check will not catch it // phaseloop
-    // this only makes sense if you happen to be in the center of the region band
+    // check if the region supports the requested bandwidth (either from preset or custom settings)
     if ((newRegion->freqEnd - newRegion->freqStart) < bw / 1000) {
         const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
         const float requestedBwKHz = bw;
@@ -866,7 +861,7 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
         // Set to default modem preset
         loraConfig.use_preset = true;
         loraConfig.modem_preset = newRegion->defaultPreset;
-    }
+    } // end if region too narrow for bandwidth
 
     return validConfig;
 }
@@ -889,7 +884,7 @@ void RadioInterface::applyModemConfig()
         modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
         // If custom CR is being used already, check if the new preset is higher
         if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < newcr) {
-
+            cr = newcr;
             LOG_INFO("Default Coding Rate is higher than custom setting, using %u", cr);
         }
         // If the custom CR is higher than the preset, use it
@@ -897,10 +892,13 @@ void RadioInterface::applyModemConfig()
             cr = loraConfig.coding_rate;
             LOG_INFO("Using custom Coding Rate %u", cr);
         } else {
-            sf = loraConfig.spread_factor;
             cr = loraConfig.coding_rate;
-            bw = bwCodeToKHz(loraConfig.bandwidth);
         }
+
+    } else { // if not using preset, then just use the custom settings
+        bw = loraConfig.bandwidth;
+        sf = loraConfig.spread_factor;
+        cr = loraConfig.coding_rate;
     }
 
     power = loraConfig.tx_power;
@@ -1016,7 +1014,7 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
     size_t num_pa_points = portduino_config.num_pa_points;
     const uint16_t *tx_gain = portduino_config.tx_gain_lora;
 #else
-    int num_pa_points = NUM_PA_POINTS;
+    size_t num_pa_points = NUM_PA_POINTS;
     const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
 #endif
 
