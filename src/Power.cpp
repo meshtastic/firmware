@@ -709,6 +709,22 @@ bool Power::setup()
         found = true;
 #endif
     }
+#ifdef T_WATCH_S3   // I don't know if this particular modification is disruptive on other devices, so better keep this here
+#ifdef PMU_IRQ
+    /*
+        This particular piece of code reacts to the pressing of the Power/Corona button by generating an interrupt that resets the counter of the run_once() function
+        allowing me to use the function to make my button do whatever I want (in my case switching on or off the screen) whenever I want.
+    */
+    pinMode(PMU_IRQ, INPUT_PULLUP);
+    attachInterrupt(
+        PMU_IRQ,
+        []() {//lambda that wakes the power thread
+            power->setIntervalFromNow(0);
+            runASAP = true;
+        },
+        FALLING);
+#endif
+#endif
 #ifdef EXT_PWR_DETECT
     attachInterrupt(
         EXT_PWR_DETECT,
@@ -986,6 +1002,25 @@ int32_t Power::runOnce()
             powerFSM.trigger(EVENT_POWER_CONNECTED);
         }
 
+        #ifdef T_WATCH_S3
+        /*
+            In the T-Watch S3 this code fragment reacts to the short press of the button by switching the
+            display on and off
+        */
+        if (PMU->isPekeyShortPressIrq()) {
+            LOG_INFO("Input: Corona Button Click");
+
+            if (screen) {
+                if (!screen->isScreenOn()) {
+                    LOG_DEBUG("Waking screen via Button");
+                    screen->setOn(true);
+                } else {
+                    LOG_DEBUG("Sleeping screen via Button");
+                    screen->setOn(false); 
+                }
+            }
+        }
+        #endif
         /*
         Other things we could check if we cared...
 
