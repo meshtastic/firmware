@@ -9,6 +9,8 @@
 
 #ifdef ARCH_PORTDUINO
 
+using meshtastic::Syslog;
+
 // Mock UDP client for testing
 class MockUDP : public UDP {
 public:
