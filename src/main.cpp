@@ -764,7 +764,9 @@ void setup() {
                       meshtastic_TelemetrySensorType_INA3221);
   scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX17048,
                       meshtastic_TelemetrySensorType_MAX17048);
-  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC6310,
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC6310U,
+                      meshtastic_TelemetrySensorType_QMC6310);
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC6310N,
                       meshtastic_TelemetrySensorType_QMC6310);
   scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMI8658,
                       meshtastic_TelemetrySensorType_QMI8658);
@@ -772,7 +774,7 @@ void setup() {
                       meshtastic_TelemetrySensorType_QMC5883L);
   scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::HMC5883L,
                       meshtastic_TelemetrySensorType_QMC5883L);
-  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PMSA0031,
+  scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PMSA003I,
                       meshtastic_TelemetrySensorType_PMSA003I);
   scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90614,
                       meshtastic_TelemetrySensorType_MLX90614);
