@@ -7,12 +7,14 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
+#include "RadioLibInterface.h"
 #include "ReliableRouter.h"
+#include "TransmitHistory.h"
 #include "airtime.h"
 #include "buzz.h"
+#include "power/PowerHAL.h"
 
 #include "FSCommon.h"
-#include "Led.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
@@ -28,7 +30,6 @@
 #include <Wire.h>
 #endif
 #include "detect/einkScan.h"
-#include "graphics/RAKled.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
@@ -38,6 +39,9 @@
 #include "target_specific.h"
 #include <memory>
 #include <utility>
+#if HAS_SCREEN
+#include "MessageStore.h"
+#endif
 
 #ifdef ELECROW_ThinkNode_M5
 PCA9557 io(0x18, &Wire);
@@ -256,32 +260,13 @@ const char *getDeviceName() {
   return name;
 }
 
-static int32_t ledBlinker() {
-  // Still set up the blinking (heartbeat) interval but skip code path below, so
-  // LED will blink if config.device.led_heartbeat_disabled is changed
-  if (config.device.led_heartbeat_disabled)
-    return 1000;
-
-  static bool ledOn;
-  ledOn ^= 1;
-
-  ledBlink.set(ledOn);
-
-  // have a very sparse duty cycle of LED being on, unless charging, then blink
-  // 0.5Hz square wave rate to indicate that
-  return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
-}
-
 uint32_t timeLastPowered = 0;
 
-static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
-static OSThread *ambientLightingThread;
+OSThread *ambientLightingThread;
 
 RadioInterface *rIf = NULL;
-#ifdef ARCH_PORTDUINO
 RadioLibHal *RadioLibHAL = NULL;
-#endif
 
 /**
  * Some platforms (nrf52) might provide an alterate version that suppresses
@@ -557,13 +542,6 @@ void setup() {
   initSPI();
 
   OSThread::setup();
-
-#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
-  // The ThinkNodes have their own blink logic
-  // ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
-#else
-  ledPeriodic = new Periodic("Blink", ledBlinker);
-#endif
 
   fsInit();
 
