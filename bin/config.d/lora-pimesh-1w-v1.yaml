@@ -1,0 +1,14 @@
+# PiMesh-1W (V1)
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Reset: 18
+  Busy: 20
+  TXen: 13
+  RXen: 12
+  DIO3_TCXO_VOLTAGE: true
+  SX126X_MAX_POWER: 22
+  spidev: spidev0.0
+
+# preamble_length: 17
