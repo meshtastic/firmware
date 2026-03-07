@@ -94,8 +94,7 @@ class EInkDisplay : public OLEDDisplay
     SPIClass *hspi = NULL;
 #endif
 
-#if defined(HELTEC_MESH_POCKET) || defined(SEEED_WIO_TRACKER_L1_EINK) || defined(HELTEC_MESH_SOLAR_EINK) ||                      \
-    defined(MINI_EPAPER_S3)
+#if defined(HELTEC_MESH_POCKET) || defined(SEEED_WIO_TRACKER_L1_EINK) || defined(HELTEC_MESH_SOLAR_EINK)
     SPIClass *spi1 = NULL;
 #endif
 

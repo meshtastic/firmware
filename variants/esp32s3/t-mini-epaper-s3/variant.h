@@ -11,8 +11,8 @@
 // Built-in RTC (I2C)
 #define PCF8563_RTC 0x51
 #define HAS_RTC 1
-#define I2C_SDA 18
-#define I2C_SCL 9
+#define I2C_SDA SDA
+#define I2C_SCL SCL
 
 // Battery voltage monitoring
 #define BATTERY_PIN 2 // A battery voltage measurement pin, voltage divider connected here to
