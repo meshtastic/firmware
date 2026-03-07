@@ -540,5 +540,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN 0
 #endif
 
+#ifndef MESHTASTIC_EXCLUDE_APPS
+#define MESHTASTIC_EXCLUDE_APPS 1
+#endif
+
 #include "DebugConfiguration.h"
 #include "RF95Configuration.h"

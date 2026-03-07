@@ -55,7 +55,8 @@ class menuHandler
         NodeNameLengthMenu,
         FrameToggles,
         DisplayUnits,
-        MessageBubblesMenu
+        MessageBubblesMenu,
+        AppsMenu
     };
     static screenMenus menuQueue;
     static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
@@ -110,6 +111,10 @@ class menuHandler
     static void frameTogglesMenu();
     static void displayUnitsMenu();
     static void messageBubblesMenu();
+#if !MESHTASTIC_EXCLUDE_APPS
+    static void appsMenu();
+    static void appRunningMenu();
+#endif
     static void textMessageMenu();
 
   private:

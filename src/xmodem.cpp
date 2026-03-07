@@ -58,6 +58,27 @@ XModemAdapter xModem;
 XModemAdapter::XModemAdapter() {}
 
 /**
+ * Creates all parent directories for a given file path.
+ * e.g. for "/apps/counter/app.json", creates "/apps" and "/apps/counter".
+ */
+static void createParentDirs(const char *filepath)
+{
+    char dir[sizeof(meshtastic_XModem_buffer_t::bytes)];
+    strncpy(dir, filepath, sizeof(dir) - 1);
+    dir[sizeof(dir) - 1] = '\0';
+
+    for (char *p = dir + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            spiLock->lock();
+            FSCom.mkdir(dir);
+            spiLock->unlock();
+            *p = '/';
+        }
+    }
+}
+
+/**
  * Calculates the CRC-16 CCITT checksum of the given buffer.
  *
  * @param buffer The buffer to calculate the checksum for.
@@ -122,6 +143,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
+                createParentDirs(filename);
                 spiLock->lock();
                 file = FSCom.open(filename, FILE_O_WRITE);
                 spiLock->unlock();

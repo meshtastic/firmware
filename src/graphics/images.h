@@ -223,6 +223,18 @@ const uint8_t icon_module[] PROGMEM = {
     0b00011000  // ░░░██░░░
 };
 
+// App grid icon (3x3 grid of dots)
+const uint8_t icon_apps[] PROGMEM = {
+    0b00000000, // ░░░░░░░░
+    0b11011011, // ██░██░██
+    0b00000000, // ░░░░░░░░
+    0b11011011, // ██░██░██
+    0b00000000, // ░░░░░░░░
+    0b11011011, // ██░██░██
+    0b00000000, // ░░░░░░░░
+    0b00000000  // ░░░░░░░░
+};
+
 #define mute_symbol_width 8
 #define mute_symbol_height 8
 const uint8_t mute_symbol[] PROGMEM = {
