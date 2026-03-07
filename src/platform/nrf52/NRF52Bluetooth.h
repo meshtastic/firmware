@@ -22,4 +22,6 @@ class NRF52Bluetooth : BluetoothApi
 
     static bool onUnwantedPairing(uint16_t conn_handle, uint8_t const passkey[6], bool match_request);
     static void disconnect();
+
+    bool meshReadyNotified = false;
 };

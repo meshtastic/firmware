@@ -381,6 +381,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
+#if HAS_BLE_MESH
+    if (bleMeshHandler) {
+        bleMeshHandler->onSend(p);
+    }
+#endif
+
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
     return iface->send(p);
 }

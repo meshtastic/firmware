@@ -10,11 +10,17 @@
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
 #include "sleep.h"
+#include <NimBLEAdvertising.h>
 #include <NimBLEDevice.h>
+#include <Preferences.h>
 #include <atomic>
 #include <mutex>
 
-#ifdef NIMBLE_TWO
+#ifdef ARCH_ESP32
+#include <nvs.h>
+#endif
+
+#if defined(NIMBLE_TWO) || (defined(CONFIG_BT_NIMBLE_EXT_ADV) && CONFIG_BT_NIMBLE_EXT_ADV)
 #include "NimBLEAdvertising.h"
 #include "NimBLEExtAdvertising.h"
 #include "PowerStatus.h"
@@ -731,7 +737,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         // Restart Advertising
         ble->startAdvertising();
 #else
-        NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+        auto *pAdvertising = NimBLEDevice::getAdvertising();
         if (!pAdvertising->start(0)) {
             if (pAdvertising->isAdvertising()) {
                 LOG_DEBUG("BLE advertising already running");
@@ -746,13 +752,48 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 static NimbleBluetoothToRadioCallback *toRadioCallbacks;
 static NimbleBluetoothFromRadioCallback *fromRadioCallbacks;
 
+#ifdef ARCH_ESP32
+static void clearCorruptBondStoreOnce()
+{
+    Preferences prefs;
+    if (!prefs.begin("meshtastic", false)) {
+        return;
+    }
+
+    const bool alreadyCleared = prefs.getBool("nimbleBondClr", false);
+    if (alreadyCleared) {
+        prefs.end();
+        return;
+    }
+
+    nvs_handle_t nimbleHandle;
+    esp_err_t err = nvs_open("nimble_bond", NVS_READWRITE, &nimbleHandle);
+    if (err == ESP_OK) {
+        err = nvs_erase_all(nimbleHandle);
+        if (err == ESP_OK) {
+            err = nvs_commit(nimbleHandle);
+        }
+        nvs_close(nimbleHandle);
+
+        if (err == ESP_OK) {
+            LOG_WARN("Cleared NimBLE bond database from NVS (one-time recovery)");
+        } else {
+            LOG_WARN("Failed clearing NimBLE bond database, err=%d", err);
+        }
+    }
+
+    prefs.putBool("nimbleBondClr", true);
+    prefs.end();
+}
+#endif
+
 void NimbleBluetooth::shutdown()
 {
     // No measurable power saving for ESP32 during light-sleep(?)
 #ifndef ARCH_ESP32
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable bluetooth");
-    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    auto *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->stop();
 #endif
@@ -825,6 +866,11 @@ void NimbleBluetooth::setup()
 
     LOG_INFO("Init the NimBLE bluetooth module");
 
+#ifdef ARCH_ESP32
+    // Recovery for units that carry corrupted bond blobs that crash NimBLE during populate_db_from_nvs.
+    clearCorruptBondStoreOnce();
+#endif
+
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
@@ -867,6 +913,12 @@ void NimbleBluetooth::setup()
     bleServer->setCallbacks(serverCallbacks, true);
     setupService();
     startAdvertising();
+
+#if HAS_BLE_MESH
+    if (bleMeshHandler) {
+        bleMeshHandler->onBluetoothReady();
+    }
+#endif
 }
 
 void NimbleBluetooth::setupService()
@@ -922,8 +974,12 @@ void NimbleBluetooth::setupService()
 
 void NimbleBluetooth::startAdvertising()
 {
-#ifdef NIMBLE_TWO
+#if defined(NIMBLE_TWO) || (defined(CONFIG_BT_NIMBLE_EXT_ADV) && CONFIG_BT_NIMBLE_EXT_ADV)
+    // NimBLE-Arduino 1.4.x can leave ext-adv callbacks uninitialized.
+    // Explicitly install a default callback sink before starting any instance.
+    static NimBLEExtAdvertisingCallbacks extAdvCallbacks;
     NimBLEExtAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->setCallbacks(&extAdvCallbacks, false);
     NimBLEExtAdvertisement legacyAdvertising;
 
     legacyAdvertising.setLegacyAdvertising(true);
@@ -950,7 +1006,7 @@ void NimbleBluetooth::startAdvertising()
         LOG_ERROR("BLE failed to start legacyAdvertising");
     }
 #else
-    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    auto *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
     pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service

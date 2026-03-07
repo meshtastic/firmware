@@ -62,6 +62,11 @@ extern AudioThread *audioThread;
 extern UdpMulticastHandler *udpHandler;
 #endif
 
+#if HAS_BLE_MESH
+#include "mesh/BLEMeshHandler.h"
+extern BLEMeshHandler *bleMeshHandler;
+#endif
+
 // Global Screen singleton.
 extern graphics::Screen *screen;
 

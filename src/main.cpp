@@ -147,6 +147,15 @@ extern void tftSetup(void);
 UdpMulticastHandler *udpHandler = nullptr;
 #endif
 
+#if HAS_BLE_MESH
+BLEMeshHandler *bleMeshHandler = nullptr;
+#if defined(ARCH_NRF52)
+#include "platform/nrf52/NRF52BLEMesh.h"
+#elif defined(ARCH_ESP32)
+#include "platform/esp32/ESP32BLEMesh.h"
+#endif
+#endif
+
 #if defined(TCXO_OPTIONAL)
 float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
 #endif
@@ -884,6 +893,17 @@ void setup()
         udpHandler->start();
     }
 #endif
+#endif
+
+#if HAS_BLE_MESH
+    LOG_DEBUG("Start BLE mesh handler");
+#if defined(ARCH_NRF52)
+    bleMeshHandler = new NRF52BLEMesh();
+#elif defined(ARCH_ESP32)
+    bleMeshHandler = new ESP32BLEMesh();
+#endif
+    if (bleMeshHandler)
+        bleMeshHandler->start();
 #endif
     service = new MeshService();
     service->init();

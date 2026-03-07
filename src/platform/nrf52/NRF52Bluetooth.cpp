@@ -233,6 +233,7 @@ void NRF52Bluetooth::shutdown()
     Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
     disconnect();
     Bluefruit.Advertising.stop();
+    meshReadyNotified = false;
 }
 void NRF52Bluetooth::startDisabled()
 {
@@ -241,6 +242,7 @@ void NRF52Bluetooth::startDisabled()
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
     Bluefruit.setTxPower(-40); // Minimum power
+    meshReadyNotified = false;
     LOG_INFO("Disable NRF52 Bluetooth. (Workaround: tx power min, advertise stopped)");
 }
 bool NRF52Bluetooth::isConnected()
@@ -263,7 +265,8 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
-    Bluefruit.begin();
+    Bluefruit.configCentralBandwidth(BANDWIDTH_MAX);
+    Bluefruit.begin(1, 1);
     // Clear existing data.
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
@@ -338,14 +341,22 @@ void NRF52Bluetooth::setup()
     // Setup the advertising packet(s)
     LOG_INFO("Set up the advertising payload(s)");
     startAdv();
+    if (bleMeshHandler && !meshReadyNotified) {
+        bleMeshHandler->onBluetoothReady();
+        meshReadyNotified = true;
+    }
     LOG_INFO("Advertise");
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
-    Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
-    Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
-    Bluefruit.Advertising.start(0);
+    Bluefruit.Advertising.stop();
+    Bluefruit.Advertising.clearData();
+    Bluefruit.ScanResponse.clearData();
+    startAdv();
+    if (bleMeshHandler && !meshReadyNotified) {
+        bleMeshHandler->onBluetoothReady();
+        meshReadyNotified = true;
+    }
 }
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
