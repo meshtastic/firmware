@@ -380,7 +380,10 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     }
 
     p->to = dest;
-    p->decoded.want_response = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ? false : wantReplies;
+    p->decoded.want_response = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                                         meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
+                                   ? false
+                                   : wantReplies;
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
         config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
         p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
