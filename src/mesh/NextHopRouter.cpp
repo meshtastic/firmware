@@ -23,8 +23,18 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
     p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // First set the relayer to us
     wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
-    p->next_hop = getNextHop(p->to, p->relay_node); // set the next hop
-    LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
+    // For unicast user traffic, bootstrap the route with one flood-heard hop before any directed routing kicks in.
+    // This gives nearby relays a chance to hear the packet even when the sender's cached next_hop is stale or wrong.
+    // Routing control packets keep their existing behavior because they participate in path maintenance themselves.
+    bool forceFloodFirstHop =
+        !isBroadcast(p->to) && isFromUs(p) && p->hop_limit > 0 &&
+        !(p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && p->decoded.portnum == meshtastic_PortNum_ROUTING_APP);
+    p->next_hop = forceFloodFirstHop ? NO_NEXT_HOP_PREFERENCE : getNextHop(p->to, p->relay_node);
+    if (forceFloodFirstHop) {
+        LOG_DEBUG("Disabling next hop for first unicast hop to 0x%x", p->to);
+    } else {
+        LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
+    }
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
@@ -147,7 +157,11 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     }
 #endif
 
-                    if (p->next_hop == NO_NEXT_HOP_PREFERENCE) {
+                    int8_t hopsAway = getHopsAway(*p);
+                    // Keep the deliberate flood bootstrap alive only for the first hop window. Once a downstream relay sees the
+                    // packet as >0 hops away, it can resume directed next-hop routing from its own local view of the mesh.
+                    bool keepFloodingFirstHop = (p->next_hop == NO_NEXT_HOP_PREFERENCE && hopsAway <= 0);
+                    if (keepFloodingFirstHop) {
                         FloodingRouter::send(tosend);
                     } else {
                         NextHopRouter::send(tosend);
