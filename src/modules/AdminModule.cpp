@@ -810,6 +810,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #endif
                     validatedLora.tx_enabled = true;
                 }
+                // If we're unsetting the region for some reason, disable tx
+                if (!isRegionUnset && validatedLora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+                    validatedLora.tx_enabled = false;
+                }
                 initRegion();
                 if (myRegion->dutyCycle < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
@@ -820,14 +824,15 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                 }
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             } else {
-                //  Validation has failed, so just copy over the new config
-                validatedLora.region = myRegion->code;
+                //  Region validation has failed, so just copy all of the old config over the new config
+                validatedLora = oldLoraConfig;
             }
         }
 
-        if (RadioInterface::validateModemConfig(validatedLora)) {
-            //  use_preset and bandwidth are coerced into valid values by this check. modem_preset is coerced into a valid value
-            //  when it is used to set the modem config, so no need to set it here.
+        if (!RadioInterface::validateModemConfig(validatedLora)) {
+            //  use_preset and bandwidth are coerced into valid values by the check.
+            //  modem_preset set to a valid setting based on the check result here
+            validatedLora.modem_preset = myRegion->defaultPreset;
         }
 
         // If no lora radio parameters change, don't need to reboot
@@ -905,10 +910,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     }
     if (requiresReboot && !hasOpenEditTransaction) {
         disableBluetooth();
-    }
+    } // end of switch case which_payload_variant
 
     saveChanges(changes, requiresReboot);
-}
+} // end of handleSetConfig
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
