@@ -88,6 +88,15 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     PacketRecord *found = find(r.sender, r.id); // Find the packet record in the recentPackets array
     bool seenRecently = (found != NULL);        // If found -> the packet was seen recently
+    // This node only skips PacketHistory insertion for directed traffic that is truly off-path:
+    // - the packet is asking some other relay byte to forward it
+    // - we are neither the original sender nor the current relay
+    // - and the packet is not actually addressed to us
+    //
+    // That keeps off-path listeners from poisoning fallback-to-flooding recovery, while still letting destination-side
+    // duplicate suppression protect apps/phone delivery.
+    bool offPathDirectedPacket = p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != ourRelayID &&
+                                 r.sender != nodeDB->getNodeNum() && p->relay_node != ourRelayID && !isToUs(p);
 
     // Check for hop_limit upgrade scenario
     if (seenRecently && wasUpgraded && getHighestHopLimit(*found) < p->hop_limit) {
@@ -96,6 +105,13 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         *wasUpgraded = true;
     } else if (wasUpgraded) {
         *wasUpgraded = false; // Initialize to false if not an upgrade
+    }
+
+    if (withUpdate && !seenRecently && offPathDirectedPacket) {
+        // Off-path transit observers should not create duplicate-history state for someone else's directed packet.
+        // If this packet later falls back to flooding, those observers still need to be willing to forward it.
+        // Packets to us still take the normal path below so repeated copies are suppressed before local delivery.
+        return false;
     }
 
     if (seenRecently) {
@@ -175,7 +191,9 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                     r.relayed_by[i + startIdx] = found->relayed_by[i];
                 }
             }
-            r.next_hop = found->next_hop; // keep the original next_hop (such that we check whether we were originally asked)
+            // Preserve the originally requested next hop across duplicate updates. Other code uses this to answer
+            // "were we the chosen directed relay?" even if a later copy arrived as flood fallback.
+            r.next_hop = found->next_hop;
 #if VERBOSE_PACKET_HISTORY
             LOG_DEBUG("Packet History - Was Seen Recently: s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d wUpd AFTER", r.sender,
                       r.id, r.next_hop, r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], millis() - r.rxTimeMsec);
