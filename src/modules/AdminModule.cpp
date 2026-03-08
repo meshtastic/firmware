@@ -24,6 +24,7 @@
 
 #include "Default.h"
 #include "MeshRadio.h"
+#include "RadioInterface.h"
 #include "TypeConversions.h"
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -768,6 +769,67 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             validatedLora.spread_factor = LORA_SF_DEFAULT;
         }
 
+#if HAS_LORA_FEM
+        // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
+        if (loraFEMInterface.isLnaCanControl()) {
+            loraFEMInterface.setLNAEnable(validatedLora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED);
+        } else if (validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
+            // Hardware FEM does not support LNA control; normalize stored config to match actual capability
+            LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
+            validatedLora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
+        }
+#endif
+        // If we're setting a new region, check the region is valid and then init the region or discard the change
+        if (validatedLora.region != myRegion->code) {
+            //  Region has changed so check whether there is a regulatory one we should be using instead.
+            //  Additionally as a side-effect, assume a new value under myRegion
+            if (RadioInterface::validateRegionConfig(config.lora)) {
+
+                // If we're setting region for the first time, init the region and regenerate the keys
+                if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+                    if (!owner.is_licensed) {
+                        bool keygenSuccess = false;
+                        if (config.security.private_key.size == 32) {
+                            if (crypto->regeneratePublicKey(config.security.public_key.bytes,
+                                                            config.security.private_key.bytes)) {
+                                keygenSuccess = true;
+                            }
+                        } else {
+                            LOG_INFO("Generate new PKI keys");
+                            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+                            keygenSuccess = true;
+                        }
+                        if (keygenSuccess) {
+                            config.security.public_key.size = 32;
+                            config.security.private_key.size = 32;
+                            owner.public_key.size = 32;
+                            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+                        }
+                    }
+#endif
+                    validatedLora.tx_enabled = true;
+                }
+                initRegion();
+                if (myRegion->dutyCycle < 100) {
+                    validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
+                }
+                if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+                    //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
+                    sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+                }
+                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+            } else {
+                //  Validation has failed, so just copy over the new config
+                validatedLora.region = myRegion->code;
+            }
+        }
+
+        if (RadioInterface::validateModemConfig(validatedLora)) {
+            //  use_preset and bandwidth are coerced into valid values by this check. modem_preset is coerced into a valid value
+            //  when it is used to set the modem config, so no need to set it here.
+        }
+
         // If no lora radio parameters change, don't need to reboot
         if (oldLoraConfig.use_preset == validatedLora.use_preset && oldLoraConfig.region == validatedLora.region &&
             oldLoraConfig.modem_preset == validatedLora.modem_preset && oldLoraConfig.bandwidth == validatedLora.bandwidth &&
@@ -796,62 +858,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         }
 #endif
         config.lora = validatedLora;
-
-#if HAS_LORA_FEM
-        // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
-        if (loraFEMInterface.isLnaCanControl()) {
-            loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED);
-        } else if (config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
-            // Hardware FEM does not support LNA control; normalize stored config to match actual capability
-            LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
-            config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
-        }
-#endif
-        // If we're setting region for the first time, init the region and regenerate the keys
-        if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-            if (!owner.is_licensed) {
-                bool keygenSuccess = false;
-                if (config.security.private_key.size == 32) {
-                    if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                        keygenSuccess = true;
-                    }
-                } else {
-                    LOG_INFO("Generate new PKI keys");
-                    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-                    keygenSuccess = true;
-                }
-                if (keygenSuccess) {
-                    config.security.public_key.size = 32;
-                    config.security.private_key.size = 32;
-                    owner.public_key.size = 32;
-                    memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-                }
-            }
-#endif
-            config.lora.tx_enabled = true;
-            initRegion();
-            if (myRegion->dutyCycle < 100) {
-                config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
-            }
-            //  Compare the entire string, we are sure of the length as a topic has never been set
-            if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
-                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
-            }
-        }
-        if (config.lora.region != myRegion->code) {
-            //  Region has changed so check whether there is a regulatory one we should be using instead.
-            //  Additionally as a side-effect, assume a new value under myRegion
-            initRegion();
-
-            if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
-            }
-
-            changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
-        }
         break;
     }
     case meshtastic_Config_bluetooth_tag:

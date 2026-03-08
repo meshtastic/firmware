@@ -25,7 +25,8 @@ struct RegionInfo {
     meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
     // static list of available presets
     const meshtastic_Config_LoRaConfig_ModemPreset *availablePresets;
-    const char *name; // EU433 etc
+    size_t numPresets; // number of presets in the availablePresets list, for validation
+    const char *name;  // EU433 etc
 };
 
 extern const RegionInfo regions[];
