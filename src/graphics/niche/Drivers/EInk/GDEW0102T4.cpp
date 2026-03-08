@@ -147,8 +147,17 @@ void GDEW0102T4::writeOldImage()
     // On this panel, FULL refresh is most reliable when "old image" is all white.
     if (updateType == FULL) {
         sendCommand(0x10);
-        for (uint32_t i = 0; i < bufferSize; ++i)
-            sendData((uint8_t)0xFF);
+        // Use buffered writes of 0xFF to avoid per-byte SPI transactions.
+        const uint16_t chunkSize = 64;
+        uint8_t ffBuf[chunkSize];
+        memset(ffBuf, 0xFF, sizeof(ffBuf));
+
+        uint32_t remaining = bufferSize;
+        while (remaining > 0) {
+            uint16_t toSend = remaining > chunkSize ? chunkSize : static_cast<uint16_t>(remaining);
+            sendData(ffBuf, toSend);
+            remaining -= toSend;
+        }
         return;
     }
 
