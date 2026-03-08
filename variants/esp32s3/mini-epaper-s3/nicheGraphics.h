@@ -37,7 +37,7 @@ void setupNicheGraphics()
 
     Drivers::GDEW0102T4 *displayDriver = new Drivers::GDEW0102T4;
     displayDriver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
-    // Tuned fast-refresh values reg30 reg50 reg82 lutW2 lutB2 = 11 F2 04 0F 0D
+    // Tuned fast-refresh values reg30 reg50 reg82 lutW2 lutB2 = 11 F2 04 11 0D
     displayDriver->setFastConfig({0x11, 0xF2, 0x04, 0x11, 0x0D});
     Drivers::EInk *driver = displayDriver;
 

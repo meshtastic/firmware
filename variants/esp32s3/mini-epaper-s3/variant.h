@@ -41,17 +41,17 @@
 // LoRa (SX1262)
 #define USE_SX1262
 
-#define LORA_DIO0 RADIOLIB_NC
 #define LORA_DIO1 5
 #define LORA_SCK 8
 #define LORA_MISO 6
 #define LORA_MOSI 17
 #define LORA_CS 7 // CS not connected; IO7 is free
 #define LORA_RESET 21
-#define LORA_DIO2 16
 
+#ifdef USE_SX1262
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY LORA_DIO2
+#define SX126X_BUSY 16
 #define SX126X_RESET LORA_RESET
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#endif
