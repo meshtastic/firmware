@@ -160,7 +160,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     int8_t hopsAway = getHopsAway(*p);
                     // Keep the deliberate flood bootstrap alive only for the first hop window. Once a downstream relay sees the
                     // packet as >0 hops away, it can resume directed next-hop routing from its own local view of the mesh.
-                    bool keepFloodingFirstHop = (p->next_hop == NO_NEXT_HOP_PREFERENCE && hopsAway <= 0);
+                    bool keepFloodingFirstHop = (p->next_hop == NO_NEXT_HOP_PREFERENCE && hopsAway == 0);
                     if (keepFloodingFirstHop) {
                         FloodingRouter::send(tosend);
                     } else {
