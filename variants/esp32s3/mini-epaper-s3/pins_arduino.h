@@ -11,7 +11,7 @@ static const uint8_t SDA = 18;
 static const uint8_t SCL = 9;
 
 // Default SPI (LoRa bus)
-static const uint8_t SS = 7;
+static const uint8_t SS = -1;
 static const uint8_t MOSI = 17;
 static const uint8_t MISO = 6;
 static const uint8_t SCK = 8;
