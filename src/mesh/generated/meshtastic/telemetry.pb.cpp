@@ -21,6 +21,9 @@ PB_BIND(meshtastic_AirQualityMetrics, meshtastic_AirQualityMetrics, AUTO)
 PB_BIND(meshtastic_LocalStats, meshtastic_LocalStats, AUTO)
 
 
+PB_BIND(meshtastic_TrafficManagementStats, meshtastic_TrafficManagementStats, AUTO)
+
+
 PB_BIND(meshtastic_HealthMetrics, meshtastic_HealthMetrics, AUTO)
 
 
