@@ -12,6 +12,8 @@ class SHTXXSensor : public TelemetrySensor
     SHTSensor sht;
     TwoWire *_bus{};
     uint8_t _address{};
+    SHTSensor::SHTAccuracy accuracy{};
+    bool setAccuracy(SHTSensor::SHTAccuracy newAccuracy);
 
   public:
     SHTXXSensor();
@@ -19,6 +21,9 @@ class SHTXXSensor : public TelemetrySensor
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
     void getSensorVariant(SHTSensor::SHTSensorType);
     const char *sensorVariant;
+
+    AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                meshtastic_AdminMessage *response) override;
 };
 
 #endif
