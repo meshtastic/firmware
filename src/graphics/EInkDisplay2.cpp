@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#ifdef USE_EINK
+#if defined(USE_EINK) && !defined(USE_EINK_PARALLELDISPLAY)
 #include "EInkDisplay2.h"
 #include "SPILock.h"
 #include "main.h"
