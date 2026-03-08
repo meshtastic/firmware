@@ -1496,7 +1496,7 @@ bool TFTDisplay::connect()
     attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
 #elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
     tft->setRotation(1); // T-Deck has the TFT in landscape
-#elif defined(T_WATCH_S3)
+#elif defined(T_WATCH_S3) || defined(T_DISPLAY_S3_PRO)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
 #elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER)
     tft->setRotation(0); // use config.yaml to set rotation
