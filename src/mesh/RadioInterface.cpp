@@ -926,9 +926,11 @@ void RadioInterface::applyModemConfig()
         }
 
     } else { // if not using preset, then just use the custom settings
-        bw = loraConfig.bandwidth;
-        sf = loraConfig.spread_factor;
-        cr = loraConfig.coding_rate;
+        if (validateModemConfig(loraConfig)) {
+            bw = loraConfig.bandwidth;
+            sf = loraConfig.spread_factor;
+            cr = loraConfig.coding_rate;
+        }
     }
 
     power = loraConfig.tx_power;
