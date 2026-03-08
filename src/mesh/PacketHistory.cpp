@@ -100,15 +100,21 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     if (seenRecently) {
         if (wasFallback) {
+            // This record came from a directed packet we only overheard. Repeated directed retries should still dedupe, but a
+            // later flood retry must remain actionable for recovery.
+            bool observerOnlyDirectedRecord = !isToUs(p) && found->sender != nodeDB->getNodeNum() &&
+                                              found->next_hop != NO_NEXT_HOP_PREFERENCE && found->next_hop != ourRelayID &&
+                                              !wasRelayer(ourRelayID, *found);
             // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, and the relayer relayed already
             // before, it's a fallback to flooding. If we didn't already relay and the next-hop neither, we might need to handle
             // it now.
-            if (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE &&
-                found->next_hop != ourRelayID && p->next_hop == NO_NEXT_HOP_PREFERENCE && wasRelayer(p->relay_node, *found) &&
-                !wasRelayer(ourRelayID, *found) &&
-                !wasRelayer(
-                    found->next_hop,
-                    *found)) { // If we were not the next hop and the next hop is not us, and we are not relaying this packet
+            if ((observerOnlyDirectedRecord && p->next_hop == NO_NEXT_HOP_PREFERENCE) ||
+                (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE &&
+                 found->next_hop != ourRelayID && p->next_hop == NO_NEXT_HOP_PREFERENCE && wasRelayer(p->relay_node, *found) &&
+                 !wasRelayer(ourRelayID, *found) &&
+                 !wasRelayer(
+                     found->next_hop,
+                     *found))) { // If we were not the next hop and the next hop is not us, and we are not relaying this packet
 #if VERBOSE_PACKET_HISTORY
                 LOG_DEBUG("Packet History - Was Seen Recently: f=%08x id=%08x nh=%02x rn=%02x oID=%02x, wasFbk=%d-set TRUE",
                           p->from, p->id, p->next_hop, p->relay_node, ourRelayID, wasFallback ? *wasFallback : -1);
@@ -175,7 +181,9 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                     r.relayed_by[i + startIdx] = found->relayed_by[i];
                 }
             }
-            r.next_hop = found->next_hop; // keep the original next_hop (such that we check whether we were originally asked)
+            // Preserve the originally requested next hop across duplicate updates. Other code uses this to answer
+            // "were we the chosen directed relay?" even if a later copy arrived as flood fallback.
+            r.next_hop = found->next_hop;
 #if VERBOSE_PACKET_HISTORY
             LOG_DEBUG("Packet History - Was Seen Recently: s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d wUpd AFTER", r.sender,
                       r.id, r.next_hop, r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], millis() - r.rxTimeMsec);
