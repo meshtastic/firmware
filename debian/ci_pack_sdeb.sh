@@ -10,6 +10,10 @@ export PLATFORMIO_SETTING_CHECK_PRUNE_SYSTEM_THRESHOLD=10240
 # Download libraries to `pio`
 platformio pkg install -e native-tft
 platformio pkg install -e native-tft -t platformio/tool-scons@4.40502.0
+# Mangle PlatformIO cache to prevent internet access at build-time
+# Simply adds 1 to all expiry (epoch) timestamps, adding ~500 years to expiry date
+cp pio/core/.cache/downloads/usage.db pio/core/.cache/downloads/usage.db.bak
+jq -c 'with_entries(.value |= (. | tostring + "1" | tonumber))' pio/core/.cache/downloads/usage.db.bak >pio/core/.cache/downloads/usage.db
 # Compress `pio` directory to prevent dh_clean from sanitizing it
 tar -cf pio.tar pio/
 rm -rf pio
