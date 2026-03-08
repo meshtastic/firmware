@@ -37,14 +37,14 @@ void setupNicheGraphics()
 
     Drivers::GDEW0102T4 *displayDriver = new Drivers::GDEW0102T4;
     displayDriver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
-    // FAST tuning:
-    displayDriver->setFastConfig({0x05, 0xF2, 0x00, 0x0E, 0x0A});
+    // Tuned fast-refresh values reg30 reg50 reg82 lutW2 lutB2 = 11 F2 04 0F 0D
+    displayDriver->setFastConfig({0x11, 0xF2, 0x04, 0x11, 0x0D});
     Drivers::EInk *driver = displayDriver;
 
     InkHUD::InkHUD *inkhud = InkHUD::InkHUD::getInstance();
     inkhud->setDriver(driver);
     // Slightly stricter FAST/FULL
-    inkhud->setDisplayResilience(7, 1.5);
+    inkhud->setDisplayResilience(5, 1.5);
     inkhud->twoWayRocker = true;
 
     // Fonts
