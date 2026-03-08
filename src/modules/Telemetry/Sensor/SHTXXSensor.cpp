@@ -55,7 +55,7 @@ bool SHTXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         LOG_INFO("%s Sensor detected: %s", sensorName, sensorVariant);
         status = 1;
     } else {
-        LOG_ERROR("%s: init(): failed\n", sensorName);
+        LOG_ERROR("%s: init(): failed", sensorName);
     }
 
     initI2CSensor();
@@ -70,12 +70,13 @@ bool SHTXXSensor::getMetrics(meshtastic_Telemetry *measurement)
         measurement->variant.environment_metrics.temperature = sht.getTemperature();
         measurement->variant.environment_metrics.relative_humidity = sht.getHumidity();
 
-        LOG_INFO("%s: Got: temp:%fdegC, hum:%f%rh", sensorName, measurement->variant.environment_metrics.temperature,
+        LOG_INFO("%s (%s): Got: temp:%fdegC, hum:%f%rh", sensorName, sensorVariant,
+                 measurement->variant.environment_metrics.temperature,
                  measurement->variant.environment_metrics.relative_humidity);
 
         return true;
     } else {
-        LOG_ERROR("%s: read sample failed", sensorName);
+        LOG_ERROR("%s (%s): read sample failed", sensorName, sensorVariant);
         return false;
     }
 }
