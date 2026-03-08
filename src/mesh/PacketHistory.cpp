@@ -88,15 +88,6 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     PacketRecord *found = find(r.sender, r.id); // Find the packet record in the recentPackets array
     bool seenRecently = (found != NULL);        // If found -> the packet was seen recently
-    // This node only skips PacketHistory insertion for directed traffic that is truly off-path:
-    // - the packet is asking some other relay byte to forward it
-    // - we are neither the original sender nor the current relay
-    // - and the packet is not actually addressed to us
-    //
-    // That keeps off-path listeners from poisoning fallback-to-flooding recovery, while still letting destination-side
-    // duplicate suppression protect apps/phone delivery.
-    bool offPathDirectedPacket = p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != ourRelayID &&
-                                 r.sender != nodeDB->getNodeNum() && p->relay_node != ourRelayID && !isToUs(p);
 
     // Check for hop_limit upgrade scenario
     if (seenRecently && wasUpgraded && getHighestHopLimit(*found) < p->hop_limit) {
@@ -107,24 +98,23 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         *wasUpgraded = false; // Initialize to false if not an upgrade
     }
 
-    if (withUpdate && !seenRecently && offPathDirectedPacket) {
-        // Off-path transit observers should not create duplicate-history state for someone else's directed packet.
-        // If this packet later falls back to flooding, those observers still need to be willing to forward it.
-        // Packets to us still take the normal path below so repeated copies are suppressed before local delivery.
-        return false;
-    }
-
     if (seenRecently) {
         if (wasFallback) {
+            // This record came from a directed packet we only overheard. Repeated directed retries should still dedupe, but a
+            // later flood retry must remain actionable for recovery.
+            bool observerOnlyDirectedRecord = !isToUs(p) && found->sender != nodeDB->getNodeNum() &&
+                                              found->next_hop != NO_NEXT_HOP_PREFERENCE && found->next_hop != ourRelayID &&
+                                              !wasRelayer(ourRelayID, *found);
             // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, and the relayer relayed already
             // before, it's a fallback to flooding. If we didn't already relay and the next-hop neither, we might need to handle
             // it now.
-            if (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE &&
-                found->next_hop != ourRelayID && p->next_hop == NO_NEXT_HOP_PREFERENCE && wasRelayer(p->relay_node, *found) &&
-                !wasRelayer(ourRelayID, *found) &&
-                !wasRelayer(
-                    found->next_hop,
-                    *found)) { // If we were not the next hop and the next hop is not us, and we are not relaying this packet
+            if ((observerOnlyDirectedRecord && p->next_hop == NO_NEXT_HOP_PREFERENCE) ||
+                (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE &&
+                 found->next_hop != ourRelayID && p->next_hop == NO_NEXT_HOP_PREFERENCE && wasRelayer(p->relay_node, *found) &&
+                 !wasRelayer(ourRelayID, *found) &&
+                 !wasRelayer(
+                     found->next_hop,
+                     *found))) { // If we were not the next hop and the next hop is not us, and we are not relaying this packet
 #if VERBOSE_PACKET_HISTORY
                 LOG_DEBUG("Packet History - Was Seen Recently: f=%08x id=%08x nh=%02x rn=%02x oID=%02x, wasFbk=%d-set TRUE",
                           p->from, p->id, p->next_hop, p->relay_node, ourRelayID, wasFallback ? *wasFallback : -1);
