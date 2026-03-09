@@ -652,9 +652,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-            case ICM20948_ADDR:     // same as BMX160_ADDR and SEN5X_ADDR
-            case ICM20948_ADDR_ALT: // same as MPU6050_ADDR
-                // ICM20948 Register check
+            case ICM20948_ADDR:     // same as BMX160_ADDR, BMI270_ADDR_ALT, and SEN5X_ADDR
+            case ICM20948_ADDR_ALT: // same as MPU6050_ADDR, BMI270_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
 #ifdef HAS_ICM20948
                 type = ICM20948;
@@ -664,6 +663,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0xEA) {
                     type = ICM20948;
                     logFoundDevice("ICM20948", (uint8_t)addr.address);
+                    break;
+                } else if (registerValue == 0x24) {
+                    type = BMI270;
+                    logFoundDevice("BMI270", (uint8_t)addr.address);
+                    break;
+                } else if (registerValue == 0xD8) { // BMX160 chip ID at register 0x00
+                    type = BMX160;
+                    logFoundDevice("BMX160", (uint8_t)addr.address);
                     break;
                 } else {
                     String prod = "";
@@ -718,11 +725,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (len == 5 && memcmp(expectedInfo, info, len) == 0) {
                     LOG_INFO("NXP SE050 crypto chip found");
                     type = NXP_SE050;
-
-                } else {
-                    LOG_INFO("FT6336U touchscreen found");
-                    type = FT6336U;
+                    break;
                 }
+
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
+                if (registerValue == 0x8583 || registerValue == 0x8580) {
+                    type = ADS1115;
+                    logFoundDevice("ADS1115 ADC", (uint8_t)addr.address);
+                    break;
+                }
+
+                LOG_INFO("FT6336U touchscreen found");
+                type = FT6336U;
                 break;
             }
 
