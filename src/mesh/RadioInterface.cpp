@@ -777,13 +777,10 @@ struct ModemConfig { // this is just a convenient struct to pass modem settings 
  * Checks if a region is valid for the current settings.
  * Returns false if not compatible.
  */
-bool RadioInterface::validateRegionConfig(meshtastic_Config_LoRaConfig &loraConfig)
+bool RadioInterface::validateConfigRegion(meshtastic_Config_LoRaConfig &loraConfig)
 {
     bool validConfig = true;
     char err_string[160];
-    float bw;
-    uint8_t sf;
-    uint8_t cr;
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
     if (!newRegion) { // copilot said I had to check for null pointer
@@ -814,13 +811,11 @@ bool RadioInterface::validateRegionConfig(meshtastic_Config_LoRaConfig &loraConf
  * Checks if a modem preset or bandwidth are valid for the region.
  * Returns false if invalid preset, or coerces default preset if bandwidth is too wide for the region.
  */
-bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfig)
+bool RadioInterface::validateConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
 {
     bool validConfig = true;
     char err_string[160];
-    float bw;
-    uint8_t sf;
-    uint8_t cr;
+    float check_bw;
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
     if (!newRegion) { // copilot said I had to check for null pointer
@@ -828,11 +823,14 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
         return false;
     }
 
-    modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, cr);
+    const char *presetName = DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+    const char *defaultPresetName = DisplayFormatters::getModemPresetDisplayName(newRegion->defaultPreset, false, true);
 
     // early check - if we use preset, make sure it's on available preset list
     if (loraConfig.use_preset) {
         bool preset_valid = false;
+        check_bw = modemPresetToBwKHz(loraConfig.modem_preset,
+                                      newRegion->wideLora); // set the bandwidth we want to check for the next test
 
         for (size_t i = 0; i < newRegion->numPresets; i++) {
             if (loraConfig.modem_preset == newRegion->availablePresets[i]) {
@@ -856,7 +854,82 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
             service->sendClientNotification(cn);
             return false;
         }
-    } // end if use_preset
+    } else {
+        check_bw = loraConfig.bandwidth; // set the bandwidth we want to check for the next test
+    }                                    // end if use_preset
+
+    // Calculate width of channels based on bandwidth and any spacing or padding required by the region:
+    // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
+    // padding = gap at the beginning and end of the channel (0 for no padding)
+    float channelSpacing = newRegion->spacing + (newRegion->padding * 2) + (check_bw / 1000); // in MHz
+
+    // check if the region supports the requested bandwidth from custom settings and coerce a valid preset if not
+    if ((newRegion->freqEnd - newRegion->freqStart) < channelSpacing) {
+        const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
+        const bool isWideRequest = check_bw >= 499.5f; // treat as 500 kHz preset
+
+        // actual falling back is done in applyModemSettings()
+        if (isWideRequest) {
+            snprintf(err_string, sizeof(err_string), "%s region too narrow for 500kHz preset (%s).", newRegion->name, presetName);
+        } else {
+            snprintf(err_string, sizeof(err_string), "%s region span %.0fkHz < requested %.0fkHz.", newRegion->name,
+                     regionSpanKHz, check_bw);
+        }
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        snprintf(cn->message, sizeof(cn->message), "%s", err_string);
+        service->sendClientNotification(cn);
+        return false;
+    } // end if region too narrow for bandwidth
+
+    return validConfig;
+}
+
+/**
+ * Checks if a modem preset or bandwidth are valid for the region.
+ * Coerces default preset if invalid or bandwidth is too wide for the region.
+ */
+void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
+{
+    char err_string[160];
+    float bw;
+    uint8_t sf;
+    uint8_t cr;
+
+    const RegionInfo *newRegion = getRegion(loraConfig.region);
+
+    modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, cr);
+    const char *defaultPresetName = DisplayFormatters::getModemPresetDisplayName(newRegion->defaultPreset, false, true);
+    const char *presetName = DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+
+    if (loraConfig.use_preset) {
+        bool preset_valid = false;
+        bw = modemPresetToBwKHz(loraConfig.modem_preset,
+                                newRegion->wideLora); // set the bandwidth we want to check for the next test
+
+        for (size_t i = 0; i < newRegion->numPresets; i++) {
+            if (loraConfig.modem_preset == newRegion->availablePresets[i]) {
+                preset_valid = true;
+                break;
+            }
+        }
+        if (!preset_valid) {
+            snprintf(err_string, sizeof(err_string),
+                     "Selected preset %s is not on a list of available presets for region %s, falling back to %s.", presetName,
+                     newRegion->name, defaultPresetName);
+            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            snprintf(cn->message, sizeof(cn->message), "%s", err_string);
+            service->sendClientNotification(cn);
+
+            loraConfig.modem_preset = newRegion->defaultPreset; // fallback to default preset
+        }
+    } else {
+        bw = loraConfig.bandwidth; // set the bandwidth we want to check for the next test
+    }                              // end if use_preset
 
     // Calculate width of channels based on bandwidth and any spacing or padding required by the region:
     // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
@@ -868,32 +941,27 @@ bool RadioInterface::validateModemConfig(meshtastic_Config_LoRaConfig &loraConfi
         const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
         const float requestedBwKHz = bw;
         const bool isWideRequest = requestedBwKHz >= 499.5f; // treat as 500 kHz preset
-        const char *presetName =
-            DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
-        const char *defaultPresetName = DisplayFormatters::getModemPresetDisplayName(newRegion->defaultPreset, false, true);
 
-        // actual falling back is done in applyModemSettings()
         if (isWideRequest) {
-            snprintf(err_string, sizeof(err_string), "%s region too narrow for 500kHz preset (%s). Falling back to %s.",
-                     newRegion->name, presetName, defaultPresetName);
+            snprintf(err_string, sizeof(err_string),
+                     "%s region too narrow for 500kHz preset (%s). Using bandwidth from %s instead.", newRegion->name, presetName,
+                     defaultPresetName);
         } else {
-            snprintf(err_string, sizeof(err_string), "%s region span %.0fkHz < requested %.0fkHz. Falling back to %s.",
-                     newRegion->name, regionSpanKHz, requestedBwKHz, defaultPresetName);
+            snprintf(err_string, sizeof(err_string),
+                     "%s region span %.0fkHz < requested %.0fkHz. Using bandwidth from  %s instead.", newRegion->name,
+                     regionSpanKHz, requestedBwKHz, defaultPresetName);
         }
         LOG_ERROR("%s", err_string);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_ERROR;
         snprintf(cn->message, sizeof(cn->message), "%s", err_string);
         service->sendClientNotification(cn);
 
-        // If the BW is too wide, set to the region default modem preset
-        loraConfig.use_preset = true;
-        loraConfig.modem_preset = newRegion->defaultPreset;
+        // If the BW is too wide, set to the bandwidth to the same as the region default modem preset
+        loraConfig.bandwidth = modemPresetToBwKHz(newRegion->defaultPreset, newRegion->wideLora);
     } // end if region too narrow for bandwidth
 
-    return validConfig;
+    return;
 }
 
 /**
@@ -907,7 +975,7 @@ void RadioInterface::applyModemConfig()
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
     if (loraConfig.use_preset) {
-        if (!validateModemConfig(loraConfig)) {
+        if (!validateConfigLora(loraConfig)) {
             loraConfig.modem_preset = newRegion->defaultPreset;
         }
         uint8_t newcr;
@@ -926,7 +994,7 @@ void RadioInterface::applyModemConfig()
         }
 
     } else { // if not using preset, then just use the custom settings
-        if (validateModemConfig(loraConfig)) {
+        if (validateConfigLora(loraConfig)) {
             bw = loraConfig.bandwidth;
             sf = loraConfig.spread_factor;
             cr = loraConfig.coding_rate;

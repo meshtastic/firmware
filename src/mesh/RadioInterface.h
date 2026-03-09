@@ -127,7 +127,7 @@ class RadioInterface
      * Coerce LoRa config fields (bandwidth/spread_factor) derived from presets.
      * This is used during early bootstrapping so UIs that display these fields directly remain consistent.
      */
-    static void bootstrapLoRaConfigFromPreset(meshtastic_Config_LoRaConfig &loraConfig); // maybe superseded?
+    // static void bootstrapLoRaConfigFromPreset(meshtastic_Config_LoRaConfig &loraConfig); // maybe superseded?
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
@@ -235,10 +235,13 @@ class RadioInterface
     static bool uses_default_frequency_slot;
 
     // Check if a candidate region is compatible and valid.
-    static bool validateRegionConfig(meshtastic_Config_LoRaConfig &loraConfig);
+    static bool validateConfigRegion(meshtastic_Config_LoRaConfig &loraConfig);
 
     // Check if a candidate radio configuration is valid.
-    static bool validateModemConfig(meshtastic_Config_LoRaConfig &loraConfig);
+    static bool validateConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+
+    // Make a candidate radio configuration valid, even if it isn't.
+    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
 
   protected:
     int8_t power = 17; // Set by applyModemConfig()

@@ -783,7 +783,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         if (validatedLora.region != myRegion->code) {
             //  Region has changed so check whether there is a regulatory one we should be using instead.
             //  Additionally as a side-effect, assume a new value under myRegion
-            if (RadioInterface::validateRegionConfig(config.lora)) {
+            if (RadioInterface::validateConfigRegion(config.lora)) {
 
                 // If we're setting region for the first time, init the region and regenerate the keys
                 if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
@@ -814,6 +814,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                 if (!isRegionUnset && validatedLora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
                     validatedLora.tx_enabled = false;
                 }
+                if (!RadioInterface::validateConfigLora(validatedLora)) {
+                    //  use_preset and bandwidth are coerced into valid values by the check.
+                    //  modem_preset set to a valid setting based on the check result here
+                    validatedLora.modem_preset = myRegion->defaultPreset;
+                }
                 initRegion();
                 if (myRegion->dutyCycle < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
@@ -827,12 +832,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                 //  Region validation has failed, so just copy all of the old config over the new config
                 validatedLora = oldLoraConfig;
             }
-        }
+        } // end of new region handling
 
-        if (!RadioInterface::validateModemConfig(validatedLora)) {
+        if (!RadioInterface::validateConfigLora(validatedLora)) {
             //  use_preset and bandwidth are coerced into valid values by the check.
-            //  modem_preset set to a valid setting based on the check result here
-            validatedLora.modem_preset = myRegion->defaultPreset;
+            //  modem_preset set to use the old setting if the check fails
+            validatedLora.modem_preset = oldLoraConfig.modem_preset;
         }
 
         // If no lora radio parameters change, don't need to reboot
