@@ -31,6 +31,7 @@ class AsyncUDP : public Print, private concurrency::OSThread
   private:
     EthernetUDP udp;
     uint16_t localPort;
+    volatile bool isSending = false;
     std::function<void(AsyncUDPPacket)> _onPacket;
     virtual int32_t runOnce() override;
 };

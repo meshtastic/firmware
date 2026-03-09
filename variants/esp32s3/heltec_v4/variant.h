@@ -65,12 +65,12 @@
 // Pin mapping:
 //   CPS (pin 5)  -> SX1262 DIO2: TX/RX path select (automatic via SX126X_DIO2_AS_RF_SWITCH)
 //   CSD (pin 4)  -> GPIO2: Chip enable (HIGH=on, LOW=shutdown)
-//   CTX (pin 6)  -> GPIO5: Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=bypass PA, LOW=LNA)
+//   CTX (pin 6)  -> GPIO5: Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=RX bypass, LOW=RX LNA)
 //   VCC0/VCC1    -> Vfem via U3 LDO, controlled by GPIO7
 // KCT8103L FEM: TX/RX path switching is handled by DIO2 -> CPS pin (via SX126X_DIO2_AS_RF_SWITCH)
 
 #define LORA_KCT8103L_PA_CSD 2 // CSD - KCT8103L chip enable (HIGH=on)
-#define LORA_KCT8103L_PA_CTX 5 // CTX - Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=bypass PA, LOW=LNA)
+#define LORA_KCT8103L_PA_CTX 5 // CTX - Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=RX bypass, LOW=RX LNA)
 
 #if HAS_TFT
 #define USE_TFTDISPLAY 1
