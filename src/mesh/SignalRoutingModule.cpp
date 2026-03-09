@@ -1109,11 +1109,6 @@ ProcessMessage SignalRoutingModule::handleReceived(const meshtastic_MeshPacket &
     // We'll check this after determining if packet is direct (below)
     bool shouldUpdateNodeActivity = false;
 
-    // Update NodeDB with packet information like FloodingRouter does
-    if (nodeDB) {
-        nodeDB->updateFrom(mp);
-    }
-
     // Handle ACK reception for unicast coordination
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.request_id != 0 &&
         mp.to == nodeDB->getNodeNum()) {
