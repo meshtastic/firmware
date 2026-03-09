@@ -163,13 +163,6 @@ void initDeepSleep()
     if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
         LOG_DEBUG("Disable any holds on RTC IO pads");
         for (uint8_t i = 0; i <= GPIO_NUM_MAX; i++) {
-#if defined(USE_GC1109_PA)
-            // Skip GC1109 FEM power pins - they are held HIGH during deep sleep to keep
-            // the LNA active for RX wake. Released later in SX126xInterface::init() after
-            // GPIO registers are set HIGH first, avoiding a power glitch.
-            if (i == LORA_PA_POWER || i == LORA_PA_EN)
-                continue;
-#endif
             if (rtc_gpio_is_valid_gpio((gpio_num_t)i))
                 rtc_gpio_hold_dis((gpio_num_t)i);
 
@@ -546,7 +539,8 @@ void enableModemSleep()
 
 bool shouldLoraWake(uint32_t msecToWake)
 {
-    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER);
+    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+                                          config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE);
 }
 
 void enableLoraInterrupt()
@@ -567,15 +561,8 @@ void enableLoraInterrupt()
     gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
 
-#if defined(USE_GC1109_PA)
-    // Keep GC1109 FEM powered during deep sleep so LNA remains active for RX wake.
-    // Set PA_POWER and PA_EN HIGH (overrides SX126xInterface::sleep() shutdown),
-    // then latch with RTC hold so the state survives deep sleep.
-    digitalWrite(LORA_PA_POWER, HIGH);
-    rtc_gpio_hold_en((gpio_num_t)LORA_PA_POWER);
-    digitalWrite(LORA_PA_EN, HIGH);
-    rtc_gpio_hold_en((gpio_num_t)LORA_PA_EN);
-    gpio_pulldown_en((gpio_num_t)LORA_PA_TX_EN);
+#if HAS_LORA_FEM
+    loraFEMInterface.setRxModeEnableWhenMCUSleep();
 #endif
 
     LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);

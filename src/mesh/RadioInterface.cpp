@@ -16,6 +16,7 @@
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
 #include "main.h"
+#include "meshUtils.h" // for pow_of_2
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>
@@ -30,12 +31,6 @@
 #ifdef ARCH_STM32WL
 #include "STM32WLE5JCInterface.h"
 #endif
-
-// Calculate 2^n without calling pow()
-uint32_t pow_of_2(uint32_t n)
-{
-    return 1 << n;
-}
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
     {                                                                                                                            \
@@ -920,6 +915,12 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
         power = maxPower;
     }
 
+#if HAS_LORA_FEM
+    if (!devicestate.owner.is_licensed) {
+        power = loraFEMInterface.powerConversion(power);
+    }
+#else
+// todo:All entries containing "lora fem" are grouped together above.
 #ifdef ARCH_PORTDUINO
     size_t num_pa_points = portduino_config.num_pa_points;
     const uint16_t *tx_gain = portduino_config.tx_gain_lora;
@@ -945,7 +946,7 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
             }
         }
     }
-
+#endif
     if (power > loraMaxPower) // Clamp power to maximum defined level
         power = loraMaxPower;
 

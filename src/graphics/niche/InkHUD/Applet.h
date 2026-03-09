@@ -3,7 +3,7 @@
 /*
 
     Base class for InkHUD applets
-    Must be overriden
+    Must be overridden
 
     An applet is one "program" which may show info on the display.
 
