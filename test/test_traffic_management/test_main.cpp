@@ -34,7 +34,7 @@ class MockNodeDB : public NodeDB
     {
         if (hasCachedNode && n == cachedNodeNum)
             return &cachedNode;
-        return nullptr;
+        return NodeDB::getMeshNode(n);
     }
 
     void clearCachedNode()
@@ -125,6 +125,7 @@ static void resetTrafficConfig()
     router = nullptr;
     service = nullptr;
 
+    mockNodeDB->resetNodes();
     mockNodeDB->clearCachedNode();
     nodeDB = mockNodeDB;
 }
@@ -360,6 +361,39 @@ static void test_tm_fromUs_bypassesPositionAndRateFilters(void)
 }
 
 /**
+ * Verify locally addressed packets are never dropped by transit shaping.
+ * Important so dedup/rate limiting do not suppress end-user delivery.
+ */
+static void test_tm_localDestination_bypassesTransitFilters(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 16;
+    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    moduleConfig.traffic_management.rate_limit_enabled = true;
+    moduleConfig.traffic_management.rate_limit_window_secs = 60;
+    moduleConfig.traffic_management.rate_limit_max_packets = 1;
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket position1 = makePositionPacket(kRemoteNode, 374221234, -1220845678, kLocalNode);
+    meshtastic_MeshPacket position2 = makePositionPacket(kRemoteNode, 374221234, -1220845678, kLocalNode);
+    meshtastic_MeshPacket text1 = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, kLocalNode);
+    meshtastic_MeshPacket text2 = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, kLocalNode);
+
+    ProcessMessage p1 = module.handleReceived(position1);
+    ProcessMessage p2 = module.handleReceived(position2);
+    ProcessMessage t1 = module.handleReceived(text1);
+    ProcessMessage t2 = module.handleReceived(text2);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(p1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(p2));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(t1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(t2));
+    TEST_ASSERT_EQUAL_UINT32(0, stats.position_dedup_drops);
+    TEST_ASSERT_EQUAL_UINT32(0, stats.rate_limit_drops);
+}
+
+/**
  * Verify router role clamps NodeInfo response hops to router-safe maximum.
  * Important so large config values cannot widen response scope unexpectedly.
  */
@@ -428,6 +462,42 @@ static void test_tm_nodeinfo_directResponse_respondsFromCache(void)
     TEST_ASSERT_EQUAL_UINT8(mockNodeDB->getLastByteOfNodeNum(kRemoteNode), reply.next_hop);
     TEST_ASSERT_TRUE(reply.decoded.has_bitfield);
     TEST_ASSERT_EQUAL_UINT8(BITFIELD_OK_TO_MQTT_MASK, reply.decoded.bitfield);
+}
+
+/**
+ * Verify cached direct replies still preserve requester NodeInfo learning.
+ * Important so consuming the request does not skip NodeDB refresh for observers.
+ */
+static void test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response = true;
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->setCachedNode(kTargetNode);
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket request = makeNodeInfoPacket(kRemoteNode, "requester-long", "rq");
+    request.to = kTargetNode;
+    request.decoded.want_response = true;
+    request.id = 0x01020304;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    ProcessMessage result = module.handleReceived(request);
+    meshtastic_NodeInfoLite *requestor = mockNodeDB->getMeshNode(kRemoteNode);
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(result));
+    TEST_ASSERT_NOT_NULL(requestor);
+    TEST_ASSERT_TRUE(requestor->has_user);
+    TEST_ASSERT_EQUAL_STRING("requester-long", requestor->user.long_name);
+    TEST_ASSERT_EQUAL_STRING("rq", requestor->user.short_name);
+    TEST_ASSERT_EQUAL_UINT8(request.channel, requestor->channel);
 }
 
 /**
@@ -773,6 +843,35 @@ static void test_tm_positionDedup_epochReset_doesNotDropFirstPacketAfterReset(vo
 }
 
 /**
+ * Verify non-position cache state does not make the first fingerprint-0 position look duplicated.
+ * Important so unified cache entries from other features cannot leak into dedup decisions.
+ */
+static void test_tm_positionDedup_priorRateState_doesNotDropFirstFingerprintZero(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 16;
+    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    moduleConfig.traffic_management.rate_limit_enabled = true;
+    moduleConfig.traffic_management.rate_limit_window_secs = 60;
+    moduleConfig.traffic_management.rate_limit_max_packets = 10;
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket text = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
+    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 0x12300000, 0x45600000);
+    meshtastic_MeshPacket duplicate = makePositionPacket(kRemoteNode, 0x12300000, 0x45600000);
+
+    ProcessMessage seeded = module.handleReceived(text);
+    ProcessMessage r1 = module.handleReceived(first);
+    ProcessMessage r2 = module.handleReceived(duplicate);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(seeded));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
+}
+
+/**
  * Verify rate-limit counters reset after the window expires.
  * Important so temporary bursts do not cause persistent throttling.
  */
@@ -1008,8 +1107,10 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_rateLimit_dropsOnlyAfterThreshold);
     RUN_TEST(test_tm_rateLimit_skipsRoutingAndAdminPorts);
     RUN_TEST(test_tm_fromUs_bypassesPositionAndRateFilters);
+    RUN_TEST(test_tm_localDestination_bypassesTransitFilters);
     RUN_TEST(test_tm_nodeinfo_routerClamp_skipsWhenTooManyHops);
     RUN_TEST(test_tm_nodeinfo_directResponse_respondsFromCache);
+    RUN_TEST(test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo);
     RUN_TEST(test_tm_nodeinfo_clientClamp_skipsWhenNotDirect);
 #if !(defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM))
     RUN_TEST(test_tm_nodeinfo_directResponse_withoutNodeDbEntry_skips);
@@ -1026,6 +1127,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_positionDedup_precision32_allowsDistinctPositions);
     RUN_TEST(test_tm_positionDedup_precisionZero_allowsDistinctPositions);
     RUN_TEST(test_tm_positionDedup_epochReset_doesNotDropFirstPacketAfterReset);
+    RUN_TEST(test_tm_positionDedup_priorRateState_doesNotDropFirstFingerprintZero);
     RUN_TEST(test_tm_rateLimit_resetsAfterWindowExpires);
     RUN_TEST(test_tm_rateLimit_thresholdAbove255_clamps);
     RUN_TEST(test_tm_unknownPackets_resetAfterWindowExpires);

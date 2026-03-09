@@ -929,6 +929,10 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     if (cfg.nodeinfo_direct_response && mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP && mp.decoded.want_response &&
         !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp)) {
         if (shouldRespondToNodeInfo(&mp, true)) {
+            meshtastic_User requester = meshtastic_User_init_zero;
+            if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {
+                nodeDB->updateUser(getFrom(&mp), requester, mp.channel);
+            }
             logAction("respond", &mp, "nodeinfo-cache");
             incrementStat(&stats.nodeinfo_cache_hits);
             ignoreRequest = true;        // We responded; suppress default NAK
@@ -943,7 +947,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     // last broadcast from this node. Uses truncated coordinates to ignore
     // GPS jitter within the configured precision.
 
-    if (!isFromUs(&mp)) {
+    if (!isFromUs(&mp) && !isToUs(&mp)) {
         if (cfg.position_dedup_enabled && mp.decoded.portnum == meshtastic_PortNum_POSITION_APP) {
             meshtastic_Position pos = meshtastic_Position_init_zero;
             if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Position_msg, &pos)) {
@@ -1155,9 +1159,10 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
 
     // Compare fingerprint and check time window
     // When minIntervalMs == 0, deduplication is disabled (withinInterval = false means never drop)
-    const bool samePosition = !isNew && entry->pos_fingerprint == fingerprint;
+    const bool hasPositionState = !isNew && entry->pos_time != 0;
+    const bool samePosition = hasPositionState && entry->pos_fingerprint == fingerprint;
     const bool withinInterval =
-        (minIntervalMs == 0) ? false : isWithinWindow(nowMs, fromRelativePosTime(entry->pos_time), minIntervalMs);
+        hasPositionState && (minIntervalMs != 0) && isWithinWindow(nowMs, fromRelativePosTime(entry->pos_time), minIntervalMs);
 
     TM_LOG_DEBUG("Position dedup 0x%08x: fp=0x%02x prev=0x%02x same=%d within=%d new=%d", p->from, fingerprint,
                  entry->pos_fingerprint, samePosition, withinInterval, isNew);
