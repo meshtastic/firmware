@@ -714,8 +714,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case 0x48: {
+                // TODO Add more options for ADS
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
-                if (registerValue == 0x8583 || registerValue == 0x8580) {
+                if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700) {
                     type = ADS1X15;
                     logFoundDevice("ADS1X15 ADC", (uint8_t)addr.address);
                     break;
@@ -745,7 +746,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case ADS1X15_ADDR_ALT3: {
                 // ADS1X15 default config register is 8583h
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
-                if (registerValue == 0x8583 || registerValue == 0x8580) {
+                if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700) {
                     type = ADS1X15_ALT;
                     logFoundDevice("ADS1X15_ALT", (uint8_t)addr.address);
                     break;
