@@ -4,14 +4,14 @@ cli:
 plugins:
   sources:
     - id: trunk
-      ref: v1.7.5
+      ref: v1.7.6
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
     - checkov@3.2.508
-    - renovate@43.59.5
+    - renovate@43.60.5
     - prettier@3.8.1
-    - trufflehog@3.93.7
+    - trufflehog@3.93.8
     - yamllint@1.38.0
     - bandit@1.9.4
     - trivy@0.69.3
