@@ -200,7 +200,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     case meshtastic_AdminMessage_set_config_tag:
         LOG_DEBUG("Client set config");
-        handleSetConfig(r->set_config);
+        handleSetConfig(r->set_config, fromOthers);
         break;
 
     case meshtastic_AdminMessage_set_module_config_tag:
@@ -627,7 +627,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 }
 
-void AdminModule::handleSetConfig(const meshtastic_Config &c)
+void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 {
     auto changes = SEGMENT_CONFIG;
     auto existingRole = config.device.role;
@@ -835,9 +835,15 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         } // end of new region handling
 
         if (!RadioInterface::validateConfigLora(validatedLora)) {
+            if (fromOthers) {
+                LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
+                //  modem_preset set to use the old setting if the check fails
+                validatedLora.modem_preset = oldLoraConfig.modem_preset;
+            } else {
+                LOG_WARN("Invalid LoRa config received from client, using corrected values");
+                RadioInterface::clampConfigLora(validatedLora);
+            }
             //  use_preset and bandwidth are coerced into valid values by the check.
-            //  modem_preset set to use the old setting if the check fails
-            validatedLora.modem_preset = oldLoraConfig.modem_preset;
         }
 
         // If no lora radio parameters change, don't need to reboot

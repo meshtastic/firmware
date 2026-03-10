@@ -60,7 +60,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
      */
     void handleSetOwner(const meshtastic_User &o);
     void handleSetChannel(const meshtastic_Channel &cc);
-    void handleSetConfig(const meshtastic_Config &c);
+    void handleSetConfig(const meshtastic_Config &c, bool fromOthers);
     bool handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
     void handleSetHamMode(const meshtastic_HamParameters &req);
