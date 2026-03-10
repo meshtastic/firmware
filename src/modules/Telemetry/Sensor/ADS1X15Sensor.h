@@ -11,9 +11,9 @@
 class ADS1X15Sensor : public TelemetrySensor
 {
   private:
-    Adafruit_ADS1X15 ads1x15;
-    TwoWire *bus{};
-    uint8_t address{};
+    Adafruit_ADS1X15 ads1x15{};
+    TwoWire *_bus{};
+    uint8_t _address{};
 
     // get a single measurement for a channel
     struct _ADS1X15Measurement getMeasurement(uint8_t ch);

@@ -17,24 +17,24 @@ int32_t ADS1X15Sensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    bus = nodeTelemetrySensorsMap[sensorType].second;
-    address = (uint8_t)nodeTelemetrySensorsMap[sensorType].first;
+    _bus = nodeTelemetrySensorsMap[sensorType].second;
+    _address = (uint8_t)nodeTelemetrySensorsMap[sensorType].first;
 
 #ifdef ADS1X15_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(ADS1X15_I2C_CLOCK_SPEED, bus, false);
+    uint32_t currentClock = reClockI2C(ADS1X15_I2C_CLOCK_SPEED, _bus, false);
 #elif !HAS_SCREEN
-    reClockI2C(ADS1X15_I2C_CLOCK_SPEED, bus, true);
+    reClockI2C(ADS1X15_I2C_CLOCK_SPEED, _bus, true);
 #else
     LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
     return false;
 #endif /* CAN_RECLOCK_I2C */
 #endif /* ADS1X15_I2C_CLOCK_SPEED */
 
-    status = ads1x15.begin(address);
+    status = ads1x15.begin(_address, _bus);
 
 #if defined(ADS1X15_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, bus, false);
+    reClockI2C(currentClock, _bus, false);
 #endif
 
     return initI2CSensor();
@@ -113,9 +113,9 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
     // Done here and not in getMeasurements to avoid the back-and-forth 4-8 times one after the other
 #ifdef ADS1X15_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(ADS1X15_I2C_CLOCK_SPEED, bus, false);
+    uint32_t currentClock = reClockI2C(ADS1X15_I2C_CLOCK_SPEED, _bus, false);
 #elif !HAS_SCREEN
-    reClockI2C(ADS1X15_I2C_CLOCK_SPEED, bus, true);
+    reClockI2C(ADS1X15_I2C_CLOCK_SPEED, _bus, true);
 #else
     LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
     return false;
@@ -125,7 +125,7 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
     struct _ADS1X15Measurements m = getMeasurements();
 
 #if defined(ADS1X15_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, bus, false);
+    reClockI2C(currentClock, _bus, false);
 #endif
 
     switch (sensorType) {
