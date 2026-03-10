@@ -174,7 +174,7 @@ class RadioInterface
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
-    [[nodiscard]] virtual bool init();
+    virtual bool init();
 
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
