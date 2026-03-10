@@ -35,12 +35,12 @@ extern const RegionInfo *myRegion;
 extern void initRegion();
 
 // modem presets for each region.
-extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[];
-extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[];
+extern const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[];
+extern const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[];
 // extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[];
 // extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[];
 // extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[];
-extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[];
+extern const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[];
 
 // Valid LoRa spread factor range and defaults
 constexpr uint8_t LORA_SF_MIN = 7;

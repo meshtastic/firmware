@@ -781,10 +781,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #endif
         // If we're setting a new region, check the region is valid and then init the region or discard the change
         if (validatedLora.region != myRegion->code) {
-            //  Region has changed so check whether there is a regulatory one we should be using instead.
-            //  Additionally as a side-effect, assume a new value under myRegion
-            if (RadioInterface::validateConfigRegion(config.lora)) {
-
+            //  Region has changed so check whether it is valid for e.g. licensing conditions and if the lora config is valid too
+            if (RadioInterface::validateConfigRegion(validatedLora) && RadioInterface::validateConfigLora(validatedLora)) {
                 // If we're setting region for the first time, init the region and regenerate the keys
                 if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
@@ -813,11 +811,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 // If we're unsetting the region for some reason, disable tx
                 if (!isRegionUnset && validatedLora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
                     validatedLora.tx_enabled = false;
-                }
-                if (!RadioInterface::validateConfigLora(validatedLora)) {
-                    //  use_preset and bandwidth are coerced into valid values by the check.
-                    //  modem_preset set to a valid setting based on the check result here
-                    validatedLora.modem_preset = myRegion->defaultPreset;
                 }
                 initRegion();
                 if (myRegion->dutyCycle < 100) {

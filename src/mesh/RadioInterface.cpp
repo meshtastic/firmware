@@ -829,8 +829,8 @@ bool RadioInterface::validateConfigLora(meshtastic_Config_LoRaConfig &loraConfig
     // early check - if we use preset, make sure it's on available preset list
     if (loraConfig.use_preset) {
         bool preset_valid = false;
-        check_bw = modemPresetToBwKHz(loraConfig.modem_preset,
-                                      newRegion->wideLora); // set the bandwidth we want to check for the next test
+        // set the bandwidth we want to check for the next test
+        check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
 
         for (size_t i = 0; i < newRegion->numPresets; i++) {
             if (loraConfig.modem_preset == newRegion->availablePresets[i]) {
@@ -855,8 +855,9 @@ bool RadioInterface::validateConfigLora(meshtastic_Config_LoRaConfig &loraConfig
             return false;
         }
     } else {
-        check_bw = loraConfig.bandwidth; // set the bandwidth we want to check for the next test
-    }                                    // end if use_preset
+        // set the bandwidth we want to check for the next test
+        check_bw = bwCodeToKHz(loraConfig.bandwidth);
+    } // end if use_preset
 
     // Calculate width of channels based on bandwidth and any spacing or padding required by the region:
     // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
@@ -907,8 +908,8 @@ void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
 
     if (loraConfig.use_preset) {
         bool preset_valid = false;
-        bw = modemPresetToBwKHz(loraConfig.modem_preset,
-                                newRegion->wideLora); // set the bandwidth we want to check for the next test
+        // set the bandwidth we want to check for the next test
+        bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
 
         for (size_t i = 0; i < newRegion->numPresets; i++) {
             if (loraConfig.modem_preset == newRegion->availablePresets[i]) {
@@ -928,8 +929,9 @@ void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
             loraConfig.modem_preset = newRegion->defaultPreset; // fallback to default preset
         }
     } else {
-        bw = loraConfig.bandwidth; // set the bandwidth we want to check for the next test
-    }                              // end if use_preset
+        // set the bandwidth we want to check for the next test
+        bw = bwCodeToKHz(loraConfig.bandwidth);
+    } // end if use_preset
 
     // Calculate width of channels based on bandwidth and any spacing or padding required by the region:
     // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
@@ -958,7 +960,7 @@ void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
         service->sendClientNotification(cn);
 
         // If the BW is too wide, set to the bandwidth to the same as the region default modem preset
-        loraConfig.bandwidth = modemPresetToBwKHz(newRegion->defaultPreset, newRegion->wideLora);
+        loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->defaultPreset, newRegion->wideLora));
     } // end if region too narrow for bandwidth
 
     return;
