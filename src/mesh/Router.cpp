@@ -16,6 +16,7 @@
 #endif
 #include "Default.h"
 #if ARCH_PORTDUINO
+#include "Throttle.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
@@ -532,6 +533,25 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
         } else if (portduino_config.JSONFilename != "") {
+            if (portduino_config.JSONFileRotate != 0) {
+                static uint32_t fileage = 0;
+
+                if (portduino_config.JSONFileRotate != 0 &&
+                    (fileage == 0 || !Throttle::isWithinTimespanMs(fileage, portduino_config.JSONFileRotate * 60 * 1000))) {
+                    time_t timestamp = time(NULL);
+                    struct tm *timeinfo;
+                    char buffer[80];
+                    timeinfo = localtime(&timestamp);
+                    strftime(buffer, 80, "%Y%m%d-%H%M%S", timeinfo);
+
+                    std::string datetime(buffer);
+                    if (JSONFile.is_open()) {
+                        JSONFile.close();
+                    }
+                    JSONFile.open(portduino_config.JSONFilename + "_" + datetime, std::ios::out | std::ios::app);
+                    fileage = millis();
+                }
+            }
             if (portduino_config.JSONFilter == (_meshtastic_PortNum)0 || portduino_config.JSONFilter == p->decoded.portnum) {
                 JSONFile << MeshPacketSerializer::JsonSerialize(p, false) << std::endl;
             }

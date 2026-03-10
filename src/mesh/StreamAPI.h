@@ -52,13 +52,16 @@ class StreamAPI : public PhoneAPI
     virtual int32_t runOncePart();
     virtual int32_t runOncePart(char *buf, uint16_t bufLen);
 
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() override = 0;
+
   private:
     /**
      * Read any rx chars from the link and call handleToRadio
      */
     int32_t readStream();
-    int32_t readStream(char *buf, uint16_t bufLen);
-    int32_t handleRecStream(char *buf, uint16_t bufLen);
+    int32_t readStream(const char *buf, uint16_t bufLen);
+    int32_t handleRecStream(const char *buf, uint16_t bufLen);
 
     /**
      * call getFromRadio() and deliver encapsulated packets to the Stream
@@ -72,9 +75,6 @@ class StreamAPI : public PhoneAPI
     void emitRebooted();
 
     virtual void onConnectionChanged(bool connected) override;
-
-    /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override = 0;
 
     /**
      * Send the current txBuffer over our stream
