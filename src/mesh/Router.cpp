@@ -794,7 +794,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                     if (p_encrypted_new) {
                         auto encodeResult = perhapsEncode(p_encrypted_new);
                         if (encodeResult != meshtastic_Routing_Error_NONE) {
-                            // Encryption failed, release the new packet and fall back to sending the original encrypted packet to MQTT
+                            // Encryption failed, release the new packet and fall back to sending the original encrypted packet to
+                            // MQTT
                             LOG_WARN("Encryption of new TR packet failed, sending original TR to MQTT");
                             packetPool.release(p_encrypted_new);
                             p_encrypted_new = nullptr;
@@ -809,7 +810,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                     }
                 }
                 mqtt->onSend(*p_encrypted, *p, p->channel);
-             }
+            }
         }
 #endif
     }
