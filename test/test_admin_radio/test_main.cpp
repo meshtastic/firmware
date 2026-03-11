@@ -12,12 +12,21 @@
  */
 
 #include "MeshRadio.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
+
+class MockMeshService : public MeshService
+{
+  public:
+    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
+};
+
+static MockMeshService *mockMeshService;
 
 // -----------------------------------------------------------------------
 // getRegion() tests
@@ -391,8 +400,17 @@ static void test_channelSpacingCalculation_placeholder()
 // Test runner
 // -----------------------------------------------------------------------
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void)
+{
+    mockMeshService = new MockMeshService();
+    service = mockMeshService;
+}
+void tearDown(void)
+{
+    service = nullptr;
+    delete mockMeshService;
+    mockMeshService = nullptr;
+}
 
 void setup()
 {

@@ -1,9 +1,18 @@
 #include "MeshRadio.h"
+#include "MeshService.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
+
+class MockMeshService : public MeshService
+{
+  public:
+    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
+};
+
+static MockMeshService *mockMeshService;
 
 static void test_bwCodeToKHz_specialMappings()
 {
@@ -91,8 +100,17 @@ static void test_clampConfigLora_validPresetUnchanged()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
 }
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void)
+{
+    mockMeshService = new MockMeshService();
+    service = mockMeshService;
+}
+void tearDown(void)
+{
+    service = nullptr;
+    delete mockMeshService;
+    mockMeshService = nullptr;
+}
 
 void setup()
 {
