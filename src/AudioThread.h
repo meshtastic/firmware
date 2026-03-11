@@ -30,8 +30,8 @@ class AudioThread : public concurrency::OSThread
         io.digitalWrite(EXPANDS_AMP_EN, HIGH);
 #endif
         setCPUFast(true);
-        rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
-        i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
+        rtttlFile = std::make_unique<AudioFileSourcePROGMEM>(data, len);
+        i2sRtttl = std::make_unique<AudioGeneratorRTTTL>();
         i2sRtttl->begin(rtttlFile.get(), audioOut.get());
     }
 
@@ -69,7 +69,7 @@ class AudioThread : public concurrency::OSThread
 #ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, HIGH);
 #endif
-        auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
+        auto sam = std::make_unique<ESP8266SAM>();
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
 #ifdef T_LORA_PAGER
@@ -91,7 +91,7 @@ class AudioThread : public concurrency::OSThread
   private:
     void initOutput()
     {
-        audioOut = std::unique_ptr<AudioOutputI2S>(new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S));
+        audioOut = std::make_unique<AudioOutputI2S>(1, AudioOutputI2S::EXTERNAL_I2S);
         audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT, DAC_I2S_MCLK);
         audioOut->SetGain(0.2);
     };
