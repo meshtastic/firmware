@@ -32,14 +32,14 @@
 #include "STM32WLE5JCInterface.h"
 #endif
 
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = { // 9 available presets
+const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = { // 9 available presets
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
     meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO};
 
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = { // 7 available presets
+const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = { // 7 available presets
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,    meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
     meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,  meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
@@ -55,7 +55,7 @@ meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = { // 7 available pre
 // meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[] = { // 2 available presets
 // meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW};
 
-meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST};
+const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, padding, power_limit, audio_permitted, frequency_switching,        \
              wide_lora, licensed_only, text_throttle, position_throttle, telemetry_throttle, override_slot, default_preset,      \
@@ -240,7 +240,7 @@ const RegionInfo regions[] = {
 };
 
 const RegionInfo *myRegion;
-bool RadioInterface::uses_default_frequency_slot = true; // this is modified in init region
+bool RadioInterface::uses_default_frequency_slot = true;
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 
@@ -744,7 +744,7 @@ void RadioInterface::saveFreq(float freq)
 }
 
 /**
- * Save our channel for later reuse.
+ * Save our frequency slot (aka channel) for later reuse.
  */
 void RadioInterface::saveChannelNum(uint32_t channel_num)
 {
@@ -777,7 +777,7 @@ struct ModemConfig { // this is just a convenient struct to pass modem settings 
  * Checks if a region is valid for the current settings.
  * Returns false if not compatible.
  */
-bool RadioInterface::validateConfigRegion(meshtastic_Config_LoRaConfig &loraConfig)
+bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig)
 {
     bool validConfig = true;
     char err_string[160];
@@ -811,17 +811,13 @@ bool RadioInterface::validateConfigRegion(meshtastic_Config_LoRaConfig &loraConf
  * Checks if a modem preset or bandwidth are valid for the region.
  * Returns false if invalid preset, or coerces default preset if bandwidth is too wide for the region.
  */
-bool RadioInterface::validateConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
+bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig)
 {
     bool validConfig = true;
     char err_string[160];
     float check_bw;
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
-    if (!newRegion) { // copilot said I had to check for null pointer
-        LOG_ERROR("Invalid region code %d", loraConfig.region);
-        return false;
-    }
 
     const char *presetName = DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
     const char *defaultPresetName = DisplayFormatters::getModemPresetDisplayName(newRegion->defaultPreset, false, true);
@@ -859,13 +855,13 @@ bool RadioInterface::validateConfigLora(meshtastic_Config_LoRaConfig &loraConfig
         check_bw = bwCodeToKHz(loraConfig.bandwidth);
     } // end if use_preset
 
-    // Calculate width of channels based on bandwidth and any spacing or padding required by the region:
-    // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
-    // padding = gap at the beginning and end of the channel (0 for no padding)
-    float channelSpacing = newRegion->spacing + (newRegion->padding * 2) + (check_bw / 1000); // in MHz
+    // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
+    // spacing = gap between slots (0 for continuous spectrum) and at the beginning of the band
+    // padding = gap at the beginning and end of the slots (0 for no padding)
+    float freqSlotWidth = newRegion->spacing + (newRegion->padding * 2) + (check_bw / 1000); // in MHz
 
     // check if the region supports the requested bandwidth from custom settings and coerce a valid preset if not
-    if ((newRegion->freqEnd - newRegion->freqStart) < channelSpacing) {
+    if ((newRegion->freqEnd - newRegion->freqStart) < freqSlotWidth) {
         const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
         const bool isWideRequest = check_bw >= 499.5f; // treat as 500 kHz preset
 
@@ -933,13 +929,13 @@ void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
         bw = bwCodeToKHz(loraConfig.bandwidth);
     } // end if use_preset
 
-    // Calculate width of channels based on bandwidth and any spacing or padding required by the region:
-    // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
-    // padding = gap at the beginning and end of the channel (0 for no padding)
-    float channelSpacing = newRegion->spacing + (newRegion->padding * 2) + (bw / 1000); // in MHz
+    // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
+    // spacing = gap between slots (0 for continuous spectrum) and at the beginning of the band
+    // padding = gap at the beginning and end of the slot (0 for no padding)
+    float freqSlotWidth = newRegion->spacing + (newRegion->padding * 2) + (bw / 1000); // in MHz
 
     // check if the region supports the requested bandwidth from custom settings and coerce a valid preset if not
-    if ((newRegion->freqEnd - newRegion->freqStart) < channelSpacing) {
+    if ((newRegion->freqEnd - newRegion->freqStart) < freqSlotWidth) {
         const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
         const float requestedBwKHz = bw;
         const bool isWideRequest = requestedBwKHz >= 499.5f; // treat as 500 kHz preset
@@ -1016,39 +1012,46 @@ void RadioInterface::applyModemConfig()
     // Set final tx_power back onto config
     loraConfig.tx_power = (int8_t)power; // cppcheck-suppress assignmentAddressToInteger
 
-    // Calculate number of channels:
+    // Calculate number of frequency slots (aka Channels):
     // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
     // padding = gap at the beginning and end of the channel (0 for no padding)
-    float channelSpacing = myRegion->spacing + (myRegion->padding * 2) + (bw / 1000); // in MHz
-    uint32_t numChannels = round((myRegion->freqEnd - myRegion->freqStart + myRegion->spacing) / channelSpacing);
+    float freqSlotWidth = myRegion->spacing + (myRegion->padding * 2) + (bw / 1000); // in MHz
+    uint32_t numFreqSlots = round((myRegion->freqEnd - myRegion->freqStart + myRegion->spacing) / freqSlotWidth);
 
-    // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
-    // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
-    uint32_t channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
+    uint32_t channelNameHashSlot = hash(channelName) % numFreqSlots;
+    uint32_t presetNameHashSlot =
+        hash(DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)) % numFreqSlots;
+    uint32_t channel_num;
 
     // Check if we use the default frequency slot
-    if (myRegion->overrideSlot == 0) {
-        RadioInterface::uses_default_frequency_slot = true;
-        channel_num =
-            hash(DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset)) %
-            numChannels;
-    }
-    // If we have an override slot, use it
-    // Note: overrideSlot is the same, regardless of which preset we use, so it should only be used where presets are limited.
-    else {
-        RadioInterface::uses_default_frequency_slot = false;
-        channel_num = myRegion->overrideSlot - 1;
+    bool uses_default_frequency_slot = (loraConfig.channel_num == 0 && newRegion->overrideSlot == 0) ||
+                                       (newRegion->overrideSlot != 0 && loraConfig.channel_num == newRegion->overrideSlot) ||
+                                       ((loraConfig.channel_num != 0) && (channelNameHashSlot == presetNameHashSlot));
+
+    // If user has manually specified a frequency slot, then use that, otherwise generate one by hashing the name
+    // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numFreqSlots - 1)
+    // NB: channel_num is also know as frequency slot but it's too late to fix now.
+    if (uses_default_frequency_slot) {
+        // if there's an override slot, use that
+        if (newRegion->overrideSlot != 0) {
+            channel_num = newRegion->overrideSlot - 1;
+        } else {
+            channel_num = presetNameHashSlot;
+        }
+    } else {
+        channel_num = channelNameHashSlot;
     }
 
     // Calculate frequency: freqStart is band edge, add half bandwidth (plus optional padding) to get middle of first channel
-    // subsequent channels are spaced by channelSpacing
-    float freq = myRegion->freqStart + (bw / 2000) + myRegion->padding + (channel_num * channelSpacing); // in MHz
+    // subsequent channels are spaced by freqSlotWidth
+    float freq = myRegion->freqStart + (bw / 2000) + myRegion->padding + (channel_num * freqSlotWidth); // in MHz
 
     // override if we have a verbatim frequency
     if (loraConfig.override_frequency) {
         freq = loraConfig.override_frequency;
         channel_num = -1;
+        uses_default_frequency_slot = false;
     }
 
     saveChannelNum(channel_num);
@@ -1062,7 +1065,7 @@ void RadioInterface::applyModemConfig()
              channel_num, power);
     LOG_INFO("myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f MHz)", myRegion->freqStart, myRegion->freqEnd,
              myRegion->freqEnd - myRegion->freqStart);
-    LOG_INFO("numChannels: %d x %.3fkHz", numChannels, bw);
+    LOG_INFO("numFreqSlots: %d x %.3fkHz", numFreqSlots, bw);
     if (myRegion->overrideSlot != 0) {
         LOG_INFO("Using region override slot: %d", myRegion->overrideSlot);
     }

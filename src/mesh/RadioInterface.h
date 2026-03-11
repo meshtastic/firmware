@@ -235,10 +235,10 @@ class RadioInterface
     static bool uses_default_frequency_slot;
 
     // Check if a candidate region is compatible and valid.
-    static bool validateConfigRegion(meshtastic_Config_LoRaConfig &loraConfig);
+    static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
 
     // Check if a candidate radio configuration is valid.
-    static bool validateConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig);
 
     // Make a candidate radio configuration valid, even if it isn't.
     static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
