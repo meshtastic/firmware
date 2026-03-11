@@ -767,11 +767,11 @@ uint32_t RadioInterface::getChannelNum()
     return savedChannelNum;
 }
 
-struct ModemConfig { // this is just a convenient struct to pass modem settings around, it's not used in the code as is
-    float bw;
-    uint8_t sf;
-    uint8_t cr;
-};
+// struct ModemConfig { // this is just a convenient struct to pass modem settings around, it's not used in the code as is
+//     float bw;
+//     uint8_t sf;
+//     uint8_t cr;
+// };
 
 /**
  * Checks if a region is valid for the current settings.
@@ -835,9 +835,6 @@ bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &lora
             }
         }
         if (!preset_valid) {
-            const char *presetName =
-                DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
-
             snprintf(err_string, sizeof(err_string), "Selected preset %s is not on a list of available presets for region %s",
                      presetName, newRegion->name);
 
@@ -1026,9 +1023,9 @@ void RadioInterface::applyModemConfig()
     uint32_t channel_num;
 
     // Check if we use the default frequency slot
-    bool uses_default_frequency_slot = (loraConfig.channel_num == 0 && newRegion->overrideSlot == 0) ||
-                                       (newRegion->overrideSlot != 0 && loraConfig.channel_num == newRegion->overrideSlot) ||
-                                       ((loraConfig.channel_num != 0) && (channelNameHashSlot == presetNameHashSlot));
+    uses_default_frequency_slot = (loraConfig.channel_num == 0 && newRegion->overrideSlot == 0) ||
+                                  (newRegion->overrideSlot != 0 && loraConfig.channel_num == newRegion->overrideSlot) ||
+                                  ((loraConfig.channel_num != 0) && (channelNameHashSlot == presetNameHashSlot));
 
     // If user has manually specified a frequency slot, then use that, otherwise generate one by hashing the name
     // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numFreqSlots - 1)
