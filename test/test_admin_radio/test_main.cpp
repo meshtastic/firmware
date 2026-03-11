@@ -22,6 +22,7 @@
 // -----------------------------------------------------------------------
 // getRegion() tests
 // -----------------------------------------------------------------------
+extern const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code);
 
 static void test_getRegion_returnsCorrectRegion_US()
 {

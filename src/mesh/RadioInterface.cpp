@@ -528,7 +528,6 @@ void initRegion()
 
 const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
 {
-
     const RegionInfo *r = regions;
     for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != code; r++)
         ;

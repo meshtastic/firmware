@@ -781,7 +781,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #endif
         // If we're setting a new region, check the region is valid and then init the region or discard the change
         if (validatedLora.region != myRegion->code) {
-            //  Region has changed so check whether it is valid for e.g. licensing conditions and if the lora config is valid too
+            //  Region has changed so check whether it is valid for e.g. licensing conditions and if the lora config is valid
             if (RadioInterface::validateConfigRegion(validatedLora) && RadioInterface::validateConfigLora(validatedLora)) {
                 // If we're setting region for the first time, init the region and regenerate the keys
                 if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
