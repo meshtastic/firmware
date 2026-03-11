@@ -923,6 +923,7 @@ void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
             service->sendClientNotification(cn);
 
             loraConfig.modem_preset = newRegion->defaultPreset; // fallback to default preset
+            bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
         }
     } else {
         // set the bandwidth we want to check for the next test
