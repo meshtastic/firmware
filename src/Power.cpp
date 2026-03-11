@@ -709,7 +709,7 @@ bool Power::setup()
         found = true;
 #endif
     }
-#ifdef T_WATCH_S3   // I don't know if this particular modification is disruptive on other devices, so better keep this here
+#ifdef T_WATCH_S3 
 #ifdef PMU_IRQ
     /*
         This particular piece of code reacts to the pressing of the Power/Corona button by generating an interrupt that resets the counter of the run_once() function
