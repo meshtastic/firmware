@@ -45,3 +45,5 @@ inline uint32_t pow_of_2(uint32_t n)
 }
 
 #define IS_ONE_OF(item, ...) isOneOf(item, sizeof((int[]){__VA_ARGS__}) / sizeof(int), __VA_ARGS__)
+
+int constant_time_compare(const void *a_, const void *b_, size_t len);
