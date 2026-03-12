@@ -23,7 +23,7 @@ bool SEN5XSensor::getVersion()
     }
     delay(20); // From Sensirion Datasheet
 
-    uint8_t versionBuffer[12];
+    uint8_t versionBuffer[12]{};
     size_t charNumber = readBuffer(&versionBuffer[0], 3);
     if (charNumber == 0) {
         LOG_ERROR("SEN5X: Error getting data ready flag value");
@@ -638,7 +638,7 @@ bool SEN5XSensor::readValues()
     LOG_DEBUG("SEN5X: Reading PM Values");
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataBuffer[16];
+    uint8_t dataBuffer[16]{};
     size_t receivedNumber = readBuffer(&dataBuffer[0], 24);
     if (receivedNumber == 0) {
         LOG_ERROR("SEN5X: Error getting values");
@@ -691,7 +691,7 @@ bool SEN5XSensor::readPNValues(bool cumulative)
     LOG_DEBUG("SEN5X: Reading PN Values");
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataBuffer[20];
+    uint8_t dataBuffer[20]{};
     size_t receivedNumber = readBuffer(&dataBuffer[0], 30);
     if (receivedNumber == 0) {
         LOG_ERROR("SEN5X: Error getting PN values");
