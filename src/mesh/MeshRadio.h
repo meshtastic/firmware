@@ -5,6 +5,9 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 
+// Sentinel marking the end of a modem preset array
+#define MODEM_PRESET_END ((meshtastic_Config_LoRaConfig_ModemPreset)0xFF)
+
 // Map from old region names to new region enums
 struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
@@ -22,11 +25,20 @@ struct RegionInfo {
     int8_t positionThrottle;  // position broadcast throttle - signed to allow future changes
     int8_t telemetryThrottle; // telemetry broadcast throttle - signed to allow future changes
     uint8_t overrideSlot;     // default frequency slot if not using channel hashing
-    meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
-    // static list of available presets
+    // Sentinel-terminated list of available presets; first entry is the default
     const meshtastic_Config_LoRaConfig_ModemPreset *availablePresets;
-    size_t numPresets; // number of presets in the availablePresets list, for validation
-    const char *name;  // EU433 etc
+    const char *name; // EU433 etc
+
+    // Default preset is the first entry in the available presets array
+    meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return availablePresets[0]; }
+    // Count presets by scanning to the MODEM_PRESET_END sentinel
+    size_t getNumPresets() const
+    {
+        size_t n = 0;
+        while (availablePresets[n] != MODEM_PRESET_END)
+            n++;
+        return n;
+    }
 };
 
 extern const RegionInfo regions[];

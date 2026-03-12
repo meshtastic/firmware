@@ -237,7 +237,7 @@ static void test_clampConfigLora_invalidPresetClampedToDefault()
     RadioInterface::clampConfigLora(cfg);
 
     const RegionInfo *eu868 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
-    TEST_ASSERT_EQUAL(eu868->defaultPreset, cfg.modem_preset);
+    TEST_ASSERT_EQUAL(eu868->getDefaultPreset(), cfg.modem_preset);
 }
 
 static void test_clampConfigLora_validPresetUnchanged()
@@ -265,7 +265,7 @@ static void test_clampConfigLora_customBwTooWideClampedToDefaultBw()
     RadioInterface::clampConfigLora(cfg);
 
     const RegionInfo *eu868 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
-    float expectedBw = modemPresetToBwKHz(eu868->defaultPreset, eu868->wideLora);
+    float expectedBw = modemPresetToBwKHz(eu868->getDefaultPreset(), eu868->wideLora);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, expectedBw, (float)cfg.bandwidth);
 }
 
@@ -291,21 +291,21 @@ static void test_presetsStd_hasNineEntries()
 {
     // PRESETS_STD should have exactly 9 presets
     const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    TEST_ASSERT_EQUAL(9, us->numPresets);
+    TEST_ASSERT_EQUAL(9, us->getNumPresets());
     TEST_ASSERT_EQUAL_PTR(PRESETS_STD, us->availablePresets);
 }
 
 static void test_presetsEU868_hasSevenEntries()
 {
     const RegionInfo *eu = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
-    TEST_ASSERT_EQUAL(7, eu->numPresets);
+    TEST_ASSERT_EQUAL(7, eu->getNumPresets());
     TEST_ASSERT_EQUAL_PTR(PRESETS_EU_868, eu->availablePresets);
 }
 
 static void test_presetsUndef_hasOneEntry()
 {
     const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
-    TEST_ASSERT_EQUAL(1, unset->numPresets);
+    TEST_ASSERT_EQUAL(1, unset->getNumPresets());
     TEST_ASSERT_EQUAL_PTR(PRESETS_UNDEF, unset->availablePresets);
 }
 
@@ -315,8 +315,8 @@ static void test_defaultPresetIsInAvailablePresets()
     const RegionInfo *r = regions;
     while (true) {
         bool found = false;
-        for (size_t i = 0; i < r->numPresets; i++) {
-            if (r->availablePresets[i] == r->defaultPreset) {
+        for (size_t i = 0; i < r->getNumPresets(); i++) {
+            if (r->availablePresets[i] == r->getDefaultPreset()) {
                 found = true;
                 break;
             }
@@ -340,7 +340,7 @@ static void test_regionFieldsAreSane()
         snprintf(msg, sizeof(msg), "Region %s: freqEnd must be > freqStart", r->name);
         TEST_ASSERT_TRUE_MESSAGE(r->freqEnd > r->freqStart, msg);
         TEST_ASSERT_NOT_NULL(r->name);
-        TEST_ASSERT_TRUE_MESSAGE(r->numPresets > 0, "numPresets must be > 0");
+        TEST_ASSERT_TRUE_MESSAGE(r->getNumPresets() > 0, "numPresets must be > 0");
         TEST_ASSERT_NOT_NULL(r->availablePresets);
 
         if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
