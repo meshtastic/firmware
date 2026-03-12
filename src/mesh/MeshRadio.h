@@ -8,34 +8,45 @@
 // Sentinel marking the end of a modem preset array
 #define MODEM_PRESET_END ((meshtastic_Config_LoRaConfig_ModemPreset)0xFF)
 
+// Region profile: bundles the preset list with regulatory parameters shared across regions
+struct RegionProfile {
+    const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated; first entry is the default
+    float spacing;                                           // gaps between radio channels
+    float padding;                                           // padding at each side of the "operating channel"
+    bool audioPermitted;
+    bool licensedOnly;
+    int8_t textThrottle;
+    int8_t positionThrottle;
+    int8_t telemetryThrottle;
+    uint8_t overrideSlot;
+};
+
+extern const RegionProfile PROFILE_STD;
+extern const RegionProfile PROFILE_EU868;
+extern const RegionProfile PROFILE_UNDEF;
+// extern const RegionProfile  PROFILE_LITE[];
+// extern const RegionProfile  PROFILE_NARROW[];
+// extern const RegionProfile  PROFILE_HAM[];
+
 // Map from old region names to new region enums
 struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
     float freqStart;
     float freqEnd;
     float dutyCycle;    // modified by getEffectiveDutyCycle
-    float spacing;      // gaps between radio channels
-    float padding;      // padding at each side of the "operating channel"
     uint8_t powerLimit; // Or zero for not set
-    bool audioPermitted;
     bool freqSwitching;
     bool wideLora;
-    bool licensedOnly;        // Only allow in HAM mode
-    int8_t textThrottle;      // text broadcast throttle - signed to allow future changes
-    int8_t positionThrottle;  // position broadcast throttle - signed to allow future changes
-    int8_t telemetryThrottle; // telemetry broadcast throttle - signed to allow future changes
-    uint8_t overrideSlot;     // default frequency slot if not using channel hashing
-    // Sentinel-terminated list of available presets; first entry is the default
-    const meshtastic_Config_LoRaConfig_ModemPreset *availablePresets;
+    const RegionProfile *profile;
     const char *name; // EU433 etc
 
-    // Default preset is the first entry in the available presets array
-    meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return availablePresets[0]; }
-    // Count presets by scanning to the MODEM_PRESET_END sentinel
+    // Preset accessors (delegate through profile)
+    meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return profile->presets[0]; }
+    const meshtastic_Config_LoRaConfig_ModemPreset *getAvailablePresets() const { return profile->presets; }
     size_t getNumPresets() const
     {
         size_t n = 0;
-        while (availablePresets[n] != MODEM_PRESET_END)
+        while (profile->presets[n] != MODEM_PRESET_END)
             n++;
         return n;
     }
@@ -45,14 +56,6 @@ extern const RegionInfo regions[];
 extern const RegionInfo *myRegion;
 
 extern void initRegion();
-
-// modem presets for each region.
-extern const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[];
-extern const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[];
-// extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[];
-// extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[];
-// extern meshtastic_Config_LoRaConfig_ModemPreset PRESETS_HAM[];
-extern const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[];
 
 // Valid LoRa spread factor range and defaults
 constexpr uint8_t LORA_SF_MIN = 7;

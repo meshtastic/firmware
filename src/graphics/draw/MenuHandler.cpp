@@ -271,7 +271,7 @@ void menuHandler::FrequencySlotPicker()
 
     uint32_t numChannels = 0;
     if (myRegion) {
-        numChannels = (uint32_t)floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000.0)));
+        numChannels = (uint32_t)floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->profile->spacing + (bw / 1000.0)));
     } else {
         LOG_WARN("Region not set, cannot calculate number of channels");
         return;

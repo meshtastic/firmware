@@ -289,24 +289,24 @@ static void test_clampConfigLora_customBwValidLeftUnchanged()
 
 static void test_presetsStd_hasNineEntries()
 {
-    // PRESETS_STD should have exactly 9 presets
+    // PROFILE_STD should have exactly 9 presets
     const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
     TEST_ASSERT_EQUAL(9, us->getNumPresets());
-    TEST_ASSERT_EQUAL_PTR(PRESETS_STD, us->availablePresets);
+    TEST_ASSERT_EQUAL_PTR(PROFILE_STD.presets, us->getAvailablePresets());
 }
 
 static void test_presetsEU868_hasSevenEntries()
 {
     const RegionInfo *eu = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
     TEST_ASSERT_EQUAL(7, eu->getNumPresets());
-    TEST_ASSERT_EQUAL_PTR(PRESETS_EU_868, eu->availablePresets);
+    TEST_ASSERT_EQUAL_PTR(PROFILE_EU868.presets, eu->getAvailablePresets());
 }
 
 static void test_presetsUndef_hasOneEntry()
 {
     const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     TEST_ASSERT_EQUAL(1, unset->getNumPresets());
-    TEST_ASSERT_EQUAL_PTR(PRESETS_UNDEF, unset->availablePresets);
+    TEST_ASSERT_EQUAL_PTR(PROFILE_UNDEF.presets, unset->getAvailablePresets());
 }
 
 static void test_defaultPresetIsInAvailablePresets()
@@ -316,7 +316,7 @@ static void test_defaultPresetIsInAvailablePresets()
     while (true) {
         bool found = false;
         for (size_t i = 0; i < r->getNumPresets(); i++) {
-            if (r->availablePresets[i] == r->getDefaultPreset()) {
+            if (r->getAvailablePresets()[i] == r->getDefaultPreset()) {
                 found = true;
                 break;
             }
@@ -341,7 +341,7 @@ static void test_regionFieldsAreSane()
         TEST_ASSERT_TRUE_MESSAGE(r->freqEnd > r->freqStart, msg);
         TEST_ASSERT_NOT_NULL(r->name);
         TEST_ASSERT_TRUE_MESSAGE(r->getNumPresets() > 0, "numPresets must be > 0");
-        TEST_ASSERT_NOT_NULL(r->availablePresets);
+        TEST_ASSERT_NOT_NULL(r->getAvailablePresets());
 
         if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
             break;
@@ -362,8 +362,8 @@ static void test_channelSpacingCalculation_US_LONG_FAST()
     // numChannels = round((928 - 902 + 0) / 0.250) = round(104) = 104
     const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
     float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, us->wideLora);
-    float channelSpacing = us->spacing + (us->padding * 2) + (bw / 1000.0f);
-    uint32_t numChannels = (uint32_t)(((us->freqEnd - us->freqStart + us->spacing) / channelSpacing) + 0.5f);
+    float channelSpacing = us->profile->spacing + (us->profile->padding * 2) + (bw / 1000.0f);
+    uint32_t numChannels = (uint32_t)(((us->freqEnd - us->freqStart + us->profile->spacing) / channelSpacing) + 0.5f);
 
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.250f, channelSpacing);
     TEST_ASSERT_EQUAL_UINT32(104, numChannels);
@@ -376,8 +376,8 @@ static void test_channelSpacingCalculation_EU868_LONG_FAST()
     // numChannels = round((0.25 + 0) / 0.250) = 1
     const RegionInfo *eu = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
     float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, eu->wideLora);
-    float channelSpacing = eu->spacing + (eu->padding * 2) + (bw / 1000.0f);
-    uint32_t numChannels = (uint32_t)(((eu->freqEnd - eu->freqStart + eu->spacing) / channelSpacing) + 0.5f);
+    float channelSpacing = eu->profile->spacing + (eu->profile->padding * 2) + (bw / 1000.0f);
+    uint32_t numChannels = (uint32_t)(((eu->freqEnd - eu->freqStart + eu->profile->spacing) / channelSpacing) + 0.5f);
 
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.250f, channelSpacing);
     TEST_ASSERT_EQUAL_UINT32(1, numChannels);
