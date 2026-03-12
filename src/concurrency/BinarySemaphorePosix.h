@@ -2,6 +2,10 @@
 
 #include "../freertosinc.h"
 
+#ifndef HAS_FREE_RTOS
+#include <pthread.h>
+#endif
+
 namespace concurrency
 {
 
@@ -9,7 +13,9 @@ namespace concurrency
 
 class BinarySemaphorePosix
 {
-    // SemaphoreHandle_t semaphore;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    bool signaled;
 
   public:
     BinarySemaphorePosix();
