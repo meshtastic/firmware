@@ -1295,17 +1295,19 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     bool isConnected = false;
     uint32_t ipAddr = 0;
 
-#if defined(ESP32) && (defined(ETH_PHY_TYPE) || defined(USE_WS5500))
+#if HAS_ETHERNET_ON_WIFI_STACK
     isConnected = ETH.linkUp();
-    if (isConnected)
-        ipAddr = (uint32_t)ETH.localIP();
 #else
     isConnected = (Ethernet.linkStatus() == LinkON);
-    if (isConnected)
-        ipAddr = (uint32_t)Ethernet.localIP();
 #endif
 
     if (isConnected) {
+#if HAS_ETHERNET_ON_WIFI_STACK
+        ipAddr = (uint32_t)ETH.localIP();
+#else
+        ipAddr = (uint32_t)Ethernet.localIP();
+#endif
+
         conn.ethernet.status.is_connected = true;
         conn.ethernet.status.ip_address = ipAddr;
 #if !MESHTASTIC_EXCLUDE_MQTT
