@@ -19,6 +19,14 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+void VL53L0XSensor::setMode(Adafruit_VL53L0X::VL53L0X_Sense_config_t mode)
+{
+    if(this->mode != mode) {
+        this->mode = mode;
+        saveState();
+    }
+
+}
 
 bool VL53L0XSensor::loadState()
 {

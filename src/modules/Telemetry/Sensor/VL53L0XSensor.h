@@ -18,10 +18,11 @@ class VL53L0XSensor : public TelemetrySensor
 
     Adafruit_VL53L0X::VL53L0X_Sense_config_t mode;
 
+  public:
+    void setMode(Adafruit_VL53L0X::VL53L0X_Sense_config_t mode);
     bool loadState();
     bool saveState();
 
-  public:
     VL53L0XSensor();
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
