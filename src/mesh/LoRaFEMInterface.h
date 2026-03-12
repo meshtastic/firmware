@@ -8,7 +8,7 @@ typedef enum { GC1109_PA, KCT8103L_PA, OTHER_FEM_TYPES } LoRaFEMType;
 class LoRaFEMInterface
 {
   public:
-    LoRaFEMInterface() {}
+    LoRaFEMInterface() : fem_type(OTHER_FEM_TYPES) {}
     virtual ~LoRaFEMInterface() {}
     void init(void);
     void setSleepModeEnable(void);
