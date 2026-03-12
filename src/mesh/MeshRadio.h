@@ -14,19 +14,19 @@ struct RegionProfile {
     float spacing;                                           // gaps between radio channels
     float padding;                                           // padding at each side of the "operating channel"
     bool audioPermitted;
-    bool licensedOnly;
-    int8_t textThrottle;
-    int8_t positionThrottle;
-    int8_t telemetryThrottle;
-    uint8_t overrideSlot;
+    bool licensedOnly;        // a region profile for licensed operators only
+    int8_t textThrottle;      // throttle for text - future expansion
+    int8_t positionThrottle;  // throttle for location data - future expansion
+    int8_t telemetryThrottle; // throttle for telemetry - future expansion
+    uint8_t overrideSlot;     // a per-region override slot for if we need to fix it in place
 };
 
 extern const RegionProfile PROFILE_STD;
 extern const RegionProfile PROFILE_EU868;
 extern const RegionProfile PROFILE_UNDEF;
-// extern const RegionProfile  PROFILE_LITE[];
-// extern const RegionProfile  PROFILE_NARROW[];
-// extern const RegionProfile  PROFILE_HAM[];
+// extern const RegionProfile  PROFILE_LITE;
+// extern const RegionProfile  PROFILE_NARROW;
+// extern const RegionProfile  PROFILE_HAM;
 
 // Map from old region names to new region enums
 struct RegionInfo {
