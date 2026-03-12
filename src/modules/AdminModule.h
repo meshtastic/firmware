@@ -4,7 +4,7 @@
 #endif
 #include "ProtobufModule.h"
 #include <sys/types.h>
-#if HAS_WIFI
+#if HAS_WIFI || HAS_ETHERNET_ON_WIFI_STACK
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 

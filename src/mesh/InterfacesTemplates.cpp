@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "LR11x0Interface.cpp"
 #include "LR11x0Interface.h"
 #include "SX126xInterface.cpp"

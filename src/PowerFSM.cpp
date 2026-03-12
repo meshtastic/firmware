@@ -19,7 +19,7 @@
 #include "sleep.h"
 #include "target_specific.h"
 
-#if HAS_WIFI && !defined(ARCH_PORTDUINO) || defined(MESHTASTIC_EXCLUDE_WIFI)
+#if (HAS_WIFI || HAS_ETHERNET_ON_WIFI_STACK) && !defined(ARCH_PORTDUINO) || defined(MESHTASTIC_EXCLUDE_WIFI)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
@@ -376,7 +376,7 @@ void PowerFSM_setup()
     // Don't add power saving transitions if we are a power saving tracker or sensor or have Wifi enabled. Sleep will be initiated
     // through the modules
 
-#if HAS_WIFI && !defined(MESHTASTIC_EXCLUDE_WIFI)
+#if (HAS_WIFI || HAS_ETHERNET_ON_WIFI_STACK) && !defined(MESHTASTIC_EXCLUDE_WIFI)
     bool isTrackerOrSensor = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;

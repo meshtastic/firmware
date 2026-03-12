@@ -10,7 +10,7 @@
 #include "serialization/JSON.h"
 #endif
 
-#if HAS_WIFI || (defined(ESP32) && defined(ETH_PHY_TYPE))
+#if HAS_WIFI || HAS_ETHERNET_ON_WIFI_STACK
 #include <WiFiClient.h>
 #if __has_include(<WiFiClientSecure.h>)
 #include <WiFiClientSecure.h>
@@ -83,7 +83,7 @@ class MQTT : private concurrency::OSThread
   private:
 #endif
 
-#if HAS_WIFI || (defined(ESP32) && defined(ETH_PHY_TYPE))
+#if HAS_WIFI || HAS_ETHERNET_ON_WIFI_STACK
     using MQTTClient = WiFiClient;
 #if __has_include(<WiFiClientSecure.h>)
     using MQTTClientTLS = WiFiClientSecure;

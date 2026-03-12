@@ -21,7 +21,7 @@
 extern bool needReconnect;
 extern concurrency::Periodic *wifiReconnect;
 
-/// @return true if wifi is now in use
+/// @return true if Wi-Fi is now in use
 bool initWifi();
 
 void deinitWifi();
@@ -30,6 +30,6 @@ bool isWifiAvailable();
 
 uint8_t getWifiDisconnectReason();
 
-#if HAS_ETHERNET && (defined(USE_WS5500) || defined(ETH_PHY_TYPE))
+#if HAS_ETHERNET_ON_WIFI_STACK
 bool initEthernet();
 #endif

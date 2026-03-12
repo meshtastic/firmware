@@ -31,7 +31,7 @@
 #include <vector>
 
 #ifdef ARCH_ESP32
-#if HAS_WIFI
+#if HAS_WIFI || HAS_ETHERNET_ON_WIFI_STACK
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "SPILock.h"

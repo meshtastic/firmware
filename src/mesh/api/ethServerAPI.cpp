@@ -1,5 +1,6 @@
-#include "ethServerAPI.h"
 #include "configuration.h"
+#include "ethServerAPI.h"
+
 #include <Arduino.h>
 
 #if HAS_ETHERNET

@@ -520,6 +520,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Allow code that needs internet to just check HAS_NETWORKING rather than HAS_WIFI || HAS_ETHERNET
 #define HAS_NETWORKING (HAS_WIFI || HAS_ETHERNET)
 
+// ESP32 uses Arduino Wi-Fi stack when using native/WS5500 Ethernet
+#if (HAS_ETHERNET && (defined(ETH_PHY_TYPE) || defined(USE_WS5500)))
+#define HAS_ETHERNET_ON_WIFI_STACK 1
+#else
+#define HAS_ETHERNET_ON_WIFI_STACK 0
+#endif
+
 // // Turn off Bluetooth
 #ifdef MESHTASTIC_EXCLUDE_BLUETOOTH
 #undef HAS_BLUETOOTH

@@ -1,9 +1,9 @@
 #pragma once
+#include "configuration.h"
 #include "ServerAPI.h"
-#include "variant.h"
 
 #if HAS_ETHERNET
-#if defined(ESP32) && (defined(ETH_PHY_TYPE) || defined(USE_WS5500))
+#if defined(ESP32) && HAS_ETHERNET_ON_WIFI_STACK
 #if defined(ETH_PHY_TYPE)
 #include <ETH.h>
 #else

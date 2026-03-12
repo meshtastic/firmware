@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if HAS_WIFI || HAS_ETHERNET
+#if HAS_WIFI || (HAS_ETHERNET && defined(ETH_PHY_TYPE))
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
@@ -13,7 +13,7 @@
 #if HAS_ETHERNET && defined(USE_WS5500)
 #include <ETHClass2.h>
 #define ETH ETH2
-#endif // HAS_ETHERNET
+#endif
 
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
