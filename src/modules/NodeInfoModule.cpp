@@ -5,6 +5,7 @@
 #include "NodeStatus.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
@@ -133,11 +134,12 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
 
     // Use graduated scaling based on active mesh size (10 minute base, scales with congestion coefficient)
     uint32_t timeoutMs = Default::getConfiguredOrDefaultMsScaled(0, 10 * 60, nodeStatus->getNumOnline());
-    if (!shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, timeoutMs)) {
+    uint32_t lastNodeInfo = transmitHistory ? transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP) : 0;
+    if (!shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, timeoutMs)) {
         LOG_DEBUG("Skip send NodeInfo since we sent it <%us ago", timeoutMs / 1000);
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
-    } else if (shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 60 * 1000)) {
+    } else if (shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, 60 * 1000)) {
         // For interactive/urgent requests (e.g., user-triggered or implicit requests), use a shorter 60s timeout
         LOG_DEBUG("Skip send NodeInfo since we sent it <60s ago");
         ignoreRequest = true;
@@ -159,7 +161,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         strcpy(u.id, nodeDB->getNodeId().c_str());
 
         LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);
-        lastSentToMesh = millis();
+        if (transmitHistory)
+            transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
         return allocDataProtobuf(u);
     }
 }

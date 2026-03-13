@@ -51,9 +51,7 @@ class AudioThread : public concurrency::OSThread
             i2sRtttl = nullptr;
         }
 
-        if (rtttlFile != nullptr) {
-            rtttlFile = nullptr;
-        }
+        rtttlFile = nullptr;
 
         setCPUFast(false);
 #ifdef T_LORA_PAGER

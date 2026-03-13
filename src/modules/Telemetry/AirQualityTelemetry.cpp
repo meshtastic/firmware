@@ -11,6 +11,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "UnitConversions.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -18,6 +19,8 @@
 #include "main.h"
 #include "sleep.h"
 #include <Throttle.h>
+
+static constexpr uint16_t TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY = 0x8004;
 
 // Sensors
 #include "Sensor/AddI2CSensorTemplate.h"
@@ -108,26 +111,26 @@ int32_t AirQualityTelemetryModule::runOnce()
 
         // Wake up the sensors that need it
         LOG_INFO("Waking up sensors...");
+        uint32_t lastTelemetry =
+            transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY) : 0;
         for (TelemetrySensor *sensor : sensors) {
-            if (!sensor->allDisabled()) {
-                if (!sensor->canSleep()) {
-                    LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
-                } else if (((lastSentToMesh == 0) ||
-                            !Throttle::isWithinTimespanMs(lastSentToMesh - sensor->wakeUpTimeMs(),
-                                                          Default::getConfiguredOrDefaultMsScaled(
-                                                              moduleConfig.telemetry.air_quality_interval,
-                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-                           airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-                           airTime->isTxAllowedAirUtil()) {
-                    if (!sensor->isActive()) {
-                        LOG_DEBUG("Waking up: %s", sensor->sensorName);
-                        return sensor->wakeUp();
-                    } else {
-                        int32_t pendingForReadyMs = sensor->pendingForReadyMs();
-                        LOG_DEBUG("%s. Pending for ready %ums", sensor->sensorName, pendingForReadyMs);
-                        if (pendingForReadyMs) {
-                            return pendingForReadyMs;
-                        }
+            if (!sensor->canSleep()) {
+                LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
+            } else if (((lastTelemetry == 0) ||
+                        !Throttle::isWithinTimespanMs(lastTelemetry - sensor->wakeUpTimeMs(),
+                                                      Default::getConfiguredOrDefaultMsScaled(
+                                                          moduleConfig.telemetry.air_quality_interval,
+                                                          default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+                       airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                       airTime->isTxAllowedAirUtil()) {
+                if (!sensor->isActive()) {
+                    LOG_DEBUG("Waking up: %s", sensor->sensorName);
+                    return sensor->wakeUp();
+                } else {
+                    int32_t pendingForReadyMs = sensor->pendingForReadyMs();
+                    LOG_DEBUG("%s. Pending for ready %ums", sensor->sensorName, pendingForReadyMs);
+                    if (pendingForReadyMs) {
+                        return pendingForReadyMs;
                     }
                 }
             } else {
@@ -135,14 +138,15 @@ int32_t AirQualityTelemetryModule::runOnce()
             }
         }
 
-        if (((lastSentToMesh == 0) ||
-             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                               moduleConfig.telemetry.air_quality_interval,
-                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+        if (((lastTelemetry == 0) ||
+             !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
+                                                              moduleConfig.telemetry.air_quality_interval,
+                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = millis();
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
@@ -333,6 +337,10 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
 {
     if (currentRequest) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
         auto req = *currentRequest;
         const auto &p = req.decoded;
         meshtastic_Telemetry scratch;
