@@ -45,6 +45,7 @@
 #endif
 
 uint16_t getVDDVoltage();
+void cpuDeepSleep(uint32_t msecToWake);
 
 // Weak empty variant shutdown prep function.
 // May be redefined by variant files.
@@ -75,7 +76,7 @@ bool powerHAL_isVBUSConnected()
 bool powerHAL_isPowerLevelSafe()
 {
 
-    static bool powerLevelSafe = true;
+    static bool powerLevelSafe = true;  
 
     uint16_t threshold = SAFE_VDD_VOLTAGE_THRESHOLD * 1000; // convert V to mV
     uint16_t hysteresis = SAFE_VDD_VOLTAGE_THRESHOLD_HYST * 1000;
@@ -326,6 +327,24 @@ void nrf52Loop()
 
     checkSDEvents();
     reportLittleFSCorruptionOnce();
+
+#ifdef LOW_VDD_SYSTEMOFF_DELAY_MS   // rak_wismeshtag does not have a USB VBUS connected
+    // If VDD stays unsafe for a while (typically during brownout),
+    // force System OFF to avoid flash writes / SoftDevice instability loops.
+    // Skip when VBUS is present to allow recovery while USB-powered.
+    if (!powerHAL_isVBUSConnected()) {
+        static uint32_t low_vdd_since_ms = 0;
+        if (!powerHAL_isPowerLevelSafe()) {
+            if (low_vdd_since_ms == 0)
+                low_vdd_since_ms = millis();
+            if ((uint32_t)(millis() - low_vdd_since_ms) >= (uint32_t)LOW_VDD_SYSTEMOFF_DELAY_MS) {
+                cpuDeepSleep(portMAX_DELAY);
+            }
+        } else {
+            low_vdd_since_ms = 0;
+        }
+    }
+#endif
 }
 
 #ifdef USE_SEMIHOSTING

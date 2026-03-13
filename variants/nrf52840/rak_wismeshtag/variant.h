@@ -225,7 +225,29 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.73
-#define OCV_ARRAY 4240, 4112, 4029, 3970, 3906, 3846, 3824, 3802, 3776, 3650, 3072
+#define OCV_ARRAY 4160, 4020, 3940, 3870, 3810, 3760, 3740, 3720, 3680, 3620, 2990  // updated OCV array for rak_wismeshtag
+
+// Wake from System OFF when battery rises again (LPCOMP).
+// BAT_ADC divider: R22=1M (top), R24=1.5M (bottom) => V_BAT_ADC = VBAT * (1.5 / (1.0 + 1.5)) = 0.6 * VBAT
+// RAK4630 module: AIN0 = nrf52840 AIN3 = Pin 5 (A0/BATTERY_PIN)
+#define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_3
+// If VDD is regulated ~3.3V, this wakes around VBAT ~3.09V (good for brownout recovery).
+#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_9_16  //3.09V NRF_LPCOMP_REF_SUPPLY_9_16 = 3.09V
+
+// Low voltage protection:
+// If VDD is below SAFE_VDD_VOLTAGE_THRESHOLD for longer than this delay (and no USB VBUS),
+// the device will enter System OFF to avoid brownout loops and flash corruption.
+#ifndef LOW_VDD_SYSTEMOFF_DELAY_MS
+#define LOW_VDD_SYSTEMOFF_DELAY_MS 5000
+#endif
+
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD
+#define SAFE_VDD_VOLTAGE_THRESHOLD 2.9
+#endif
+
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD_HYST
+#define SAFE_VDD_VOLTAGE_THRESHOLD_HYST 0.1
+#endif
 
 #define RAK_4631 1
 
