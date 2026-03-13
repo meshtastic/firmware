@@ -95,8 +95,8 @@ class UIRenderer
         return graphics::EmoteRenderer::truncateToWidth(display, line, maxWidth, ellipsis, graphics::emotes, graphics::numEmotes,
                                                         emoteSpacing);
     }
-    static void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const char *line, int fontHeight,
-                                     int emoteSpacing = 1, bool fauxBold = true);
+    static void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const char *line, int fontHeight, int emoteSpacing = 1,
+                                     bool fauxBold = true);
     static inline void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, int fontHeight,
                                             int emoteSpacing = 1, bool fauxBold = true)
     {

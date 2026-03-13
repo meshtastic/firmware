@@ -292,8 +292,8 @@ size_t truncateToWidth(OLEDDisplay *display, const char *line, char *out, size_t
         return 0;
 
     const size_t lineLen = strlen(line);
-    const int suffixWidth = (ellipsis && *ellipsis) ? measureStringWithEmotes(display, ellipsis, emoteSet, emoteCount, emoteSpacing)
-                                                    : 0;
+    const int suffixWidth =
+        (ellipsis && *ellipsis) ? measureStringWithEmotes(display, ellipsis, emoteSet, emoteCount, emoteSpacing) : 0;
     const char *suffix = (ellipsis && suffixWidth <= maxWidth) ? ellipsis : "";
     const size_t suffixLen = strlen(suffix);
     const int availableWidth = maxWidth - (*suffix ? suffixWidth : 0);
@@ -372,7 +372,8 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const char *line, 
 
     const size_t lineLen = strlen(line);
     // Center text vertically when any emote is taller than the font.
-    const int maxIconHeight = analyzeLineInternal(nullptr, line, lineLen, fontHeight, emoteSet, emoteCount, emoteSpacing).tallestHeight;
+    const int maxIconHeight =
+        analyzeLineInternal(nullptr, line, lineLen, fontHeight, emoteSet, emoteCount, emoteSpacing).tallestHeight;
     const int lineHeight = std::max(fontHeight, maxIconHeight);
     const int fontY = y + (lineHeight - fontHeight) / 2;
 
@@ -380,7 +381,7 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const char *line, 
     bool inBold = false;
 
     for (size_t i = 0; i < lineLen;) {
-        // Toggle faux bold on markdown-style ** markers.
+        // Toggle faux bold.
         if (fauxBold && i + 1 < lineLen && line[i] == '*' && line[i + 1] == '*') {
             inBold = !inBold;
             i += 2;

@@ -356,8 +356,8 @@ static void drawWrappedEmoteText(OLEDDisplay *display, int x, int y, const char 
     int yCursor = y;
 
     while (offset < textLen) {
-        size_t copied = graphics::EmoteRenderer::truncateToWidth(display, text + offset, lineBuffer, sizeof(lineBuffer), maxWidth, "",
-                                                                 graphics::emotes, graphics::numEmotes, emoteSpacing);
+        size_t copied = graphics::EmoteRenderer::truncateToWidth(display, text + offset, lineBuffer, sizeof(lineBuffer), maxWidth,
+                                                                 "", graphics::emotes, graphics::numEmotes, emoteSpacing);
         size_t consumed = copied;
 
         if (copied == 0) {
@@ -515,9 +515,9 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
     if (event->kbchar != 0x09)
         return false;
 
-    const cannedMessageModuleRunState targetState =
-        (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) ? CANNED_MESSAGE_RUN_STATE_FREETEXT
-                                                                     : CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
+    const cannedMessageModuleRunState targetState = (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
+                                                        ? CANNED_MESSAGE_RUN_STATE_FREETEXT
+                                                        : CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
 
     destIndex = 0;
     scrollIndex = 0;
@@ -1738,7 +1738,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                     availWidth = 0;
                 char truncatedEntry[96];
                 graphics::UIRenderer::truncateStringWithEmotes(display, entryText.c_str(), truncatedEntry, sizeof(truncatedEntry),
-                                                              availWidth);
+                                                               availWidth);
                 entryText = truncatedEntry;
 
                 // Prepend "* " if this is a favorite
@@ -1746,7 +1746,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                     entryText = "* " + entryText;
                 }
                 graphics::UIRenderer::truncateStringWithEmotes(display, entryText.c_str(), truncatedEntry, sizeof(truncatedEntry),
-                                                              availWidth);
+                                                               availWidth);
                 entryText = truncatedEntry;
             }
         }

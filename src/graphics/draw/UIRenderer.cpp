@@ -1,7 +1,6 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "CompassRenderer.h"
-#include "graphics/EmoteRenderer.h"
 #include "GPSStatus.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -9,6 +8,7 @@
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/GeoCoord.h"
+#include "graphics/EmoteRenderer.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"

@@ -13,8 +13,7 @@ namespace graphics
 namespace EmoteRenderer
 {
 
-struct LineMetrics
-{
+struct LineMetrics {
     int width;
     int tallestHeight;
     bool hasEmote;
@@ -40,8 +39,8 @@ inline LineMetrics analyzeLine(OLEDDisplay *display, const std::string &line, in
 }
 int maxEmoteHeight(const Emote *emoteSet = emotes, int emoteCount = numEmotes);
 
-int measureStringWithEmotes(OLEDDisplay *display, const char *line, const Emote *emoteSet = emotes,
-                            int emoteCount = numEmotes, int emoteSpacing = 1);
+int measureStringWithEmotes(OLEDDisplay *display, const char *line, const Emote *emoteSet = emotes, int emoteCount = numEmotes,
+                            int emoteSpacing = 1);
 inline int measureStringWithEmotes(OLEDDisplay *display, const std::string &line, const Emote *emoteSet = emotes,
                                    int emoteCount = numEmotes, int emoteSpacing = 1)
 {
@@ -60,7 +59,8 @@ inline std::string truncateToWidth(OLEDDisplay *display, const std::string &line
         return line;
 
     std::vector<char> out(line.length() + ellipsis.length() + 1, '\0');
-    truncateToWidth(display, line.c_str(), out.data(), out.size(), maxWidth, ellipsis.c_str(), emoteSet, emoteCount, emoteSpacing);
+    truncateToWidth(display, line.c_str(), out.data(), out.size(), maxWidth, ellipsis.c_str(), emoteSet, emoteCount,
+                    emoteSpacing);
     return std::string(out.data());
 }
 

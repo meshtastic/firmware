@@ -943,7 +943,8 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         if (availWidth < 0)
             availWidth = 0;
         char truncatedLongName[64];
-        graphics::UIRenderer::truncateStringWithEmotes(display, longName, truncatedLongName, sizeof(truncatedLongName), availWidth);
+        graphics::UIRenderer::truncateStringWithEmotes(display, longName, truncatedLongName, sizeof(truncatedLongName),
+                                                       availWidth);
         const char *msgRaw = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
 
         char banner[256];
