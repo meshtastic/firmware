@@ -9,6 +9,10 @@
 #include <string>
 #include <vector>
 
+#ifndef SCREEN_I2C_FREQUENCY
+#define SCREEN_I2C_FREQUENCY 700000
+#endif
+
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 namespace graphics
 {
