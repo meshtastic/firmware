@@ -1,8 +1,12 @@
 #pragma once
 
 #include "ServerAPI.h"
-#ifndef USE_WS5500
+#if !defined(USE_WS5500)
+#if defined(WIZNET_5500_EVB_PICO2)
+#include <Ethernet.h>
+#else
 #include <RAK13800_W5100S.h>
+#endif
 
 /**
  * Provides both debug printing and, if the client starts sending protobufs to us, switches to send/receive protobufs

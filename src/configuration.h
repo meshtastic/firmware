@@ -119,7 +119,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef EBYTE_E22_900M30S
 // 10dB PA gain and 30dB rated output; based on measurements from
 // https://github.com/S5NC/EBYTE_ESP32-S3/blob/main/E22-900M30S%20power%20output%20testing.txt
-#define TX_GAIN_LORA 7
+#define TX_GAIN_LORA 10
 #define SX126X_MAX_POWER 22
 #endif
 
