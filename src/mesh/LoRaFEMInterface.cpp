@@ -25,7 +25,7 @@ void LoRaFEMInterface::init(void)
         pinMode(LORA_KCT8103L_PA_CSD, OUTPUT);
         digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
         pinMode(LORA_KCT8103L_PA_CTX, OUTPUT);
-        digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
+        digitalWrite(LORA_KCT8103L_PA_CTX, LOW); // LNA enabled by default
         setLnaCanControl(true);
     } else if (digitalRead(LORA_KCT8103L_PA_CSD) == LOW) {
         // FEM is GC1109
@@ -66,7 +66,7 @@ void LoRaFEMInterface::init(void)
     pinMode(LORA_KCT8103L_PA_CSD, OUTPUT);
     digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
     pinMode(LORA_KCT8103L_PA_CTX, OUTPUT);
-    digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
+    digitalWrite(LORA_KCT8103L_PA_CTX, LOW); // LNA enabled by default
     setLnaCanControl(true);
 #endif
 }

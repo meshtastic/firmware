@@ -60,7 +60,7 @@ template <typename T> bool SX126xInterface<T>::init()
     loraFEMInterface.init();
     // Apply saved FEM LNA mode from config
     if (loraFEMInterface.isLnaCanControl()) {
-        loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED);
+        loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
     }
 #endif
 
