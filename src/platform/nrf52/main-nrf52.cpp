@@ -45,12 +45,15 @@
 #endif
 
 uint16_t getVDDVoltage();
-void cpuDeepSleep(uint32_t msecToWake);
 
 // Weak empty variant shutdown prep function.
 // May be redefined by variant files.
 void variant_shutdown() __attribute__((weak));
 void variant_shutdown() {}
+
+// Optional variant hook called each nrf52Loop(); e.g. for low-VDD System OFF.
+void variant_nrf52LoopHook(void) __attribute__((weak));
+void variant_nrf52LoopHook(void) {}
 
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
@@ -328,23 +331,7 @@ void nrf52Loop()
     checkSDEvents();
     reportLittleFSCorruptionOnce();
 
-#ifdef LOW_VDD_SYSTEMOFF_DELAY_MS   // rak_wismeshtag does not have a USB VBUS connected
-    // If VDD stays unsafe for a while (typically during brownout),
-    // force System OFF to avoid flash writes / SoftDevice instability loops.
-    // Skip when VBUS is present to allow recovery while USB-powered.
-    if (!powerHAL_isVBUSConnected()) {
-        static uint32_t low_vdd_since_ms = 0;
-        if (!powerHAL_isPowerLevelSafe()) {
-            if (low_vdd_since_ms == 0)
-                low_vdd_since_ms = millis();
-            if ((uint32_t)(millis() - low_vdd_since_ms) >= (uint32_t)LOW_VDD_SYSTEMOFF_DELAY_MS) {
-                cpuDeepSleep(portMAX_DELAY);
-            }
-        } else {
-            low_vdd_since_ms = 0;
-        }
-    }
-#endif
+    variant_nrf52LoopHook();  // Optional variant hook called each nrf52Loop();
 }
 
 #ifdef USE_SEMIHOSTING

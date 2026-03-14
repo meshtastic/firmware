@@ -22,6 +22,10 @@
 #include "nrf.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
+#include "power/PowerHAL.h"
+#include "sleep.h"
+#include "FreeRTOS.h"
+#include "Arduino.h"
 
 const uint32_t g_ADigitalPinMap[] = {
     // P0
@@ -40,3 +44,23 @@ void initVariant()
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
 }
+
+#ifdef LOW_VDD_SYSTEMOFF_DELAY_MS
+void variant_nrf52LoopHook(void)
+{
+    // If VDD stays unsafe for a while (brownout), force System OFF.
+    // Skip when VBUS present to allow recovery while USB-powered.
+    if (!powerHAL_isVBUSConnected()) {
+        static uint32_t low_vdd_since_ms = 0;
+        if (!powerHAL_isPowerLevelSafe()) {
+            if (low_vdd_since_ms == 0)
+                low_vdd_since_ms = millis();
+            if ((uint32_t)(millis() - low_vdd_since_ms) >= (uint32_t)LOW_VDD_SYSTEMOFF_DELAY_MS) {
+                cpuDeepSleep(portMAX_DELAY);
+            }
+        } else {
+            low_vdd_since_ms = 0;
+        }
+    }
+}
+#endif
