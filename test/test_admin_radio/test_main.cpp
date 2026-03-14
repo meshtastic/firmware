@@ -11,6 +11,7 @@
  *  6. Channel spacing calculation (placeholder for future protobuf changes)
  */
 
+#include "AdminModule.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -641,6 +642,87 @@ static void test_channelSpacingCalculation_placeholder()
 }
 
 // -----------------------------------------------------------------------
+// handleSetConfig fromOthers dispatch tests
+// -----------------------------------------------------------------------
+
+class AdminModuleTestShim : public AdminModule
+{
+  public:
+    using AdminModule::handleSetConfig;
+};
+
+static AdminModuleTestShim *testAdmin;
+
+static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode region, bool usePreset,
+                                           meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora.region = region;
+    c.payload_variant.lora.use_preset = usePreset;
+    c.payload_variant.lora.modem_preset = preset;
+    return c;
+}
+
+static void test_handleSetConfig_fromOthers_invalidPresetRejected()
+{
+    // Set up a known-good baseline in the global config
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    // Build an admin set_config with an invalid preset for EU_868
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_EU_868, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO);
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    // fromOthers=true: invalid preset should be rejected, old preset preserved
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+}
+
+static void test_handleSetConfig_fromLocal_invalidPresetClamped()
+{
+    // Set up a known-good baseline
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    // Build an admin set_config with an invalid preset for EU_868
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_EU_868, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO);
+
+    testAdmin->handleSetConfig(c, false); // fromOthers = false (local client)
+
+    // fromOthers=false: invalid preset should be clamped to the region's default
+    const RegionInfo *eu868 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+    TEST_ASSERT_EQUAL(eu868->getDefaultPreset(), config.lora.modem_preset);
+}
+
+static void test_handleSetConfig_fromOthers_validPresetAccepted()
+{
+    // Set up baseline
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    // Build an admin set_config with a valid preset for EU_868
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_EU_868, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    // Valid preset should be accepted regardless of fromOthers
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+}
+
+// -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
 
@@ -648,12 +730,15 @@ void setUp(void)
 {
     mockMeshService = new MockMeshService();
     service = mockMeshService;
+    testAdmin = new AdminModuleTestShim();
 }
 void tearDown(void)
 {
     service = nullptr;
     delete mockMeshService;
     mockMeshService = nullptr;
+    delete testAdmin;
+    testAdmin = nullptr;
 }
 
 void setup()
@@ -717,6 +802,11 @@ void setup()
     RUN_TEST(test_channelSpacingCalculation_US_LONG_FAST);
     RUN_TEST(test_channelSpacingCalculation_EU868_LONG_FAST);
     RUN_TEST(test_channelSpacingCalculation_placeholder);
+
+    // handleSetConfig fromOthers dispatch
+    RUN_TEST(test_handleSetConfig_fromOthers_invalidPresetRejected);
+    RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
+    RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
 
     exit(UNITY_END());
 }
