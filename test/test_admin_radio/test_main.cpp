@@ -99,24 +99,173 @@ static void test_validateConfigRegion_unsetRegionReturnsTrue()
     TEST_ASSERT_TRUE(RadioInterface::validateConfigRegion(cfg));
 }
 
-// Note: There are currently no regions with licensedOnly=true in the table.
-// When HAM regions are added, uncomment and adapt the test below.
-//
-// static void test_validateConfigRegion_licensedOnlyRegionRejectedWhenUnlicensed()
-// {
-//     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
-//     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_HAM_REGION;
-//     devicestate.owner.is_licensed = false;
-//     TEST_ASSERT_FALSE(RadioInterface::validateConfigRegion(cfg));
-// }
-//
-// static void test_validateConfigRegion_licensedOnlyRegionAcceptedWhenLicensed()
-// {
-//     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
-//     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_HAM_REGION;
-//     devicestate.owner.is_licensed = true;
-//     TEST_ASSERT_TRUE(RadioInterface::validateConfigRegion(cfg));
-// }
+// -----------------------------------------------------------------------
+// Shadow tables for testing (preset lists → profiles → regions → lookup)
+// -----------------------------------------------------------------------
+
+// A minimal preset list with only one entry
+static const meshtastic_Config_LoRaConfig_ModemPreset TEST_PRESETS_SINGLE[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+    MODEM_PRESET_END,
+};
+
+// A preset list that includes all turbo variants only
+static const meshtastic_Config_LoRaConfig_ModemPreset TEST_PRESETS_TURBO_ONLY[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+    MODEM_PRESET_END,
+};
+
+// A restricted list simulating a hypothetical tight-regulation region
+static const meshtastic_Config_LoRaConfig_ModemPreset TEST_PRESETS_RESTRICTED[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE,
+    MODEM_PRESET_END,
+};
+
+// Mirrors PROFILE_STD but with non-zero spacing/padding for testing
+static const RegionProfile TEST_PROFILE_SPACED = {
+    TEST_PRESETS_SINGLE,
+    /* spacing */ 0.025f,
+    /* padding */ 0.010f,
+    /* audioPermitted */ true,
+    /* licensedOnly */ false,
+    /* textThrottle */ 0,
+    /* positionThrottle */ 0,
+    /* telemetryThrottle */ 0,
+    /* overrideSlot */ 0,
+};
+
+// A licensed-only profile for testing access control
+static const RegionProfile TEST_PROFILE_LICENSED = {
+    TEST_PRESETS_RESTRICTED,
+    /* spacing */ 0.0f,
+    /* padding */ 0.0f,
+    /* audioPermitted */ false,
+    /* licensedOnly */ true,
+    /* textThrottle */ 5,
+    /* positionThrottle */ 10,
+    /* telemetryThrottle */ 10,
+    /* overrideSlot */ 3,
+};
+
+// Turbo-only profile
+static const RegionProfile TEST_PROFILE_TURBO = {
+    TEST_PRESETS_TURBO_ONLY,
+    /* spacing */ 0.0f,
+    /* padding */ 0.0f,
+    /* audioPermitted */ true,
+    /* licensedOnly */ false,
+    /* textThrottle */ 0,
+    /* positionThrottle */ 0,
+    /* telemetryThrottle */ 0,
+    /* overrideSlot */ 0,
+};
+
+static const RegionInfo testRegions[] = {
+    // A wide US-like region with spacing + padding
+    {meshtastic_Config_LoRaConfig_RegionCode_US, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED, "TEST_US_SPACED"},
+
+    // A narrow band simulating tight EU regulation
+    {meshtastic_Config_LoRaConfig_RegionCode_EU_868, 869.4f, 869.65f, 10, 14, false, false, &TEST_PROFILE_LICENSED,
+     "TEST_EU_LICENSED"},
+
+    // A wide-LoRa region with turbo-only presets
+    {meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, &TEST_PROFILE_TURBO,
+     "TEST_LORA24_TURBO"},
+
+    // Sentinel — must be last
+    {meshtastic_Config_LoRaConfig_RegionCode_UNSET, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED, "TEST_UNSET"},
+};
+
+static const RegionInfo *getTestRegion(meshtastic_Config_LoRaConfig_RegionCode code)
+{
+    const RegionInfo *r = testRegions;
+    while (r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        if (r->code == code)
+            return r;
+        r++;
+    }
+    return r; // Returns the UNSET sentinel
+}
+
+// -----------------------------------------------------------------------
+// Shadow table tests
+// -----------------------------------------------------------------------
+
+static void test_shadowTable_spacedProfileHasNonZeroSpacing()
+{
+    const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    TEST_ASSERT_EQUAL_STRING("TEST_US_SPACED", r->name);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.025f, r->profile->spacing);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.010f, r->profile->padding);
+}
+
+static void test_shadowTable_licensedProfileFlagsCorrect()
+{
+    const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+    TEST_ASSERT_TRUE(r->profile->licensedOnly);
+    TEST_ASSERT_FALSE(r->profile->audioPermitted);
+    TEST_ASSERT_EQUAL(3, r->profile->overrideSlot);
+}
+
+static void test_shadowTable_presetCountMatchesExpected()
+{
+    const RegionInfo *spaced = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    TEST_ASSERT_EQUAL(1, spaced->getNumPresets());
+
+    const RegionInfo *licensed = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+    TEST_ASSERT_EQUAL(2, licensed->getNumPresets());
+
+    const RegionInfo *turbo = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_LORA_24);
+    TEST_ASSERT_EQUAL(2, turbo->getNumPresets());
+}
+
+static void test_shadowTable_defaultPresetIsFirstInList()
+{
+    const RegionInfo *spaced = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, spaced->getDefaultPreset());
+
+    const RegionInfo *licensed = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, licensed->getDefaultPreset());
+
+    const RegionInfo *turbo = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_LORA_24);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, turbo->getDefaultPreset());
+}
+
+static void test_shadowTable_channelSpacingWithPadding()
+{
+    // Verify channel count when spacing + padding are non-zero
+    const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    float bw = modemPresetToBwKHz(r->getDefaultPreset(), r->wideLora);
+    float channelSpacing = r->profile->spacing + (r->profile->padding * 2) + (bw / 1000.0f);
+
+    // spacing=0.025, padding=0.010*2=0.020, bw=250kHz=0.250
+    // channelSpacing = 0.025 + 0.020 + 0.250 = 0.295 MHz
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.295f, channelSpacing);
+
+    uint32_t numChannels = (uint32_t)(((r->freqEnd - r->freqStart + r->profile->spacing) / channelSpacing) + 0.5f);
+    // (928 - 902 + 0.025) / 0.295 = 88.2 → 88
+    TEST_ASSERT_EQUAL_UINT32(88, numChannels);
+}
+
+static void test_shadowTable_turboOnlyOnWideLora()
+{
+    const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_LORA_24);
+    TEST_ASSERT_TRUE(r->wideLora);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, r->getDefaultPreset());
+
+    // Verify wide-LoRa bandwidth for SHORT_TURBO
+    float bw = modemPresetToBwKHz(r->getDefaultPreset(), r->wideLora);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 1625.0f, bw); // 1625 kHz in wide mode
+}
+
+static void test_shadowTable_unknownCodeFallsToSentinel()
+{
+    const RegionInfo *r = getTestRegion((meshtastic_Config_LoRaConfig_RegionCode)200);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, r->code);
+    TEST_ASSERT_EQUAL_STRING("TEST_UNSET", r->name);
+}
 
 // -----------------------------------------------------------------------
 // validateConfigLora() tests
@@ -223,6 +372,54 @@ static void test_validateConfigLora_customBandwidthFitsEU868()
     TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg));
 }
 
+static void test_validateConfigLora_bogusPresetRejected()
+{
+    // A fabricated preset value not in any list should be rejected
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.use_preset = true;
+    cfg.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)99;
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
+}
+
+static void test_validateConfigLora_unsetRegionOnlyAcceptsLongFast()
+{
+    // UNSET uses PROFILE_UNDEF which has only LONG_FAST
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    cfg.use_preset = true;
+
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::validateConfigLora(cfg), "LONG_FAST should be valid for UNSET");
+
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "MEDIUM_FAST should be invalid for UNSET");
+
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "SHORT_TURBO should be invalid for UNSET");
+}
+
+static void test_validateConfigLora_allPresetsValidForLORA24()
+{
+    // LORA_24 uses PROFILE_STD (9 presets) with wideLora=true
+    meshtastic_Config_LoRaConfig_ModemPreset stdPresets[] = {
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
+        meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
+        meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+    };
+
+    for (size_t i = 0; i < sizeof(stdPresets) / sizeof(stdPresets[0]); i++) {
+        meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+        cfg.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+        cfg.use_preset = true;
+        cfg.modem_preset = stdPresets[i];
+        TEST_ASSERT_TRUE_MESSAGE(RadioInterface::validateConfigLora(cfg), "Expected valid preset for LORA_24");
+    }
+}
+
 // -----------------------------------------------------------------------
 // clampConfigLora() tests
 // -----------------------------------------------------------------------
@@ -281,6 +478,33 @@ static void test_clampConfigLora_customBwValidLeftUnchanged()
     RadioInterface::clampConfigLora(cfg);
 
     TEST_ASSERT_EQUAL_UINT16(125, cfg.bandwidth);
+}
+
+static void test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast()
+{
+    // UNSET uses PROFILE_UNDEF with only LONG_FAST; any other preset should clamp to it
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    cfg.use_preset = true;
+    cfg.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)99;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+}
+
+static void test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault()
+{
+    // LORA_24 uses PROFILE_STD; a bogus preset should clamp to LONG_FAST (first in PRESETS_STD)
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    cfg.use_preset = true;
+    cfg.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)99;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    const RegionInfo *lora24 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_LORA_24);
+    TEST_ASSERT_EQUAL(lora24->getDefaultPreset(), cfg.modem_preset);
 }
 
 // -----------------------------------------------------------------------
@@ -342,6 +566,26 @@ static void test_regionFieldsAreSane()
         TEST_ASSERT_NOT_NULL(r->name);
         TEST_ASSERT_TRUE_MESSAGE(r->getNumPresets() > 0, "numPresets must be > 0");
         TEST_ASSERT_NOT_NULL(r->getAvailablePresets());
+
+        if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            break;
+        r++;
+    }
+}
+
+static void test_onlyLORA24HasWideLora()
+{
+    // Verify that LORA_24 is the only region with wideLora=true
+    const RegionInfo *r = regions;
+    while (true) {
+        char msg[80];
+        if (r->code == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) {
+            snprintf(msg, sizeof(msg), "Region %s should have wideLora=true", r->name);
+            TEST_ASSERT_TRUE_MESSAGE(r->wideLora, msg);
+        } else {
+            snprintf(msg, sizeof(msg), "Region %s should have wideLora=false", r->name);
+            TEST_ASSERT_FALSE_MESSAGE(r->wideLora, msg);
+        }
 
         if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
             break;
@@ -432,6 +676,15 @@ void setup()
     RUN_TEST(test_validateConfigRegion_validRegionReturnsTrue);
     RUN_TEST(test_validateConfigRegion_unsetRegionReturnsTrue);
 
+    // Shadow table tests
+    RUN_TEST(test_shadowTable_spacedProfileHasNonZeroSpacing);
+    RUN_TEST(test_shadowTable_licensedProfileFlagsCorrect);
+    RUN_TEST(test_shadowTable_presetCountMatchesExpected);
+    RUN_TEST(test_shadowTable_defaultPresetIsFirstInList);
+    RUN_TEST(test_shadowTable_channelSpacingWithPadding);
+    RUN_TEST(test_shadowTable_turboOnlyOnWideLora);
+    RUN_TEST(test_shadowTable_unknownCodeFallsToSentinel);
+
     // validateConfigLora()
     RUN_TEST(test_validateConfigLora_validPresetForUS);
     RUN_TEST(test_validateConfigLora_allStdPresetsValidForUS);
@@ -440,12 +693,17 @@ void setup()
     RUN_TEST(test_validateConfigLora_customBandwidthTooWideForEU868);
     RUN_TEST(test_validateConfigLora_customBandwidthFitsUS);
     RUN_TEST(test_validateConfigLora_customBandwidthFitsEU868);
+    RUN_TEST(test_validateConfigLora_bogusPresetRejected);
+    RUN_TEST(test_validateConfigLora_unsetRegionOnlyAcceptsLongFast);
+    RUN_TEST(test_validateConfigLora_allPresetsValidForLORA24);
 
     // clampConfigLora()
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
     RUN_TEST(test_clampConfigLora_customBwTooWideClampedToDefaultBw);
     RUN_TEST(test_clampConfigLora_customBwValidLeftUnchanged);
+    RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);
+    RUN_TEST(test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault);
 
     // RegionInfo preset list integrity
     RUN_TEST(test_presetsStd_hasNineEntries);
@@ -453,6 +711,7 @@ void setup()
     RUN_TEST(test_presetsUndef_hasOneEntry);
     RUN_TEST(test_defaultPresetIsInAvailablePresets);
     RUN_TEST(test_regionFieldsAreSane);
+    RUN_TEST(test_onlyLORA24HasWideLora);
 
     // Channel spacing (current + placeholder)
     RUN_TEST(test_channelSpacingCalculation_US_LONG_FAST);
