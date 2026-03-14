@@ -32,6 +32,10 @@
 #include "STM32WLE5JCInterface.h"
 #endif
 
+#if defined(ARCH_ESP32) && defined(USE_LORA_SPI_DMA)
+#include "ESP32LoRaSPIDMAHal.h"
+#endif
+
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
     {                                                                                                                            \
         meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, \
@@ -292,7 +296,10 @@ std::unique_ptr<RadioInterface> initLoRa()
 #elif defined(HW_SPI1_DEVICE)
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI1, loraSpiSettings);
     RadioLibHAL = loraHal;
-#else // HW_SPI1_DEVICE
+#elif defined(ARCH_ESP32) && defined(USE_LORA_SPI_DMA)
+    LockingArduinoHal *loraHal = new ESP32LoRaSPIDMAHal(SPI, loraSpiSettings);
+    RadioLibHAL = loraHal;
+#else
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI, loraSpiSettings);
     RadioLibHAL = loraHal;
 #endif

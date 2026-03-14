@@ -279,7 +279,12 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #endif
 
 #if defined(VEXT_ENABLE)
-    digitalWrite(VEXT_ENABLE, !VEXT_ON_VALUE); // turn on the display power
+    digitalWrite(VEXT_ENABLE, !VEXT_ON_VALUE); // turn off display/peripheral rail to save power
+#if defined(HELTEC_V4) && defined(ARCH_ESP32)
+    if (GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)VEXT_ENABLE)) {
+        gpio_hold_en((gpio_num_t)VEXT_ENABLE); // hold state during deep sleep (released on wake in initDeepSleep)
+    }
+#endif
 #endif
 
 #ifdef ARCH_ESP32
@@ -537,7 +542,11 @@ void enableModemSleep()
 #else
     esp32_config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
 #endif
-    esp32_config.min_freq_mhz = 20; // 10Mhz is minimum recommended
+#if defined(HELTEC_V4)
+    esp32_config.min_freq_mhz = 10; // save power when CPU idle
+#else
+    esp32_config.min_freq_mhz = 20; // 10 MHz is minimum recommended
+#endif
     esp32_config.light_sleep_enable = false;
     int rv = esp_pm_configure(&esp32_config);
     LOG_DEBUG("Sleep request result %x", rv);

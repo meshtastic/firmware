@@ -508,8 +508,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
             cfg.spi_3wire = false;
             cfg.use_lock = true;               // Set to true to use transaction locking
-            cfg.dma_channel = SPI_DMA_CH_AUTO; // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
-                                               // SPI_DMA_CH_AUTO=auto setting)
+            cfg.dma_channel = SPI_DMA_CH_AUTO; // Use GDMA for display transfers (0=off). See docs/dma-audit-heltec-v4.md
             cfg.pin_sclk = ST7789_SCK;         // Set SPI SCLK pin number
             cfg.pin_mosi = ST7789_SDA;         // Set SPI MOSI pin number
             cfg.pin_miso = ST7789_MISO;        // Set SPI MISO pin number (-1 = disable)

@@ -34,8 +34,20 @@ struct ButtonConfig {
 #define BUTTON_CLICK_MS 250
 #endif
 
+#ifndef BUTTON_DEBOUNCE_MS
+#define BUTTON_DEBOUNCE_MS 1
+#endif
+
 #ifndef BUTTON_TOUCH_MS
 #define BUTTON_TOUCH_MS 400
+#endif
+
+#ifndef BUTTON_POLL_MS
+#define BUTTON_POLL_MS 100 // How often to poll when idle; lower = fewer missed presses, more CPU
+#endif
+
+#ifndef BUTTON_ACTIVE_POLL_MS
+#define BUTTON_ACTIVE_POLL_MS 50 // Poll interval while button pressed or waiting for long-press combo
 #endif
 
 #ifndef BUTTON_COMBO_TIMEOUT_MS

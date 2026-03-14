@@ -346,7 +346,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
                 // Already initialized - filter this reading
                 last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
             }
-
+#if defined(HELTEC_V4) && !defined(EXT_PWR_DETECT)
+            recordVoltageSample(last_read_time_ms, (uint16_t)last_read_value);
+#endif
             // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u",
             // BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t) (last_read_value));
         }
@@ -468,7 +470,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO)
         return powerHAL_isVBUSConnected();
 #endif
+#if defined(HELTEC_V4) && !defined(EXT_PWR_DETECT)
+        // No USB-detect pin (Heltec V4): infer from full voltage or voltage rising
+        if (getBattVoltage() >= chargingVolt)
+            return true;
+        return isVoltageRising();
+#else
         return getBattVoltage() > chargingVolt;
+#endif
     }
 
     /// Assume charging if we have a battery and external power is connected.
@@ -499,7 +508,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
             return getINACurrent() < 0;
 #endif
         }
+#if defined(HELTEC_V4)
+        // When no dedicated charging pin: show lightning only while charging, not when full
+        if (isBatteryConnect() && isVbusIn())
+            return getBattVoltage() < (chargingVolt - 50);
+        return false;
+#else
         return isBatteryConnect() && isVbusIn();
+#endif
 #endif
 #endif
         // by default, we check the battery voltage only
@@ -522,6 +538,44 @@ class AnalogBatteryLevel : public HasBatteryLevel
     bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
+
+#if defined(HELTEC_V4) && !defined(EXT_PWR_DETECT)
+    // Voltage history for inferring USB/charging when no EXT_PWR_DETECT pin (Heltec V4)
+    static const int VOLTAGE_HISTORY_SIZE = 6;
+    static const uint32_t VOLTAGE_RECORD_INTERVAL_MS = 15000;
+    static const uint32_t VOLTAGE_RISE_WINDOW_MS = 60000;
+    static const uint16_t VOLTAGE_RISE_THRESHOLD_MV = 25;
+    uint32_t voltageHistoryTime[VOLTAGE_HISTORY_SIZE] = {0};
+    uint16_t voltageHistoryMv[VOLTAGE_HISTORY_SIZE] = {0};
+    uint8_t voltageHistoryCount = 0;
+    uint8_t voltageHistoryWriteIndex = 0;
+    uint32_t lastVoltageRecordTime = 0;
+    void recordVoltageSample(uint32_t timeMs, uint16_t voltageMv)
+    {
+        if (timeMs - lastVoltageRecordTime < VOLTAGE_RECORD_INTERVAL_MS)
+            return;
+        lastVoltageRecordTime = timeMs;
+        uint8_t idx = voltageHistoryWriteIndex % VOLTAGE_HISTORY_SIZE;
+        voltageHistoryTime[idx] = timeMs;
+        voltageHistoryMv[idx] = voltageMv;
+        voltageHistoryWriteIndex++;
+        if (voltageHistoryCount < VOLTAGE_HISTORY_SIZE)
+            voltageHistoryCount++;
+    }
+    bool isVoltageRising() const
+    {
+        if (voltageHistoryCount < 3)
+            return false;
+        uint8_t oldestIdx = (voltageHistoryWriteIndex - voltageHistoryCount + VOLTAGE_HISTORY_SIZE) % VOLTAGE_HISTORY_SIZE;
+        uint8_t newestIdx = (voltageHistoryWriteIndex - 1 + VOLTAGE_HISTORY_SIZE) % VOLTAGE_HISTORY_SIZE;
+        uint32_t oldestTime = voltageHistoryTime[oldestIdx];
+        uint32_t newestTime = voltageHistoryTime[newestIdx];
+        if (newestTime - oldestTime < VOLTAGE_RISE_WINDOW_MS)
+            return false;
+        int32_t delta = (int32_t)voltageHistoryMv[newestIdx] - (int32_t)voltageHistoryMv[oldestIdx];
+        return delta >= (int32_t)VOLTAGE_RISE_THRESHOLD_MV;
+    }
+#endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
 

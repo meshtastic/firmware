@@ -4,6 +4,9 @@
 
 #include <memory>
 
+#if defined(ARCH_ESP32)
+#include "IGpsSerial.h"
+#endif
 #include "GPSStatus.h"
 #include "GpioLogic.h"
 #include "Observer.h"
@@ -203,6 +206,8 @@ class GPS : private concurrency::OSThread
     static SerialUART *_serial_gps;
 #elif defined(ARCH_NRF52)
     static Uart *_serial_gps;
+#elif defined(ARCH_ESP32)
+    static IGpsSerial *_serial_gps;
 #else
     static HardwareSerial *_serial_gps;
 #endif

@@ -798,7 +798,8 @@ void setup()
     SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI1.setFrequency(4000000);
-#else
+#elif !defined(USE_LORA_SPI_DMA)
+    // When USE_LORA_SPI_DMA is set, LoRa uses ESP-IDF SPI master (DMA); do not init Arduino SPI for LoRa bus
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);

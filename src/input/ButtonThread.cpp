@@ -98,12 +98,18 @@ bool ButtonThread::initButton(const ButtonConfig &config)
 #ifdef USE_EINK
     userButton.setDebounceMs(0);
 #else
-    userButton.setDebounceMs(1);
+    userButton.setDebounceMs(BUTTON_DEBOUNCE_MS);
 #endif
     userButton.setPressMs(_longPressTime);
 
+    // With screen: short window (20ms) for snappy single-click; use BUTTON_CLICK_MS if variant defines
+    // USE_LONG_CLICK_WINDOW_WITH_SCREEN (e.g. mechanical button + double-click)
     if (screen) {
+#ifdef USE_LONG_CLICK_WINDOW_WITH_SCREEN
+        userButton.setClickMs(BUTTON_CLICK_MS);
+#else
         userButton.setClickMs(20);
+#endif
     } else {
         userButton.setClickMs(BUTTON_CLICK_MS);
     }
@@ -297,11 +303,12 @@ int32_t ButtonThread::runOnce()
     }
     btnEvent = BUTTON_EVENT_NONE;
 
-    // only pull when the button is pressed, we get notified via IRQ on a new press
+    // When active: poll for long-press and lead-up. When idle: poll at BUTTON_POLL_MS so we don't miss short presses.
+    // (Interrupt-only idle caused many missed presses: tick() in ISR is unreliable, e.g. millis() / OneButton state machine.)
     if (!userButton.isIdle() || waitingForLongPress) {
-        return 50;
+        return BUTTON_ACTIVE_POLL_MS;
     }
-    return 100; // FIXME: Why can't we rely on interrupts and use INT32_MAX here?
+    return BUTTON_POLL_MS;
 }
 
 /*

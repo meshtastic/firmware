@@ -335,7 +335,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_BAUDRATE 9600
 #define GPS_BAUDRATE_FIXED 0
 #else
+#ifndef GPS_BAUDRATE_FIXED
 #define GPS_BAUDRATE_FIXED 1
+#endif
 #endif
 
 #ifndef GPS_THREAD_INTERVAL

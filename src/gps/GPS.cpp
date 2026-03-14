@@ -20,6 +20,12 @@
 #include "GPSUpdateScheduling.h"
 #include "cas.h"
 #include "ubx.h"
+#if defined(ARCH_ESP32)
+#include "HardwareSerialGpsAdapter.h"
+#if defined(USE_GPS_UART_RINGBUF)
+#include "GpsUartRingBuffer.h"
+#endif
+#endif
 
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
@@ -44,7 +50,9 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 
 #if defined(ARCH_NRF52)
 Uart *GPS::_serial_gps = &GPS_SERIAL_PORT;
-#elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+#elif defined(ARCH_ESP32)
+IGpsSerial *GPS::_serial_gps = nullptr;
+#elif defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
 HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #elif defined(ARCH_RP2040)
 SerialUART *GPS::_serial_gps = &GPS_SERIAL_PORT;
@@ -70,6 +78,39 @@ static struct uBloxGnssModelInfo {
 
 #define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
+
+/** Map baud to L76K $PCAS01 CMD (0=4800, 1=9600, 2=19200, 3=38400, 4=57600, 5=115200). Returns -1 if unsupported. */
+static int gpsBaudToPcas01Cmd(unsigned long baud)
+{
+    switch (baud) {
+    case 4800:
+        return 0;
+    case 9600:
+        return 1;
+    case 19200:
+        return 2;
+    case 38400:
+        return 3;
+    case 57600:
+        return 4;
+    case 115200:
+        return 5;
+    default:
+        return -1;
+    }
+}
+
+/** Build $PCAS01,<cmd>*<checksum>\r\n for L76K NMEA baud (caller sends at current UART baud). */
+static void buildL76KPcas01BaudCommand(int cmd, char *buf, size_t bufSize)
+{
+    int len = snprintf(buf, bufSize, "$PCAS01,%d", cmd);
+    if (len <= 0 || len >= (int)bufSize - 4)
+        return;
+    uint8_t cs = 0;
+    for (int i = 1; i < len; i++)
+        cs ^= (uint8_t)buf[i];
+    snprintf(buf + len, bufSize - len, "*%02X\r\n", cs);
+}
 
 // For logging
 static const char *getGPSPowerStateString(GPSPowerState state)
@@ -530,6 +571,22 @@ bool GPS::setup()
              * t-beam-s3-core uses the same L76K GNSS module as t-echo.
              * Unlike t-echo, L76K uses 9600 baud rate for communication by default.
              * */
+
+#if defined(ARCH_ESP32) && defined(HELTEC_V4)
+            // If desired baud (GPS_BAUDRATE) differs from current, set L76K NMEA baud via $PCAS01 then switch our UART
+            unsigned long currentBaud = _serial_gps->baudRate();
+            if (currentBaud != (unsigned long)GPS_BAUDRATE) {
+                int cmd = gpsBaudToPcas01Cmd(GPS_BAUDRATE);
+                if (cmd >= 0) {
+                    char pcas01Buf[24];
+                    buildL76KPcas01BaudCommand(cmd, pcas01Buf, sizeof(pcas01Buf));
+                    _serial_gps->write(pcas01Buf);
+                    delay(150);
+                    _serial_gps->updateBaudRate(GPS_BAUDRATE);
+                    delay(50);
+                }
+            }
+#endif
 
             // Initialize the L76K Chip, use GPS + GLONASS + BEIDOU
             _serial_gps->write("$PCAS04,7*1E\r\n");
@@ -1528,6 +1585,18 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
 
 std::unique_ptr<GPS> GPS::createGps()
 {
+#if defined(ARCH_ESP32)
+    if (!_serial_gps) {
+#if defined(USE_GPS_UART_RINGBUF)
+        static GpsUartRingBuffer s_gpsUart;
+        _serial_gps = &s_gpsUart;
+#else
+        static HardwareSerialGpsAdapter s_adapter(&GPS_SERIAL_PORT);
+        _serial_gps = &s_adapter;
+#endif
+    }
+#endif
+
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
     int8_t _en_gpio = config.position.gps_en_gpio;

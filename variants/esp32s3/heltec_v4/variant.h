@@ -1,5 +1,11 @@
-#define VEXT_ENABLE 36 // active low, powers the oled display and the lora antenna boost
+// VEXT_ENABLE: active low; powers OLED/TFT and LoRa FEM. Turned off before deep sleep and held to save power.
+#define VEXT_ENABLE 36
+#define VEXT_ON_VALUE LOW
 #define BUTTON_PIN 0
+#define BUTTON_DEBOUNCE_MS 30               // Debounce for mechanical button (GPIO0); 1ms default was too short
+#define BUTTON_POLL_MS 50                   // Poll when idle so short presses aren't missed (ISR-only idle was unreliable)
+#define BUTTON_ACTIVE_POLL_MS 25            // Poll while pressed for reliable long-press/lead-up
+#define USE_LONG_CLICK_WINDOW_WITH_SCREEN 1 // Use BUTTON_CLICK_MS (250ms) so double-click works with mechanical button
 
 #define ADC_CTRL 37
 #define ADC_CTRL_ENABLED HIGH
@@ -9,6 +15,7 @@
 #define ADC_MULTIPLIER 4.9 * 1.045
 
 #define USE_SX1262
+#define USE_LORA_SPI_DMA // LoRa SPI via ESP-IDF SPI master with DMA (see ESP32LoRaSPIDMAHal)
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
 #define LORA_RESET 12
@@ -83,6 +90,14 @@
 #if HAS_TFT
 #define USE_TFTDISPLAY 1
 #endif
+/* GPS UART: large RX ring buffer via ESP-IDF (existing parser unchanged) */
+#define USE_GPS_UART_RINGBUF
+
+/* L76K: run at 115200; firmware sends $PCAS01,5 after detection and switches UART */
+#define GPS_BAUDRATE 115200
+#undef GPS_BAUDRATE_FIXED
+#define GPS_BAUDRATE_FIXED 0 /* probe 9600/115200/38400 first, then switch to GPS_BAUDRATE */
+
 /*
  * GPS pins
  */
