@@ -8,7 +8,10 @@
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
 #include "target_specific.h"
+
+#if HAS_WIFI || defined(ARCH_ESP32)
 #include <WiFi.h>
+#endif
 
 #if HAS_ETHERNET && defined(USE_WS5500)
 #include <ETHClass2.h>
@@ -23,7 +26,7 @@
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
-#elif defined(ARCH_RP2040)
+#elif defined(ARCH_RP2040) && HAS_WIFI
 #include <SimpleMDNS.h>
 #endif
 
@@ -46,21 +49,22 @@ uint8_t wifiDisconnectReason = 0;
 // Stores our hostname
 char ourHost[16];
 
+#if HAS_WIFI
 // To replace blocking wifi connect delay with a non-blocking sleep
 static unsigned long wifiReconnectStartMillis = 0;
+
 static bool wifiReconnectPending = false;
+bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
+bool isReconnecting = false; // If we are currently reconnecting
+Periodic *wifiReconnect;
+#endif
 
 bool APStartupComplete = 0;
 
 unsigned long lastrun_ntp = 0;
 
-bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
-bool isReconnecting = false; // If we are currently reconnecting
-
 WiFiUDP syslogClient;
 meshtastic::Syslog syslog(syslogClient);
-
-Periodic *wifiReconnect;
 
 #if HAS_ETHERNET
 // Startup Ethernet (Universal: Native or SPI)
@@ -80,7 +84,11 @@ bool initEthernet()
     if (ok) {
         WiFi.onEvent(WiFiEvent);
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
-        createSSLCert(); // For WebServer
+        if (xPortGetFreeHeapSize() > 50000) {
+            createSSLCert(); // For WebServer
+        } else {
+            LOG_WARN("Not enough memory for SSL cert, WebServer will be HTTP only");
+        }
 #endif
         return true;
     }
@@ -96,6 +104,7 @@ static void onNetworkConnected()
         // Start web server
         LOG_INFO("Start network services");
 
+#if defined(ARCH_ESP32) || (defined(ARCH_RP2040) && HAS_WIFI)
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
             LOG_ERROR("Error setting up mDNS responder!");
@@ -108,13 +117,14 @@ static void onNetworkConnected()
             MDNS.addServiceTxt("meshtastic", "tcp", "id", String(nodeDB->getNodeId().c_str()));
             MDNS.addServiceTxt("meshtastic", "tcp", "pio_env", optstr(APP_ENV));
             // ESP32 prints obtained IP address in WiFiEvent
-#elif defined(ARCH_RP2040)
+#elif defined(ARCH_RP2040) && HAS_WIFI
             MDNS.addServiceTxt("meshtastic", "shortname", owner.short_name);
             MDNS.addServiceTxt("meshtastic", "id", nodeDB->getNodeId().c_str());
             MDNS.addServiceTxt("meshtastic", "pio_env", optstr(APP_ENV));
             LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
 #endif
         }
+#endif
 
 #ifndef DISABLE_NTP
         LOG_INFO("Start NTP time client");
@@ -162,6 +172,7 @@ static void onNetworkConnected()
 #endif
 }
 
+#if HAS_WIFI
 static int32_t reconnectWiFi()
 {
     const char *wifiName = config.network.wifi_ssid;
@@ -239,6 +250,7 @@ static int32_t reconnectWiFi()
         return 300000; // every 5 minutes
     }
 }
+#endif
 
 bool isWifiAvailable()
 {
@@ -250,7 +262,7 @@ bool isWifiAvailable()
         return true;
     }
 #endif
-#ifndef ARCH_PORTDUINO
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     else if (WiFi.status() == WL_CONNECTED) {
         return true;
     }
@@ -261,6 +273,7 @@ bool isWifiAvailable()
 // Disable WiFi
 void deinitWifi()
 {
+#if HAS_WIFI
     LOG_INFO("WiFi deinit");
 
     if (isWifiAvailable()) {
@@ -273,11 +286,13 @@ void deinitWifi()
         LOG_INFO("WiFi Turned Off");
         // WiFi.printDiag(Serial);
     }
+#endif
 }
 
 // Startup WiFi
 bool initWifi()
 {
+#if HAS_WIFI
     if (config.network.wifi_enabled && config.network.wifi_ssid[0]) {
 
         const char *wifiName = config.network.wifi_ssid;
@@ -341,6 +356,8 @@ bool initWifi()
         LOG_INFO("Not using WIFI");
         return false;
     }
+#endif
+    return false;
 }
 
 #ifdef ARCH_ESP32
