@@ -1,4 +1,7 @@
 #include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_VIGIL
+#include "modules/VigilModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "buzz/BuzzerFeedbackThread.h"
 #include "modules/SystemCommandsModule.h"
@@ -259,6 +262,9 @@ void setupModules()
 #endif
 #if defined(HAS_HARDWARE_WATCHDOG)
     watchdogThread = new WatchdogThread();
+#endif
+#if !MESHTASTIC_EXCLUDE_VIGIL
+    vigilModule = new VigilModule();
 #endif
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
