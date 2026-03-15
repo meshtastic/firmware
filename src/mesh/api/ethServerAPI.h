@@ -1,4 +1,7 @@
 #pragma once
+
+#include "configuration.h"
+
 #include "ServerAPI.h"
 
 #if HAS_ETHERNET
@@ -8,6 +11,7 @@
 #else
 #include <ETHClass2.h>
 #endif
+#include <WiFi.h>
 typedef WiFiClient MeshEthernetClient;
 typedef WiFiServer MeshEthernetServer;
 #else
