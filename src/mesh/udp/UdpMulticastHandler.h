@@ -73,6 +73,11 @@ class UdpMulticastHandler final
         LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
         bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router && mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+            // Drop packets with spoofed local origin — no legitimate LAN node should send from=0 or our own nodeNum
+            if (isFromUs(&mp)) {
+                LOG_WARN("UDP packet with spoofed local from=0x%x, dropping", mp.from);
+                return;
+            }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
             mp.pki_encrypted = false;
             mp.public_key.size = 0;
@@ -105,8 +110,7 @@ class UdpMulticastHandler final
         LOG_DEBUG("Broadcasting packet over UDP (id=%u)", mp->id);
         uint8_t buffer[meshtastic_MeshPacket_size];
         size_t encodedLength = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
-        udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
-        return true;
+        return udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
     }
 
   private:
