@@ -1283,21 +1283,22 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.has_ethernet = true;
     conn.ethernet.has_status = true;
     bool isConnected = false;
-    uint32_t ipAddr = 0;
 
 #if defined(ESP32) && (defined(ETH_PHY_TYPE) || defined(USE_WS5500))
     isConnected = ETH.linkUp();
-    if (isConnected)
-        ipAddr = (uint32_t)ETH.localIP();
 #else
     isConnected = (Ethernet.linkStatus() == LinkON);
-    if (isConnected)
-        ipAddr = (uint32_t)Ethernet.localIP();
 #endif
 
     if (isConnected) {
         conn.ethernet.status.is_connected = true;
-        conn.ethernet.status.ip_address = ipAddr;
+
+#if defined(ESP32) && (defined(ETH_PHY_TYPE) || defined(USE_WS5500))
+        conn.ethernet.status.ip_address = (uint32_t)ETH.localIP();
+#else
+        conn.ethernet.status.ip_address = (uint32_t)Ethernet.localIP();
+#endif
+
 #if !MESHTASTIC_EXCLUDE_MQTT
         conn.ethernet.status.is_mqtt_connected = mqtt && mqtt->isConnectedDirectly();
 #endif
