@@ -1,0 +1,61 @@
+name: Vigil CI
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'src/modules/Vigil*'
+      - 'src/vigil/**'
+      - 'variants/esp32s3/vigil/**'
+      - 'tools/synth_audio/**'
+      - 'test/vigil/**'
+  pull_request:
+    branches: [develop]
+
+jobs:
+  build-firmware:
+    name: Build Vigil firmware (ESP32-S3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-${{ hashFiles('platformio.ini') }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build Vigil target
+        run: pio run -e vigil
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vigil-firmware
+          path: .pio/build/vigil/firmware.bin
+
+  synth-audio-tests:
+    name: Python synthetic audio tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install numpy scipy
+
+      - name: Run synthetic audio generator tests
+        run: python -m pytest tools/synth_audio/ -v
