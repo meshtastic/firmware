@@ -35,6 +35,7 @@
 // #define BUTTON_NEED_PULLUP
 
 // GPS UART pins (RP2040 UART0 by default: TX=GP0, RX=GP1)
+#define HAS_GPS 1
 #define GPS_TX_PIN 0
 #define GPS_RX_PIN 1
 
