@@ -34,6 +34,10 @@
 // #define BUTTON_PIN 6
 // #define BUTTON_NEED_PULLUP
 
+// GPS UART pins (RP2040 UART0 by default: TX=GP0, RX=GP1)
+#define GPS_TX_PIN 0
+#define GPS_RX_PIN 1
+
 // ---- EBYTE E22-900M30S on SPI1 -----------------------------------------
 #define USE_SX1262
 
