@@ -79,9 +79,6 @@ class UdpMulticastHandler final
                 return;
             }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
-            mp.pki_encrypted = false;
-            mp.public_key.size = 0;
-            memset(mp.public_key.bytes, 0, sizeof(mp.public_key.bytes));
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             // Unset received SNR/RSSI
             p->rx_snr = 0;
