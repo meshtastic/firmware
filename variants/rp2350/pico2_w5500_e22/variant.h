@@ -34,10 +34,13 @@
 // #define BUTTON_PIN 6
 // #define BUTTON_NEED_PULLUP
 
-// GPS UART pins (RP2040 UART0 by default: TX=GP0, RX=GP1)
+// GPS UART pins
+// NOTE: GPIO0 cannot be used as GPS_TX_PIN because the firmware treats
+// pin 0 as "not configured" (falsy check in GPS::setup).
+// GP4/GP5 occupied by I2C (SCL/SDA for BMP-280).
 #define HAS_GPS 1
-#define GPS_TX_PIN 0
-#define GPS_RX_PIN 1
+#define GPS_TX_PIN 8
+#define GPS_RX_PIN 9
 #define GPS_BAUDRATE 38400
 
 // ---- EBYTE E22-900M30S on SPI1 -----------------------------------------
