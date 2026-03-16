@@ -38,6 +38,7 @@
 #define HAS_GPS 1
 #define GPS_TX_PIN 0
 #define GPS_RX_PIN 1
+#define GPS_BAUDRATE 38400
 
 // ---- EBYTE E22-900M30S on SPI1 -----------------------------------------
 #define USE_SX1262
