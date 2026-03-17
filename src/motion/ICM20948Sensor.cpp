@@ -26,7 +26,11 @@ bool ICM20948Sensor::init()
         return false;
 
     // Enable simple Wake on Motion
-    return sensor->setWakeOnMotion();
+    bool wakeOnMotionOk = sensor->setWakeOnMotion();
+    if (wakeOnMotionOk) {
+        loadMagnetometerCalibration(compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+    }
+    return wakeOnMotionOk;
 }
 
 #ifdef ICM_20948_INT_PIN
@@ -96,6 +100,7 @@ int32_t ICM20948Sensor::runOnce()
             doCalibration = false;
             endCalibrationAt = 0;
             showingScreen = false;
+            saveMagnetometerCalibration(compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
             if (screen) {
                 screen->setEndCalibration(0);
                 screen->endAlert();

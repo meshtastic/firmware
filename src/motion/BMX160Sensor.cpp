@@ -16,6 +16,7 @@ bool BMX160Sensor::init()
     if (sensor.begin()) {
         // set output data rate
         sensor.ODR_Config(BMX160_ACCEL_ODR_100HZ, BMX160_GYRO_ODR_100HZ);
+        loadMagnetometerCalibration(compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
         LOG_DEBUG("BMX160 init ok");
         return true;
     }
@@ -59,6 +60,7 @@ int32_t BMX160Sensor::runOnce()
             doCalibration = false;
             endCalibrationAt = 0;
             showingScreen = false;
+            saveMagnetometerCalibration(compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
             if (screen) {
                 screen->setEndCalibration(0);
                 screen->endAlert();

@@ -54,6 +54,11 @@ class MotionSensor
     static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #endif
 
+    bool saveMagnetometerCalibration(const char *filePath, float highestX, float lowestX, float highestY, float lowestY,
+                                     float highestZ, float lowestZ);
+    bool loadMagnetometerCalibration(const char *filePath, float &highestX, float &lowestX, float &highestY, float &lowestY,
+                                     float &highestZ, float &lowestZ);
+
     ScanI2C::FoundDevice device;
 
     // Do calibration if true
