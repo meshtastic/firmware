@@ -40,6 +40,7 @@ template <class T> int32_t ServerAPI<T>::runOnce()
         return StreamAPI::runOncePart();
     } else {
         LOG_INFO("Client dropped connection, suspend API service");
+        close();
         enabled = false; // we no longer need to run
         return 0;
     }
@@ -54,10 +55,9 @@ template <class T, class U> void APIServerPort<T, U>::init()
 
 template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
 {
-    if (openAPI && !openAPI->isClientConnected()) {
-        LOG_INFO("Cleaning up disconnected TCP API client");
-        delete openAPI;
-        openAPI = nullptr;
+    // Clean up previous connection if its client already disconnected
+    if (openAPI && !openAPI->checkIsConnected()) {
+        openAPI.reset();
     }
 
 #ifdef ARCH_ESP32
@@ -85,10 +85,10 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
             }
 #endif
             LOG_INFO("Force close previous TCP connection");
-            delete openAPI;
+            openAPI.reset();
         }
 
-        openAPI = new T(client);
+        openAPI.reset(new T(client));
     }
 
 #if RAK_4631

@@ -50,7 +50,6 @@ L76K GPS Module Information : https://www.seeedstudio.com/L76K-GNSS-Module-for-S
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
 #define HAS_GPS 1
-#define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX

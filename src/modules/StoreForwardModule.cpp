@@ -588,7 +588,8 @@ StoreForwardModule::StoreForwardModule()
     if (moduleConfig.store_forward.enabled) {
 
         // Router
-        if ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER || moduleConfig.store_forward.is_server)) {
+        if ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+             config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE || moduleConfig.store_forward.is_server)) {
             LOG_INFO("Init Store & Forward Module in Server mode");
             if (memGet.getPsramSize() > 0) {
                 if (memGet.getFreePsram() >= 1024 * 1024) {
