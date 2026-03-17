@@ -1302,6 +1302,10 @@ void NodeDB::loadFromDisk()
         RadioInterface::bootstrapLoRaConfigFromPreset(config.lora);
     }
 
+#if defined(USERPREFS_LORA_TX_DISABLED) && USERPREFS_LORA_TX_DISABLED
+    config.lora.tx_enabled = false;
+#endif
+
     if (backupSecurity.private_key.size > 0) {
         LOG_DEBUG("Restoring backup of security config");
         config.security = backupSecurity;
