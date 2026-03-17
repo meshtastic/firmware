@@ -431,7 +431,7 @@ static void test_tm_nodeinfo_directResponse_respondsFromCache(void)
     mockNodeDB->setCachedNode(kTargetNode);
 
     MockRouter mockRouter;
-    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    mockRouter.addInterface(std::make_unique<MockRadioInterface>());
     MeshService mockService;
     router = &mockRouter;
     service = &mockService;
@@ -476,7 +476,7 @@ static void test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo(void)
     mockNodeDB->setCachedNode(kTargetNode);
 
     MockRouter mockRouter;
-    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    mockRouter.addInterface(std::make_unique<MockRadioInterface>());
     MeshService mockService;
     router = &mockRouter;
     service = &mockService;
@@ -539,7 +539,7 @@ static void test_tm_nodeinfo_directResponse_withoutNodeDbEntry_skips(void)
     mockNodeDB->clearCachedNode();
 
     MockRouter mockRouter;
-    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    mockRouter.addInterface(std::make_unique<MockRadioInterface>());
     MeshService mockService;
     router = &mockRouter;
     service = &mockService;
@@ -574,7 +574,7 @@ static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfie
     mockNodeDB->clearCachedNode();
 
     MockRouter mockRouter;
-    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    mockRouter.addInterface(std::make_unique<MockRadioInterface>());
     MeshService mockService;
     router = &mockRouter;
     service = &mockService;
@@ -627,7 +627,7 @@ static void test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb(voi
     mockNodeDB->setCachedNode(kTargetNode);
 
     MockRouter mockRouter;
-    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    mockRouter.addInterface(std::make_unique<MockRadioInterface>());
     MeshService mockService;
     router = &mockRouter;
     service = &mockService;

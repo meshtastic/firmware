@@ -172,7 +172,7 @@ void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
     aes = nullptr;
     if (key_len != 0) {
-        aes = std::unique_ptr<AESSmall256>(new AESSmall256());
+        aes = std::make_unique<AESSmall256>();
         aes->setKey(key_bytes, key_len);
     }
 }
@@ -233,9 +233,9 @@ void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numByte
 {
     std::unique_ptr<CTRCommon> ctr;
     if (_key.length == 16)
-        ctr = std::unique_ptr<CTRCommon>(new CTR<AES128>());
+        ctr = std::make_unique<CTR<AES128>>();
     else
-        ctr = std::unique_ptr<CTRCommon>(new CTR<AES256>());
+        ctr = std::make_unique<CTR<AES256>>();
     ctr->setKey(_key.bytes, _key.length);
     static uint8_t scratch[MAX_BLOCKSIZE];
     memcpy(scratch, bytes, numBytes);

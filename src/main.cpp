@@ -522,7 +522,7 @@ void setup()
 #if !MESHTASTIC_EXCLUDE_I2C
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
     // accessories
-    auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
+    auto i2cScanner = std::make_unique<ScanI2CTwoWire>();
 #if HAS_WIRE
     LOG_INFO("Scan for i2c devices");
 #endif

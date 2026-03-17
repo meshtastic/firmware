@@ -409,7 +409,7 @@ void mqttInit()
 }
 
 #if HAS_NETWORKING
-MQTT::MQTT() : MQTT(std::unique_ptr<MQTTClient>(new MQTTClient())) {}
+MQTT::MQTT() : MQTT(std::make_unique<MQTTClient>()) {}
 MQTT::MQTT(std::unique_ptr<MQTTClient> _mqttClient)
     : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE), mqttClient(std::move(_mqttClient)), pubSub(*mqttClient)
 #else
