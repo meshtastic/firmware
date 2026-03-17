@@ -47,7 +47,8 @@ int32_t ICM20948Sensor::runOnce()
 int32_t ICM20948Sensor::runOnce()
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
-    if (screen && !screen->isScreenOn() && !config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
+    if (screen && !doCalibration && !screen->isScreenOn() && !config.display.wake_on_tap_or_motion &&
+        !config.device.double_tap_as_button_press) {
         if (!isAsleep) {
             LOG_DEBUG("sleeping IMU");
             sensor->sleep(true);
@@ -91,12 +92,14 @@ int32_t ICM20948Sensor::runOnce()
             lowestZ = magZ;
 
         uint32_t now = millis();
-        if (now > endCalibrationAt) {
+        if ((int32_t)(now - endCalibrationAt) >= 0) {
             doCalibration = false;
             endCalibrationAt = 0;
             showingScreen = false;
-            if (screen)
+            if (screen) {
+                screen->setEndCalibration(0);
                 screen->endAlert();
+            }
         }
 
         // LOG_DEBUG("ICM20948 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
@@ -185,7 +188,7 @@ void ICM20948Sensor::calibrate(uint16_t forSeconds)
     }
 
     doCalibration = true;
-    uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
+    uint32_t calibrateFor = static_cast<uint32_t>(forSeconds) * 1000U; // calibrate for seconds provided
     endCalibrationAt = millis() + calibrateFor;
     if (screen)
         screen->setEndCalibration(endCalibrationAt);

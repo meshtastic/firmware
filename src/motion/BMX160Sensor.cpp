@@ -55,12 +55,14 @@ int32_t BMX160Sensor::runOnce()
             lowestZ = magAccel.z;
 
         uint32_t now = millis();
-        if (now > endCalibrationAt) {
+        if ((int32_t)(now - endCalibrationAt) >= 0) {
             doCalibration = false;
             endCalibrationAt = 0;
             showingScreen = false;
-            if (screen)
+            if (screen) {
+                screen->setEndCalibration(0);
                 screen->endAlert();
+            }
         }
 
         // LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
@@ -124,7 +126,7 @@ void BMX160Sensor::calibrate(uint16_t forSeconds)
     highestZ = magAccel.z, lowestZ = magAccel.z;
 
     doCalibration = true;
-    uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
+    uint32_t calibrateFor = static_cast<uint32_t>(forSeconds) * 1000U; // calibrate for seconds provided
     endCalibrationAt = millis() + calibrateFor;
     if (screen)
         screen->setEndCalibration(endCalibrationAt);
