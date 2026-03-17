@@ -17,6 +17,11 @@
 #include <RTC.h>
 #include <cstring>
 
+#if !MESHTASTIC_EXCLUDE_APPS
+#include "mapps/AppLibrary.h"
+#include "modules/AppModule/AppModule.h"
+#endif
+
 // External variables
 extern graphics::Screen *screen;
 #if defined(M5STACK_UNITC6L)
@@ -1556,6 +1561,80 @@ std::string UIRenderer::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t mi
     else
         uptime = std::to_string(seconds) + "s";
     return uptime;
+}
+
+#if !MESHTASTIC_EXCLUDE_APPS
+static const char *appStatusLabel(AppStatus status)
+{
+    switch (status) {
+    case AppStatus::Discovered:
+        return "new";
+    case AppStatus::SignatureValid:
+        return "verified";
+    case AppStatus::SignatureFailed:
+        return "sig fail";
+    case AppStatus::SignatureApproved:
+        return "trusted";
+case AppStatus::Ready:
+        return "ready";
+    case AppStatus::Unsigned:
+        return "unsigned";
+    default:
+        return "unknown";
+    }
+}
+#endif
+
+void UIRenderer::drawAppsFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+
+#if !MESHTASTIC_EXCLUDE_APPS
+    // If an app is running, draw it inside this frame instead of the app list
+    if (appModule && appModule->isAppRunning()) {
+        appModule->drawFrame(display, state, x, y);
+        return;
+    }
+
+    const int dispWidth = display->getWidth();
+    const int dispHeight = display->getHeight();
+
+    // Title
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    const int titleY = (dispHeight > 64) ? 2 : 0;
+    display->drawString(x + dispWidth / 2, y + titleY, "Apps");
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    const int startY = titleY + FONT_HEIGHT_SMALL + 2;
+
+    if (!appLibrary || appLibrary->getApps().empty()) {
+        display->drawString(x + 4, y + startY, "No apps installed");
+        return;
+    }
+
+    const auto &apps = appLibrary->getApps();
+    int yPos = startY;
+    int maxVisible = (dispHeight - startY) / FONT_HEIGHT_SMALL;
+    int count = (int)apps.size();
+    if (count > maxVisible)
+        count = maxVisible;
+
+    for (int i = 0; i < count; i++) {
+        const char *label = appStatusLabel(apps[i].status);
+        char line[64];
+        snprintf(line, sizeof(line), "%s [%s]", apps[i].manifest.name.c_str(), label);
+        display->fillCircle(x + 6, y + yPos + FONT_HEIGHT_SMALL / 2 - 1, 2);
+        display->drawString(x + 12, y + yPos, line);
+        yPos += FONT_HEIGHT_SMALL;
+    }
+
+    if ((int)apps.size() > maxVisible) {
+        char moreStr[16];
+        snprintf(moreStr, sizeof(moreStr), "+%d more", (int)apps.size() - maxVisible);
+        display->drawString(x + 4, y + yPos, moreStr);
+    }
+#endif
 }
 
 } // namespace graphics

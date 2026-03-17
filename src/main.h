@@ -65,6 +65,12 @@ extern UdpMulticastHandler *udpHandler;
 // Global Screen singleton.
 extern graphics::Screen *screen;
 
+#if !MESHTASTIC_EXCLUDE_APPS
+// Global AppLibrary singleton.
+class AppLibrary;
+extern AppLibrary *appLibrary;
+#endif
+
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;

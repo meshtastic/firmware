@@ -77,6 +77,8 @@ class UIRenderer
     static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
 #endif
 
+    static void drawAppsFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
     static std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
     static int formatDateTime(char *buffer, size_t bufferSize, uint32_t rtc_sec, OLEDDisplay *display, bool showTime);
 
