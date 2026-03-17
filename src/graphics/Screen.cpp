@@ -97,6 +97,7 @@ namespace graphics
 
 // This means the *visible* area (sh1106 can address 132, but shows 128 for example)
 #define IDLE_FRAMERATE 1 // in fps
+#define COMPASS_ACTIVE_FRAMERATE 20
 
 // DEBUG
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
@@ -916,9 +917,17 @@ int32_t Screen::runOnce()
     // but we should only call setTargetFPS when framestate changes, because
     // otherwise that breaks animations.
 
-    if (targetFramerate != IDLE_FRAMERATE && ui->getUiState()->frameState == FIXED) {
+    uint32_t desiredFramerate = IDLE_FRAMERATE;
+#if HAS_GPS && !defined(USE_EINK)
+    if (showingNormalScreen && hasCompass && framesetInfo.positions.gps != 255 &&
+        ui->getUiState()->currentFrame == framesetInfo.positions.gps) {
+        desiredFramerate = COMPASS_ACTIVE_FRAMERATE;
+    }
+#endif
+
+    if (targetFramerate != desiredFramerate && ui->getUiState()->frameState == FIXED) {
         // oldFrameState = ui->getUiState()->frameState;
-        targetFramerate = IDLE_FRAMERATE;
+        targetFramerate = desiredFramerate;
 
         ui->setTargetFPS(targetFramerate);
         forceDisplay();

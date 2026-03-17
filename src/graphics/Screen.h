@@ -5,6 +5,7 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
+#include <cmath>
 #include <functional>
 #include <string>
 #include <vector>
@@ -330,15 +331,60 @@ class Screen : public concurrency::OSThread
 
     // Function to allow the AccelerometerThread to set the heading if a sensor provides it
     // Mutex needed?
-    void setHeading(long _heading)
+    void setHeading(float _heading)
     {
-        hasCompass = true;
-        compassHeading = fmod(_heading, 360);
+        float wrappedHeading = fmodf(_heading, 360.0f);
+        if (wrappedHeading < 0.0f) {
+            wrappedHeading += 360.0f;
+        }
+
+        if (!hasCompass) {
+            hasCompass = true;
+            compassHeading = wrappedHeading;
+            return;
+        }
+
+        // Interpolate using shortest-path angular delta to avoid jumps around 0/360.
+        float delta = wrappedHeading - compassHeading;
+        if (delta > 180.0f) {
+            delta -= 360.0f;
+        } else if (delta < -180.0f) {
+            delta += 360.0f;
+        }
+
+        // Adaptive filtering:
+        // - Strong damping for tiny deltas (jitter)
+        // - Faster response for larger turns
+        float absDelta = fabsf(delta);
+        if (absDelta < 1.0f) {
+            return;
+        }
+
+        float alpha = 0.35f;
+        if (absDelta > 25.0f) {
+            alpha = 0.85f;
+        } else if (absDelta > 10.0f) {
+            alpha = 0.65f;
+        }
+
+        float step = delta * alpha;
+        const float maxStep = 12.0f;
+        if (step > maxStep) {
+            step = maxStep;
+        } else if (step < -maxStep) {
+            step = -maxStep;
+        }
+
+        compassHeading += step;
+        compassHeading = fmodf(compassHeading, 360.0f);
+        if (compassHeading < 0.0f) {
+            compassHeading += 360.0f;
+        }
     }
 
     bool hasHeading() { return hasCompass; }
 
-    long getHeading() { return compassHeading; }
+    float getHeading() { return compassHeading; }
 
     void setEndCalibration(uint32_t _endCalibrationAt) { endCalibrationAt = _endCalibrationAt; }
     uint32_t getEndCalibration() { return endCalibrationAt; }
