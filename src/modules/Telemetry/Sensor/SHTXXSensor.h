@@ -20,7 +20,7 @@ class SHTXXSensor : public TelemetrySensor
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
     void getSensorVariant(SHTSensor::SHTSensorType);
-    const char *sensorVariant;
+    const char *sensorVariant{};
 
     AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
                                                 meshtastic_AdminMessage *response) override;
