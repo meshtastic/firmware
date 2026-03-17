@@ -141,12 +141,12 @@ bool TransmitHistory::saveToDisk()
         file.write((uint8_t *)&header, sizeof(header));
 
         uint8_t written = 0;
-        for (auto &pair : history) {
+        for (const auto &[key, epochSeconds] : history) {
             if (written >= MAX_ENTRIES)
                 break;
             Entry entry{};
-            entry.key = pair.first;
-            entry.epochSeconds = pair.second;
+            entry.key = key;
+            entry.epochSeconds = epochSeconds;
             file.write((uint8_t *)&entry, sizeof(entry));
             written++;
         }
