@@ -25,6 +25,7 @@
 #include "Default.h"
 #include "MeshRadio.h"
 #include "TypeConversions.h"
+#include "mesh/RadioLibInterface.h"
 
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -199,7 +200,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     case meshtastic_AdminMessage_set_config_tag:
         LOG_DEBUG("Client set config");
-        handleSetConfig(r->set_config);
+        // Reject LORA_24 at runtime if the active radio hardware does not support 2.4 GHz.
+        if (r->set_config.which_payload_variant == meshtastic_Config_lora_tag &&
+            r->set_config.payload_variant.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24
+            && RadioLibInterface::instance && !RadioLibInterface::instance->wideLora())
+        {
+            LOG_WARN("Radio hardware does not support 2.4 GHz; rejecting LORA_24 region");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        } else {
+            handleSetConfig(r->set_config);
+        }
         break;
 
     case meshtastic_AdminMessage_set_module_config_tag:
@@ -768,17 +778,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             validatedLora.spread_factor = LORA_SF_DEFAULT;
         }
 
-        // If no lora radio parameters change, don't need to reboot
-        if (oldLoraConfig.use_preset == validatedLora.use_preset && oldLoraConfig.region == validatedLora.region &&
-            oldLoraConfig.modem_preset == validatedLora.modem_preset && oldLoraConfig.bandwidth == validatedLora.bandwidth &&
-            oldLoraConfig.spread_factor == validatedLora.spread_factor &&
-            oldLoraConfig.coding_rate == validatedLora.coding_rate && oldLoraConfig.tx_power == validatedLora.tx_power &&
-            oldLoraConfig.frequency_offset == validatedLora.frequency_offset &&
-            oldLoraConfig.override_frequency == validatedLora.override_frequency &&
-            oldLoraConfig.channel_num == validatedLora.channel_num &&
-            oldLoraConfig.sx126x_rx_boosted_gain == validatedLora.sx126x_rx_boosted_gain) {
-            requiresReboot = false;
-        }
+        // LoRa radio changes are applied live via the configChanged observer which calls reconfigure().
+        // reconfigure() puts the radio in standby, reprograms all modem parameters, and restarts receive.
+        // sx126x_rx_boosted_gain is only applied during init(), so a reboot is still required for that setting.
+        requiresReboot = (oldLoraConfig.sx126x_rx_boosted_gain != validatedLora.sx126x_rx_boosted_gain);
 
 #if defined(ARCH_PORTDUINO)
         // If running on portduino and using SimRadio, do not require reboot

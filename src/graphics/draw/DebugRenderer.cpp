@@ -408,7 +408,15 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->drawString(nameX, getTextPositions(display)[line++], device_role);
 
     // === Third Row: Radio Preset ===
-    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+    // For custom modem settings show the actual parameters; for presets use the preset name.
+    char modeStr[16];
+    if (!config.lora.use_preset) {
+        snprintf(modeStr, sizeof(modeStr), "BW%d-SF%d-CR%d", config.lora.bandwidth, config.lora.spread_factor,
+                 config.lora.coding_rate);
+    } else {
+        strncpy(modeStr, DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true), sizeof(modeStr) - 1);
+        modeStr[sizeof(modeStr) - 1] = '\0';
+    }
 
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
@@ -416,7 +424,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         if (currentResolution == ScreenResolution::UltraLow) {
             snprintf(regionradiopreset, sizeof(regionradiopreset), "%s", region);
         } else {
-            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, modeStr);
         }
     }
     textWidth = display->getStringWidth(regionradiopreset);
