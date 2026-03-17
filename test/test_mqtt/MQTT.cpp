@@ -289,13 +289,23 @@ class MQTTUnitTest : public MQTT
         mqtt = unitTest = new MQTTUnitTest();
         mqtt->start();
 
+        auto clearStartupOutput = []() {
+            pubsub->published_.clear();
+            if (mockMeshService != nullptr) {
+                mockMeshService->messages_.clear();
+                mockMeshService->notifications_.clear();
+            }
+        };
+
         if (!moduleConfig.mqtt.enabled || moduleConfig.mqtt.proxy_to_client_enabled || *moduleConfig.mqtt.root) {
             loopUntil([] { return true; }); // Loop once
+            clearStartupOutput();
             return;
         }
         // Wait for MQTT to subscribe to all topics.
         TEST_ASSERT_TRUE(loopUntil(
             [] { return pubsub->subscriptions_.count("msh/2/e/test/+") && pubsub->subscriptions_.count("msh/2/e/PKI/+"); }));
+        clearStartupOutput();
     }
     PubSubClient &getPubSub() { return pubSub; }
 };

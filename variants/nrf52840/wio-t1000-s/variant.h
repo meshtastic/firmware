@@ -143,9 +143,9 @@ extern "C" {
 #define PIN_BUZZER (0 + 25)    // P0.25, pwm output
 
 #define T1000X_SENSOR_EN
-#define T1000X_VCC_PIN (0 + 4)  // P0.4
-#define T1000X_NTC_PIN (0 + 31) // P0.31
-#define T1000X_LUX_PIN (0 + 29) // P0.29
+#define T1000X_SENSOR_EN_PIN (0 + 4) // P0.4, Power to Sensor (GPIO, not ADC)
+#define T1000X_NTC_PIN (0 + 31)      // P0.31
+#define T1000X_LUX_PIN (0 + 29)      // P0.29
 
 #ifdef __cplusplus
 }
