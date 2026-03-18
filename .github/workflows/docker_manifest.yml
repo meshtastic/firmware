@@ -146,7 +146,7 @@ jobs:
 
       - name: Docker meta (Debian)
         id: meta_debian
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: meshtastic/meshtasticd
           tags: |
@@ -167,7 +167,7 @@ jobs:
 
       - name: Docker meta (Alpine)
         id: meta_alpine
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: meshtastic/meshtasticd
           tags: |
