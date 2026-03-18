@@ -651,23 +651,15 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
 
     if (config.enabled && !config.proxy_to_client_enabled) {
 #if HAS_NETWORKING
-        std::unique_ptr<MQTTClient> clientConnection;
         if (config.tls_enabled) {
-#if MQTT_SUPPORTS_TLS
-            MQTTClientTLS *tlsClient = new MQTTClientTLS;
-            clientConnection.reset(tlsClient);
-            tlsClient->setInsecure();
-#else
+#if !MQTT_SUPPORTS_TLS
             LOG_ERROR("Invalid MQTT config: tls_enabled is not supported on this node");
             return false;
 #endif
-        } else {
-            clientConnection.reset(new MQTTClient);
         }
-        std::unique_ptr<PubSubClient> pubSub(new PubSubClient);
-        if (isConnectedToNetwork()) {
-            return connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection);
-        }
+        // Note: connectivity is intentionally NOT validated here.
+        // Settings must be saved even when the network is temporarily unavailable.
+        // The MQTT module's reconnect loop will establish the connection when possible.
 #else
         const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
         LOG_ERROR(warning);
