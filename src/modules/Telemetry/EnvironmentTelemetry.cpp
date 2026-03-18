@@ -631,20 +631,34 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
 
     if (getEnvironmentTelemetry(&m)) {
-        LOG_INFO("Send: barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f",
-                 m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
-                 m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
-                 m.variant.environment_metrics.temperature);
-        LOG_INFO("Send: voltage=%f, IAQ=%d, distance=%f, lux=%f", m.variant.environment_metrics.voltage,
-                 m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
+        if (m.variant.environment_metrics.has_temperature || m.variant.environment_metrics.has_relative_humidity ||
+            m.variant.environment_metrics.has_barometric_pressure)
+            LOG_INFO("Send: barometric_pressure=%fkPa, relative_humidity=%f%RH, temperature=%fdegC",
+                     m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.relative_humidity,
+                     m.variant.environment_metrics.temperature);
 
-        LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees, weight=%fkg", m.variant.environment_metrics.wind_speed,
-                 m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
+        if (m.variant.environment_metrics.has_voltage || m.variant.environment_metrics.has_current ||
+            m.variant.environment_metrics.has_iaq || m.variant.environment_metrics.has_gas_resistance)
+            LOG_INFO("Send: voltage=%f, current=%f, IAQ=%d, gas_resistance=%f", m.variant.environment_metrics.voltage,
+                     m.variant.environment_metrics.current, m.variant.environment_metrics.iaq,
+                     m.variant.environment_metrics.gas_resistance);
 
-        LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
+        if (m.variant.environment_metrics.has_distance || m.variant.environment_metrics.has_lux)
+            LOG_INFO("Send: distance=%f, lux=%f", m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
 
-        LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
-                 m.variant.environment_metrics.soil_moisture);
+        if (m.variant.environment_metrics.has_wind_speed || m.variant.environment_metrics.has_wind_direction)
+            LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees", m.variant.environment_metrics.wind_speed,
+                     m.variant.environment_metrics.wind_direction);
+
+        if (m.variant.environment_metrics.has_weight)
+            LOG_INFO("Send: weight=%fkg", m.variant.environment_metrics.weight);
+
+        if (m.variant.environment_metrics.has_radiation)
+            LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
+
+        if (m.variant.environment_metrics.has_soil_temperature || m.variant.environment_metrics.has_soil_moisture)
+            LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
+                     m.variant.environment_metrics.soil_moisture);
 
         if (m.variant.environment_metrics.has_adc_voltage_ch1 || m.variant.environment_metrics.has_adc_voltage_ch2 ||
             m.variant.environment_metrics.has_adc_voltage_ch3 || m.variant.environment_metrics.has_adc_voltage_ch4)
