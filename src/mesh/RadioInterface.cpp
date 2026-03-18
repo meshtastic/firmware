@@ -952,7 +952,7 @@ void RadioInterface::applyModemConfig()
     uses_default_frequency_slot =
         (loraConfig.channel_num == 0 && newRegion->profile->overrideSlot == 0) ||
         (newRegion->profile->overrideSlot != 0 && loraConfig.channel_num == newRegion->profile->overrideSlot) ||
-        ((loraConfig.channel_num != 0) && ((loraConfig.channel_num - 1) == presetNameHashSlot));
+        ((loraConfig.channel_num != 0) && ((uint32_t)(loraConfig.channel_num - 1) == presetNameHashSlot));
 
     // If user has manually specified a frequency slot, then use that, otherwise generate one by hashing the name
     // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numFreqSlots - 1)
