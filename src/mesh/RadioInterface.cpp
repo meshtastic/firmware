@@ -914,7 +914,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         } // end of channel number check
     } else {
         // if we have a frequency override, we ignore the channel number and just use the override frequency
-        snprintf(err_string, sizeof(err_string), "Frequency override in place, using %u", loraConfig.override_frequency);
+        snprintf(err_string, sizeof(err_string), "Frequency override in place, using %.3f", loraConfig.override_frequency);
     }
     return true;
 }
