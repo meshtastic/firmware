@@ -102,10 +102,6 @@ std::string getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node,
         nodeName = fallbackId();
     }
 
-    if (nodeName.empty()) {
-        nodeName = fallbackId();
-    }
-
     return nodeName;
 }
 

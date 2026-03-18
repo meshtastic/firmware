@@ -525,6 +525,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 senderName[sizeof(senderName) - 1] = '\0';
             }
         }
+        // If recipient info is missing/empty, prefer a recipient identifier for outbound messages.
+        if (mine && (!node_recipient || !node_recipient->has_user ||
+                     (!node_recipient->user.long_name[0] && !node_recipient->user.short_name[0]))) {
+            snprintf(senderName, sizeof(senderName), "(%08x)", m.dest);
+        }
 
         // Shrink Sender name if needed
         int availWidth = (mine ? rightTextWidth : leftTextWidth) - display->getStringWidth(timeBuf) -
