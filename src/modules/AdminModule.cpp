@@ -868,7 +868,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             digitalWrite(RF95_FAN_EN, HIGH ^ 0);
         }
 #endif
-        config.lora = validatedLora;
+        config.lora = validatedLora; // Finally, return the validated config back to the main config
         break;
     }
     case meshtastic_Config_bluetooth_tag:

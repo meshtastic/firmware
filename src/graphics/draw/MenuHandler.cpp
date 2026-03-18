@@ -282,7 +282,7 @@ void menuHandler::FrequencySlotPicker()
         const double padding = myRegion->profile->padding;
         const double channelBandwidthMHz = bw / 1000.0;
         const double numerator = (myRegion->freqEnd - myRegion->freqStart) + spacing;
-        const double denominator = spacing + padding + channelBandwidthMHz;
+        const double denominator = spacing + (padding * 2) + channelBandwidthMHz;
         if (denominator > 0.0) {
             numChannels = static_cast<uint32_t>(round(numerator / denominator));
         } else {

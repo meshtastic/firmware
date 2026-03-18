@@ -234,6 +234,11 @@ class RadioInterface
     // Whether we use the default frequency slot given our LoRa config (region and modem preset)
     static bool uses_default_frequency_slot;
 
+    // Whether we have a custom channel name
+    static bool uses_custom_channel_name;
+
+    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
+
     // Check if a candidate region is compatible and valid.
     static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
 
