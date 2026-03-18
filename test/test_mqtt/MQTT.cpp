@@ -818,7 +818,8 @@ void test_configEmptyIsValid(void)
     TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
-// Empty 'enabled' configuration is valid. No connectivity check is performed.
+// Empty 'enabled' configuration is valid. A lightweight TCP check may be performed
+// but does not affect the result.
 void test_configEnabledEmptyIsValid(void)
 {
     meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true};
@@ -842,7 +843,7 @@ void test_configWithDefaultServerAndInvalidPort(void)
     TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
 }
 
-// Custom host and port is valid. No connectivity check is performed.
+// Custom host and port is valid. TCP reachability is checked but does not block saving.
 void test_configCustomHostAndPort(void)
 {
     meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server:1234"};
@@ -851,7 +852,7 @@ void test_configCustomHostAndPort(void)
 }
 
 // An unreachable server is still a valid config — settings always save.
-// The MQTT reconnect loop handles connectivity after settings are persisted.
+// A warning notification is sent in non-test builds, but isValidConfig returns true.
 void test_configWithUnreachableServerIsStillValid(void)
 {
     meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server"};

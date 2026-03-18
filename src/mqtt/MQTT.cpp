@@ -657,9 +657,29 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
             return false;
 #endif
         }
-        // Connectivity is intentionally NOT validated here. Settings must be saved even
-        // when the network is temporarily unavailable. The MQTT module's existing reconnect
-        // loop will establish the connection after settings are persisted and the device reboots.
+        // Perform a lightweight TCP connectivity check without using connectPubSub(),
+        // which mutates the module's isConnected state. This only checks if the server
+        // is reachable — it does not establish an MQTT session.
+        // Settings are always saved regardless of the result.
+        if (isConnectedToNetwork()) {
+            MQTTClient testClient;
+            if (!testClient.connect(parsed.serverAddr.c_str(), parsed.serverPort)) {
+                const char *warning = "Could not reach the MQTT server. Settings will be saved, but please verify the server "
+                                      "address and credentials.";
+                LOG_WARN(warning);
+#if !IS_RUNNING_TESTS
+                meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+                if (cn) {
+                    cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->time = getValidTime(RTCQualityFromNet);
+                    strncpy(cn->message, warning, sizeof(cn->message) - 1);
+                    cn->message[sizeof(cn->message) - 1] = '\0';
+                    service->sendClientNotification(cn);
+                }
+#endif
+            }
+            testClient.stop();
+        }
 #else
         const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
         LOG_ERROR(warning);
