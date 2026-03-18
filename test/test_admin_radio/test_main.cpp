@@ -11,12 +11,12 @@
  *  6. Channel spacing calculation (placeholder for future protobuf changes)
  */
 
-#include "AdminModule.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
+#include "modules/AdminModule.h"
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
