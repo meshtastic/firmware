@@ -682,6 +682,40 @@ bool Power::analogInit()
 #endif
 }
 
+#ifdef T_WATCH_S3
+#ifdef PMU_IRQ
+void Power::triggerButtonWakeup() {
+        power->setIntervalFromNow(0);
+        runASAP = true;
+    }
+
+// This function is secure and runs on the FreeRTOS Daemon Task, not in the interrupt.
+static void pmu_deferred_handler(void *arg1, uint32_t arg2) {
+    if (power) {
+        power->triggerButtonWakeup();
+    }
+}
+
+// High speed ISR, won't make the esp32s3 crash
+void IRAM_ATTR pmu_isr_handler() {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    
+    // Delegate the work to the secure function pmu_deferred_handler
+    xTimerPendFunctionCallFromISR(
+        pmu_deferred_handler, 
+        NULL, 
+        0, 
+        &xHigherPriorityTaskWoken
+    );
+    
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+#endif
+#endif
+
 /**
  * Initializes the Power class.
  *
@@ -711,18 +745,9 @@ bool Power::setup()
     }
 #ifdef T_WATCH_S3 
 #ifdef PMU_IRQ
-    /*
-        This particular piece of code reacts to the pressing of the Power/Corona button by generating an interrupt that resets the counter of the run_once() function
-        allowing me to use the function to make my button do whatever I want (in my case switching on or off the screen) whenever I want.
-    */
+    // Attaching the button press interrupt to the function
     pinMode(PMU_IRQ, INPUT_PULLUP);
-    attachInterrupt(
-        PMU_IRQ,
-        []() {//lambda that wakes the power thread
-            power->setIntervalFromNow(0);
-            runASAP = true;
-        },
-        FALLING);
+    attachInterrupt(PMU_IRQ, pmu_isr_handler, FALLING);
 #endif
 #endif
 #ifdef EXT_PWR_DETECT
