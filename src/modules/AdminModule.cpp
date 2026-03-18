@@ -198,19 +198,35 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleSetOwner(r->set_owner);
         break;
 
-    case meshtastic_AdminMessage_set_config_tag:
+    case meshtastic_AdminMessage_set_config_tag: {
         LOG_DEBUG("Client set config");
-        // Reject LORA_24 at runtime if the active radio hardware does not support 2.4 GHz.
-        if (r->set_config.which_payload_variant == meshtastic_Config_lora_tag &&
-            r->set_config.payload_variant.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24
-            && RadioLibInterface::instance && !RadioLibInterface::instance->wideLora())
-        {
-            LOG_WARN("Radio hardware does not support 2.4 GHz; rejecting LORA_24 region");
-            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
-        } else {
+
+        // Non-LoRa configs need no further validation.
+        if (r->set_config.which_payload_variant != meshtastic_Config_lora_tag) {
+            LOG_DEBUG("Non-LoRa config, applying directly");
             handleSetConfig(r->set_config);
+            break;
         }
+
+        // Only LORA_24 requires hardware capability validation.
+        if (r->set_config.payload_variant.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) {
+            LOG_DEBUG("LoRa config, region is not LORA_24, applying directly");
+            handleSetConfig(r->set_config);
+            break;
+        }
+
+        // Hardware supports 2.4 GHz — apply the config.
+        // Fail closed: null instance is treated as incapable.
+        if (RadioLibInterface::instance && RadioLibInterface::instance->wideLora()) {
+            LOG_DEBUG("LORA_24 requested, radio hardware supports 2.4 GHz, applying");
+            handleSetConfig(r->set_config);
+            break;
+        }
+
+        LOG_WARN("Radio hardware does not support 2.4 GHz; rejecting LORA_24 region");
+        myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         break;
+    }
 
     case meshtastic_AdminMessage_set_module_config_tag:
         LOG_DEBUG("Client set module config");
