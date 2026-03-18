@@ -769,16 +769,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             validatedLora.spread_factor = LORA_SF_DEFAULT;
         }
 
-#if HAS_LORA_FEM
-        // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
-        if (loraFEMInterface.isLnaCanControl()) {
-            loraFEMInterface.setLNAEnable(validatedLora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED);
-        } else if (validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
-            // Hardware FEM does not support LNA control; normalize stored config to match actual capability
-            LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
-            validatedLora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
-        }
-#endif
         // If we're setting a new region, check the region is valid and then init the region or discard the change
         if (validatedLora.region != myRegion->code) {
             //  Region has changed so check whether it is valid for e.g. licensing conditions and if the lora config is valid
@@ -825,6 +815,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 //  Region validation has failed, so just copy all of the old config over the new config
                 validatedLora = oldLoraConfig;
             }
+#if HAS_LORA_FEM
+            // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
+            if (loraFEMInterface.isLnaCanControl()) {
+                loraFEMInterface.setLNAEnable(validatedLora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED);
+            } else if (validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
+                // Hardware FEM does not support LNA control; normalize stored config to match actual capability
+                LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
+                validatedLora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
+            }
+#endif
         } // end of new region handling
 
         if (!RadioInterface::validateConfigLora(validatedLora)) {

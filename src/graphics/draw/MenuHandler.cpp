@@ -25,6 +25,7 @@
 #include "modules/TraceRouteModule.h"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <functional>
 #include <utility>
 
@@ -265,13 +266,28 @@ void menuHandler::FrequencySlotPicker()
     optionsEnumArray[options++] = 0;
 
     // Calculate number of channels (copied from RadioInterface::applyModemConfig())
+    if (!myRegion) {
+        LOG_WARN("Region not set, cannot calculate number of channels");
+        return;
+    }
+
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
     double bw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, myRegion->wideLora)
                                       : bwCodeToKHz(loraConfig.bandwidth);
 
     uint32_t numChannels = 0;
     if (myRegion) {
-        numChannels = (uint32_t)floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->profile->spacing + (bw / 1000.0)));
+        // Match RadioInterface::applyModemConfig(): include padding, add spacing in numerator, and use round()
+        const double spacing = myRegion->profile->spacing;
+        const double padding = myRegion->profile->padding;
+        const double channelBandwidthMHz = bw / 1000.0;
+        const double numerator = (myRegion->freqEnd - myRegion->freqStart) + spacing;
+        const double denominator = spacing + padding + channelBandwidthMHz;
+        if (denominator > 0.0) {
+            numChannels = static_cast<uint32_t>(std::round(numerator / denominator));
+        } else {
+            LOG_WARN("Invalid region configuration: non-positive channel spacing/width");
+        }
     } else {
         LOG_WARN("Region not set, cannot calculate number of channels");
         return;

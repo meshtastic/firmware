@@ -891,7 +891,7 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
-    const RegionInfo *newRegion = getRegion(loraConfig.region);
+    const RegionInfo *newRegion = myRegion;
 
     if (loraConfig.use_preset) {
         if (!validateConfigLora(loraConfig)) {
@@ -914,7 +914,7 @@ void RadioInterface::applyModemConfig()
 
     } else { // if not using preset, then just use the custom settings
         if (validateConfigLora(loraConfig)) {
-            bw = loraConfig.bandwidth;
+            bw = bwCodeToKHz(loraConfig.bandwidth);
             sf = loraConfig.spread_factor;
             cr = loraConfig.coding_rate;
         }
