@@ -80,7 +80,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Pre-hop drop handling (compile-time flag).
 #ifndef MESHTASTIC_PREHOP_DROP
-#define MESHTASTIC_PREHOP_DROP 1
+#define MESHTASTIC_PREHOP_DROP 0
 #endif
 
 /// Convert a preprocessor name into a quoted string
