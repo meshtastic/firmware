@@ -93,6 +93,39 @@ void test_client_medium_fast_preset_scaling()
     TEST_ASSERT_INT_WITHIN(1, expected, res);
 }
 
+void test_router_uses_router_minimums()
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+
+    uint32_t telemetry = Default::getConfiguredOrMinimumValue(60, min_default_telemetry_interval_secs);
+    uint32_t position = Default::getConfiguredOrMinimumValue(60, min_default_broadcast_interval_secs);
+
+    TEST_ASSERT_EQUAL_UINT32(ONE_DAY / 2, telemetry);
+    TEST_ASSERT_EQUAL_UINT32(ONE_DAY / 2, position);
+}
+
+void test_router_late_uses_router_minimums()
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER_LATE;
+
+    uint32_t telemetry = Default::getConfiguredOrMinimumValue(60, min_default_telemetry_interval_secs);
+    uint32_t position = Default::getConfiguredOrMinimumValue(60, min_default_broadcast_interval_secs);
+
+    TEST_ASSERT_EQUAL_UINT32(ONE_DAY / 2, telemetry);
+    TEST_ASSERT_EQUAL_UINT32(ONE_DAY / 2, position);
+}
+
+void test_client_uses_public_channel_minimums()
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+
+    uint32_t telemetry = Default::getConfiguredOrMinimumValue(60, min_default_telemetry_interval_secs);
+    uint32_t position = Default::getConfiguredOrMinimumValue(60, min_default_broadcast_interval_secs);
+
+    TEST_ASSERT_EQUAL_UINT32(30 * 60, telemetry);
+    TEST_ASSERT_EQUAL_UINT32(60 * 60, position);
+}
+
 void setup()
 {
     // Small delay to match other test mains
@@ -103,6 +136,9 @@ void setup()
     RUN_TEST(test_client_below_threshold);
     RUN_TEST(test_client_default_preset_scaling);
     RUN_TEST(test_client_medium_fast_preset_scaling);
+    RUN_TEST(test_router_uses_router_minimums);
+    RUN_TEST(test_router_late_uses_router_minimums);
+    RUN_TEST(test_client_uses_public_channel_minimums);
     exit(UNITY_END());
 }
 
