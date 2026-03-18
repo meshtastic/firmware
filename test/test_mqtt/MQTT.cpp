@@ -818,7 +818,7 @@ void test_configEmptyIsValid(void)
     TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
-// Empty 'enabled' configuration is valid. Connectivity is verified but does not block saving.
+// Empty 'enabled' configuration is valid. Connectivity is checked when network is available but does not block saving.
 void test_configEnabledEmptyIsValid(void)
 {
     meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true};
@@ -846,7 +846,7 @@ void test_configWithDefaultServerAndInvalidPort(void)
     TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
 }
 
-// isValidConfig verifies connectivity but always returns true (settings always save).
+// isValidConfig checks connectivity when network is available but returns true regardless (settings always save).
 void test_configCustomHostAndPort(void)
 {
     meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server:1234"};
@@ -859,7 +859,8 @@ void test_configCustomHostAndPort(void)
 }
 
 // isValidConfig returns true even when the broker is unreachable — settings always save.
-// A warning notification is sent to the client instead of blocking the save.
+// In non-test builds, a warning notification is sent to the client. In test builds, the
+// notification path is compiled out (#if !IS_RUNNING_TESTS).
 void test_configWithUnreachableServerIsStillValid(void)
 {
     meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server"};

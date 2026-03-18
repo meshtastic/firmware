@@ -672,15 +672,17 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
             }
             std::unique_ptr<PubSubClient> pubSub(new PubSubClient);
             if (!connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection)) {
-                const char *warning = "MQTT settings saved, but could not reach the MQTT server. Please verify the server address and credentials.";
+                const char *warning = "Could not reach the MQTT server. Settings will be saved, but please verify the server address and credentials.";
                 LOG_WARN(warning);
 #if !IS_RUNNING_TESTS
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-                cn->level = meshtastic_LogRecord_Level_WARNING;
-                cn->time = getValidTime(RTCQualityFromNet);
-                strncpy(cn->message, warning, sizeof(cn->message) - 1);
-                cn->message[sizeof(cn->message) - 1] = '\0';
-                service->sendClientNotification(cn);
+                if (cn) {
+                    cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->time = getValidTime(RTCQualityFromNet);
+                    strncpy(cn->message, warning, sizeof(cn->message) - 1);
+                    cn->message[sizeof(cn->message) - 1] = '\0';
+                    service->sendClientNotification(cn);
+                }
 #endif
             }
         } else {
