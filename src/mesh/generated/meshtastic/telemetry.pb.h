@@ -26,7 +26,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_INA219 = 5,
     /* High accuracy temperature and pressure */
     meshtastic_TelemetrySensorType_BMP280 = 6,
-    /* High accuracy temperature and humidity */
+    /* TODO - REMOVE High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHTC3 = 7,
     /* High accuracy pressure */
     meshtastic_TelemetrySensorType_LPS22 = 8,
@@ -36,7 +36,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_QMI8658 = 10,
     /* 3-Axis magnetic sensor */
     meshtastic_TelemetrySensorType_QMC5883L = 11,
-    /* High accuracy temperature and humidity */
+    /* TODO - REMOVE High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT31 = 12,
     /* PM2.5 air quality sensor */
     meshtastic_TelemetrySensorType_PMSA003I = 13,
@@ -46,7 +46,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_BMP085 = 15,
     /* RCWL-9620 Doppler Radar Distance Sensor, used for water level detection */
     meshtastic_TelemetrySensorType_RCWL9620 = 16,
-    /* Sensirion High accuracy temperature and humidity */
+    /* TODO - REMOVE Sensirion High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT4X = 17,
     /* VEML7700 high accuracy ambient light(Lux) digital 16-bit resolution sensor. */
     meshtastic_TelemetrySensorType_VEML7700 = 18,
@@ -106,12 +106,14 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_BH1750 = 45,
     /* HDC1080 Temperature and Humidity Sensor */
     meshtastic_TelemetrySensorType_HDC1080 = 46,
-    /* STH21 Temperature and R. Humidity sensor */
+    /* TODO - REMOVE STH21 Temperature and R. Humidity sensor */
     meshtastic_TelemetrySensorType_SHT21 = 47,
     /* Sensirion STC31 CO2 sensor */
     meshtastic_TelemetrySensorType_STC31 = 48,
     /* SCD30 CO2, humidity, temperature sensor */
-    meshtastic_TelemetrySensorType_SCD30 = 49
+    meshtastic_TelemetrySensorType_SCD30 = 49,
+    /* SHT family of sensors for temperature and humidity */
+    meshtastic_TelemetrySensorType_SHTXX = 50
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -489,8 +491,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SCD30
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SCD30+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SHTXX
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SHTXX+1))
 
 
 
