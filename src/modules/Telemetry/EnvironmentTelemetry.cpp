@@ -139,6 +139,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/BH1750Sensor.h"
 #endif
 
+#if __has_include(<Adafruit_ADS1X15.h>)
+#include "Sensor/ADS1X15Sensor.h"
+#endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -154,6 +158,15 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
         return;
     }
     LOG_INFO("Environment Telemetry adding I2C devices...");
+
+    /*
+        Uncomment the preferences below if you want to use the module
+        without having to configure it from the PythonAPI or WebUI.
+    */
+
+    // moduleConfig.telemetry.environment_measurement_enabled = 1;
+    // moduleConfig.telemetry.environment_screen_enabled = 1;
+    // moduleConfig.telemetry.environment_update_interval = 15;
 
     // order by priority of metrics/values (low top, high bottom)
 
@@ -245,6 +258,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<BH1750_WE.h>)
     addSensor<BH1750Sensor>(i2cScanner, ScanI2C::DeviceType::BH1750);
 #endif
+#if __has_include(<Adafruit_ADS1X15.h>)
+    addSensor<ADS1X15Sensor>(i2cScanner, ScanI2C::DeviceType::ADS1X15);
+    addSensor<ADS1X15Sensor>(i2cScanner, ScanI2C::DeviceType::ADS1X15_ALT);
+#endif
 
 #endif
 }
@@ -260,14 +277,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
     }
 
     uint32_t result = UINT32_MAX;
-    /*
-        Uncomment the preferences below if you want to use the module
-        without having to configure it from the PythonAPI or WebUI.
-    */
-
-    // moduleConfig.telemetry.environment_measurement_enabled = 1;
-    // moduleConfig.telemetry.environment_screen_enabled = 1;
-    // moduleConfig.telemetry.environment_update_interval = 15;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled ||
           ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE)) {
@@ -636,6 +645,18 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
                  m.variant.environment_metrics.soil_moisture);
+
+        if (m.variant.environment_metrics.has_adc_voltage_ch1 || m.variant.environment_metrics.has_adc_voltage_ch2 ||
+            m.variant.environment_metrics.has_adc_voltage_ch3 || m.variant.environment_metrics.has_adc_voltage_ch4)
+            LOG_INFO("Send: adc_ch1=%f, adc_ch2=%f, adc_ch3=%f, adc_ch4=%f", m.variant.environment_metrics.adc_voltage_ch1,
+                     m.variant.environment_metrics.adc_voltage_ch2, m.variant.environment_metrics.adc_voltage_ch3,
+                     m.variant.environment_metrics.adc_voltage_ch4);
+
+        if (m.variant.environment_metrics.has_adc_voltage_ch5 || m.variant.environment_metrics.has_adc_voltage_ch6 ||
+            m.variant.environment_metrics.has_adc_voltage_ch7 || m.variant.environment_metrics.has_adc_voltage_ch8)
+            LOG_INFO("Send: adc_ch5=%f, adc_ch6=%f, adc_ch7=%f, adc_ch8=%f", m.variant.environment_metrics.adc_voltage_ch5,
+                     m.variant.environment_metrics.adc_voltage_ch6, m.variant.environment_metrics.adc_voltage_ch7,
+                     m.variant.environment_metrics.adc_voltage_ch8);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;

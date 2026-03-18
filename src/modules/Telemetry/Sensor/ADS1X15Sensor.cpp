@@ -6,19 +6,18 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "ADS1X15Sensor.h"
 #include "TelemetrySensor.h"
+#include "detect/ScanI2C.h"
 #include <Adafruit_ADS1X15.h>
 
-ADS1X15Sensor::ADS1X15Sensor(meshtastic_TelemetrySensorType sensorType) : TelemetrySensor(sensorType, "ADS1X15") {}
+ADS1X15Sensor::ADS1X15Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_ADS1X15, "ADS1X15") {}
 
-int32_t ADS1X15Sensor::runOnce()
+bool ADS1X15Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
-    LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
+    LOG_INFO("Init sensor: %s (address: 0x%x", sensorName, dev->address.address);
 
-    _bus = nodeTelemetrySensorsMap[sensorType].second;
-    _address = (uint8_t)nodeTelemetrySensorsMap[sensorType].first;
+    _bus = bus;
+    _address = dev->address.address;
+    _deviceType = dev->type;
 
 #ifdef ADS1X15_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C
@@ -37,10 +36,11 @@ int32_t ADS1X15Sensor::runOnce()
     reClockI2C(currentClock, _bus, false);
 #endif
 
-    return initI2CSensor();
-}
+    status = 1;
+    initI2CSensor();
 
-void ADS1X15Sensor::setup() {}
+    return true;
+}
 
 struct _ADS1X15Measurement ADS1X15Sensor::getMeasurement(uint8_t ch)
 {
@@ -128,55 +128,58 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
     reClockI2C(currentClock, _bus, false);
 #endif
 
-    switch (sensorType) {
-    case meshtastic_TelemetrySensorType_ADS1X15: {
-        measurement->variant.power_metrics.has_ch1_voltage = true;
-        measurement->variant.power_metrics.has_ch2_voltage = true;
-        measurement->variant.power_metrics.has_ch3_voltage = true;
-        measurement->variant.power_metrics.has_ch4_voltage = true;
+    switch (_deviceType) {
+    case ScanI2C::DeviceType::ADS1X15: {
+        measurement->variant.environment_metrics.has_adc_voltage_ch1 = true;
+        measurement->variant.environment_metrics.has_adc_voltage_ch2 = true;
+        measurement->variant.environment_metrics.has_adc_voltage_ch3 = true;
+        measurement->variant.environment_metrics.has_adc_voltage_ch4 = true;
 
-        measurement->variant.power_metrics.ch1_voltage = m.measurements[0].voltage;
-        measurement->variant.power_metrics.ch2_voltage = m.measurements[1].voltage;
-        measurement->variant.power_metrics.ch3_voltage = m.measurements[2].voltage;
-        measurement->variant.power_metrics.ch4_voltage = m.measurements[3].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch1 = m.measurements[0].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch2 = m.measurements[1].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch3 = m.measurements[2].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch4 = m.measurements[3].voltage;
 
-        LOG_DEBUG("Got %s readings: ch1_voltage=%f, ch2_voltage=%f, ch3_voltage=%f, ch4_voltage=%f", sensorName,
-                  measurement->variant.power_metrics.ch1_voltage, measurement->variant.power_metrics.ch2_voltage,
-                  measurement->variant.power_metrics.ch3_voltage, measurement->variant.power_metrics.ch4_voltage);
+        LOG_DEBUG(
+            "Got %s readings: adc_voltage_ch1=%f, adc_voltage_ch2=%f, adc_voltage_ch3=%f, adc_voltage_ch4=%f", sensorName,
+            measurement->variant.environment_metrics.adc_voltage_ch1, measurement->variant.environment_metrics.adc_voltage_ch2,
+            measurement->variant.environment_metrics.adc_voltage_ch3, measurement->variant.environment_metrics.adc_voltage_ch4);
 
         break;
     }
-    case meshtastic_TelemetrySensorType_ADS1X15_ALT: {
-        measurement->variant.power_metrics.has_ch5_voltage = true;
-        measurement->variant.power_metrics.has_ch6_voltage = true;
-        measurement->variant.power_metrics.has_ch7_voltage = true;
-        measurement->variant.power_metrics.has_ch8_voltage = true;
+    case ScanI2C::DeviceType::ADS1X15_ALT: {
+        measurement->variant.environment_metrics.has_adc_voltage_ch5 = true;
+        measurement->variant.environment_metrics.has_adc_voltage_ch6 = true;
+        measurement->variant.environment_metrics.has_adc_voltage_ch7 = true;
+        measurement->variant.environment_metrics.has_adc_voltage_ch8 = true;
 
-        measurement->variant.power_metrics.ch5_voltage = m.measurements[0].voltage;
-        measurement->variant.power_metrics.ch6_voltage = m.measurements[1].voltage;
-        measurement->variant.power_metrics.ch7_voltage = m.measurements[2].voltage;
-        measurement->variant.power_metrics.ch8_voltage = m.measurements[3].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch5 = m.measurements[0].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch6 = m.measurements[1].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch7 = m.measurements[2].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch8 = m.measurements[3].voltage;
 
-        LOG_DEBUG("Got %s readings: ch5_voltage=%f, ch6_voltage=%f, ch7_voltage=%f, ch4_voltage=%f", sensorName,
-                  measurement->variant.power_metrics.ch5_voltage, measurement->variant.power_metrics.ch6_voltage,
-                  measurement->variant.power_metrics.ch3_voltage, measurement->variant.power_metrics.ch4_voltage);
+        LOG_DEBUG(
+            "Got %s readings: adc_voltage_ch5=%f, adc_voltage_ch6=%f, adc_voltage_ch7=%f, adc_voltage_ch8=%f", sensorName,
+            measurement->variant.environment_metrics.adc_voltage_ch5, measurement->variant.environment_metrics.adc_voltage_ch6,
+            measurement->variant.environment_metrics.adc_voltage_ch7, measurement->variant.environment_metrics.adc_voltage_ch8);
 
         break;
     }
     default: {
-        measurement->variant.power_metrics.has_ch1_voltage = true;
-        measurement->variant.power_metrics.has_ch2_voltage = true;
-        measurement->variant.power_metrics.has_ch3_voltage = true;
-        measurement->variant.power_metrics.has_ch4_voltage = true;
+        measurement->variant.environment_metrics.has_adc_voltage_ch1 = true;
+        measurement->variant.environment_metrics.has_adc_voltage_ch2 = true;
+        measurement->variant.environment_metrics.has_adc_voltage_ch3 = true;
+        measurement->variant.environment_metrics.has_adc_voltage_ch4 = true;
 
-        measurement->variant.power_metrics.ch1_voltage = m.measurements[0].voltage;
-        measurement->variant.power_metrics.ch2_voltage = m.measurements[1].voltage;
-        measurement->variant.power_metrics.ch3_voltage = m.measurements[2].voltage;
-        measurement->variant.power_metrics.ch4_voltage = m.measurements[3].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch1 = m.measurements[0].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch2 = m.measurements[1].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch3 = m.measurements[2].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch4 = m.measurements[3].voltage;
 
-        LOG_DEBUG("Got %s readings: ch1_voltage=%f, ch2_voltage=%f, ch3_voltage=%f, ch4_voltage=%f", sensorName,
-                  measurement->variant.power_metrics.ch1_voltage, measurement->variant.power_metrics.ch2_voltage,
-                  measurement->variant.power_metrics.ch3_voltage, measurement->variant.power_metrics.ch4_voltage);
+        LOG_DEBUG(
+            "Got %s readings: adc_voltage_ch1=%f, adc_voltage_ch2=%f, adc_voltage_ch3=%f, adc_voltage_ch4=%f", sensorName,
+            measurement->variant.environment_metrics.adc_voltage_ch1, measurement->variant.environment_metrics.adc_voltage_ch2,
+            measurement->variant.environment_metrics.adc_voltage_ch3, measurement->variant.environment_metrics.adc_voltage_ch4);
 
         break;
     }
