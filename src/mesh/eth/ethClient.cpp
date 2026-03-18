@@ -50,6 +50,11 @@ static int32_t reconnectETH()
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
             deInitApiServer();
 #endif
+#if HAS_UDP_MULTICAST
+            if (udpHandler) {
+                udpHandler->stop();
+            }
+#endif
 
 #ifdef PIN_ETHERNET_RESET
             pinMode(PIN_ETHERNET_RESET, OUTPUT);
