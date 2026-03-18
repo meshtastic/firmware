@@ -411,8 +411,8 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // For custom modem settings show the actual parameters; for presets use the preset name.
     char modeStr[16];
     if (!config.lora.use_preset) {
-        snprintf(modeStr, sizeof(modeStr), "BW%d-SF%d-CR%d", config.lora.bandwidth, config.lora.spread_factor,
-                 config.lora.coding_rate);
+        snprintf(modeStr, sizeof(modeStr), "BW%u-SF%u-CR%u", static_cast<unsigned>(config.lora.bandwidth),
+                 static_cast<unsigned>(config.lora.spread_factor), static_cast<unsigned>(config.lora.coding_rate));
     } else {
         strncpy(modeStr, DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true), sizeof(modeStr) - 1);
         modeStr[sizeof(modeStr) - 1] = '\0';
