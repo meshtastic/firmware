@@ -657,9 +657,35 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
             return false;
 #endif
         }
-        // Note: connectivity is intentionally NOT validated here.
-        // Settings must be saved even when the network is temporarily unavailable.
+        // Attempt to verify broker connectivity, but do NOT block saving settings if unreachable.
         // The MQTT module's reconnect loop will establish the connection when possible.
+        if (isConnectedToNetwork()) {
+            std::unique_ptr<MQTTClient> clientConnection;
+            if (config.tls_enabled) {
+#if MQTT_SUPPORTS_TLS
+                MQTTClientTLS *tlsClient = new MQTTClientTLS;
+                clientConnection.reset(tlsClient);
+                tlsClient->setInsecure();
+#endif
+            } else {
+                clientConnection.reset(new MQTTClient);
+            }
+            std::unique_ptr<PubSubClient> pubSub(new PubSubClient);
+            if (!connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection)) {
+                const char *warning = "MQTT settings saved, but could not reach the MQTT server. Please verify the server address and credentials.";
+                LOG_WARN(warning);
+#if !IS_RUNNING_TESTS
+                meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+                cn->level = meshtastic_LogRecord_Level_WARNING;
+                cn->time = getValidTime(RTCQualityFromNet);
+                strncpy(cn->message, warning, sizeof(cn->message) - 1);
+                cn->message[sizeof(cn->message) - 1] = '\0';
+                service->sendClientNotification(cn);
+#endif
+            }
+        } else {
+            LOG_INFO("Network not available, skipping MQTT connectivity check. Settings will be saved.");
+        }
 #else
         const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
         LOG_ERROR(warning);
