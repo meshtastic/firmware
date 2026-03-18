@@ -949,7 +949,7 @@ void RadioInterface::applyModemConfig()
     uses_default_frequency_slot =
         (loraConfig.channel_num == 0 && newRegion->profile->overrideSlot == 0) ||
         (newRegion->profile->overrideSlot != 0 && loraConfig.channel_num == newRegion->profile->overrideSlot) ||
-        ((loraConfig.channel_num != 0) && (channelNameHashSlot == presetNameHashSlot));
+        ((loraConfig.channel_num != 0) && ((loraConfig.channel_num - 1) == presetNameHashSlot));
 
     // If user has manually specified a frequency slot, then use that, otherwise generate one by hashing the name
     // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numFreqSlots - 1)
@@ -962,7 +962,7 @@ void RadioInterface::applyModemConfig()
             channel_num = presetNameHashSlot;
         }
     } else {
-        channel_num = channelNameHashSlot;
+        channel_num = loraConfig.channel_num - 1;
     }
 
     // Calculate frequency: freqStart is band edge, add half bandwidth (plus optional padding) to get middle of first channel

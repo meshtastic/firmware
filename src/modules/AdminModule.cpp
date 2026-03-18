@@ -802,6 +802,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 if (!isRegionUnset && validatedLora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
                     validatedLora.tx_enabled = false;
                 }
+                // Ensure initRegion() uses the newly validated region
+                config.lora.region = validatedLora.region;
                 initRegion();
                 if (myRegion->dutyCycle < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
