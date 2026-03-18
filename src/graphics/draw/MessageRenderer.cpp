@@ -7,6 +7,7 @@
 #include "NodeDB.h"
 #include "UIRenderer.h"
 #include "gps/RTC.h"
+#include "graphics/EmoteRenderer.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -33,44 +34,6 @@ namespace MessageRenderer
 static std::vector<std::string> cachedLines;
 static std::vector<int> cachedHeights;
 static bool manualScrolling = false;
-
-// UTF-8 skip helper
-static inline size_t utf8CharLen(uint8_t c)
-{
-    if ((c & 0xE0) == 0xC0)
-        return 2;
-    if ((c & 0xF0) == 0xE0)
-        return 3;
-    if ((c & 0xF8) == 0xF0)
-        return 4;
-    return 1;
-}
-
-// Remove variation selectors (FE0F) and skin tone modifiers from emoji so they match your labels
-static std::string normalizeEmoji(const std::string &s)
-{
-    std::string out;
-    for (size_t i = 0; i < s.size();) {
-        uint8_t c = static_cast<uint8_t>(s[i]);
-        size_t len = utf8CharLen(c);
-
-        if (c == 0xEF && i + 2 < s.size() && (uint8_t)s[i + 1] == 0xB8 && (uint8_t)s[i + 2] == 0x8F) {
-            i += 3;
-            continue;
-        }
-
-        // Skip skin tone modifiers
-        if (c == 0xF0 && i + 3 < s.size() && (uint8_t)s[i + 1] == 0x9F && (uint8_t)s[i + 2] == 0x8F &&
-            ((uint8_t)s[i + 3] >= 0xBB && (uint8_t)s[i + 3] <= 0xBF)) {
-            i += 4;
-            continue;
-        }
-
-        out.append(s, i, len);
-        i += len;
-    }
-    return out;
-}
 
 // Scroll state (file scope so we can reset on new message)
 float scrollY = 0.0f;
@@ -110,102 +73,7 @@ void scrollDown()
 
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
 {
-    int cursorX = x;
-    const int fontHeight = FONT_HEIGHT_SMALL;
-
-    // Step 1: Find tallest emote in the line
-    int maxIconHeight = fontHeight;
-    for (size_t i = 0; i < line.length();) {
-        bool matched = false;
-        for (int e = 0; e < emoteCount; ++e) {
-            size_t emojiLen = strlen(emotes[e].label);
-            if (line.compare(i, emojiLen, emotes[e].label) == 0) {
-                if (emotes[e].height > maxIconHeight)
-                    maxIconHeight = emotes[e].height;
-                i += emojiLen;
-                matched = true;
-                break;
-            }
-        }
-        if (!matched) {
-            i += utf8CharLen(static_cast<uint8_t>(line[i]));
-        }
-    }
-
-    // Step 2: Baseline alignment
-    int lineHeight = std::max(fontHeight, maxIconHeight);
-    int baselineOffset = (lineHeight - fontHeight) / 2;
-    int fontY = y + baselineOffset;
-
-    // Step 3: Render line in segments
-    size_t i = 0;
-    bool inBold = false;
-
-    while (i < line.length()) {
-        // Check for ** start/end for faux bold
-        if (line.compare(i, 2, "**") == 0) {
-            inBold = !inBold;
-            i += 2;
-            continue;
-        }
-
-        // Look ahead for the next emote match
-        size_t nextEmotePos = std::string::npos;
-        const Emote *matchedEmote = nullptr;
-        size_t emojiLen = 0;
-
-        for (int e = 0; e < emoteCount; ++e) {
-            size_t pos = line.find(emotes[e].label, i);
-            if (pos != std::string::npos && (nextEmotePos == std::string::npos || pos < nextEmotePos)) {
-                nextEmotePos = pos;
-                matchedEmote = &emotes[e];
-                emojiLen = strlen(emotes[e].label);
-            }
-        }
-
-        // Render normal text segment up to the emote or bold toggle
-        size_t nextControl = std::min(nextEmotePos, line.find("**", i));
-        if (nextControl == std::string::npos)
-            nextControl = line.length();
-
-        if (nextControl > i) {
-            std::string textChunk = line.substr(i, nextControl - i);
-            if (inBold) {
-                // Faux bold: draw twice, offset by 1px
-                display->drawString(cursorX + 1, fontY, textChunk.c_str());
-            }
-            display->drawString(cursorX, fontY, textChunk.c_str());
-#if defined(OLED_UA) || defined(OLED_RU)
-            cursorX += display->getStringWidth(textChunk.c_str(), textChunk.length(), true);
-#else
-            cursorX += display->getStringWidth(textChunk.c_str());
-#endif
-            i = nextControl;
-            continue;
-        }
-
-        // Render the emote (if found)
-        if (matchedEmote && i == nextEmotePos) {
-            int iconY = y + (lineHeight - matchedEmote->height) / 2;
-            display->drawXbm(cursorX, iconY, matchedEmote->width, matchedEmote->height, matchedEmote->bitmap);
-            cursorX += matchedEmote->width + 1;
-            i += emojiLen;
-            continue;
-        } else {
-            // No more emotes — render the rest of the line
-            std::string remaining = line.substr(i);
-            if (inBold) {
-                display->drawString(cursorX + 1, fontY, remaining.c_str());
-            }
-            display->drawString(cursorX, fontY, remaining.c_str());
-#if defined(OLED_UA) || defined(OLED_RU)
-            cursorX += display->getStringWidth(remaining.c_str(), remaining.length(), true);
-#else
-            cursorX += display->getStringWidth(remaining.c_str());
-#endif
-            break;
-        }
-    }
+    graphics::EmoteRenderer::drawStringWithEmotes(display, x, y, line, FONT_HEIGHT_SMALL, emotes, emoteCount);
 }
 
 // Reset scroll state when new messages arrive
@@ -377,32 +245,7 @@ static void drawRelayMark(OLEDDisplay *display, int x, int y, int size = 8)
 
 static inline int getRenderedLineWidth(OLEDDisplay *display, const std::string &line, const Emote *emotes, int emoteCount)
 {
-    std::string normalized = normalizeEmoji(line);
-    int totalWidth = 0;
-
-    size_t i = 0;
-    while (i < normalized.length()) {
-        bool matched = false;
-        for (int e = 0; e < emoteCount; ++e) {
-            size_t emojiLen = strlen(emotes[e].label);
-            if (normalized.compare(i, emojiLen, emotes[e].label) == 0) {
-                totalWidth += emotes[e].width + 1; // +1 spacing
-                i += emojiLen;
-                matched = true;
-                break;
-            }
-        }
-        if (!matched) {
-            size_t charLen = utf8CharLen(static_cast<uint8_t>(normalized[i]));
-#if defined(OLED_UA) || defined(OLED_RU)
-            totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str(), charLen, true);
-#else
-            totalWidth += display->getStringWidth(normalized.substr(i, charLen).c_str());
-#endif
-            i += charLen;
-        }
-    }
-    return totalWidth;
+    return graphics::EmoteRenderer::analyzeLine(display, line, 0, emotes, emoteCount).width;
 }
 
 struct MessageBlock {
@@ -417,13 +260,7 @@ static int getDrawnLinePixelBottom(int lineTopY, const std::string &line, bool i
         return lineTopY + (FONT_HEIGHT_SMALL - 1);
     }
 
-    int tallest = FONT_HEIGHT_SMALL;
-    for (int e = 0; e < numEmotes; ++e) {
-        if (line.find(emotes[e].label) != std::string::npos) {
-            if (emotes[e].height > tallest)
-                tallest = emotes[e].height;
-        }
-    }
+    const int tallest = graphics::EmoteRenderer::analyzeLine(nullptr, line, FONT_HEIGHT_SMALL, emotes, numEmotes).tallestHeight;
 
     const int lineHeight = std::max(FONT_HEIGHT_SMALL, tallest);
     const int iconTop = lineTopY + (lineHeight - tallest) / 2;
@@ -536,30 +373,28 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int rightTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - SCROLLBAR_WIDTH;
 
     // Title string depending on mode
-    static char titleBuf[32];
-    const char *titleStr = "Messages";
+    char titleStr[48];
+    snprintf(titleStr, sizeof(titleStr), "Messages");
     switch (currentMode) {
     case ThreadMode::ALL:
-        titleStr = "Messages";
+        snprintf(titleStr, sizeof(titleStr), "Messages");
         break;
     case ThreadMode::CHANNEL: {
         const char *cname = channels.getName(currentChannel);
         if (cname && cname[0]) {
-            snprintf(titleBuf, sizeof(titleBuf), "#%s", cname);
+            snprintf(titleStr, sizeof(titleStr), "#%s", cname);
         } else {
-            snprintf(titleBuf, sizeof(titleBuf), "Ch%d", currentChannel);
+            snprintf(titleStr, sizeof(titleStr), "Ch%d", currentChannel);
         }
-        titleStr = titleBuf;
         break;
     }
     case ThreadMode::DIRECT: {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentPeer);
-        if (node && node->has_user) {
-            snprintf(titleBuf, sizeof(titleBuf), "@%s", node->user.short_name);
+        if (node && node->has_user && node->user.short_name[0]) {
+            snprintf(titleStr, sizeof(titleStr), "@%s", node->user.short_name);
         } else {
-            snprintf(titleBuf, sizeof(titleBuf), "@%08x", currentPeer);
+            snprintf(titleStr, sizeof(titleStr), "@%08x", currentPeer);
         }
-        titleStr = titleBuf;
         break;
     }
     }
@@ -666,44 +501,50 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(m.sender);
         meshtastic_NodeInfoLite *node_recipient = nodeDB->getMeshNode(m.dest);
 
-        char senderBuf[48] = "";
+        char senderName[64] = "";
         if (node && node->has_user) {
-            // Use long name if present
-            strncpy(senderBuf, node->user.long_name, sizeof(senderBuf) - 1);
-            senderBuf[sizeof(senderBuf) - 1] = '\0';
-        } else {
-            // No long/short name → show NodeID in parentheses
-            snprintf(senderBuf, sizeof(senderBuf), "(%08x)", m.sender);
+            if (node->user.long_name[0]) {
+                strncpy(senderName, node->user.long_name, sizeof(senderName) - 1);
+            } else if (node->user.short_name[0]) {
+                strncpy(senderName, node->user.short_name, sizeof(senderName) - 1);
+            }
+            senderName[sizeof(senderName) - 1] = '\0';
+        }
+        if (!senderName[0]) {
+            snprintf(senderName, sizeof(senderName), "(%08x)", m.sender);
         }
 
-        // If this is *our own* message, override senderBuf to who the recipient was
+        // If this is *our own* message, override senderName to who the recipient was
         bool mine = (m.sender == nodeDB->getNodeNum());
         if (mine && node_recipient && node_recipient->has_user) {
-            strcpy(senderBuf, node_recipient->user.long_name);
+            if (node_recipient->user.long_name[0]) {
+                strncpy(senderName, node_recipient->user.long_name, sizeof(senderName) - 1);
+                senderName[sizeof(senderName) - 1] = '\0';
+            } else if (node_recipient->user.short_name[0]) {
+                strncpy(senderName, node_recipient->user.short_name, sizeof(senderName) - 1);
+                senderName[sizeof(senderName) - 1] = '\0';
+            }
+        }
+        // If recipient info is missing/empty, prefer a recipient identifier for outbound messages.
+        if (mine && (!node_recipient || !node_recipient->has_user ||
+                     (!node_recipient->user.long_name[0] && !node_recipient->user.short_name[0]))) {
+            snprintf(senderName, sizeof(senderName), "(%08x)", m.dest);
         }
 
         // Shrink Sender name if needed
         int availWidth = (mine ? rightTextWidth : leftTextWidth) - display->getStringWidth(timeBuf) -
-                         display->getStringWidth(chanType) - display->getStringWidth("   @...");
+                         display->getStringWidth(chanType) - graphics::UIRenderer::measureStringWithEmotes(display, "   @...");
         if (availWidth < 0)
             availWidth = 0;
-
-        size_t origLen = strlen(senderBuf);
-        while (senderBuf[0] && display->getStringWidth(senderBuf) > availWidth) {
-            senderBuf[strlen(senderBuf) - 1] = '\0';
-        }
-
-        // If we actually truncated, append "..."
-        if (strlen(senderBuf) < origLen) {
-            strcat(senderBuf, "...");
-        }
+        char truncatedSender[64];
+        graphics::UIRenderer::truncateStringWithEmotes(display, senderName, truncatedSender, sizeof(truncatedSender), availWidth);
 
         // Final header line
-        char headerStr[96];
+        char headerStr[128];
         if (mine) {
             if (currentMode == ThreadMode::ALL) {
                 if (strcmp(chanType, "(DM)") == 0) {
-                    snprintf(headerStr, sizeof(headerStr), "%s to %s", timeBuf, senderBuf);
+                    snprintf(headerStr, sizeof(headerStr), "%s to %s", timeBuf, truncatedSender);
                 } else {
                     snprintf(headerStr, sizeof(headerStr), "%s to %s", timeBuf, chanType);
                 }
@@ -711,11 +552,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 snprintf(headerStr, sizeof(headerStr), "%s", timeBuf);
             }
         } else {
-            snprintf(headerStr, sizeof(headerStr), "%s @%s %s", timeBuf, senderBuf, chanType);
+            snprintf(headerStr, sizeof(headerStr), chanType[0] ? "%s @%s %s" : "%s @%s", timeBuf, truncatedSender, chanType);
         }
 
         // Push header line
-        allLines.push_back(std::string(headerStr));
+        allLines.push_back(headerStr);
         isMine.push_back(mine);
         isHeader.push_back(true);
         ackForLine.push_back(m.ackStatus);
@@ -816,13 +657,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 topY = visualTop - BUBBLE_PAD_TOP_HEADER;
             } else {
                 // Body start
-                bool thisLineHasEmote = false;
-                for (int e = 0; e < numEmotes; ++e) {
-                    if (cachedLines[b.start].find(emotes[e].label) != std::string::npos) {
-                        thisLineHasEmote = true;
-                        break;
-                    }
-                }
+                const bool thisLineHasEmote =
+                    graphics::EmoteRenderer::analyzeLine(nullptr, cachedLines[b.start].c_str(), 0, emotes, numEmotes).hasEmote;
                 if (thisLineHasEmote) {
                     constexpr int EMOTE_PADDING_ABOVE = 4;
                     visualTop -= EMOTE_PADDING_ABOVE;
@@ -851,7 +687,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             for (size_t i = b.start; i <= b.end; ++i) {
                 int w = 0;
                 if (isHeader[i]) {
-                    w = display->getStringWidth(cachedLines[i].c_str());
+                    w = graphics::UIRenderer::measureStringWithEmotes(display, cachedLines[i].c_str());
                     if (b.mine)
                         w += 12; // room for ACK/NACK/relay mark
                 } else {
@@ -907,7 +743,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         if (lineY > -cachedHeights[i] && lineY < scrollBottom) {
             if (isHeader[i]) {
 
-                int w = display->getStringWidth(cachedLines[i].c_str());
+                int w = graphics::UIRenderer::measureStringWithEmotes(display, cachedLines[i].c_str());
                 int headerX;
                 if (isMine[i]) {
                     // push header left to avoid overlap with scrollbar
@@ -917,7 +753,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 } else {
                     headerX = x + textIndent;
                 }
-                display->drawString(headerX, lineY, cachedLines[i].c_str());
+                graphics::UIRenderer::drawStringWithEmotes(display, headerX, lineY, cachedLines[i].c_str(), FONT_HEIGHT_SMALL, 1,
+                                                           false);
 
                 // Draw underline just under header text
                 int underlineY = lineY + FONT_HEIGHT_SMALL;
@@ -1005,11 +842,7 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
         } else {
             word += ch;
             std::string test = line + word;
-#if defined(OLED_UA) || defined(OLED_RU)
-            uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
-#else
-            uint16_t strWidth = display->getStringWidth(test.c_str());
-#endif
+            uint16_t strWidth = graphics::UIRenderer::measureStringWithEmotes(display, test.c_str());
             if (strWidth > textWidth) {
                 if (!line.empty())
                     lines.push_back(line);
@@ -1038,31 +871,20 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
 
     std::vector<int> rowHeights;
     rowHeights.reserve(lines.size());
+    std::vector<graphics::EmoteRenderer::LineMetrics> lineMetrics;
+    lineMetrics.reserve(lines.size());
+
+    for (const auto &line : lines) {
+        lineMetrics.push_back(graphics::EmoteRenderer::analyzeLine(nullptr, line, FONT_HEIGHT_SMALL, emotes, numEmotes));
+    }
 
     for (size_t idx = 0; idx < lines.size(); ++idx) {
-        const auto &line = lines[idx];
         const int baseHeight = FONT_HEIGHT_SMALL;
         int lineHeight = baseHeight;
 
-        // Detect if THIS line or NEXT line contains an emote
-        bool hasEmote = false;
-        int tallestEmote = baseHeight;
-        for (int i = 0; i < numEmotes; ++i) {
-            if (line.find(emotes[i].label) != std::string::npos) {
-                hasEmote = true;
-                tallestEmote = std::max(tallestEmote, emotes[i].height);
-            }
-        }
-
-        bool nextHasEmote = false;
-        if (idx + 1 < lines.size()) {
-            for (int i = 0; i < numEmotes; ++i) {
-                if (lines[idx + 1].find(emotes[i].label) != std::string::npos) {
-                    nextHasEmote = true;
-                    break;
-                }
-            }
-        }
+        const int tallestEmote = lineMetrics[idx].tallestHeight;
+        const bool hasEmote = lineMetrics[idx].hasEmote;
+        const bool nextHasEmote = (idx + 1 < lines.size()) && lineMetrics[idx + 1].hasEmote;
 
         if (isHeaderVec[idx]) {
             // Header line spacing
@@ -1112,22 +934,22 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 
         // Banner logic
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
-        char longName[48] = "?";
-        if (node && node->user.long_name) {
-            strncpy(longName, node->user.long_name, sizeof(longName) - 1);
-            longName[sizeof(longName) - 1] = '\0';
+        char longName[64] = "?";
+        if (node && node->has_user) {
+            if (node->user.long_name[0]) {
+                strncpy(longName, node->user.long_name, sizeof(longName) - 1);
+                longName[sizeof(longName) - 1] = '\0';
+            } else if (node->user.short_name[0]) {
+                strncpy(longName, node->user.short_name, sizeof(longName) - 1);
+                longName[sizeof(longName) - 1] = '\0';
+            }
         }
         int availWidth = display->getWidth() - ((currentResolution == ScreenResolution::High) ? 40 : 20);
         if (availWidth < 0)
             availWidth = 0;
-
-        size_t origLen = strlen(longName);
-        while (longName[0] && display->getStringWidth(longName) > availWidth) {
-            longName[strlen(longName) - 1] = '\0';
-        }
-        if (strlen(longName) < origLen) {
-            strcat(longName, "...");
-        }
+        char truncatedLongName[64];
+        graphics::UIRenderer::truncateStringWithEmotes(display, longName, truncatedLongName, sizeof(truncatedLongName),
+                                                       availWidth);
         const char *msgRaw = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
 
         char banner[256];
@@ -1145,8 +967,8 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         }
 
         if (isAlert) {
-            if (longName && longName[0])
-                snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+            if (truncatedLongName[0])
+                snprintf(banner, sizeof(banner), "Alert Received from\n%s", truncatedLongName);
             else
                 strcpy(banner, "Alert Received");
         } else {
@@ -1154,11 +976,11 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             if (isChannelMuted)
                 return;
 
-            if (longName && longName[0]) {
+            if (truncatedLongName[0]) {
                 if (currentResolution == ScreenResolution::UltraLow) {
                     strcpy(banner, "New Message");
                 } else {
-                    snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+                    snprintf(banner, sizeof(banner), "New Message from\n%s", truncatedLongName);
                 }
             } else
                 strcpy(banner, "New Message");
