@@ -818,16 +818,12 @@ void test_configEmptyIsValid(void)
     TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
-// Empty 'enabled' configuration is valid. Connectivity is checked when network is available but does not block saving.
+// Empty 'enabled' configuration is valid. No connectivity check is performed.
 void test_configEnabledEmptyIsValid(void)
 {
     meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true};
-    MockPubSubServer client;
 
-    TEST_ASSERT_TRUE(MQTTUnitTest::isValidConfig(config, &client));
-    TEST_ASSERT_TRUE(client.connected_);
-    TEST_ASSERT_EQUAL_STRING(default_mqtt_address, client.host_.c_str());
-    TEST_ASSERT_EQUAL(1883, client.port_);
+    TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
 // Configuration with the default server is valid.
@@ -846,40 +842,32 @@ void test_configWithDefaultServerAndInvalidPort(void)
     TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
 }
 
-// isValidConfig checks connectivity when network is available but returns true regardless (settings always save).
+// Custom host and port is valid. No connectivity check is performed.
 void test_configCustomHostAndPort(void)
 {
     meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server:1234"};
-    MockPubSubServer client;
 
-    TEST_ASSERT_TRUE(MQTTUnitTest::isValidConfig(config, &client));
-    TEST_ASSERT_TRUE(client.connected_);
-    TEST_ASSERT_EQUAL_STRING("server", client.host_.c_str());
-    TEST_ASSERT_EQUAL(1234, client.port_);
+    TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
-// isValidConfig returns true even when the broker is unreachable — settings always save.
-// In non-test builds, a warning notification is sent to the client. In test builds, the
-// notification path is compiled out (#if !IS_RUNNING_TESTS).
+// An unreachable server is still a valid config — settings always save.
+// The MQTT reconnect loop handles connectivity after settings are persisted.
 void test_configWithUnreachableServerIsStillValid(void)
 {
     meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server"};
-    MockPubSubServer client;
-    client.refuseConnection_ = true;
 
-    TEST_ASSERT_TRUE(MQTTUnitTest::isValidConfig(config, &client));
+    TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
 // isValidConfig returns true when tls_enabled is supported, or false otherwise.
 void test_configWithTLSEnabled(void)
 {
     meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server", .tls_enabled = true};
-    MockPubSubServer client;
 
 #if MQTT_SUPPORTS_TLS
-    TEST_ASSERT_TRUE(MQTTUnitTest::isValidConfig(config, &client));
+    TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 #else
-    TEST_ASSERT_FALSE(MQTTUnitTest::isValidConfig(config, &client));
+    TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
 #endif
 }
 
