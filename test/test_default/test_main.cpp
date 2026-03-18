@@ -10,8 +10,9 @@ static uint32_t computeExpectedMs(uint32_t defaultSeconds, uint32_t numOnlineNod
 {
     uint32_t baseMs = Default::getConfiguredOrDefaultMs(0, defaultSeconds);
 
-    // Routers don't scale
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
+    // Routers (including ROUTER_LATE) don't scale
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
         return baseMs;
     }
 
