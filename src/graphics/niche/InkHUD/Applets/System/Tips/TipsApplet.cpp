@@ -152,6 +152,11 @@ void InkHUD::TipsApplet::onRender(bool full)
             drawBullet("User Button");
             drawBullet("- short press: next");
             drawBullet("- long press: select or open menu");
+        } else if (inkhud->twoWayRocker) {
+            drawBullet("Rocker + Button");
+            drawBullet("- center press: open menu or select");
+            drawBullet("- left/right: applet nav");
+            drawBullet("- in menu: up/down");
         } else {
             drawBullet("Joystick");
             drawBullet("- press: open menu or select");

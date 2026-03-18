@@ -78,6 +78,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Configuration
 // -----------------------------------------------------------------------------
 
+// Pre-hop drop handling (compile-time flag).
+#ifndef MESHTASTIC_PREHOP_DROP
+#define MESHTASTIC_PREHOP_DROP 0
+#endif
+
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
 #define ystr(s) #s
@@ -147,6 +152,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Power Amps are often non-linear, so we can use an array of values for the power curve
 #define NUM_PA_POINTS 22
 #define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7
+#endif
+
+#ifdef USE_KCT8103L_PA
+// Power Amps are often non-linear, so we can use an array of values for the power curve
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 13, 12, 12, 11, 10, 9, 8, 7
 #endif
 
 #ifdef RAK13302
@@ -265,6 +276,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BHI260AP_ADDR 0x28
 #define BMM150_ADDR 0x13
 #define DA217_ADDR 0x26
+#define BMI270_ADDR 0x68
+#define BMI270_ADDR_ALT 0x69
 
 // -----------------------------------------------------------------------------
 // LED
@@ -491,6 +504,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_REMOTEHARDWARE 1
 #define MESHTASTIC_EXCLUDE_STOREFORWARD 1
 #define MESHTASTIC_EXCLUDE_TEXTMESSAGE 1
+#define MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT 1
 #define MESHTASTIC_EXCLUDE_ATAK 1
 #define MESHTASTIC_EXCLUDE_CANNEDMESSAGES 1
 #define MESHTASTIC_EXCLUDE_NEIGHBORINFO 1

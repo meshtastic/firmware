@@ -126,7 +126,7 @@ extern "C" {
 #define BATTERY_PIN 2 // P0.02/AIN0, BAT_ADC
 #define BATTERY_IMMUTABLE
 #define ADC_MULTIPLIER (2.0F)
-// P0.04/AIN2 is VCC_ADC, P0.05/AIN3 is CHARGER_DET, P1.03 is CHARGE_STA, P1.04 is CHARGE_DONE
+// P0.04 is sensor power enable, P0.05/AIN3 is CHARGER_DET, P1.03 is CHARGE_STA, P1.04 is CHARGE_DONE
 
 #define EXT_CHRG_DETECT (32 + 3) // P1.03
 #define EXT_CHRG_DETECT_VALUE LOW
@@ -148,11 +148,20 @@ extern "C" {
 #define PIN_BUZZER (0 + 25)    // P0.25, pwm output
 
 #define T1000X_SENSOR_EN
-#define T1000X_VCC_PIN (0 + 4)  // P0.4
-#define T1000X_NTC_PIN (0 + 31) // P0.31/AIN7
-#define T1000X_LUX_PIN (0 + 29) // P0.29/AIN5
+#define T1000X_SENSOR_EN_PIN (0 + 4) // P0.4, Power to Sensor (GPIO, not ADC)
+#define T1000X_NTC_PIN (0 + 31)      // P0.31/AIN7
+#define T1000X_LUX_PIN (0 + 29)      // P0.29/AIN5
 
 #define HAS_SCREEN 0
+
+// Enable Traffic Management Module for testing on T1000-E
+// NRF52840 has 256KB RAM - 1024 entries uses ~10KB
+#ifndef HAS_TRAFFIC_MANAGEMENT
+#define HAS_TRAFFIC_MANAGEMENT 1
+#endif
+#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1024
+#endif
 
 #ifdef __cplusplus
 }
