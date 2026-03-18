@@ -764,11 +764,14 @@ uint32_t RadioInterface::getChannelNum()
  */
 static void sendErrorNotification(const char *msg)
 {
+    if (!service)
+        return;
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
     cn->level = meshtastic_LogRecord_Level_ERROR;
     snprintf(cn->message, sizeof(cn->message), "%s", msg);
-    if (service)
-        service->sendClientNotification(cn);
+    service->sendClientNotification(cn);
 }
 
 /**
