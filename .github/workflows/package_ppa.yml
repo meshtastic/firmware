@@ -46,7 +46,7 @@ jobs:
           sudo apt-get install -y dput
 
       - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
+        uses: crazy-max/ghaction-import-gpg@v7
         with:
           gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
         id: gpg
@@ -60,7 +60,7 @@ jobs:
         id: version
 
       - name: Download artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: firmware-debian-${{ steps.version.outputs.deb }}~${{ inputs.series }}-src
           merge-multiple: true

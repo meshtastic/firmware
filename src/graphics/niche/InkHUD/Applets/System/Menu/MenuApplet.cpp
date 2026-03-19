@@ -349,13 +349,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         handleFreeText = true;
         cm.freeTextItem.rawText.erase(); // clear the previous freetext message
         freeTextMode = true;             // render input field instead of normal menu
-        // Open the on-screen keyboard if the joystick is enabled
-        if (settings->joystick.enabled)
+        // Open the on-screen keyboard only for full joystick devices
+        if (settings->joystick.enabled && !inkhud->twoWayRocker)
             inkhud->openKeyboard();
         break;
 
     case STORE_CANNEDMESSAGE_SELECTION:
-        if (!settings->joystick.enabled)
+        if (!settings->joystick.enabled || inkhud->twoWayRocker)
             cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
         else
             cm.selectedMessageItem = &cm.messageItems.at(cursor - 2); // Minus two: offset for the "Send Ping" and free text entry
@@ -922,7 +922,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (settings->userTiles.maxCount > 1)
             items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
-        if (settings->joystick.enabled)
+        if (settings->joystick.enabled && !inkhud->twoWayRocker)
             items.push_back(MenuItem("Align Joystick", MenuAction::ALIGN_JOYSTICK, MenuPage::EXIT));
         items.push_back(MenuItem("Notifications", MenuAction::TOGGLE_NOTIFICATIONS, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.notifications));
@@ -1524,7 +1524,15 @@ void InkHUD::MenuApplet::onButtonShortPress()
         if (!settings->joystick.enabled) {
             if (!cursorShown) {
                 cursorShown = true;
+                // Select the first item that isn't a header
                 cursor = 0;
+                while (cursor < items.size() && items.at(cursor).isHeader) {
+                    cursor++;
+                }
+                if (cursor >= items.size()) {
+                    cursorShown = false;
+                    cursor = 0;
+                }
             } else {
                 do {
                     cursor = (cursor + 1) % items.size();
@@ -1576,7 +1584,15 @@ void InkHUD::MenuApplet::onNavUp()
 
         if (!cursorShown) {
             cursorShown = true;
-            cursor = 0;
+            // Select the last item that isn't a header
+            cursor = items.size() - 1;
+            while (items.at(cursor).isHeader) {
+                if (cursor == 0) {
+                    cursorShown = false;
+                    break;
+                }
+                cursor--;
+            }
         } else {
             do {
                 if (cursor == 0)
@@ -1597,7 +1613,15 @@ void InkHUD::MenuApplet::onNavDown()
 
         if (!cursorShown) {
             cursorShown = true;
+            // Select the first item that isn't a header
             cursor = 0;
+            while (cursor < items.size() && items.at(cursor).isHeader) {
+                cursor++;
+            }
+            if (cursor >= items.size()) {
+                cursorShown = false;
+                cursor = 0;
+            }
         } else {
             do {
                 cursor = (cursor + 1) % items.size();
@@ -1727,7 +1751,7 @@ void InkHUD::MenuApplet::populateSendPage()
     items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
 
     // If joystick is available, include the Free Text option
-    if (settings->joystick.enabled)
+    if (settings->joystick.enabled && !inkhud->twoWayRocker)
         items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::SEND));
 
     // One menu item for each canned message
@@ -2004,7 +2028,7 @@ void InkHUD::MenuApplet::sendText(NodeNum dest, ChannelIndex channel, const char
     service->sendToMesh(p, RX_SRC_LOCAL, true); // Send to mesh, cc to phone
 }
 
-// Free up any heap mmemory we'd used while selecting / sending canned messages
+// Free up any heap memory we'd used while selecting / sending canned messages
 void InkHUD::MenuApplet::freeCannedMessageResources()
 {
     cm.selectedMessageItem = nullptr;
