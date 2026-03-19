@@ -1254,14 +1254,14 @@ void TFTDisplay::display(bool fromBlank)
 
         // Did we find a pixel that needs updating on this row?
         if (x_FirstPixelUpdate < displayWidth) {
+            // Align the first pixel for update to an even number so the total alignment of
+            // the data will be at 32-bit boundary, which is required by GDMA SPI transfers.
+            x_FirstPixelUpdate &= ~1;
 
-            // Quickly write out the first changed pixel (saves another array lookup)
-            linePixelBuffer[x_FirstPixelUpdate] = isset ? colorTftMesh : colorTftBlack;
-            x_LastPixelUpdate = x_FirstPixelUpdate;
-
-            // Step 3: copy all remaining pixels in this row into the pixel line buffer,
-            // while also recording the last pixel in the row that needs updating
-            for (x = x_FirstPixelUpdate + 1; x < displayWidth; x++) {
+            // Step 3a: copy rest of the pixels in this row into the pixel line buffer,
+            // while also recording the last pixel in the row that needs updating.
+            // Since the first changed pixel will be looked up, the x_LastPixelUpdate will be set.
+            for (x = x_FirstPixelUpdate; x < displayWidth; x++) {
                 isset = buffer[x + y_byteIndex] & y_byteMask;
                 linePixelBuffer[x] = isset ? colorTftMesh : colorTftBlack;
 
@@ -1274,6 +1274,10 @@ void TFTDisplay::display(bool fromBlank)
                     x_LastPixelUpdate = x;
                 }
             }
+            // Step 3b: Round up the last pixel to odd number to maintain 32-bit alignment for SPIs.
+            // Most of displays will have even number of pixels in a row -- this will be in bounds
+            // of the displayWidth. (Hopefully odd displays will just ignore that extra pixel.)
+            x_LastPixelUpdate |= 1;
 #if defined(HACKADAY_COMMUNICATOR)
             tft->draw16bitBeRGBBitmap(x_FirstPixelUpdate, y, &linePixelBuffer[x_FirstPixelUpdate],
                                       (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1);
