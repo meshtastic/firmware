@@ -101,8 +101,9 @@ void FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
             printPacket("reprocessPacket(DUP)", p);
         } else {
             // Fatal decoding error, we can't do anything with this packet
-            LOG_WARN("FloodingRouter::reprocessPacket: Fatal decode error (state=%d, id=0x%08x, from=%u), can't check for traceroute",
-                     static_cast<int>(decodedState), p->id, getFrom(p));
+            LOG_WARN(
+                "FloodingRouter::reprocessPacket: Fatal decode error (state=%d, id=0x%08x, from=%u), can't check for traceroute",
+                static_cast<int>(decodedState), p->id, getFrom(p));
             return;
         }
     }
