@@ -820,11 +820,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #if HAS_LORA_FEM
             // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
             if (loraFEMInterface.isLnaCanControl()) {
-                loraFEMInterface.setLNAEnable(validatedLora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED);
-            } else if (validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
+                loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
+            } else if (config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
                 // Hardware FEM does not support LNA control; normalize stored config to match actual capability
                 LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
-                validatedLora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
+                config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
             }
 #endif
         } // end of new region handling
@@ -869,62 +869,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
         config.lora = validatedLora; // Finally, return the validated config back to the main config
-
-#if HAS_LORA_FEM
-        // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
-        if (loraFEMInterface.isLnaCanControl()) {
-            loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
-        } else if (config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
-            // Hardware FEM does not support LNA control; normalize stored config to match actual capability
-            LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
-            config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
-        }
-#endif
-        // If we're setting region for the first time, init the region and regenerate the keys
-        if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-            if (!owner.is_licensed) {
-                bool keygenSuccess = false;
-                if (config.security.private_key.size == 32) {
-                    if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                        keygenSuccess = true;
-                    }
-                } else {
-                    LOG_INFO("Generate new PKI keys");
-                    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-                    keygenSuccess = true;
-                }
-                if (keygenSuccess) {
-                    config.security.public_key.size = 32;
-                    config.security.private_key.size = 32;
-                    owner.public_key.size = 32;
-                    memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-                }
-            }
-#endif
-            config.lora.tx_enabled = true;
-            initRegion();
-            if (myRegion->dutyCycle < 100) {
-                config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
-            }
-            //  Compare the entire string, we are sure of the length as a topic has never been set
-            if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
-                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
-            }
-        }
-        if (config.lora.region != myRegion->code) {
-            //  Region has changed so check whether there is a regulatory one we should be using instead.
-            //  Additionally as a side-effect, assume a new value under myRegion
-            initRegion();
-
-            if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
-            }
-
-            changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
-        }
 
         break;
     }
