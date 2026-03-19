@@ -31,7 +31,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     auto p = *pptr;
 
     // Suppress replies to senders we've replied to recently (12H window)
-    if (mp.decoded.want_response) {
+    if (mp.decoded.want_response && !isFromUs(&mp)) {
         const NodeNum sender = getFrom(&mp);
         const uint32_t now = mp.rx_time ? mp.rx_time : getTime();
         auto it = lastNodeInfoSeen.find(sender);
@@ -121,7 +121,10 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
     // Only apply suppression when actually replying to someone else's request, not for periodic broadcasts.
-    const bool isReplyingToExternalRequest = currentRequest && !isFromUs(currentRequest);
+    const bool isReplyingToExternalRequest = currentRequest &&
+                                             currentRequest->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                                             currentRequest->decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
+                                             currentRequest->decoded.want_response && !isFromUs(currentRequest);
 
     if (suppressReplyForCurrentRequest && isReplyingToExternalRequest) {
         LOG_DEBUG("Skip send NodeInfo since we heard the requester <12h ago");
