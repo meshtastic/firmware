@@ -266,10 +266,6 @@ void menuHandler::FrequencySlotPicker()
     optionsEnumArray[options++] = 0;
 
     // Calculate number of channels (copied from RadioInterface::applyModemConfig())
-    if (!myRegion) {
-        LOG_WARN("Region not set, cannot calculate number of channels");
-        return;
-    }
 
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
     double bw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, myRegion->wideLora)

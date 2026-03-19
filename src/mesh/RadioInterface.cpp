@@ -870,6 +870,10 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
 
         if (clamp) {
             loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora));
+
+            // Recompute slot width and number of slots based on the new bandwidth
+            freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (check_bw / 1000); // in MHz
+            numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
         } else {
             return false;
         }
@@ -902,10 +906,17 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             sendErrorNotification(err_string);
 
             if (clamp) {
-                if (uses_custom_channel_name) {
-                    loraConfig.channel_num = channelNameHashSlot;
-                } else if (loraConfig.use_preset) {
-                    loraConfig.channel_num = presetNameHashSlot;
+                if (uses_custom_channel_name && (loraConfig.channel_num == 0)) { // user choice unset, so use channel name hash
+                    loraConfig.channel_num =
+                        channelNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
+                } else if ((loraConfig.use_preset) &&
+                           (newRegion->profile->overrideSlot != 0)) { // user choice unset, so use preset
+                    loraConfig.channel_num =
+                        newRegion->profile->overrideSlot; // use the override slot specified by the region profile
+                    uses_default_frequency_slot = true;
+                } else if (loraConfig.use_preset) {                  // user choice unset, so use preset
+                    loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
+                    uses_default_frequency_slot = true;
                 } else {
                     uses_default_frequency_slot = true;
                 };
@@ -967,6 +978,10 @@ void RadioInterface::applyModemConfig()
             bw = bwCodeToKHz(loraConfig.bandwidth);
             sf = loraConfig.spread_factor;
             cr = loraConfig.coding_rate;
+        } else {
+            LOG_WARN("Invalid LoRa config settings, cannot apply requested modem config - falling back to %s defaults",
+                     newRegion->name);
+            clampConfigLora(loraConfig);
         }
     }
 
@@ -992,6 +1007,9 @@ void RadioInterface::applyModemConfig()
     float freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (bw / 1000); // in MHz
     uint32_t numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
 
+    // Calculate hash of channel name and preset name to pick a default frequency slot if user has not specified one.
+    // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to
+    // (numFreqSlots - 1).
     uint32_t presetNameHashSlot =
         hash(DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)) % numFreqSlots;
 
@@ -1005,16 +1023,16 @@ void RadioInterface::applyModemConfig()
         // If user has not manually specified a frequency slot, or has not specified one that is different than the default or the
         // override for the new region, then use the default or override. If the user has not specified one, but has specified a
         // custom channel name, then use the hash of that channel name to pick a frequency slot. Note that channel_num is actually
-        // (channel_num - 1), since modulus (%) returns values from 0 to (numFreqSlots - 1) NB: channel_num is also know as
-        // frequency slot but it's too late to fix now.
+        // (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to (numFreqSlots - 1).
+        // NB: channel_num is also know as frequency slot but it's too late to fix now.
         if (uses_default_frequency_slot) {
             // if there's an override slot, use that
             if (newRegion->profile->overrideSlot != 0) {
                 channel_num = newRegion->profile->overrideSlot - 1;
             } else {
-                channel_num = presetNameHashSlot - 1;
+                channel_num = presetNameHashSlot;
             }
-        } else {
+        } else { // use the manually defined one
             channel_num = loraConfig.channel_num - 1;
         }
 
