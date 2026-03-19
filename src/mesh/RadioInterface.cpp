@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <string.h>
 
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -875,9 +876,10 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     }
 
     const char *channelName = channels.getName(channels.getPrimaryIndex());
+    const char *presetNameDisplay =
+        DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
     uint32_t channelNameHashSlot = hash(channelName) % numFreqSlots;
-    uint32_t presetNameHashSlot =
-        hash(DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)) % numFreqSlots;
+    uint32_t presetNameHashSlot = hash(presetNameDisplay) % numFreqSlots;
 
     if (loraConfig.override_frequency == 0) {
 
@@ -890,8 +892,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
              ((uint32_t)(loraConfig.channel_num - 1) == presetNameHashSlot)); // user setting matches preset hash, no override
 
         // check if user setting different to preset name
-        uses_custom_channel_name =
-            (channelName != DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset));
+        uses_custom_channel_name = (strcmp(channelName, presetNameDisplay) != 0);
 
         if (loraConfig.channel_num > numFreqSlots) {
             snprintf(err_string, sizeof(err_string), "Channel number %u invalid for %s, max is %u", loraConfig.channel_num,
