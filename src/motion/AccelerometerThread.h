@@ -18,6 +18,7 @@
 #include "ICM20948Sensor.h"
 #include "LIS3DHSensor.h"
 #include "LSM6DS3Sensor.h"
+#include "LSM6DSOSensor.h"
 #include "MPU6050Sensor.h"
 #include "MotionSensor.h"
 #ifdef HAS_QMA6100P
@@ -102,6 +103,9 @@ class AccelerometerThread : public concurrency::OSThread
             break;
         case ScanI2C::DeviceType::LSM6DS3:
             sensor = new LSM6DS3Sensor(device);
+            break;
+        case ScanI2C::DeviceType::LSM6DSOX:
+            sensor = new LSM6DSOSensor(device);
             break;
 #ifdef HAS_STK8XXX
         case ScanI2C::DeviceType::STK8BAXX:

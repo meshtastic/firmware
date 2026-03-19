@@ -511,6 +511,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0x6A) {
                     type = LSM6DS3;
                     logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+                } else if (registerValue == 0x6C) {
+                    type = LSM6DSOX;
+                    logFoundDevice("LSM6DSOX", (uint8_t)addr.address);
                 } else {
                     type = QMI8658;
                     logFoundDevice("QMI8658", (uint8_t)addr.address);
@@ -548,7 +551,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 break;
 
-                SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
+            case LSM6DS3_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 1);
+                if (registerValue == 0x6A) {
+                    type = LSM6DS3;
+                    logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+                } else if (registerValue == 0x6C) {
+                    type = LSM6DSOX;
+                    logFoundDevice("LSM6DSOX", (uint8_t)addr.address);
+                } else {
+                    type = QMI8658;
+                    logFoundDevice("QMI8658", (uint8_t)addr.address);
+                }
+                break;
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700", (uint8_t)addr.address);
             case TCA9555_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 1);

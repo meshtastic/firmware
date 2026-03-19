@@ -64,6 +64,11 @@ int32_t DetectionSensorModule::runOnce()
     if (moduleConfig.detection_sensor.enabled == false)
         return disable();
 
+#ifdef DETECTION_SENSOR_DEFAULT_PIN
+    if (moduleConfig.detection_sensor.monitor_pin == 0)
+        moduleConfig.detection_sensor.monitor_pin = DETECTION_SENSOR_DEFAULT_PIN;
+#endif
+
     if (firstTime) {
 
 #ifdef DETECTION_SENSOR_EN
