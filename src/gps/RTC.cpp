@@ -12,7 +12,8 @@ uint32_t lastSetFromPhoneNtpOrGps = 0;
 static uint32_t lastTimeValidationWarning = 0;
 static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
-namespace {
+namespace
+{
 #if defined(UNIT_TEST)
 bool hasMockSystemTime = false;
 bool forceSystemTimeFallback = false;
@@ -41,7 +42,8 @@ static uint32_t
     timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
 static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
 
-namespace {
+namespace
+{
 RTCSetResult readFromSystemTimeFallback()
 {
     struct timeval tv;
