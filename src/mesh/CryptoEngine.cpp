@@ -1,6 +1,7 @@
 #include "CryptoEngine.h"
 // #include "NodeDB.h"
 #include "architecture.h"
+#include "endian.h"
 #include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -281,11 +282,16 @@ void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extr
 {
     memset(nonce, 0, sizeof(nonce));
 
-    // use memcpy to avoid breaking strict-aliasing
-    memcpy(nonce, &packetId, sizeof(uint64_t));
-    memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
-    if (extraNonce)
-        memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
+    // Protocol uses little-endian byte order for nonce fields.
+    // On big-endian hosts, swap before memcpy to match wire format.
+    uint64_t lePacketId = mesh_htole64(packetId);
+    uint32_t leFromNode = mesh_htole32(fromNode);
+    memcpy(nonce, &lePacketId, sizeof(uint64_t));
+    memcpy(nonce + sizeof(uint64_t), &leFromNode, sizeof(uint32_t));
+    if (extraNonce) {
+        uint32_t leExtra = mesh_htole32(extraNonce);
+        memcpy(nonce + sizeof(uint32_t), &leExtra, sizeof(uint32_t));
+    }
 }
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;

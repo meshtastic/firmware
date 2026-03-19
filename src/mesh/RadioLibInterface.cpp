@@ -1,5 +1,6 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
+#include "endian.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "SPILock.h"
@@ -474,7 +475,7 @@ void RadioLibInterface::handleReceiveInterrupt()
         } else {
             rxGood++;
             // altered packet with "from == 0" can do Remote Node Administration without permission
-            if (radioBuffer.header.from == 0) {
+            if (mesh_le32toh(radioBuffer.header.from) == 0) {
                 LOG_WARN("Ignore received packet without sender");
                 return;
             }
@@ -485,9 +486,9 @@ void RadioLibInterface::handleReceiveInterrupt()
             meshtastic_MeshPacket *mp = packetPool.allocZeroed();
 
             // Keep the assigned fields in sync with src/mqtt/MQTT.cpp:onReceiveProto
-            mp->from = radioBuffer.header.from;
-            mp->to = radioBuffer.header.to;
-            mp->id = radioBuffer.header.id;
+            mp->from = mesh_le32toh(radioBuffer.header.from);
+            mp->to = mesh_le32toh(radioBuffer.header.to);
+            mp->id = mesh_le32toh(radioBuffer.header.id);
             mp->channel = radioBuffer.header.channel;
             assert(HOP_MAX <= PACKET_FLAGS_HOP_LIMIT_MASK); // If hopmax changes, carefully check this code
             mp->hop_limit = radioBuffer.header.flags & PACKET_FLAGS_HOP_LIMIT_MASK;

@@ -1,5 +1,6 @@
 #include "RadioInterface.h"
 #include "Channels.h"
+#include "endian.h"
 #include "DisplayFormatters.h"
 #include "LLCC68Interface.h"
 #include "LR1110Interface.h"
@@ -1153,9 +1154,9 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     // LOG_DEBUG("Send queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag); // It should have already been encoded by now
 
-    radioBuffer.header.from = p->from;
-    radioBuffer.header.to = p->to;
-    radioBuffer.header.id = p->id;
+    radioBuffer.header.from = mesh_htole32(p->from);
+    radioBuffer.header.to = mesh_htole32(p->to);
+    radioBuffer.header.id = mesh_htole32(p->id);
     radioBuffer.header.channel = p->channel;
     radioBuffer.header.next_hop = p->next_hop;
     radioBuffer.header.relay_node = p->relay_node;
