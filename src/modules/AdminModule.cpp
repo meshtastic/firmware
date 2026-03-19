@@ -800,7 +800,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #if HAS_LORA_FEM
         // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
         if (loraFEMInterface.isLnaCanControl()) {
-            loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED);
+            loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
         } else if (config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
             // Hardware FEM does not support LNA control; normalize stored config to match actual capability
             LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
