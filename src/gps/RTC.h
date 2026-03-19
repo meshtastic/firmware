@@ -56,6 +56,13 @@ RTCSetResult readFromRTC();
 
 time_t gm_mktime(const struct tm *tm);
 
+#if defined(UNIT_TEST)
+void resetRTCStateForTests();
+void setRTCSystemTimeForTests(const struct timeval *tv);
+void clearRTCSystemTimeForTests();
+void setReadFromRTCUseSystemTimeForTests(bool enabled);
+#endif
+
 #define SEC_PER_DAY 86400
 #define SEC_PER_HOUR 3600
 #define SEC_PER_MIN 60
