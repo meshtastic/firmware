@@ -91,10 +91,24 @@ void FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
 {
     if (nodeDB)
         nodeDB->updateFrom(*p);
+
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        auto decodedState = perhapsDecode(const_cast<meshtastic_MeshPacket *>(p));
+        if (decodedState == DecodeState::DECODE_SUCCESS) {
+            // parsing was successful, print for debugging
+            printPacket("reprocessPacket(DUP)", p);
+        } else {
+            // Fatal decoding error, we can't do anything with this packet
+            LOG_WARN("FloodingRouter::reprocessPacket: Fatal decode error, can't check for traceroute");
+            return;
+        }
+    }
+
     if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+        p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP) {
         traceRouteModule->processUpgradedPacket(*p);
+    }
 #endif
 }
 
