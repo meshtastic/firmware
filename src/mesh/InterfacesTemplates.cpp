@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "LR11x0Interface.cpp"
 #include "LR11x0Interface.h"
 #include "SX126xInterface.cpp"
@@ -25,10 +26,12 @@ template class LR11x0Interface<LR1121>;
 template class SX126xInterface<STM32WLx>;
 #endif
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET
 #include "api/ethServerAPI.h"
-template class ServerAPI<EthernetClient>;
-template class APIServerPort<ethServerAPI, EthernetServer>;
+#if !(defined(ESP32) && HAS_WIFI)
+template class ServerAPI<MeshEthernetClient>;
+#endif
+template class APIServerPort<ethServerAPI, MeshEthernetServer>;
 #endif
 
 #if HAS_WIFI

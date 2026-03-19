@@ -21,7 +21,7 @@
 // "esp_pm_config_esp32_t is deprecated, please include esp_pm.h and use esp_pm_config_t instead"
 #include "esp32/pm.h"
 #include "esp_pm.h"
-#if HAS_WIFI
+#if HAS_WIFI || HAS_ETHERNET_ON_WIFI_STACK
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "rom/rtc.h"

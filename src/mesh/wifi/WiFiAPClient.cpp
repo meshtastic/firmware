@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if HAS_WIFI
+#if HAS_WIFI || (HAS_ETHERNET && defined(ETH_PHY_TYPE))
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
@@ -13,7 +13,7 @@
 #if HAS_ETHERNET && defined(USE_WS5500)
 #include <ETHClass2.h>
 #define ETH ETH2
-#endif // HAS_ETHERNET
+#endif
 
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
@@ -50,7 +50,7 @@ char ourHost[16];
 static unsigned long wifiReconnectStartMillis = 0;
 static bool wifiReconnectPending = false;
 
-bool APStartupComplete = 0;
+bool APStartupComplete = false;
 
 unsigned long lastrun_ntp = 0;
 
@@ -62,19 +62,31 @@ meshtastic::Syslog syslog(syslogClient);
 
 Periodic *wifiReconnect;
 
-#ifdef USE_WS5500
-// Startup Ethernet
+#if HAS_ETHERNET
+// Startup Ethernet (Universal: Native or SPI)
 bool initEthernet()
 {
-    if ((config.network.eth_enabled) && (ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
-                                                   ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN))) {
-        WiFi.onEvent(WiFiEvent);
+    bool ok = false;
+#if defined(ESP32) && defined(ETH_PHY_TYPE)
+    // Native ESP32 Ethernet (LAN8720, etc.)
+    LOG_INFO("Starting Native Ethernet...");
+    WiFi.onEvent(WiFiEvent);
+    ok = ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER, ETH_PHY_MDC, ETH_PHY_MDIO, ETH_PHY_TYPE, ETH_CLK_MODE);
+#elif defined(USE_WS5500)
+    // SPI Ethernet (W5500)
+    LOG_INFO("Starting W5500 Ethernet...");
+    WiFi.onEvent(WiFiEvent);
+    ok = ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST, ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN);
+#endif
+
+    if (ok) {
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
 #endif
         return true;
     }
 
+    LOG_ERROR("Ethernet failed to start");
     return false;
 }
 #endif
@@ -231,21 +243,20 @@ static int32_t reconnectWiFi()
 
 bool isWifiAvailable()
 {
-
     if (config.network.wifi_enabled && (config.network.wifi_ssid[0])) {
         return true;
-#ifdef USE_WS5500
-    } else if (config.network.eth_enabled) {
+    }
+#if HAS_ETHERNET
+    else if (config.network.eth_enabled) {
         return true;
+    }
 #endif
 #ifndef ARCH_PORTDUINO
-    } else if (WiFi.status() == WL_CONNECTED) {
-        // it's likely we have wifi now, but user intends to turn it off in config!
+    else if (WiFi.status() == WL_CONNECTED) {
         return true;
-#endif
-    } else {
-        return false;
     }
+#endif
+    return false;
 }
 
 // Disable WiFi
@@ -494,7 +505,10 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Ethernet disconnected");
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-#ifdef USE_WS5500
+#if defined(ETH_PHY_TYPE)
+        LOG_INFO("Ethernet Obtained IP address: %s", ETH.localIP().toString().c_str());
+        onNetworkConnected();
+#elif defined(USE_WS5500)
         LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
                  ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
         onNetworkConnected();
