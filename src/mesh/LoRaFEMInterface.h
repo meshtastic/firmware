@@ -22,7 +22,7 @@ class LoRaFEMInterface
 
   private:
     LoRaFEMType fem_type;
-    bool lna_enabled = false;
+    bool lna_enabled = true;
     bool lna_can_control = false;
 };
 extern LoRaFEMInterface loraFEMInterface;
