@@ -341,6 +341,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = DPS310;
                         break;
                     }
+                    if (type == DPS310) {
+                        break;
+                    }
                 default:
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1); // GET_ID
                     switch (registerValue) {
