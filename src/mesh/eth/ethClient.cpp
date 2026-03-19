@@ -56,6 +56,11 @@ static int32_t reconnectETH()
             }
 #endif
 
+            ethStartupComplete = false;
+#ifndef DISABLE_NTP
+            ntp_renew = 0;
+#endif
+
 #ifdef PIN_ETHERNET_RESET
             pinMode(PIN_ETHERNET_RESET, OUTPUT);
             digitalWrite(PIN_ETHERNET_RESET, LOW);
@@ -88,11 +93,6 @@ static int32_t reconnectETH()
 
             LOG_INFO("Ethernet reinitialized - IP %u.%u.%u.%u", Ethernet.localIP()[0], Ethernet.localIP()[1],
                      Ethernet.localIP()[2], Ethernet.localIP()[3]);
-
-            ethStartupComplete = false;
-#ifndef DISABLE_NTP
-            ntp_renew = 0;
-#endif
         }
 
         Ethernet.maintain();

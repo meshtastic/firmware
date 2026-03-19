@@ -3,7 +3,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-#define TCP_IDLE_TIMEOUT_MS (15 * 60 * 1000UL)
+static constexpr uint32_t TCP_IDLE_TIMEOUT_MS = 15 * 60 * 1000UL;
 
 template <typename T>
 ServerAPI<T>::ServerAPI(T &_client) : StreamAPI(&client), concurrency::OSThread("ServerAPI"), client(_client)
