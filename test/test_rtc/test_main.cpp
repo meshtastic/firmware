@@ -1,5 +1,6 @@
 #include "TestUtil.h"
 #include "gps/RTC.h"
+#include <sys/time.h>
 #include <time.h>
 #include <unity.h>
 

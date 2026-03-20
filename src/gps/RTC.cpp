@@ -41,6 +41,7 @@ RTCQuality getRTCQuality()
 static uint32_t
     timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
 static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
+static uint32_t lastSetMsec = 0;
 
 namespace
 {
@@ -50,7 +51,7 @@ RTCSetResult readFromSystemTimeFallback()
     if (readSystemTime(&tv)) {
         uint32_t now = millis();
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
-        LOG_DEBUG("Read RTC time as %ld", printableEpoch);
+        LOG_DEBUG("Read RTC time as %lu", static_cast<unsigned long>(printableEpoch));
         if (currentQuality == RTCQualityNone) {
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
@@ -63,8 +64,9 @@ RTCSetResult readFromSystemTimeFallback()
 } // namespace
 
 /**
- * Reads the current date and time from the RTC module and updates the system time.
- * @return True if the RTC was successfully read and the system time was updated, false otherwise.
+ * Reads the current date and time from the RTC or the system-time fallback.
+ * @return RTCSetResultSuccess when a time source is read successfully, even if
+ *         a higher-quality RTC source is intentionally preserved.
  */
 RTCSetResult readFromRTC()
 {
@@ -209,7 +211,6 @@ RTCSetResult readFromRTC()
  */
 RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 {
-    static uint32_t lastSetMsec = 0;
     uint32_t now = millis();
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
@@ -442,8 +443,10 @@ void resetRTCStateForTests()
     currentQuality = RTCQualityNone;
     lastSetFromPhoneNtpOrGps = 0;
     lastTimeValidationWarning = 0;
+    lastSetMsec = 0;
     timeStartMsec = 0;
     zeroOffsetSecs = 0;
+    forceSystemTimeFallback = false;
     clearRTCSystemTimeForTests();
 }
 
