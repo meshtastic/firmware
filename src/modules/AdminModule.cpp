@@ -1149,83 +1149,85 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
     meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
 
     if (req.decoded.want_response) {
+        const char *configName = "?";
         switch (configType) {
         case meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG:
-            LOG_INFO("Get module config: MQTT");
+            configName = "MQTT";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mqtt_tag;
             res.get_module_config_response.payload_variant.mqtt = moduleConfig.mqtt;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_SERIAL_CONFIG:
-            LOG_INFO("Get module config: Serial");
+            configName = "Serial";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_serial_tag;
             res.get_module_config_response.payload_variant.serial = moduleConfig.serial;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
-            LOG_INFO("Get module config: External Notification");
+            configName = "External Notification";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_external_notification_tag;
             res.get_module_config_response.payload_variant.external_notification = moduleConfig.external_notification;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
-            LOG_INFO("Get module config: Store & Forward");
+            configName = "Store & Forward";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_store_forward_tag;
             res.get_module_config_response.payload_variant.store_forward = moduleConfig.store_forward;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_RANGETEST_CONFIG:
-            LOG_INFO("Get module config: Range Test");
+            configName = "Range Test";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_range_test_tag;
             res.get_module_config_response.payload_variant.range_test = moduleConfig.range_test;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_TELEMETRY_CONFIG:
-            LOG_INFO("Get module config: Telemetry");
+            configName = "Telemetry";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_telemetry_tag;
             res.get_module_config_response.payload_variant.telemetry = moduleConfig.telemetry;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG:
-            LOG_INFO("Get module config: Canned Message");
+            configName = "Canned Message";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_canned_message_tag;
             res.get_module_config_response.payload_variant.canned_message = moduleConfig.canned_message;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_AUDIO_CONFIG:
-            LOG_INFO("Get module config: Audio");
+            configName = "Audio";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_audio_tag;
             res.get_module_config_response.payload_variant.audio = moduleConfig.audio;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG:
-            LOG_INFO("Get module config: Remote Hardware");
+            configName = "Remote Hardware";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_remote_hardware_tag;
             res.get_module_config_response.payload_variant.remote_hardware = moduleConfig.remote_hardware;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_NEIGHBORINFO_CONFIG:
-            LOG_INFO("Get module config: Neighbor Info");
+            configName = "Neighbor Info";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_neighbor_info_tag;
             res.get_module_config_response.payload_variant.neighbor_info = moduleConfig.neighbor_info;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_DETECTIONSENSOR_CONFIG:
-            LOG_INFO("Get module config: Detection Sensor");
+            configName = "Detection Sensor";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_detection_sensor_tag;
             res.get_module_config_response.payload_variant.detection_sensor = moduleConfig.detection_sensor;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_AMBIENTLIGHTING_CONFIG:
-            LOG_INFO("Get module config: Ambient Lighting");
+            configName = "Ambient Lighting";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
             res.get_module_config_response.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG:
-            LOG_INFO("Get module config: Paxcounter");
+            configName = "Paxcounter";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_STATUSMESSAGE_CONFIG:
-            LOG_INFO("Get module config: StatusMessage");
+            configName = "StatusMessage";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_statusmessage_tag;
             res.get_module_config_response.payload_variant.statusmessage = moduleConfig.statusmessage;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_TRAFFICMANAGEMENT_CONFIG:
-            LOG_INFO("Get module config: Traffic Management");
+            configName = "Traffic Management";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             res.get_module_config_response.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
         }
+        LOG_INFO("Get module config: %s", configName);
 
         // NOTE: The phone app needs to know the ls_secsvalue so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
@@ -1408,23 +1410,17 @@ void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uic
 void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 {
     // Validate ham parameters before setting since this would bypass validation in the owner struct
-    if (*p.call_sign) {
-        const char *start = p.call_sign;
-        // Skip all whitespace
-        while (*start && isspace((unsigned char)*start))
-            start++;
-        if (*start == '\0') {
-            LOG_WARN("Rejected ham call_sign: must contain at least 1 non-whitespace character");
-            return;
-        }
-    }
-    if (*p.short_name) {
-        const char *start = p.short_name;
-        while (*start && isspace((unsigned char)*start))
-            start++;
-        if (*start == '\0') {
-            LOG_WARN("Rejected ham short_name: must contain at least 1 non-whitespace character");
-            return;
+    const char *fieldsToCheck[] = {p.call_sign, p.short_name};
+    const char *fieldNames[] = {"call_sign", "short_name"};
+    for (int i = 0; i < 2; i++) {
+        if (*fieldsToCheck[i]) {
+            const char *start = fieldsToCheck[i];
+            while (*start && isspace((unsigned char)*start))
+                start++;
+            if (*start == '\0') {
+                LOG_WARN("Rejected ham %s: must contain at least 1 non-whitespace character", fieldNames[i]);
+                return;
+            }
         }
     }
 
