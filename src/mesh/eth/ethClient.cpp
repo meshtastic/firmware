@@ -6,6 +6,9 @@
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
 #include "target_specific.h"
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+#include "mesh/eth/ethOTA.h"
+#endif
 #ifdef WIZNET_5500_EVB_PICO2
 #include <Ethernet.h> // arduino-libraries/Ethernet — supports W5100/W5200/W5500
 #else
@@ -141,6 +144,10 @@ static int32_t reconnectETH()
             }
 #endif
 
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+            initEthOTA();
+#endif
+
             ethStartupComplete = true;
         }
     }
@@ -164,6 +171,10 @@ static int32_t reconnectETH()
             ntp_renew = millis() + 300 * 1000; // failure, retry every 5 minutes
         }
     }
+#endif
+
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+    ethOTALoop();
 #endif
 
     return 5000; // every 5 seconds
