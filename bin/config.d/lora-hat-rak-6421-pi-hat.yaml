@@ -12,4 +12,4 @@ Lora:
   DIO2_AS_RF_SWITCH: true
   spidev: spidev0.0
   # GPIO_DETECT_PA: 13
-  TX_GAIN_LORA: [8]
+  TX_GAIN_LORA: [9, 9, 10, 11, 9, 8, 9, 10, 10, 10, 11, 12, 12, 12, 12, 12, 12, 12, 12, 10, 9, 8]

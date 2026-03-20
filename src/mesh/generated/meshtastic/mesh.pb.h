@@ -304,6 +304,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TBEAM_BPF = 124,
     /* LilyGo T-Mini E-paper S3 Kit */
     meshtastic_HardwareModel_MINI_EPAPER_S3 = 125,
+    /* LilyGo T-Display S3 Pro LR1121 */
+    meshtastic_HardwareModel_TDISPLAY_S3_PRO = 126,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

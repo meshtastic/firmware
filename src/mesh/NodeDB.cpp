@@ -322,9 +322,9 @@ NodeDB::NodeDB()
     // config.network.enabled_protocols = meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
 
     // If we are setup to broadcast on any default channel slot (with default frequency slot semantics),
-    // ensure that the telemetry intervals are coerced to the minimum value of 30 minutes or more.
+    // ensure that the telemetry intervals are coerced to the role-aware minimum value.
     if (channels.hasDefaultChannel()) {
-        LOG_DEBUG("Coerce telemetry to min of 30 minutes on defaults");
+        LOG_DEBUG("Coerce telemetry to role-aware minimum on defaults");
         moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.device_update_interval, min_default_telemetry_interval_secs);
         moduleConfig.telemetry.environment_update_interval = Default::getConfiguredOrMinimumValue(
@@ -347,7 +347,7 @@ NodeDB::NodeDB()
         }
     }
     if (positionUsesDefaultChannel) {
-        LOG_DEBUG("Coerce position broadcasts to min of 1 hour and smart broadcast min of 5 minutes on defaults");
+        LOG_DEBUG("Coerce position broadcasts to role-aware minimum and smart broadcast min of 5 minutes on defaults");
         config.position.position_broadcast_secs =
             Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, min_default_broadcast_interval_secs);
         config.position.broadcast_smart_minimum_interval_secs = Default::getConfiguredOrMinimumValue(
@@ -569,7 +569,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
 #if HAS_LORA_FEM
-    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED;
+    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED;
 #else
     config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
 #endif
@@ -1299,8 +1299,12 @@ void NodeDB::loadFromDisk()
     // Coerce LoRa config fields derived from presets while bootstrapping.
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
     if (config.has_lora && config.lora.use_preset) {
-        RadioInterface::bootstrapLoRaConfigFromPreset(config.lora);
+        RadioInterface::clampConfigLora(config.lora);
     }
+
+#if defined(USERPREFS_LORA_TX_DISABLED) && USERPREFS_LORA_TX_DISABLED
+    config.lora.tx_enabled = false;
+#endif
 
     if (backupSecurity.private_key.size > 0) {
         LOG_DEBUG("Restoring backup of security config");
@@ -1646,6 +1650,25 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
     return delta;
 }
 
+HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p)
+{
+    // Guard against invalid values.
+    if (p.hop_start < p.hop_limit)
+        return HopStartStatus::INVALID;
+
+    if (p.hop_start == 0) {
+        // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
+        // bitfield that is always present. Use the presence of the bitfield to determine if the origin's firmware
+        // version is guaranteed to have hop_start populated. Note that this can only be done for decoded packets as
+        // the bitfield is encrypted under the channel encryption key.
+        if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.has_bitfield)
+            return HopStartStatus::VALID;
+        return HopStartStatus::MISSING_OR_UNKNOWN;
+    }
+
+    return HopStartStatus::VALID;
+}
+
 int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown)
 {
     // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
@@ -1682,6 +1705,22 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 
 #include "MeshModule.h"
 #include "Throttle.h"
+
+static constexpr uint32_t HOPSTART_DROP_LOG_INTERVAL_MS = 15000;
+
+void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context)
+{
+    static uint32_t lastLogMs = 0;
+    if (Throttle::isWithinTimespanMs(lastLogMs, HOPSTART_DROP_LOG_INTERVAL_MS)) {
+        return;
+    }
+    lastLogMs = millis();
+    const bool decoded = (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag);
+    const bool hasBitfield = decoded && p.decoded.has_bitfield;
+    LOG_DEBUG(
+        "Drop packet (%s): hop_start invalid/missing (from=0x%x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)",
+        context ? context : "unknown", p.from, p.id, p.hop_start, p.hop_limit, decoded, hasBitfield);
+}
 
 /** Update position info for this node based on received position data
  */

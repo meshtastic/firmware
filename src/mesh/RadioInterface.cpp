@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <string.h>
 
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -32,10 +33,32 @@
 #include "STM32WLE5JCInterface.h"
 #endif
 
-#define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,    MODEM_PRESET_END};
+
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, MODEM_PRESET_END};
+
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                                                                         MODEM_PRESET_END};
+
+// Region profiles: bundle preset list + regulatory parameters shared across regions
+// presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle, override slot
+const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 0, 0, 0};
+const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 0, 0, 0};
+const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 0, 0, 0};
+
+#define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr)                   \
     {                                                                                                                            \
-        meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, \
-            frequency_switching, wide_lora, #name                                                                                \
+        meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching,      \
+            wide_lora, &profile_ptr, #name                                                                                       \
     }
 
 const RegionInfo regions[] = {
@@ -43,7 +66,7 @@ const RegionInfo regions[] = {
         https://link.springer.com/content/pdf/bbm%3A978-1-4842-4357-2%2F1.pdf
         https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
     */
-    RDEF(US, 902.0f, 928.0f, 100, 0, 30, true, false, false),
+    RDEF(US, 902.0f, 928.0f, 100, 30, false, false, PROFILE_STD),
 
     /*
         EN300220 ETSI V3.2.1 [Table B.1, Item H, p. 21]
@@ -51,8 +74,7 @@ const RegionInfo regions[] = {
         https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.02.01_60/en_30022002v030201p.pdf
         FIXME: https://github.com/meshtastic/firmware/issues/3371
      */
-    RDEF(EU_433, 433.0f, 434.0f, 10, 0, 10, true, false, false),
-
+    RDEF(EU_433, 433.0f, 434.0f, 10, 10, false, false, PROFILE_STD),
     /*
        https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
        https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
@@ -67,33 +89,33 @@ const RegionInfo regions[] = {
        AFA) to avoid a duty cycle. (Please refer to line P page 22 of this document.)
        https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.01.01_60/en_30022002v030101p.pdf
      */
-    RDEF(EU_868, 869.4f, 869.65f, 10, 0, 27, false, false, false),
+    RDEF(EU_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_EU868),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(CN, 470.0f, 510.0f, 100, 0, 19, true, false, false),
+    RDEF(CN, 470.0f, 510.0f, 100, 19, false, false, PROFILE_STD),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
         https://www.arib.or.jp/english/html/overview/doc/5-STD-T108v1_5-E1.pdf
         https://qiita.com/ammo0613/items/d952154f1195b64dc29f
      */
-    RDEF(JP, 920.5f, 923.5f, 100, 0, 13, true, false, false),
+    RDEF(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_STD),
 
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
         https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
         Also used in Brazil.
      */
-    RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false, false),
+    RDEF(ANZ, 915.0f, 928.0f, 100, 30, false, false, PROFILE_STD),
 
     /*
         433.05 - 434.79 MHz, 25mW EIRP max, No duty cycle restrictions
         AU Low Interference Potential https://www.acma.gov.au/licences/low-interference-potential-devices-lipd-class-licence
         NZ General User Radio Licence for Short Range Devices https://gazette.govt.nz/notice/id/2022-go3100
      */
-    RDEF(ANZ_433, 433.05f, 434.79f, 100, 0, 14, true, false, false),
+    RDEF(ANZ_433, 433.05f, 434.79f, 100, 14, false, false, PROFILE_STD),
 
     /*
         https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
@@ -101,13 +123,13 @@ const RegionInfo regions[] = {
         Note:
             - We do LBT, so 100% is allowed.
      */
-    RDEF(RU, 868.7f, 869.2f, 100, 0, 20, true, false, false),
+    RDEF(RU, 868.7f, 869.2f, 100, 20, false, false, PROFILE_STD),
 
     /*
         https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulId=53943&efYd=0
         https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
      */
-    RDEF(KR, 920.0f, 923.0f, 100, 0, 23, true, false, false),
+    RDEF(KR, 920.0f, 923.0f, 100, 23, false, false, PROFILE_STD),
 
     /*
         Taiwan, 920-925Mhz, limited to 0.5W indoor or coastal, 1.0W outdoor.
@@ -115,42 +137,38 @@ const RegionInfo regions[] = {
         https://www.ncc.gov.tw/english/files/23070/102_5190_230703_1_doc_C.PDF
         https://gazette.nat.gov.tw/egFront/e_detail.do?metaid=147283
      */
-    RDEF(TW, 920.0f, 925.0f, 100, 0, 27, true, false, false),
+    RDEF(TW, 920.0f, 925.0f, 100, 27, false, false, PROFILE_STD),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(IN, 865.0f, 867.0f, 100, 0, 30, true, false, false),
+    RDEF(IN, 865.0f, 867.0f, 100, 30, false, false, PROFILE_STD),
 
     /*
          https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
          https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
       */
-    RDEF(NZ_865, 864.0f, 868.0f, 100, 0, 36, true, false, false),
+    RDEF(NZ_865, 864.0f, 868.0f, 100, 36, false, false, PROFILE_STD),
 
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
     */
-    RDEF(TH, 920.0f, 925.0f, 100, 0, 16, true, false, false),
+    RDEF(TH, 920.0f, 925.0f, 100, 16, false, false, PROFILE_STD),
 
     /*
         433,05-434,7 Mhz 10 mW
-        https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
-    */
-    RDEF(UA_433, 433.0f, 434.7f, 10, 0, 10, true, false, false),
-
-    /*
         868,0-868,6 Mhz 25 mW
         https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
     */
-    RDEF(UA_868, 868.0f, 868.6f, 1, 0, 14, true, false, false),
+    RDEF(UA_433, 433.0f, 434.7f, 10, 10, false, false, PROFILE_STD),
+    RDEF(UA_868, 868.0f, 868.6f, 1, 14, false, false, PROFILE_STD),
 
     /*
         Malaysia
         433 - 435 MHz at 100mW, no restrictions.
         https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
     */
-    RDEF(MY_433, 433.0f, 435.0f, 100, 0, 20, true, false, false),
+    RDEF(MY_433, 433.0f, 435.0f, 100, 20, false, false, PROFILE_STD),
 
     /*
         Malaysia
@@ -159,14 +177,14 @@ const RegionInfo regions[] = {
         Frequency hopping is used for 919 - 923 MHz.
         https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
     */
-    RDEF(MY_919, 919.0f, 924.0f, 100, 0, 27, true, true, false),
+    RDEF(MY_919, 919.0f, 924.0f, 100, 27, true, false, PROFILE_STD),
 
     /*
         Singapore
         SG_923 Band 30d: 917 - 925 MHz at 100mW, no restrictions.
         https://www.imda.gov.sg/-/media/imda/files/regulation-licensing-and-consultations/ict-standards/telecommunication-standards/radio-comms/imdatssrd.pdf
     */
-    RDEF(SG_923, 917.0f, 925.0f, 100, 0, 20, true, false, false),
+    RDEF(SG_923, 917.0f, 925.0f, 100, 20, false, false, PROFILE_STD),
 
     /*
         Philippines
@@ -176,8 +194,9 @@ const RegionInfo regions[] = {
                 https://github.com/meshtastic/firmware/issues/4948#issuecomment-2394926135
     */
 
-    RDEF(PH_433, 433.0f, 434.7f, 100, 0, 10, true, false, false), RDEF(PH_868, 868.0f, 869.4f, 100, 0, 14, true, false, false),
-    RDEF(PH_915, 915.0f, 918.0f, 100, 0, 24, true, false, false),
+    RDEF(PH_433, 433.0f, 434.7f, 100, 10, false, false, PROFILE_STD),
+    RDEF(PH_868, 868.0f, 869.4f, 100, 14, false, false, PROFILE_STD),
+    RDEF(PH_915, 915.0f, 918.0f, 100, 24, false, false, PROFILE_STD),
 
     /*
         Kazakhstan
@@ -185,37 +204,38 @@ const RegionInfo regions[] = {
                 863 - 868 MHz <25 mW EIRP, 500kHz channels allowed, must not be used at airfields
                                 https://github.com/meshtastic/firmware/issues/7204
     */
-    RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false),
-    RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, false),
+    RDEF(KZ_433, 433.075f, 434.775f, 100, 10, false, false, PROFILE_STD),
+    RDEF(KZ_863, 863.0f, 868.0f, 100, 30, false, false, PROFILE_STD),
 
     /*
         Nepal
         865 MHz to 868 MHz frequency band for IoT (Internet of Things), M2M (Machine-to-Machine), and smart metering use,
        specifically in non-cellular mode. https://www.nta.gov.np/uploads/contents/Radio-Frequency-Policy-2080-English.pdf
     */
-    RDEF(NP_865, 865.0f, 868.0f, 100, 0, 30, true, false, false),
+    RDEF(NP_865, 865.0f, 868.0f, 100, 30, false, false, PROFILE_STD),
 
     /*
         Brazil
         902 - 907.5 MHz , 1W power limit, no duty cycle restrictions
         https://github.com/meshtastic/firmware/issues/3741
     */
-    RDEF(BR_902, 902.0f, 907.5f, 100, 0, 30, true, false, false),
+    RDEF(BR_902, 902.0f, 907.5f, 100, 30, false, false, PROFILE_STD),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
-    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
+    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_STD),
 
     /*
         This needs to be last. Same as US.
     */
-    RDEF(UNSET, 902.0f, 928.0f, 100, 0, 30, true, false, false)
+    RDEF(UNSET, 902.0f, 928.0f, 100, 30, false, false, PROFILE_UNDEF)
 
 };
 
 const RegionInfo *myRegion;
 bool RadioInterface::uses_default_frequency_slot = true;
+bool RadioInterface::uses_custom_channel_name = false;
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 
@@ -501,44 +521,13 @@ void initRegion()
     myRegion = r;
 }
 
-void RadioInterface::bootstrapLoRaConfigFromPreset(meshtastic_Config_LoRaConfig &loraConfig)
+const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
 {
-    if (!loraConfig.use_preset) {
-        return;
-    }
-
-    // Find region info to determine whether "wide" LoRa is permitted (2.4 GHz uses wider bandwidth codes).
     const RegionInfo *r = regions;
-    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != loraConfig.region; r++)
+    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != code; r++)
         ;
-
-    const bool regionWideLora = r->wideLora;
-
-    float bwKHz = 0;
-    uint8_t sf = 0;
-    uint8_t cr = 0;
-    modemPresetToParams(loraConfig.modem_preset, regionWideLora, bwKHz, sf, cr);
-
-    // If selected preset requests a bandwidth larger than the region span, fall back to LONG_FAST.
-    if (r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && (r->freqEnd - r->freqStart) < (bwKHz / 1000.0f)) {
-        loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-        modemPresetToParams(loraConfig.modem_preset, regionWideLora, bwKHz, sf, cr);
-    }
-
-    loraConfig.bandwidth = bwKHzToCode(bwKHz);
-    loraConfig.spread_factor = sf;
+    return r;
 }
-
-/**
- * ## LoRaWAN for North America
-
-LoRaWAN defines 64, 125 kHz channels from 902.3 to 914.9 MHz increments.
-
-The maximum output power for North America is +30 dBM.
-
-The band is from 902 to 928 MHz. It mentions channel number and its respective channel frequency. All the 13 channels are
-separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts at 903.08 MHz center frequency.
-*/
 
 uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool received)
 {
@@ -749,7 +738,7 @@ void RadioInterface::saveFreq(float freq)
 }
 
 /**
- * Save our channel for later reuse.
+ * Save our frequency slot (aka channel) for later reuse.
  */
 void RadioInterface::saveChannelNum(uint32_t channel_num)
 {
@@ -773,112 +762,296 @@ uint32_t RadioInterface::getChannelNum()
 }
 
 /**
+ * Send an error-level client notification. Safe to call when service is null (e.g. in tests).
+ */
+static void sendErrorNotification(const char *msg)
+{
+    if (!service)
+        return;
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
+    cn->level = meshtastic_LogRecord_Level_ERROR;
+    snprintf(cn->message, sizeof(cn->message), "%s", msg);
+    service->sendClientNotification(cn);
+}
+
+/**
+ * Checks if a region is valid for the current settings.
+ * Returns false if not compatible.
+ */
+bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig)
+{
+    const RegionInfo *newRegion = getRegion(loraConfig.region);
+
+    // If you are not licensed, you can't use ham regions.
+    if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {
+        char err_string[160];
+        snprintf(err_string, sizeof(err_string), "Region %s requires licensed mode", newRegion->name);
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        sendErrorNotification(err_string);
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Internal helper: validate or clamp a LoRa config against its region.
+ * When clamp==false, returns false on first error (pure validation).
+ * When clamp==true, fixes invalid settings in-place and returns true.
+ */
+bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp)
+{
+    char err_string[160];
+    float check_bw;
+
+    const RegionInfo *newRegion = getRegion(loraConfig.region);
+
+    const char *presetName = DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+
+    // Check preset validity (only when use_preset is true)
+    if (loraConfig.use_preset) {
+        check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+
+        bool preset_valid = false;
+        for (size_t i = 0; i < newRegion->getNumPresets(); i++) {
+            if (loraConfig.modem_preset == newRegion->getAvailablePresets()[i]) {
+                preset_valid = true;
+                break;
+            }
+        }
+        if (!preset_valid) {
+            const char *defaultName = DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true);
+            if (clamp) {
+                snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s, using %s", presetName, newRegion->name,
+                         defaultName);
+            } else {
+                snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s", presetName, newRegion->name);
+            }
+            LOG_ERROR("%s", err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            sendErrorNotification(err_string);
+
+            if (clamp) {
+                loraConfig.modem_preset = newRegion->getDefaultPreset();
+                check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+            } else {
+                return false;
+            }
+        }
+    } else {
+        check_bw = bwCodeToKHz(loraConfig.bandwidth);
+    }
+
+    // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
+    // spacing = gap between slots (0 for continuous spectrum) and at the beginning of the band
+    // padding = gap at the beginning and end of the slots (0 for no padding)
+    float freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (check_bw / 1000); // in MHz
+    uint32_t numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
+
+    // Check if the region supports the requested bandwidth
+    if ((newRegion->freqEnd - newRegion->freqStart) < freqSlotWidth) {
+        const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
+        snprintf(err_string, sizeof(err_string), "%s span %.0fkHz < requested %.0fkHz", newRegion->name, regionSpanKHz, check_bw);
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        sendErrorNotification(err_string);
+
+        if (clamp) {
+            loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora));
+            check_bw = bwCodeToKHz(loraConfig.bandwidth);
+
+            // Recompute slot width and number of slots based on the new bandwidth
+            freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (check_bw / 1000); // in MHz
+            numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
+        } else {
+            return false;
+        }
+    }
+
+    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    const char *presetNameDisplay =
+        DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+    uint32_t channelNameHashSlot = hash(channelName) % numFreqSlots;
+    uint32_t presetNameHashSlot = hash(presetNameDisplay) % numFreqSlots;
+
+    if (loraConfig.override_frequency == 0) {
+
+        // Check if we use the default frequency slot
+        uses_default_frequency_slot =
+            (loraConfig.channel_num == 0) || // user choice unset, no frequency override, so use default
+            (newRegion->profile->overrideSlot != 0 &&
+             loraConfig.channel_num == newRegion->profile->overrideSlot) || // user setting matches override
+            ((newRegion->profile->overrideSlot == 0) &&
+             ((uint32_t)(loraConfig.channel_num - 1) == presetNameHashSlot)); // user setting matches preset hash, no override
+
+        // check if user setting different to preset name
+        uses_custom_channel_name = (strcmp(channelName, presetNameDisplay) != 0);
+
+        if (loraConfig.channel_num > numFreqSlots) {
+            snprintf(err_string, sizeof(err_string), "Channel number %u invalid for %s, max is %u", loraConfig.channel_num,
+                     newRegion->name, numFreqSlots);
+            LOG_ERROR("%s", err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            sendErrorNotification(err_string);
+
+            if (clamp) {
+                if (uses_custom_channel_name) { // clamp to channel name hash
+                    loraConfig.channel_num =
+                        channelNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
+                } else if ((loraConfig.use_preset) && (newRegion->profile->overrideSlot != 0)) { // clamp to preset override slot
+                    loraConfig.channel_num =
+                        newRegion->profile->overrideSlot; // use the override slot specified by the region profile
+                    uses_default_frequency_slot = true;
+                } else if (loraConfig.use_preset) {                  // clamp to preset slot
+                    loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
+                    uses_default_frequency_slot = true;
+                } else { // if not using preset, and no custom channel name, just clamp to default anyway
+                    uses_default_frequency_slot = true;
+                };
+            } else {
+                return false;
+            }
+        } // end of channel number check
+    } else {
+        // if we have a frequency override, we ignore the channel number and just use the override frequency
+        snprintf(err_string, sizeof(err_string), "Frequency override in place, using %.3f", loraConfig.override_frequency);
+    }
+    return true;
+}
+
+bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig)
+{
+    auto copy = loraConfig;
+    return checkOrClampConfigLora(copy, false);
+}
+
+void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
+{
+    checkOrClampConfigLora(loraConfig, true);
+}
+
+/**
  * Pull our channel settings etc... from protobufs to the dumb interface settings
+ * Note: this must be given only settings which have been validated or clamped!
  */
 void RadioInterface::applyModemConfig()
 {
     // Set up default configuration
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
-    bool validConfig = false; // We need to check for a valid configuration
-    while (!validConfig) {
-        if (loraConfig.use_preset) {
-            modemPresetToParams(loraConfig.modem_preset, myRegion->wideLora, bw, sf, cr);
-            if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate != cr) {
-                cr = loraConfig.coding_rate;
-                LOG_INFO("Using custom Coding Rate %u", cr);
-            }
-        } else {
-            sf = loraConfig.spread_factor;
+    const RegionInfo *newRegion = getRegion(loraConfig.region);
+    myRegion = newRegion;
+
+    if (loraConfig.use_preset) {
+        if (!validateConfigLora(loraConfig)) {
+            loraConfig.modem_preset = newRegion->getDefaultPreset();
+        }
+        uint8_t newcr;
+        modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
+        // If custom CR is being used already, check if the new preset is higher
+        if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < newcr) {
+            cr = newcr;
+            LOG_INFO("Default Coding Rate is higher than custom setting, using %u", cr);
+        }
+        // If the custom CR is higher than the preset, use it
+        else if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate > newcr) {
             cr = loraConfig.coding_rate;
-            bw = bwCodeToKHz(loraConfig.bandwidth);
-        }
-
-        if ((myRegion->freqEnd - myRegion->freqStart) < bw / 1000) {
-            const float regionSpanKHz = (myRegion->freqEnd - myRegion->freqStart) * 1000.0f;
-            const float requestedBwKHz = bw;
-            const bool isWideRequest = requestedBwKHz >= 499.5f; // treat as 500 kHz preset
-            const char *presetName =
-                DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
-
-            char err_string[160];
-            if (isWideRequest) {
-                snprintf(err_string, sizeof(err_string), "%s region too narrow for 500kHz preset (%s). Falling back to LongFast.",
-                         myRegion->name, presetName);
-            } else {
-                snprintf(err_string, sizeof(err_string), "%s region span %.0fkHz < requested %.0fkHz. Falling back to LongFast.",
-                         myRegion->name, regionSpanKHz, requestedBwKHz);
-            }
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-            cn->level = meshtastic_LogRecord_Level_ERROR;
-            snprintf(cn->message, sizeof(cn->message), "%s", err_string);
-            service->sendClientNotification(cn);
-
-            // Set to default modem preset
-            loraConfig.use_preset = true;
-            loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+            LOG_INFO("Using custom Coding Rate %u", cr);
         } else {
-            validConfig = true;
+            cr = loraConfig.coding_rate;
         }
+
+    } else { // if not using preset, then just use the custom settings
+        if (validateConfigLora(loraConfig)) {
+        } else {
+            LOG_WARN("Invalid LoRa config settings, cannot apply requested modem config - falling back to %s defaults",
+                     newRegion->name);
+            clampConfigLora(loraConfig);
+        }
+        bw = bwCodeToKHz(loraConfig.bandwidth);
+        sf = loraConfig.spread_factor;
+        cr = loraConfig.coding_rate;
     }
 
     power = loraConfig.tx_power;
 
-    if ((power == 0) || ((power > myRegion->powerLimit) && !devicestate.owner.is_licensed))
-        power = myRegion->powerLimit;
+    if ((power == 0) || ((power > newRegion->powerLimit) && !devicestate.owner.is_licensed))
+        power = newRegion->powerLimit;
 
     if (power == 0)
-        power = 17; // Default to this power level if we don't have a valid regional power limit (powerLimit of myRegion defaults
+        power = 17; // Default to this power level if we don't have a valid regional power limit (powerLimit of newRegion defaults
                     // to 0, currently no region has an actual power limit of 0 [dBm] so we can assume regions which have this
                     // variable set to 0 don't have a valid power limit)
 
     // Set final tx_power back onto config
     loraConfig.tx_power = (int8_t)power; // cppcheck-suppress assignmentAddressToInteger
 
-    // Calculate the number of channels
-    uint32_t numChannels = floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000)));
+    uint32_t channel_num;
+    float freq;
 
-    // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
-    // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
-    uint32_t channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
+    // Calculate number of frequency slots (aka Channels):
+    // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
+    // padding = gap at the beginning and end of the channel (0 for no padding)
+    float freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (bw / 1000); // in MHz
+    uint32_t numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
 
-    // Check if we use the default frequency slot
-    RadioInterface::uses_default_frequency_slot =
-        channel_num ==
-        hash(DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset)) % numChannels;
-
-    // Old frequency selection formula
-    // float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);
-
-    // New frequency selection formula
-    float freq = myRegion->freqStart + (bw / 2000) + (channel_num * (bw / 1000));
+    // Calculate hash of channel name and preset name to pick a default frequency slot if user has not specified one.
+    // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to
+    // (numFreqSlots - 1).
+    uint32_t presetNameHashSlot =
+        hash(DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)) % numFreqSlots;
 
     // override if we have a verbatim frequency
     if (loraConfig.override_frequency) {
         freq = loraConfig.override_frequency;
         channel_num = -1;
+        uses_default_frequency_slot = false;
+    } else {
+
+        // If user has not manually specified a frequency slot, or has not specified one that is different than the default or the
+        // override for the new region, then use the default or override. If the user has not specified one, but has specified a
+        // custom channel name, then use the hash of that channel name to pick a frequency slot. Note that channel_num is actually
+        // (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to (numFreqSlots - 1).
+        // NB: channel_num is also know as frequency slot but it's too late to fix now.
+        if (uses_default_frequency_slot) {
+            // if there's an override slot, use that
+            if (newRegion->profile->overrideSlot != 0) {
+                channel_num = newRegion->profile->overrideSlot - 1;
+            } else {
+                channel_num = presetNameHashSlot;
+            }
+        } else { // use the manually defined one
+            channel_num = loraConfig.channel_num - 1;
+        }
+
+        // Calculate frequency: freqStart is band edge, add half bandwidth (plus optional padding) to get middle of first channel
+        // subsequent channels are spaced by freqSlotWidth
+        freq = newRegion->freqStart + (bw / 2000) + newRegion->profile->padding + (channel_num * freqSlotWidth); // in MHz
     }
 
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
+    const char *channelName = channels.getName(channels.getPrimaryIndex());
 
     slotTimeMsec = computeSlotTimeMsec();
     preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
 
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f", freq, loraConfig.frequency_offset);
-    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d", myRegion->name, channelName, loraConfig.modem_preset,
+    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d", newRegion->name, channelName, loraConfig.modem_preset,
              channel_num, power);
-    LOG_INFO("myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f MHz)", myRegion->freqStart, myRegion->freqEnd,
-             myRegion->freqEnd - myRegion->freqStart);
-    LOG_INFO("numChannels: %d x %.3fkHz", numChannels, bw);
+    LOG_INFO("newRegion->freqStart -> newRegion->freqEnd: %f -> %f (%f MHz)", newRegion->freqStart, newRegion->freqEnd,
+             newRegion->freqEnd - newRegion->freqStart);
+    LOG_INFO("numFreqSlots: %d x %.3fkHz", numFreqSlots, bw);
+    if (newRegion->profile->overrideSlot != 0) {
+        LOG_INFO("Using region override slot: %d", newRegion->profile->overrideSlot);
+    }
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
     LOG_INFO("Slot time: %u msec, preamble time: %u msec", slotTimeMsec, preambleTimeMsec);
-}
+} // end of applyModemConfig
 
 /** Slottime is the time to detect a transmission has started, consisting of:
   - CAD duration;
