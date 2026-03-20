@@ -6,7 +6,8 @@
 #include "configuration.h"
 
 // Sentinel marking the end of a modem preset array
-#define MODEM_PRESET_END ((meshtastic_Config_LoRaConfig_ModemPreset)0xFF)
+static constexpr meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
+    static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(0xFF);
 
 // Region profile: bundles the preset list with regulatory parameters shared across regions
 struct RegionProfile {
