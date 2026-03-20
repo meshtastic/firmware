@@ -154,7 +154,7 @@ No longer populated on PCB
  */
 #define GPS_UC6580
 #define GPS_BAUDRATE 115200
-#define PIN_GPS_RESET (32 + 14) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
+#define PIN_GPS_RESET (32 + 14) // An output to reset UC6580 GPS. As per datasheet, low for > 100ms will reset the UC6580
 #define GPS_RESET_MODE LOW
 #define PIN_GPS_EN (0 + 6)
 #define GPS_EN_ACTIVE LOW
