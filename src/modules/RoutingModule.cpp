@@ -20,9 +20,11 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
         if ((nodeDB->getMeshNode(mp.from) == NULL || !nodeDB->getMeshNode(mp.from)->has_user) &&
             (nodeDB->getMeshNode(mp.to) == NULL || !nodeDB->getMeshNode(mp.to)->has_user))
             return false;
-    } else if (owner.is_licensed && nodeDB->getLicenseStatus(mp.from) != UserLicenseStatus::Licensed) {
-        // Don't let licensed users to rebroadcast packets from unknown or unlicensed users
-        LOG_DEBUG("Packet from unlicensed user, ignoring packet");
+    } else if (owner.is_licensed && ((nodeDB->getLicenseStatus(mp.from) == UserLicenseStatus::NotLicensed) ||
+                                     (nodeDB->getLicenseStatus(mp.to) == UserLicenseStatus::NotLicensed))) {
+        // Don't let licensed users to rebroadcast packets to or from unlicensed users
+        // If we know they are in-fact unlicensed
+        LOG_DEBUG("Packet to or from unlicensed user, ignoring packet");
         return false;
     }
 
