@@ -93,12 +93,12 @@ No longer populated on PCB
 #define WIRE_INTERFACES_COUNT 2
 
 // I2C bus 0
-#define PIN_WIRE_SDA (0 + 7)  // SDA
-#define PIN_WIRE_SCL (0 + 8)  // SCL
+#define PIN_WIRE_SDA (0 + 7) // SDA
+#define PIN_WIRE_SCL (0 + 8) // SCL
 
 // I2C bus 1
-#define PIN_WIRE1_SDA (0 + 4)   // SDA (secondary bus)
-#define PIN_WIRE1_SCL (0 + 27)  // SCL (secondary bus)
+#define PIN_WIRE1_SDA (0 + 4)  // SDA (secondary bus)
+#define PIN_WIRE1_SCL (0 + 27) // SCL (secondary bus)
 
 /*
  * Lora radio
