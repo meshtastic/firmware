@@ -162,6 +162,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #elif defined(HELTEC_MESH_NODE_T096)
 #define NUM_PA_POINTS 22
 #define TX_GAIN_LORA 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 13, 12, 11, 10, 9, 8, 7
+#else
+// If a board enables USE_KCT8103L_PA but does not match a known variant and has
+// not already provided a PA curve, fail at compile time to avoid unsafe defaults.
+#if !defined(NUM_PA_POINTS) || !defined(TX_GAIN_LORA)
+#error "USE_KCT8103L_PA is defined, but no PA gain curve (NUM_PA_POINTS / TX_GAIN_LORA) is configured for this board."
+#endif
 #endif
 #endif
 
