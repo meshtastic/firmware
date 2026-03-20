@@ -56,21 +56,21 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 | Pin   | Function    |     | Pin      | Function     |
 | ----- | ----------- | --- | -------- | ------------ |
 | Gnd   |             |     | vbat     |              |
-| P0.06 | Serial2 RX  |     | vbat     |              |
-| P0.08 | Serial2 TX  |     | Gnd      |              |
+| P0.06 | Button opt  |     | vbat     |              |
+| P0.08 | Buzzer opt  |     | Gnd      |              |
 | Gnd   |             |     | reset    |              |
 | Gnd   | GND         |     | ext_vcc  | *see 0.13    |
-| P0.17 | Free pin    |     | P0.31    | BATTERY_PIN  |
-| P0.20 | Free pin    |     | P0.29    | DI01         |
-| P0.22 | Free pin    |     | P0.02    | BUSY         |
-| P0.24 | Free pin    |     | P1.15    | NRST         |
+| P0.17 | Serial2 TX  |     | P0.31    | BATTERY_PIN  |
+| P0.20 | Rotary B    |     | P0.29    | DI01         |
+| P0.22 | Rotary A    |     | P0.02    | BUSY         |
+| P0.24 | Rotary press|     | P1.15    | NRST         |
 | P1.00 | TXEN        |     | P1.13    | MISO         |
 | P0.11 | RXEN        |     | P1.11    | MOSI         |
 | P1.04 | SDA         |     | P0.10    | SCK          |
 | P1.06 | SCL         |     | P0.09    | NSS          |
 |       |             |     |          |              |
 |       | Mid board   |     |          | Internal     |
-| P1.01 | Free pin    |     | 0.15     | LED          |
+| P1.01 | Serial2 RX  |     | 0.15     | LED          |
 | P1.02 | GPS_TX      |     | 0.13     | 3V3_EN       |
 | P1.07 | GPS_RX      |     |          |              |
 */
@@ -107,17 +107,16 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 
 // LED
 #define PIN_LED1 (0 + 15) // P0.15
-#define LED_BUILTIN PIN_LED1
 // Actually red
 #define LED_BLUE PIN_LED1
 #define LED_STATE_ON 1 // State when LED is lit
 
 // Button
-#define BUTTON_PIN (-1) // no button
+#define BUTTON_PIN (0 + 6) // P0.06
 
 // GPS
-#define PIN_GPS_TX (32 + 2) // P1.02
-#define PIN_GPS_RX (32 + 7) // P1.07
+#define GPS_TX_PIN (32 + 2) // P1.02
+#define GPS_RX_PIN (32 + 7) // P1.07
 
 #define PIN_GPS_EN (0 + 13) // P0.13 3.3V enable
 #define GPS_POWER_TOGGLE
@@ -125,11 +124,11 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 // define GPS_DEBUG
 
 // UART interfaces
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_TX GPS_TX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
 
-#define PIN_SERIAL2_RX (0 + 6) // P0.06
-#define PIN_SERIAL2_TX (0 + 8) // P0.08
+#define PIN_SERIAL2_RX (32 + 1) // P1.01
+#define PIN_SERIAL2_TX (0 + 17) // P0.17
 
 // Serial interfaces
 #define SPI_INTERFACES_COUNT 1
