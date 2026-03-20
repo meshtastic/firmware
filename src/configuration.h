@@ -156,8 +156,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifdef USE_KCT8103L_PA
 // Power Amps are often non-linear, so we can use an array of values for the power curve
+#if defined(HELTEC_WIRELESS_TRACKER_V2)
 #define NUM_PA_POINTS 22
 #define TX_GAIN_LORA 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 13, 12, 12, 11, 10, 9, 8, 7
+#elif defined(HELTEC_MESH_NODE_T096)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 13, 12, 11, 10, 9, 8, 7
+#endif
 #endif
 
 #ifdef RAK13302
