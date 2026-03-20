@@ -34,14 +34,15 @@
 // #define BUTTON_PIN 6
 // #define BUTTON_NEED_PULLUP
 
-// GPS UART pins
-// NOTE: GPIO0 cannot be used as GPS_TX_PIN because the firmware treats
-// pin 0 as "not configured" (falsy check in GPS::setup).
+// GPS on UART1 (Serial2) — GP8 TX, GP9 RX
+// GP8/GP9 belong to UART1, so we must use Serial2 (not the default Serial1/UART0).
+// GP0/GP1 (UART0 defaults) are free but the firmware treats pin 0 as "not configured".
 // GP4/GP5 occupied by I2C (SCL/SDA for BMP-280).
 #define HAS_GPS 1
 #define GPS_TX_PIN 8
 #define GPS_RX_PIN 9
 #define GPS_BAUDRATE 38400
+#define GPS_SERIAL_PORT Serial2
 
 // ---- EBYTE E22-900M30S on SPI1 -----------------------------------------
 #define USE_SX1262
