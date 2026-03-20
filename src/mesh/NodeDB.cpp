@@ -322,9 +322,9 @@ NodeDB::NodeDB()
     // config.network.enabled_protocols = meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
 
     // If we are setup to broadcast on any default channel slot (with default frequency slot semantics),
-    // ensure that the telemetry intervals are coerced to the minimum value of 30 minutes or more.
+    // ensure that the telemetry intervals are coerced to the role-aware minimum value.
     if (channels.hasDefaultChannel()) {
-        LOG_DEBUG("Coerce telemetry to min of 30 minutes on defaults");
+        LOG_DEBUG("Coerce telemetry to role-aware minimum on defaults");
         moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.device_update_interval, min_default_telemetry_interval_secs);
         moduleConfig.telemetry.environment_update_interval = Default::getConfiguredOrMinimumValue(
@@ -347,7 +347,7 @@ NodeDB::NodeDB()
         }
     }
     if (positionUsesDefaultChannel) {
-        LOG_DEBUG("Coerce position broadcasts to min of 1 hour and smart broadcast min of 5 minutes on defaults");
+        LOG_DEBUG("Coerce position broadcasts to role-aware minimum and smart broadcast min of 5 minutes on defaults");
         config.position.position_broadcast_secs =
             Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, min_default_broadcast_interval_secs);
         config.position.broadcast_smart_minimum_interval_secs = Default::getConfiguredOrMinimumValue(
