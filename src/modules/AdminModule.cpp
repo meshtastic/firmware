@@ -796,6 +796,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                         }
                     }
 #endif
+                    // new region is valid and we're coming from an unset region, so enable tx
                     validatedLora.tx_enabled = true;
                 }
                 // If we're unsetting the region for some reason, disable tx
@@ -817,16 +818,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 //  Region validation has failed, so just copy all of the old config over the new config
                 validatedLora = oldLoraConfig;
             }
-#if HAS_LORA_FEM
-            // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
-            if (loraFEMInterface.isLnaCanControl()) {
-                loraFEMInterface.setLNAEnable(validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
-            } else if (validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
-                // Hardware FEM does not support LNA control; normalize stored config to match actual capability
-                LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
-                validatedLora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
-            }
-#endif
         } // end of new region handling
 
         if (!RadioInterface::validateConfigLora(validatedLora)) {
@@ -868,6 +859,19 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             digitalWrite(RF95_FAN_EN, HIGH ^ 0);
         }
 #endif
+
+#if HAS_LORA_FEM
+        // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
+        // Note that a rejected lora config will revert this as well.
+        if (loraFEMInterface.isLnaCanControl()) {
+            loraFEMInterface.setLNAEnable(validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
+        } else if (validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
+            // Hardware FEM does not support LNA control; normalize stored config to match actual capability
+            LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
+            validatedLora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
+        }
+#endif
+
         config.lora = validatedLora; // Finally, return the validated config back to the main config
 
         break;

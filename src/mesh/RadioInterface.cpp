@@ -234,8 +234,8 @@ const RegionInfo regions[] = {
 };
 
 const RegionInfo *myRegion;
-bool RadioInterface::uses_default_frequency_slot;
-bool RadioInterface::uses_custom_channel_name;
+bool RadioInterface::uses_default_frequency_slot = true;
+bool RadioInterface::uses_custom_channel_name = false;
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 
@@ -783,10 +783,6 @@ static void sendErrorNotification(const char *msg)
 bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig)
 {
     const RegionInfo *newRegion = getRegion(loraConfig.region);
-    if (!newRegion) {
-        LOG_ERROR("Invalid region code %d", loraConfig.region);
-        return false;
-    }
 
     // If you are not licensed, you can't use ham regions.
     if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {
@@ -870,6 +866,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
 
         if (clamp) {
             loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora));
+            check_bw = bwCodeToKHz(loraConfig.bandwidth);
 
             // Recompute slot width and number of slots based on the new bandwidth
             freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (check_bw / 1000); // in MHz
@@ -906,18 +903,17 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             sendErrorNotification(err_string);
 
             if (clamp) {
-                if (uses_custom_channel_name && (loraConfig.channel_num == 0)) { // user choice unset, so use channel name hash
+                if (uses_custom_channel_name) { // clamp to channel name hash
                     loraConfig.channel_num =
                         channelNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
-                } else if ((loraConfig.use_preset) &&
-                           (newRegion->profile->overrideSlot != 0)) { // user choice unset, so use preset
+                } else if ((loraConfig.use_preset) && (newRegion->profile->overrideSlot != 0)) { // clamp to preset override slot
                     loraConfig.channel_num =
                         newRegion->profile->overrideSlot; // use the override slot specified by the region profile
                     uses_default_frequency_slot = true;
-                } else if (loraConfig.use_preset) {                  // user choice unset, so use preset
+                } else if (loraConfig.use_preset) {                  // clamp to preset slot
                     loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
                     uses_default_frequency_slot = true;
-                } else {
+                } else { // if not using preset, and no custom channel name, just clamp to default anyway
                     uses_default_frequency_slot = true;
                 };
             } else {
@@ -975,14 +971,14 @@ void RadioInterface::applyModemConfig()
 
     } else { // if not using preset, then just use the custom settings
         if (validateConfigLora(loraConfig)) {
-            bw = bwCodeToKHz(loraConfig.bandwidth);
-            sf = loraConfig.spread_factor;
-            cr = loraConfig.coding_rate;
         } else {
             LOG_WARN("Invalid LoRa config settings, cannot apply requested modem config - falling back to %s defaults",
                      newRegion->name);
             clampConfigLora(loraConfig);
         }
+        bw = bwCodeToKHz(loraConfig.bandwidth);
+        sf = loraConfig.spread_factor;
+        cr = loraConfig.coding_rate;
     }
 
     power = loraConfig.tx_power;
