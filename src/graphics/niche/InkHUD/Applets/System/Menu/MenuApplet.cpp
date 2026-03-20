@@ -177,24 +177,8 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     auto changes = SEGMENT_CONFIG;
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    if (!owner.is_licensed) {
-        bool keygenSuccess = false;
-
-        if (config.security.private_key.size == 32) {
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                keygenSuccess = true;
-            }
-        } else {
-            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-            keygenSuccess = true;
-        }
-
-        if (keygenSuccess) {
-            config.security.public_key.size = 32;
-            config.security.private_key.size = 32;
-            owner.public_key.size = 32;
-            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-        }
+    if (crypto) {
+        crypto->ensurePkiKeys(config.security, owner);
     }
 #endif
 
