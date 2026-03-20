@@ -25,6 +25,13 @@
 // #define BUTTON_PIN 6
 // #define BUTTON_NEED_PULLUP
 
+// GPS on UART1 (Serial2) — GP8 TX, GP9 RX
+#define HAS_GPS 1
+#define GPS_TX_PIN 8
+#define GPS_RX_PIN 9
+#define GPS_BAUDRATE 38400
+#define GPS_SERIAL_PORT Serial2
+
 // ---- EBYTE E22-900M30S on SPI1 -----------------------------------------
 // Wire the module to these GPIO pins:
 //   SPI1 bus : SCK=GP10  MOSI=GP11  MISO=GP12
