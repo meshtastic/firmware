@@ -23,9 +23,23 @@ struct c2_header {
 };
 
 #define ADC_BUFFER_SIZE_MAX 320
-#define PTT_PIN 39
 
+#ifdef AUDIO_PTT_PIN
+#define PTT_PIN AUDIO_PTT_PIN
+#else
+#define PTT_PIN 39
+#endif
+
+#ifdef AUDIO_I2S_DUAL
+// Dual I2S mode: separate buses for mic (RX) and speaker (TX)
+#define I2S_PORT_MIC I2S_NUM_0
+#define I2S_PORT_SPK I2S_NUM_1
+#else
+// Single I2S mode: shared bus for both mic and speaker
 #define I2S_PORT I2S_NUM_0
+#define I2S_PORT_MIC I2S_PORT
+#define I2S_PORT_SPK I2S_PORT
+#endif
 
 #define AUDIO_MODULE_RX_BUFFER 128
 #define AUDIO_MODULE_MODE meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700

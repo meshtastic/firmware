@@ -4,6 +4,7 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
 
@@ -29,6 +30,10 @@
 
 ButterworthFilter hp_filter(240, 8000, ButterworthFilter::ButterworthFilter::Highpass, 1);
 
+// Volume gain applied to mic input and speaker output.
+// Increase to make audio louder; decrease if clipping/distortion occurs.
+static constexpr int AUDIO_GAIN = 8;
+
 TaskHandle_t codec2HandlerTask;
 AudioModule *audioModule;
 
@@ -53,8 +58,12 @@ void run_codec2(void *parameter)
 
         if (tcount != 0) {
             if (audioModule->radio_state == RadioState::tx) {
-                for (int i = 0; i < audioModule->adc_buffer_size; i++)
-                    audioModule->speech[i] = (int16_t)hp_filter.Update((float)audioModule->speech[i]);
+                for (int i = 0; i < audioModule->adc_buffer_size; i++) {
+                    int32_t sample = (int32_t)hp_filter.Update((float)audioModule->speech[i]) * AUDIO_GAIN;
+                    if (sample > 32767) sample = 32767;
+                    if (sample < -32768) sample = -32768;
+                    audioModule->speech[i] = (int16_t)sample;
+                }
 
                 codec2_encode(audioModule->codec2, audioModule->tx_encode_frame + audioModule->tx_encode_frame_index,
                               audioModule->speech);
@@ -71,8 +80,14 @@ void run_codec2(void *parameter)
                 if (memcmp(audioModule->rx_encode_frame, &audioModule->tx_header, sizeof(audioModule->tx_header)) == 0) {
                     for (int i = 4; i < audioModule->rx_encode_frame_index; i += audioModule->encode_codec_size) {
                         codec2_decode(audioModule->codec2, audioModule->output_buffer, audioModule->rx_encode_frame + i);
-                        i2s_write(I2S_PORT, &audioModule->output_buffer, audioModule->adc_buffer_size, &bytesOut,
-                                  pdMS_TO_TICKS(500));
+                        for (int j = 0; j < audioModule->adc_buffer_size; j++) {
+                            int32_t s = (int32_t)audioModule->output_buffer[j] * AUDIO_GAIN;
+                            if (s > 32767) s = 32767;
+                            if (s < -32768) s = -32768;
+                            audioModule->output_buffer[j] = (int16_t)s;
+                        }
+                        i2s_write(I2S_PORT_SPK, audioModule->output_buffer,
+                                  audioModule->adc_buffer_size * sizeof(int16_t), &bytesOut, pdMS_TO_TICKS(500));
                     }
                 } else {
                     // if the buffer header does not match our own codec, make a temp decoding setup.
@@ -82,7 +97,14 @@ void run_codec2(void *parameter)
                     int tmp_adc_buffer_size = codec2_samples_per_frame(tmp_codec2);
                     for (int i = 4; i < audioModule->rx_encode_frame_index; i += tmp_encode_codec_size) {
                         codec2_decode(tmp_codec2, audioModule->output_buffer, audioModule->rx_encode_frame + i);
-                        i2s_write(I2S_PORT, &audioModule->output_buffer, tmp_adc_buffer_size, &bytesOut, pdMS_TO_TICKS(500));
+                        for (int j = 0; j < tmp_adc_buffer_size; j++) {
+                            int32_t s = (int32_t)audioModule->output_buffer[j] * AUDIO_GAIN;
+                            if (s > 32767) s = 32767;
+                            if (s < -32768) s = -32768;
+                            audioModule->output_buffer[j] = (int16_t)s;
+                        }
+                        i2s_write(I2S_PORT_SPK, audioModule->output_buffer,
+                                  tmp_adc_buffer_size * sizeof(int16_t), &bytesOut, pdMS_TO_TICKS(500));
                     }
                     codec2_destroy(tmp_codec2);
                 }
@@ -146,6 +168,107 @@ int32_t AudioModule::runOnce()
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
         esp_err_t res;
         if (firstTime) {
+#ifdef AUDIO_I2S_DUAL
+            // ---- Dual I2S mode (e.g. MVSR board): separate buses for mic and speaker ----
+#ifdef AUDIO_I2S_MIC_PDM
+            LOG_INFO("Init dual I2S — PDM Mic CLK:%d DATA:%d EN:%d | Spk SCK:%d WS:%d DIN:%d EN:%d",
+                     AUDIO_I2S_MIC_CLK, AUDIO_I2S_MIC_DATA, AUDIO_I2S_MIC_EN,
+                     AUDIO_I2S_SPK_SCK, AUDIO_I2S_SPK_WS, AUDIO_I2S_SPK_DIN, AUDIO_I2S_SPK_EN);
+
+            // --- Microphone I2S in PDM RX mode on I2S_NUM_0 ---
+            i2s_config_t mic_config = {.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM),
+                                       .sample_rate = 8000,
+                                       .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+                                       .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
+                                       .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
+                                       .intr_alloc_flags = 0,
+                                       .dma_buf_count = 8,
+                                       .dma_buf_len = adc_buffer_size,
+                                       .use_apll = false,
+                                       .tx_desc_auto_clear = false,
+                                       .fixed_mclk = 0};
+            res = i2s_driver_install(I2S_PORT_MIC, &mic_config, 0, NULL);
+            if (res != ESP_OK)
+                LOG_ERROR("Failed to install mic I2S PDM driver: %d", res);
+
+            // For PDM RX on ESP32-S3: CLK output is via ws_io_num, data input via data_in_num
+            const i2s_pin_config_t mic_pins = {.mck_io_num = I2S_PIN_NO_CHANGE,
+                                               .bck_io_num = I2S_PIN_NO_CHANGE,
+                                               .ws_io_num = AUDIO_I2S_MIC_CLK,
+                                               .data_out_num = I2S_PIN_NO_CHANGE,
+                                               .data_in_num = AUDIO_I2S_MIC_DATA};
+#else
+            LOG_INFO("Init dual I2S — Mic SCK:%d WS:%d SD:%d EN:%d | Spk SCK:%d WS:%d DIN:%d EN:%d",
+                     AUDIO_I2S_MIC_SCK, AUDIO_I2S_MIC_WS, AUDIO_I2S_MIC_SD, AUDIO_I2S_MIC_EN,
+                     AUDIO_I2S_SPK_SCK, AUDIO_I2S_SPK_WS, AUDIO_I2S_SPK_DIN, AUDIO_I2S_SPK_EN);
+
+            // --- Microphone I2S (standard RX) on I2S_NUM_0 ---
+            i2s_config_t mic_config = {.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
+                                       .sample_rate = 8000,
+                                       .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+                                       .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+                                       .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
+                                       .intr_alloc_flags = 0,
+                                       .dma_buf_count = 8,
+                                       .dma_buf_len = adc_buffer_size,
+                                       .use_apll = false,
+                                       .tx_desc_auto_clear = false,
+                                       .fixed_mclk = 0};
+            res = i2s_driver_install(I2S_PORT_MIC, &mic_config, 0, NULL);
+            if (res != ESP_OK)
+                LOG_ERROR("Failed to install mic I2S driver: %d", res);
+
+            const i2s_pin_config_t mic_pins = {.mck_io_num = I2S_PIN_NO_CHANGE,
+                                               .bck_io_num = AUDIO_I2S_MIC_SCK,
+                                               .ws_io_num = AUDIO_I2S_MIC_WS,
+                                               .data_out_num = I2S_PIN_NO_CHANGE,
+                                               .data_in_num = AUDIO_I2S_MIC_SD};
+#endif
+            res = i2s_set_pin(I2S_PORT_MIC, &mic_pins);
+            if (res != ESP_OK)
+                LOG_ERROR("Failed to set mic I2S pins: %d", res);
+
+            res = i2s_start(I2S_PORT_MIC);
+            if (res != ESP_OK)
+                LOG_ERROR("Failed to start mic I2S: %d", res);
+
+            // --- Speaker I2S (TX only) on I2S_NUM_1 ---
+            i2s_config_t spk_config = {.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+                                       .sample_rate = 8000,
+                                       .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+                                       .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+                                       .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
+                                       .intr_alloc_flags = 0,
+                                       .dma_buf_count = 8,
+                                       .dma_buf_len = adc_buffer_size,
+                                       .use_apll = false,
+                                       .tx_desc_auto_clear = true,
+                                       .fixed_mclk = 0};
+            res = i2s_driver_install(I2S_PORT_SPK, &spk_config, 0, NULL);
+            if (res != ESP_OK)
+                LOG_ERROR("Failed to install speaker I2S driver: %d", res);
+
+            const i2s_pin_config_t spk_pins = {.mck_io_num = I2S_PIN_NO_CHANGE,
+                                               .bck_io_num = AUDIO_I2S_SPK_SCK,
+                                               .ws_io_num = AUDIO_I2S_SPK_WS,
+                                               .data_out_num = AUDIO_I2S_SPK_DIN,
+                                               .data_in_num = I2S_PIN_NO_CHANGE};
+            res = i2s_set_pin(I2S_PORT_SPK, &spk_pins);
+            if (res != ESP_OK)
+                LOG_ERROR("Failed to set speaker I2S pins: %d", res);
+
+            res = i2s_start(I2S_PORT_SPK);
+            if (res != ESP_OK)
+                LOG_ERROR("Failed to start speaker I2S: %d", res);
+
+            // Enable mic (active LOW) and speaker amplifier via their enable pins
+            pinMode(AUDIO_I2S_MIC_EN, OUTPUT);
+            digitalWrite(AUDIO_I2S_MIC_EN, LOW);
+            pinMode(AUDIO_I2S_SPK_EN, OUTPUT);
+            digitalWrite(AUDIO_I2S_SPK_EN, HIGH);
+
+#else
+            // ---- Single I2S mode: shared bus for mic + speaker ----
             // Set up I2S Processor configuration. This will produce 16bit samples at 8 kHz instead of 12 from the ADC
             LOG_INFO("Init I2S SD: %d DIN: %d WS: %d SCK: %d", moduleConfig.audio.i2s_sd, moduleConfig.audio.i2s_din,
                      moduleConfig.audio.i2s_ws, moduleConfig.audio.i2s_sck);
@@ -161,41 +284,62 @@ int32_t AudioModule::runOnce()
                                        .use_apll = false,
                                        .tx_desc_auto_clear = true,
                                        .fixed_mclk = 0};
-            res = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
+            res = i2s_driver_install(I2S_PORT_MIC, &i2s_config, 0, NULL);
             if (res != ESP_OK) {
                 LOG_ERROR("Failed to install I2S driver: %d", res);
             }
 
             const i2s_pin_config_t pin_config = {
+                .mck_io_num = I2S_PIN_NO_CHANGE,
                 .bck_io_num = moduleConfig.audio.i2s_sck,
                 .ws_io_num = moduleConfig.audio.i2s_ws,
                 .data_out_num = moduleConfig.audio.i2s_din ? moduleConfig.audio.i2s_din : I2S_PIN_NO_CHANGE,
                 .data_in_num = moduleConfig.audio.i2s_sd ? moduleConfig.audio.i2s_sd : I2S_PIN_NO_CHANGE};
-            res = i2s_set_pin(I2S_PORT, &pin_config);
+            res = i2s_set_pin(I2S_PORT_MIC, &pin_config);
             if (res != ESP_OK) {
                 LOG_ERROR("Failed to set I2S pin config: %d", res);
             }
 
-            res = i2s_start(I2S_PORT);
+            res = i2s_start(I2S_PORT_MIC);
             if (res != ESP_OK) {
                 LOG_ERROR("Failed to start I2S: %d", res);
             }
+#endif
 
             radio_state = RadioState::rx;
 
-            // Configure PTT input
-            LOG_INFO("Init PTT on Pin %u", moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN);
-            pinMode(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN, INPUT);
+            // Configure PTT input with pull-up; PTT is active LOW (shorted to GND when pressed).
+            // This prevents a floating pin from causing spurious REGENERATE_FRAMESET calls
+            // that would reset the screen to frame 0 and break user button navigation.
+            uint8_t pttPin = moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN;
+            LOG_INFO("Init PTT on Pin %u", pttPin);
+            pinMode(pttPin, INPUT_PULLUP);
+
+            // Log the initial PTT state to help diagnose hardware that holds the pin LOW
+            int initialPttState = digitalRead(pttPin);
+            LOG_WARN("PTT pin %u initial state after INPUT_PULLUP: %s",
+                     pttPin, initialPttState == LOW ? "LOW (PTT active!)" : "HIGH (idle)");
 
             firstTime = false;
         } else {
             UIFrameEvent e;
-            // Check if PTT is pressed. TODO hook that into Onebutton/Interrupt drive.
-            if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == HIGH) {
+            // Periodic debug to verify cooperative scheduler is alive
+            static uint32_t lastAudioDebug = 0;
+            if (millis() - lastAudioDebug > 5000) {
+                lastAudioDebug = millis();
+                uint8_t pttPin = moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN;
+                int pttVal = digitalRead(pttPin);
+                LOG_WARN("Audio runOnce: state=%s ptt_pin=%d val=%d",
+                         radio_state == RadioState::tx ? "TX" : "RX", pttPin, pttVal);
+            }
+            // Check if PTT is pressed (active LOW). TODO hook that into Onebutton/Interrupt drive.
+            if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == LOW) {
                 if (radio_state == RadioState::rx) {
                     LOG_INFO("PTT pressed, switching to TX");
+                    powerFSM.trigger(EVENT_INPUT); // Wake screen on PTT press
                     radio_state = RadioState::tx;
-                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
+                    requestFocus(); // Focus on the audio frame when PTT is pressed
+                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // Add audio frame + focus on it
                     this->notifyObservers(&e);
                 }
             } else {
@@ -208,29 +352,34 @@ int32_t AudioModule::runOnce()
                     }
                     tx_encode_frame_index = sizeof(tx_header);
                     radio_state = RadioState::rx;
-                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
+                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND; // Remove audio frame, preserve user's position
                     this->notifyObservers(&e);
                 }
             }
             if (radio_state == RadioState::tx) {
-                // Get I2S data from the microphone and place in data buffer
+                // Drain all available I2S DMA data in a loop to avoid falling behind.
+                // At 8kHz/16-bit/mono = 16KB/s, each codec2 frame is 320 samples (640 bytes, 40ms).
+                // We must read faster than data arrives to avoid DMA overflow.
                 size_t bytesIn = 0;
-                res = i2s_read(I2S_PORT, adc_buffer + adc_buffer_index, adc_buffer_size - adc_buffer_index, &bytesIn,
-                               pdMS_TO_TICKS(40)); // wait 40ms for audio to arrive.
+                int framesEncoded = 0;
+                const int maxFramesPerCall = 4; // cap to avoid blocking too long
 
-                if (res == ESP_OK) {
-                    adc_buffer_index += bytesIn;
-                    if (adc_buffer_index == adc_buffer_size) {
-                        adc_buffer_index = 0;
-                        memcpy((void *)speech, (void *)adc_buffer, 2 * adc_buffer_size);
-                        // Notify run_codec2 task that the buffer is ready.
-                        radio_state = RadioState::tx;
-                        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-                        vTaskNotifyGiveFromISR(codec2HandlerTask, &xHigherPriorityTaskWoken);
-                        if (xHigherPriorityTaskWoken == pdTRUE)
-                            YIELD_FROM_ISR(xHigherPriorityTaskWoken);
+                do {
+                    size_t readSize = (adc_buffer_size - adc_buffer_index) * sizeof(uint16_t);
+                    res = i2s_read(I2S_PORT_MIC, (uint8_t *)adc_buffer + adc_buffer_index * sizeof(uint16_t), readSize, &bytesIn,
+                                   pdMS_TO_TICKS(20));
+
+                    if (res == ESP_OK && bytesIn > 0) {
+                        adc_buffer_index += bytesIn / sizeof(uint16_t);
+                        if (adc_buffer_index >= (uint16_t)adc_buffer_size) {
+                            adc_buffer_index = 0;
+                            memcpy((void *)speech, (void *)adc_buffer, adc_buffer_size * sizeof(int16_t));
+                            // Notify run_codec2 task that the buffer is ready.
+                            xTaskNotifyGive(codec2HandlerTask);
+                            framesEncoded++;
+                        }
                     }
-                }
+                } while (res == ESP_OK && bytesIn > 0 && framesEncoded < maxFramesPerCall);
             }
         }
         return 100;
@@ -277,10 +426,7 @@ ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
             radio_state = RadioState::rx;
             rx_encode_frame_index = p.payload.size;
             // Notify run_codec2 task that the buffer is ready.
-            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-            vTaskNotifyGiveFromISR(codec2HandlerTask, &xHigherPriorityTaskWoken);
-            if (xHigherPriorityTaskWoken == pdTRUE)
-                YIELD_FROM_ISR(xHigherPriorityTaskWoken);
+            xTaskNotifyGive(codec2HandlerTask);
         }
     }
 
