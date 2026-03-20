@@ -13,6 +13,7 @@ Soporte de Meshtastic para la board **WIZnet W5500-EVB-Pico2** (RP2350 + Etherne
 | Flash      | 2 MB                                                 |
 | Ethernet   | W5500 integrado (SPI0, pines fijos en PCB)           |
 | LoRa       | EBYTE E22-900M30S externo (SX1262 + PA 30 dBm, SPI1) |
+| GPS        | Módulo GPS externo (UART1 — GP8 TX, GP9 RX)           |
 
 ### Pines de sistema (fijos en PCB)
 
@@ -70,6 +71,21 @@ E22 pin TXEN  ──┘
 ```
 
 Con este puente, `SX126X_DIO2_AS_RF_SWITCH` hace que el SX1262 lleve DIO2 a HIGH automáticamente durante TX, activando el PA sin necesitar un GPIO del RP2350 para TXEN.
+
+---
+
+## Pinout GPS (UART1, conexión externa)
+
+Módulo GPS conectado por UART1 (Serial2) a 38400 baud.
+
+| Señal GPS | GPIO RP2350 | Notas                          |
+|-----------|-------------|--------------------------------|
+| TX        | GP9         | GPS transmite → RP2350 recibe  |
+| RX        | GP8         | RP2350 transmite → GPS recibe  |
+| VCC       | 3.3V        | Alimentación                   |
+| GND       | GND         | —                              |
+
+> **Nota:** Los pines se cruzan — TX del GPS va a GP9 (RX del RP2350) y RX del GPS va a GP8 (TX del RP2350).
 
 ---
 
