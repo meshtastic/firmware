@@ -164,9 +164,19 @@ typedef struct {
 3. **CRC32 del bootloader** — PicoOTA escribe `otacommand.bin` con su propio CRC32, el bootloader lo verifica antes de aplicar
 
 ### Formato del binario
-- **Archivo enviado**: firmware compilado → comprimido con GZIP → enviado via TCP
+- **Archivo enviado**: firmware `.bin` (raw binary) → comprimido con GZIP → enviado via TCP
 - **El bootloader descomprime GZIP** automáticamente al flashear
 - No se necesita header especial en el binario, solo en el protocolo TCP
+
+> **IMPORTANTE: Solo archivos `.bin` — NO `.uf2`**
+>
+> El pipeline OTA (Updater → picoOTA → bootloader) escribe los bytes recibidos directamente a flash.
+> No hay detección ni conversión de formato UF2 en ningún punto de la cadena.
+> Enviar un `.uf2` por OTA **corrompe el firmware** porque los headers UF2 (32 bytes cada 512 bytes)
+> se escriben como si fueran código ejecutable. El resultado es un nodo que cae en modo BOOTSEL.
+>
+> El script `eth-ota-upload.py` rechaza archivos `.uf2` automáticamente.
+> Los archivos `.uf2` solo sirven para flasheo USB vía BOOTSEL/picotool.
 
 ## Por qué NO usar picowota directamente
 
@@ -1108,6 +1118,14 @@ def crc32(data: bytes) -> int:
 
 def load_firmware(path: str) -> bytes:
     """Load firmware file, compressing with GZIP if not already compressed."""
+    # Reject UF2 files — OTA requires raw .bin firmware
+    if path.lower().endswith(".uf2"):
+        bin_path = path.rsplit(".", 1)[0] + ".bin"
+        print(f"ERROR: UF2 files cannot be used for OTA updates.")
+        print(f"       The Updater/picoOTA expects raw .bin firmware.")
+        print(f"       Try: {bin_path}")
+        sys.exit(1)
+
     with open(path, "rb") as f:
         data = f.read()
 
