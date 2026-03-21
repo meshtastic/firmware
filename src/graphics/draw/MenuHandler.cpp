@@ -1236,9 +1236,10 @@ void menuHandler::testMenu()
 
     optionsArray[options] = screen->isFrameHidden("chirpy") ? "Show Chirpy" : "Hide Chirpy";
     optionsEnumArray[options++] = ShowChirpy;
-
+#ifdef HAS_I2S
     optionsArray[options] = "Test Announce";
     optionsEnumArray[options++] = TestAnnounce;
+#endif
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Hidden Test Menu";
@@ -1254,7 +1255,9 @@ void menuHandler::testMenu()
             screen->setFrames(Screen::FOCUS_SYSTEM);
 
         } else if (selected == TestAnnounce) {
+#ifdef HAS_I2S
             audioThread->readAloud("This is a test of the emergency broadcast system. This is only a test.");
+#endif
         } else {
             menuQueue = system_base_menu;
             screen->runNow();
