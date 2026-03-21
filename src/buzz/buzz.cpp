@@ -6,6 +6,11 @@
 #include "Tone.h"
 #endif
 
+#if defined(HAS_I2S)
+// including AudioThread.h causes a compile failure atm
+#include "main.h"
+#endif
+
 #if !defined(ARCH_PORTDUINO)
 extern "C" void delay(uint32_t dwMs);
 #endif
@@ -29,6 +34,10 @@ struct ToneDuration {
 #define NOTE_AS3 233
 #define NOTE_B3 247
 #define NOTE_CS4 277
+
+#define BEEP_RTTTL "beep:d=4,o=5,b=120:16g"
+#define CHIRP_RTTTL "chirp:d=4,o=4,b=120:32a#"
+#define BOOP_RTTTL "chirp:d=4,o=4,b=120:16a"
 
 const int DURATION_1_8 = 125;  // 1/8 note
 const int DURATION_1_4 = 250;  // 1/4 note
@@ -59,8 +68,16 @@ void playTones(const ToneDuration *tone_durations, int size)
 
 void playBeep()
 {
-    ToneDuration melody[] = {{NOTE_B3, DURATION_1_8}};
+#ifdef I2S_BLEEBLE
+    audioThread->beginRttl(BEEP_RTTTL, sizeof(BEEP_RTTTL));
+    while (audioThread->isPlaying()) {
+        delay(10);
+    }
+    audioThread->stop();
+#else
+    ToneDuration melody[] = {{NOTE_B3, DURATION_1_16}};
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+#endif
 }
 
 void playLongBeep()
@@ -95,16 +112,39 @@ void playShutdownMelody()
 
 void playChirp()
 {
+#ifdef I2S_BLEEBLE
+    audioThread->beginRttl(CHIRP_RTTTL, sizeof(CHIRP_RTTTL));
+    while (audioThread->isPlaying()) {
+        delay(10);
+    }
+    audioThread->stop();
+#else
     // A short, friendly "chirp" sound for key presses
-    ToneDuration melody[] = {{NOTE_AS3, 20}}; // Very short AS3 note
+    ToneDuration melody[] = {{NOTE_AS3, 20}}; // Short AS3 note
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+#endif
+}
+
+void playClick()
+{
+    // A very short "click" sound with minimum delay; ideal for rotary encoder events
+    ToneDuration melody[] = {{NOTE_AS3, 1}}; // Very Short AS3
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
 void playBoop()
 {
+#ifdef I2S_BLEEBLE
+    audioThread->beginRttl(BOOP_RTTTL, sizeof(BOOP_RTTTL));
+    while (audioThread->isPlaying()) {
+        delay(10);
+    }
+    audioThread->stop();
+#else
     // A short, friendly "boop" sound for button presses
     ToneDuration melody[] = {{NOTE_A3, 50}}; // Very short A3 note
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+#endif
 }
 
 void playLongPressLeadUp()
