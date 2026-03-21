@@ -76,6 +76,13 @@ static int32_t reconnectETH()
             delay(100);
 #endif
 
+#ifdef WIZNET_5500_EVB_PICO2 // Re-configure SPI0 for the on-board W5500
+            SPI.setRX(ETH_SPI0_MISO);
+            SPI.setSCK(ETH_SPI0_SCK);
+            SPI.setTX(ETH_SPI0_MOSI);
+            SPI.begin();
+            Ethernet.init(PIN_ETHERNET_SS);
+#else
 #ifdef RAK11310
             ETH_SPI_PORT.setSCK(PIN_SPI0_SCK);
             ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
@@ -83,6 +90,7 @@ static int32_t reconnectETH()
             ETH_SPI_PORT.begin();
 #endif
             Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
+#endif
 
             int status = 0;
             if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
