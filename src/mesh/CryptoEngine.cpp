@@ -61,6 +61,33 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
     }
     return true;
 }
+
+bool CryptoEngine::ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user)
+{
+    if (user.is_licensed) {
+        return false;
+    }
+
+    bool keygenSuccess = false;
+    if (security.private_key.size == 32) {
+        if (regeneratePublicKey(security.public_key.bytes, security.private_key.bytes)) {
+            keygenSuccess = true;
+        }
+    } else {
+        LOG_INFO("Generate new PKI keys");
+        generateKeyPair(security.public_key.bytes, security.private_key.bytes);
+        keygenSuccess = true;
+    }
+
+    if (keygenSuccess) {
+        security.public_key.size = 32;
+        security.private_key.size = 32;
+        user.public_key.size = 32;
+        memcpy(user.public_key.bytes, security.public_key.bytes, 32);
+    }
+
+    return keygenSuccess;
+}
 #endif
 
 /**
