@@ -33,6 +33,14 @@ def crc32(data: bytes) -> int:
 
 def load_firmware(path: str) -> bytes:
     """Load firmware file, compressing with GZIP if not already compressed."""
+    # Reject UF2 files — OTA requires raw .bin firmware
+    if path.lower().endswith(".uf2"):
+        bin_path = path.rsplit(".", 1)[0] + ".bin"
+        print(f"ERROR: UF2 files cannot be used for OTA updates.")
+        print(f"       The Updater/picoOTA expects raw .bin firmware.")
+        print(f"       Try: {bin_path}")
+        sys.exit(1)
+
     with open(path, "rb") as f:
         data = f.read()
 
