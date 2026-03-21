@@ -2204,9 +2204,9 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    enum optionsNumbers { Back, NumberPicker, ShowChirpy };
-    static const char *optionsArray[4] = {"Back"};
-    static int optionsEnumArray[4] = {Back};
+    enum optionsNumbers { Back, NumberPicker, ShowChirpy, TestAnnounce };
+    static const char *optionsArray[5] = {"Back"};
+    static int optionsEnumArray[5] = {Back};
     int options = 1;
 
     optionsArray[options] = "Number Picker";
@@ -2214,6 +2214,9 @@ void menuHandler::testMenu()
 
     optionsArray[options] = screen->isFrameHidden("chirpy") ? "Show Chirpy" : "Hide Chirpy";
     optionsEnumArray[options++] = ShowChirpy;
+
+    optionsArray[options] = "Test Announce";
+    optionsEnumArray[options++] = TestAnnounce;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Hidden Test Menu";
@@ -2228,6 +2231,8 @@ void menuHandler::testMenu()
             screen->toggleFrameVisibility("chirpy");
             screen->setFrames(Screen::FOCUS_SYSTEM);
 
+        } else if (selected == TestAnnounce) {
+            audioThread->readAloud("This is a test of the emergency broadcast system. This is only a test.");
         } else {
             menuQueue = SystemBaseMenu;
             screen->runNow();
