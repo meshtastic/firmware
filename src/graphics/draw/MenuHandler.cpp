@@ -18,6 +18,7 @@
 #include "main.h"
 #include "mesh/Default.h"
 #include "mesh/MeshTypes.h"
+#include "mesh/RadioLibInterface.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
@@ -157,6 +158,14 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 
             auto selectedRegion = option.value;
             if (config.lora.region == selectedRegion) {
+                return;
+            }
+
+            // Guard: without a reboot, reconfigure() applies the region directly.
+            // Reject LORA_24 on sub-GHz-only hardware — getRadio() used to catch this post-reboot.
+            if (selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_LORA_24 &&
+                !(RadioLibInterface::instance && RadioLibInterface::instance->wideLora())) {
+                LOG_WARN("Radio hardware does not support 2.4 GHz; ignoring LORA_24 selection");
                 return;
             }
 
