@@ -769,6 +769,8 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (!ourNode)
         return;
+    if (!nodeDB->hasValidPosition(ourNode))
+        return;
 
     double lat = DegD(ourNode->position.latitude_i);
     double lon = DegD(ourNode->position.longitude_i);

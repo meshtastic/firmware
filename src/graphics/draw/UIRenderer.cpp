@@ -641,19 +641,26 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
     bool showCompass = false;
     float myHeading = 0.0f;
     float bearing = 0.0f;
-    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node)) {
+    const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
+    const bool hasNodePositionFix = nodeDB->hasValidPosition(node);
+    const char *statusInCompass = nullptr;
+    if (hasOwnPositionFix && hasNodePositionFix) {
         const auto &op = ourNode->position;
         showCompass = CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
         if (showCompass) {
             const auto &p = node->position;
             bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
             bearing = CompassRenderer::adjustBearingForCompassMode(bearing, myHeading);
+        } else {
+            statusInCompass = "NoHdg";
         }
+    } else if (!hasOwnPositionFix || !hasNodePositionFix) {
+        statusInCompass = "NoFix";
     }
 
     // --- Compass Rendering: landscape (wide) screens use the original side-aligned logic ---
     if (SCREEN_WIDTH > SCREEN_HEIGHT) {
-        if (showCompass) {
+        if (showCompass || statusInCompass) {
             const int16_t topY = getTextPositions(display)[1];
             const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
             const int16_t usableHeight = bottomY - topY - 5;
@@ -665,13 +672,19 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
             const int16_t compassDiam = compassRadius * 2;
 
             display->drawCircle(compassX, compassY, compassRadius);
-            CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
-            CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
+            if (showCompass) {
+                CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+                CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
+            } else {
+                display->setTextAlignment(TEXT_ALIGN_CENTER);
+                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL / 2, statusInCompass);
+                display->setTextAlignment(TEXT_ALIGN_LEFT);
+            }
         }
         // else show nothing
     } else {
         // Portrait or square: put compass at the bottom and centered, scaled to fit available space
-        if (showCompass) {
+        if (showCompass || statusInCompass) {
             int yBelowContent = (line > 0 && line <= 5) ? (getTextPositions(display)[line - 1] + FONT_HEIGHT_SMALL + 2)
                                                         : getTextPositions(display)[1];
             const int margin = 4;
@@ -697,11 +710,15 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
             int compassX = x + SCREEN_WIDTH / 2;
             int compassY = yBelowContent + availableHeight / 2;
 
-            graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
-
-            graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
-
             display->drawCircle(compassX, compassY, compassRadius);
+            if (showCompass) {
+                graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+                graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
+            } else {
+                display->setTextAlignment(TEXT_ALIGN_CENTER);
+                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL / 2, statusInCompass);
+                display->setTextAlignment(TEXT_ALIGN_LEFT);
+            }
         }
         // else show nothing
     }
@@ -1165,10 +1182,19 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     geoCoord.updateCoords(int32_t(gpsStatus->getLatitude()), int32_t(gpsStatus->getLongitude()),
                           int32_t(gpsStatus->getAltitude()));
 
-    // === Determine Compass Heading ===
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
     float heading = 0.0f;
-    bool validHeading =
-        CompassRenderer::getHeadingRadians(geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7, heading);
+    bool validHeading = false;
+    const char *statusInCompass = nullptr;
+    if (hasOwnPositionFix) {
+        const auto &op = ourNode->position;
+        validHeading = CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), heading);
+        if (!validHeading)
+            statusInCompass = "NoHdg";
+    } else {
+        statusInCompass = "NoFix";
+    }
 
     // If GPS is off, no need to display these parts
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
@@ -1209,8 +1235,8 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         display->drawString(x, getTextPositions(display)[line++], altitudeLine);
     }
 #if !defined(M5STACK_UNITC6L)
-    // === Draw Compass if heading is valid ===
-    if (validHeading) {
+    // === Draw Compass ===
+    if (validHeading || statusInCompass) {
         // --- Compass Rendering: landscape (wide) screens use original side-aligned logic ---
         if (SCREEN_WIDTH > SCREEN_HEIGHT) {
             const int16_t topY = getTextPositions(display)[1];
@@ -1226,25 +1252,31 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             // Center vertically and nudge down slightly to keep "N" clear of header
             const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
 
-            CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, -heading);
             display->drawCircle(compassX, compassY, compassRadius);
+            if (validHeading) {
+                CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, -heading);
 
-            // "N" label
-            float northAngle = 0;
-            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
-                northAngle = -heading;
-            float radius = compassRadius;
-            int16_t nX = compassX + (radius - 1) * sin(northAngle);
-            int16_t nY = compassY - (radius - 1) * cos(northAngle);
-            int16_t nLabelWidth = display->getStringWidth("N") + 2;
-            int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
+                // "N" label
+                float northAngle = 0;
+                if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
+                    northAngle = -heading;
+                float radius = compassRadius;
+                int16_t nX = compassX + (radius - 1) * sin(northAngle);
+                int16_t nY = compassY - (radius - 1) * cos(northAngle);
+                int16_t nLabelWidth = display->getStringWidth("N") + 2;
+                int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
 
-            display->setColor(BLACK);
-            display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
-            display->setColor(WHITE);
-            display->setFont(FONT_SMALL);
-            display->setTextAlignment(TEXT_ALIGN_CENTER);
-            display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+                display->setColor(BLACK);
+                display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
+                display->setColor(WHITE);
+                display->setFont(FONT_SMALL);
+                display->setTextAlignment(TEXT_ALIGN_CENTER);
+                display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+            } else {
+                display->setTextAlignment(TEXT_ALIGN_CENTER);
+                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL / 2, statusInCompass);
+            }
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
         } else {
             // Portrait or square: put compass at the bottom and centered, scaled to fit available space
             // For E-Ink screens, account for navigation bar at the bottom!
@@ -1269,25 +1301,31 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             int compassX = x + SCREEN_WIDTH / 2;
             int compassY = yBelowContent + availableHeight / 2;
 
-            CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, -heading);
             display->drawCircle(compassX, compassY, compassRadius);
+            if (validHeading) {
+                CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, -heading);
 
-            // "N" label
-            float northAngle = 0;
-            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
-                northAngle = -heading;
-            float radius = compassRadius;
-            int16_t nX = compassX + (radius - 1) * sin(northAngle);
-            int16_t nY = compassY - (radius - 1) * cos(northAngle);
-            int16_t nLabelWidth = display->getStringWidth("N") + 2;
-            int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
+                // "N" label
+                float northAngle = 0;
+                if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
+                    northAngle = -heading;
+                float radius = compassRadius;
+                int16_t nX = compassX + (radius - 1) * sin(northAngle);
+                int16_t nY = compassY - (radius - 1) * cos(northAngle);
+                int16_t nLabelWidth = display->getStringWidth("N") + 2;
+                int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
 
-            display->setColor(BLACK);
-            display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
-            display->setColor(WHITE);
-            display->setFont(FONT_SMALL);
-            display->setTextAlignment(TEXT_ALIGN_CENTER);
-            display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+                display->setColor(BLACK);
+                display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
+                display->setColor(WHITE);
+                display->setFont(FONT_SMALL);
+                display->setTextAlignment(TEXT_ALIGN_CENTER);
+                display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+            } else {
+                display->setTextAlignment(TEXT_ALIGN_CENTER);
+                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL / 2, statusInCompass);
+            }
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
         }
     }
 #endif

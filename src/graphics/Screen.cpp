@@ -974,9 +974,14 @@ int32_t Screen::runOnce()
 
     uint32_t desiredFramerate = IDLE_FRAMERATE;
 #if HAS_GPS && !defined(USE_EINK)
-    if (showingNormalScreen && hasCompass && framesetInfo.positions.gps != 255 &&
-        ui->getUiState()->currentFrame == framesetInfo.positions.gps) {
-        desiredFramerate = COMPASS_ACTIVE_FRAMERATE;
+    if (showingNormalScreen && hasCompass) {
+        const uint8_t currentFrame = ui->getUiState()->currentFrame;
+        if ((framesetInfo.positions.gps != 255 && currentFrame == framesetInfo.positions.gps) ||
+            (framesetInfo.positions.waypoint != 255 && currentFrame == framesetInfo.positions.waypoint) ||
+            (framesetInfo.positions.firstFavorite != 255 && currentFrame >= framesetInfo.positions.firstFavorite &&
+             currentFrame <= framesetInfo.positions.lastFavorite)) {
+            desiredFramerate = COMPASS_ACTIVE_FRAMERATE;
+        }
     }
 #endif
 
