@@ -142,7 +142,8 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     const uint16_t compassDiam = compassRadius * 2;
 
     const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
-    const char *statusInCompass = nullptr;
+    const char *statusLine1 = nullptr;
+    const char *statusLine2 = nullptr;
 
     // Only show compass/bearing once we have a valid own position fix (GPS or phone location) and valid heading.
     if (hasOwnPositionFix) {
@@ -175,17 +176,20 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
             }
 
         } else {
-            statusInCompass = "NoHdg";
+            statusLine1 = "No";
+            statusLine2 = "Heading";
         }
     } else {
         // No own fix yet, so compass/bearing data would be misleading.
-        statusInCompass = "NoFix";
+        statusLine1 = "No";
+        statusLine2 = "Fix";
     }
 
-    if (statusInCompass) {
+    if (statusLine1) {
         display->drawCircle(compassX, compassY, compassRadius);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(compassX, compassY - FONT_HEIGHT_SMALL / 2, statusInCompass);
+        display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
+        display->drawString(compassX, compassY, statusLine2);
     }
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Something above me changes to a different alignment, forcing a fix here!

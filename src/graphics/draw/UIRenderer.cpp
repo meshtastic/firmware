@@ -643,7 +643,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
     float bearing = 0.0f;
     const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
     const bool hasNodePositionFix = nodeDB->hasValidPosition(node);
-    const char *statusInCompass = nullptr;
+    const char *statusLine1 = nullptr;
+    const char *statusLine2 = nullptr;
     if (hasOwnPositionFix && hasNodePositionFix) {
         const auto &op = ourNode->position;
         showCompass = CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
@@ -652,15 +653,17 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
             bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
             bearing = CompassRenderer::adjustBearingForCompassMode(bearing, myHeading);
         } else {
-            statusInCompass = "NoHdg";
+            statusLine1 = "No";
+            statusLine2 = "Heading";
         }
     } else if (!hasOwnPositionFix || !hasNodePositionFix) {
-        statusInCompass = "NoFix";
+        statusLine1 = "No";
+        statusLine2 = "Fix";
     }
 
     // --- Compass Rendering: landscape (wide) screens use the original side-aligned logic ---
     if (SCREEN_WIDTH > SCREEN_HEIGHT) {
-        if (showCompass || statusInCompass) {
+        if (showCompass || statusLine1) {
             const int16_t topY = getTextPositions(display)[1];
             const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
             const int16_t usableHeight = bottomY - topY - 5;
@@ -677,14 +680,15 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
                 CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
             } else {
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL / 2, statusInCompass);
+                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
+                display->drawString(compassX, compassY, statusLine2);
                 display->setTextAlignment(TEXT_ALIGN_LEFT);
             }
         }
         // else show nothing
     } else {
         // Portrait or square: put compass at the bottom and centered, scaled to fit available space
-        if (showCompass || statusInCompass) {
+        if (showCompass || statusLine1) {
             int yBelowContent = (line > 0 && line <= 5) ? (getTextPositions(display)[line - 1] + FONT_HEIGHT_SMALL + 2)
                                                         : getTextPositions(display)[1];
             const int margin = 4;
@@ -716,7 +720,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
                 graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
             } else {
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL / 2, statusInCompass);
+                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
+                display->drawString(compassX, compassY, statusLine2);
                 display->setTextAlignment(TEXT_ALIGN_LEFT);
             }
         }
@@ -1186,14 +1191,18 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
     float heading = 0.0f;
     bool validHeading = false;
-    const char *statusInCompass = nullptr;
+    const char *statusLine1 = nullptr;
+    const char *statusLine2 = nullptr;
     if (hasOwnPositionFix) {
         const auto &op = ourNode->position;
         validHeading = CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), heading);
-        if (!validHeading)
-            statusInCompass = "NoHdg";
+        if (!validHeading) {
+            statusLine1 = "No";
+            statusLine2 = "Heading";
+        }
     } else {
-        statusInCompass = "NoFix";
+        statusLine1 = "No";
+        statusLine2 = "Fix";
     }
 
     // If GPS is off, no need to display these parts
@@ -1236,7 +1245,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     }
 #if !defined(M5STACK_UNITC6L)
     // === Draw Compass ===
-    if (validHeading || statusInCompass) {
+    if (validHeading || statusLine1) {
         // --- Compass Rendering: landscape (wide) screens use original side-aligned logic ---
         if (SCREEN_WIDTH > SCREEN_HEIGHT) {
             const int16_t topY = getTextPositions(display)[1];
@@ -1274,7 +1283,8 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
                 display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
             } else {
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL / 2, statusInCompass);
+                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
+                display->drawString(compassX, compassY, statusLine2);
             }
             display->setTextAlignment(TEXT_ALIGN_LEFT);
         } else {
@@ -1323,7 +1333,8 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
                 display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
             } else {
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL / 2, statusInCompass);
+                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
+                display->drawString(compassX, compassY, statusLine2);
             }
             display->setTextAlignment(TEXT_ALIGN_LEFT);
         }

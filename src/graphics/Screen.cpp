@@ -327,12 +327,14 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
-    static float b;
+    static float b = -1.0f;
+    static bool haveReference = false;
 
-    if (oldLat == 0) {
-        // just prepare for next time
+    if (!haveReference) {
+        // First valid sample is only our reference point; no heading yet.
         oldLat = lat;
         oldLon = lon;
+        haveReference = true;
 
         return b;
     }

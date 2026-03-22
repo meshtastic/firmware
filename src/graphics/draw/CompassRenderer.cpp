@@ -125,7 +125,7 @@ bool getHeadingRadians(double lat, double lon, float &headingRadian)
     }
 
     const float estimatedHeadingDeg = screen->estimatedHeading(lat, lon);
-    if (isnan(estimatedHeadingDeg))
+    if (isnan(estimatedHeadingDeg) || estimatedHeadingDeg < 0.0f)
         return false;
 
     headingRadian = estimatedHeadingDeg * DEG_TO_RAD;
