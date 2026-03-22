@@ -74,41 +74,10 @@ int32_t ICM20948Sensor::runOnce()
     }
 
     if (doCalibration) {
-
-        if (!showingScreen) {
-            powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
-            showingScreen = true;
-            if (screen)
-                screen->startAlert((FrameCallback)drawFrameCalibration);
-        }
-
-        if (magX > highestX)
-            highestX = magX;
-        if (magX < lowestX)
-            lowestX = magX;
-        if (magY > highestY)
-            highestY = magY;
-        if (magY < lowestY)
-            lowestY = magY;
-        if (magZ > highestZ)
-            highestZ = magZ;
-        if (magZ < lowestZ)
-            lowestZ = magZ;
-
-        uint32_t now = millis();
-        if ((int32_t)(now - endCalibrationAt) >= 0) {
-            doCalibration = false;
-            endCalibrationAt = 0;
-            showingScreen = false;
-            saveMagnetometerCalibration(compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
-            if (screen) {
-                screen->setEndCalibration(0);
-                screen->endAlert();
-            }
-        }
-
-        // LOG_DEBUG("ICM20948 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
-        //           lowestY, highestY, lowestZ, highestZ);
+        beginCalibrationDisplay(showingScreen);
+        updateCalibrationExtrema(magX, magY, magZ, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+        finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ,
+                                   lowestZ);
     }
 
     magX -= (highestX + lowestX) / 2;
@@ -130,23 +99,7 @@ int32_t ICM20948Sensor::runOnce()
 
     float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
 
-    switch (config.display.compass_orientation) {
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0_INVERTED:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0:
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90_INVERTED:
-        heading += 90;
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180_INVERTED:
-        heading += 180;
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED:
-        heading += 270;
-        break;
-    }
+    heading = applyCompassOrientation(heading);
     if (screen)
         screen->setHeading(heading);
 #endif
@@ -154,14 +107,14 @@ int32_t ICM20948Sensor::runOnce()
     // Wake on motion using polling  - this is not as efficient as using hardware interrupt pin (see above)
     auto status = sensor->setBank(0);
     if (sensor->status != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 isWakeOnMotion failed to set bank - %s", sensor->statusString());
+        LOG_DEBUG("ICM20948 setBank fail: %s", sensor->statusString());
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
     ICM_20948_INT_STATUS_t int_stat;
     status = sensor->read(AGB0_REG_INT_STATUS, (uint8_t *)&int_stat, sizeof(ICM_20948_INT_STATUS_t));
     if (status != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 isWakeOnMotion failed to read interrupts - %s", sensor->statusString());
+        LOG_DEBUG("ICM20948 int read fail: %s", sensor->statusString());
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
@@ -177,26 +130,16 @@ int32_t ICM20948Sensor::runOnce()
 void ICM20948Sensor::calibrate(uint16_t forSeconds)
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
-    LOG_DEBUG("Old calibration data: highestX = %f, lowestX = %f, highestY = %f, lowestY = %f, highestZ = %f, lowestZ = %f",
-              highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
-    LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
+    LOG_DEBUG("ICM20948 cal start %is", forSeconds);
     if (sensor->dataReady()) {
         sensor->getAGMT();
-        highestX = sensor->agmt.mag.axes.x;
-        lowestX = sensor->agmt.mag.axes.x;
-        highestY = sensor->agmt.mag.axes.y;
-        lowestY = sensor->agmt.mag.axes.y;
-        highestZ = sensor->agmt.mag.axes.z;
-        lowestZ = sensor->agmt.mag.axes.z;
+        seedCalibrationExtrema(sensor->agmt.mag.axes.x, sensor->agmt.mag.axes.y, sensor->agmt.mag.axes.z, highestX, lowestX,
+                               highestY, lowestY, highestZ, lowestZ);
     } else {
-        highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+        seedCalibrationExtrema(0.0f, 0.0f, 0.0f, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
     }
 
-    doCalibration = true;
-    uint32_t calibrateFor = static_cast<uint32_t>(forSeconds) * 1000U; // calibrate for seconds provided
-    endCalibrationAt = millis() + calibrateFor;
-    if (screen)
-        screen->setEndCalibration(endCalibrationAt);
+    startCalibrationWindow(forSeconds);
 #endif
 }
 // ----------------------------------------------------------------------
@@ -236,34 +179,34 @@ bool ICM20948Singleton::init(ScanI2C::FoundDevice device)
     bool bAddr = (device.address.address == 0x69);
     delay(100);
 
-    LOG_DEBUG("ICM20948 begin on addr 0x%02X (port=%d, bAddr=%d)", device.address.address, device.address.port, bAddr);
+    LOG_DEBUG("ICM20948 begin 0x%02X p=%d b=%d", device.address.address, device.address.port, bAddr);
 
     ICM_20948_Status_e status = begin(bus, bAddr);
     if (status != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 init begin - %s", statusString());
+        LOG_DEBUG("ICM20948 begin fail: %s", statusString());
         return false;
     }
 
     // SW reset to make sure the device starts in a known state
     if (swReset() != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 init reset - %s", statusString());
+        LOG_DEBUG("ICM20948 reset fail: %s", statusString());
         return false;
     }
     delay(200);
 
     // Now wake the sensor up
     if (sleep(false) != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 init wake - %s", statusString());
+        LOG_DEBUG("ICM20948 wake fail: %s", statusString());
         return false;
     }
 
     if (lowPower(false) != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 init high power - %s", statusString());
+        LOG_DEBUG("ICM20948 high power fail: %s", statusString());
         return false;
     }
 
     if (startupMagnetometer(false) != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 init magnetometer - %s", statusString());
+        LOG_DEBUG("ICM20948 mag start fail: %s", statusString());
         return false;
     }
 
@@ -271,19 +214,15 @@ bool ICM20948Singleton::init(ScanI2C::FoundDevice device)
 
     // Active low
     cfgIntActiveLow(true);
-    LOG_DEBUG("ICM20948 init set cfgIntActiveLow - %s", statusString());
 
     // Push-pull
     cfgIntOpenDrain(false);
-    LOG_DEBUG("ICM20948 init set cfgIntOpenDrain - %s", statusString());
 
     // If enabled, *ANY* read will clear the INT_STATUS register.
     cfgIntAnyReadToClear(true);
-    LOG_DEBUG("ICM20948 init set cfgIntAnyReadToClear - %s", statusString());
 
     // Latch the interrupt until cleared
     cfgIntLatch(true);
-    LOG_DEBUG("ICM20948 init set cfgIntLatch - %s", statusString());
 
     // Set up an interrupt pin with an internal pullup for active low
     pinMode(ICM_20948_INT_PIN, INPUT_PULLUP);
@@ -314,19 +253,12 @@ bool ICM20948Singleton::setWakeOnMotion()
 
     // Enable WoM Logic mode 1 = Compare the current sample with the previous sample
     status = WOMLogic(true, 1);
-    LOG_DEBUG("ICM20948 init set WOMLogic - %s", statusString());
     if (status != ICM_20948_Stat_Ok)
         return false;
 
     // Enable interrupts on WakeOnMotion
     status = intEnableWOM(true);
-    LOG_DEBUG("ICM20948 init set intEnableWOM - %s", statusString());
     return status == ICM_20948_Stat_Ok;
-
-    // Clear any current interrupts
-    ICM20948_IRQ = false;
-    clearInterrupts();
-    return true;
 }
 
 #endif

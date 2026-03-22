@@ -15,15 +15,6 @@
 
 WaypointModule *waypointModule;
 
-static inline float degToRad(float deg)
-{
-    return deg * PI / 180.0f;
-}
-static inline float radToDeg(float rad)
-{
-    return rad * 180.0f / PI;
-}
-
 ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
@@ -123,28 +114,17 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     // If our node has a position:
     if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
-        float myHeading;
-        if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
-            myHeading = 0;
-        } else {
-            if (screen->hasHeading())
-                myHeading = degToRad(screen->getHeading());
-            else
-                myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        }
+        float myHeading = 0.0f;
+        graphics::CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
         graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, (compassDiam / 2));
 
         // Compass bearing to waypoint
         float bearingToOther =
             GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
-        // If the top of the compass is a static north then bearingToOther can be drawn on the compass directly
-        // If the top of the compass is not a static north we need adjust bearingToOther based on heading
-        if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
-            bearingToOther -= myHeading;
+        bearingToOther = graphics::CompassRenderer::adjustBearingForCompassMode(bearingToOther, myHeading);
         graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
 
-        float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2 * PI : bearingToOther;
-        bearingToOtherDegrees = radToDeg(bearingToOtherDegrees);
+        const float bearingToOtherDegrees = graphics::CompassRenderer::radiansToDegrees360(bearingToOther);
 
         // Distance to Waypoint
         float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));

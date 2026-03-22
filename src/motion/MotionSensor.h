@@ -58,6 +58,15 @@ class MotionSensor
                                      float highestZ, float lowestZ);
     bool loadMagnetometerCalibration(const char *filePath, float &highestX, float &lowestX, float &highestY, float &lowestY,
                                      float &highestZ, float &lowestZ);
+    void beginCalibrationDisplay(bool &showingScreen);
+    void finishCalibrationIfExpired(bool &showingScreen, const char *filePath, float highestX, float lowestX, float highestY,
+                                    float lowestY, float highestZ, float lowestZ);
+    void startCalibrationWindow(uint16_t forSeconds);
+    static void seedCalibrationExtrema(float x, float y, float z, float &highestX, float &lowestX, float &highestY,
+                                       float &lowestY, float &highestZ, float &lowestZ);
+    static void updateCalibrationExtrema(float x, float y, float z, float &highestX, float &lowestX, float &highestY,
+                                         float &lowestY, float &highestZ, float &lowestZ);
+    static float applyCompassOrientation(float heading);
 
     ScanI2C::FoundDevice device;
 

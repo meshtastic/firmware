@@ -639,12 +639,21 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(x, getTextPositions(display)[line++], batLine);
     }
 
+    bool showCompass = false;
+    float myHeading = 0.0f;
+    float bearing = 0.0f;
+    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node)) {
+        const auto &op = ourNode->position;
+        showCompass = CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
+        if (showCompass) {
+            const auto &p = node->position;
+            bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            bearing = CompassRenderer::adjustBearingForCompassMode(bearing, myHeading);
+        }
+    }
+
     // --- Compass Rendering: landscape (wide) screens use the original side-aligned logic ---
     if (SCREEN_WIDTH > SCREEN_HEIGHT) {
-        bool showCompass = false;
-        if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node)) {
-            showCompass = true;
-        }
         if (showCompass) {
             const int16_t topY = getTextPositions(display)[1];
             const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
@@ -656,22 +665,6 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
             const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
             const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
 
-            const auto &op = ourNode->position;
-            float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
-                                                   : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-
-            const auto &p = node->position;
-            /* unused
-            float d =
-                GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-            */
-            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
-                myHeading = 0;
-            } else {
-                bearing -= myHeading;
-            }
-
             display->drawCircle(compassX, compassY, compassRadius);
             CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
             CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
@@ -679,10 +672,6 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
         // else show nothing
     } else {
         // Portrait or square: put compass at the bottom and centered, scaled to fit available space
-        bool showCompass = false;
-        if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node)) {
-            showCompass = true;
-        }
         if (showCompass) {
             int yBelowContent = (line > 0 && line <= 5) ? (getTextPositions(display)[line - 1] + FONT_HEIGHT_SMALL + 2)
                                                         : getTextPositions(display)[1];
@@ -709,22 +698,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
             int compassX = x + SCREEN_WIDTH / 2;
             int compassY = yBelowContent + availableHeight / 2;
 
-            const auto &op = ourNode->position;
-            float myHeading = 0;
-            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
-                myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
-                                                 : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-            }
             graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
 
-            const auto &p = node->position;
-            /* unused
-            float d =
-                GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-            */
-            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
-                bearing -= myHeading;
             graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
 
             display->drawCircle(compassX, compassY, compassRadius);
@@ -1186,19 +1161,9 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
                           int32_t(gpsStatus->getAltitude()));
 
     // === Determine Compass Heading ===
-    float heading = 0;
-    bool validHeading = false;
-    if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
-        validHeading = true;
-    } else {
-        if (screen->hasHeading()) {
-            heading = radians(screen->getHeading());
-            validHeading = true;
-        } else {
-            heading = screen->estimatedHeading(geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
-            validHeading = !isnan(heading);
-        }
-    }
+    float heading = 0.0f;
+    bool validHeading =
+        CompassRenderer::getHeadingRadians(geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7, heading);
 
     // If GPS is off, no need to display these parts
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {

@@ -7,9 +7,6 @@
 extern graphics::Screen *screen;
 #endif
 
-// Flag when an interrupt has been detected
-volatile static bool BMM150_IRQ = false;
-
 BMM150Sensor::BMM150Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
 
 bool BMM150Sensor::init()
@@ -23,24 +20,7 @@ int32_t BMM150Sensor::runOnce()
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     float heading = sensor->getCompassDegree();
-
-    switch (config.display.compass_orientation) {
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0_INVERTED:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0:
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90_INVERTED:
-        heading += 90;
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180_INVERTED:
-        heading += 180;
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED:
-        heading += 270;
-        break;
-    }
+    heading = applyCompassOrientation(heading);
     if (screen)
         screen->setHeading(heading);
 #endif
@@ -75,10 +55,10 @@ bool BMM150Singleton::init(ScanI2C::FoundDevice device)
 {
 
     // startup
-    LOG_DEBUG("BMM150 begin on addr 0x%02X (port=%d)", device.address.address, device.address.port);
+    LOG_DEBUG("BMM150 begin 0x%02X p=%d", device.address.address, device.address.port);
     uint8_t status = begin();
     if (status != 0) {
-        LOG_DEBUG("BMM150 init error %u", status);
+        LOG_DEBUG("BMM150 init err %u", status);
         return false;
     }
 

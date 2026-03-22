@@ -34,44 +34,11 @@ int32_t BMX160Sensor::runOnce()
     sensor.getAllData(&magAccel, NULL, &gAccel);
 
     if (doCalibration) {
-
-        if (!showingScreen) {
-            powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
-            showingScreen = true;
-            if (screen)
-                screen->startAlert((FrameCallback)drawFrameCalibration);
-        }
-
-        if (magAccel.x > highestX)
-            highestX = magAccel.x;
-        if (magAccel.x < lowestX)
-            lowestX = magAccel.x;
-        if (magAccel.y > highestY)
-            highestY = magAccel.y;
-        if (magAccel.y < lowestY)
-            lowestY = magAccel.y;
-        if (magAccel.z > highestZ)
-            highestZ = magAccel.z;
-        if (magAccel.z < lowestZ)
-            lowestZ = magAccel.z;
-
-        uint32_t now = millis();
-        if ((int32_t)(now - endCalibrationAt) >= 0) {
-            doCalibration = false;
-            endCalibrationAt = 0;
-            showingScreen = false;
-            saveMagnetometerCalibration(compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
-            if (screen) {
-                screen->setEndCalibration(0);
-                screen->endAlert();
-            }
-        }
-
-        // LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
-        // lowestY, highestY, lowestZ, highestZ);
+        beginCalibrationDisplay(showingScreen);
+        updateCalibrationExtrema(magAccel.x, magAccel.y, magAccel.z, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+        finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ,
+                                   lowestZ);
     }
-
-    int highestRealX = highestX - (highestX + lowestX) / 2;
 
     magAccel.x -= (highestX + lowestX) / 2;
     magAccel.y -= (highestY + lowestY) / 2;
@@ -92,23 +59,7 @@ int32_t BMX160Sensor::runOnce()
 
     float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
 
-    switch (config.display.compass_orientation) {
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0_INVERTED:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0:
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90_INVERTED:
-        heading += 90;
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180_INVERTED:
-        heading += 180;
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED:
-        heading += 270;
-        break;
-    }
+    heading = applyCompassOrientation(heading);
     if (screen)
         screen->setHeading(heading);
 #endif
@@ -123,15 +74,8 @@ void BMX160Sensor::calibrate(uint16_t forSeconds)
     sBmx160SensorData_t gAccel;
     LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
     sensor.getAllData(&magAccel, NULL, &gAccel);
-    highestX = magAccel.x, lowestX = magAccel.x;
-    highestY = magAccel.y, lowestY = magAccel.y;
-    highestZ = magAccel.z, lowestZ = magAccel.z;
-
-    doCalibration = true;
-    uint32_t calibrateFor = static_cast<uint32_t>(forSeconds) * 1000U; // calibrate for seconds provided
-    endCalibrationAt = millis() + calibrateFor;
-    if (screen)
-        screen->setEndCalibration(endCalibrationAt);
+    seedCalibrationExtrema(magAccel.x, magAccel.y, magAccel.z, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+    startCalibrationWindow(forSeconds);
 #endif
 }
 

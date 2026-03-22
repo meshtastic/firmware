@@ -1,10 +1,6 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "CompassRenderer.h"
-#include "NodeDB.h"
-#include "UIRenderer.h"
-#include "configuration.h"
-#include "gps/GeoCoord.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include <cmath>
@@ -113,11 +109,44 @@ void drawArrowToNode(OLEDDisplay *display, int16_t x, int16_t y, int16_t size, f
     display->fillTriangle(tip.x, tip.y, right.x, right.y, tail.x, tail.y);
 }
 
-float estimatedHeading(double lat, double lon)
+bool getHeadingRadians(double lat, double lon, float &headingRadian)
 {
-    // Simple magnetic declination estimation
-    // This is a very basic implementation - the original might be more sophisticated
-    return 0.0f; // Return 0 for now, indicating no heading available
+    headingRadian = 0.0f;
+
+    if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING)
+        return true;
+
+    if (!screen)
+        return false;
+
+    if (screen->hasHeading()) {
+        headingRadian = screen->getHeading() * DEG_TO_RAD;
+        return true;
+    }
+
+    const float estimatedHeadingDeg = screen->estimatedHeading(lat, lon);
+    if (isnan(estimatedHeadingDeg))
+        return false;
+
+    headingRadian = estimatedHeadingDeg * DEG_TO_RAD;
+    return true;
+}
+
+float adjustBearingForCompassMode(float bearingRadian, float headingRadian)
+{
+    if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
+        return bearingRadian - headingRadian;
+
+    return bearingRadian;
+}
+
+float radiansToDegrees360(float angleRadian)
+{
+    float wrapped = fmodf(angleRadian, 2.0f * PI);
+    if (wrapped < 0.0f)
+        wrapped += 2.0f * PI;
+
+    return wrapped * RAD_TO_DEG;
 }
 
 uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)

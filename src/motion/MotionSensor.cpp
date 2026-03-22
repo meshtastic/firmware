@@ -40,7 +40,7 @@ MotionSensor::MotionSensor(ScanI2C::FoundDevice foundDevice)
     device.address.address = foundDevice.address.address;
     device.address.port = foundDevice.address.port;
     device.type = foundDevice.type;
-    LOG_DEBUG("Motion MotionSensor port: %s address: 0x%x type: %d", devicePort() == ScanI2C::I2CPort::WIRE1 ? "Wire1" : "Wire",
+    LOG_DEBUG("MotionSensor p=%s a=0x%x t=%d", devicePort() == ScanI2C::I2CPort::WIRE1 ? "Wire1" : "Wire",
               (uint8_t)deviceAddress(), deviceType());
 }
 
@@ -132,6 +132,93 @@ bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &high
     LOG_INFO("Filesystem unavailable, skipping compass calibration load");
     return false;
 #endif
+}
+
+void MotionSensor::beginCalibrationDisplay(bool &showingScreen)
+{
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
+    if (!showingScreen) {
+        powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
+        showingScreen = true;
+        if (screen)
+            screen->startAlert((FrameCallback)drawFrameCalibration);
+    }
+#else
+    (void)showingScreen;
+#endif
+}
+
+void MotionSensor::finishCalibrationIfExpired(bool &showingScreen, const char *filePath, float highestX, float lowestX,
+                                              float highestY, float lowestY, float highestZ, float lowestZ)
+{
+    const uint32_t now = millis();
+    if ((int32_t)(now - endCalibrationAt) < 0)
+        return;
+
+    doCalibration = false;
+    endCalibrationAt = 0;
+    showingScreen = false;
+    saveMagnetometerCalibration(filePath, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
+    if (screen) {
+        screen->setEndCalibration(0);
+        screen->endAlert();
+    }
+#endif
+}
+
+void MotionSensor::startCalibrationWindow(uint16_t forSeconds)
+{
+    doCalibration = true;
+    const uint32_t calibrateFor = static_cast<uint32_t>(forSeconds) * 1000U;
+    endCalibrationAt = millis() + calibrateFor;
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
+    if (screen)
+        screen->setEndCalibration(endCalibrationAt);
+#endif
+}
+
+void MotionSensor::seedCalibrationExtrema(float x, float y, float z, float &highestX, float &lowestX, float &highestY,
+                                          float &lowestY, float &highestZ, float &lowestZ)
+{
+    highestX = lowestX = x;
+    highestY = lowestY = y;
+    highestZ = lowestZ = z;
+}
+
+void MotionSensor::updateCalibrationExtrema(float x, float y, float z, float &highestX, float &lowestX, float &highestY,
+                                            float &lowestY, float &highestZ, float &lowestZ)
+{
+    if (x > highestX)
+        highestX = x;
+    if (x < lowestX)
+        lowestX = x;
+    if (y > highestY)
+        highestY = y;
+    if (y < lowestY)
+        lowestY = y;
+    if (z > highestZ)
+        highestZ = z;
+    if (z < lowestZ)
+        lowestZ = z;
+}
+
+float MotionSensor::applyCompassOrientation(float heading)
+{
+    switch (config.display.compass_orientation) {
+    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90:
+    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90_INVERTED:
+        return heading + 90;
+    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180:
+    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180_INVERTED:
+        return heading + 180;
+    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270:
+    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED:
+        return heading + 270;
+    default:
+        return heading;
+    }
 }
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
