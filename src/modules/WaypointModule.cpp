@@ -83,9 +83,6 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
 
-    const int w = display->getWidth();
-    const int h = display->getHeight();
-
     // Decode the waypoint
     const meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
     meshtastic_Waypoint wp{};
@@ -99,60 +96,103 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     getTimeAgoStr(sinceReceived(&mp), lastStr, sizeof(lastStr));
 
     // Will contain distance information, passed as a field to drawColumns
-    char distStr[20];
+    char distStr[20] = "";
 
     // Get our node, to use our own position
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
-    // Dimensions / co-ordinates for the compass/circle
-    const uint16_t compassDiam = graphics::CompassRenderer::getCompassDiam(w, h);
-    const int16_t compassX = x + w - (compassDiam / 2) - 5;
-    const int16_t compassY = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
-                                 ? y + h / 2
-                                 : y + FONT_HEIGHT_SMALL + (h - FONT_HEIGHT_SMALL) / 2;
+    // Match compass sizing/placement to favorite node screen logic.
+    const int w = display->getWidth();
+    int16_t compassRadius = 8;
+    int16_t compassX = x + w - compassRadius - 8;
+    int16_t compassY = y + display->getHeight() / 2;
 
-    // If our node has a position:
-    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
-        const meshtastic_PositionLite &op = ourNode->position;
-        float myHeading = 0.0f;
-        graphics::CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
-        graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, (compassDiam / 2));
-
-        // Compass bearing to waypoint
-        float bearingToOther =
-            GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
-        bearingToOther = graphics::CompassRenderer::adjustBearingForCompassMode(bearingToOther, myHeading);
-        graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
-
-        const float bearingToOtherDegrees = graphics::CompassRenderer::radiansToDegrees360(bearingToOther);
-
-        // Distance to Waypoint
-        float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            float feet = d * METERS_TO_FEET;
-            snprintf(distStr, sizeof(distStr), feet < (2 * MILES_TO_FEET) ? "%.0fft   %.0f°" : "%.1fmi   %.0f°",
-                     feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET, bearingToOtherDegrees);
-        } else {
-            snprintf(distStr, sizeof(distStr), d < 2000 ? "%.0fm   %.0f°" : "%.1fkm   %.0f°", d < 2000 ? d : d / 1000,
-                     bearingToOtherDegrees);
+    if (SCREEN_WIDTH > SCREEN_HEIGHT) {
+        const int16_t topY = graphics::getTextPositions(display)[1];
+        const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
+        const int16_t usableHeight = bottomY - topY - 5;
+        compassRadius = usableHeight / 2;
+        if (compassRadius < 8)
+            compassRadius = 8;
+        compassX = x + SCREEN_WIDTH - compassRadius - 8;
+        compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
+    } else {
+        // Waypoint content uses rows 1..4, so place the compass below that block.
+        const int yBelowContent = graphics::getTextPositions(display)[4] + FONT_HEIGHT_SMALL + 2;
+        const int margin = 4;
+#if defined(USE_EINK)
+        const int iconSize = (currentResolution == ScreenResolution::High) ? 16 : 8;
+        const int navBarHeight = iconSize + 6;
+#else
+        const int navBarHeight = 0;
+#endif
+        const int availableHeight = SCREEN_HEIGHT - yBelowContent - navBarHeight - margin;
+        if (availableHeight > 0) {
+            compassRadius = availableHeight / 2;
+            if (compassRadius < 8)
+                compassRadius = 8;
+            if (compassRadius * 2 > SCREEN_WIDTH - 16)
+                compassRadius = (SCREEN_WIDTH - 16) / 2;
+            if (compassRadius < 8)
+                compassRadius = 8;
+            compassX = x + SCREEN_WIDTH / 2;
+            compassY = yBelowContent + availableHeight / 2;
         }
     }
+    const uint16_t compassDiam = compassRadius * 2;
 
-    else {
-        display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
+    const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
+    const char *statusInCompass = nullptr;
 
-        // ? in the distance field
-        snprintf(distStr, sizeof(distStr), "? %s ?°",
-                 (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) ? "mi" : "km");
+    // Only show compass/bearing once we have a valid own position fix (GPS or phone location) and valid heading.
+    if (hasOwnPositionFix) {
+        const meshtastic_PositionLite &op = ourNode->position;
+        float myHeading = 0.0f;
+        const bool hasHeading = graphics::CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
+        if (hasHeading) {
+            // Draw compass circle
+            display->drawCircle(compassX, compassY, compassRadius);
+            graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+
+            // Compass bearing to waypoint
+            float bearingToOther =
+                GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
+            bearingToOther = graphics::CompassRenderer::adjustBearingForCompassMode(bearingToOther, myHeading);
+            graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
+
+            const float bearingToOtherDegrees = graphics::CompassRenderer::radiansToDegrees360(bearingToOther);
+
+            // Distance to Waypoint
+            float d =
+                GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+                float feet = d * METERS_TO_FEET;
+                snprintf(distStr, sizeof(distStr), feet < (2 * MILES_TO_FEET) ? "%.0fft   %.0f°" : "%.1fmi   %.0f°",
+                         feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET, bearingToOtherDegrees);
+            } else {
+                snprintf(distStr, sizeof(distStr), d < 2000 ? "%.0fm   %.0f°" : "%.1fkm   %.0f°", d < 2000 ? d : d / 1000,
+                         bearingToOtherDegrees);
+            }
+
+        } else {
+            statusInCompass = "NoHdg";
+        }
+    } else {
+        // No own fix yet, so compass/bearing data would be misleading.
+        statusInCompass = "NoFix";
     }
 
-    // Draw compass circle
-    display->drawCircle(compassX, compassY, compassDiam / 2);
+    if (statusInCompass) {
+        display->drawCircle(compassX, compassY, compassRadius);
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(compassX, compassY - FONT_HEIGHT_SMALL / 2, statusInCompass);
+    }
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Something above me changes to a different alignment, forcing a fix here!
     display->drawString(0, graphics::getTextPositions(display)[line++], lastStr);
     display->drawString(0, graphics::getTextPositions(display)[line++], wp.name);
     display->drawString(0, graphics::getTextPositions(display)[line++], wp.description);
-    display->drawString(0, graphics::getTextPositions(display)[line++], distStr);
+    if (distStr[0])
+        display->drawString(0, graphics::getTextPositions(display)[line++], distStr);
 }
 #endif

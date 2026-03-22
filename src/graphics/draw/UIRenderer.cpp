@@ -660,9 +660,9 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
             int16_t compassRadius = usableHeight / 2;
             if (compassRadius < 8)
                 compassRadius = 8;
-            const int16_t compassDiam = compassRadius * 2;
             const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
             const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
+            const int16_t compassDiam = compassRadius * 2;
 
             display->drawCircle(compassX, compassY, compassRadius);
             CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
@@ -682,8 +682,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
 #else
             const int navBarHeight = 0;
 #endif
-            int availableHeight = SCREEN_HEIGHT - yBelowContent - navBarHeight - margin;
             // --------- END PATCH FOR EINK NAV BAR -----------
+            int availableHeight = SCREEN_HEIGHT - yBelowContent - navBarHeight - margin;
 
             if (availableHeight < FONT_HEIGHT_SMALL * 2)
                 return;
