@@ -2,7 +2,7 @@
 
 /*
 
-System Applet to render an on-screeen keyboard
+System Applet to render an on-screen keyboard
 
 */
 

@@ -19,7 +19,7 @@ void setupNicheGraphics()
     SPIClass *hspi = new SPIClass(HSPI);
     hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
 
-    // Setup Enk driver
+    // Setup EInk driver
     Drivers::EInk *driver = new Drivers::DEPG0290BNS800;
     driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY);
 
