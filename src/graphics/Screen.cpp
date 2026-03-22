@@ -329,23 +329,49 @@ float Screen::estimatedHeading(double lat, double lon)
     static double oldLat, oldLon;
     static float b = -1.0f;
     static bool haveReference = false;
+    static uint32_t referenceAtMs = 0;
+    static uint32_t lastHeadingAtMs = 0;
+
+    constexpr float MIN_MOVE_METERS_SLOW = 3.0f;
+    constexpr uint32_t SLOW_MOVE_WINDOW_MS = 18000;
+    constexpr float MIN_MOVE_METERS_GENERAL = 6.0f;
+    constexpr uint32_t REFERENCE_RESET_MS = 60000;
+    constexpr uint32_t HEADING_STALE_MS = 30000;
+    const uint32_t now = millis();
 
     if (!haveReference) {
         // First valid sample is only our reference point; no heading yet.
         oldLat = lat;
         oldLon = lon;
         haveReference = true;
+        referenceAtMs = now;
 
         return b;
     }
 
     float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
-    if (d < 10) // haven't moved enough, just keep current bearing
+    const uint32_t elapsedMs = now - referenceAtMs;
+    const bool movedEnough = (d >= MIN_MOVE_METERS_GENERAL) || (d >= MIN_MOVE_METERS_SLOW && elapsedMs <= SLOW_MOVE_WINDOW_MS);
+    if (!movedEnough) {
+        // Prevent long idle/drift accumulation from eventually producing a fake heading.
+        if (elapsedMs >= REFERENCE_RESET_MS) {
+            oldLat = lat;
+            oldLon = lon;
+            referenceAtMs = now;
+        }
+
+        // Sensorless heading is stale if we have not confirmed movement recently.
+        if (lastHeadingAtMs != 0 && (now - lastHeadingAtMs) >= HEADING_STALE_MS)
+            return -1.0f;
+
         return b;
+    }
 
     b = GeoCoord::bearing(oldLat, oldLon, lat, lon) * RAD_TO_DEG;
     oldLat = lat;
     oldLon = lon;
+    referenceAtMs = now;
+    lastHeadingAtMs = now;
 
     return b;
 }

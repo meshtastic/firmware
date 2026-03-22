@@ -1189,20 +1189,30 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
+    const bool hasSensorHeading = screen->hasHeading();
     float heading = 0.0f;
     bool validHeading = false;
     const char *statusLine1 = nullptr;
     const char *statusLine2 = nullptr;
-    if (hasOwnPositionFix) {
-        const auto &op = ourNode->position;
-        validHeading = CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), heading);
-        if (!validHeading) {
+    if (hasSensorHeading || hasOwnPositionFix) {
+        double headingLat = 0.0;
+        double headingLon = 0.0;
+        if (hasOwnPositionFix) {
+            const auto &op = ourNode->position;
+            headingLat = DegD(op.latitude_i);
+            headingLon = DegD(op.longitude_i);
+        }
+        validHeading = CompassRenderer::getHeadingRadians(headingLat, headingLon, heading);
+    }
+
+    if (!validHeading) {
+        if (hasSensorHeading || hasOwnPositionFix) {
             statusLine1 = "No";
             statusLine2 = "Heading";
+        } else {
+            statusLine1 = "No";
+            statusLine2 = "Fix";
         }
-    } else {
-        statusLine1 = "No";
-        statusLine2 = "Fix";
     }
 
     // If GPS is off, no need to display these parts
