@@ -142,11 +142,13 @@ float adjustBearingForCompassMode(float bearingRadian, float headingRadian)
 
 float radiansToDegrees360(float angleRadian)
 {
-    float wrapped = fmodf(angleRadian, 2.0f * PI);
-    if (wrapped < 0.0f)
-        wrapped += 2.0f * PI;
-
-    return wrapped * RAD_TO_DEG;
+    constexpr float fullTurnDeg = 360.0f;
+    float degrees = angleRadian * RAD_TO_DEG;
+    if (degrees < 0.0f)
+        degrees += fullTurnDeg;
+    else if (degrees >= fullTurnDeg)
+        degrees -= fullTurnDeg;
+    return degrees;
 }
 
 uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)

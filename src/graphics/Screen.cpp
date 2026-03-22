@@ -135,6 +135,61 @@ static bool heartbeat = false;
 
 extern bool hasUnreadMessage;
 
+static inline float wrapHeading360(float heading)
+{
+    while (heading < 0.0f) {
+        heading += 360.0f;
+    }
+    while (heading >= 360.0f) {
+        heading -= 360.0f;
+    }
+    return heading;
+}
+
+void Screen::setHeading(float heading)
+{
+    const float wrappedHeading = wrapHeading360(heading);
+
+    if (!hasCompass) {
+        hasCompass = true;
+        compassHeading = wrappedHeading;
+        return;
+    }
+
+    // Interpolate using shortest-path angular delta to avoid jumps around 0/360.
+    float delta = wrappedHeading - compassHeading;
+    if (delta > 180.0f) {
+        delta -= 360.0f;
+    } else if (delta < -180.0f) {
+        delta += 360.0f;
+    }
+
+    // Adaptive filtering:
+    // - Strong damping for tiny deltas (jitter)
+    // - Faster response for larger turns
+    const float absDelta = (delta >= 0.0f) ? delta : -delta;
+    if (absDelta < 1.0f) {
+        return;
+    }
+
+    float alpha = 0.35f;
+    if (absDelta > 25.0f) {
+        alpha = 0.85f;
+    } else if (absDelta > 10.0f) {
+        alpha = 0.65f;
+    }
+
+    float step = delta * alpha;
+    const float maxStep = 12.0f;
+    if (step > maxStep) {
+        step = maxStep;
+    } else if (step < -maxStep) {
+        step = -maxStep;
+    }
+
+    compassHeading = wrapHeading360(compassHeading + step);
+}
+
 // ==============================
 // Overlay Alert Banner Renderer
 // ==============================

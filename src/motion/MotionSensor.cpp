@@ -64,7 +64,7 @@ bool MotionSensor::saveMagnetometerCalibration(const char *filePath, float highe
 {
 #ifdef FSCom
     if (!isRangeValid(highestX, lowestX) || !isRangeValid(highestY, lowestY) || !isRangeValid(highestZ, lowestZ)) {
-        LOG_WARN("Skipping save for invalid compass calibration ranges");
+        LOG_WARN("Skip save: invalid compass calib range");
         return false;
     }
 
@@ -76,13 +76,13 @@ bool MotionSensor::saveMagnetometerCalibration(const char *filePath, float highe
     const size_t written = file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
     bool okay = (written == sizeof(record)) && file.close();
     if (okay) {
-        LOG_INFO("Saved compass calibration to %s", filePath);
+        LOG_INFO("Saved compass calib %s", filePath);
     } else {
-        LOG_WARN("Failed to save compass calibration to %s", filePath);
+        LOG_WARN("Save compass calib failed %s", filePath);
     }
     return okay;
 #else
-    LOG_WARN("Cannot save compass calibration (filesystem unavailable)");
+    LOG_WARN("Skip save: filesystem unavailable");
     return false;
 #endif
 }
@@ -98,24 +98,19 @@ bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &high
     auto file = FSCom.open(filePath, FILE_O_READ);
     if (!file) {
         spiLock->unlock();
-        LOG_INFO("No compass calibration file found at %s", filePath);
+        LOG_INFO("No compass calib file %s", filePath);
         return false;
     }
     bytesRead = file.read(reinterpret_cast<uint8_t *>(&record), sizeof(record));
     file.close();
     spiLock->unlock();
 
-    if (bytesRead != sizeof(record)) {
-        LOG_WARN("Compass calibration file has unexpected size: %s", filePath);
-        return false;
-    }
-    if (record.magic != COMPASS_CALIBRATION_MAGIC || record.version != COMPASS_CALIBRATION_VERSION) {
-        LOG_WARN("Compass calibration file has invalid header: %s", filePath);
-        return false;
-    }
-    if (!isRangeValid(record.highestX, record.lowestX) || !isRangeValid(record.highestY, record.lowestY) ||
-        !isRangeValid(record.highestZ, record.lowestZ)) {
-        LOG_WARN("Compass calibration file contains invalid ranges: %s", filePath);
+    const bool headerValid = (bytesRead == sizeof(record)) && (record.magic == COMPASS_CALIBRATION_MAGIC) &&
+                             (record.version == COMPASS_CALIBRATION_VERSION);
+    const bool rangeValid = isRangeValid(record.highestX, record.lowestX) && isRangeValid(record.highestY, record.lowestY) &&
+                            isRangeValid(record.highestZ, record.lowestZ);
+    if (!headerValid || !rangeValid) {
+        LOG_WARN("Invalid compass calib file %s", filePath);
         return false;
     }
 
@@ -126,10 +121,10 @@ bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &high
     highestZ = record.highestZ;
     lowestZ = record.lowestZ;
 
-    LOG_INFO("Loaded compass calibration from %s", filePath);
+    LOG_INFO("Loaded compass calib %s", filePath);
     return true;
 #else
-    LOG_INFO("Filesystem unavailable, skipping compass calibration load");
+    LOG_INFO("Skip load: filesystem unavailable");
     return false;
 #endif
 }
