@@ -25,6 +25,7 @@
 #include "modules/TraceRouteModule.h"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <functional>
 #include <utility>
 
@@ -162,28 +163,9 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             config.lora.region = selectedRegion;
             auto changes = SEGMENT_CONFIG;
 
-        // FIXME: This should be a method consolidated with the same logic in the admin message as well
-        // This is needed as we wait til picking the LoRa region to generate keys for the first time.
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-            if (!owner.is_licensed) {
-                bool keygenSuccess = false;
-                if (config.security.private_key.size == 32) {
-                    // public key is derived from private, so this will always have the same result.
-                    if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                        keygenSuccess = true;
-                    }
-
-                } else {
-                    LOG_INFO("Generate new PKI keys");
-                    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-                    keygenSuccess = true;
-                }
-                if (keygenSuccess) {
-                    config.security.public_key.size = 32;
-                    config.security.private_key.size = 32;
-                    owner.public_key.size = 32;
-                    memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-                }
+            if (crypto) {
+                crypto->ensurePkiKeys(config.security, owner);
             }
 #endif
             config.lora.tx_enabled = true;
@@ -265,13 +247,24 @@ void menuHandler::FrequencySlotPicker()
     optionsEnumArray[options++] = 0;
 
     // Calculate number of channels (copied from RadioInterface::applyModemConfig())
+
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
     double bw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, myRegion->wideLora)
                                       : bwCodeToKHz(loraConfig.bandwidth);
 
     uint32_t numChannels = 0;
     if (myRegion) {
-        numChannels = (uint32_t)floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000.0)));
+        // Match RadioInterface::applyModemConfig(): include padding, add spacing in numerator, and use round()
+        const double spacing = myRegion->profile->spacing;
+        const double padding = myRegion->profile->padding;
+        const double channelBandwidthMHz = bw / 1000.0;
+        const double numerator = (myRegion->freqEnd - myRegion->freqStart) + spacing;
+        const double denominator = spacing + (padding * 2) + channelBandwidthMHz;
+        if (denominator > 0.0) {
+            numChannels = static_cast<uint32_t>(round(numerator / denominator));
+        } else {
+            LOG_WARN("Invalid region configuration: non-positive channel spacing/width");
+        }
     } else {
         LOG_WARN("Region not set, cannot calculate number of channels");
         return;
