@@ -3,7 +3,6 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "graphics/draw/CompassRenderer.h"
-#include <cmath>
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
@@ -28,7 +27,8 @@ struct CompassCalibrationRecord {
 
 bool isRangeValid(float highest, float lowest)
 {
-    return std::isfinite(highest) && std::isfinite(lowest) && (highest > lowest);
+    // NaN/Inf guard without pulling in extra math helpers.
+    return ((highest - highest) == 0.0f) && ((lowest - lowest) == 0.0f) && (highest > lowest);
 }
 } // namespace
 
@@ -64,7 +64,7 @@ bool MotionSensor::saveMagnetometerCalibration(const char *filePath, float highe
 {
 #ifdef FSCom
     if (!isRangeValid(highestX, lowestX) || !isRangeValid(highestY, lowestY) || !isRangeValid(highestZ, lowestZ)) {
-        LOG_WARN("Skip save: invalid compass calib range");
+        LOG_WARN("Cal save skip: bad range");
         return false;
     }
 
@@ -76,13 +76,13 @@ bool MotionSensor::saveMagnetometerCalibration(const char *filePath, float highe
     const size_t written = file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
     bool okay = (written == sizeof(record)) && file.close();
     if (okay) {
-        LOG_INFO("Saved compass calib %s", filePath);
+        LOG_INFO("Cal saved %s", filePath);
     } else {
-        LOG_WARN("Save compass calib failed %s", filePath);
+        LOG_WARN("Cal save fail %s", filePath);
     }
     return okay;
 #else
-    LOG_WARN("Skip save: filesystem unavailable");
+    LOG_WARN("Cal save skip: no fs");
     return false;
 #endif
 }
@@ -98,7 +98,7 @@ bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &high
     auto file = FSCom.open(filePath, FILE_O_READ);
     if (!file) {
         spiLock->unlock();
-        LOG_INFO("No compass calib file %s", filePath);
+        LOG_INFO("Cal file missing %s", filePath);
         return false;
     }
     bytesRead = file.read(reinterpret_cast<uint8_t *>(&record), sizeof(record));
@@ -110,7 +110,7 @@ bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &high
     const bool rangeValid = isRangeValid(record.highestX, record.lowestX) && isRangeValid(record.highestY, record.lowestY) &&
                             isRangeValid(record.highestZ, record.lowestZ);
     if (!headerValid || !rangeValid) {
-        LOG_WARN("Invalid compass calib file %s", filePath);
+        LOG_WARN("Cal file invalid %s", filePath);
         return false;
     }
 
@@ -121,10 +121,10 @@ bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &high
     highestZ = record.highestZ;
     lowestZ = record.lowestZ;
 
-    LOG_INFO("Loaded compass calib %s", filePath);
+    LOG_INFO("Cal loaded %s", filePath);
     return true;
 #else
-    LOG_INFO("Skip load: filesystem unavailable");
+    LOG_INFO("Cal load skip: no fs");
     return false;
 #endif
 }
@@ -257,7 +257,7 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
 void MotionSensor::wakeScreen()
 {
     if (powerFSM.getState() == &stateDARK) {
-        LOG_DEBUG("Motion wakeScreen detected");
+        LOG_DEBUG("Motion wake");
         if (config.display.wake_on_tap_or_motion)
             powerFSM.trigger(EVENT_INPUT);
     }
@@ -265,7 +265,7 @@ void MotionSensor::wakeScreen()
 
 void MotionSensor::buttonPress()
 {
-    LOG_DEBUG("Motion buttonPress detected");
+    LOG_DEBUG("Motion btn");
     powerFSM.trigger(EVENT_PRESS);
 }
 

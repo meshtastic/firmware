@@ -107,14 +107,14 @@ int32_t ICM20948Sensor::runOnce()
     // Wake on motion using polling  - this is not as efficient as using hardware interrupt pin (see above)
     auto status = sensor->setBank(0);
     if (sensor->status != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 setBank fail: %s", sensor->statusString());
+        LOG_DEBUG("ICM setBank: %s", sensor->statusString());
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
     ICM_20948_INT_STATUS_t int_stat;
     status = sensor->read(AGB0_REG_INT_STATUS, (uint8_t *)&int_stat, sizeof(ICM_20948_INT_STATUS_t));
     if (status != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 int read fail: %s", sensor->statusString());
+        LOG_DEBUG("ICM int read: %s", sensor->statusString());
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
@@ -183,30 +183,30 @@ bool ICM20948Singleton::init(ScanI2C::FoundDevice device)
 
     ICM_20948_Status_e status = begin(bus, bAddr);
     if (status != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 begin fail: %s", statusString());
+        LOG_DEBUG("ICM begin: %s", statusString());
         return false;
     }
 
     // SW reset to make sure the device starts in a known state
     if (swReset() != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 reset fail: %s", statusString());
+        LOG_DEBUG("ICM reset: %s", statusString());
         return false;
     }
     delay(200);
 
     // Now wake the sensor up
     if (sleep(false) != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 wake fail: %s", statusString());
+        LOG_DEBUG("ICM wake: %s", statusString());
         return false;
     }
 
     if (lowPower(false) != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 high power fail: %s", statusString());
+        LOG_DEBUG("ICM hi pwr: %s", statusString());
         return false;
     }
 
     if (startupMagnetometer(false) != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948 mag start fail: %s", statusString());
+        LOG_DEBUG("ICM mag start: %s", statusString());
         return false;
     }
 

@@ -38,6 +38,15 @@ static inline void drawSatelliteIcon(OLEDDisplay *display, int16_t x, int16_t y)
     }
 }
 
+static void drawCompassStatusText(OLEDDisplay *display, int16_t compassX, int16_t compassY, const char *statusLine1,
+                                  const char *statusLine2)
+{
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
+    display->drawString(compassX, compassY, statusLine2);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+}
+
 void graphics::UIRenderer::rebuildFavoritedNodes()
 {
     favoritedNodes.clear();
@@ -679,10 +688,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
                 CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
                 CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
             } else {
-                display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
-                display->drawString(compassX, compassY, statusLine2);
-                display->setTextAlignment(TEXT_ALIGN_LEFT);
+                drawCompassStatusText(display, compassX, compassY, statusLine1, statusLine2);
             }
         }
         // else show nothing
@@ -719,10 +725,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
                 graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
                 graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
             } else {
-                display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
-                display->drawString(compassX, compassY, statusLine2);
-                display->setTextAlignment(TEXT_ALIGN_LEFT);
+                drawCompassStatusText(display, compassX, compassY, statusLine1, statusLine2);
             }
         }
         // else show nothing
@@ -1292,11 +1295,8 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
                 display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
             } else {
-                display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
-                display->drawString(compassX, compassY, statusLine2);
+                drawCompassStatusText(display, compassX, compassY, statusLine1, statusLine2);
             }
-            display->setTextAlignment(TEXT_ALIGN_LEFT);
         } else {
             // Portrait or square: put compass at the bottom and centered, scaled to fit available space
             // For E-Ink screens, account for navigation bar at the bottom!
@@ -1342,11 +1342,8 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
                 display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
             } else {
-                display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
-                display->drawString(compassX, compassY, statusLine2);
+                drawCompassStatusText(display, compassX, compassY, statusLine1, statusLine2);
             }
-            display->setTextAlignment(TEXT_ALIGN_LEFT);
         }
     }
 #endif
