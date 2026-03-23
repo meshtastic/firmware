@@ -15,8 +15,7 @@ on:
       - "**.md"
       - version.properties
 
-  # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
-  pull_request_target:
+  pull_request:
     branches:
       - master
       - develop
@@ -88,8 +87,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
       - name: Check ${{ matrix.check.board }}
         uses: meshtastic/gh-action-firmware@main
         with:
@@ -173,9 +170,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-        with:
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - uses: actions/download-artifact@v8
         with:
@@ -245,7 +239,7 @@ jobs:
     needs: [build]
     steps:
       - uses: actions/checkout@v6
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         with:
           filter: blob:none # means we download all the git history but none of the commit (except ones with checkout like the head)
           fetch-depth: 0
@@ -263,21 +257,21 @@ jobs:
           overwrite: true
           path: manifests-new/*.mt.json
       - name: Find the merge base
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
         env:
           base: ${{ github.base_ref }}
           head: ${{ github.sha }}
       # Currently broken (for-loop through EVERY artifact -- rate limiting)
       # - name: Download the old manifests
-      #   if: github.event_name == 'pull_request_target'
+      #   if: github.event_name == 'pull_request'
       #   run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
       #   env:
       #     GH_TOKEN: ${{ github.token }}
       #     merge_base: ${{ env.MERGE_BASE }}
       #     repo: ${{ github.repository }}
       # - name: Do scan and post comment
-      #   if: github.event_name == 'pull_request_target'
+      #   if: github.event_name == 'pull_request'
       #   run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
 
   release-artifacts:
