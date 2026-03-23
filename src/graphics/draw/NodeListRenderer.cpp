@@ -373,14 +373,13 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         }
     }
 
-    if (strlen(distStr) > 0) {
-        int offset = (currentResolution == ScreenResolution::High)
-                         ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
-                         : (isLeftCol ? 4 : 7); // Offset for Narrow Screens (Left Column:Right Column)
-        int rightEdge = x + columnWidth - offset;
-        int textWidth = display->getStringWidth(distStr);
-        display->drawString(rightEdge - textWidth, y, distStr);
-    }
+    const char *distanceLabel = (strlen(distStr) > 0) ? distStr : "?";
+    int offset = (currentResolution == ScreenResolution::High)
+                     ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
+                     : (isLeftCol ? 4 : 7); // Offset for Narrow Screens (Left Column:Right Column)
+    int rightEdge = x + columnWidth - offset;
+    int textWidth = display->getStringWidth(distanceLabel);
+    display->drawString(rightEdge - textWidth, y, distanceLabel);
 }
 
 void drawEntryDynamic_Nodes(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
@@ -478,6 +477,21 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->fillTriangle(tipX, tipY, leftX, leftY, notchX, notchY);
     display->fillTriangle(tipX, tipY, notchX, notchY, rightX, rightY);
     */
+}
+
+void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float, double,
+                        double)
+{
+    if (!nodeDB->hasValidPosition(node))
+        return;
+
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
+    int arrowXOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
+    int centerX = x + columnWidth - arrowXOffset;
+
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(centerX, y, "?");
 }
 
 // =============================
@@ -767,10 +781,10 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 {
     float headingRadian = 0.0f;
     auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    if (!ourNode)
+    if (!ourNode || !nodeDB->hasValidPosition(ourNode)) {
+        drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassUnknown, headingRadian, 0.0, 0.0);
         return;
-    if (!nodeDB->hasValidPosition(ourNode))
-        return;
+    }
 
     double lat = DegD(ourNode->position.latitude_i);
     double lon = DegD(ourNode->position.longitude_i);
@@ -783,8 +797,10 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
         lastSwitchTime = now;
     }
 #endif
-    if (!CompassRenderer::getHeadingRadians(lat, lon, headingRadian))
+    if (!CompassRenderer::getHeadingRadians(lat, lon, headingRadian)) {
+        drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassUnknown, headingRadian, lat, lon);
         return;
+    }
 
     drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, headingRadian, lat, lon);
 }
