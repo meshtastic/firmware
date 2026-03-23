@@ -17,8 +17,8 @@ struct Point {
 
     void rotate(float angle)
     {
-        float cos_a = cos(angle);
-        float sin_a = sin(angle);
+        float cos_a = cosf(angle);
+        float sin_a = sinf(angle);
         float new_x = x * cos_a - y * sin_a;
         float new_y = x * sin_a + y * cos_a;
         x = new_x;
@@ -47,21 +47,30 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
     if (currentResolution == ScreenResolution::High) {
         radius += 4;
     }
-    Point north(0, -radius);
-    if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
-        north.rotate(-myHeading);
-    north.translate(compassX, compassY);
+    float northX = 0.0f;
+    float northY = -radius;
+    if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) {
+        const float c = cosf(-myHeading);
+        const float s = sinf(-myHeading);
+        const float rx = northX * c - northY * s;
+        const float ry = northX * s + northY * c;
+        northX = rx;
+        northY = ry;
+    }
+    northX += compassX;
+    northY += compassY;
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setColor(BLACK);
+    const int16_t nLabelWidth = display->getStringWidth("N");
     if (currentResolution == ScreenResolution::High) {
-        display->fillRect(north.x - 8, north.y - 1, display->getStringWidth("N") + 3, FONT_HEIGHT_SMALL - 6);
+        display->fillRect(northX - 8, northY - 1, nLabelWidth + 3, FONT_HEIGHT_SMALL - 6);
     } else {
-        display->fillRect(north.x - 4, north.y - 1, display->getStringWidth("N") + 2, FONT_HEIGHT_SMALL - 6);
+        display->fillRect(northX - 4, northY - 1, nLabelWidth + 2, FONT_HEIGHT_SMALL - 6);
     }
     display->setColor(WHITE);
-    display->drawString(north.x, north.y - 3, "N");
+    display->drawString(northX, northY - 3, "N");
 }
 
 void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian)
@@ -125,7 +134,7 @@ bool getHeadingRadians(double lat, double lon, float &headingRadian)
     }
 
     const float estimatedHeadingDeg = screen->estimatedHeading(lat, lon);
-    if (isnan(estimatedHeadingDeg) || estimatedHeadingDeg < 0.0f)
+    if (!(estimatedHeadingDeg >= 0.0f))
         return false;
 
     headingRadian = estimatedHeadingDeg * DEG_TO_RAD;

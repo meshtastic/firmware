@@ -82,6 +82,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
+    const int *textPos = graphics::getTextPositions(display);
 
     // Decode the waypoint
     const meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
@@ -108,7 +109,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     int16_t compassY = y + display->getHeight() / 2;
 
     if (SCREEN_WIDTH > SCREEN_HEIGHT) {
-        const int16_t topY = graphics::getTextPositions(display)[1];
+        const int16_t topY = textPos[1];
         const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
         const int16_t usableHeight = bottomY - topY - 5;
         compassRadius = usableHeight / 2;
@@ -118,7 +119,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
     } else {
         // Waypoint content uses rows 1..4, so place the compass below that block.
-        const int yBelowContent = graphics::getTextPositions(display)[4] + FONT_HEIGHT_SMALL + 2;
+        const int yBelowContent = textPos[4] + FONT_HEIGHT_SMALL + 2;
         const int margin = 4;
 #if defined(USE_EINK)
         const int iconSize = (currentResolution == ScreenResolution::High) ? 16 : 8;
@@ -193,10 +194,10 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     }
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Something above me changes to a different alignment, forcing a fix here!
-    display->drawString(0, graphics::getTextPositions(display)[line++], lastStr);
-    display->drawString(0, graphics::getTextPositions(display)[line++], wp.name);
-    display->drawString(0, graphics::getTextPositions(display)[line++], wp.description);
+    display->drawString(0, textPos[line++], lastStr);
+    display->drawString(0, textPos[line++], wp.name);
+    display->drawString(0, textPos[line++], wp.description);
     if (distStr[0])
-        display->drawString(0, graphics::getTextPositions(display)[line++], distStr);
+        display->drawString(0, textPos[line++], distStr);
 }
 #endif

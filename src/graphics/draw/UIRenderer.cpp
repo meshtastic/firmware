@@ -1162,6 +1162,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
+    const int *textPos = getTextPositions(display);
 
     // === First Row: My Location ===
 #if HAS_GPS
@@ -1176,12 +1177,12 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-        drawSatelliteIcon(display, x, getTextPositions(display)[line]);
+        drawSatelliteIcon(display, x, textPos[line]);
         int xOffset = (currentResolution == ScreenResolution::High) ? 6 : 0;
-        display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
+        display->drawString(x + 11 + xOffset, textPos[line++], displayLine);
     } else {
         // Onboard GPS
-        UIRenderer::drawGps(display, 0, getTextPositions(display)[line++], gpsStatus);
+        UIRenderer::drawGps(display, 0, textPos[line++], gpsStatus);
     }
 
     config.display.heading_bold = origBold;
@@ -1232,18 +1233,18 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             getUptimeStr(delta, "Last: ", uptimeStr, sizeof(uptimeStr), true);
 #endif
 
-            display->drawString(0, getTextPositions(display)[line++], uptimeStr);
+            display->drawString(0, textPos[line++], uptimeStr);
         } else {
-            display->drawString(0, getTextPositions(display)[line++], "Last: ?");
+            display->drawString(0, textPos[line++], "Last: ?");
         }
 
         // === Third Row: Line 1 GPS Info ===
-        UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line1");
+        UIRenderer::drawGpsCoordinates(display, x, textPos[line++], gpsStatus, "line1");
 
         if (uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC &&
             uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS) {
             // === Fourth Row: Line 2 GPS Info ===
-            UIRenderer::drawGpsCoordinates(display, x, getTextPositions(display)[line++], gpsStatus, "line2");
+            UIRenderer::drawGpsCoordinates(display, x, textPos[line++], gpsStatus, "line2");
         }
 
         // === Final Row: Altitude ===
@@ -1254,14 +1255,14 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         } else {
             snprintf(altitudeLine, sizeof(altitudeLine), "Alt: %.0im", alt);
         }
-        display->drawString(x, getTextPositions(display)[line++], altitudeLine);
+        display->drawString(x, textPos[line++], altitudeLine);
     }
 #if !defined(M5STACK_UNITC6L)
     // === Draw Compass ===
     if (validHeading || statusLine1) {
         // --- Compass Rendering: landscape (wide) screens use original side-aligned logic ---
         if (SCREEN_WIDTH > SCREEN_HEIGHT) {
-            const int16_t topY = getTextPositions(display)[1];
+            const int16_t topY = textPos[1];
             const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1); // nav row height
             const int16_t usableHeight = bottomY - topY - 5;
 
@@ -1300,7 +1301,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         } else {
             // Portrait or square: put compass at the bottom and centered, scaled to fit available space
             // For E-Ink screens, account for navigation bar at the bottom!
-            int yBelowContent = getTextPositions(display)[5] + FONT_HEIGHT_SMALL + 2;
+            int yBelowContent = textPos[5] + FONT_HEIGHT_SMALL + 2;
             const int margin = 4;
             int availableHeight =
 #if defined(USE_EINK)

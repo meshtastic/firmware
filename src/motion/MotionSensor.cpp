@@ -28,7 +28,7 @@ struct CompassCalibrationRecord {
 bool isRangeValid(float highest, float lowest)
 {
     // NaN/Inf guard without pulling in extra math helpers.
-    return ((highest - highest) == 0.0f) && ((lowest - lowest) == 0.0f) && (highest > lowest);
+    return (highest == highest) && (lowest == lowest) && (highest > lowest);
 }
 } // namespace
 
@@ -40,8 +40,8 @@ MotionSensor::MotionSensor(ScanI2C::FoundDevice foundDevice)
     device.address.address = foundDevice.address.address;
     device.address.port = foundDevice.address.port;
     device.type = foundDevice.type;
-    LOG_DEBUG("MotionSensor p=%s a=0x%x t=%d", devicePort() == ScanI2C::I2CPort::WIRE1 ? "Wire1" : "Wire",
-              (uint8_t)deviceAddress(), deviceType());
+    LOG_DEBUG("MotionSensor p=%s a=0x%x t=%d", device.address.port == ScanI2C::I2CPort::WIRE1 ? "Wire1" : "Wire",
+              (uint8_t)device.address.address, device.type);
 }
 
 ScanI2C::DeviceType MotionSensor::deviceType()
