@@ -685,6 +685,12 @@ void setup()
 
     // Hello
     printInfo();
+#if DEFAULT_REGULAR_REBOOT_DAYS > 0 && DEFAULT_REGULAR_REBOOT_DAYS < 50
+    // Schedule a periodic reboot (build-time configured).
+    constexpr uint32_t MSEC_PER_DAY = 24UL * 60UL * 60UL * 1000UL;
+    rebootAtMsec = millis() + (uint32_t)DEFAULT_REGULAR_REBOOT_DAYS * MSEC_PER_DAY;
+    LOG_DEBUG("Periodic reboot scheduled in %u day(s)", DEFAULT_REGULAR_REBOOT_DAYS);
+#endif
 #ifdef BUILD_EPOCH
     LOG_INFO("Build timestamp: %ld", BUILD_EPOCH);
 #endif
