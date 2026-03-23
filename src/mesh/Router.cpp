@@ -830,6 +830,23 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             }
         }
 #endif
+#if HAS_UDP_MULTICAST
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && udpHandler &&
+            p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP &&
+            config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST && !isFromUs(p)) {
+#if MESHTASTIC_EXCLUDE_MQTT
+            if (decodedState == DecodeState::DECODE_FAILURE && p->channel == 0x00 && !isBroadcast(p->to) && !isToUs(p)) {
+                p_encrypted->pki_encrypted = true;
+            }
+#endif
+            if (decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) {
+                LOG_DEBUG("Rebroadcasting incoming packet via UDP too");
+                if (!udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p_encrypted))) {
+                    LOG_WARN("Rebroadcast via UDP failed");
+                }
+            }
+        }
+#endif
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet
