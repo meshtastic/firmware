@@ -300,7 +300,9 @@ struct PubSubConfig {
         if (config.tls_enabled) {
             serverPort = 8883;
         }
-        std::tie(serverAddr, serverPort) = parseHostAndPort(serverAddr.c_str(), serverPort);
+        auto [parsedServerAddr, parsedServerPort] = parseHostAndPort(serverAddr.c_str(), serverPort);
+        serverAddr = std::move(parsedServerAddr);
+        serverPort = parsedServerPort;
     }
 
     // Defaults
@@ -441,7 +443,8 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
                 moduleConfig.mqtt.map_report_settings.publish_interval_secs, default_map_publish_interval_secs);
         }
 
-        String host = parseHostAndPort(moduleConfig.mqtt.address).first;
+        auto [host, parsedPort] = parseHostAndPort(moduleConfig.mqtt.address);
+        (void)parsedPort;
         isConfiguredForDefaultServer = isDefaultServer(host);
         IPAddress ip;
         isMqttServerAddressPrivate = ip.fromString(host.c_str()) && isPrivateIpAddress(ip);

@@ -78,6 +78,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Configuration
 // -----------------------------------------------------------------------------
 
+// Pre-hop drop handling (compile-time flag).
+#ifndef MESHTASTIC_PREHOP_DROP
+#define MESHTASTIC_PREHOP_DROP 0
+#endif
+
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
 #define ystr(s) #s
@@ -499,6 +504,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_REMOTEHARDWARE 1
 #define MESHTASTIC_EXCLUDE_STOREFORWARD 1
 #define MESHTASTIC_EXCLUDE_TEXTMESSAGE 1
+#define MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT 1
 #define MESHTASTIC_EXCLUDE_ATAK 1
 #define MESHTASTIC_EXCLUDE_CANNEDMESSAGES 1
 #define MESHTASTIC_EXCLUDE_NEIGHBORINFO 1
