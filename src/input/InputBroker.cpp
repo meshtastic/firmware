@@ -34,7 +34,7 @@
 
 #if defined(BUTTON_PIN_TOUCH)
 ButtonThread *TouchButtonThread = nullptr;
-#if defined(TTGO_T_ECHO_PLUS) && defined(PIN_EINK_EN)
+#if defined(PIN_EINK_EN)
 static bool touchBacklightWasOn = false;
 static bool touchBacklightActive = false;
 #endif
@@ -220,8 +220,8 @@ void InputBroker::Init()
     };
     touchConfig.singlePress = INPUT_BROKER_NONE;
     touchConfig.longPress = INPUT_BROKER_BACK;
-#if defined(TTGO_T_ECHO_PLUS) && defined(PIN_EINK_EN)
-    // On T-Echo Plus the touch pad should only drive the backlight, not UI navigation/sounds
+#if defined(PIN_EINK_EN)
+    // Touch pad drives the backlight on devices with e-ink backlight pin
     touchConfig.longPress = INPUT_BROKER_NONE;
     touchConfig.suppressLeadUpSound = true;
     touchConfig.onPress = []() {
