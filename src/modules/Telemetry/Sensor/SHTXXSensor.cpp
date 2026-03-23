@@ -89,7 +89,7 @@ bool SHTXXSensor::getMetrics(meshtastic_Telemetry *measurement)
         measurement->variant.environment_metrics.temperature = sht.getTemperature();
         measurement->variant.environment_metrics.relative_humidity = sht.getHumidity();
 
-        LOG_INFO("%s (%s): Got: temp:%fdegC, hum:%f%rh", sensorName, sensorVariant,
+        LOG_INFO("%s (%s): Got: temp:%fdegC, hum:%f%%rh", sensorName, sensorVariant,
                  measurement->variant.environment_metrics.temperature,
                  measurement->variant.environment_metrics.relative_humidity);
 
