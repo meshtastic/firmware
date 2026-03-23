@@ -685,6 +685,11 @@ void setup()
 
     // Hello
     printInfo();
+#if DEFAULT_REGULAR_REBOOT_SECONDS > 0
+    // Schedule a periodic reboot (build-time configured).
+    rebootAtMsec = millis() + (uint32_t)DEFAULT_REGULAR_REBOOT_SECONDS * 1000;
+    LOG_DEBUG("Periodic reboot scheduled in %u seconds", DEFAULT_REGULAR_REBOOT_SECONDS);
+#endif
 #ifdef BUILD_EPOCH
     LOG_INFO("Build timestamp: %ld", BUILD_EPOCH);
 #endif

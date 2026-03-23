@@ -361,6 +361,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFAULT_REBOOT_SECONDS 7
 #endif
 
+// Allows scheduling a periodic reboot at boot-time.
+// Default is -1 (disabled)
+// (24 * 60 * 60) is 24 hours.
+// Permissible range: 1 to 4294967 seconds (to avoid uint32_t overflow in calculation).
+// Values > ~49 days may not work as expected due to millis() wrap-around.
+#ifndef DEFAULT_REGULAR_REBOOT_SECONDS
+#define DEFAULT_REGULAR_REBOOT_SECONDS -1
+#endif
+
 #ifndef DEFAULT_SHUTDOWN_SECONDS
 #define DEFAULT_SHUTDOWN_SECONDS 2
 #endif
