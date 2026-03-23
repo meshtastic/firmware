@@ -78,11 +78,18 @@ bool powerHAL_isVBUSConnected()
 
 bool powerHAL_isPowerLevelSafe()
 {
+    static bool powerLevelSafe = true;
 
-    static bool powerLevelSafe = true;  
-
-    uint16_t threshold = SAFE_VDD_VOLTAGE_THRESHOLD * 1000; // convert V to mV
-    uint16_t hysteresis = SAFE_VDD_VOLTAGE_THRESHOLD_HYST * 1000;
+#ifdef SAFE_VDD_VOLTAGE_THRESHOLD_MV
+    uint16_t threshold = SAFE_VDD_VOLTAGE_THRESHOLD_MV;
+#else
+    uint16_t threshold = (uint16_t)(SAFE_VDD_VOLTAGE_THRESHOLD * 1000.0f + 0.5f); // convert V to mV
+#endif
+#ifdef SAFE_VDD_VOLTAGE_THRESHOLD_HYST_MV
+    uint16_t hysteresis = SAFE_VDD_VOLTAGE_THRESHOLD_HYST_MV;
+#else
+    uint16_t hysteresis = (uint16_t)(SAFE_VDD_VOLTAGE_THRESHOLD_HYST * 1000.0f + 0.5f);
+#endif
 
     if (powerLevelSafe) {
         if (getVDDVoltage() < threshold) {

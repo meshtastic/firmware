@@ -231,8 +231,10 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // BAT_ADC divider: R22=1M (top), R24=1.5M (bottom) => V_BAT_ADC = VBAT * (1.5 / (1.0 + 1.5)) = 0.6 * VBAT
 // RAK4630 module: AIN0 = nrf52840 AIN3 = Pin 5 (A0/BATTERY_PIN)
 #define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_3
-// If VDD is regulated ~3.3V, this wakes around VBAT ~3.09V (good for brownout recovery).
-#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_9_16  //3.09V NRF_LPCOMP_REF_SUPPLY_9_16 = 3.09V
+// LPCOMP compares the selected input to a fraction of VDD (here 9/16 of VDD at the LPCOMP input).
+// With VDD ≈ 3.3 V: threshold at input ≈ (9/16) * 3.3 V ≈ 1.86 V.
+// BAT_ADC divider: V_BAT_ADC = 0.6 * VBAT → equivalent VBAT ≈ 1.86 / 0.6 ≈ 3.1 V (wake when battery recovers).
+#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_9_16
 
 // Low voltage protection:
 // If VDD is below SAFE_VDD_VOLTAGE_THRESHOLD for longer than this delay (and no USB VBUS),
@@ -241,12 +243,18 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define LOW_VDD_SYSTEMOFF_DELAY_MS 5000
 #endif
 
-#ifndef SAFE_VDD_VOLTAGE_THRESHOLD
-#define SAFE_VDD_VOLTAGE_THRESHOLD 2.9
+// Prefer integer mV so platform code avoids float→int truncation quirks (e.g. 0.1 V → 99 vs 100 mV).
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD_MV
+#define SAFE_VDD_VOLTAGE_THRESHOLD_MV 2900
 #endif
-
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD_HYST_MV
+#define SAFE_VDD_VOLTAGE_THRESHOLD_HYST_MV 100
+#endif
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD
+#define SAFE_VDD_VOLTAGE_THRESHOLD (SAFE_VDD_VOLTAGE_THRESHOLD_MV / 1000.0f)
+#endif
 #ifndef SAFE_VDD_VOLTAGE_THRESHOLD_HYST
-#define SAFE_VDD_VOLTAGE_THRESHOLD_HYST 0.1
+#define SAFE_VDD_VOLTAGE_THRESHOLD_HYST (SAFE_VDD_VOLTAGE_THRESHOLD_HYST_MV / 1000.0f)
 #endif
 
 #define RAK_4631 1

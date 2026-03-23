@@ -51,15 +51,31 @@ void variant_nrf52LoopHook(void)
     // If VDD stays unsafe for a while (brownout), force System OFF.
     // Skip when VBUS present to allow recovery while USB-powered.
     if (!powerHAL_isVBUSConnected()) {
+        // Rate-limit VDD safety checks: powerHAL_isPowerLevelSafe() calls getVDDVoltage() each time.
+        static constexpr uint32_t POWER_LEVEL_CHECK_INTERVAL_MS = 100;
+        static uint32_t last_vdd_check_ms = 0;
+        static bool last_power_level_safe = true;
+
+        const uint32_t now = millis();
+        if (last_vdd_check_ms == 0 || (uint32_t)(now - last_vdd_check_ms) >= POWER_LEVEL_CHECK_INTERVAL_MS) {
+            last_vdd_check_ms = now;
+            last_power_level_safe = powerHAL_isPowerLevelSafe();
+        }
+
+        // Do not use millis()==0 as a sentinel: at boot, millis() may be 0 while VDD is unsafe.
+        static bool low_vdd_timer_armed = false;
         static uint32_t low_vdd_since_ms = 0;
-        if (!powerHAL_isPowerLevelSafe()) {
-            if (low_vdd_since_ms == 0)
-                low_vdd_since_ms = millis();
-            if ((uint32_t)(millis() - low_vdd_since_ms) >= (uint32_t)LOW_VDD_SYSTEMOFF_DELAY_MS) {
+
+        if (!last_power_level_safe) {
+            if (!low_vdd_timer_armed) {
+                low_vdd_since_ms = now;
+                low_vdd_timer_armed = true;
+            }
+            if ((uint32_t)(now - low_vdd_since_ms) >= (uint32_t)LOW_VDD_SYSTEMOFF_DELAY_MS) {
                 cpuDeepSleep(portMAX_DELAY);
             }
         } else {
-            low_vdd_since_ms = 0;
+            low_vdd_timer_armed = false;
         }
     }
 }
