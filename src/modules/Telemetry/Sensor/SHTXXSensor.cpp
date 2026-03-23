@@ -52,7 +52,7 @@ bool SHTXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (sht.init(*_bus)) {
         LOG_INFO("%s: init(): success", sensorName);
         getSensorVariant(sht.mSensorType);
-        LOG_INFO("%s Sensor detected: %s", sensorName, sensorVariant);
+        LOG_INFO("%s Sensor detected: %s on 0x%x", sensorName, sensorVariant, _address);
         status = 1;
     } else {
         LOG_ERROR("%s: init(): failed", sensorName);
@@ -73,16 +73,14 @@ bool SHTXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 bool SHTXXSensor::setAccuracy(SHTSensor::SHTAccuracy newAccuracy)
 {
     // Only SHT3X-family (including alternates) and SHT4X support changing accuracy
-    if (sht.mSensorType != SHTSensor::SHTSensorType::SHT3X &&
-        sht.mSensorType != SHTSensor::SHTSensorType::SHT3X_ALT &&
-        sht.mSensorType != SHTSensor::SHTSensorType::SHT85 &&
-        sht.mSensorType != SHTSensor::SHTSensorType::SHT4X) {
+    if (sht.mSensorType != SHTSensor::SHTSensorType::SHT3X && sht.mSensorType != SHTSensor::SHTSensorType::SHT3X_ALT &&
+        sht.mSensorType != SHTSensor::SHTSensorType::SHT85 && sht.mSensorType != SHTSensor::SHTSensorType::SHT4X) {
         LOG_WARN("%s doesn't support accuracy setting", sensorVariant);
         return false;
     }
     LOG_INFO("%s: setting new accuracy setting", sensorVariant);
     accuracy = newAccuracy;
-    return sht.setAccuracy(newAccuracy);
+    return sht.setAccuracy(accuracy);
 }
 
 bool SHTXXSensor::getMetrics(meshtastic_Telemetry *measurement)
