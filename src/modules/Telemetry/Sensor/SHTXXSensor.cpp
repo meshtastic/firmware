@@ -64,7 +64,7 @@ bool SHTXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 /**
  * Accuracy setting of measurement.
- * Not all sensors support changing the sampling accuracy (only SHT3X an SHT4X)
+ * Not all sensors support changing the sampling accuracy (only SHT3X and SHT4X)
  * SHTAccuracy:
  * - SHT_ACCURACY_HIGH: Highest repeatability at the cost of slower measurement
  * - SHT_ACCURACY_MEDIUM: Balanced repeatability and speed of measurement
