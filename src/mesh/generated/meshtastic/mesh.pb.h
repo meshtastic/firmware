@@ -306,6 +306,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_MINI_EPAPER_S3 = 125,
     /* LilyGo T-Display S3 Pro LR1121 */
     meshtastic_HardwareModel_TDISPLAY_S3_PRO = 126,
+    /* Heltec Mesh Node T096 board features an nRF52840 CPU and a TFT screen. */
+    meshtastic_HardwareModel_HELTEC_MESH_NODE_T096 = 127,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
