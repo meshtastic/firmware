@@ -72,7 +72,11 @@ bool SHTXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
  */
 bool SHTXXSensor::setAccuracy(SHTSensor::SHTAccuracy newAccuracy)
 {
-    if (!(sht.mSensorType == SHTSensor::SHTSensorType::SHT3X || sht.mSensorType != SHTSensor::SHTSensorType::SHT4X)) {
+    // Only SHT3X-family (including alternates) and SHT4X support changing accuracy
+    if (sht.mSensorType != SHTSensor::SHTSensorType::SHT3X &&
+        sht.mSensorType != SHTSensor::SHTSensorType::SHT3X_ALT &&
+        sht.mSensorType != SHTSensor::SHTSensorType::SHT85 &&
+        sht.mSensorType != SHTSensor::SHTSensorType::SHT4X) {
         LOG_WARN("%s doesn't support accuracy setting", sensorVariant);
         return false;
     }
