@@ -685,7 +685,7 @@ void setup()
 
     // Hello
     printInfo();
-#if DEFAULT_REGULAR_REBOOT_DAYS > 0
+#if DEFAULT_REGULAR_REBOOT_DAYS > 0 && DEFAULT_REGULAR_REBOOT_DAYS <= 49
     // Schedule a periodic reboot (build-time configured).
     constexpr uint32_t MSEC_PER_DAY = 24UL * 60UL * 60UL * 1000UL;
     rebootAtMsec = millis() + (uint32_t)DEFAULT_REGULAR_REBOOT_DAYS * MSEC_PER_DAY;

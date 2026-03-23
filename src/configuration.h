@@ -364,8 +364,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Allows scheduling a periodic reboot at boot-time.
 // Default is -1 (disabled)
 // Unit is whole days.
-// Permissible values: -1 (disabled), or 1 to 49 days.
-// Values > 49 days may not work as expected due to millis() wrap-around.
+// Effective range: 1 to 49 days. Values outside that range will not schedule a periodic reboot.
 #ifndef DEFAULT_REGULAR_REBOOT_DAYS
 #define DEFAULT_REGULAR_REBOOT_DAYS -1
 #endif
