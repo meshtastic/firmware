@@ -177,7 +177,7 @@ void MPR121Keyboard::reset()
     delay(20);
     writeRegister(_MPR121_REG_CONFIG2, 0x21);
     delay(20);
-    // Enter run mode by Seting partial filter calibration tracking, disable proximity detection, enable 12 channels
+    // Enter run mode by setting partial filter calibration tracking, disable proximity detection, enable 12 channels
     writeRegister(_MPR121_REG_ELECTRODE_CONFIG,
                   ECR_CALIBRATION_TRACK_FROM_FULL_FILTER | ECR_PROXIMITY_DETECTION_OFF | ECR_TOUCH_DETECTION_12CH);
     delay(100);

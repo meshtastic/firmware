@@ -46,10 +46,6 @@ using namespace httpsserver;
 
 #include "mesh/http/ContentHandler.h"
 
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
-HTTPClient httpClient;
-
 #define DEST_FS_USES_LITTLEFS
 
 // We need to specify some content-type mapping, so the resources get delivered with the
@@ -344,11 +340,6 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->print(jsonString.c_str());
 
     delete value;
-
-    // Clean up the fileList to prevent memory leak
-    for (auto *val : fileList) {
-        delete val;
-    }
 }
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
@@ -543,6 +534,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         if (name != "file") {
             LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
+            delete parser;
             return;
         }
 
@@ -550,6 +542,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         if (filename == "") {
             LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
+            delete parser;
             return;
         }
 
@@ -783,11 +776,6 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     std::string jsonString = value->Stringify();
     res->print(jsonString.c_str());
     delete value;
-
-    // Clean up the nodesArray to prevent memory leak
-    for (auto *val : nodesArray) {
-        delete val;
-    }
 }
 
 /*
@@ -941,10 +929,5 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
     std::string jsonString = value->Stringify();
     res->print(jsonString.c_str());
     delete value;
-
-    // Clean up the networkObjs to prevent memory leak
-    for (auto *val : networkObjs) {
-        delete val;
-    }
 }
 #endif

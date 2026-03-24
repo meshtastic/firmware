@@ -33,7 +33,6 @@ extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
 extern bool kb_found;
 extern bool osk_found;
-extern unsigned long last_listen;
 extern ScanI2C::DeviceAddress rtc_found;
 extern ScanI2C::DeviceAddress accelerometer_found;
 extern ScanI2C::FoundDevice rgb_found;
