@@ -40,7 +40,7 @@ class LatchingBacklight
     CallbackObserver<LatchingBacklight, void *> deepSleepObserver =
         CallbackObserver<LatchingBacklight, void *>(this, &LatchingBacklight::beforeDeepSleep);
 
-    uint8_t pin = (uint8_t)-1;
+    uint8_t pin = static_cast<uint8_t>(-1);
     bool logicActive = HIGH; // Is light active HIGH or active LOW
 
     bool on = false;      // Is light on (either peek or latched)

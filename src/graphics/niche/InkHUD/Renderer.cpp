@@ -269,42 +269,42 @@ void InkHUD::Renderer::clearTile(Tile *t)
     // Rotate the tile dimensions
     int16_t left = 0;
     int16_t top = 0;
-    uint16_t width = 0;
-    uint16_t height = 0;
+    uint16_t tileW = 0;
+    uint16_t tileH = 0;
     switch (settings->rotation) {
     case 0:
         left = t->getLeft();
         top = t->getTop();
-        width = t->getWidth();
-        height = t->getHeight();
+        tileW = t->getWidth();
+        tileH = t->getHeight();
         break;
     case 1:
         left = driver->width - (t->getTop() + t->getHeight());
         top = t->getLeft();
-        width = t->getHeight();
-        height = t->getWidth();
+        tileW = t->getHeight();
+        tileH = t->getWidth();
         break;
     case 2:
         left = driver->width - (t->getLeft() + t->getWidth());
         top = driver->height - (t->getTop() + t->getHeight());
-        width = t->getWidth();
-        height = t->getHeight();
+        tileW = t->getWidth();
+        tileH = t->getHeight();
         break;
     case 3:
         left = t->getTop();
         top = driver->height - (t->getLeft() + t->getWidth());
-        width = t->getHeight();
-        height = t->getWidth();
+        tileW = t->getHeight();
+        tileH = t->getWidth();
         break;
     }
 
     // Calculate the bounds to clear
     uint16_t xStart = (left < 0) ? 0 : left;
     uint16_t yStart = (top < 0) ? 0 : top;
-    if (xStart >= driver->width || yStart >= driver->height || left + width < 0 || top + height < 0)
+    if (xStart >= driver->width || yStart >= driver->height || left + tileW < 0 || top + tileH < 0)
         return; // the box is completely off the screen
-    uint16_t xEnd = left + width;
-    uint16_t yEnd = top + height;
+    uint16_t xEnd = left + tileW;
+    uint16_t yEnd = top + tileH;
     if (xEnd > driver->width)
         xEnd = driver->width;
     if (yEnd > driver->height)

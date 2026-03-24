@@ -32,6 +32,69 @@ static Periodic *ethEvent;
 static int32_t reconnectETH()
 {
     if (config.network.eth_enabled) {
+
+        // Detect W5100S chip reset by verifying the MAC address register.
+        // PoE power instability can brownout the W5100S while the MCU keeps running,
+        // causing all chip registers (MAC, IP, sockets) to revert to defaults.
+        uint8_t currentMac[6];
+        Ethernet.MACAddress(currentMac);
+
+        uint8_t expectedMac[6];
+        getMacAddr(expectedMac);
+        expectedMac[0] &= 0xfe;
+
+        if (memcmp(currentMac, expectedMac, 6) != 0) {
+            LOG_WARN("W5100S MAC mismatch (chip reset detected), reinitializing Ethernet");
+
+            syslog.disable();
+#if !MESHTASTIC_EXCLUDE_SOCKETAPI
+            deInitApiServer();
+#endif
+#if HAS_UDP_MULTICAST
+            if (udpHandler) {
+                udpHandler->stop();
+            }
+#endif
+
+            ethStartupComplete = false;
+#ifndef DISABLE_NTP
+            ntp_renew = 0;
+#endif
+
+#ifdef PIN_ETHERNET_RESET
+            pinMode(PIN_ETHERNET_RESET, OUTPUT);
+            digitalWrite(PIN_ETHERNET_RESET, LOW);
+            delay(100);
+            digitalWrite(PIN_ETHERNET_RESET, HIGH);
+            delay(100);
+#endif
+
+#ifdef RAK11310
+            ETH_SPI_PORT.setSCK(PIN_SPI0_SCK);
+            ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
+            ETH_SPI_PORT.setRX(PIN_SPI0_MISO);
+            ETH_SPI_PORT.begin();
+#endif
+            Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
+
+            int status = 0;
+            if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
+                status = Ethernet.begin(expectedMac);
+            } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
+                Ethernet.begin(expectedMac, config.network.ipv4_config.ip, config.network.ipv4_config.dns,
+                               config.network.ipv4_config.gateway, config.network.ipv4_config.subnet);
+                status = 1;
+            }
+
+            if (status == 0) {
+                LOG_ERROR("Ethernet re-initialization failed, will retry");
+                return 5000;
+            }
+
+            LOG_INFO("Ethernet reinitialized - IP %u.%u.%u.%u", Ethernet.localIP()[0], Ethernet.localIP()[1],
+                     Ethernet.localIP()[2], Ethernet.localIP()[3]);
+        }
+
         Ethernet.maintain();
         if (!ethStartupComplete) {
             // Start web server

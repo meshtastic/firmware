@@ -24,24 +24,8 @@
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
 
-#ifdef HAS_NCP5623
-#include <graphics/RAKled.h>
-#endif
-
-#ifdef HAS_LP5562
-#include <graphics/NomadStarLED.h>
-#endif
-
-#ifdef HAS_NEOPIXEL
-#include <graphics/NeoPixel.h>
-#endif
-
-#ifdef UNPHONE
-#include "unPhone.h"
-extern unPhone unphone;
-#endif
-
 #if defined(HAS_RGB_LED)
+#include "AmbientLightingThread.h"
 uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
@@ -123,32 +107,6 @@ int32_t ExternalNotificationModule::runOnce()
             green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
             blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
             white = (colorState & 12) ? brightnessValues[brightnessIndex] : 0;
-#ifdef HAS_NCP5623
-            if (rgb_found.type == ScanI2C::NCP5623) {
-                rgb.setColor(red, green, blue);
-            }
-#endif
-#ifdef HAS_LP5562
-            if (rgb_found.type == ScanI2C::LP5562) {
-                rgbw.setColor(red, green, blue, white);
-            }
-#endif
-#ifdef RGBLED_CA
-            analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
-            analogWrite(RGBLED_GREEN, 255 - green);
-            analogWrite(RGBLED_BLUE, 255 - blue);
-#elif defined(RGBLED_RED)
-            analogWrite(RGBLED_RED, red);
-            analogWrite(RGBLED_GREEN, green);
-            analogWrite(RGBLED_BLUE, blue);
-#endif
-#ifdef HAS_NEOPIXEL
-            pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
-            pixels.show();
-#endif
-#ifdef UNPHONE
-            unphone.rgb(red, green, blue);
-#endif
             if (ascending) { // fade in
                 brightnessIndex++;
                 if (brightnessIndex == (sizeof(brightnessValues) - 1)) {
@@ -255,34 +213,9 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
         blue = 0;
         white = 0;
     }
+    ambientLightingThread->setLighting(moduleConfig.ambient_lighting.current, red, green, blue);
 #endif
 
-#ifdef HAS_NCP5623
-    if (rgb_found.type == ScanI2C::NCP5623) {
-        rgb.setColor(red, green, blue);
-    }
-#endif
-#ifdef HAS_LP5562
-    if (rgb_found.type == ScanI2C::LP5562) {
-        rgbw.setColor(red, green, blue, white);
-    }
-#endif
-#ifdef RGBLED_CA
-    analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
-    analogWrite(RGBLED_GREEN, 255 - green);
-    analogWrite(RGBLED_BLUE, 255 - blue);
-#elif defined(RGBLED_RED)
-    analogWrite(RGBLED_RED, red);
-    analogWrite(RGBLED_GREEN, green);
-    analogWrite(RGBLED_BLUE, blue);
-#endif
-#ifdef HAS_NEOPIXEL
-    pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
-    pixels.show();
-#endif
-#ifdef UNPHONE
-    unphone.rgb(red, green, blue);
-#endif
 #ifdef HAS_DRV2605
     if (on) {
         drv.go();
@@ -407,33 +340,6 @@ ExternalNotificationModule::ExternalNotificationModule()
                 LOG_INFO("Use Pin %i in PWM mode", config.device.buzzer_gpio);
             }
         }
-#ifdef HAS_NCP5623
-        if (rgb_found.type == ScanI2C::NCP5623) {
-            rgb.begin();
-            rgb.setCurrent(10);
-        }
-#endif
-#ifdef HAS_LP5562
-        if (rgb_found.type == ScanI2C::LP5562) {
-            rgbw.begin();
-            rgbw.setCurrent(20);
-        }
-#endif
-#ifdef RGBLED_RED
-        pinMode(RGBLED_RED, OUTPUT); // set up the RGB led pins
-        pinMode(RGBLED_GREEN, OUTPUT);
-        pinMode(RGBLED_BLUE, OUTPUT);
-#endif
-#ifdef RGBLED_CA
-        analogWrite(RGBLED_RED, 255);   // with a common anode type, logic is reversed
-        analogWrite(RGBLED_GREEN, 255); // so we want to initialise with lights off
-        analogWrite(RGBLED_BLUE, 255);
-#endif
-#ifdef HAS_NEOPIXEL
-        pixels.begin(); // Initialise the pixel(s)
-        pixels.clear(); // Set all pixel colors to 'off'
-        pixels.setBrightness(moduleConfig.ambient_lighting.current);
-#endif
     } else {
         LOG_INFO("External Notification Module Disabled");
         disable();
@@ -461,7 +367,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
+            const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
             meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
 
             // If we receive a broadcast message, apply channel mute setting
