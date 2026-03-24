@@ -1,12 +1,8 @@
-#include "modules/MorseInputModule.h"
+#include "input/SingleButtonMorse.h"
 #if HAS_SCREEN && defined(BUTTON_PIN)
 
-#include "modules/SingleButtonInputManager.h"
 #include "graphics/SharedUIDisplay.h"
-#include "input/ButtonThread.h"
 #include <Arduino.h>
-
-extern ButtonThread *UserButtonThread;
 
 namespace graphics
 {
@@ -25,62 +21,53 @@ static const MorseChar morseTable[] = {
     {'5', "....."}, {'6', "-...."}, {'7', "--..."}, {'8', "---.."}, {'9', "----."}, {'0', "-----"},
     {'.', ".-.-.-"}, {',', "--..--"}, {'?', "..--.."}, {'\'', ".----."}, {'!', "-.-.--"}, {'/', "-..-."},
     {'(', "-.--."}, {')', "-.--.-"}, {'&', ".-..."}, {':', "---..."}, {';', "-.-.-."}, {'=', "-...-"},
-    {'+', ".-.-."}, {'-', "-....-"}, {'_', "..--.-"}, {'"', ".-..-."}, {'$', "...-..-"}, {'@', ".--.-."},
-    {'\b', "........"}, /* correction --> backspace */
-    {'\n', ".-.-."}     /* OUT --> send message */
+    {'+', ".-.-."}, {'-', "-....-"}, {'_', "..--.-"}, {'\"', ".-..-."}, {'$', "...-..-"}, {'@', ".--.-."},
+    {'\b', "........"},
+    {'\n', ".-.-."}
 };
 
-MorseInputModule &MorseInputModule::instance()
+SingleButtonMorse &SingleButtonMorse::instance()
 {
-    static MorseInputModule inst;
+    static SingleButtonMorse inst;
     return inst;
 }
 
-MorseInputModule::MorseInputModule() : SingleButtonInputBase("MorseInput") {}
+SingleButtonMorse::SingleButtonMorse() : SingleButtonInputBase("SingleButtonMorse") {}
 
-void MorseInputModule::start(const char *header, const char *initialText, uint32_t durationMs,
+void SingleButtonMorse::start(const char *header, const char *initialText, uint32_t durationMs,
                               std::function<void(const std::string &)> cb)
 {
     SingleButtonInputBase::start(header ? header : "Morse Input", initialText, durationMs, cb);
-    
-    currentMorse = "";
+    currentMorse.clear();
     lastInputTime = millis();
     consecutiveDots = 0;
 }
 
-void MorseInputModule::handleButtonPress(uint32_t now)
+void SingleButtonMorse::handleButtonPress(uint32_t now)
 {
     SingleButtonInputBase::handleButtonPress(now);
-    // No additional action needed on press
 }
 
-void MorseInputModule::handleButtonRelease(uint32_t now, uint32_t duration)
+void SingleButtonMorse::handleButtonRelease(uint32_t now, uint32_t duration)
 {
     if (menuOpen) {
         SingleButtonInputBase::handleButtonRelease(now, duration);
         return;
     }
-    
-    // Morse input
-    if (duration < 300) { // Dot
+
+    if (duration < 300) {
         consecutiveDots++;
         if (consecutiveDots == 8) {
-            // Check if sequence has dashes
-            if (currentMorse.find('-') == std::string::npos) {
-                // Pure dots -> Backspace immediately
-                if (!inputText.empty()) {
-                    inputText.pop_back();
-                }
+            if (currentMorse.find('-') == std::string::npos && !inputText.empty()) {
+                inputText.pop_back();
             }
-            // Always cancel the current sequence
-            currentMorse = "";
-            // Don't restart new sequence yet, wait for consecutiveDots to reset
+            currentMorse.clear();
         } else if (consecutiveDots > 8) {
-            currentMorse = ""; // Continue ignoring
+            currentMorse.clear();
         } else {
             currentMorse += ".";
         }
-    } else { // Dash
+    } else {
         consecutiveDots = 0;
         currentMorse += "-";
     }
@@ -91,7 +78,7 @@ void MorseInputModule::handleButtonRelease(uint32_t now, uint32_t duration)
     notifyObservers(&e);
 }
 
-void MorseInputModule::handleButtonHeld(uint32_t now, uint32_t duration)
+void SingleButtonMorse::handleButtonHeld(uint32_t now, uint32_t duration)
 {
     if (menuOpen) {
         if (duration > 500) {
@@ -104,17 +91,13 @@ void MorseInputModule::handleButtonHeld(uint32_t now, uint32_t duration)
             notifyObservers(&e);
             return;
         }
-    } else {
-        // Force update when crossing dot/dash threshold
-        if (duration >= 300) {
-            UIFrameEvent e;
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-            notifyObservers(&e);
-        }
+    } else if (duration >= 300) {
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        notifyObservers(&e);
     }
 
     if (!menuOpen && duration > 2000) {
-        // Open menu
         menuOpen = true;
         menuSelection = 0;
         ignoreRelease = true;
@@ -126,21 +109,18 @@ void MorseInputModule::handleButtonHeld(uint32_t now, uint32_t duration)
     }
 }
 
-void MorseInputModule::handleIdle(uint32_t now)
+void SingleButtonMorse::handleIdle(uint32_t now)
 {
     if (!menuOpen && !currentMorse.empty()) {
-        // Auto-commit character (fixed timing)
         if (now - lastInputTime > 800) {
             commitCharacter();
             consecutiveDots = 0;
         }
     } else if (!menuOpen && currentMorse.empty()) {
-        // Reset backspace tracking if enough time has passed
         if (consecutiveDots > 0 && now - lastInputTime > 800) {
             consecutiveDots = 0;
         }
 
-        // Auto-space
         if (now - lastInputTime > 2000 && !inputText.empty() && inputText.back() != ' ') {
             inputText += " ";
             lastInputTime = now;
@@ -151,7 +131,7 @@ void MorseInputModule::handleIdle(uint32_t now)
     }
 }
 
-void MorseInputModule::commitCharacter()
+void SingleButtonMorse::commitCharacter()
 {
     char c = morseToChar(currentMorse);
     if (c == '\b') {
@@ -159,39 +139,41 @@ void MorseInputModule::commitCharacter()
             inputText.pop_back();
         }
     } else if (c == '\n') {
-        if (callback) callback(inputText);
+        if (callback) {
+            callback(inputText);
+        }
         stop();
         return;
     } else if (c != 0) {
         if (shift) {
             c = toupper(c);
-            if (autoShift) shift = false;
+            if (autoShift) {
+                shift = false;
+            }
         } else {
             c = tolower(c);
         }
         inputText += c;
-        
-        // Check for auto-shift
+
         if (c == '.' || c == '!' || c == '?') {
             shift = true;
         }
     }
-    
-    currentMorse = "";
+
+    currentMorse.clear();
     lastInputTime = millis();
-    
+
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
 }
 
-void MorseInputModule::handleMenuSelection(int selection)
+void SingleButtonMorse::handleMenuSelection(int selection)
 {
-    // Let base class handle all menu items
     SingleButtonInputBase::handleMenuSelection(selection);
 }
 
-char MorseInputModule::morseToChar(const std::string &code)
+char SingleButtonMorse::morseToChar(const std::string &code)
 {
     for (const auto &mc : morseTable) {
         if (code == mc.code) {
@@ -201,10 +183,11 @@ char MorseInputModule::morseToChar(const std::string &code)
     return 0;
 }
 
-void MorseInputModule::draw(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void SingleButtonMorse::draw(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    if (!active)
+    if (!active) {
         return;
+    }
 
     if (menuOpen) {
         drawMenu(display, x, y);
@@ -214,12 +197,12 @@ void MorseInputModule::draw(OLEDDisplay *display, OLEDDisplayUiState *state, int
     drawInterface(display, x, y);
 }
 
-void MorseInputModule::drawInterface(OLEDDisplay *display, int16_t x, int16_t y)
+void SingleButtonMorse::drawInterface(OLEDDisplay *display, int16_t x, int16_t y)
 {
     drawMorseInterface(display, x, y);
 }
 
-void MorseInputModule::drawMorseInterface(OLEDDisplay *display, int16_t x, int16_t y)
+void SingleButtonMorse::drawMorseInterface(OLEDDisplay *display, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -227,109 +210,83 @@ void MorseInputModule::drawMorseInterface(OLEDDisplay *display, int16_t x, int16
     std::string activeMorse = currentMorse;
     if (buttonPressed && !menuOpen) {
         uint32_t duration = millis() - buttonPressTime;
-        if (duration >= 300) {
-            activeMorse += "-";
-        } else {
-            activeMorse += ".";
-        }
+        activeMorse += (duration >= 300) ? "-" : ".";
     }
 
-    // Input Text
     int lineHeightText = 13;
     int lineHeightHints = 4;
     int currentY = y;
-    
-    // Header
+
     display->drawString(x, currentY, headerText.c_str());
     currentY += lineHeightText;
     display->drawLine(x, currentY, x + display->getWidth(), currentY);
     currentY += 1;
-    
+
     std::string displayInput = getDisplayTextWithCursor();
     displayInput = formatDisplayTextWithScrolling(display, displayInput);
-    
     display->drawString(x, currentY, displayInput.c_str());
-    
-    // Horizontal Line
+
     currentY += lineHeightText;
     display->drawLine(x, currentY, x + display->getWidth(), currentY);
-    currentY += 3; // Spacing
+    currentY += 3;
 
-    // Character Layout
-    const char *rows[] = {
-        "ABCD EFGH IJKL MNOP",
-        "QRST UVW XYZ ,.?!"
-    };
-    
+    const char *rows[] = {"ABCD EFGH IJKL MNOP", "QRST UVW XYZ ,.?!"};
+
     int startX = x;
     int charSpacing = 7;
     int blockSpacing = 5;
-    
+
     for (int r = 0; r < 2; ++r) {
         const char *layout = rows[r];
         int currentX = startX;
-        
+
         for (int i = 0; layout[i]; ++i) {
             char c = layout[i];
-
             if (c == ' ') {
                 currentX += blockSpacing;
                 continue;
             }
 
-            std::string code = "";
+            std::string code;
             for (const auto &mc : morseTable) {
                 if (mc.c == c) {
                     code = mc.code;
                     break;
                 }
             }
-            
+
             bool isVisible = false;
             char hintChar = ' ';
             bool isSelected = false;
-            
-            // Check if this character matches the current input prefix
+
             if (code.find(activeMorse) == 0) {
                 isVisible = true;
                 if (code == activeMorse) {
-                    isSelected = true; // Complete match
+                    isSelected = true;
                 } else {
-                    char next = code[activeMorse.length()];
-                    hintChar = next;
+                    hintChar = code[activeMorse.length()];
                 }
             }
-            
-            // If visible, draw it. If not, we skip drawing but keep the space (currentX still increments)
+
             if (isVisible) {
-                char displayChar = (shift ? c : tolower(c));
-                // Numbers and punctuation don't have lower case in this context, but good to be safe
-                if (!isalpha(c)) displayChar = c;
-                
-                // Draw hint (dot/dash) if not selected
+                char displayChar = shift ? c : tolower(c);
+                if (!isalpha(c)) {
+                    displayChar = c;
+                }
+
                 if (!isSelected && hintChar != ' ') {
                     if (hintChar == '.') {
-                        int w = 3; 
-                        int h = 3;
-                        display->fillRect(currentX + (charSpacing - w) / 2, currentY + 2, w, h);
+                        display->fillRect(currentX + 2, currentY + 2, 3, 3);
                     } else if (hintChar == '-') {
-                        int w = 5;
-                        int h = 2; // Slightly thinner dash
-                        display->fillRect(currentX + (charSpacing - w) / 2, currentY, w, h);
+                        display->fillRect(currentX + 1, currentY, 5, 2);
                     }
                 }
-                
-                // Draw char
+
                 std::string ch(1, displayChar);
                 if (isSelected) {
-                    // Draw inverted (negative) for selected char
-                    int w = charSpacing; // Or use display->getStringWidth(ch.c_str()) + padding
-                    if (w < 6) w = 6;
-                    int h = lineHeightText;
-                    // Center the box horizontally
-                    int boxX = currentX + (charSpacing - w) / 2;
-                    
-                    display->fillRect(boxX, currentY + lineHeightHints, w, h);
+                    int width = charSpacing < 6 ? 6 : charSpacing;
+                    int boxX = currentX + (charSpacing - width) / 2;
+                    display->fillRect(boxX, currentY + lineHeightHints, width, lineHeightText);
                     display->setColor(BLACK);
                     display->drawString(currentX, currentY + lineHeightHints, ch.c_str());
                     display->setColor(WHITE);
@@ -337,10 +294,10 @@ void MorseInputModule::drawMorseInterface(OLEDDisplay *display, int16_t x, int16
                     display->drawString(currentX, currentY + lineHeightHints, ch.c_str());
                 }
             }
-            
+
             currentX += charSpacing;
         }
-        currentY += lineHeightHints + lineHeightText; 
+        currentY += lineHeightHints + lineHeightText;
     }
 }
 

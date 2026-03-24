@@ -75,7 +75,7 @@ class SingleButtonInputManager
     SingleButtonInputManager();
     ~SingleButtonInputManager() = default;
 
-    InputMode currentMode = MODE_MORSE;
+    InputMode currentMode = MODE_GRID_KEYBOARD;
     
     /**
      * @brief Load the saved input mode preference

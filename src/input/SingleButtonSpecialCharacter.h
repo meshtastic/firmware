@@ -4,53 +4,45 @@
 #if HAS_SCREEN && defined(BUTTON_PIN)
 
 #include "modules/SingleButtonInputBase.h"
-#include <string>
 
 namespace graphics
 {
 
-class SpecialCharacterInputModule : public SingleButtonInputBase
+class SingleButtonSpecialCharacter : public SingleButtonInputBase
 {
   public:
-    static SpecialCharacterInputModule &instance();
+    static SingleButtonSpecialCharacter &instance();
 
     void start(const char *header, const char *initialText, uint32_t durationMs,
                std::function<void(const std::string &)> callback) override;
-    
     void draw(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 
   protected:
     void handleButtonPress(uint32_t now) override;
     void handleButtonRelease(uint32_t now, uint32_t duration) override;
     void handleIdle(uint32_t now) override;
-    
     void handleMenuSelection(int selection) override;
     void drawInterface(OLEDDisplay *display, int16_t x, int16_t y) override;
 
   private:
-    SpecialCharacterInputModule();
-    ~SpecialCharacterInputModule() = default;
+    SingleButtonSpecialCharacter();
+    ~SingleButtonSpecialCharacter() = default;
 
-    // Selection state
     enum SelectionLevel {
-        LEVEL_BLOCK,    // Selecting which 3x3 block
-        LEVEL_ROW,      // Selecting which row within a block
-        LEVEL_CHARACTER // Selecting which character within a row
+        LEVEL_BLOCK,
+        LEVEL_ROW,
+        LEVEL_CHARACTER
     };
-    
+
     SelectionLevel currentLevel = LEVEL_BLOCK;
-    int currentBlock = -1;      // 0-3 (blocks)
-    int currentRow = -1;        // 0-2 (rows within block)
-    int currentCharIndex = -1;  // 0-2 (characters within row)
+    int currentBlock = -1;
+    int currentRow = -1;
+    int currentCharIndex = -1;
     uint32_t lastPressTime = 0;
-    
-    // Constants
+
     static const uint32_t SELECTION_TIMEOUT_MS = 400;
-    
-    // Character layout: 4 blocks with 3 rows each
-    static const char* BLOCK_CHARS[4][3];
-    
-    // Helper methods
+    static const char *BLOCK_CHARS[4][3];
+
     void advanceSelection();
     void confirmSelection();
     void resetToBlockLevel();
@@ -58,8 +50,6 @@ class SpecialCharacterInputModule : public SingleButtonInputBase
     int getRowCharCount(int blockIndex, int rowIndex) const;
     char getCharAt(int blockIndex, int rowIndex, int charIndex) const;
     void addCharacterToInput(char c);
-    
-    // Drawing helpers
     void drawGridInterface(OLEDDisplay *display, int16_t x, int16_t y);
     void drawBlock(OLEDDisplay *display, int blockIndex, int x, int y, int width, int height, bool highlighted);
 };

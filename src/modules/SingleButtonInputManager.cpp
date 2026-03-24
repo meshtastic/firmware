@@ -1,11 +1,12 @@
 #include "modules/SingleButtonInputManager.h"
 #if HAS_SCREEN && defined(BUTTON_PIN)
 
-#include "modules/MorseInputModule.h"
-#include "modules/SpecialCharacterInputModule.h"
-#include "modules/GridKeyboardInputModule.h"
+#include "input/SingleButtonGridKeyboard.h"
+#include "input/SingleButtonMorse.h"
+#include "input/SingleButtonSpecialCharacter.h"
 #include "graphics/Screen.h"
 #include "mesh/NodeDB.h"
+#include "FSCommon.h"
 #include <Arduino.h>
 
 extern graphics::Screen *screen;
@@ -33,25 +34,25 @@ void SingleButtonInputManager::start(const char *header, const char *initialText
     
     // Start the appropriate module based on current mode
     if (currentMode == MODE_MORSE) {
-        MorseInputModule::instance().start(header, initialText, durationMs, callback);
+        SingleButtonMorse::instance().start(header, initialText, durationMs, callback);
     } else if (currentMode == MODE_GRID_KEYBOARD) {
-        GridKeyboardInputModule::instance().start(header, initialText, durationMs, callback);
+        SingleButtonGridKeyboard::instance().start(header, initialText, durationMs, callback);
     } else {
-        SpecialCharacterInputModule::instance().start(header, initialText, durationMs, callback);
+        SingleButtonSpecialCharacter::instance().start(header, initialText, durationMs, callback);
     }
 }
 
 void SingleButtonInputManager::stop(bool callEmptyCallback)
 {
     // Stop whichever module might be active
-    if (MorseInputModule::instance().isActive()) {
-        MorseInputModule::instance().stop(callEmptyCallback);
+    if (SingleButtonMorse::instance().isActive()) {
+        SingleButtonMorse::instance().stop(callEmptyCallback);
     }
-    if (SpecialCharacterInputModule::instance().isActive()) {
-        SpecialCharacterInputModule::instance().stop(callEmptyCallback);
+    if (SingleButtonSpecialCharacter::instance().isActive()) {
+        SingleButtonSpecialCharacter::instance().stop(callEmptyCallback);
     }
-    if (GridKeyboardInputModule::instance().isActive()) {
-        GridKeyboardInputModule::instance().stop(callEmptyCallback);
+    if (SingleButtonGridKeyboard::instance().isActive()) {
+        SingleButtonGridKeyboard::instance().stop(callEmptyCallback);
     }
 }
 
@@ -76,36 +77,60 @@ void SingleButtonInputManager::toggleMode()
 
 SingleButtonInputBase *SingleButtonInputManager::getActiveModule()
 {
-    if (MorseInputModule::instance().isActive()) {
-        return &MorseInputModule::instance();
+    if (SingleButtonMorse::instance().isActive()) {
+        return &SingleButtonMorse::instance();
     }
-    if (SpecialCharacterInputModule::instance().isActive()) {
-        return &SpecialCharacterInputModule::instance();
+    if (SingleButtonSpecialCharacter::instance().isActive()) {
+        return &SingleButtonSpecialCharacter::instance();
     }
-    if (GridKeyboardInputModule::instance().isActive()) {
-        return &GridKeyboardInputModule::instance();
+    if (SingleButtonGridKeyboard::instance().isActive()) {
+        return &SingleButtonGridKeyboard::instance();
     }
     return nullptr;
 }
 
 bool SingleButtonInputManager::isActive() const
 {
-    return MorseInputModule::instance().isActive() || 
-           SpecialCharacterInputModule::instance().isActive() ||
-           GridKeyboardInputModule::instance().isActive();
+        return SingleButtonMorse::instance().isActive() || SingleButtonSpecialCharacter::instance().isActive() ||
+            SingleButtonGridKeyboard::instance().isActive();
 }
 
 void SingleButtonInputManager::loadPreference()
 {
-    // Default to Morse mode
-    // TODO: Add single_button_input_mode field to meshtastic_DeviceUIConfig protobuf to persist this setting
-    currentMode = MODE_MORSE;
+    // Load from file, default to Grid Keyboard mode
+    currentMode = MODE_GRID_KEYBOARD;
+    
+    if (FSBegin()) {
+        if (FSCom.exists("/prefs/single_button_mode")) {
+            File file = FSCom.open("/prefs/single_button_mode", FILE_O_READ);
+            if (file) {
+                int savedMode = file.read();
+                file.close();
+                
+                // Validate the mode value
+                if (savedMode >= MODE_MORSE && savedMode <= MODE_SPECIAL_CHARACTERS) {
+                    currentMode = static_cast<InputMode>(savedMode);
+                    LOG_DEBUG("Loaded single button input mode: %d", savedMode);
+                }
+            }
+        }
+    }
 }
 
 void SingleButtonInputManager::savePreference()
 {
-    // Mode persistence not yet implemented
-    // TODO: Add single_button_input_mode field to meshtastic_DeviceUIConfig protobuf to persist this setting
+    // Save mode preference to file
+    if (FSBegin()) {
+        FSCom.mkdir("/prefs");
+        File file = FSCom.open("/prefs/single_button_mode", FILE_O_WRITE);
+        if (file) {
+            file.write(static_cast<uint8_t>(currentMode));
+            file.close();
+            LOG_DEBUG("Saved single button input mode: %d", currentMode);
+        } else {
+            LOG_ERROR("Failed to save single button input mode");
+        }
+    }
 }
 
 } // namespace graphics

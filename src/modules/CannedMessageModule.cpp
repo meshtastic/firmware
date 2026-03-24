@@ -209,15 +209,14 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     }
 
 #if defined(BUTTON_PIN) || HAS_TOUCHSCREEN || ARCH_PORTDUINO
-    // Use screen->showTextInput for single button input, touchscreen, or when there's no keyboard
-    // When BUTTON_PIN is defined, Screen::showTextInput will route to SingleButtonInputManager
+    // Use screen->showTextInput for single-button, touchscreen, or no-keyboard input.
+    // When BUTTON_PIN is defined, Screen::showTextInput routes through SingleButtonInputManager.
     if (screen) {
         const char *nodeName = getNodeName(dest);
         char header[64];
         snprintf(header, sizeof(header), "To: %s", nodeName ? nodeName : "Unknown");
 
-        // Use screen->showTextInput which will start SingleButtonInputManager via OnScreenKeyboardModule
-        // and properly set up all the overlays
+        // Screen owns the text-input overlay lifecycle and starts the right input UI.
         screen->showTextInput(header, "", 0, [this](const std::string &text) {
              if (!text.empty()) {
                  this->sendText(this->dest, this->channel, text.c_str(), true);
