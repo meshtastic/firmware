@@ -26,7 +26,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_INA219 = 5,
     /* High accuracy temperature and pressure */
     meshtastic_TelemetrySensorType_BMP280 = 6,
-    /* TODO - REMOVE High accuracy temperature and humidity */
+    /* High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHTC3 = 7,
     /* High accuracy pressure */
     meshtastic_TelemetrySensorType_LPS22 = 8,
@@ -36,7 +36,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_QMI8658 = 10,
     /* 3-Axis magnetic sensor */
     meshtastic_TelemetrySensorType_QMC5883L = 11,
-    /* TODO - REMOVE High accuracy temperature and humidity */
+    /* High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT31 = 12,
     /* PM2.5 air quality sensor */
     meshtastic_TelemetrySensorType_PMSA003I = 13,
@@ -46,7 +46,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_BMP085 = 15,
     /* RCWL-9620 Doppler Radar Distance Sensor, used for water level detection */
     meshtastic_TelemetrySensorType_RCWL9620 = 16,
-    /* TODO - REMOVE Sensirion High accuracy temperature and humidity */
+    /* Sensirion High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT4X = 17,
     /* VEML7700 high accuracy ambient light(Lux) digital 16-bit resolution sensor. */
     meshtastic_TelemetrySensorType_VEML7700 = 18,
@@ -106,14 +106,14 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_BH1750 = 45,
     /* HDC1080 Temperature and Humidity Sensor */
     meshtastic_TelemetrySensorType_HDC1080 = 46,
-    /* TODO - REMOVE STH21 Temperature and R. Humidity sensor */
+    /* STH21 Temperature and R. Humidity sensor */
     meshtastic_TelemetrySensorType_SHT21 = 47,
     /* Sensirion STC31 CO2 sensor */
     meshtastic_TelemetrySensorType_STC31 = 48,
     /* SCD30 CO2, humidity, temperature sensor */
     meshtastic_TelemetrySensorType_SCD30 = 49,
-    /* SHT family of sensors for temperature and humidity */
-    meshtastic_TelemetrySensorType_SHTXX = 50
+    /* Dallas/Maxim DS18B20 1-Wire digital thermometer */
+    meshtastic_TelemetrySensorType_DS18B20 = 51
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -135,6 +135,14 @@ typedef struct _meshtastic_DeviceMetrics {
     bool has_uptime_seconds;
     uint32_t uptime_seconds;
 } meshtastic_DeviceMetrics;
+
+/* A single DS18B20 1-Wire temperature sensor reading with its unique ROM code */
+typedef struct _meshtastic_DS18B20Reading {
+    /* 32-bit FNV-1a hash of the 64-bit 1-Wire ROM code — stable, compact identifier per sensor */
+    uint32_t device_id;
+    /* Temperature in degrees Celsius */
+    float temperature;
+} meshtastic_DS18B20Reading;
 
 /* Weather station or other environmental metrics */
 typedef struct _meshtastic_EnvironmentMetrics {
@@ -206,6 +214,9 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Soil temperature measured (*C) */
     bool has_soil_temperature;
     float soil_temperature;
+    /* DS18B20 1-Wire temperature sensor readings (up to 8 sensors per bus) */
+    pb_size_t ds18b20_readings_count;
+    meshtastic_DS18B20Reading ds18b20_readings[16];
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -491,8 +502,9 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SHTXX
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SHTXX+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_DS18B20
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_DS18B20+1))
+
 
 
 
@@ -508,7 +520,8 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, 0, {meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default, meshtastic_DS18B20Reading_init_default}}
+#define meshtastic_DS18B20Reading_init_default   {0, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -519,7 +532,8 @@ extern "C" {
 #define meshtastic_Nau7802Config_init_default    {0, 0}
 #define meshtastic_SEN5XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, 0, {meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero, meshtastic_DS18B20Reading_init_zero}}
+#define meshtastic_DS18B20Reading_init_zero      {0, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -536,6 +550,8 @@ extern "C" {
 #define meshtastic_DeviceMetrics_channel_utilization_tag 3
 #define meshtastic_DeviceMetrics_air_util_tx_tag 4
 #define meshtastic_DeviceMetrics_uptime_seconds_tag 5
+#define meshtastic_DS18B20Reading_device_id_tag  1
+#define meshtastic_DS18B20Reading_temperature_tag 2
 #define meshtastic_EnvironmentMetrics_temperature_tag 1
 #define meshtastic_EnvironmentMetrics_relative_humidity_tag 2
 #define meshtastic_EnvironmentMetrics_barometric_pressure_tag 3
@@ -558,6 +574,7 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_rainfall_24h_tag 20
 #define meshtastic_EnvironmentMetrics_soil_moisture_tag 21
 #define meshtastic_EnvironmentMetrics_soil_temperature_tag 22
+#define meshtastic_EnvironmentMetrics_ds18b20_readings_tag 23
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -683,9 +700,17 @@ X(a, STATIC,   OPTIONAL, FLOAT,    radiation,        18) \
 X(a, STATIC,   OPTIONAL, FLOAT,    rainfall_1h,      19) \
 X(a, STATIC,   OPTIONAL, FLOAT,    rainfall_24h,     20) \
 X(a, STATIC,   OPTIONAL, UINT32,   soil_moisture,    21) \
-X(a, STATIC,   OPTIONAL, FLOAT,    soil_temperature,  22)
+X(a, STATIC,   OPTIONAL, FLOAT,    soil_temperature,  22) \
+X(a, STATIC,   REPEATED, MESSAGE,  ds18b20_readings,  23)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
+#define meshtastic_EnvironmentMetrics_ds18b20_readings_MSGTYPE meshtastic_DS18B20Reading
+
+#define meshtastic_DS18B20Reading_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FIXED32,  device_id,         1) \
+X(a, STATIC,   SINGULAR, FLOAT,    temperature,       2)
+#define meshtastic_DS18B20Reading_CALLBACK NULL
+#define meshtastic_DS18B20Reading_DEFAULT NULL
 
 #define meshtastic_PowerMetrics_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, FLOAT,    ch1_voltage,       1) \
@@ -825,6 +850,7 @@ X(a, STATIC,   OPTIONAL, FIXED64,  voc_state_array,   6)
 
 extern const pb_msgdesc_t meshtastic_DeviceMetrics_msg;
 extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
+extern const pb_msgdesc_t meshtastic_DS18B20Reading_msg;
 extern const pb_msgdesc_t meshtastic_PowerMetrics_msg;
 extern const pb_msgdesc_t meshtastic_AirQualityMetrics_msg;
 extern const pb_msgdesc_t meshtastic_LocalStats_msg;
@@ -838,6 +864,7 @@ extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_DeviceMetrics_fields &meshtastic_DeviceMetrics_msg
 #define meshtastic_EnvironmentMetrics_fields &meshtastic_EnvironmentMetrics_msg
+#define meshtastic_DS18B20Reading_fields &meshtastic_DS18B20Reading_msg
 #define meshtastic_PowerMetrics_fields &meshtastic_PowerMetrics_msg
 #define meshtastic_AirQualityMetrics_fields &meshtastic_AirQualityMetrics_msg
 #define meshtastic_LocalStats_fields &meshtastic_LocalStats_msg
@@ -851,15 +878,16 @@ extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        150
+#define meshtastic_DS18B20Reading_size           10
 #define meshtastic_DeviceMetrics_size            27
-#define meshtastic_EnvironmentMetrics_size       113
+#define meshtastic_EnvironmentMetrics_size       321
 #define meshtastic_HealthMetrics_size            11
 #define meshtastic_HostMetrics_size              264
 #define meshtastic_LocalStats_size               87
 #define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             81
 #define meshtastic_SEN5XState_size               27
-#define meshtastic_Telemetry_size                272
+#define meshtastic_Telemetry_size                329
 #define meshtastic_TrafficManagementStats_size   42
 
 #ifdef __cplusplus

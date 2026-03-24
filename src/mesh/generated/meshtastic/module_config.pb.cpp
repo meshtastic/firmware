@@ -45,6 +45,9 @@ PB_BIND(meshtastic_ModuleConfig_StoreForwardConfig, meshtastic_ModuleConfig_Stor
 PB_BIND(meshtastic_ModuleConfig_RangeTestConfig, meshtastic_ModuleConfig_RangeTestConfig, AUTO)
 
 
+PB_BIND(meshtastic_ModuleConfig_DS18B20Config, meshtastic_ModuleConfig_DS18B20Config, AUTO)
+
+
 PB_BIND(meshtastic_ModuleConfig_TelemetryConfig, meshtastic_ModuleConfig_TelemetryConfig, AUTO)
 
 
@@ -61,6 +64,8 @@ PB_BIND(meshtastic_ModuleConfig_TAKConfig, meshtastic_ModuleConfig_TAKConfig, AU
 
 
 PB_BIND(meshtastic_RemoteHardwarePin, meshtastic_RemoteHardwarePin, AUTO)
+
+
 
 
 

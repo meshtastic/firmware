@@ -92,6 +92,18 @@ typedef enum _meshtastic_ModuleConfig_SerialConfig_Serial_Mode {
     meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT = 10 /* only text (channel & DM) */
 } meshtastic_ModuleConfig_SerialConfig_Serial_Mode;
 
+/* Which value the legacy EnvironmentMetrics.temperature scalar reports. */
+typedef enum _meshtastic_ModuleConfig_DS18B20Config_TemperatureMode {
+    /* Report the temperature of the first sensor (index 0, sorted by ROM code). Default. */
+    meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_FIRST = 0,
+    /* Report the average temperature across all connected sensors. */
+    meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_AVERAGE = 1,
+    /* Report the minimum temperature across all connected sensors. */
+    meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_MIN = 2,
+    /* Report the maximum temperature across all connected sensors. */
+    meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_MAX = 3
+} meshtastic_ModuleConfig_DS18B20Config_TemperatureMode;
+
 /* TODO: REPLACE */
 typedef enum _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar {
     /* TODO: REPLACE */
@@ -359,6 +371,18 @@ typedef struct _meshtastic_ModuleConfig_RangeTestConfig {
     bool clear_on_reboot;
 } meshtastic_ModuleConfig_RangeTestConfig;
 
+/* DS18B20 1-Wire sensor configuration. */
+typedef struct _meshtastic_ModuleConfig_DS18B20Config {
+    /* GPIO pin for the DS18B20 1-Wire sensor bus. 0 = disabled.
+ Set via CLI to activate DS18B20 support on any pin. */
+    uint32_t pin;
+    /* Selects what value the legacy EnvironmentMetrics.temperature scalar reports. */
+    meshtastic_ModuleConfig_DS18B20Config_TemperatureMode mode;
+    /* When true, DS18B20 readings beyond the first packet are broadcast over LoRa mesh.
+ When false (default), extra sensor chunks are sent only to the connected phone/client. */
+    bool mesh_enabled;
+} meshtastic_ModuleConfig_DS18B20Config;
+
 /* Configuration for both device and environment metrics */
 typedef struct _meshtastic_ModuleConfig_TelemetryConfig {
     /* Interval in seconds of how often we should try to send our
@@ -398,6 +422,9 @@ typedef struct _meshtastic_ModuleConfig_TelemetryConfig {
     bool device_telemetry_enabled;
     /* Enable/Disable the air quality telemetry measurement module on-device display */
     bool air_quality_screen_enabled;
+    /* DS18B20 1-Wire sensor configuration. Pin, temperature mode, and mesh broadcast control. */
+    bool has_ds18b20;
+    meshtastic_ModuleConfig_DS18B20Config ds18b20;
 } meshtastic_ModuleConfig_TelemetryConfig;
 
 /* Canned Messages Module Config */
@@ -545,6 +572,10 @@ extern "C" {
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MAX meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Mode)(meshtastic_ModuleConfig_SerialConfig_Serial_Mode_LOGTEXT+1))
 
+#define _meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_MIN meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_FIRST
+#define _meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_MAX meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_MAX
+#define _meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_ARRAYSIZE ((meshtastic_ModuleConfig_DS18B20Config_TemperatureMode)(meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_MAX+1))
+
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MAX meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_ARRAYSIZE ((meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar)(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK+1))
@@ -565,6 +596,8 @@ extern "C" {
 
 
 
+
+#define meshtastic_ModuleConfig_DS18B20Config_mode_ENUMTYPE meshtastic_ModuleConfig_DS18B20Config_TemperatureMode
 
 
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_event_cw_ENUMTYPE meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar
@@ -593,7 +626,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_DS18B20Config_init_default {0, _meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_MIN, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, meshtastic_ModuleConfig_DS18B20Config_init_default}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_default {""}
@@ -612,7 +646,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_DS18B20Config_init_zero {0, _meshtastic_ModuleConfig_DS18B20Config_TemperatureMode_MIN, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, meshtastic_ModuleConfig_DS18B20Config_init_zero}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_zero {""}
@@ -703,6 +738,9 @@ extern "C" {
 #define meshtastic_ModuleConfig_RangeTestConfig_sender_tag 2
 #define meshtastic_ModuleConfig_RangeTestConfig_save_tag 3
 #define meshtastic_ModuleConfig_RangeTestConfig_clear_on_reboot_tag 4
+#define meshtastic_ModuleConfig_DS18B20Config_pin_tag 1
+#define meshtastic_ModuleConfig_DS18B20Config_mode_tag 2
+#define meshtastic_ModuleConfig_DS18B20Config_mesh_enabled_tag 3
 #define meshtastic_ModuleConfig_TelemetryConfig_device_update_interval_tag 1
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_update_interval_tag 2
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_measurement_enabled_tag 3
@@ -718,6 +756,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_TelemetryConfig_health_screen_enabled_tag 13
 #define meshtastic_ModuleConfig_TelemetryConfig_device_telemetry_enabled_tag 14
 #define meshtastic_ModuleConfig_TelemetryConfig_air_quality_screen_enabled_tag 15
+#define meshtastic_ModuleConfig_TelemetryConfig_ds18b20_tag 16
 #define meshtastic_ModuleConfig_CannedMessageConfig_rotary1_enabled_tag 1
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_a_tag 2
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_b_tag 3
@@ -933,6 +972,13 @@ X(a, STATIC,   SINGULAR, BOOL,     clear_on_reboot,   4)
 #define meshtastic_ModuleConfig_RangeTestConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_RangeTestConfig_DEFAULT NULL
 
+#define meshtastic_ModuleConfig_DS18B20Config_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   pin,               1) \
+X(a, STATIC,   SINGULAR, UENUM,    mode,              2) \
+X(a, STATIC,   SINGULAR, BOOL,     mesh_enabled,      3)
+#define meshtastic_ModuleConfig_DS18B20Config_CALLBACK NULL
+#define meshtastic_ModuleConfig_DS18B20Config_DEFAULT NULL
+
 #define meshtastic_ModuleConfig_TelemetryConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   device_update_interval,   1) \
 X(a, STATIC,   SINGULAR, UINT32,   environment_update_interval,   2) \
@@ -948,9 +994,11 @@ X(a, STATIC,   SINGULAR, BOOL,     health_measurement_enabled,  11) \
 X(a, STATIC,   SINGULAR, UINT32,   health_update_interval,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     health_screen_enabled,  13) \
 X(a, STATIC,   SINGULAR, BOOL,     device_telemetry_enabled,  14) \
-X(a, STATIC,   SINGULAR, BOOL,     air_quality_screen_enabled,  15)
+X(a, STATIC,   SINGULAR, BOOL,     air_quality_screen_enabled,  15) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  ds18b20,          16)
 #define meshtastic_ModuleConfig_TelemetryConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TelemetryConfig_DEFAULT NULL
+#define meshtastic_ModuleConfig_TelemetryConfig_ds18b20_MSGTYPE meshtastic_ModuleConfig_DS18B20Config
 
 #define meshtastic_ModuleConfig_CannedMessageConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     rotary1_enabled,   1) \
@@ -1007,6 +1055,7 @@ extern const pb_msgdesc_t meshtastic_ModuleConfig_SerialConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_ExternalNotificationConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_StoreForwardConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_RangeTestConfig_msg;
+extern const pb_msgdesc_t meshtastic_ModuleConfig_DS18B20Config_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_TelemetryConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_CannedMessageConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_AmbientLightingConfig_msg;
@@ -1028,6 +1077,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_fields &meshtastic_ModuleConfig_ExternalNotificationConfig_msg
 #define meshtastic_ModuleConfig_StoreForwardConfig_fields &meshtastic_ModuleConfig_StoreForwardConfig_msg
 #define meshtastic_ModuleConfig_RangeTestConfig_fields &meshtastic_ModuleConfig_RangeTestConfig_msg
+#define meshtastic_ModuleConfig_DS18B20Config_fields &meshtastic_ModuleConfig_DS18B20Config_msg
 #define meshtastic_ModuleConfig_TelemetryConfig_fields &meshtastic_ModuleConfig_TelemetryConfig_msg
 #define meshtastic_ModuleConfig_CannedMessageConfig_fields &meshtastic_ModuleConfig_CannedMessageConfig_msg
 #define meshtastic_ModuleConfig_AmbientLightingConfig_fields &meshtastic_ModuleConfig_AmbientLightingConfig_msg
@@ -1040,6 +1090,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_AmbientLightingConfig_size 14
 #define meshtastic_ModuleConfig_AudioConfig_size 19
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
+#define meshtastic_ModuleConfig_DS18B20Config_size 10
 #define meshtastic_ModuleConfig_DetectionSensorConfig_size 44
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 42
 #define meshtastic_ModuleConfig_MQTTConfig_size  224
@@ -1052,7 +1103,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_StatusMessageConfig_size 81
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TAKConfig_size   4
-#define meshtastic_ModuleConfig_TelemetryConfig_size 50
+#define meshtastic_ModuleConfig_TelemetryConfig_size 63
 #define meshtastic_ModuleConfig_TrafficManagementConfig_size 52
 #define meshtastic_ModuleConfig_size             227
 #define meshtastic_RemoteHardwarePin_size        21
