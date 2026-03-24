@@ -1275,7 +1275,7 @@ void TFTDisplay::display(bool fromBlank)
                 }
             }
             // Step 3b: Round up the last pixel to odd number to maintain 32-bit alignment for SPIs.
-            // Most of displays will have even number of pixels in a row -- this will be in bounds
+            // Most displays will have even number of pixels in a row -- this will be in bounds
             // of the displayWidth. (Hopefully odd displays will just ignore that extra pixel.)
             x_LastPixelUpdate |= 1;
 #if defined(HACKADAY_COMMUNICATOR)
