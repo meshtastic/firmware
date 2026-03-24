@@ -18,6 +18,7 @@
 #include "main.h"
 #include "mesh/Default.h"
 #include "mesh/MeshTypes.h"
+#include "mesh/RadioLibInterface.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
@@ -160,31 +161,20 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
+            // Guard: without a reboot, reconfigure() applies the region directly.
+            // Reject LORA_24 on sub-GHz-only hardware — getRadio() used to catch this post-reboot.
+            if (selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_LORA_24 &&
+                !(RadioLibInterface::instance && RadioLibInterface::instance->wideLora())) {
+                LOG_WARN("Radio hardware does not support 2.4 GHz; ignoring LORA_24 selection");
+                return;
+            }
+
             config.lora.region = selectedRegion;
             auto changes = SEGMENT_CONFIG;
 
-        // FIXME: This should be a method consolidated with the same logic in the admin message as well
-        // This is needed as we wait til picking the LoRa region to generate keys for the first time.
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-            if (!owner.is_licensed) {
-                bool keygenSuccess = false;
-                if (config.security.private_key.size == 32) {
-                    // public key is derived from private, so this will always have the same result.
-                    if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                        keygenSuccess = true;
-                    }
-
-                } else {
-                    LOG_INFO("Generate new PKI keys");
-                    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-                    keygenSuccess = true;
-                }
-                if (keygenSuccess) {
-                    config.security.public_key.size = 32;
-                    config.security.private_key.size = 32;
-                    owner.public_key.size = 32;
-                    memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-                }
+            if (crypto) {
+                crypto->ensurePkiKeys(config.security, owner);
             }
 #endif
             config.lora.tx_enabled = true;
@@ -200,7 +190,6 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             }
 
             service->reloadConfig(changes);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         });
 
     bannerOptions.durationMs = duration;
@@ -319,7 +308,6 @@ void menuHandler::FrequencySlotPicker()
 
         config.lora.channel_num = selected;
         service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
     };
 
     screen->showOverlayBanner(bannerOptions);
@@ -358,7 +346,6 @@ void menuHandler::radioPresetPicker()
             config.lora.channel_num = 0;        // Reset to default channel for the preset
             config.lora.override_frequency = 0; // Clear any custom frequency
             service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         });
 
     screen->showOverlayBanner(bannerOptions);
