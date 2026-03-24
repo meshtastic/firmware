@@ -72,7 +72,6 @@
 #define DAC_I2S_DOUT 42
 #define DAC_I2S_DIN 46
 #define DAC_I2S_MCLK 45 // dummy
-#define I2S_BLEEBLE
 
 // TCA8418 keyboard
 #define I2C_NO_RESCAN
