@@ -24,6 +24,15 @@ bool readTouch(int16_t *x, int16_t *y)
     return false;
 }
 
+void earlyInitVariant()
+{
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(BOARD_BL_EN, OUTPUT);
+}
+
 // T5-S3-ePaper Pro specific (late-) init
 void lateInitVariant(void)
 {
