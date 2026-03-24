@@ -21,7 +21,7 @@ void DS18B20Sensor::scanBus()
     }
 
     std::vector<SensorReading> found;
-    for (int i = 0; i < count && i < MAX_DS18B20_SENSORS; i++) {
+    for (int i = 0; i < count; i++) {
         DeviceAddress addr;
         if (!dallas->getAddress(addr, i)) {
             LOG_WARN("DS18B20: failed to read address for device %d", i);

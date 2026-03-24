@@ -10,7 +10,9 @@
 #include <algorithm>
 #include <vector>
 
-#define MAX_DS18B20_SENSORS 16
+// Derived from the nanopb-generated struct array — single source of truth with telemetry.options max_count
+#define MAX_DS18B20_SENSORS                                                                                                      \
+    (int(sizeof(((meshtastic_EnvironmentMetrics *)0)->ds18b20_readings) / sizeof(meshtastic_DS18B20Reading)))
 
 class DS18B20Sensor : public TelemetrySensor
 {

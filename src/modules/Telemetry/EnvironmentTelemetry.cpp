@@ -706,7 +706,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                     LOG_INFO("DS18B20: chunk offset %d (%d readings) → phone%s", offset,
                              chunk.variant.environment_metrics.ds18b20_readings_count,
                              moduleConfig.telemetry.ds18b20.mesh_enabled ? " + mesh" : "");
-                    if (moduleConfig.telemetry.ds18b20.mesh_enabled) {
+                    if (moduleConfig.telemetry.ds18b20.mesh_enabled && !phoneOnly) {
                         meshtastic_MeshPacket *cp = allocDataProtobuf(chunk);
                         cp->to = dest;
                         cp->decoded.want_response = false;
