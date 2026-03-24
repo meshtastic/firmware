@@ -394,7 +394,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
 #if HAS_UDP_MULTICAST
     if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
+        bool res = udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
+        if (res && config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+            LOG_DEBUG("Packet successfully sent via UDP, skipping LoRa");
+            packetPool.release(p);
+            return ERRNO_OK;
+        }
     }
 #endif
 
