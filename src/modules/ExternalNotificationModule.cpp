@@ -380,13 +380,17 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             const bool buzzerModeIsDirectOnly =
                 (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
 
+            // Bell messages always pass (bell overrides mute); regular messages only pass if not muted.
             if (containsBell || !is_muted) {
-                if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_message ||
-                    moduleConfig.external_notification.alert_bell_vibra ||
+                // Start the nag cycle if at least one output would fire for this message.
+                // alert_bell_* flags only apply when the message actually contains a bell character;
+                // alert_message_* flags apply to any message that passed the mute check above.
+                if ((containsBell && (moduleConfig.external_notification.alert_bell ||
+                                      moduleConfig.external_notification.alert_bell_vibra ||
+                                      (moduleConfig.external_notification.alert_bell_buzzer && canBuzz()))) ||
+                    moduleConfig.external_notification.alert_message ||
                     moduleConfig.external_notification.alert_message_vibra ||
-                    ((moduleConfig.external_notification.alert_bell_buzzer ||
-                      moduleConfig.external_notification.alert_message_buzzer) &&
-                     canBuzz())) {
+                    (moduleConfig.external_notification.alert_message_buzzer && canBuzz())) {
                     nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
                                                      ? (moduleConfig.external_notification.nag_timeout * 1000)
                                                      : moduleConfig.external_notification.output_ms);
@@ -394,18 +398,21 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     isNagging = true;
                 }
 
-                if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_message) {
+                // Each output is gated independently: alert_bell_* requires containsBell,
+                // alert_message_* fires on any (non-muted) message.
+                if ((containsBell && moduleConfig.external_notification.alert_bell) ||
+                    moduleConfig.external_notification.alert_message) {
                     LOG_INFO("externalNotificationModule - Notification Module or Bell");
                     setExternalState(0, true);
                 }
 
-                if (moduleConfig.external_notification.alert_bell_vibra ||
+                if ((containsBell && moduleConfig.external_notification.alert_bell_vibra) ||
                     moduleConfig.external_notification.alert_message_vibra) {
                     LOG_INFO("externalNotificationModule - Notification Module or Bell (Vibra)");
                     setExternalState(1, true);
                 }
 
-                if ((moduleConfig.external_notification.alert_bell_buzzer ||
+                if (((containsBell && moduleConfig.external_notification.alert_bell_buzzer) ||
                      moduleConfig.external_notification.alert_message_buzzer) &&
                     canBuzz()) {
                     LOG_INFO("externalNotificationModule - Notification Module or Bell (Buzzer)");
