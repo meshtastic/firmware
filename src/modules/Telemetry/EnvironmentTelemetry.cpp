@@ -131,6 +131,11 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/IndicatorSensor.h"
 #endif
 
+#if __has_include(<DallasTemperature.h>)
+#include "Sensor/DS18B20Sensor.h"
+static DS18B20Sensor ds18b20Sensor;
+#endif
+
 #if __has_include(<Adafruit_TSL2561_U.h>)
 #include "Sensor/TSL2561Sensor.h"
 #endif
@@ -303,6 +308,13 @@ int32_t EnvironmentTelemetryModule::runOnce()
             if (rak9154Sensor.hasSensor())
                 result = rak9154Sensor.runOnce();
 #endif
+#if __has_include(<DallasTemperature.h>)
+            {
+                uint32_t ds_delay = ds18b20Sensor.runOnce();
+                if (ds_delay < result)
+                    result = ds_delay;
+            }
+#endif
 #endif
         }
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -320,6 +332,14 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = delay;
             }
         }
+
+#if __has_include(<DallasTemperature.h>)
+        {
+            uint32_t ds_delay = ds18b20Sensor.runOnce();
+            if (ds_delay < result)
+                result = ds_delay;
+        }
+#endif
 
         uint32_t lastTelemetry =
             transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY) : 0;
@@ -580,6 +600,13 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         hasSensor = true;
     }
 #endif
+#if __has_include(<DallasTemperature.h>)
+    {
+        get_metrics = ds18b20Sensor.getMetrics(m);
+        valid = valid || get_metrics;
+        hasSensor = true;
+    }
+#endif
     return valid && hasSensor;
 }
 
@@ -669,6 +696,27 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                 LOG_DEBUG("Start next execution in 5s, then sleep");
                 setIntervalFromNow(FIVE_SECONDS_MS);
             }
+
+#if __has_include(<DallasTemperature.h>)
+            for (int offset = MAX_DS18B20_SENSORS; offset < ds18b20Sensor.getSensorCount(); offset += MAX_DS18B20_SENSORS) {
+                meshtastic_Telemetry chunk = meshtastic_Telemetry_init_zero;
+                chunk.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+                chunk.time = getTime();
+                if (ds18b20Sensor.getMetricsChunk(&chunk, offset)) {
+                    LOG_INFO("DS18B20: chunk offset %d (%d readings) → phone%s", offset,
+                             chunk.variant.environment_metrics.ds18b20_readings_count,
+                             moduleConfig.telemetry.ds18b20.mesh_enabled ? " + mesh" : "");
+                    if (moduleConfig.telemetry.ds18b20.mesh_enabled) {
+                        meshtastic_MeshPacket *cp = allocDataProtobuf(chunk);
+                        cp->to = dest;
+                        cp->decoded.want_response = false;
+                        cp->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+                        service->sendToMesh(cp, RX_SRC_LOCAL, true);
+                    }
+                    service->sendToPhone(allocDataProtobuf(chunk));
+                }
+            }
+#endif
         }
         return true;
     }
