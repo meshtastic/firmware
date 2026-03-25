@@ -237,6 +237,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<BH1750Sensor>(i2cScanner, ScanI2C::DeviceType::BH1750);
 #endif
 #if __has_include(<SHTSensor.h>)
+    // TODO Can we scan for multiple sensors connected on the same bus?
     addSensor<SHTXXSensor>(i2cScanner, ScanI2C::DeviceType::SHTXX);
 #endif
 #endif
