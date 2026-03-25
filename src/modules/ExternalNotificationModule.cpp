@@ -350,12 +350,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 {
     // Trigger external notification if enabled and not muted; isSilenced is from temporary mute toggles
     if (moduleConfig.external_notification.enabled && !isSilenced) {
-#ifdef T_WATCH_S3
-        drv.setWaveform(0, 75);
-        drv.setWaveform(1, 56);
-        drv.setWaveform(2, 0);
-        drv.go();
-#endif
         if (!isFromUs(&mp)) {
             // Check if the message contains a bell character. Don't do this loop for every pin, just once.
             auto &p = mp.decoded;
@@ -423,7 +417,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
-#ifdef T_LORA_PAGER
+#ifdef HAS_DRV2605
                     drv.setWaveform(0, 16); // Long buzzer 100%
                     drv.setWaveform(1, 0);  // Pause
                     drv.setWaveform(2, 16);
@@ -434,12 +428,12 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     drv.setWaveform(7, 0);
                     drv.go();
 #endif
-#ifdef HAS_I2S
+
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+#ifdef HAS_I2S
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
-                    } else
 #endif
-                        if (moduleConfig.external_notification.use_pwm) {
+                    } else if (moduleConfig.external_notification.use_pwm) {
                         rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
                     } else {
                         setExternalState(2, true);
