@@ -181,7 +181,6 @@ String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
 {
-    uint8_t cmd[] = {0xFA, 0x0F};
 
     i2cBus->beginTransmission(address);
     i2cBus->write(0xFA);
@@ -195,6 +194,21 @@ bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
 
     // Just flush the data
     while (i2cBus->available() < 8) {
+        i2cBus->read();
+    }
+
+    i2cBus->beginTransmission(address);
+    i2cBus->write(0xFC);
+    i2cBus->write(0xC9);
+
+    if (i2cBus->endTransmission() != 0)
+        return false;
+
+    if (i2cBus->requestFrom(address, (uint8_t)6) != 6)
+        return false;
+
+    // Just flush the data
+    while (i2cBus->available() < 6) {
         i2cBus->read();
     }
 
