@@ -25,6 +25,8 @@
 #include "power.h"
 #include <power/PowerHAL.h>
 
+#include "Nrf52SaadcLock.h"
+#include "concurrency/LockGuard.h"
 #include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
@@ -136,11 +138,12 @@ void powerHAL_platformInit()
 // get VDD voltage (in millivolts)
 uint16_t getVDDVoltage()
 {
-    // we use the same values as regular battery read so there is no conflict on SAADC
+    concurrency::LockGuard guard(concurrency::nrf52SaadcLock);
+
+    // Match battery read resolution; SAADC is shared with AnalogBatteryLevel in Power.cpp.
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 
     // VDD range on NRF52840 is 1.8-3.3V so we need to remap analog reference to 3.6V
-    // let's hope battery reading runs in same task and we don't have race condition
     analogReference(AR_INTERNAL);
 
     uint16_t vddADCRead = analogReadVDD();
