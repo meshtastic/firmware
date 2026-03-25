@@ -380,10 +380,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             const bool buzzerModeIsDirectOnly =
                 (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
 
-            // Each output evaluates its own alert condition independently.
+            // Each output evaluates its own alert condition independently:
             // alert_bell_* fires only when a bell character is present.
             // alert_message_* fires on any non-muted message.
-            // This allows mixed configurations such as LED on all messages + buzzer on bell-only.
 
             // Alert when receiving a bell = alertBell: true
             // Alert when receiving a message = alertMessage: true
