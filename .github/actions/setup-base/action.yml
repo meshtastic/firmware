@@ -8,8 +8,6 @@ runs:
       uses: actions/checkout@v6
       with:
         submodules: recursive
-        ref: ${{github.event.pull_request.head.ref}}
-        repository: ${{github.event.pull_request.head.repo.full_name}}
 
     - name: Install dependencies
       shell: bash

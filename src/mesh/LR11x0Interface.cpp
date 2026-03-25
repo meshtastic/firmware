@@ -192,6 +192,11 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
+    // Apply RX gain mode — valid in STDBY, matches resetAGC() pattern
+    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_WARN("LR11x0 setRxBoostedGainMode %s%d", radioLibErr, err);
+
     startReceive(); // restart receiving
 
     return RADIOLIB_ERR_NONE;
