@@ -381,12 +381,14 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
 
             if (containsBell || !is_muted) {
-                if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_message ||
-                    moduleConfig.external_notification.alert_bell_vibra ||
-                    moduleConfig.external_notification.alert_message_vibra ||
-                    ((moduleConfig.external_notification.alert_bell_buzzer ||
-                      moduleConfig.external_notification.alert_message_buzzer) &&
-                     canBuzz())) {
+                const bool alertPinEnabled = containsBell ? moduleConfig.external_notification.alert_bell = true
+                                                          : moduleConfig.external_notification.alert_message;
+                const bool alertVibraEnabled = containsBell ? moduleConfig.external_notification.alert_bell_vibra
+                                                            : moduleConfig.external_notification.alert_message_vibra;
+                const bool alertBuzzerEnabled = containsBell ? moduleConfig.external_notification.alert_bell_buzzer
+                                                             : moduleConfig.external_notification.alert_message_buzzer; 
+       
+                if (alertPinEnabled || alertVibraEnabled || (alertBuzzerEnabled && canBuzz())) {
                     nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
                                                      ? (moduleConfig.external_notification.nag_timeout * 1000)
                                                      : moduleConfig.external_notification.output_ms);
@@ -394,20 +396,17 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     isNagging = true;
                 }
 
-                if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_message) {
+                if (alertPinEnabled) {
                     LOG_INFO("externalNotificationModule - Notification Module or Bell");
                     setExternalState(0, true);
                 }
 
-                if (moduleConfig.external_notification.alert_bell_vibra ||
-                    moduleConfig.external_notification.alert_message_vibra) {
+                if (alertVibraEnabled) {
                     LOG_INFO("externalNotificationModule - Notification Module or Bell (Vibra)");
                     setExternalState(1, true);
                 }
 
-                if ((moduleConfig.external_notification.alert_bell_buzzer ||
-                     moduleConfig.external_notification.alert_message_buzzer) &&
-                    canBuzz()) {
+                if (alertBuzzerEnabled && canBuzz()) {
                     LOG_INFO("externalNotificationModule - Notification Module or Bell (Buzzer)");
                     if (buzzerModeIsDirectOnly && !isDmToUs && !containsBell) {
                         LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
