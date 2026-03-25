@@ -381,7 +381,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
 
             if (containsBell || !is_muted) {
-                const bool alertPinEnabled = containsBell ? moduleConfig.external_notification.alert_bell = true
+                const bool alertPinEnabled = containsBell ? moduleConfig.external_notification.alert_bell
                                                           : moduleConfig.external_notification.alert_message;
                 const bool alertVibraEnabled = containsBell ? moduleConfig.external_notification.alert_bell_vibra
                                                             : moduleConfig.external_notification.alert_message_vibra;
