@@ -28,6 +28,8 @@ on:
 
   workflow_dispatch:
 
+permissions: read-all
+
 jobs:
   setup:
     strategy:
@@ -123,9 +125,16 @@ jobs:
 
   test-native:
     if: ${{ !contains(github.ref_name, 'event/') && github.repository == 'meshtastic/firmware' }}
+    permissions: # Needed for dorny/test-reporter.
+      contents: read
+      actions: read
+      checks: write
     uses: ./.github/workflows/test_native.yml
 
   docker:
+    permissions: # Needed for pushing to GHCR.
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -150,9 +159,6 @@ jobs:
   gather-artifacts:
     # trunk-ignore(checkov/CKV2_GHA_1)
     if: github.repository == 'meshtastic/firmware'
-    permissions:
-      contents: write
-      pull-requests: write
     strategy:
       fail-fast: false
       matrix:
@@ -225,13 +231,6 @@ jobs:
           path: ./*.elf
           retention-days: 30
 
-      - uses: scruplelesswizard/comment-artifact@main
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
-          description: "Download firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip. This artifact will be available for 90 days from creation"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
   shame:
     if: github.repository == 'meshtastic/firmware'
     continue-on-error: true
@@ -275,6 +274,8 @@ jobs:
       #   run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
 
   release-artifacts:
+    permissions: # Needed for 'gh release upload'.
+      contents: write
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     outputs:
@@ -366,6 +367,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-firmware:
+    permissions: # Needed for 'gh release upload'.
+      contents: write
     strategy:
       fail-fast: false
       matrix:
