@@ -231,10 +231,14 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // BAT_ADC divider: R22=1M (top), R24=1.5M (bottom) => V_BAT_ADC = VBAT * (1.5 / (1.0 + 1.5)) = 0.6 * VBAT
 // RAK4630 module: AIN0 = nrf52840 AIN3 = Pin 5 (A0/BATTERY_PIN)
 #define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_3
-// LPCOMP compares the selected input to a fraction of VDD (here 9/16 of VDD at the LPCOMP input).
-// With VDD ≈ 3.3 V: threshold at input ≈ (9/16) * 3.3 V ≈ 1.86 V.
-// BAT_ADC divider: V_BAT_ADC = 0.6 * VBAT → equivalent VBAT ≈ 1.86 / 0.6 ≈ 3.1 V (wake when battery recovers).
-#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_9_16
+// LPCOMP compares the selected input to a fraction of VDD (here 5/8 of VDD at the LPCOMP input).
+// With VDD ≈ 3.3 V: threshold at input ≈ (5/8) * 3.3 V ≈ 2.06 V.
+// BAT_ADC divider: V_BAT_ADC = 0.6 * VBAT → equivalent VBAT ≈ 2.06 / 0.6 ≈ 3.4 V (wake when battery recovers).
+//
+// Note: if VDD is drooping/tracking VBAT in the low-voltage region, using a fraction >= divider ratio helps ensure the
+// input is below the threshold at shutdown; the intended wake event happens when the supply recovers enough for a rising
+// crossing to occur.
+#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_5_8
 
 // Low voltage protection:
 // If VDD is below SAFE_VDD_VOLTAGE_THRESHOLD for longer than this delay (and no USB VBUS),
