@@ -1222,9 +1222,11 @@ void menuHandler::positionBaseMenu()
     };
 
     constexpr size_t baseCount = sizeof(baseOptions) / sizeof(baseOptions[0]);
-    constexpr size_t calibrateCount = sizeof(calibrateOptions) / sizeof(calibrateOptions[0]);
     static std::array<const char *, baseCount> baseLabels{};
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    constexpr size_t calibrateCount = sizeof(calibrateOptions) / sizeof(calibrateOptions[0]);
     static std::array<const char *, calibrateCount> calibrateLabels{};
+#endif
 
     auto onSelection = [](const PositionMenuOption &option, int) -> void {
         if (option.action == OptionsAction::Back) {
@@ -1250,9 +1252,11 @@ void menuHandler::positionBaseMenu()
             screen->runNow();
             break;
         case PositionAction::CompassCalibrate:
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
             if (accelerometerThread) {
                 accelerometerThread->calibrate(30);
             }
+#endif
             break;
         case PositionAction::GPSSmartPosition:
             menuQueue = GpsSmartPositionMenu;
@@ -1270,11 +1274,15 @@ void menuHandler::positionBaseMenu()
     };
 
     BannerOverlayOptions bannerOptions;
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (accelerometerThread) {
         bannerOptions = createStaticBannerOptions("GPS Action", calibrateOptions, calibrateLabels, onSelection);
     } else {
         bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
     }
+#else
+    bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
+#endif
 
     screen->showOverlayBanner(bannerOptions);
 }
