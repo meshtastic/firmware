@@ -143,7 +143,7 @@ void InkHUD::WindowManager::openMenu()
 // Bring the AlignStick applet to the foreground
 void InkHUD::WindowManager::openAlignStick()
 {
-    if (settings->joystick.enabled) {
+    if (settings->joystick.enabled && !inkhud->twoWayRocker) {
         AlignStickApplet *alignStick = (AlignStickApplet *)inkhud->getSystemApplet("AlignStick");
         alignStick->bringToForeground();
     }
@@ -151,6 +151,9 @@ void InkHUD::WindowManager::openAlignStick()
 
 void InkHUD::WindowManager::openKeyboard()
 {
+    if (!settings->joystick.enabled || inkhud->twoWayRocker)
+        return;
+
     KeyboardApplet *keyboard = (KeyboardApplet *)inkhud->getSystemApplet("Keyboard");
 
     if (keyboard) {
@@ -162,6 +165,9 @@ void InkHUD::WindowManager::openKeyboard()
 
 void InkHUD::WindowManager::closeKeyboard()
 {
+    if (!settings->joystick.enabled || inkhud->twoWayRocker)
+        return;
+
     KeyboardApplet *keyboard = (KeyboardApplet *)inkhud->getSystemApplet("Keyboard");
 
     if (keyboard) {
@@ -477,7 +483,7 @@ void InkHUD::WindowManager::createSystemApplets()
     addSystemApplet("Logo", new LogoApplet, new Tile);
     addSystemApplet("Pairing", new PairingApplet, new Tile);
     addSystemApplet("Tips", new TipsApplet, new Tile);
-    if (settings->joystick.enabled) {
+    if (settings->joystick.enabled && !inkhud->twoWayRocker) {
         addSystemApplet("AlignStick", new AlignStickApplet, new Tile);
         addSystemApplet("Keyboard", new KeyboardApplet, new Tile);
     }
@@ -503,7 +509,7 @@ void InkHUD::WindowManager::placeSystemTiles()
     inkhud->getSystemApplet("Logo")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
     inkhud->getSystemApplet("Pairing")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
     inkhud->getSystemApplet("Tips")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
-    if (settings->joystick.enabled) {
+    if (settings->joystick.enabled && !inkhud->twoWayRocker) {
         inkhud->getSystemApplet("AlignStick")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
         const uint16_t keyboardHeight = KeyboardApplet::getKeyboardHeight();
         inkhud->getSystemApplet("Keyboard")

@@ -5,18 +5,52 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 
+// Sentinel marking the end of a modem preset array
+static constexpr meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
+    static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(0xFF);
+
+// Region profile: bundles the preset list with regulatory parameters shared across regions
+struct RegionProfile {
+    const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated; first entry is the default
+    float spacing;                                           // gaps between radio channels
+    float padding;                                           // padding at each side of the "operating channel"
+    bool audioPermitted;
+    bool licensedOnly;        // a region profile for licensed operators only
+    int8_t textThrottle;      // throttle for text - future expansion
+    int8_t positionThrottle;  // throttle for location data - future expansion
+    int8_t telemetryThrottle; // throttle for telemetry - future expansion
+    uint8_t overrideSlot;     // a per-region override slot for if we need to fix it in place
+};
+
+extern const RegionProfile PROFILE_STD;
+extern const RegionProfile PROFILE_EU868;
+extern const RegionProfile PROFILE_UNDEF;
+// extern const RegionProfile  PROFILE_LITE;
+// extern const RegionProfile  PROFILE_NARROW;
+// extern const RegionProfile  PROFILE_HAM;
+
 // Map from old region names to new region enums
 struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
     float freqStart;
     float freqEnd;
-    float dutyCycle;
-    float spacing;
+    float dutyCycle;    // modified by getEffectiveDutyCycle
     uint8_t powerLimit; // Or zero for not set
-    bool audioPermitted;
     bool freqSwitching;
     bool wideLora;
+    const RegionProfile *profile;
     const char *name; // EU433 etc
+
+    // Preset accessors (delegate through profile)
+    meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return profile->presets[0]; }
+    const meshtastic_Config_LoRaConfig_ModemPreset *getAvailablePresets() const { return profile->presets; }
+    size_t getNumPresets() const
+    {
+        size_t n = 0;
+        while (profile->presets[n] != MODEM_PRESET_END)
+            n++;
+        return n;
+    }
 };
 
 extern const RegionInfo regions[];
