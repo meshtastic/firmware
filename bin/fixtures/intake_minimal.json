@@ -1,0 +1,6 @@
+{
+    "environment_name": "hypothetical_esp32s3_board",
+    "hardware_model": "9981",
+    "display_name": "Hypothetical ESP32-S3 Board",
+    "architecture": "esp32-s3"
+}

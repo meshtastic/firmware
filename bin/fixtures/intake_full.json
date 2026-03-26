@@ -1,0 +1,14 @@
+{
+    "environment_name": "new_esp32s3_board",
+    "hardware_model": "999",
+    "hardware_model_slug": "NEW_ESP32S3_BOARD",
+    "display_name": "Acme ESP32-S3 Dev Board v1",
+    "architecture": "esp32-s3",
+    "actively_supported": true,
+    "support_level": "1",
+    "source_materials": [
+        "https://example.com/acme-esp32s3-schematic.pdf",
+        "https://example.com/acme-esp32s3-pinout.png"
+    ],
+    "board_notes": "Initial bring-up for v1 PCB only. SX1262 radio on SPI2, OLED on I2C bus."
+}

@@ -1,0 +1,13 @@
+{
+    "environment_name": "new_nrf52_tracker",
+    "hardware_model": "998",
+    "hardware_model_slug": "NEW_NRF52_TRACKER",
+    "display_name": "Acme nRF52840 Tracker v2",
+    "architecture": "nrf52840",
+    "actively_supported": null,
+    "support_level": "2",
+    "source_materials": [
+        "https://example.com/acme-tracker-pinout.pdf"
+    ],
+    "board_notes": "Two revisions exist: v2 (SSD1306 OLED) and v2a (no display). This intake covers v2 only."
+}

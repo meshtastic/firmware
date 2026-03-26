@@ -1,0 +1,11 @@
+{
+  "ai": "copilot",
+  "ai_commands_dir": null,
+  "ai_skills": false,
+  "branch_numbering": "sequential",
+  "here": true,
+  "offline": false,
+  "preset": null,
+  "script": "sh",
+  "speckit_version": "0.4.2"
+}
