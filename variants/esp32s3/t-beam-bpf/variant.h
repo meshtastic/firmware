@@ -28,7 +28,7 @@
 // SD Card
 #define HAS_SDCARD
 #define SDCARD_USE_SPI1
-#define SDCARD_CS SPI_CS
+// #define SDCARD_CS SPI_CS (already defined in pins_arduino.h)
 
 // LoRa Radio - SX1278 144-148Mhz
 #define USE_RF95
