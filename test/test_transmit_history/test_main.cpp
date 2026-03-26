@@ -161,44 +161,102 @@ static void test_save_and_load_round_trip()
     // After loadFromDisk, millis should be seeded (non-zero) for stored entries
     uint32_t restoredMillis = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
     if (restoredNodeInfo > 0) {
-        // If epoch was stored, millis should be seeded from load
+        // If epoch was stored (set seconds ago), epoch-conversion gives elapsed ≈ 0 s,
+        // so getLastSentToMeshMillis() should return a non-zero value.
         TEST_ASSERT_NOT_EQUAL(0, restoredMillis);
     }
 }
 
 // --- Boot without RTC scenario ---
 
-static void test_load_seeds_millis_even_without_rtc()
+// Crash-reboot protection: a send that happened moments before the reboot must still
+// throttle after reload. This works because getLastSentToMeshMillis() reconstructs
+// a millis()-relative timestamp from the stored epoch, and Throttle uses unsigned
+// subtraction so the age survives wraparound even when uptime is near zero.
+static void test_boot_after_recent_send_still_throttles()
 {
-    // This tests the critical crash-reboot scenario:
-    // After loadFromDisk(), even if getTime() returns 0 (no RTC),
-    // lastMillis should be seeded so throttle blocks immediate re-broadcast.
-
     transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
     transmitHistory->saveToDisk();
 
-    // Simulate reboot: destroy and recreate
+    // Simulate reboot
     delete transmitHistory;
     transmitHistory = nullptr;
     transmitHistory = TransmitHistory::getInstance();
     transmitHistory->loadFromDisk();
 
-    // The key insight: after load, getLastSentToMeshMillis should return non-zero
-    // because loadFromDisk seeds lastMillis[key] = millis() for every loaded entry.
-    // This ensures throttle works even without RTC.
+    // Epoch was set seconds ago; reconstructed age is still within the 10-min window.
     uint32_t result = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
-
     uint32_t epoch = transmitHistory->getLastSentToMeshEpoch(meshtastic_PortNum_NODEINFO_APP);
     if (epoch > 0) {
-        // Data was persisted — millis must be seeded
         TEST_ASSERT_NOT_EQUAL(0, result);
-
-        // And it should cause throttle to block (treating as "just sent")
         bool withinInterval = Throttle::isWithinTimespanMs(result, 10 * 60 * 1000);
         TEST_ASSERT_TRUE(withinInterval);
     }
-    // If epoch == 0, RTC wasn't available — no data was saved, so nothing to restore.
-    // This is expected on platforms without RTC during the very first boot.
+    // If epoch == 0, RTC was unavailable during setLastSentToMesh() so nothing was persisted.
+}
+
+// Regression test for issue #9901:
+// A device powered off for longer than the throttle window must broadcast NodeInfo
+// on its next boot — it must not be silenced because loadFromDisk() once treated
+// every loaded entry as "just sent" by seeding lastMillis to millis() at boot.
+static void test_boot_after_long_gap_allows_nodeinfo()
+{
+    uint32_t now = getTime();
+    if (now < 2) {
+        TEST_IGNORE_MESSAGE("No RTC available; skipping epoch-dependent test");
+        return;
+    }
+
+    // Simulate: last NodeInfo sent 30 minutes ago (outside the 10-min throttle window)
+    transmitHistory->setLastSentAtEpoch(meshtastic_PortNum_NODEINFO_APP, now - (30 * 60));
+    transmitHistory->saveToDisk();
+
+    // Simulate reboot
+    delete transmitHistory;
+    transmitHistory = nullptr;
+    transmitHistory = TransmitHistory::getInstance();
+    transmitHistory->loadFromDisk();
+
+    uint32_t restoredEpoch = transmitHistory->getLastSentToMeshEpoch(meshtastic_PortNum_NODEINFO_APP);
+    if (restoredEpoch == 0) {
+        TEST_IGNORE_MESSAGE("Epoch not persisted; skipping");
+        return;
+    }
+
+    uint32_t restoredMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
+    bool throttled = (restoredMs != 0) && Throttle::isWithinTimespanMs(restoredMs, 10 * 60 * 1000);
+    TEST_ASSERT_FALSE_MESSAGE(throttled, "NodeInfo must not be throttled after a 30-min gap (#9901)");
+}
+
+// Complementary: a rapid reboot must still throttle (crash-loop protection), even
+// though the reconstructed lastMs may wrap because current uptime is small.
+static void test_boot_within_throttle_window_still_throttles()
+{
+    uint32_t now = getTime();
+    if (now < 2) {
+        TEST_IGNORE_MESSAGE("No RTC available; skipping epoch-dependent test");
+        return;
+    }
+
+    // Simulate: last NodeInfo sent 5 minutes ago (inside the 10-min throttle window)
+    transmitHistory->setLastSentAtEpoch(meshtastic_PortNum_NODEINFO_APP, now - (5 * 60));
+    transmitHistory->saveToDisk();
+
+    // Simulate reboot
+    delete transmitHistory;
+    transmitHistory = nullptr;
+    transmitHistory = TransmitHistory::getInstance();
+    transmitHistory->loadFromDisk();
+
+    uint32_t restoredEpoch = transmitHistory->getLastSentToMeshEpoch(meshtastic_PortNum_NODEINFO_APP);
+    if (restoredEpoch == 0) {
+        TEST_IGNORE_MESSAGE("Epoch not persisted; skipping");
+        return;
+    }
+
+    uint32_t restoredMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
+    bool throttled = (restoredMs != 0) && Throttle::isWithinTimespanMs(restoredMs, 10 * 60 * 1000);
+    TEST_ASSERT_TRUE_MESSAGE(throttled, "NodeInfo must still be throttled when last send was within the 10-min window");
 }
 
 void setup()
@@ -222,7 +280,11 @@ void setup()
 
     // Persistence
     RUN_TEST(test_save_and_load_round_trip);
-    RUN_TEST(test_load_seeds_millis_even_without_rtc);
+    RUN_TEST(test_boot_after_recent_send_still_throttles);
+
+    // Issue #9901 regression tests
+    RUN_TEST(test_boot_after_long_gap_allows_nodeinfo);
+    RUN_TEST(test_boot_within_throttle_window_still_throttles);
 
     exit(UNITY_END());
 }

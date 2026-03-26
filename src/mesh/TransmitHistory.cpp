@@ -29,10 +29,17 @@ void TransmitHistory::loadFromDisk()
                 if (file.read((uint8_t *)&entry, sizeof(entry)) == sizeof(entry)) {
                     if (entry.epochSeconds > 0) {
                         history[entry.key] = entry.epochSeconds;
-                        // Seed in-memory millis so throttle works even without RTC/GPS.
-                        // Treating stored entries as "just sent" is safe — worst case the
-                        // node waits one full interval before its first broadcast.
-                        lastMillis[entry.key] = millis();
+                        // Do NOT seed lastMillis here.
+                        //
+                        // getLastSentToMeshMillis() reconstructs a millis()-relative value
+                        // from the stored epoch, and Throttle::isWithinTimespanMs() uses
+                        // the same unsigned subtraction pattern. That means recent reboots
+                        // still throttle correctly, while long power-off periods no longer
+                        // look like "just sent" and incorrectly suppress the first send.
+                        //
+                        // If we seeded lastMillis to millis() here, every loaded entry would
+                        // appear to have been sent at boot time, regardless of the true age
+                        // of the last transmission. That was the regression behind #9901.
                     }
                 }
             }
@@ -65,6 +72,17 @@ void TransmitHistory::setLastSentToMesh(uint16_t key)
                 lastDiskSave = millis();
             }
         }
+    }
+}
+
+void TransmitHistory::setLastSentAtEpoch(uint16_t key, uint32_t epochSeconds)
+{
+    if (epochSeconds > 0) {
+        history[key] = epochSeconds;
+        dirty = true;
+    } else {
+        history.erase(key);
+        lastMillis.erase(key);
     }
 }
 
@@ -110,9 +128,13 @@ uint32_t TransmitHistory::getLastSentToMeshMillis(uint16_t key) const
         return 0;
     }
 
-    // Convert to a millis()-relative timestamp: millis() - msAgo
-    // This gives a value that, when passed to Throttle::isWithinTimespanMs(value, interval),
-    // correctly reports whether the transmit was within interval ms.
+    // Convert to a millis()-relative timestamp: millis() - msAgo.
+    //
+    // The result may wrap if msAgo is larger than the current uptime, and that is
+    // intentional. Throttle::isWithinTimespanMs() also uses unsigned subtraction,
+    // so the reconstructed age is preserved across wraparound:
+    // - recent reboot, 5 min ago   -> (millis() - lastMs) == 300000, still throttled
+    // - long reboot, 30 min ago    -> (millis() - lastMs) == 1800000, allowed
     return millis() - msAgo;
 }
 

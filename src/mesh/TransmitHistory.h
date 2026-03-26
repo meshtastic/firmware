@@ -36,6 +36,13 @@ class TransmitHistory
     void setLastSentToMesh(uint16_t key);
 
     /**
+     * Directly set the stored epoch for a key without touching the runtime lastMillis map.
+     * Intended for testing purposes: lets tests simulate "the last broadcast happened N
+     * seconds ago" without needing to fake the system clock.
+     */
+    void setLastSentAtEpoch(uint16_t key, uint32_t epochSeconds);
+
+    /**
      * Get the last transmit epoch seconds for a given key, or 0 if unknown.
      */
     uint32_t getLastSentToMeshEpoch(uint16_t key) const;
