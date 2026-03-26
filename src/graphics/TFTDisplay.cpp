@@ -1278,6 +1278,10 @@ void TFTDisplay::display(bool fromBlank)
             // Most displays will have even number of pixels in a row -- this will be in bounds
             // of the displayWidth. (Hopefully odd displays will just ignore that extra pixel.)
             x_LastPixelUpdate |= 1;
+            // Ensure the last pixel index does not exceed the display width.
+            if (x_LastPixelUpdate >= displayWidth) {
+                x_LastPixelUpdate = displayWidth - 1;
+            }
 #if defined(HACKADAY_COMMUNICATOR)
             tft->draw16bitBeRGBBitmap(x_FirstPixelUpdate, y, &linePixelBuffer[x_FirstPixelUpdate],
                                       (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1);
