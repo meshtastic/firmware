@@ -35,6 +35,7 @@ class TransmitHistory
      */
     void setLastSentToMesh(uint16_t key);
 
+#ifdef PIO_UNIT_TESTING
     /**
      * Directly set the stored epoch for a key without touching the runtime lastMillis map.
      * Intended for testing purposes: lets tests simulate "the last broadcast happened N
@@ -46,9 +47,13 @@ class TransmitHistory
      * Directly set a boot-relative timestamp (seconds since boot) for testing.
      */
     void setLastSentAtBootRelative(uint16_t key, uint32_t secondsSinceBoot);
+#endif
 
     /**
-     * Get the last transmit epoch seconds for a given key, or 0 if unknown.
+     * Get the raw persisted timestamp seconds for a given key, or 0 if unknown.
+     *
+     * The returned value is an absolute epoch when persisted with valid RTC/NTP/GPS time,
+     * or boot-relative seconds when ENTRY_FLAG_BOOT_RELATIVE is set.
      */
     uint32_t getLastSentToMeshEpoch(uint16_t key) const;
 

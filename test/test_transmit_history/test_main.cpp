@@ -204,11 +204,12 @@ static void test_boot_after_recent_send_still_throttles()
 // every loaded entry as "just sent" by seeding lastMillis to millis() at boot.
 static void test_boot_after_long_gap_allows_nodeinfo()
 {
-    uint32_t now = getTime();
-    if (now < 2) {
+    if (getRTCQuality() <= RTCQualityNone) {
         TEST_IGNORE_MESSAGE("No RTC available; skipping epoch-dependent test");
         return;
     }
+
+    uint32_t now = getTime();
 
     // Simulate: last NodeInfo sent 30 minutes ago (outside the 10-min throttle window)
     transmitHistory->setLastSentAtEpoch(meshtastic_PortNum_NODEINFO_APP, now - (30 * 60));
@@ -235,11 +236,12 @@ static void test_boot_after_long_gap_allows_nodeinfo()
 // though the reconstructed lastMs may wrap because current uptime is small.
 static void test_boot_within_throttle_window_still_throttles()
 {
-    uint32_t now = getTime();
-    if (now < 2) {
+    if (getRTCQuality() <= RTCQualityNone) {
         TEST_IGNORE_MESSAGE("No RTC available; skipping epoch-dependent test");
         return;
     }
+
+    uint32_t now = getTime();
 
     // Simulate: last NodeInfo sent 5 minutes ago (inside the 10-min throttle window)
     transmitHistory->setLastSentAtEpoch(meshtastic_PortNum_NODEINFO_APP, now - (5 * 60));
