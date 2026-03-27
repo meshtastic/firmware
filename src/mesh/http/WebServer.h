@@ -5,6 +5,8 @@
 #include <Arduino.h>
 #include <functional>
 
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+
 void initWebServer();
 void createSSLCert();
 
@@ -24,3 +26,20 @@ class WebServerThread : private concurrency::OSThread
 };
 
 extern WebServerThread *webServerThread;
+
+#else
+// Stub implementations when web server is excluded
+inline void initWebServer() {}
+inline void createSSLCert() {}
+
+class WebServerThread
+{
+  public:
+    WebServerThread() {}
+    uint32_t requestRestart = 0;
+    void markActivity() {}
+};
+
+inline WebServerThread *webServerThread = nullptr;
+
+#endif
