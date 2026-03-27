@@ -33,9 +33,14 @@ void TransmitHistory::loadFromDisk()
                         //
                         // getLastSentToMeshMillis() reconstructs a millis()-relative value
                         // from the stored epoch, and Throttle::isWithinTimespanMs() uses
-                        // the same unsigned subtraction pattern. That means recent reboots
-                        // still throttle correctly, while long power-off periods no longer
-                        // look like "just sent" and incorrectly suppress the first send.
+                        // the same unsigned subtraction pattern. Once getTime() has a valid
+                        // wall-clock epoch comparable to stored values, recent reboots still
+                        // throttle correctly while long power-off periods no longer look like
+                        // "just sent" and incorrectly suppress the first send.
+                        //
+                        // Before RTC/NTP/GPS time is valid, stored epochs may appear to be
+                        // in the future and getLastSentToMeshMillis() returns 0, so persisted
+                        // history does not contribute to throttling yet.
                         //
                         // If we seeded lastMillis to millis() here, every loaded entry would
                         // appear to have been sent at boot time, regardless of the true age

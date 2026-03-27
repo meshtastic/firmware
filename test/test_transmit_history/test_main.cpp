@@ -187,12 +187,14 @@ static void test_boot_after_recent_send_still_throttles()
     // Epoch was set seconds ago; reconstructed age is still within the 10-min window.
     uint32_t result = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
     uint32_t epoch = transmitHistory->getLastSentToMeshEpoch(meshtastic_PortNum_NODEINFO_APP);
-    if (epoch > 0) {
-        TEST_ASSERT_NOT_EQUAL(0, result);
-        bool withinInterval = Throttle::isWithinTimespanMs(result, 10 * 60 * 1000);
-        TEST_ASSERT_TRUE(withinInterval);
+    if (epoch == 0) {
+        TEST_IGNORE_MESSAGE("Epoch not persisted; skipping");
+        return;
     }
-    // If epoch == 0, RTC was unavailable during setLastSentToMesh() so nothing was persisted.
+
+    TEST_ASSERT_NOT_EQUAL(0, result);
+    bool withinInterval = Throttle::isWithinTimespanMs(result, 10 * 60 * 1000);
+    TEST_ASSERT_TRUE(withinInterval);
 }
 
 // Regression test for issue #9901:
