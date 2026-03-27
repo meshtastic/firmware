@@ -1,5 +1,6 @@
 #include "TestUtil.h"
 #include "TransmitHistory.h"
+#include "gps/RTC.h"
 #include <Throttle.h>
 #include <unity.h>
 
@@ -261,6 +262,41 @@ static void test_boot_within_throttle_window_still_throttles()
     TEST_ASSERT_TRUE_MESSAGE(throttled, "NodeInfo must still be throttled when last send was within the 10-min window");
 }
 
+static void test_boot_without_time_source_still_throttles_recent_restart()
+{
+    setBootRelativeTimeForUnitTest(32);
+    transmitHistory->setLastSentAtBootRelative(meshtastic_PortNum_NODEINFO_APP, 32);
+    transmitHistory->saveToDisk();
+
+    delete transmitHistory;
+    transmitHistory = nullptr;
+    transmitHistory = TransmitHistory::getInstance();
+
+    setBootRelativeTimeForUnitTest(31);
+    transmitHistory->loadFromDisk();
+
+    uint32_t restoredMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
+    bool throttled = (restoredMs != 0) && Throttle::isWithinTimespanMs(restoredMs, 10 * 60 * 1000);
+    TEST_ASSERT_TRUE_MESSAGE(throttled, "Recent no-RTC reboots should still suppress duplicate NodeInfo");
+}
+
+static void test_boot_without_time_source_expires_boot_relative_history()
+{
+    setBootRelativeTimeForUnitTest(32);
+    transmitHistory->setLastSentAtBootRelative(meshtastic_PortNum_NODEINFO_APP, 32);
+    transmitHistory->saveToDisk();
+
+    delete transmitHistory;
+    transmitHistory = nullptr;
+    transmitHistory = TransmitHistory::getInstance();
+
+    setBootRelativeTimeForUnitTest(400);
+    transmitHistory->loadFromDisk();
+
+    uint32_t restoredMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, restoredMs, "Boot-relative history should only suppress near-term restarts");
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -287,6 +323,10 @@ void setup()
     // Issue #9901 regression tests
     RUN_TEST(test_boot_after_long_gap_allows_nodeinfo);
     RUN_TEST(test_boot_within_throttle_window_still_throttles);
+
+    // No-RTC regression tests
+    RUN_TEST(test_boot_without_time_source_still_throttles_recent_restart);
+    RUN_TEST(test_boot_without_time_source_expires_boot_relative_history);
 
     exit(UNITY_END());
 }

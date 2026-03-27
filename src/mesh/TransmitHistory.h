@@ -43,6 +43,11 @@ class TransmitHistory
     void setLastSentAtEpoch(uint16_t key, uint32_t epochSeconds);
 
     /**
+     * Directly set a boot-relative timestamp (seconds since boot) for testing.
+     */
+    void setLastSentAtBootRelative(uint16_t key, uint32_t secondsSinceBoot);
+
+    /**
      * Get the last transmit epoch seconds for a given key, or 0 if unknown.
      */
     uint32_t getLastSentToMeshEpoch(uint16_t key) const;
@@ -71,11 +76,29 @@ class TransmitHistory
 
     static constexpr const char *FILENAME = "/prefs/transmit_history.dat";
     static constexpr uint32_t MAGIC = 0x54485354; // "THST"
-    static constexpr uint8_t VERSION = 1;
+    static constexpr uint8_t VERSION = 2;
     static constexpr uint8_t MAX_ENTRIES = 16;
     static constexpr uint32_t SAVE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+    static constexpr uint32_t BOOT_RELATIVE_RECOVERY_WINDOW_SEC = 2 * 60;
+    static constexpr uint32_t LEGACY_BOOT_RELATIVE_MAX_SEC = 365UL * 24 * 60 * 60;
+
+    enum EntryFlags : uint8_t {
+        ENTRY_FLAG_NONE = 0,
+        ENTRY_FLAG_BOOT_RELATIVE = 0x01,
+    };
+
+    struct StoredTimestamp {
+        uint32_t seconds = 0;
+        uint8_t flags = ENTRY_FLAG_NONE;
+    };
 
     struct __attribute__((packed)) Entry {
+        uint16_t key;
+        uint32_t epochSeconds;
+        uint8_t flags;
+    };
+
+    struct __attribute__((packed)) LegacyEntry {
         uint16_t key;
         uint32_t epochSeconds;
     };
@@ -86,8 +109,13 @@ class TransmitHistory
         uint8_t count;
     };
 
-    std::map<uint16_t, uint32_t> history;    // key -> epoch seconds (for disk persistence)
-    std::map<uint16_t, uint32_t> lastMillis; // key -> millis() value (for runtime throttle)
+    uint32_t getLastSentAbsoluteMillis(uint32_t storedEpoch) const;
+    uint32_t getLastSentBootRelativeMillis(uint32_t storedSeconds) const;
+    static StoredTimestamp makeStoredTimestamp(uint32_t seconds, uint8_t flags = ENTRY_FLAG_NONE);
+    static StoredTimestamp decodeLegacyTimestamp(uint32_t seconds);
+
+    std::map<uint16_t, StoredTimestamp> history; // key -> persisted transmit time
+    std::map<uint16_t, uint32_t> lastMillis;     // key -> millis() value (for runtime throttle)
     bool dirty = false;
     uint32_t lastDiskSave = 0; // millis() of last disk flush
 };

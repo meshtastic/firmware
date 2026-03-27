@@ -397,6 +397,17 @@ uint32_t getValidTime(RTCQuality minQuality, bool local)
     return (currentQuality >= minQuality) ? getTime(local) : 0;
 }
 
+#ifdef PIO_UNIT_TESTING
+void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot)
+{
+    currentQuality = RTCQualityNone;
+    zeroOffsetSecs = 0;
+    timeStartMsec = millis() - (secondsSinceBoot * 1000);
+    lastSetFromPhoneNtpOrGps = 0;
+    lastTimeValidationWarning = 0;
+}
+#endif
+
 time_t gm_mktime(const struct tm *tm)
 {
 #if !MESHTASTIC_EXCLUDE_TZ
