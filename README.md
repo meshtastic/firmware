@@ -1,3 +1,35 @@
+# Meshtastic DM Relay Custom Firmware
+
+This is a custom fork of the Meshtastic firmware that includes the **DM Relay Module**. This module intercepts incoming Direct Messages (DMs) from favorite nodes and rebroadcasts them to the local mesh on Channel 0 with a restricted hop count of 1.
+
+## Custom Build Instructions
+
+To compile this custom firmware for the Heltec MeshPocket 10000mAh (using Windows/PowerShell):
+
+```powershell
+# Install or update PlatformIO
+python -m pip install -U platformio
+
+# Set a temporary workspace directory to avoid long path issues
+$env:PLATFORMIO_WORKSPACE_DIR = "$env:TEMP\meshtastic_pio"
+
+# Optional: Set the hop count for the rebroadcasted message (default is 1)
+$env:PLATFORMIO_BUILD_FLAGS = "-DDM_RELAY_HOP_LIMIT=3"
+
+# Compile for the Heltec MeshPocket 10000mAh
+python -m platformio run -e heltec-mesh-pocket-10000
+```
+
+After compilation, the new firmware file will be located at `$env:TEMP\meshtastic_pio\build\heltec-mesh-pocket-10000\firmware.uf2`.
+
+### Flashing Instructions
+1. Connect the Heltec Meshpocket to your PC via USB.
+2. Double-click the reset button on the device to enter DFU mode.
+3. A new USB drive should appear (usually named `NRF52BOOT`).
+4. Drag and drop `firmware.uf2` into that USB drive.
+
+---
+
 <div align="center" markdown="1">
 
 <img src=".github/meshtastic_logo.png" alt="Meshtastic Logo" width="80"/>
