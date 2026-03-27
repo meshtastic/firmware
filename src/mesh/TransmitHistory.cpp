@@ -75,6 +75,7 @@ void TransmitHistory::setLastSentToMesh(uint16_t key)
     }
 }
 
+#ifdef PIO_UNIT_TESTING
 void TransmitHistory::setLastSentAtEpoch(uint16_t key, uint32_t epochSeconds)
 {
     if (epochSeconds > 0) {
@@ -85,6 +86,7 @@ void TransmitHistory::setLastSentAtEpoch(uint16_t key, uint32_t epochSeconds)
         lastMillis.erase(key);
     }
 }
+#endif
 
 uint32_t TransmitHistory::getLastSentToMeshEpoch(uint16_t key) const
 {
