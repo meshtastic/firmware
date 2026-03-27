@@ -38,6 +38,7 @@ void TransmitHistory::loadFromDisk()
         FileHeader header{};
         if (file.read((uint8_t *)&header, sizeof(header)) == sizeof(header) && header.magic == MAGIC &&
             (header.version == 1 || header.version == VERSION) && header.count <= MAX_ENTRIES) {
+            bool wasLegacy = (header.version == 1);
             for (uint8_t i = 0; i < header.count; i++) {
                 if (header.version == 1) {
                     LegacyEntry entry{};
@@ -68,6 +69,10 @@ void TransmitHistory::loadFromDisk()
                 }
             }
             LOG_INFO("TransmitHistory: loaded %u entries from disk", header.count);
+            // Mark dirty if we loaded v1 entries so they get rewritten in v2 format on next save
+            if (wasLegacy) {
+                dirty = true;
+            }
         } else {
             LOG_WARN("TransmitHistory: invalid file header, starting fresh");
         }
@@ -76,6 +81,11 @@ void TransmitHistory::loadFromDisk()
         LOG_INFO("TransmitHistory: no history file found, starting fresh");
     }
     spiLock->unlock();
+    // Clean up old v1 files after migration
+    if (dirty && FSCom.exists(FILENAME)) {
+        FSCom.remove(FILENAME);
+        LOG_INFO("TransmitHistory: removed legacy v1 file, will rewrite in v2 format");
+    }
     dirty = false;
 }
 
