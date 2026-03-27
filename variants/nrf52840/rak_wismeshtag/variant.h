@@ -225,7 +225,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.73
-#define OCV_ARRAY 4160, 4020, 3940, 3870, 3810, 3760, 3740, 3720, 3680, 3620, 2990  // updated OCV array for rak_wismeshtag
+#define OCV_ARRAY 4160, 4020, 3940, 3870, 3810, 3760, 3740, 3720, 3680, 3620, 2990 // updated OCV array for rak_wismeshtag
 
 // Wake from System OFF when battery rises again (LPCOMP).
 // BAT_ADC divider: R22=1M (top), R24=1.5M (bottom) => V_BAT_ADC = VBAT * (1.5 / (1.0 + 1.5)) = 0.6 * VBAT

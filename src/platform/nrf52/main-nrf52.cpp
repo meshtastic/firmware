@@ -341,7 +341,7 @@ void nrf52Loop()
     checkSDEvents();
     reportLittleFSCorruptionOnce();
 
-    variant_nrf52LoopHook();  // Optional variant hook called each nrf52Loop();
+    variant_nrf52LoopHook(); // Optional variant hook called each nrf52Loop();
 }
 
 #ifdef USE_SEMIHOSTING

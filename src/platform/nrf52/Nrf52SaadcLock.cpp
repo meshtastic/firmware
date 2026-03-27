@@ -1,6 +1,6 @@
-#include "configuration.h"
 #include "Nrf52SaadcLock.h"
 #include "concurrency/Lock.h"
+#include "configuration.h"
 
 #ifdef ARCH_NRF52
 

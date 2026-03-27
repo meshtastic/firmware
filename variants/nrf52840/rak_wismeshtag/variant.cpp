@@ -19,13 +19,13 @@
 */
 
 #include "variant.h"
+#include "Arduino.h"
+#include "FreeRTOS.h"
 #include "nrf.h"
-#include "wiring_constants.h"
-#include "wiring_digital.h"
 #include "power/PowerHAL.h"
 #include "sleep.h"
-#include "FreeRTOS.h"
-#include "Arduino.h"
+#include "wiring_constants.h"
+#include "wiring_digital.h"
 
 const uint32_t g_ADigitalPinMap[] = {
     // P0
