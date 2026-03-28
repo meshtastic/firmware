@@ -99,6 +99,14 @@
 #define AUDIO_I2S_SPK_DIN 39  // DATA (serial data to speaker)
 #define AUDIO_I2S_SPK_EN 38   // SD_MODE / amplifier enable (active HIGH)
 
+// Enable the HAS_I2S subsystem so AudioThread handles RTTTL tones and TTS
+// through the same speaker. AudioModule codec2 audio also writes to I2S_NUM_1.
+#define HAS_I2S
+#define DAC_I2S_BCK AUDIO_I2S_SPK_SCK
+#define DAC_I2S_WS AUDIO_I2S_SPK_WS
+#define DAC_I2S_DOUT AUDIO_I2S_SPK_DIN
+#define DAC_I2S_MCLK -1 // No MCLK pin (I2S_PIN_NO_CHANGE)
+
 // PTT button — use the T3S3 user button (GPIO 0) by default
 // Override in moduleConfig.audio.ptt_pin if using a different pin
 #define AUDIO_PTT_PIN 42

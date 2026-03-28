@@ -7,6 +7,9 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#ifdef HAS_I2S
+#include "main.h" // for audioThread
+#endif
 
 /*
     AudioModule
@@ -35,6 +38,7 @@ ButterworthFilter hp_filter(240, 8000, ButterworthFilter::ButterworthFilter::Hig
 static constexpr int AUDIO_GAIN = 8;
 
 TaskHandle_t codec2HandlerTask;
+TaskHandle_t speakerTaskHandle;
 AudioModule *audioModule;
 
 #ifdef ARCH_ESP32
@@ -46,18 +50,174 @@ AudioModule *audioModule;
 
 #include "graphics/ScreenFonts.h"
 
+#ifdef AUDIO_I2S_DUAL
+void AudioModule::reinstallSpeakerI2S()
+{
+    // AudioOutputI2S::stop() calls i2s_driver_uninstall(), so we must
+    // reinstall the driver before codec2 can write decoded audio.
+    i2s_config_t spk_config = {.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+                               .sample_rate = 8000,
+                               .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+                               .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+                               .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
+                               .intr_alloc_flags = 0,
+                               .dma_buf_count = 16,
+                               .dma_buf_len = adc_buffer_size,
+                               .use_apll = false,
+                               .tx_desc_auto_clear = true,
+                               .fixed_mclk = 0};
+    esp_err_t res = i2s_driver_install(I2S_PORT_SPK, &spk_config, 0, NULL);
+    if (res == ESP_OK) {
+        const i2s_pin_config_t spk_pins = {.mck_io_num = I2S_PIN_NO_CHANGE,
+                                           .bck_io_num = AUDIO_I2S_SPK_SCK,
+                                           .ws_io_num = AUDIO_I2S_SPK_WS,
+                                           .data_out_num = AUDIO_I2S_SPK_DIN,
+                                           .data_in_num = I2S_PIN_NO_CHANGE};
+        i2s_set_pin(I2S_PORT_SPK, &spk_pins);
+        i2s_start(I2S_PORT_SPK);
+        LOG_INFO("Reinstalled speaker I2S driver after AudioThread teardown");
+    } else if (res == ESP_ERR_INVALID_STATE) {
+        // Driver still installed (RTTTL never played or stop() wasn't called) — just reset rate
+        i2s_set_sample_rates(I2S_PORT_SPK, 8000);
+    } else {
+        LOG_ERROR("Failed to reinstall speaker I2S driver: %d", res);
+    }
+}
+#endif
+
+// --- Shared ring buffer helpers (TX mic and RX jitter use the same buffer) ---
+
+uint32_t AudioModule::ringAvailable()
+{
+    uint32_t h = ring_head;
+    uint32_t t = ring_tail;
+    return (h - t) & RING_BUF_MASK;
+}
+
+void AudioModule::ringWrite(const int16_t *data, int count)
+{
+    for (int i = 0; i < count; i++) {
+        uint32_t nextHead = (ring_head + 1) & RING_BUF_MASK;
+        if (nextHead == ring_tail) {
+            // Buffer full — drop remaining samples (never modify ring_tail from writer;
+            // only the reader may advance tail to keep this a safe SPSC buffer).
+            uint32_t dropped = count - i;
+            ring_drops += dropped;
+            LOG_WARN("Ring buffer full, dropped %u samples (total drops: %u, avail: %u)",
+                     dropped, ring_drops, ringAvailable());
+            return;
+        }
+        ring_buf[ring_head] = data[i];
+        ring_head = nextHead;
+    }
+}
+
+int AudioModule::ringRead(int16_t *data, int maxCount)
+{
+    int count = 0;
+    while (count < maxCount && ring_tail != ring_head) {
+        data[count++] = ring_buf[ring_tail];
+        ring_tail = (ring_tail + 1) & RING_BUF_MASK;
+    }
+    return count;
+}
+
+void AudioModule::ringReset()
+{
+    ring_head = ring_tail = 0;
+}
+
+// === Speaker drain task ===
+// Runs independently of codec2 decode at priority 19 on core 1.
+// Continuously pulls decoded PCM from the ring buffer and writes to I2S.
+// Uses portMAX_DELAY so it blocks on the I2S DMA semaphore and wakes
+// the instant DMA space opens — natural hardware flow control.
+static void speaker_task(void *parameter)
+{
+    while (audioModule == nullptr)
+        vTaskDelay(pdMS_TO_TICKS(10));
+
+    int16_t playBuf[ADC_BUFFER_SIZE_MAX];
+    uint32_t lastDataTime = 0;
+
+    LOG_INFO("Speaker drain task started");
+
+    while (true) {
+        // Wait for playback to become active
+        if (!audioModule->rx_playback_active) {
+            // Check if jitter buffer is filled enough to start
+            if (audioModule->rx_draining && audioModule->ringAvailable() >= RX_JITTER_SAMPLES) {
+                audioModule->rx_playback_active = true;
+                lastDataTime = millis();
+                LOG_INFO("RX jitter buffer filled (%u samples), starting playback", audioModule->ringAvailable());
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(5));
+                continue;
+            }
+        }
+
+        // Drain one frame to I2S (blocks until DMA accepts it)
+        if (audioModule->ringAvailable() >= (uint32_t)audioModule->adc_buffer_size) {
+            audioModule->ringRead(playBuf, audioModule->adc_buffer_size);
+            size_t bytesOut = 0;
+            i2s_write(I2S_PORT_SPK, playBuf, audioModule->adc_buffer_size * sizeof(int16_t),
+                      &bytesOut, portMAX_DELAY);
+            lastDataTime = millis();
+        } else {
+            // Ring buffer empty — check for silence timeout
+            if (millis() - lastDataTime > RX_SILENCE_TIMEOUT) {
+                audioModule->rx_playback_active = false;
+                audioModule->rx_draining = false;
+                audioModule->i2s_reclaimed_for_codec2 = false;
+                audioModule->rx_seq_initialized = false;
+                LOG_INFO("RX playback stopped (buffer drained, no new data)");
+            } else {
+                // Brief sleep while waiting for more decoded data
+                vTaskDelay(pdMS_TO_TICKS(5));
+            }
+        }
+    }
+}
+
 void run_codec2(void *parameter)
 {
-    // 4 bytes of header in each frame hex c0 de c2 plus the bitrate
+    // Wait for the global audioModule pointer to be assigned.
+    // The task is created inside the AudioModule constructor, but the global
+    // pointer isn't set until after the constructor returns (audioModule = new AudioModule()).
+    // On dual-core ESP32-S3 the task can start on core 1 immediately.
+    while (audioModule == nullptr) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    // 4 bytes of c2_header (magic + mode) then 1 byte sequence number
     memcpy(audioModule->tx_encode_frame, &audioModule->tx_header, sizeof(audioModule->tx_header));
+    audioModule->tx_encode_frame[sizeof(c2_header)] = 0; // initial seq = 0
 
     LOG_INFO("Start codec2 task");
 
     while (true) {
-        uint32_t tcount = ulTaskNotifyTake(pdFALSE, pdMS_TO_TICKS(10000));
+        // Block until notified by handleReceived (new packet) or PTT press.
+        // Short timeout during TX so we re-enter the mic read loop quickly
+        // if we ever exit it (e.g. partial i2s_read). Long timeout during RX
+        // since speaker_task handles playback independently.
+        bool inTx = (audioModule->radio_state == RadioState::tx);
+        uint32_t tcount = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(inTx ? 5 : 10000));
 
-        if (tcount != 0) {
-            if (audioModule->radio_state == RadioState::tx) {
+        // === TX path: read mic I2S directly, filter, encode, send ===
+        // codec2 task runs at priority 1 (same as main loop) so that
+        // xTaskNotifyGive from the PTT handler does NOT preempt — the main
+        // loop finishes its iteration (including screen update) first.
+        // i2s_read blocks on DMA, naturally yielding CPU between frames.
+        if (audioModule->radio_state == RadioState::tx) {
+            size_t bytesIn = 0;
+            while (audioModule->radio_state == RadioState::tx) {
+                // Read one full codec2 frame directly from mic I2S
+                esp_err_t res = i2s_read(I2S_PORT_MIC, audioModule->speech,
+                                         audioModule->adc_buffer_size * sizeof(int16_t),
+                                         &bytesIn, pdMS_TO_TICKS(80));
+                if (res != ESP_OK || (int)(bytesIn / sizeof(int16_t)) < audioModule->adc_buffer_size)
+                    continue; // Partial read — try again (don't break out of TX loop!)
+
                 for (int i = 0; i < audioModule->adc_buffer_size; i++) {
                     int32_t sample = (int32_t)hp_filter.Update((float)audioModule->speech[i]) * AUDIO_GAIN;
                     if (sample > 32767) sample = 32767;
@@ -69,47 +229,100 @@ void run_codec2(void *parameter)
                               audioModule->speech);
                 audioModule->tx_encode_frame_index += audioModule->encode_codec_size;
 
-                if (audioModule->tx_encode_frame_index == (audioModule->encode_frame_size + sizeof(audioModule->tx_header))) {
-                    LOG_INFO("Send %d codec2 bytes", audioModule->encode_frame_size);
+                if (audioModule->tx_encode_frame_index == (audioModule->encode_frame_size + (int)AUDIO_HEADER_SIZE)) {
+                    LOG_DEBUG("Send %d codec2 bytes (seq=%u)", audioModule->encode_frame_size, audioModule->tx_seq);
+                    audioModule->tx_encode_frame[sizeof(c2_header)] = audioModule->tx_seq++;
                     audioModule->sendPayload();
-                    audioModule->tx_encode_frame_index = sizeof(audioModule->tx_header);
-                }
-            }
-            if (audioModule->radio_state == RadioState::rx) {
-                size_t bytesOut = 0;
-                if (memcmp(audioModule->rx_encode_frame, &audioModule->tx_header, sizeof(audioModule->tx_header)) == 0) {
-                    for (int i = 4; i < audioModule->rx_encode_frame_index; i += audioModule->encode_codec_size) {
-                        codec2_decode(audioModule->codec2, audioModule->output_buffer, audioModule->rx_encode_frame + i);
-                        for (int j = 0; j < audioModule->adc_buffer_size; j++) {
-                            int32_t s = (int32_t)audioModule->output_buffer[j] * AUDIO_GAIN;
-                            if (s > 32767) s = 32767;
-                            if (s < -32768) s = -32768;
-                            audioModule->output_buffer[j] = (int16_t)s;
-                        }
-                        i2s_write(I2S_PORT_SPK, audioModule->output_buffer,
-                                  audioModule->adc_buffer_size * sizeof(int16_t), &bytesOut, pdMS_TO_TICKS(500));
-                    }
-                } else {
-                    // if the buffer header does not match our own codec, make a temp decoding setup.
-                    CODEC2 *tmp_codec2 = codec2_create(audioModule->rx_encode_frame[3]);
-                    codec2_set_lpc_post_filter(tmp_codec2, 1, 0, 0.8, 0.2);
-                    int tmp_encode_codec_size = (codec2_bits_per_frame(tmp_codec2) + 7) / 8;
-                    int tmp_adc_buffer_size = codec2_samples_per_frame(tmp_codec2);
-                    for (int i = 4; i < audioModule->rx_encode_frame_index; i += tmp_encode_codec_size) {
-                        codec2_decode(tmp_codec2, audioModule->output_buffer, audioModule->rx_encode_frame + i);
-                        for (int j = 0; j < tmp_adc_buffer_size; j++) {
-                            int32_t s = (int32_t)audioModule->output_buffer[j] * AUDIO_GAIN;
-                            if (s > 32767) s = 32767;
-                            if (s < -32768) s = -32768;
-                            audioModule->output_buffer[j] = (int16_t)s;
-                        }
-                        i2s_write(I2S_PORT_SPK, audioModule->output_buffer,
-                                  tmp_adc_buffer_size * sizeof(int16_t), &bytesOut, pdMS_TO_TICKS(500));
-                    }
-                    codec2_destroy(tmp_codec2);
+                    audioModule->tx_encode_frame_index = AUDIO_HEADER_SIZE;
+                    taskYIELD();
                 }
             }
         }
+
+        // === RX path: decode queued packets into ring buffer ===
+        if (audioModule->radio_state != RadioState::tx && audioModule->rxPacketQueue) {
+            AudioRxPacket pkt;
+            while (xQueueReceive(audioModule->rxPacketQueue, &pkt, 0) == pdTRUE) {
+                if (pkt.size < AUDIO_HEADER_SIZE)
+                    continue;
+
+                // Extract and check sequence number (byte after c2_header)
+                uint8_t rxSeq = pkt.data[sizeof(c2_header)];
+                if (!audioModule->rx_seq_initialized) {
+                    audioModule->rx_seq_expected = rxSeq;
+                    audioModule->rx_seq_initialized = true;
+                }
+                if (rxSeq != audioModule->rx_seq_expected) {
+                    uint8_t gap = (uint8_t)(rxSeq - audioModule->rx_seq_expected);
+                    LOG_WARN("RX audio seq gap: expected %u got %u (lost %u packets)",
+                             audioModule->rx_seq_expected, rxSeq, gap);
+
+                    // Packet Loss Concealment: insert silence for each missing packet
+                    // so playback timing stays aligned. Without this, the ring buffer
+                    // drains early and the listener hears a jarring click/pop.
+                    // Cap at 3 packets to avoid flooding the ring buffer on session restart
+                    // or large sequence jumps (e.g. wrap from 255 → 0 after a gap).
+                    uint8_t plcGap = (gap > 3) ? 3 : gap;
+                    memset(audioModule->output_buffer, 0, audioModule->adc_buffer_size * sizeof(int16_t));
+                    for (uint8_t g = 0; g < plcGap; g++) {
+                        for (int f = 0; f < audioModule->encode_frame_num; f++) {
+                            audioModule->ringWrite(audioModule->output_buffer, audioModule->adc_buffer_size);
+                        }
+                    }
+                    LOG_DEBUG("PLC: inserted %d samples of silence for %u missing packets (gap=%u)",
+                              audioModule->encode_frame_num * audioModule->adc_buffer_size * plcGap, plcGap, gap);
+                }
+                audioModule->rx_seq_expected = rxSeq + 1;
+
+                // Determine codec from packet header
+                bool headerMatch = (memcmp(pkt.data, &audioModule->tx_header, sizeof(c2_header)) == 0);
+                CODEC2 *dec_codec;
+                int dec_frame_bytes, dec_samples;
+                bool tmpCodec = false;
+
+                if (headerMatch) {
+                    dec_codec = audioModule->codec2;
+                    dec_frame_bytes = audioModule->encode_codec_size;
+                    dec_samples = audioModule->adc_buffer_size;
+                } else if (memcmp(pkt.data, c2_magic, sizeof(c2_magic)) == 0) {
+                    // Mismatched codec mode — create temporary decoder
+                    dec_codec = codec2_create(pkt.data[3]);
+                    codec2_set_lpc_post_filter(dec_codec, 1, 0, 0.8, 0.2);
+                    dec_frame_bytes = (codec2_bits_per_frame(dec_codec) + 7) / 8;
+                    dec_samples = codec2_samples_per_frame(dec_codec);
+                    tmpCodec = true;
+                } else {
+                    continue; // Unknown header, skip
+                }
+
+                // Decode all frames in the packet into the ring buffer.
+                // Speaker_task is higher priority and preempts us whenever DMA
+                // needs data, so no yield needed here — just decode as fast
+                // as possible to keep the ring buffer ahead of playback.
+                for (int i = AUDIO_HEADER_SIZE; i + dec_frame_bytes <= (int)pkt.size; i += dec_frame_bytes) {
+                    codec2_decode(dec_codec, audioModule->output_buffer, pkt.data + i);
+                    for (int j = 0; j < dec_samples; j++) {
+                        int32_t s = (int32_t)audioModule->output_buffer[j] * AUDIO_GAIN;
+                        if (s > 32767) s = 32767;
+                        if (s < -32768) s = -32768;
+                        audioModule->output_buffer[j] = (int16_t)s;
+                    }
+                    audioModule->ringWrite(audioModule->output_buffer, dec_samples);
+                    // Signal speaker to start as soon as first frame is decoded,
+                    // not after the whole packet. Critical for slow codecs (700bps).
+                    audioModule->rx_draining = true;
+                }
+
+                if (tmpCodec)
+                    codec2_destroy(dec_codec);
+
+                LOG_DEBUG("RX decoded seq=%u: %d frames, ring=%u/%d samples",
+                          rxSeq, (int)(pkt.size - AUDIO_HEADER_SIZE) / dec_frame_bytes,
+                          audioModule->ringAvailable(), RING_BUF_SAMPLES);
+            }
+        }
+
+        // Nothing else to do here — speaker_task handles playback independently.
     }
 }
 
@@ -129,12 +342,32 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
         tx_header.mode = (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1;
         codec2_set_lpc_post_filter(codec2, 1, 0, 0.8, 0.2);
         encode_codec_size = (codec2_bits_per_frame(codec2) + 7) / 8;
-        encode_frame_num = (meshtastic_Constants_DATA_PAYLOAD_LEN - sizeof(tx_header)) / encode_codec_size;
-        encode_frame_size = encode_frame_num * encode_codec_size; // max 233 bytes + 4 header bytes
         adc_buffer_size = codec2_samples_per_frame(codec2);
-        LOG_INFO("Use %d frames of %d bytes for a total payload length of %d bytes", encode_frame_num, encode_codec_size,
-                 encode_frame_size);
-        xTaskCreate(&run_codec2, "codec2_task", 30000, NULL, 5, &codec2HandlerTask);
+
+        // Fill as much of the payload as possible for the slowest packet rate.
+        // The radio frame limit is MAX_LORA_PAYLOAD_LEN(255) - MESHTASTIC_HEADER_LENGTH(16)
+        // = 239 bytes for the protobuf-encoded Data struct. Protobuf adds ~6 bytes
+        // overhead (field tags, varint lengths), so max audio payload ≈ 233 - 6 = 227.
+        // We use 224 as a safe max for the codec data portion (leaves headroom).
+        static const int MAX_AUDIO_DATA = 224;
+        encode_frame_num = MAX_AUDIO_DATA / encode_codec_size;
+        encode_frame_size = encode_frame_num * encode_codec_size;
+        int frameDurationMs = (adc_buffer_size * 1000) / 8000;
+        LOG_INFO("Use %d frames of %d bytes (%dms per packet, total %d+%d=%d bytes)",
+                 encode_frame_num, encode_codec_size,
+                 encode_frame_num * frameDurationMs,
+                 encode_frame_size, (int)AUDIO_HEADER_SIZE,
+                 encode_frame_size + (int)AUDIO_HEADER_SIZE);
+        // Speaker task: HIGHEST priority (22) on core 1.
+        // Must never be starved — DMA underruns cause audible glitches.
+        // Blocks on i2s_write(portMAX_DELAY) when DMA is full, freeing CPU.
+        xTaskCreatePinnedToCore(&speaker_task, "speaker_task", 8192, NULL, 2, &speakerTaskHandle, 1);
+        // Codec2 task: priority 20, core 1 — handles encode/decode only.
+        // Lower than speaker so decode bursts never starve DMA refills.
+        xTaskCreatePinnedToCore(&run_codec2, "codec2_task", 30000, NULL, 1, &codec2HandlerTask, 1);
+        rxPacketQueue = xQueueCreate(16, sizeof(AudioRxPacket));
+        if (!rxPacketQueue)
+            LOG_ERROR("Failed to create RX audio packet queue");
     } else {
         disable();
     }
@@ -182,7 +415,7 @@ int32_t AudioModule::runOnce()
                                        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
                                        .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
                                        .intr_alloc_flags = 0,
-                                       .dma_buf_count = 8,
+                                       .dma_buf_count = 16,
                                        .dma_buf_len = adc_buffer_size,
                                        .use_apll = false,
                                        .tx_desc_auto_clear = false,
@@ -209,7 +442,7 @@ int32_t AudioModule::runOnce()
                                        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
                                        .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
                                        .intr_alloc_flags = 0,
-                                       .dma_buf_count = 8,
+                                       .dma_buf_count = 16,
                                        .dma_buf_len = adc_buffer_size,
                                        .use_apll = false,
                                        .tx_desc_auto_clear = false,
@@ -233,13 +466,18 @@ int32_t AudioModule::runOnce()
                 LOG_ERROR("Failed to start mic I2S: %d", res);
 
             // --- Speaker I2S (TX only) on I2S_NUM_1 ---
+            // AudioModule always installs the speaker I2S driver itself.
+            // When HAS_I2S is defined, AudioThread (ESP8266Audio) will later try to
+            // i2s_driver_install in its begin() — that call will harmlessly fail
+            // (ESP_ERR_INVALID_STATE) because the driver is already installed.
+            // AudioThread then re-uses this driver and adjusts sample rate as needed.
             i2s_config_t spk_config = {.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
                                        .sample_rate = 8000,
                                        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
                                        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
                                        .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
                                        .intr_alloc_flags = 0,
-                                       .dma_buf_count = 8,
+                                       .dma_buf_count = 16,
                                        .dma_buf_len = adc_buffer_size,
                                        .use_apll = false,
                                        .tx_desc_auto_clear = true,
@@ -279,8 +517,8 @@ int32_t AudioModule::runOnce()
                                        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
                                        .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S),
                                        .intr_alloc_flags = 0,
-                                       .dma_buf_count = 8,
-                                       .dma_buf_len = adc_buffer_size, // 320 * 2 bytes
+                                       .dma_buf_count = 16,
+                                       .dma_buf_len = adc_buffer_size,
                                        .use_apll = false,
                                        .tx_desc_auto_clear = true,
                                        .fixed_mclk = 0};
@@ -322,67 +560,63 @@ int32_t AudioModule::runOnce()
 
             firstTime = false;
         } else {
-            UIFrameEvent e;
-            // Periodic debug to verify cooperative scheduler is alive
-            static uint32_t lastAudioDebug = 0;
-            if (millis() - lastAudioDebug > 5000) {
-                lastAudioDebug = millis();
-                uint8_t pttPin = moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN;
-                int pttVal = digitalRead(pttPin);
-                LOG_WARN("Audio runOnce: state=%s ptt_pin=%d val=%d",
-                         radio_state == RadioState::tx ? "TX" : "RX", pttPin, pttVal);
-            }
             // Check if PTT is pressed (active LOW). TODO hook that into Onebutton/Interrupt drive.
             if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == LOW) {
                 if (radio_state == RadioState::rx) {
                     LOG_INFO("PTT pressed, switching to TX");
                     powerFSM.trigger(EVENT_INPUT); // Wake screen on PTT press
                     radio_state = RadioState::tx;
-                    requestFocus(); // Focus on the audio frame when PTT is pressed
-                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // Add audio frame + focus on it
+                    // Update screen FIRST — show "PTT" before any blocking I/O
+                    requestFocus();
+                    UIFrameEvent e;
+                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
                     this->notifyObservers(&e);
+                    // Reset audio state for new TX session
+                    rx_playback_active = false;
+                    rx_draining = false;
+                    i2s_reclaimed_for_codec2 = false;
+                    rx_seq_initialized = false;
+                    tx_seq = 0;
+                    ring_drops = 0;
+                    ringReset();
+                    adc_buffer_index = 0;
+                    if (rxPacketQueue)
+                        xQueueReset(rxPacketQueue);
+                    // Wake the codec2 task — it may be sleeping for up to 10s
+                    xTaskNotifyGive(codec2HandlerTask);
                 }
             } else {
                 if (radio_state == RadioState::tx) {
                     LOG_INFO("PTT released, switching to RX");
-                    if (tx_encode_frame_index > sizeof(tx_header)) {
+                    if (tx_encode_frame_index > (int)AUDIO_HEADER_SIZE) {
                         // Send the incomplete frame
-                        LOG_INFO("Send %d codec2 bytes (incomplete)", tx_encode_frame_index);
+                        LOG_DEBUG("Send %d codec2 bytes (incomplete, seq=%u)", tx_encode_frame_index, tx_seq);
+                        tx_encode_frame[sizeof(c2_header)] = tx_seq++;
                         sendPayload();
                     }
-                    tx_encode_frame_index = sizeof(tx_header);
+                    tx_encode_frame_index = AUDIO_HEADER_SIZE;
+                    // Flush stale RX audio that may have arrived during TX
+                    if (rxPacketQueue)
+                        xQueueReset(rxPacketQueue);
+                    ringReset();
+                    adc_buffer_index = 0;
+                    rx_playback_active = false;
+                    rx_draining = false;
+                    i2s_reclaimed_for_codec2 = false;
+                    rx_seq_initialized = false; // reset for next RX session
+                    ring_drops = 0; // reset drop counter
                     radio_state = RadioState::rx;
-                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND; // Remove audio frame, preserve user's position
+                    UIFrameEvent e;
+                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND;
                     this->notifyObservers(&e);
                 }
             }
             if (radio_state == RadioState::tx) {
-                // Drain all available I2S DMA data in a loop to avoid falling behind.
-                // At 8kHz/16-bit/mono = 16KB/s, each codec2 frame is 320 samples (640 bytes, 40ms).
-                // We must read faster than data arrives to avoid DMA overflow.
-                size_t bytesIn = 0;
-                int framesEncoded = 0;
-                const int maxFramesPerCall = 4; // cap to avoid blocking too long
-
-                do {
-                    size_t readSize = (adc_buffer_size - adc_buffer_index) * sizeof(uint16_t);
-                    res = i2s_read(I2S_PORT_MIC, (uint8_t *)adc_buffer + adc_buffer_index * sizeof(uint16_t), readSize, &bytesIn,
-                                   pdMS_TO_TICKS(20));
-
-                    if (res == ESP_OK && bytesIn > 0) {
-                        adc_buffer_index += bytesIn / sizeof(uint16_t);
-                        if (adc_buffer_index >= (uint16_t)adc_buffer_size) {
-                            adc_buffer_index = 0;
-                            memcpy((void *)speech, (void *)adc_buffer, adc_buffer_size * sizeof(int16_t));
-                            // Notify run_codec2 task that the buffer is ready.
-                            xTaskNotifyGive(codec2HandlerTask);
-                            framesEncoded++;
-                        }
-                    }
-                } while (res == ESP_OK && bytesIn > 0 && framesEncoded < maxFramesPerCall);
+                // Mic reading is handled by the codec2 task directly.
+                // Nothing to do here — just let runOnce cycle for PTT polling.
             }
         }
-        return 100;
+        return 50;
     } else {
         return disable();
     }
@@ -396,9 +630,8 @@ meshtastic_MeshPacket *AudioModule::allocReply()
 
 bool AudioModule::shouldDraw()
 {
-    if (!moduleConfig.audio.codec2_enabled) {
+    if (!moduleConfig.audio.codec2_enabled)
         return false;
-    }
     return (radio_state == RadioState::tx);
 }
 
@@ -422,11 +655,31 @@ ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
         auto &p = mp.decoded;
         if (!isFromUs(&mp)) {
-            memcpy(rx_encode_frame, p.payload.bytes, p.payload.size);
+#ifdef AUDIO_I2S_DUAL
+            // Stop any RTTTL/TTS playback and reclaim the speaker I2S port,
+            // but only ONCE per audio session.  Doing this on every packet
+            // would call i2s_driver_uninstall() and destroy all DMA-buffered
+            // audio that is still playing back.
+            if (!i2s_reclaimed_for_codec2 && audioThread) {
+                audioThread->stop();
+                reinstallSpeakerI2S();
+                i2s_reclaimed_for_codec2 = true;
+            }
+#endif
+            // Queue the packet for the codec2 task to decode into the jitter buffer.
+            // This avoids blocking the mesh thread and prevents data loss if
+            // multiple packets arrive before the previous one is decoded.
+            if (rxPacketQueue) {
+                AudioRxPacket pkt;
+                memcpy(pkt.data, p.payload.bytes, p.payload.size);
+                pkt.size = p.payload.size;
+                if (xQueueSend(rxPacketQueue, &pkt, 0) != pdTRUE) {
+                    LOG_WARN("RX audio packet queue full, dropped packet");
+                }
+                // Wake codec2 task to process the queued packet
+                xTaskNotifyGive(codec2HandlerTask);
+            }
             radio_state = RadioState::rx;
-            rx_encode_frame_index = p.payload.size;
-            // Notify run_codec2 task that the buffer is ready.
-            xTaskNotifyGive(codec2HandlerTask);
         }
     }
 
