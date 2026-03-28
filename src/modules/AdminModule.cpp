@@ -38,7 +38,7 @@
 #include "modules/PositionModule.h"
 #endif
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 #endif
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
@@ -637,7 +637,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     case meshtastic_Config_device_tag:
         LOG_INFO("Set config: Device");
         config.has_device = true;
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
+    !MESHTASTIC_EXCLUDE_ACCELEROMETER
         if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
             accelerometerThread->enabled == false) {
             config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
@@ -739,7 +740,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                    c.payload_variant.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             config.bluetooth.enabled = false;
         }
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
+    !MESHTASTIC_EXCLUDE_ACCELEROMETER
         if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
             accelerometerThread->enabled == false) {
             config.display.wake_on_tap_or_motion = c.payload_variant.display.wake_on_tap_or_motion;
@@ -800,7 +802,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #if HAS_LORA_FEM
         // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
         if (loraFEMInterface.isLnaCanControl()) {
-            loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED);
+            loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
         } else if (config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
             // Hardware FEM does not support LNA control; normalize stored config to match actual capability
             LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");

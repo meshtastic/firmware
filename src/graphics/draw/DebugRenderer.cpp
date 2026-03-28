@@ -535,6 +535,9 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 #ifndef T_DECK_PRO
     barsOffset -= 12;
 #endif
+#if defined(T5_S3_EPAPER_PRO)
+    barsOffset += 60;
+#endif
 #endif
     int barX = x + barsOffset;
     if (currentResolution == ScreenResolution::UltraLow) {
@@ -584,11 +587,12 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     uint32_t heapUsed = memGet.getHeapSize() - memGet.getFreeHeap();
     uint32_t heapTotal = memGet.getHeapSize();
 
-    uint32_t psramUsed = memGet.getPsramSize() - memGet.getFreePsram();
-    uint32_t psramTotal = memGet.getPsramSize();
-
     uint32_t flashUsed = 0, flashTotal = 0;
 #ifdef ESP32
+#ifndef T5_S3_EPAPER_PRO
+    uint32_t psramUsed = memGet.getPsramSize() - memGet.getFreePsram();
+    uint32_t psramTotal = memGet.getPsramSize();
+#endif
     flashUsed = FSCom.usedBytes();
     flashTotal = FSCom.totalBytes();
 #endif
@@ -607,10 +611,12 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     // === Draw memory rows
     drawUsageRow("Heap:", heapUsed, heapTotal, true);
 #ifdef ESP32
+#ifndef T5_S3_EPAPER_PRO
     if (psramUsed > 0) {
         line += 1;
         drawUsageRow("PSRAM:", psramUsed, psramTotal);
     }
+#endif
     if (flashTotal > 0) {
         line += 1;
         drawUsageRow("Flash:", flashUsed, flashTotal);
