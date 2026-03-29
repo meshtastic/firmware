@@ -55,7 +55,7 @@ class PingModule : public SinglePortModule, public Observable<const UIFrameEvent
     unsigned long lastPingTime = 0;   // for cooldown enforcement
     unsigned long resultShowTime = 0;
     unsigned long cooldownMs = 30000;
-    unsigned long trackingTimeoutMs = 10000;  // how long to wait for a pong before declaring it lost
+    unsigned long trackingTimeoutMs = 20000;  // how long to wait for a pong before declaring it lost
     unsigned long resultDisplayMs = 10000;
     
     String bannerText;

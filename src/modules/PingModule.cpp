@@ -9,9 +9,6 @@ extern graphics::Screen *screen;
 
 PingModule *pingModule;
 
-static const char PING_PAYLOAD[] = "ping";
-static const char PONG_PAYLOAD[] = "pong";
-
 PingModule::PingModule() : SinglePortModule("ping", meshtastic_PortNum_PING_APP), OSThread("Ping") {}
 
 const char *PingModule::getNodeName(NodeNum node)
@@ -117,8 +114,8 @@ bool PingModule::startPing(NodeNum node)
         p->decoded.portnum = meshtastic_PortNum_PING_APP;
         p->decoded.want_response = true;
         p->want_ack = true;
-        p->decoded.payload.size = strlen(PING_PAYLOAD);
-        memcpy(p->decoded.payload.bytes, PING_PAYLOAD, p->decoded.payload.size);
+        p->decoded.payload.size = strlen("");
+        memcpy(p->decoded.payload.bytes, "", p->decoded.payload.size);
         
         LOG_INFO("Packet allocated successfully: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to,
                  p->decoded.portnum, p->decoded.want_response, p->decoded.payload.size);
@@ -171,8 +168,8 @@ meshtastic_MeshPacket *PingModule::allocReply()
         p->decoded.portnum = meshtastic_PortNum_PING_APP;
         p->decoded.want_response = false;
         p->want_ack = false;
-        p->decoded.payload.size = strlen(PONG_PAYLOAD);
-        memcpy(p->decoded.payload.bytes, PONG_PAYLOAD, p->decoded.payload.size);
+        p->decoded.payload.size = strlen("");
+        memcpy(p->decoded.payload.bytes, "", p->decoded.payload.size);
        
         LOG_INFO("Packet allocated successfully: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to,
                  p->decoded.portnum, p->decoded.want_response, p->decoded.payload.size);
