@@ -246,8 +246,7 @@ void PingModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         int contentStartY = y + FONT_HEIGHT_MEDIUM + 2; // Add more spacing after title
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
-        int lineHeight = FONT_HEIGHT_SMALL + 1; // Use proper font height with 1px spacing
-        display->drawString(x + 2, y + lineHeight, resultText);
+        display->drawString(x + 2, contentStartY, resultText);
 
     } else if (runState == PING_STATE_COOLDOWN) {
         display->setFont(FONT_MEDIUM);
