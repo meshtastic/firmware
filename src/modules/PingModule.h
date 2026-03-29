@@ -35,7 +35,7 @@ class PingModule : public SinglePortModule, public Observable<const UIFrameEvent
     void setTimeout(unsigned long ms) { trackingTimeoutMs = ms; }
 
   protected:
-    /** Called for any packet arriving on REPLY_APP. Detects pong replies to our outstanding ping. */
+    /** Called for any packet arriving on PING_APP. Detects pong replies to our outstanding ping. */
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
     /** When we are the destination of a ping (want_response set), generate the pong reply.
