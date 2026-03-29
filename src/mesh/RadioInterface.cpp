@@ -1036,6 +1036,13 @@ void RadioInterface::applyModemConfig()
     saveFreq(freq + loraConfig.frequency_offset);
     const char *channelName = channels.getName(channels.getPrimaryIndex());
 
+    if (newRegion->wideLora) {                          // clamp if wide freq range
+        preambleLength = wideLoraPreambleLengthDefault; // 12 is the default for operation above 2GHz
+    } else {
+        preambleLength =
+            preambleLengthDefault; // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    }
+
     slotTimeMsec = computeSlotTimeMsec();
     preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
 

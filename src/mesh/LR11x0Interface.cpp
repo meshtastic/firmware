@@ -73,11 +73,8 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
         limitPower(LR1120_MAX_POWER);
-        preambleLength = wideLoraPreambleLengthDefault; // 12 is the default for operation above 2GHz
     } else {
         limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
-        preambleLength =
-            preambleLengthDefault; // 8 is default, but we use longer to increase the amount of sleep time when receiving
     }
 
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
@@ -180,11 +177,8 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
 
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
         limitPower(LR1120_MAX_POWER);
-        preambleLength = wideLoraPreambleLengthDefault; // 12 is the default for operation above 2GHz
     } else {
         limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
-        preambleLength =
-            preambleLengthDefault; // 8 is default, but we use longer to increase the amount of sleep time when receiving
     }
 
     err = lora.setPreambleLength(preambleLength);
