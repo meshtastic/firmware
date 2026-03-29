@@ -1,3 +1,9 @@
+Meta:
+  name: Waveshare 2.8inch LCD HAT
+  support: community
+  compatible:
+    - raspberry-pi
+
 Display:
 
 ### Waveshare 2.8inch RPi LCD

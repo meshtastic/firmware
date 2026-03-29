@@ -103,6 +103,14 @@ static int32_t gpsSwitch()
     if (gps) {
         int currentState = digitalRead(PIN_GPS_SWITCH);
 
+        // Respect explicit NOT_PRESENT mode and do not let the hardware switch re-enable GPS.
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            gps->disable();
+            lastState = currentState;
+            firstrun = false;
+            return 1000;
+        }
+
         // if the switch is set to zero, disable the GPS Thread
         if (firstrun)
             if (currentState == LOW)

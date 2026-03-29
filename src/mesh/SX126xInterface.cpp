@@ -60,7 +60,7 @@ template <typename T> bool SX126xInterface<T>::init()
     loraFEMInterface.init();
     // Apply saved FEM LNA mode from config
     if (loraFEMInterface.isLnaCanControl()) {
-        loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode == meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED);
+        loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
     }
 #endif
 
@@ -252,6 +252,11 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX126X setOutputPower %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
+
+    // Apply RX gain mode — valid in STDBY (datasheet §9.6), matches resetAGC() pattern
+    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_WARN("SX126X setRxBoostedGainMode %s%d", radioLibErr, err);
 
     startReceive(); // restart receiving
 

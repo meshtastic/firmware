@@ -2,6 +2,13 @@
 # Enable overlay 'luckfox-lyra-ultra-w-spi0-cs0-spidev' with armbian-config
 # https://github.com/wehooper4/Meshtastic-Hardware/tree/main/Luckfox%20Ultra%20Hat
 # 1 Watt Lyra Ultra hat
+Meta:
+  name: wehooper4 Luckfox Ultra 1W
+  support: community
+  compatible:
+    - luckfox-pico-ultra # Armbian
+    - luckfox-lyra-ultra # Armbian
+
 Lora:
   Module: sx1262
   DIO2_AS_RF_SWITCH: true

@@ -8,6 +8,7 @@
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/GeoCoord.h"
+#include "graphics/EmoteRenderer.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
@@ -313,8 +314,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
 #endif
     currentFavoriteNodeNum = node->num;
     // === Create the shortName and title string ===
-    const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
-    char titlestr[32] = {0};
+    const char *shortName = (node->has_user && node->user.short_name[0]) ? node->user.short_name : "Node";
+    char titlestr[40];
     snprintf(titlestr, sizeof(titlestr), "*%s*", shortName);
 
     // === Draw battery/time/mail header (common across screens) ===
@@ -328,7 +329,6 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     // List of available macro Y positions in order, from top to bottom.
     int line = 1; // which slot to use next
-    std::string usernameStr;
     // === 1. Long Name (always try to show first) ===
     const char *username;
     if (currentResolution == ScreenResolution::UltraLow) {
@@ -338,9 +338,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
     }
 
     if (username) {
-        usernameStr = sanitizeString(username); // Sanitize the incoming long_name just in case
         // Print node's long name (e.g. "Backpack Node")
-        display->drawString(x, getTextPositions(display)[line++], usernameStr.c_str());
+        UIRenderer::drawStringWithEmotes(display, x, getTextPositions(display)[line++], username, FONT_HEIGHT_SMALL, 1, false);
     }
 
     // === 2. Signal and Hops (combined on one line, if available) ===
@@ -802,14 +801,12 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     // === Node Identity ===
     int textWidth = 0;
     int nameX = 0;
-    char shortnameble[35];
-    snprintf(shortnameble, sizeof(shortnameble), "%s",
-             graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
+    const char *shortName = owner.short_name ? owner.short_name : "";
 
     // === ShortName Centered ===
-    textWidth = display->getStringWidth(shortnameble);
+    textWidth = UIRenderer::measureStringWithEmotes(display, shortName);
     nameX = (SCREEN_WIDTH - textWidth) / 2;
-    display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
+    UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], shortName, FONT_HEIGHT_SMALL, 1, false);
 #else
     if (powerStatus->getHasBattery()) {
         char batStr[20];
@@ -904,36 +901,36 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int textWidth = 0;
     int nameX = 0;
     int yOffset = (currentResolution == ScreenResolution::High) ? 0 : 5;
-    std::string longNameStr;
-
-    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        longNameStr = sanitizeString(ourNode->user.long_name);
+    const char *longName = (ourNode && ourNode->has_user && ourNode->user.long_name[0]) ? ourNode->user.long_name : "";
+    const char *shortName = owner.short_name ? owner.short_name : "";
+    char combinedName[96];
+    if (longName[0] && shortName[0]) {
+        snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortName);
+    } else if (longName[0]) {
+        strncpy(combinedName, longName, sizeof(combinedName) - 1);
+        combinedName[sizeof(combinedName) - 1] = '\0';
+    } else {
+        strncpy(combinedName, shortName, sizeof(combinedName) - 1);
+        combinedName[sizeof(combinedName) - 1] = '\0';
     }
-    char shortnameble[35];
-    snprintf(shortnameble, sizeof(shortnameble), "%s",
-             graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
-
-    char combinedName[50];
-    snprintf(combinedName, sizeof(combinedName), "%s (%s)", longNameStr.empty() ? "" : longNameStr.c_str(), shortnameble);
-    if (SCREEN_WIDTH - (display->getStringWidth(combinedName)) > 10) {
-        size_t len = strlen(combinedName);
-        if (len >= 3 && strcmp(combinedName + len - 3, " ()") == 0) {
-            combinedName[len - 3] = '\0'; // Remove the last three characters
-        }
-        textWidth = display->getStringWidth(combinedName);
+    if (SCREEN_WIDTH - UIRenderer::measureStringWithEmotes(display, combinedName) > 10) {
+        textWidth = UIRenderer::measureStringWithEmotes(display, combinedName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(
-            nameX, ((rows == 4) ? getTextPositions(display)[line++] : getTextPositions(display)[line++]) + yOffset, combinedName);
+        UIRenderer::drawStringWithEmotes(
+            display, nameX, ((rows == 4) ? getTextPositions(display)[line++] : getTextPositions(display)[line++]) + yOffset,
+            combinedName, FONT_HEIGHT_SMALL, 1, false);
     } else {
         // === LongName Centered ===
-        textWidth = display->getStringWidth(longNameStr.c_str());
+        textWidth = UIRenderer::measureStringWithEmotes(display, longName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], longNameStr.c_str());
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], longName, FONT_HEIGHT_SMALL, 1,
+                                         false);
 
         // === ShortName Centered ===
-        textWidth = display->getStringWidth(shortnameble);
+        textWidth = UIRenderer::measureStringWithEmotes(display, shortName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], shortName, FONT_HEIGHT_SMALL, 1,
+                                         false);
     }
 #endif
     graphics::drawCommonFooter(display, x, y);
@@ -1045,12 +1042,12 @@ void UIRenderer::drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *pauseText = "Screen Paused";
     const char *idText = owner.short_name;
-    const bool useId = haveGlyphs(idText);
+    const bool useId = (idText && idText[0]);
     constexpr uint8_t padding = 2;
     constexpr uint8_t dividerGap = 1;
 
     // Text widths
-    const uint16_t idTextWidth = display->getStringWidth(idText, strlen(idText), true);
+    const uint16_t idTextWidth = useId ? UIRenderer::measureStringWithEmotes(display, idText) : 0;
     const uint16_t pauseTextWidth = display->getStringWidth(pauseText, strlen(pauseText));
     const uint16_t boxWidth = padding + (useId ? idTextWidth + padding : 0) + pauseTextWidth + padding;
     const uint16_t boxHeight = FONT_HEIGHT_SMALL + (padding * 2);
@@ -1075,7 +1072,7 @@ void UIRenderer::drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState
 
     // Draw: text
     if (useId)
-        display->drawString(idTextLeft, idTextTop, idText);
+        UIRenderer::drawStringWithEmotes(display, idTextLeft, idTextTop, idText, FONT_HEIGHT_SMALL, 1, false);
     display->drawString(pauseTextLeft, pauseTextTop, pauseText);
     display->drawString(pauseTextLeft + 1, pauseTextTop, pauseText); // Faux bold
 
@@ -1108,11 +1105,16 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
         display->drawString(msgX, msgY, upperMsg);
     }
     // Draw version and short name in bottom middle
-    char buf[25];
-    snprintf(buf, sizeof(buf), "%s   %s", xstr(APP_VERSION_SHORT),
-             graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
-
-    display->drawString(x + getStringCenteredX(buf), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, buf);
+    char footer[64];
+    if (owner.short_name && owner.short_name[0]) {
+        snprintf(footer, sizeof(footer), "%s   %s", xstr(APP_VERSION_SHORT), owner.short_name);
+    } else {
+        snprintf(footer, sizeof(footer), "%s", xstr(APP_VERSION_SHORT));
+    }
+    int footerW = UIRenderer::measureStringWithEmotes(display, footer);
+    int footerX = x + ((SCREEN_WIDTH - footerW) / 2);
+    UIRenderer::drawStringWithEmotes(display, footerX, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, footer, FONT_HEIGHT_SMALL, 1,
+                                     false);
     screen->forceDisplay();
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
@@ -1130,12 +1132,15 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
         display->drawString(x + 0, y + 0, upperMsg);
 
     // Draw version and short name in upper right
-    char buf[25];
-    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT),
-             graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
-
-    display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    display->drawString(x + SCREEN_WIDTH, y + 0, buf);
+    const char *version = xstr(APP_VERSION_SHORT);
+    int versionX = x + SCREEN_WIDTH - display->getStringWidth(version);
+    display->drawString(versionX, y + 0, version);
+    if (owner.short_name && owner.short_name[0]) {
+        const char *shortName = owner.short_name;
+        int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
+        int shortNameX = x + SCREEN_WIDTH - shortNameW;
+        UIRenderer::drawStringWithEmotes(display, shortNameX, y + FONT_HEIGHT_SMALL, shortName, FONT_HEIGHT_SMALL, 1, false);
+    }
     screen->forceDisplay();
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
@@ -1365,11 +1370,15 @@ void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, O
         display->drawString(x + 0, y + 0, upperMsg);
 
     // Draw version and shortname in upper right
-    char buf[25];
-    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
-
-    display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    display->drawString(x + SCREEN_WIDTH, y + 0, buf);
+    const char *version = xstr(APP_VERSION_SHORT);
+    int versionX = x + SCREEN_WIDTH - display->getStringWidth(version);
+    display->drawString(versionX, y + 0, version);
+    if (owner.short_name && owner.short_name[0]) {
+        const char *shortName = owner.short_name;
+        int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
+        int shortNameX = x + SCREEN_WIDTH - shortNameW;
+        UIRenderer::drawStringWithEmotes(display, shortNameX, y + FONT_HEIGHT_SMALL, shortName, FONT_HEIGHT_SMALL, 1, false);
+    }
     screen->forceDisplay();
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
@@ -1556,6 +1565,25 @@ std::string UIRenderer::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t mi
     else
         uptime = std::to_string(seconds) + "s";
     return uptime;
+}
+
+int UIRenderer::measureStringWithEmotes(OLEDDisplay *display, const char *line, int emoteSpacing)
+{
+    return graphics::EmoteRenderer::measureStringWithEmotes(display, line, graphics::emotes, graphics::numEmotes, emoteSpacing);
+}
+
+size_t UIRenderer::truncateStringWithEmotes(OLEDDisplay *display, const char *line, char *out, size_t outSize, int maxWidth,
+                                            const char *ellipsis, int emoteSpacing)
+{
+    return graphics::EmoteRenderer::truncateToWidth(display, line, out, outSize, maxWidth, ellipsis, graphics::emotes,
+                                                    graphics::numEmotes, emoteSpacing);
+}
+
+void UIRenderer::drawStringWithEmotes(OLEDDisplay *display, int x, int y, const char *line, int fontHeight, int emoteSpacing,
+                                      bool fauxBold)
+{
+    graphics::EmoteRenderer::drawStringWithEmotes(display, x, y, line, fontHeight, graphics::emotes, graphics::numEmotes,
+                                                  emoteSpacing, fauxBold);
 }
 
 } // namespace graphics
