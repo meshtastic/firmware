@@ -852,7 +852,7 @@ void NodeDB::installDefaultModuleConfig()
 #if HAS_TFT
     if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
         moduleConfig.external_notification.nag_timeout = 0;
-#else
+#elif !defined(PIN_VIBRATION)
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 #endif
@@ -862,6 +862,16 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
 #endif
+
+    // Audio module defaults
+    moduleConfig.has_audio = true;
+#ifdef USERPREFS_AUDIO_SPEAKER_GAIN
+    moduleConfig.audio.speaker_gain = USERPREFS_AUDIO_SPEAKER_GAIN;
+#endif
+#ifdef USERPREFS_AUDIO_MIC_GAIN
+    moduleConfig.audio.mic_gain = USERPREFS_AUDIO_MIC_GAIN;
+#endif
+
 #ifdef T_LORA_PAGER
     moduleConfig.canned_message.updown1_enabled = true;
     moduleConfig.canned_message.inputbroker_pin_a = ROTARY_A;

@@ -204,18 +204,24 @@ typedef struct _meshtastic_ModuleConfig_DetectionSensorConfig {
 typedef struct _meshtastic_ModuleConfig_AudioConfig {
     /* Whether Audio is enabled */
     bool codec2_enabled;
-    /* PTT Pin */
+    /* PTT Pin for codec2 audio. Can also be set at compile time via AUDIO_PTT_PIN. */
     uint8_t ptt_pin;
-    /* The audio sample rate to use for codec2 */
+    /* The codec2 bitrate to use for encoding/decoding voice */
     meshtastic_ModuleConfig_AudioConfig_Audio_Baud bitrate;
-    /* I2S Word Select */
+    /* I2S Word Select (legacy: single-I2S-bus mode only) */
     uint8_t i2s_ws;
-    /* I2S Data IN */
+    /* I2S Data IN (legacy: single-I2S-bus mode only) */
     uint8_t i2s_sd;
-    /* I2S Data OUT */
+    /* I2S Data OUT (legacy: single-I2S-bus mode only) */
     uint8_t i2s_din;
-    /* I2S Clock */
+    /* I2S Clock (legacy: single-I2S-bus mode only) */
     uint8_t i2s_sck;
+    /* Speaker output gain multiplier. 0 = firmware default. Valid range 1-30. */
+    uint8_t speaker_gain;
+    /* Microphone input gain multiplier. 0 = firmware default. Valid range 1-30. */
+    uint8_t mic_gain;
+    /* Target node number for audio transmission. 0 = broadcast (default). */
+    uint32_t audio_target;
 } meshtastic_ModuleConfig_AudioConfig;
 
 /* Config for the Paxcounter Module */
@@ -586,7 +592,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0, 0, 0, {meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_default {0, 0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
-#define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
@@ -605,7 +611,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, 0, {meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
-#define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
@@ -652,6 +658,9 @@ extern "C" {
 #define meshtastic_ModuleConfig_AudioConfig_i2s_sd_tag 5
 #define meshtastic_ModuleConfig_AudioConfig_i2s_din_tag 6
 #define meshtastic_ModuleConfig_AudioConfig_i2s_sck_tag 7
+#define meshtastic_ModuleConfig_AudioConfig_speaker_gain_tag 8
+#define meshtastic_ModuleConfig_AudioConfig_mic_gain_tag 9
+#define meshtastic_ModuleConfig_AudioConfig_audio_target_tag 10
 #define meshtastic_ModuleConfig_PaxcounterConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_PaxcounterConfig_paxcounter_update_interval_tag 2
 #define meshtastic_ModuleConfig_PaxcounterConfig_wifi_threshold_tag 3
@@ -854,7 +863,10 @@ X(a, STATIC,   SINGULAR, UENUM,    bitrate,           3) \
 X(a, STATIC,   SINGULAR, UINT32,   i2s_ws,            4) \
 X(a, STATIC,   SINGULAR, UINT32,   i2s_sd,            5) \
 X(a, STATIC,   SINGULAR, UINT32,   i2s_din,           6) \
-X(a, STATIC,   SINGULAR, UINT32,   i2s_sck,           7)
+X(a, STATIC,   SINGULAR, UINT32,   i2s_sck,           7) \
+X(a, STATIC,   SINGULAR, UINT32,   speaker_gain,      8) \
+X(a, STATIC,   SINGULAR, UINT32,   mic_gain,          9) \
+X(a, STATIC,   SINGULAR, UINT32,   audio_target,     10)
 #define meshtastic_ModuleConfig_AudioConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_AudioConfig_DEFAULT NULL
 
@@ -1038,7 +1050,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_MODULE_CONFIG_PB_H_MAX_SIZE meshtastic_ModuleConfig_size
 #define meshtastic_ModuleConfig_AmbientLightingConfig_size 14
-#define meshtastic_ModuleConfig_AudioConfig_size 19
+#define meshtastic_ModuleConfig_AudioConfig_size 30
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
 #define meshtastic_ModuleConfig_DetectionSensorConfig_size 44
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 42

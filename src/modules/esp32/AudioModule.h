@@ -13,6 +13,7 @@
 #include <driver/i2s.h>
 #include <freertos/queue.h>
 #include <functional>
+#include "input/InputBroker.h"
 
 enum RadioState { standby, rx, tx };
 
@@ -47,6 +48,7 @@ struct c2_header {
 
 #define AUDIO_MODULE_RX_BUFFER 128
 #define AUDIO_MODULE_MODE meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1600
+#define AUDIO_DEFAULT_GAIN 8 // Default gain multiplier when config value is 0
 
 // Shared ring buffer for TX mic data and RX decoded audio.
 // Since audio is half-duplex (PTT), only one direction is active at a time,
@@ -122,7 +124,7 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
 
     virtual meshtastic_MeshPacket *allocReply() override;
 
-    virtual bool wantUIFrame() override { return this->shouldDraw(); }
+    virtual bool wantUIFrame() override { return true; }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
 #if !HAS_SCREEN
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
@@ -135,6 +137,21 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
      * for it
      */
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
+
+#if HAS_SCREEN
+  private:
+    volatile uint32_t lastDrawMs = 0;
+    uint8_t pendingMenu = 0;       // 0=none, 1=mic gain, 2=spk gain, 3=target
+    bool suppressNextSelect = false;
+
+    int handleInputEvent(const InputEvent *event);
+    void showAudioMenu();
+    void showGainMenu(bool isMic);
+    void showTargetMenu();
+
+    CallbackObserver<AudioModule, const InputEvent *> inputObserver =
+        CallbackObserver<AudioModule, const InputEvent *>(this, &AudioModule::handleInputEvent);
+#endif
 };
 
 extern AudioModule *audioModule;

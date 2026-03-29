@@ -14,8 +14,8 @@
 #define I2C_SDA 18 // I2C pins for this board
 #define I2C_SCL 17
 
-#define I2C_SDA1 43
-#define I2C_SCL1 44
+#define I2C_SDA1 42 // PCF85063A RTC
+#define I2C_SCL1 45 // PCF85063A RTC
 
 #define LED_POWER 37 // If defined we will blink this LED
 #define BUTTON_PIN 0 // If defined, this will be used for user button presses,
@@ -107,6 +107,13 @@
 #define DAC_I2S_DOUT AUDIO_I2S_SPK_DIN
 #define DAC_I2S_MCLK -1 // No MCLK pin (I2S_PIN_NO_CHANGE)
 
-// PTT button — use the T3S3 user button (GPIO 0) by default
-// Override in moduleConfig.audio.ptt_pin if using a different pin
-#define AUDIO_PTT_PIN 42
+// PCF85063A RTC on Wire1 (I2C_SDA1/I2C_SCL1)
+#define PCF85063_RTC 0x51
+#define RTC_USE_WIRE1
+#define PIN_RTC_INT 16 // RTC interrupt, active LOW
+
+// Vibration motor on GPIO 46
+#define PIN_VIBRATION 46
+
+// PTT button
+#define AUDIO_PTT_PIN 47

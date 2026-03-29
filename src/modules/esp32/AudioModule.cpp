@@ -7,6 +7,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "graphics/Screen.h"
 #ifdef HAS_I2S
 #include "main.h" // for audioThread
 #endif
@@ -33,9 +34,18 @@
 
 ButterworthFilter hp_filter(240, 8000, ButterworthFilter::ButterworthFilter::Highpass, 1);
 
-// Volume gain applied to mic input and speaker output.
-// Increase to make audio louder; decrease if clipping/distortion occurs.
-static constexpr int AUDIO_GAIN = 8;
+// Runtime gain helpers — read once from config, cached in local vars
+static int getMicGain()
+{
+    uint8_t g = moduleConfig.audio.mic_gain;
+    return (g > 0 && g <= 30) ? g : AUDIO_DEFAULT_GAIN;
+}
+
+static int getSpeakerGain()
+{
+    uint8_t g = moduleConfig.audio.speaker_gain;
+    return (g > 0 && g <= 30) ? g : AUDIO_DEFAULT_GAIN;
+}
 
 TaskHandle_t codec2HandlerTask;
 TaskHandle_t speakerTaskHandle;
@@ -219,7 +229,7 @@ void run_codec2(void *parameter)
                     continue; // Partial read — try again (don't break out of TX loop!)
 
                 for (int i = 0; i < audioModule->adc_buffer_size; i++) {
-                    int32_t sample = (int32_t)hp_filter.Update((float)audioModule->speech[i]) * AUDIO_GAIN;
+                    int32_t sample = (int32_t)hp_filter.Update((float)audioModule->speech[i]) * getMicGain();
                     if (sample > 32767) sample = 32767;
                     if (sample < -32768) sample = -32768;
                     audioModule->speech[i] = (int16_t)sample;
@@ -232,7 +242,8 @@ void run_codec2(void *parameter)
                 if (audioModule->tx_encode_frame_index == (audioModule->encode_frame_size + (int)AUDIO_HEADER_SIZE)) {
                     LOG_DEBUG("Send %d codec2 bytes (seq=%u)", audioModule->encode_frame_size, audioModule->tx_seq);
                     audioModule->tx_encode_frame[sizeof(c2_header)] = audioModule->tx_seq++;
-                    audioModule->sendPayload();
+                    NodeNum dest = moduleConfig.audio.audio_target ? moduleConfig.audio.audio_target : NODENUM_BROADCAST;
+                    audioModule->sendPayload(dest);
                     audioModule->tx_encode_frame_index = AUDIO_HEADER_SIZE;
                     taskYIELD();
                 }
@@ -302,7 +313,7 @@ void run_codec2(void *parameter)
                 for (int i = AUDIO_HEADER_SIZE; i + dec_frame_bytes <= (int)pkt.size; i += dec_frame_bytes) {
                     codec2_decode(dec_codec, audioModule->output_buffer, pkt.data + i);
                     for (int j = 0; j < dec_samples; j++) {
-                        int32_t s = (int32_t)audioModule->output_buffer[j] * AUDIO_GAIN;
+                        int32_t s = (int32_t)audioModule->output_buffer[j] * getSpeakerGain();
                         if (s > 32767) s = 32767;
                         if (s < -32768) s = -32768;
                         audioModule->output_buffer[j] = (int16_t)s;
@@ -358,6 +369,9 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
                  encode_frame_num * frameDurationMs,
                  encode_frame_size, (int)AUDIO_HEADER_SIZE,
                  encode_frame_size + (int)AUDIO_HEADER_SIZE);
+        LOG_INFO("Audio gain: mic=%d speaker=%d, target=%s",
+                 getMicGain(), getSpeakerGain(),
+                 moduleConfig.audio.audio_target ? "DM" : "broadcast");
         // Speaker task: HIGHEST priority (22) on core 1.
         // Must never be starved — DMA underruns cause audible glitches.
         // Blocks on i2s_write(portMAX_DELAY) when DMA is full, freeing CPU.
@@ -375,24 +389,63 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
 
 void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+#if HAS_SCREEN
+    lastDrawMs = millis();
+
+    // Suppress frame content while a sub-menu is pending or the overlay
+    // banner is active.  Without this, "Receive" flashes for one frame
+    // between the main menu closing and the sub-menu opening.
+    if (pendingMenu != 0)
+        return;
+#endif
     char buffer[50];
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
     display->setColor(BLACK);
-    display->drawStringf(0 + x, 0 + y, buffer, "Codec2 Mode %d Audio",
-                         (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+    if (moduleConfig.audio.audio_target) {
+        display->drawStringf(0 + x, 0 + y, buffer, "Audio DM !%08x",
+                             moduleConfig.audio.audio_target);
+    } else {
+        display->drawStringf(0 + x, 0 + y, buffer, "Codec2 Mode %d Audio",
+                             (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+    }
     display->setColor(WHITE);
     display->setFont(FONT_LARGE);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    switch (radio_state) {
-    case RadioState::tx:
+    if (radio_state == RadioState::tx) {
         display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, "PTT");
-        break;
-    default:
-        display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, "Receive");
-        break;
+    } else {
+        // Map numeric gain to human-readable label
+        auto gainLabel = [](uint8_t g) -> const char * {
+            if (g == 0)
+                g = AUDIO_DEFAULT_GAIN;
+            if (g <= 1)
+                return "Quiet";
+            if (g <= 4)
+                return "Low";
+            if (g <= 8)
+                return "Default";
+            if (g <= 16)
+                return "High";
+            if (g <= 24)
+                return "Loud";
+            return "Max";
+        };
+
+        display->setFont(FONT_SMALL);
+        display->drawStringf(display->getWidth() / 2 + x, 16 + y, buffer, "Mic: %s   Spk: %s",
+                             gainLabel(moduleConfig.audio.mic_gain), gainLabel(moduleConfig.audio.speaker_gain));
+
+        // Target line
+        if (moduleConfig.audio.audio_target) {
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(moduleConfig.audio.audio_target);
+            const char *name = (node && node->user.short_name[0]) ? node->user.short_name : "????";
+            display->drawStringf(display->getWidth() / 2 + x, 30 + y, buffer, "To: %.4s", name);
+        } else {
+            display->drawString(display->getWidth() / 2 + x, 30 + y, "To: Broadcast");
+        }
     }
 }
 
@@ -559,7 +612,28 @@ int32_t AudioModule::runOnce()
                      pttPin, initialPttState == LOW ? "LOW (PTT active!)" : "HIGH (idle)");
 
             firstTime = false;
+#if HAS_SCREEN
+            this->inputObserver.observe(inputBroker);
+#endif
         } else {
+#if HAS_SCREEN
+            // Process pending sub-menu from previous banner callback
+            if (pendingMenu != 0 && screen) {
+                uint8_t menu = pendingMenu;
+                pendingMenu = 0;
+                switch (menu) {
+                case 1:
+                    showGainMenu(true);
+                    break;
+                case 2:
+                    showGainMenu(false);
+                    break;
+                case 3:
+                    showTargetMenu();
+                    break;
+                }
+            }
+#endif
             // Check if PTT is pressed (active LOW). TODO hook that into Onebutton/Interrupt drive.
             if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == LOW) {
                 if (radio_state == RadioState::rx) {
@@ -592,7 +666,8 @@ int32_t AudioModule::runOnce()
                         // Send the incomplete frame
                         LOG_DEBUG("Send %d codec2 bytes (incomplete, seq=%u)", tx_encode_frame_index, tx_seq);
                         tx_encode_frame[sizeof(c2_header)] = tx_seq++;
-                        sendPayload();
+                        NodeNum dest = moduleConfig.audio.audio_target ? moduleConfig.audio.audio_target : NODENUM_BROADCAST;
+                        sendPayload(dest);
                     }
                     tx_encode_frame_index = AUDIO_HEADER_SIZE;
                     // Flush stale RX audio that may have arrived during TX
@@ -630,8 +705,6 @@ meshtastic_MeshPacket *AudioModule::allocReply()
 
 bool AudioModule::shouldDraw()
 {
-    if (!moduleConfig.audio.codec2_enabled)
-        return false;
     return (radio_state == RadioState::tx);
 }
 
@@ -685,5 +758,176 @@ ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     return ProcessMessage::CONTINUE;
 }
+
+// --- On-screen audio settings menus (long-press SELECT on audio frame) ---
+
+#if HAS_SCREEN
+
+int AudioModule::handleInputEvent(const InputEvent *event)
+{
+    if (event->inputEvent != INPUT_BROKER_SELECT)
+        return 0;
+
+    // If a banner callback just fired (e.g. user picked an option), suppress
+    // this SELECT so we don't immediately reopen the main menu.
+    if (suppressNextSelect) {
+        suppressNextSelect = false;
+        return 0;
+    }
+
+    // Only act when the audio frame was drawn recently (i.e. it's visible).
+    // Use 1000ms to cover the 500ms long-press hold time plus margin for
+    // auto-frame-advance that may stop drawFrame calls mid-press.
+    if ((millis() - lastDrawMs) > 1000)
+        return 0;
+
+    // Don't intercept while a banner overlay is already showing
+    if (screen && screen->isOverlayBannerShowing())
+        return 0;
+
+    // Don't open menu during active TX (PTT held)
+    if (radio_state == RadioState::tx)
+        return 0;
+
+    showAudioMenu();
+    return 1; // consumed — stop observer chain
+}
+
+void AudioModule::showAudioMenu()
+{
+    if (!screen)
+        return;
+    static const char *opts[] = {"Back", "Mic Gain", "Speaker Gain", "Target"};
+    graphics::BannerOverlayOptions banner;
+    banner.message = "Audio Settings";
+    banner.optionsArrayPtr = opts;
+    banner.optionsCount = 4;
+    banner.bannerCallback = [](int selected) {
+        if (!audioModule)
+            return;
+        audioModule->suppressNextSelect = true;
+        switch (selected) {
+        case 1:
+            audioModule->pendingMenu = 1;
+            break; // mic gain
+        case 2:
+            audioModule->pendingMenu = 2;
+            break; // speaker gain
+        case 3:
+            audioModule->pendingMenu = 3;
+            break; // target
+        default:
+            break; // Back
+        }
+    };
+    screen->showOverlayBanner(banner);
+}
+
+void AudioModule::showGainMenu(bool isMic)
+{
+    if (!screen)
+        return;
+
+    static const char *micOpts[] = {"Back", "1 Quiet", "4 Low", "8 Default", "16 High", "24 Loud", "30 Max"};
+    static const char *spkOpts[] = {"Back", "1 Quiet", "4 Low", "8 Default", "16 High", "24 Loud", "30 Max"};
+    static const uint8_t gainValues[] = {0, 1, 4, 8, 16, 24, 30};
+
+    graphics::BannerOverlayOptions banner;
+    banner.message = isMic ? "Mic Gain" : "Speaker Gain";
+    banner.optionsArrayPtr = isMic ? micOpts : spkOpts;
+    banner.optionsCount = 7;
+    banner.bannerCallback = [isMic](int selected) {
+        if (!audioModule)
+            return;
+        audioModule->suppressNextSelect = true;
+        if (selected == 0)
+            return; // Back
+        uint8_t gain = gainValues[selected];
+        if (isMic)
+            moduleConfig.audio.mic_gain = gain;
+        else
+            moduleConfig.audio.speaker_gain = gain;
+        nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+        LOG_INFO("Audio %s gain set to %u", isMic ? "mic" : "speaker", gain);
+    };
+
+    // Pre-select the current value
+    uint8_t current = isMic ? moduleConfig.audio.mic_gain : moduleConfig.audio.speaker_gain;
+    if (current == 0)
+        current = AUDIO_DEFAULT_GAIN;
+    for (int i = 1; i < 7; i++) {
+        if (gainValues[i] >= current) {
+            banner.InitialSelected = i;
+            break;
+        }
+    }
+
+    screen->showOverlayBanner(banner);
+}
+
+void AudioModule::showTargetMenu()
+{
+    if (!screen)
+        return;
+
+    // Build a dynamic list: Back, Broadcast, then up to 5 known nodes
+    static char nodeLabels[8][20];
+    static const char *opts[8];
+    static uint32_t nodeNums[8];
+    int idx = 0;
+
+    strncpy(nodeLabels[idx], "Back", sizeof(nodeLabels[0]));
+    opts[idx] = nodeLabels[idx];
+    nodeNums[idx] = 0;
+    idx++;
+
+    strncpy(nodeLabels[idx], "Broadcast", sizeof(nodeLabels[0]));
+    opts[idx] = nodeLabels[idx];
+    nodeNums[idx] = 0;
+    idx++;
+
+    // Add up to 5 known nodes (excluding self)
+    for (int i = 0; i < nodeDB->getNumMeshNodes() && idx < 7; i++) {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        if (!node || node->num == nodeDB->getNodeNum())
+            continue;
+        const char *shortName = node->user.short_name[0] ? node->user.short_name : "????";
+        snprintf(nodeLabels[idx], sizeof(nodeLabels[0]), "%.4s !%04x", shortName, (uint16_t)(node->num & 0xFFFF));
+        nodeNums[idx] = node->num;
+        opts[idx] = nodeLabels[idx];
+        idx++;
+    }
+
+    graphics::BannerOverlayOptions banner;
+    banner.message = moduleConfig.audio.audio_target ? "Target: DM" : "Target: Bcast";
+    banner.optionsArrayPtr = opts;
+    banner.optionsCount = idx;
+    banner.bannerCallback = [](int selected) {
+        if (!audioModule)
+            return;
+        audioModule->suppressNextSelect = true;
+        if (selected == 0)
+            return; // Back
+        moduleConfig.audio.audio_target = nodeNums[selected]; // 0 for Broadcast, nodeNum for DM
+        nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+        LOG_INFO("Audio target set to %s (0x%08x)",
+                 moduleConfig.audio.audio_target ? "DM" : "broadcast",
+                 moduleConfig.audio.audio_target);
+    };
+
+    // If a DM target is set, pre-select it in the list
+    if (moduleConfig.audio.audio_target) {
+        for (int i = 2; i < idx; i++) {
+            if (nodeNums[i] == moduleConfig.audio.audio_target) {
+                banner.InitialSelected = i;
+                break;
+            }
+        }
+    }
+
+    screen->showOverlayBanner(banner);
+}
+
+#endif // HAS_SCREEN
 
 #endif
