@@ -187,6 +187,7 @@ Logging:
   LogLevel: info # debug, info, warn, error
 #  TraceFile: /var/log/meshtasticd.json
 #  JSONFile: /packets.json # File location for JSON output of decoded packets
+#  JSONFileRotate: 60 # Rotate JSON file every N minutes, or 0 for no rotation
 #  JSONFilter: position # filter for packets to save to JSON file
 #  AsciiLogs: true     # default if not specified is !isatty() on stdout
 
@@ -214,3 +215,4 @@ General:
   AvailableDirectory: /etc/meshtasticd/available.d/
 #  MACAddress: AA:BB:CC:DD:EE:FF
 #  MACAddressSource: eth0
+#  APIPort: 4403

@@ -1,3 +1,9 @@
+Meta:
+  name: meshstick-1262
+  support: official
+  compatible:
+    - usb
+
 Lora:
   Module: sx1262
   CS: 0
