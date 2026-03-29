@@ -23,6 +23,7 @@
 #include "modules/ExternalNotificationModule.h"
 #include "modules/KeyVerificationModule.h"
 #include "modules/TraceRouteModule.h"
+#include "modules/PingModule.h"
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -1114,7 +1115,7 @@ void menuHandler::systemBaseMenu()
 
 void menuHandler::favoriteBaseMenu()
 {
-    enum optionsNumbers { Back, Preset, Freetext, GoToChat, Remove, TraceRoute, enumEnd };
+    enum optionsNumbers { Back, Preset, Freetext, GoToChat, Remove, TraceRoute, Ping, enumEnd };
 
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
@@ -1149,6 +1150,11 @@ void menuHandler::favoriteBaseMenu()
         optionsArray[options] = "Trace Route";
         optionsEnumArray[options++] = TraceRoute;
     }
+
+    if (currentResolution != ScreenResolution::UltraLow) {
+        optionsArray[options] = "Ping";
+        optionsEnumArray[options++] = Ping;
+    }
     optionsArray[options] = "Remove Favorite";
     optionsEnumArray[options++] = Remove;
 
@@ -1182,6 +1188,10 @@ void menuHandler::favoriteBaseMenu()
         } else if (selected == TraceRoute) {
             if (traceRouteModule) {
                 traceRouteModule->launch(graphics::UIRenderer::currentFavoriteNodeNum);
+            }
+        } else if (selected == Ping) {
+            if (pingModule) {
+                pingModule->startPing(graphics::UIRenderer::currentFavoriteNodeNum);
             }
         }
     };
@@ -1342,7 +1352,7 @@ void menuHandler::manageNodeMenu()
     if (!node) {
         return;
     }
-    enum optionsNumbers { Back, Favorite, Mute, TraceRoute, KeyVerification, Ignore, enumEnd };
+    enum optionsNumbers { Back, Favorite, Mute, TraceRoute, Ping, KeyVerification, Ignore, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -1364,6 +1374,9 @@ void menuHandler::manageNodeMenu()
 
     optionsArray[options] = "Trace Route";
     optionsEnumArray[options++] = TraceRoute;
+
+    optionsArray[options] = "Ping";
+    optionsEnumArray[options++] = Ping;
 
     optionsArray[options] = "Key Verification";
     optionsEnumArray[options++] = KeyVerification;
@@ -1438,7 +1451,11 @@ void menuHandler::manageNodeMenu()
             }
             return;
         }
-
+        if (selected == Ping) { 
+            if (pingModule) {
+                pingModule->startPing(menuHandler::pickedNodeNum);
+            }
+        }
         if (selected == KeyVerification) {
             LOG_INFO("Initiating key verification with %08X", menuHandler::pickedNodeNum);
             if (keyVerificationModule) {
@@ -2201,6 +2218,15 @@ void menuHandler::traceRouteMenu()
     });
 }
 
+void menuHandler::pingMenu()
+{
+    screen->showNodePicker("Node to Ping", 30000, [](uint32_t nodenum) -> void {
+        LOG_INFO("Menu: Node picker selected node 0x%08x, pingModule=%p", nodenum, pingModule);
+        if (pingModule) {
+            pingModule->startPing(nodenum);
+        }
+    });
+}
 void menuHandler::testMenu()
 {
 
@@ -2733,6 +2759,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case TraceRouteMenu:
         traceRouteMenu();
+        break;
+    case PingMenu:
+        pingMenu();
         break;
     case TestMenu:
         testMenu();
