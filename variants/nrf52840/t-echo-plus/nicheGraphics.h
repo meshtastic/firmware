@@ -8,6 +8,7 @@
 #include "graphics/niche/Drivers/EInk/GDEY0154D67.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
@@ -43,6 +44,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
     inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet);
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);
 

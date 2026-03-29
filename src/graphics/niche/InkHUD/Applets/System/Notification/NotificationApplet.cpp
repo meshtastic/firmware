@@ -228,17 +228,17 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
                   Notification::Type::NOTIFICATION_MESSAGE_BROADCAST)) {
 
         // Although we are handling DM and broadcast notifications together, we do need to treat them slightly differently
-        bool isBroadcast = currentNotification.type == Notification::Type::NOTIFICATION_MESSAGE_BROADCAST;
+        bool msgIsBroadcast = currentNotification.type == Notification::Type::NOTIFICATION_MESSAGE_BROADCAST;
 
         // Pick source of message
-        MessageStore::Message *message =
-            isBroadcast ? &inkhud->persistence->latestMessage.broadcast : &inkhud->persistence->latestMessage.dm;
+        const MessageStore::Message *message =
+            msgIsBroadcast ? &inkhud->persistence->latestMessage.broadcast : &inkhud->persistence->latestMessage.dm;
 
         // Find info about the sender
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(message->sender);
 
         // Leading tag (channel vs. DM)
-        text += isBroadcast ? "From:" : "DM: ";
+        text += msgIsBroadcast ? "From:" : "DM: ";
 
         // Sender id
         if (node && node->has_user)
@@ -252,7 +252,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
             text.clear();
 
             // Leading tag (channel vs. DM)
-            text += isBroadcast ? "Msg from " : "DM from ";
+            text += msgIsBroadcast ? "Msg from " : "DM from ";
 
             // Sender id
             if (node && node->has_user)

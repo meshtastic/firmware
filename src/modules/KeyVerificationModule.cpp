@@ -123,7 +123,7 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
     // generate nonce
     updateState();
     if (currentState != KEY_VERIFICATION_IDLE) {
-        IF_SCREEN(graphics::menuHandler::menuQueue = graphics::menuHandler::throttle_message;)
+        IF_SCREEN(graphics::menuHandler::menuQueue = graphics::menuHandler::ThrottleMessage;)
         return false;
     }
     currentNonce = random();
@@ -259,7 +259,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     p->priority = meshtastic_MeshPacket_Priority_HIGH;
     service->sendToMesh(p, RX_SRC_LOCAL, true);
     currentState = KEY_VERIFICATION_SENDER_AWAITING_USER;
-    IF_SCREEN(screen->requestMenu(graphics::menuHandler::key_verification_final_prompt);)
+    IF_SCREEN(screen->requestMenu(graphics::menuHandler::KeyVerificationFinalPrompt);)
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     cn->level = meshtastic_LogRecord_Level_WARNING;
     sprintf(cn->message, "Final confirmation for outgoing manual key verification %s", message);

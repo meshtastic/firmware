@@ -12,7 +12,7 @@
 
 #define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
 
-#define LED_PIN 25   // If defined we will blink this LED
+#define LED_POWER 25 // If defined we will blink this LED
 #define BUTTON_PIN 0 // If defined, this will be used for user button presses
 
 #define USE_RF95

@@ -3,7 +3,7 @@
 // Hackerboxes LoRa ESP32-C3 OLED Kit
 // Uses a ESP32-C3 OLED Board and a RA-01SH (SX1262) LoRa Board
 
-#define LED_PIN 8      // LED
+#define LED_POWER 8    // LED
 #define LED_STATE_ON 1 // State when LED is lit
 
 #define HAS_SCREEN 0
