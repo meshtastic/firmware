@@ -1,3 +1,9 @@
+Meta:
+  name: Luckfox Lyra PicoCalc Wio LoRa SX1262
+  support: official
+  compatible:
+    - luckfox-lyra-plus # Armbian
+
 Lora:
   Module: sx1262
   DIO2_AS_RF_SWITCH: true

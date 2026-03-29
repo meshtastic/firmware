@@ -55,12 +55,12 @@ int InkHUD::PairingApplet::onBluetoothStatusUpdate(const meshtastic::Status *sta
     // We'll mimic that behavior, just to keep in line with the other Statuses,
     // even though I'm not sure what the original reason for jumping through these extra hoops was.
     assert(status->getStatusType() == STATUS_TYPE_BLUETOOTH);
-    meshtastic::BluetoothStatus *bluetoothStatus = (meshtastic::BluetoothStatus *)status;
+    const auto *btStatus = static_cast<const meshtastic::BluetoothStatus *>(status);
 
     // When pairing begins
-    if (bluetoothStatus->getConnectionState() == meshtastic::BluetoothStatus::ConnectionState::PAIRING) {
+    if (btStatus->getConnectionState() == meshtastic::BluetoothStatus::ConnectionState::PAIRING) {
         // Store the passkey for rendering
-        passkey = bluetoothStatus->getPasskey();
+        passkey = btStatus->getPasskey();
 
         // Show pairing screen
         bringToForeground();

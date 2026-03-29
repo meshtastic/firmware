@@ -4,7 +4,7 @@
 #define USE_SSD1306
 #define DISPLAY_FLIP_SCREEN
 
-#define LED_PIN 15 // If defined we will blink this LED
+#define LED_POWER 15 // If defined we will blink this LED
 
 #define HAS_NEOPIXEL                         // Enable the use of neopixels
 #define NEOPIXEL_COUNT 3                     // How many neopixels are connected
