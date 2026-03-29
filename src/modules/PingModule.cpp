@@ -42,7 +42,7 @@ bool PingModule::startPing(NodeNum node)
     unsigned long now = millis();
 
     if (node == 0 || node == NODENUM_BROADCAST) {
-        LOG_ERROR("Invalid node number for trace route: 0x%08x", node);
+        LOG_ERROR("Invalid node number for ping: 0x%08x", node);
         runState = PING_STATE_RESULT;
         setResultText("Invalid node");
         resultShowTime = millis();
@@ -55,9 +55,9 @@ bool PingModule::startPing(NodeNum node)
         return false;
     }
     if (node == nodeDB->getNodeNum()) {
-        LOG_ERROR("Cannot trace route to self: 0x%08x", node);
+        LOG_ERROR("Cannot ping self: 0x%08x", node);
         runState = PING_STATE_RESULT;
-        setResultText("Cannot trace self");
+        setResultText("Cannot ping self");
         resultShowTime = millis();
         pingTarget = 0;
 
@@ -88,7 +88,7 @@ bool PingModule::startPing(NodeNum node)
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         notifyObservers(&e);
-        LOG_INFO("Cooldown active, please wait %lu seconds before starting a new trace route.", wait);
+        LOG_INFO("Cooldown active, please wait %lu seconds before starting a new ping.", wait);
         return false;
     }
 
@@ -127,7 +127,7 @@ bool PingModule::startPing(NodeNum node)
         if (service) {
             LOG_INFO("MeshService is available, sending packet...");
             service->sendToMesh(p, RX_SRC_USER);
-            LOG_INFO("sendToMesh called successfully for trace route to node 0x%08x", node);
+            LOG_INFO("sendToMesh called successfully for ping to node 0x%08x", node);
         } else {
             LOG_ERROR("MeshService is NULL!");
             runState = PING_STATE_RESULT;
