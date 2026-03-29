@@ -150,7 +150,9 @@ typedef enum _meshtastic_PortNum {
  arbitrary telemetry over meshtastic that is not covered by telemetry.proto
  ENCODING: CayenneLLP */
     meshtastic_PortNum_CAYENNE_APP = 77,
-    /* GroupAlarm integration
+        /* Ping/Pong Module */
+    meshtastic_PortNum_PING_APP = 90,
+        /* GroupAlarm integration
  Used for transporting GroupAlarm-related messages between Meshtastic nodes
  and companion applications/services. */
     meshtastic_PortNum_GROUPALARM_APP = 112,
