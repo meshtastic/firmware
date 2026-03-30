@@ -1,5 +1,4 @@
 #define PIN_BUZZER 11
-// #define BUTTON_PIN 4
 #define BATTERY_PIN 3
 #define ADC_MULTIPLIER 1.2
 #define ADC_CHANNEL ADC1_GPIO3_CHANNEL
@@ -12,7 +11,7 @@
 #define TB_DOWN 41
 #define TB_LEFT 39
 #define TB_RIGHT 40
-#define TB_PRESS 10 // C (A, B and D will stay to be used for canned messages)
+#define TB_PRESS 10
 #define TB_DIRECTION FALLING
 
 // IPS 1.69 280х240 ST7789
@@ -64,11 +63,3 @@
 #define TCXO_OPTIONAL
 #define LORA_CS SX126X_CS
 #define LORA_DIO1 SX126X_DIO1
-
-// sd-card
-// #define HAS_SDCARD
-// #define SDCARD_USE_SPI1
-// #define SDCARD_CS 16
-// #define SPI_MISO  8
-// #define SPI_MOSI  17
-// #define SPI_SCK   18
