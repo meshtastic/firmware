@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <sys/time.h>
 
-#ifndef ARCH_PORTDUINO
+#ifdef ARCH_PORTDUINO
 
 namespace concurrency
 {
