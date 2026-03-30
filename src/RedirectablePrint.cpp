@@ -345,7 +345,7 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     return;
 }
 
-void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16_t len)
+void RedirectablePrint::hexDump(const char *logLevel, const unsigned char *buf, uint16_t len)
 {
     const char alphabet[17] = "0123456789abcdef";
     log(logLevel, "    +------------------------------------------------+ +----------------+");

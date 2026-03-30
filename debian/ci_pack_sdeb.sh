@@ -27,5 +27,10 @@ rm -rf debian/changelog
 dch --create --distribution "$SERIES" --package "$package" --newversion "$PKG_VERSION~$SERIES" \
 	"GitHub Actions Automatic packaging for $PKG_VERSION~$SERIES"
 
-# Build the source deb
-debuild -S -nc -k"$GPG_KEY_ID"
+if [[ -n $GPG_KEY_ID ]]; then
+	# Build and sign the source deb
+	debuild -S -nc -k"$GPG_KEY_ID"
+else
+	# Build the source deb without signing (forks)
+	debuild -S -nc
+fi
