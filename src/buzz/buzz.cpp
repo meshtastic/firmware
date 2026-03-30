@@ -6,6 +6,11 @@
 #include "Tone.h"
 #endif
 
+#if defined(HAS_I2S)
+#include "main.h"
+#include <unordered_map>
+#endif
+
 #if !defined(ARCH_PORTDUINO)
 extern "C" void delay(uint32_t dwMs);
 #endif
@@ -50,6 +55,50 @@ const int DURATION_1_2 = 500;  // 1/2 note
 const int DURATION_3_4 = 750;  // 3/4 note
 const int DURATION_1_1 = 1000; // 1/1 note
 
+#ifdef HAS_I2S
+void playTonesRTTTL(const ToneDuration *tone_durations, int size)
+{
+    // translate ToneDuration[] to RTTTL string and play using audioThread
+    static std::unordered_map<int, std::string> freqToNote = {
+        {NOTE_C3, "c4"},   {NOTE_CS3, "c#4"}, {NOTE_D3, "d4"},   {NOTE_DS3, "d#4"}, {NOTE_E3, "e4"},   {NOTE_F3, "f4"},
+        {NOTE_FS3, "f#4"}, {NOTE_G3, "g4"},   {NOTE_GS3, "g#4"}, {NOTE_A3, "a4"},   {NOTE_AS3, "a#4"}, {NOTE_B3, "b4"},
+        {NOTE_C4, "c5"},   {NOTE_E4, "e5"},   {NOTE_G4, "g5"},   {NOTE_A4, "a5"},   {NOTE_C5, "c6"},   {NOTE_E5, "e6"},
+        {NOTE_G5, "g6"},   {NOTE_F5, "f6"},   {NOTE_G6, "g7"},   {NOTE_E7, "e8"}};
+
+    char rtttl[128] = "tone:d=32,o=4,b=200:"; // default duration and octave
+    for (int i = 0; i < size; i++) {
+        const auto &td = tone_durations[i];
+        std::string note = "b4";
+        if (freqToNote.find(td.frequency_khz) != freqToNote.end()) {
+            note = freqToNote[td.frequency_khz];
+        }
+        int dur = 32; // default duration
+        if (td.duration_ms >= 1000)
+            dur = 1;
+        else if (td.duration_ms >= 500)
+            dur = 2;
+        else if (td.duration_ms >= 250)
+            dur = 4;
+        else if (td.duration_ms >= 125)
+            dur = 8;
+        else if (td.duration_ms >= 62)
+            dur = 16;
+        else
+            dur = 32;
+
+        char noteStr[64];
+        snprintf(noteStr, sizeof(noteStr), "%s,%d", note.c_str(), dur);
+        strncat(rtttl, noteStr, sizeof(rtttl) - strlen(rtttl) - 1);
+
+        audioThread->beginRttl(rtttl, strlen(rtttl));
+        while (audioThread->isPlaying()) {
+            delay(10);
+        }
+        return;
+    }
+}
+#endif
+
 void playTones(const ToneDuration *tone_durations, int size)
 {
     if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
@@ -57,7 +106,13 @@ void playTones(const ToneDuration *tone_durations, int size)
         // Buzzer is disabled or not set to system tones
         return;
     }
-#ifdef PIN_BUZZER
+#ifdef HAS_I2S
+    if (moduleConfig.external_notification.use_i2s_as_buzzer && audioThread) {
+        playTonesRTTTL(tone_durations, size);
+        return;
+    }
+#endif
+#if defined(PIN_BUZZER)
     if (!config.device.buzzer_gpio)
         config.device.buzzer_gpio = PIN_BUZZER;
 #endif
