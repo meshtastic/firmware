@@ -25,6 +25,8 @@
 #include "power.h"
 #include <power/PowerHAL.h>
 
+#include "Nrf52SaadcLock.h"
+#include "concurrency/LockGuard.h"
 #include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
@@ -51,6 +53,10 @@ uint16_t getVDDVoltage();
 void variant_shutdown() __attribute__((weak));
 void variant_shutdown() {}
 
+// Optional variant hook called each nrf52Loop(); e.g. for low-VDD System OFF.
+void variant_nrf52LoopHook(void) __attribute__((weak));
+void variant_nrf52LoopHook(void) {}
+
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
 
@@ -74,11 +80,18 @@ bool powerHAL_isVBUSConnected()
 
 bool powerHAL_isPowerLevelSafe()
 {
-
     static bool powerLevelSafe = true;
 
-    uint16_t threshold = SAFE_VDD_VOLTAGE_THRESHOLD * 1000; // convert V to mV
-    uint16_t hysteresis = SAFE_VDD_VOLTAGE_THRESHOLD_HYST * 1000;
+#ifdef SAFE_VDD_VOLTAGE_THRESHOLD_MV
+    uint16_t threshold = SAFE_VDD_VOLTAGE_THRESHOLD_MV;
+#else
+    uint16_t threshold = (uint16_t)(SAFE_VDD_VOLTAGE_THRESHOLD * 1000.0f + 0.5f); // convert V to mV
+#endif
+#ifdef SAFE_VDD_VOLTAGE_THRESHOLD_HYST_MV
+    uint16_t hysteresis = SAFE_VDD_VOLTAGE_THRESHOLD_HYST_MV;
+#else
+    uint16_t hysteresis = (uint16_t)(SAFE_VDD_VOLTAGE_THRESHOLD_HYST * 1000.0f + 0.5f);
+#endif
 
     if (powerLevelSafe) {
         if (getVDDVoltage() < threshold) {
@@ -125,11 +138,12 @@ void powerHAL_platformInit()
 // get VDD voltage (in millivolts)
 uint16_t getVDDVoltage()
 {
-    // we use the same values as regular battery read so there is no conflict on SAADC
+    concurrency::LockGuard guard(concurrency::nrf52SaadcLock);
+
+    // Match battery read resolution; SAADC is shared with AnalogBatteryLevel in Power.cpp.
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 
     // VDD range on NRF52840 is 1.8-3.3V so we need to remap analog reference to 3.6V
-    // let's hope battery reading runs in same task and we don't have race condition
     analogReference(AR_INTERNAL);
 
     uint16_t vddADCRead = analogReadVDD();
@@ -326,6 +340,8 @@ void nrf52Loop()
 
     checkSDEvents();
     reportLittleFSCorruptionOnce();
+
+    variant_nrf52LoopHook(); // Optional variant hook called each nrf52Loop();
 }
 
 #ifdef USE_SEMIHOSTING
