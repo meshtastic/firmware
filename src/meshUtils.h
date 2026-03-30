@@ -38,4 +38,10 @@ const std::string vformat(const char *const zcFormat, ...);
 // Get actual string length for nanopb char array fields.
 size_t pb_string_length(const char *str, size_t max_len);
 
+/// Calculate 2^n without calling pow() - used for spreading factor and other calculations
+inline uint32_t pow_of_2(uint32_t n)
+{
+    return 1 << n;
+}
+
 #define IS_ONE_OF(item, ...) isOneOf(item, sizeof((int[]){__VA_ARGS__}) / sizeof(int), __VA_ARGS__)

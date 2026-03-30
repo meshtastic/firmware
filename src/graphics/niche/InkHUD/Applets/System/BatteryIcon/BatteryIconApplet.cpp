@@ -6,7 +6,7 @@ using namespace NicheGraphics;
 
 InkHUD::BatteryIconApplet::BatteryIconApplet()
 {
-    alwaysRender = true; // render everytime the screen is updated
+    alwaysRender = true; // render every time the screen is updated
 
     // Show at boot, if user has previously enabled the feature
     if (settings->optionalFeatures.batteryIcon)

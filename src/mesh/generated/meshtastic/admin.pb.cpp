@@ -39,6 +39,9 @@ PB_BIND(meshtastic_SEN5X_config, meshtastic_SEN5X_config, AUTO)
 PB_BIND(meshtastic_SCD30_config, meshtastic_SCD30_config, AUTO)
 
 
+PB_BIND(meshtastic_SHTXX_config, meshtastic_SHTXX_config, AUTO)
+
+
 
 
 
