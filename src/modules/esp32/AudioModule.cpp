@@ -357,10 +357,11 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
 
         // Fill as much of the payload as possible for the slowest packet rate.
         // The radio frame limit is MAX_LORA_PAYLOAD_LEN(255) - MESHTASTIC_HEADER_LENGTH(16)
-        // = 239 bytes for the protobuf-encoded Data struct. Protobuf adds ~6 bytes
-        // overhead (field tags, varint lengths), so max audio payload ≈ 233 - 6 = 227.
-        // We use 224 as a safe max for the codec data portion (leaves headroom).
-        static const int MAX_AUDIO_DATA = 224;
+        // - MESHTASTIC_PKC_OVERHEAD(12) = 227 bytes for the protobuf-encoded Data struct.
+        // Protobuf adds ~6 bytes overhead (field tags, varint lengths), so max audio
+        // payload ≈ 227 - 6 = 221.  We use 212 as a safe max (leaves headroom and
+        // ensures PKI encryption works for direct-message audio).
+        static const int MAX_AUDIO_DATA = 212;
         encode_frame_num = MAX_AUDIO_DATA / encode_codec_size;
         encode_frame_size = encode_frame_num * encode_codec_size;
         int frameDurationMs = (adc_buffer_size * 1000) / 8000;
