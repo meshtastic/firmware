@@ -7,6 +7,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "Channels.h"
 #include "graphics/Screen.h"
 #ifdef HAS_I2S
 #include "main.h" // for audioThread
@@ -38,18 +39,41 @@ ButterworthFilter hp_filter(240, 8000, ButterworthFilter::ButterworthFilter::Hig
 static int getMicGain()
 {
     uint8_t g = moduleConfig.audio.mic_gain;
-    return (g > 0 && g <= 30) ? g : AUDIO_DEFAULT_GAIN;
+    return (g > 0 && g <= 12) ? g : AUDIO_DEFAULT_GAIN;
 }
 
 static int getSpeakerGain()
 {
     uint8_t g = moduleConfig.audio.speaker_gain;
-    return (g > 0 && g <= 30) ? g : AUDIO_DEFAULT_GAIN;
+    return (g > 0 && g <= 12) ? g : AUDIO_DEFAULT_GAIN;
 }
 
 TaskHandle_t codec2HandlerTask;
 TaskHandle_t speakerTaskHandle;
 AudioModule *audioModule;
+
+// Max audio payload bytes.  Fits inside a PKI-encrypted LoRa packet:
+// MAX_LORA_PAYLOAD_LEN(255) - header(16) - PKC overhead(12) - protobuf(~6) ≈ 221;
+// we use 212 for safety headroom.
+static const int MAX_AUDIO_DATA = 212;
+
+// Human-readable codec2 rate string from the protobuf enum value.
+static const char *getCodecRateStr(uint8_t bitrate)
+{
+    if (bitrate == 0)
+        bitrate = AUDIO_MODULE_MODE; // default
+    switch (bitrate) {
+    case 1:  return "3200";
+    case 2:  return "2400";
+    case 3:  return "1600";
+    case 4:  return "1400";
+    case 5:  return "1300";
+    case 6:  return "1200";
+    case 7:  return "700";
+    case 8:  return "700B";
+    default: return "???";
+    }
+}
 
 #ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
@@ -178,6 +202,7 @@ static void speaker_task(void *parameter)
             if (millis() - lastDataTime > RX_SILENCE_TIMEOUT) {
                 audioModule->rx_playback_active = false;
                 audioModule->rx_draining = false;
+                audioModule->rx_from_node = 0;
                 audioModule->i2s_reclaimed_for_codec2 = false;
                 audioModule->rx_seq_initialized = false;
                 LOG_INFO("RX playback stopped (buffer drained, no new data)");
@@ -356,12 +381,7 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
         adc_buffer_size = codec2_samples_per_frame(codec2);
 
         // Fill as much of the payload as possible for the slowest packet rate.
-        // The radio frame limit is MAX_LORA_PAYLOAD_LEN(255) - MESHTASTIC_HEADER_LENGTH(16)
-        // - MESHTASTIC_PKC_OVERHEAD(12) = 227 bytes for the protobuf-encoded Data struct.
-        // Protobuf adds ~6 bytes overhead (field tags, varint lengths), so max audio
-        // payload ≈ 227 - 6 = 221.  We use 212 as a safe max (leaves headroom and
-        // ensures PKI encryption works for direct-message audio).
-        static const int MAX_AUDIO_DATA = 212;
+        // See MAX_AUDIO_DATA definition at file scope for the size derivation.
         encode_frame_num = MAX_AUDIO_DATA / encode_codec_size;
         encode_frame_size = encode_frame_num * encode_codec_size;
         int frameDurationMs = (adc_buffer_size * 1000) / 8000;
@@ -406,47 +426,69 @@ void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
     display->setColor(BLACK);
     if (moduleConfig.audio.audio_target) {
-        display->drawStringf(0 + x, 0 + y, buffer, "Audio DM !%08x",
-                             moduleConfig.audio.audio_target);
+        meshtastic_NodeInfoLite *tgt = nodeDB->getMeshNode(moduleConfig.audio.audio_target);
+        if (tgt && tgt->user.long_name[0]) {
+            display->drawStringf(0 + x, 0 + y, buffer, "Audio DM: %s", tgt->user.long_name);
+        } else {
+            display->drawStringf(0 + x, 0 + y, buffer, "Audio DM !%08x", moduleConfig.audio.audio_target);
+        }
     } else {
-        display->drawStringf(0 + x, 0 + y, buffer, "Codec2 Mode %d Audio",
-                             (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+        uint8_t ch = moduleConfig.audio.audio_channel;
+        const char *chName = channels.getName(ch);
+        display->drawStringf(0 + x, 0 + y, buffer, "Audio [%s]", chName);
     }
     display->setColor(WHITE);
     display->setFont(FONT_LARGE);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     if (radio_state == RadioState::tx) {
         display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, "PTT");
+    } else if (rx_draining || rx_playback_active) {
+        // Audio is actively being received — show sender info
+        if (rx_is_dm) {
+            display->drawString(display->getWidth() / 2 + x, 14 + y, "RX DM");
+        } else {
+            display->setFont(FONT_MEDIUM);
+            display->drawStringf(display->getWidth() / 2 + x, 14 + y, buffer, "RX [%s]", channels.getName(rx_channel));
+        }
+        display->setFont(FONT_SMALL);
+        if (rx_from_node) {
+            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(rx_from_node);
+            if (sender && sender->user.long_name[0]) {
+                display->drawStringf(display->getWidth() / 2 + x, 38 + y, buffer, "From: %s", sender->user.long_name);
+            } else if (sender && sender->user.short_name[0]) {
+                display->drawStringf(display->getWidth() / 2 + x, 38 + y, buffer, "From: %.4s", sender->user.short_name);
+            } else {
+                display->drawStringf(display->getWidth() / 2 + x, 38 + y, buffer, "From: !%08x", rx_from_node);
+            }
+        }
     } else {
-        // Map numeric gain to human-readable label
-        auto gainLabel = [](uint8_t g) -> const char * {
-            if (g == 0)
-                g = AUDIO_DEFAULT_GAIN;
-            if (g <= 1)
-                return "Quiet";
-            if (g <= 4)
-                return "Low";
-            if (g <= 8)
-                return "Default";
-            if (g <= 16)
-                return "High";
-            if (g <= 24)
-                return "Loud";
-            return "Max";
-        };
+        uint8_t micG = moduleConfig.audio.mic_gain;
+        uint8_t spkG = moduleConfig.audio.speaker_gain;
+        if (micG < 1 || micG > 12) micG = AUDIO_DEFAULT_GAIN;
+        if (spkG < 1 || spkG > 12) spkG = AUDIO_DEFAULT_GAIN;
 
         display->setFont(FONT_SMALL);
-        display->drawStringf(display->getWidth() / 2 + x, 16 + y, buffer, "Mic: %s   Spk: %s",
-                             gainLabel(moduleConfig.audio.mic_gain), gainLabel(moduleConfig.audio.speaker_gain));
+        display->drawStringf(display->getWidth() / 2 + x, 16 + y, buffer, "Mic: %u   Spk: %u", micG, spkG);
 
         // Target line
         if (moduleConfig.audio.audio_target) {
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(moduleConfig.audio.audio_target);
-            const char *name = (node && node->user.short_name[0]) ? node->user.short_name : "????";
-            display->drawStringf(display->getWidth() / 2 + x, 30 + y, buffer, "To: %.4s", name);
+            if (node && node->user.long_name[0]) {
+                display->drawStringf(display->getWidth() / 2 + x, 30 + y, buffer, "To: %s", node->user.long_name);
+            } else if (node && node->user.short_name[0]) {
+                display->drawStringf(display->getWidth() / 2 + x, 30 + y, buffer, "To: %.4s", node->user.short_name);
+            } else {
+                display->drawStringf(display->getWidth() / 2 + x, 30 + y, buffer, "To: !%08x", moduleConfig.audio.audio_target);
+            }
         } else {
-            display->drawString(display->getWidth() / 2 + x, 30 + y, "To: Broadcast");
+            uint8_t ch = moduleConfig.audio.audio_channel;
+            const char *chName = channels.getName(ch);
+            display->drawStringf(display->getWidth() / 2 + x, 30 + y, buffer, "Ch: %s", chName);
         }
+
+        // Codec rate line
+        display->drawStringf(display->getWidth() / 2 + x, 44 + y, buffer, "Rate: %s bps",
+                             getCodecRateStr(moduleConfig.audio.bitrate));
     }
 }
 
@@ -632,9 +674,18 @@ int32_t AudioModule::runOnce()
                 case 3:
                     showTargetMenu();
                     break;
+                case 4:
+                    showCodecRateMenu();
+                    break;
                 }
             }
 #endif
+            // Apply pending codec2 reinit (from codec rate menu) when idle
+            if (pendingCodecReinit && radio_state == RadioState::rx && !rx_playback_active && !rx_draining) {
+                pendingCodecReinit = false;
+                reinitCodec();
+            }
+
             // Check if PTT is pressed (active LOW). TODO hook that into Onebutton/Interrupt drive.
             if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == LOW) {
                 if (radio_state == RadioState::rx) {
@@ -649,6 +700,7 @@ int32_t AudioModule::runOnce()
                     // Reset audio state for new TX session
                     rx_playback_active = false;
                     rx_draining = false;
+                    rx_from_node = 0;
                     i2s_reclaimed_for_codec2 = false;
                     rx_seq_initialized = false;
                     tx_seq = 0;
@@ -678,6 +730,7 @@ int32_t AudioModule::runOnce()
                     adc_buffer_index = 0;
                     rx_playback_active = false;
                     rx_draining = false;
+                    rx_from_node = 0;
                     i2s_reclaimed_for_codec2 = false;
                     rx_seq_initialized = false; // reset for next RX session
                     ring_drops = 0; // reset drop counter
@@ -714,6 +767,11 @@ void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
     meshtastic_MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
+
+    // Use the configured broadcast channel (only meaningful for broadcast; DMs use PKI)
+    if (dest == NODENUM_BROADCAST && moduleConfig.audio.audio_channel > 0) {
+        p->channel = moduleConfig.audio.audio_channel;
+    }
 
     p->want_ack = false;                              // Audio is shoot&forget. No need to wait for ACKs.
     p->priority = meshtastic_MeshPacket_Priority_MAX; // Audio is important, because realtime
@@ -754,6 +812,19 @@ ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
                 xTaskNotifyGive(codec2HandlerTask);
             }
             radio_state = RadioState::rx;
+
+            // Track who is sending audio for the display
+            rx_from_node = mp.from;
+            rx_is_dm = (mp.to != NODENUM_BROADCAST);
+            rx_channel = mp.channel;
+            rx_last_packet_ms = millis();
+
+            // Switch display to audio frame so user can see incoming audio
+            powerFSM.trigger(EVENT_INPUT);
+            requestFocus();
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            this->notifyObservers(&e);
         }
     }
 
@@ -798,11 +869,11 @@ void AudioModule::showAudioMenu()
 {
     if (!screen)
         return;
-    static const char *opts[] = {"Back", "Mic Gain", "Speaker Gain", "Target"};
+    static const char *opts[] = {"Back", "Mic Gain", "Speaker Gain", "Target", "Codec Rate"};
     graphics::BannerOverlayOptions banner;
     banner.message = "Audio Settings";
     banner.optionsArrayPtr = opts;
-    banner.optionsCount = 4;
+    banner.optionsCount = 5;
     banner.bannerCallback = [](int selected) {
         if (!audioModule)
             return;
@@ -817,6 +888,9 @@ void AudioModule::showAudioMenu()
         case 3:
             audioModule->pendingMenu = 3;
             break; // target
+        case 4:
+            audioModule->pendingMenu = 4;
+            break; // codec rate
         default:
             break; // Back
         }
@@ -829,21 +903,19 @@ void AudioModule::showGainMenu(bool isMic)
     if (!screen)
         return;
 
-    static const char *micOpts[] = {"Back", "1 Quiet", "4 Low", "8 Default", "16 High", "24 Loud", "30 Max"};
-    static const char *spkOpts[] = {"Back", "1 Quiet", "4 Low", "8 Default", "16 High", "24 Loud", "30 Max"};
-    static const uint8_t gainValues[] = {0, 1, 4, 8, 16, 24, 30};
+    static const char *gainOpts[] = {"Back", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"};
 
     graphics::BannerOverlayOptions banner;
     banner.message = isMic ? "Mic Gain" : "Speaker Gain";
-    banner.optionsArrayPtr = isMic ? micOpts : spkOpts;
-    banner.optionsCount = 7;
+    banner.optionsArrayPtr = gainOpts;
+    banner.optionsCount = 13;
     banner.bannerCallback = [isMic](int selected) {
         if (!audioModule)
             return;
         audioModule->suppressNextSelect = true;
         if (selected == 0)
             return; // Back
-        uint8_t gain = gainValues[selected];
+        uint8_t gain = (uint8_t)selected; // 1-12
         if (isMic)
             moduleConfig.audio.mic_gain = gain;
         else
@@ -854,14 +926,9 @@ void AudioModule::showGainMenu(bool isMic)
 
     // Pre-select the current value
     uint8_t current = isMic ? moduleConfig.audio.mic_gain : moduleConfig.audio.speaker_gain;
-    if (current == 0)
+    if (current < 1 || current > 12)
         current = AUDIO_DEFAULT_GAIN;
-    for (int i = 1; i < 7; i++) {
-        if (gainValues[i] >= current) {
-            banner.InitialSelected = i;
-            break;
-        }
-    }
+    banner.InitialSelected = current;
 
     screen->showOverlayBanner(banner);
 }
@@ -871,36 +938,57 @@ void AudioModule::showTargetMenu()
     if (!screen)
         return;
 
-    // Build a dynamic list: Back, Broadcast, then up to 5 known nodes
-    static char nodeLabels[8][20];
-    static const char *opts[8];
-    static uint32_t nodeNums[8];
+    // Combined menu: Back, broadcast channels, then DM nodes
+    static char labels[14][20];
+    static const char *opts[14];
+    static uint32_t targetNums[14];  // node num (0 = broadcast)
+    static uint8_t targetChans[14];  // channel index (broadcast entries only)
     int idx = 0;
 
-    strncpy(nodeLabels[idx], "Back", sizeof(nodeLabels[0]));
-    opts[idx] = nodeLabels[idx];
-    nodeNums[idx] = 0;
+    opts[idx] = "Back";
+    targetNums[idx] = 0;
+    targetChans[idx] = 0;
     idx++;
 
-    strncpy(nodeLabels[idx], "Broadcast", sizeof(nodeLabels[0]));
-    opts[idx] = nodeLabels[idx];
-    nodeNums[idx] = 0;
-    idx++;
+    // Broadcast entries — one per enabled channel
+    for (int i = 0; i < channels.getNumChannels() && idx < 10; i++) {
+        meshtastic_Channel ch = channels.getByIndex(i);
+        if (ch.role == meshtastic_Channel_Role_DISABLED)
+            continue;
+        const char *name = channels.getName(i);
+        snprintf(labels[idx], sizeof(labels[0]), "Bcast: %.12s", name);
+        targetNums[idx] = 0;
+        targetChans[idx] = i;
+        opts[idx] = labels[idx];
+        idx++;
+    }
 
-    // Add up to 5 known nodes (excluding self)
-    for (int i = 0; i < nodeDB->getNumMeshNodes() && idx < 7; i++) {
+    // DM entries — up to 5 known nodes (excluding self)
+    for (int i = 0; i < nodeDB->getNumMeshNodes() && idx < 14; i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
         if (!node || node->num == nodeDB->getNodeNum())
             continue;
-        const char *shortName = node->user.short_name[0] ? node->user.short_name : "????";
-        snprintf(nodeLabels[idx], sizeof(nodeLabels[0]), "%.4s !%04x", shortName, (uint16_t)(node->num & 0xFFFF));
-        nodeNums[idx] = node->num;
-        opts[idx] = nodeLabels[idx];
+        if (node->user.long_name[0]) {
+            snprintf(labels[idx], sizeof(labels[0]), "%.19s", node->user.long_name);
+        } else if (node->user.short_name[0]) {
+            snprintf(labels[idx], sizeof(labels[0]), "%.4s !%04x", node->user.short_name, (uint16_t)(node->num & 0xFFFF));
+        } else {
+            snprintf(labels[idx], sizeof(labels[0]), "!%08x", node->num);
+        }
+        targetNums[idx] = node->num;
+        targetChans[idx] = 0;
+        opts[idx] = labels[idx];
         idx++;
     }
 
     graphics::BannerOverlayOptions banner;
-    banner.message = moduleConfig.audio.audio_target ? "Target: DM" : "Target: Bcast";
+    static char hdr[24];
+    if (moduleConfig.audio.audio_target) {
+        banner.message = "Target: DM";
+    } else {
+        snprintf(hdr, sizeof(hdr), "Target: %.15s", channels.getName(moduleConfig.audio.audio_channel));
+        banner.message = hdr;
+    }
     banner.optionsArrayPtr = opts;
     banner.optionsCount = idx;
     banner.bannerCallback = [](int selected) {
@@ -909,17 +997,30 @@ void AudioModule::showTargetMenu()
         audioModule->suppressNextSelect = true;
         if (selected == 0)
             return; // Back
-        moduleConfig.audio.audio_target = nodeNums[selected]; // 0 for Broadcast, nodeNum for DM
+        moduleConfig.audio.audio_target = targetNums[selected];
+        if (targetNums[selected] == 0) {
+            // Broadcast — also set channel
+            moduleConfig.audio.audio_channel = targetChans[selected];
+        }
         nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
-        LOG_INFO("Audio target set to %s (0x%08x)",
-                 moduleConfig.audio.audio_target ? "DM" : "broadcast",
-                 moduleConfig.audio.audio_target);
+        if (targetNums[selected]) {
+            LOG_INFO("Audio target set to DM 0x%08x", targetNums[selected]);
+        } else {
+            LOG_INFO("Audio target set to broadcast ch %d", targetChans[selected]);
+        }
     };
 
-    // If a DM target is set, pre-select it in the list
+    // Pre-select current target
     if (moduleConfig.audio.audio_target) {
-        for (int i = 2; i < idx; i++) {
-            if (nodeNums[i] == moduleConfig.audio.audio_target) {
+        for (int i = 1; i < idx; i++) {
+            if (targetNums[i] == moduleConfig.audio.audio_target) {
+                banner.InitialSelected = i;
+                break;
+            }
+        }
+    } else {
+        for (int i = 1; i < idx; i++) {
+            if (targetNums[i] == 0 && targetChans[i] == moduleConfig.audio.audio_channel) {
                 banner.InitialSelected = i;
                 break;
             }
@@ -927,6 +1028,64 @@ void AudioModule::showTargetMenu()
     }
 
     screen->showOverlayBanner(banner);
+}
+
+void AudioModule::showCodecRateMenu()
+{
+    if (!screen)
+        return;
+
+    static const char *opts[] = {"Back", "3200 bps", "2400 bps", "1600 bps", "1400 bps", "1300 bps", "1200 bps", "700 bps"};
+    // Protobuf enum values: CODEC2_3200=1 .. CODEC2_700=7
+    static const uint8_t rateValues[] = {0, 1, 2, 3, 4, 5, 6, 7};
+
+    graphics::BannerOverlayOptions banner;
+    banner.message = "Codec Rate";
+    banner.optionsArrayPtr = opts;
+    banner.optionsCount = 8;
+    banner.bannerCallback = [](int selected) {
+        if (!audioModule)
+            return;
+        audioModule->suppressNextSelect = true;
+        if (selected == 0)
+            return; // Back
+        moduleConfig.audio.bitrate = (meshtastic_ModuleConfig_AudioConfig_Audio_Baud)rateValues[selected];
+        nodeDB->saveToDisk(SEGMENT_MODULECONFIG);
+        audioModule->pendingCodecReinit = true;
+        LOG_INFO("Audio codec rate set to %s bps", getCodecRateStr(rateValues[selected]));
+    };
+
+    // Pre-select the current value
+    uint8_t current = moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE;
+    for (int i = 1; i < 8; i++) {
+        if (rateValues[i] == current) {
+            banner.InitialSelected = i;
+            break;
+        }
+    }
+
+    screen->showOverlayBanner(banner);
+}
+
+void AudioModule::reinitCodec()
+{
+    if (codec2) {
+        codec2_destroy(codec2);
+    }
+    int mode = (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1;
+    codec2 = codec2_create(mode);
+    codec2_set_lpc_post_filter(codec2, 1, 0, 0.8, 0.2);
+    encode_codec_size = (codec2_bits_per_frame(codec2) + 7) / 8;
+    adc_buffer_size = codec2_samples_per_frame(codec2);
+    encode_frame_num = MAX_AUDIO_DATA / encode_codec_size;
+    encode_frame_size = encode_frame_num * encode_codec_size;
+    tx_header.mode = mode;
+    memcpy(tx_encode_frame, &tx_header, sizeof(c2_header)); // Update wire header so receivers see the new mode
+    tx_encode_frame_index = AUDIO_HEADER_SIZE;
+    rx_encode_frame_index = 0;
+    int frameDurationMs = (adc_buffer_size * 1000) / 8000;
+    LOG_INFO("Codec2 reinit: mode %d, %d frames of %d bytes (%dms per packet)",
+             mode, encode_frame_num, encode_codec_size, encode_frame_num * frameDurationMs);
 }
 
 #endif // HAS_SCREEN

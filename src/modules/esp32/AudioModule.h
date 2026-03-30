@@ -47,7 +47,7 @@ struct c2_header {
 #endif
 
 #define AUDIO_MODULE_RX_BUFFER 128
-#define AUDIO_MODULE_MODE meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1600
+#define AUDIO_MODULE_MODE meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1200
 #define AUDIO_DEFAULT_GAIN 8 // Default gain multiplier when config value is 0
 
 // Shared ring buffer for TX mic data and RX decoded audio.
@@ -96,6 +96,10 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     volatile bool rx_draining = false;
     volatile bool i2s_reclaimed_for_codec2 = false; // true once we've stopped audioThread & reinstalled speaker I2S
     volatile uint32_t ring_drops = 0;  // count of samples dropped due to ring buffer overflow
+    volatile NodeNum rx_from_node = 0;     // node number of current audio sender
+    volatile bool rx_is_dm = false;           // true if last RX was a DM, false if broadcast
+    volatile uint8_t rx_channel = 0;          // channel index of last RX packet
+    volatile uint32_t rx_last_packet_ms = 0; // millis() of last received audio packet
     QueueHandle_t rxPacketQueue = nullptr;
 
     uint32_t ringAvailable();
@@ -141,13 +145,16 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
 #if HAS_SCREEN
   private:
     volatile uint32_t lastDrawMs = 0;
-    uint8_t pendingMenu = 0;       // 0=none, 1=mic gain, 2=spk gain, 3=target
+    uint8_t pendingMenu = 0;       // 0=none, 1=mic gain, 2=spk gain, 3=target, 4=codec rate
     bool suppressNextSelect = false;
+    volatile bool pendingCodecReinit = false;
 
     int handleInputEvent(const InputEvent *event);
     void showAudioMenu();
     void showGainMenu(bool isMic);
     void showTargetMenu();
+    void showCodecRateMenu();
+    void reinitCodec();
 
     CallbackObserver<AudioModule, const InputEvent *> inputObserver =
         CallbackObserver<AudioModule, const InputEvent *>(this, &AudioModule::handleInputEvent);
