@@ -2,14 +2,14 @@
 
 #include "../freertosinc.h"
 
-#ifndef HAS_FREE_RTOS
+#ifdef ARCH_PORTDUINO
 #include <pthread.h>
 #endif
 
 namespace concurrency
 {
 
-#ifndef HAS_FREE_RTOS
+#ifdef ARCH_PORTDUINO
 
 class BinarySemaphorePosix
 {
