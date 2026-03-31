@@ -1,4 +1,10 @@
 ##  https://www.mikroe.com/lr-iot-click
+Meta:
+  name: OpenWRT One mikroBUS LR-IOT-CLICK
+  support: community
+  compatible:
+    - openwrt_one # OpenWrt target
+
 Lora:
   Module: lr1110  # OpenWRT ONE mikroBUS with LR-IOT-CLICK
 #  CS: 25
