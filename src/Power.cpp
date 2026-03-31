@@ -35,6 +35,11 @@
 #include "nrfx_power.h"
 #endif
 
+#if defined(ARCH_NRF52)
+#include "Nrf52SaadcLock.h"
+#include "concurrency/LockGuard.h"
+#endif
+
 #if defined(DEBUG_HEAP_MQTT) && !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
@@ -328,6 +333,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
             scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
             scaled *= operativeAdcMultiplier;
 #else // block for all other platforms
+#ifdef ARCH_NRF52
+            concurrency::LockGuard saadcGuard(concurrency::nrf52SaadcLock);
+#endif
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += analogRead(BATTERY_PIN);
             }
@@ -704,11 +712,11 @@ bool Power::setup()
         found = true;
     } else if (analogInit()) {
         found = true;
-    }
-
+    } else {
 #ifdef NRF_APM
-    found = true;
+        found = true;
 #endif
+    }
 #ifdef EXT_PWR_DETECT
     attachInterrupt(
         EXT_PWR_DETECT,
@@ -846,8 +854,10 @@ void Power::readPowerStatus()
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
+#ifndef NRF_APM
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
         isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
+#endif
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it

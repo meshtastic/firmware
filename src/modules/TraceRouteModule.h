@@ -62,7 +62,7 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
     void appendMyIDandSNR(meshtastic_RouteDiscovery *r, float snr, bool isTowardsDestination, bool SNRonly);
 
     // Update next-hops in the routing table based on the returned route
-    void updateNextHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r);
+    void updateNextHops(const meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r);
 
     // Helper to update next-hop for a single node
     void maybeSetNextHop(NodeNum target, uint8_t nextHopByte);
