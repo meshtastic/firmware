@@ -77,8 +77,11 @@ void test_packetHistory_offPathDirectedDuplicate_isSuppressed()
     TEST_ASSERT_TRUE(history.wasSeenRecently(&directed, true));
 }
 
-void test_packetHistory_offPathDirectedRecord_allowsFloodFallback()
+void test_packetHistory_offPathFloodFromUnknownRelay_isNotFallback()
 {
+    // A flood copy from a relay we never saw before should NOT be treated as fallback.
+    // This prevents false-positive fallback detection when a downstream relay simply has
+    // no cached route and sends with NO_NEXT_HOP_PREFERENCE (not an actual retry).
     PacketHistory history;
     meshtastic_MeshPacket directed = makePacket(kSenderNodeNum, kPacketId, kDestNodeNum, kDirectedRelayId, kDirectedNextHop);
     meshtastic_MeshPacket fallback =
@@ -87,7 +90,7 @@ void test_packetHistory_offPathDirectedRecord_allowsFloodFallback()
 
     TEST_ASSERT_FALSE(history.wasSeenRecently(&directed, true));
     TEST_ASSERT_TRUE(history.wasSeenRecently(&fallback, true, &wasFallback));
-    TEST_ASSERT_TRUE(wasFallback);
+    TEST_ASSERT_FALSE(wasFallback);
 }
 
 void test_packetHistory_destinationDirectedDuplicate_isStillSuppressed()
@@ -108,7 +111,7 @@ void setup()
 
     UNITY_BEGIN();
     RUN_TEST(test_packetHistory_offPathDirectedDuplicate_isSuppressed);
-    RUN_TEST(test_packetHistory_offPathDirectedRecord_allowsFloodFallback);
+    RUN_TEST(test_packetHistory_offPathFloodFromUnknownRelay_isNotFallback);
     RUN_TEST(test_packetHistory_destinationDirectedDuplicate_isStillSuppressed);
     exit(UNITY_END());
 }
