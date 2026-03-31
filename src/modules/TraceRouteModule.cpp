@@ -138,7 +138,22 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
     insertUnknownHops(p, r, !incoming.request_id);
 
     // Append ID and SNR. If the last hop is to us, we only need to append the SNR
-    appendMyIDandSNR(r, p.rx_snr, !incoming.request_id, isToUs(&p));
+    // Use special SNR flag values for MQTT and UDP transports to indicate non-radio hops, otherwise use the actual received SNR
+    // The constants for the SNR flags are defined in TraceRouteModule.h and are set to values that are unlikely to be confused
+    // with real SNR values (e.g. -128dB) but can be easily identified in the logs and UI.
+
+    switch (p.transport_mechanism) {
+    case meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT:
+        appendMyIDandSNR(r, (TRACEROUTE_SNR_FLAG_MQTT / 4.0f), !incoming.request_id, isToUs(&p));
+        break;
+    case meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP:
+        appendMyIDandSNR(r, (TRACEROUTE_SNR_FLAG_UDP / 4.0f), !incoming.request_id, isToUs(&p));
+        break;
+    default:
+        appendMyIDandSNR(r, p.rx_snr, !incoming.request_id, isToUs(&p));
+        break;
+    }
+
     if (!incoming.request_id)
         printRoute(r, p.from, p.to, true);
     else
@@ -181,11 +196,40 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
             LOG_INFO("TracRoute result detected: isResponseFromTarget=%d, isRequestToUs=%d", isResponseFromTarget, isRequestToUs);
 
             LOG_INFO("SNR arrays - towards_count=%d, back_count=%d", r->snr_towards_count, r->snr_back_count);
+            String snrStr = "";
             for (int i = 0; i < r->snr_towards_count; i++) {
-                LOG_INFO("SNR towards[%d] = %d (%.1fdB)", i, r->snr_towards[i], (float)r->snr_towards[i] / 4.0f);
+                switch (r->snr_towards[i]) {
+                case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                    snrStr = "(?dB)";
+                    break;
+                case TRACEROUTE_SNR_FLAG_MQTT:
+                    snrStr = "(MQTT)";
+                    break;
+                case TRACEROUTE_SNR_FLAG_UDP:
+                    snrStr = "(UDP)";
+                    break;
+                default:
+                    snrStr = String((float)r->snr_towards[i] / 4.0f, 1) + "dB";
+                    break;
+                }
+                LOG_INFO("SNR towards[%d] = %d %s", i, r->snr_towards[i], snrStr.c_str());
             }
             for (int i = 0; i < r->snr_back_count; i++) {
-                LOG_INFO("SNR back[%d] = %d (%.1fdB)", i, r->snr_back[i], (float)r->snr_back[i] / 4.0f);
+                switch (r->snr_back[i]) {
+                case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                    snrStr = "(?dB)";
+                    break;
+                case TRACEROUTE_SNR_FLAG_MQTT:
+                    snrStr = "(MQTT)";
+                    break;
+                case TRACEROUTE_SNR_FLAG_UDP:
+                    snrStr = "(UDP)";
+                    break;
+                default:
+                    snrStr = String((float)r->snr_back[i] / 4.0f, 1) + "dB";
+                    break;
+                }
+                LOG_INFO("SNR back[%d] = %d %s", i, r->snr_back[i], snrStr.c_str());
             }
 
             String result = "";
@@ -196,21 +240,46 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
                 for (uint8_t i = 0; i < r->route_count; i++) {
                     result += " > ";
                     const char *name = getNodeName(r->route[i]);
-                    float snr =
-                        (i < r->snr_towards_count && r->snr_towards[i] != INT8_MIN) ? ((float)r->snr_towards[i] / 4.0f) : 0.0f;
                     result += name;
-                    if (snr != 0.0f) {
-                        result += "(";
-                        result += String(snr, 1);
-                        result += "dB)";
+                    snrStr = "";
+                    if (i < r->snr_towards_count) {
+                        switch (r->snr_towards[i]) {
+                        case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                            snrStr = "(?dB)";
+                            break;
+                        case TRACEROUTE_SNR_FLAG_MQTT:
+                            snrStr = "(MQTT)";
+                            break;
+                        case TRACEROUTE_SNR_FLAG_UDP:
+                            snrStr = "(UDP)";
+                            break;
+                        default:
+                            snrStr = String((float)r->snr_towards[i] / 4.0f, 1) + "dB";
+                            break;
+                        }
                     }
+                    result += snrStr;
                 }
                 result += " > ";
                 result += getNodeName(tracingNode);
-                if (r->snr_towards_count > 0 && r->snr_towards[r->snr_towards_count - 1] != INT8_MIN) {
-                    result += "(";
-                    result += String((float)r->snr_towards[r->snr_towards_count - 1] / 4.0f, 1);
-                    result += "dB)";
+
+                snrStr = "";
+                if (r->snr_towards_count > 0) {
+                    switch (r->snr_towards[r->snr_towards_count - 1]) {
+                    case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                        snrStr = "(?dB)";
+                        break;
+                    case TRACEROUTE_SNR_FLAG_MQTT:
+                        snrStr = "(MQTT)";
+                        break;
+                    case TRACEROUTE_SNR_FLAG_UDP:
+                        snrStr = "(UDP)";
+                        break;
+                    default:
+                        snrStr = "(" + String((float)r->snr_towards[r->snr_towards_count - 1] / 4.0f, 1) + "dB)";
+                        break;
+                    }
+                    result += snrStr;
                 }
                 result += "\n";
             } else {
@@ -218,10 +287,23 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
                 result += getNodeName(nodeDB->getNodeNum());
                 result += " > ";
                 result += getNodeName(tracingNode);
-                if (r->snr_towards_count > 0 && r->snr_towards[0] != INT8_MIN) {
-                    result += "(";
-                    result += String((float)r->snr_towards[0] / 4.0f, 1);
-                    result += "dB)";
+                snrStr = "";
+                if (r->snr_towards_count > 0) {
+                    switch (r->snr_towards[0]) {
+                    case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                        snrStr = "(?dB)";
+                        break;
+                    case TRACEROUTE_SNR_FLAG_MQTT:
+                        snrStr = "(MQTT)";
+                        break;
+                    case TRACEROUTE_SNR_FLAG_UDP:
+                        snrStr = "(UDP)";
+                        break;
+                    default:
+                        snrStr = "(" + String((float)r->snr_towards[0] / 4.0f, 1) + "dB)";
+                        break;
+                    }
+                    result += snrStr;
                 }
                 result += "\n";
             }
@@ -232,32 +314,71 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
                 for (int8_t i = r->route_back_count - 1; i >= 0; i--) {
                     result += " > ";
                     const char *name = getNodeName(r->route_back[i]);
-                    float snr = (i < r->snr_back_count && r->snr_back[i] != INT8_MIN) ? ((float)r->snr_back[i] / 4.0f) : 0.0f;
-                    result += name;
-                    if (snr != 0.0f) {
-                        result += "(";
-                        result += String(snr, 1);
-                        result += "dB)";
+                    snrStr = "";
+                    if (i < r->snr_back_count) {
+                        switch (r->snr_back[i]) {
+                        case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                            snrStr = "(?dB)";
+                            break;
+                        case TRACEROUTE_SNR_FLAG_MQTT:
+                            snrStr = "(MQTT)";
+                            break;
+                        case TRACEROUTE_SNR_FLAG_UDP:
+                            snrStr = "(UDP)";
+                            break;
+                        default:
+                            snrStr = "(" + String((float)r->snr_back[i] / 4.0f, 1) + "dB)";
+                            break;
+                        }
                     }
+                    result += name;
+                    result += snrStr;
                 }
                 // add initiator node
                 result += " > ";
                 result += getNodeName(nodeDB->getNodeNum());
-                if (r->snr_back_count > 0 && r->snr_back[r->snr_back_count - 1] != INT8_MIN) {
-                    result += "(";
-                    result += String((float)r->snr_back[r->snr_back_count - 1] / 4.0f, 1);
-                    result += "dB)";
+                if (r->snr_back_count > 0) {
+                    snrStr = "";
+                    switch (r->snr_back[r->snr_back_count - 1]) {
+                    case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                        snrStr = "(?dB)";
+                        break;
+                    case TRACEROUTE_SNR_FLAG_MQTT:
+                        snrStr = "(MQTT)";
+                        break;
+                    case TRACEROUTE_SNR_FLAG_UDP:
+                        snrStr = "(UDP)";
+                        break;
+                    default:
+                        snrStr = "(" + String((float)r->snr_back[r->snr_back_count - 1] / 4.0f, 1) + "dB)";
+                        break;
+                    }
+                    result += snrStr;
                 }
             } else {
                 // Direct return path (no intermediate hops)
                 result += getNodeName(tracingNode);
                 result += " > ";
                 result += getNodeName(nodeDB->getNodeNum());
-                if (r->snr_back_count > 0 && r->snr_back[0] != INT8_MIN) {
-                    result += "(";
-                    result += String((float)r->snr_back[0] / 4.0f, 1);
-                    result += "dB)";
+                if (r->snr_back_count > 0) {
+                    snrStr = "";
+                    switch (r->snr_back[0]) {
+                    case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                        snrStr = "(?dB)";
+                        break;
+                    case TRACEROUTE_SNR_FLAG_MQTT:
+                        snrStr = "(MQTT)";
+                        break;
+                    case TRACEROUTE_SNR_FLAG_UDP:
+                        snrStr = "(UDP)";
+                        break;
+                    default:
+                        snrStr = "(" + String((float)r->snr_back[0] / 4.0f, 1) + "dB)";
+                        break;
+                    }
+                    result += snrStr;
                 }
+                result += "\n";
             }
 
             LOG_INFO("Trace route result: %s", result.c_str());
@@ -373,7 +494,7 @@ void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_Ro
         diff = *route_count - *snr_count;
         for (int8_t i = 0; i < diff; i++) {
             if (*snr_count < ROUTE_SIZE) {
-                snr_list[*snr_count] = INT8_MIN; // This will represent an unknown SNR
+                snr_list[*snr_count] = TRACEROUTE_SNR_FLAG_UNKNOWN; // This will represent an unknown SNR
                 *snr_count += 1;
             }
         }
@@ -422,34 +543,89 @@ void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin,
     std::string route = "Route traced:\n";
     route += vformat("0x%x --> ", origin);
     for (uint8_t i = 0; i < r->route_count; i++) {
-        if (i < r->snr_towards_count && r->snr_towards[i] != INT8_MIN)
-            route += vformat("0x%x (%.2fdB) --> ", r->route[i], (float)r->snr_towards[i] / 4);
-        else
-            route += vformat("0x%x (?dB) --> ", r->route[i]);
+        if (i < r->snr_towards_count) {
+            String snrStr = "";
+            switch (r->snr_towards[i]) {
+            case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                snrStr = "(?dB)";
+                break;
+            case TRACEROUTE_SNR_FLAG_MQTT:
+                snrStr = "(MQTT)";
+                break;
+            case TRACEROUTE_SNR_FLAG_UDP:
+                snrStr = "(UDP)";
+                break;
+            default:
+                snrStr = "(" + String((float)r->snr_towards[i] / 4.0f, 2) + "dB)";
+                break;
+            }
+            route += vformat("0x%x %s --> ", r->route[i], snrStr.c_str());
+        }
     }
     // If we are the destination, or it has already reached the destination, print it
     if (dest == nodeDB->getNodeNum() || !isTowardsDestination) {
-        if (r->snr_towards_count > 0 && r->snr_towards[r->snr_towards_count - 1] != INT8_MIN)
-            route += vformat("0x%x (%.2fdB)", dest, (float)r->snr_towards[r->snr_towards_count - 1] / 4);
-
-        else
-            route += vformat("0x%x (?dB)", dest);
+        if (r->snr_towards_count > 0) {
+            String snrStr = "";
+            switch (r->snr_towards[r->snr_towards_count - 1]) {
+            case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                snrStr = "(?dB)";
+                break;
+            case TRACEROUTE_SNR_FLAG_MQTT:
+                snrStr = "(MQTT)";
+                break;
+            case TRACEROUTE_SNR_FLAG_UDP:
+                snrStr = "(UDP)";
+                break;
+            default:
+                snrStr = "(" + String((float)r->snr_towards[r->snr_towards_count - 1] / 4.0f, 2) + "dB)";
+                break;
+            }
+            route += vformat("0x%x %s", dest, snrStr.c_str());
+        }
     } else
         route += "...";
 
     // If there's a route back (or we are the destination as then the route is complete), print it
     if (r->route_back_count > 0 || origin == nodeDB->getNodeNum()) {
         route += "\n";
-        if (r->snr_towards_count > 0 && origin == nodeDB->getNodeNum())
-            route += vformat("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
-        else
+        if (r->snr_towards_count > 0 && origin == nodeDB->getNodeNum()) {
+            String snrStr = "";
+            switch (r->snr_back[r->snr_back_count - 1]) {
+            case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                snrStr = "(?dB)";
+                break;
+            case TRACEROUTE_SNR_FLAG_MQTT:
+                snrStr = "(MQTT)";
+                break;
+            case TRACEROUTE_SNR_FLAG_UDP:
+                snrStr = "(UDP)";
+                break;
+            default:
+                snrStr = "(" + String((float)r->snr_back[r->snr_back_count - 1] / 4.0f, 2) + "dB)";
+                break;
+            }
+            route += vformat("%s 0x%x <-- ", snrStr.c_str(), origin);
+        } else
             route += "...";
-
         for (int8_t i = r->route_back_count - 1; i >= 0; i--) {
-            if (i < r->snr_back_count && r->snr_back[i] != INT8_MIN)
-                route += vformat("(%.2fdB) 0x%x <-- ", (float)r->snr_back[i] / 4, r->route_back[i]);
-            else
-                route += vformat("(?dB) 0x%x <-- ", r->route_back[i]);
+            if (i < r->snr_back_count) {
+                String snrStr = "";
+                switch (r->snr_back[i]) {
+                case TRACEROUTE_SNR_FLAG_UNKNOWN:
+                    snrStr = "(?dB)";
+                    break;
+                case TRACEROUTE_SNR_FLAG_MQTT:
+                    snrStr = "(MQTT)";
+                    break;
+                case TRACEROUTE_SNR_FLAG_UDP:
+                    snrStr = "(UDP)";
+                    break;
+                default:
+                    snrStr = "(" + String((float)r->snr_back[i] / 4.0f, 2) + "dB)";
+                    break;
+                }
+                route += vformat("%s 0x%x <-- ", snrStr.c_str(), r->route_back[i]);
+            }
         }
         route += vformat("0x%x", dest);
     }
