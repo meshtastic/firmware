@@ -69,7 +69,7 @@ class UdpMulticastHandler final
         // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
         LOG_DEBUG("UDP broadcast from: %s, len=%u", packet.remoteIP().toString().c_str(), packetLength);
 #endif
-        meshtastic_MeshPacket mp;
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
         LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
         bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router && mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
@@ -79,9 +79,6 @@ class UdpMulticastHandler final
                 return;
             }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
-            mp.pki_encrypted = false;
-            mp.public_key.size = 0;
-            memset(mp.public_key.bytes, 0, sizeof(mp.public_key.bytes));
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             // Unset received SNR/RSSI
             p->rx_snr = 0;
