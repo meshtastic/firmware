@@ -192,7 +192,7 @@ ProcessMessage PingModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     // A reply to our ping arrives with request_id set to the id of the packet we sent.
     if (runState == PING_STATE_TRACKING && mp.decoded.request_id == pingPacketId && getFrom(&mp) == pingTarget) {
-        unsigned long rtt = millis() - pingSentTime;
+        unsigned long rtt = mp.rx_time - pingSentTime;
         LOG_INFO("Ping: pong received from=0x%08x rtt=%lums", getFrom(&mp), rtt);
 
         String r = String("Pong Received: ");
@@ -201,6 +201,8 @@ ProcessMessage PingModule::handleReceived(const meshtastic_MeshPacket &mp)
         } else {
             r += String(rtt) + "ms";
         }
+        r += "| RSSI : " + String(mp.rx_rssi);
+        r += "| Hops : " + String(mp.hop_start - mp.hop_limit);
         setResultText(r);
         runState = PING_STATE_RESULT;resultShowTime = millis();
 
@@ -270,7 +272,7 @@ int32_t PingModule::runOnce()
 
         case PING_STATE_TRACKING:
             if (now - lastPingTime > trackingTimeoutMs) {
-                LOG_INFO("TraceRoute timeout, no response received");
+                LOG_INFO("Ping timeout, no response received");
                 runState = PING_STATE_RESULT;
                 setResultText("No response received");
                 resultShowTime = now;
