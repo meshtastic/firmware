@@ -15,6 +15,12 @@
 #   5     CS          24
 #   26    DIO1/IRQ    26
 
+Meta:
+  name: ws-raspberry-pico-to-orangepi-03
+  support: community
+  compatible:
+    - orange-pi-zero-3 # Armbian
+
 Lora:
   Module: sx1262  # Waveshare Raspberry Pico Lora module
   DIO2_AS_RF_SWITCH: true

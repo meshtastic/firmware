@@ -118,6 +118,12 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
     }
 }
 
+void NodeInfoModule::triggerImmediateNodeInfoCheck()
+{
+    LOG_DEBUG("NodeInfo: scheduling immediate periodic check");
+    setIntervalFromNow(0);
+}
+
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
     // Only apply suppression when actually replying to someone else's request, not for periodic broadcasts.
