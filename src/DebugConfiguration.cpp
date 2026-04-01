@@ -98,6 +98,7 @@ Syslog &Syslog::logMask(uint8_t priMask)
 
 void Syslog::enable()
 {
+    this->_client->begin(this->_port);
     this->_enabled = true;
 }
 
@@ -165,21 +166,14 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
     if ((pri & LOG_FACMASK) == 0)
         pri = LOG_MAKEPRI(LOG_FAC(this->_priDefault), pri);
 
-    // W5100S: acquire UDP socket on-demand to avoid permanent socket consumption
-    if (!this->_client->begin(this->_port)) {
-        return false;
-    }
-
     if (this->_server != NULL) {
         result = this->_client->beginPacket(this->_server, this->_port);
     } else {
         result = this->_client->beginPacket(this->_ip, this->_port);
     }
 
-    if (result != 1) {
-        this->_client->stop();
+    if (result != 1)
         return false;
-    }
 
     this->_client->print('<');
     this->_client->print(pri);
@@ -198,8 +192,6 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
     this->_client->print(F("]: "));
     this->_client->print(message);
     this->_client->endPacket();
-
-    this->_client->stop(); // W5100S: release UDP socket for other services
 
     return true;
 }
