@@ -212,7 +212,7 @@ ProcessMessage PingModule::handleReceived(const meshtastic_MeshPacket &mp)
         notifyObservers(&e);
         if (screen) {
             screen->forceDisplay();
-        }W
+        }
 
         setIntervalFromNow(resultDisplayMs);
     }
