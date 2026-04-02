@@ -1,3 +1,9 @@
+Meta:
+  name: raxda-rock2f-starter-edition-hat
+  support: community
+  compatible:
+    - rock-2f # Armbian
+
 Lora:
 
 ### Raxda Rock 2F running Armbian Linux 6.1.99-vendor-rk35xx
