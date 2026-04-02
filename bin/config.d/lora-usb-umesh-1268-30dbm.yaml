@@ -1,3 +1,9 @@
+Meta:
+  name: umesh-1268-30dbm
+  support: community
+  compatible:
+    - clockwork-uconsole
+
 Lora:
   Module: sx1268
   CS: 0
