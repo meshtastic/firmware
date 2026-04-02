@@ -79,6 +79,19 @@ bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes)
     return true;
 }
 
+int constantTimeCompare(const uint8_t *a, const uint8_t *b, size_t len)
+{
+    if (len == 0)
+        return 0;
+    if (!a || !b)
+        return -1;
+    volatile uint8_t d = 0;
+    for (size_t i = 0; i < len; i++) {
+        d |= (a[i] ^ b[i]);
+    }
+    return (d == 0) ? 0 : -1;
+}
+
 bool isOneOf(int item, int count, ...)
 {
     va_list args;

@@ -33,6 +33,9 @@ bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes);
 
 bool isOneOf(int item, int count, ...);
 
+// Constant-time comparison of two byte arrays (timing-safe alternative to memcmp for secrets)
+int constantTimeCompare(const uint8_t *a, const uint8_t *b, size_t len);
+
 const std::string vformat(const char *const zcFormat, ...);
 
 // Get actual string length for nanopb char array fields.
