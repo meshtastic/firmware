@@ -198,8 +198,11 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
     aes = nullptr;
-    if (key_len != 0) {
-        aes = std::unique_ptr<AESSmall256>(new AESSmall256());
+    if (key_len == 16) {
+        aes = std::unique_ptr<BlockCipher>(new AESSmall128());
+        aes->setKey(key_bytes, key_len);
+    } else if (key_len == 32) {
+        aes = std::unique_ptr<BlockCipher>(new AESSmall256());
         aes->setKey(key_bytes, key_len);
     }
 }
@@ -221,6 +224,56 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
         return false;
     }
     return true;
+}
+
+/**
+ * Encrypt a channel packet using AES-CCM (authenticated encryption).
+ * Output is ciphertext + MESHTASTIC_CCM_TAG_SIZE byte auth tag appended.
+ *
+ * @param fromNode The sending node number.
+ * @param packetId The packet ID for nonce construction.
+ * @param numBytes Number of plaintext bytes.
+ * @param bytes Input plaintext buffer.
+ * @param bytesOut Output buffer (must hold numBytes + MESHTASTIC_CCM_TAG_SIZE).
+ * @return 0 on success, -1 on failure.
+ */
+int CryptoEngine::encryptPacketCCM(uint32_t fromNode, uint64_t packetId, size_t numBytes, const uint8_t *bytes,
+                                   uint8_t *bytesOut)
+{
+    if (key.length <= 0)
+        return -1;
+
+    initNonce(fromNode, packetId);
+    if (aes_ccm_ae(key.bytes, key.length, nonce, MESHTASTIC_CCM_TAG_SIZE, bytes, numBytes, nullptr, 0, bytesOut,
+                   bytesOut + numBytes) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+/**
+ * Decrypt a channel packet using AES-CCM (authenticated encryption).
+ * Input is ciphertext + MESHTASTIC_CCM_TAG_SIZE byte auth tag.
+ *
+ * @param fromNode The sending node number.
+ * @param packetId The packet ID for nonce construction.
+ * @param numBytes Total input size (ciphertext + auth tag).
+ * @param bytes Input buffer (ciphertext || auth tag).
+ * @param bytesOut Output buffer for plaintext (numBytes - MESHTASTIC_CCM_TAG_SIZE bytes).
+ * @return true if auth tag verified and decryption succeeded.
+ */
+bool CryptoEngine::decryptPacketCCM(uint32_t fromNode, uint64_t packetId, size_t numBytes, const uint8_t *bytes,
+                                    uint8_t *bytesOut)
+{
+    if (key.length <= 0 || numBytes <= MESHTASTIC_CCM_TAG_SIZE)
+        return false;
+
+    initNonce(fromNode, packetId);
+
+    size_t crypt_len = numBytes - MESHTASTIC_CCM_TAG_SIZE;
+    const uint8_t *auth = bytes + crypt_len;
+
+    return aes_ccm_ad(key.bytes, key.length, nonce, MESHTASTIC_CCM_TAG_SIZE, bytes, crypt_len, nullptr, 0, auth, bytesOut);
 }
 
 #endif

@@ -152,6 +152,218 @@ void test_PKC(void)
     TEST_ASSERT_EQUAL_MEMORY(expected_decrypted, decrypted, 10);
 }
 
+void test_ECB_AES128(void)
+{
+    // Verify aesSetKey fix: 16-byte keys now use AESSmall128 instead of AESSmall256
+    // NIST SP 800-38A, Appendix F.1 (ECB-AES128-Encrypt)
+    uint8_t key[16] = {0};
+    uint8_t plain[16] = {0};
+    uint8_t result[16] = {0};
+    uint8_t expected[16] = {0};
+
+    HexToBytes(key, "2B7E151628AED2A6ABF7158809CF4F3C");
+
+    HexToBytes(plain, "6BC1BEE22E409F96E93D7E117393172A");
+    HexToBytes(expected, "3AD77BB40D7A3660A89ECAF32466EF97");
+    crypto->aesSetKey(key, 16);
+    crypto->aesEncrypt(plain, result);
+    TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
+
+    HexToBytes(plain, "AE2D8A571E03AC9C9EB76FAC45AF8E51");
+    HexToBytes(expected, "F5D3D58503B9699DE785895A96FDBAAF");
+    crypto->aesSetKey(key, 16);
+    crypto->aesEncrypt(plain, result);
+    TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
+}
+
+void test_CCM_channel_roundtrip_200bytes(void)
+{
+    // Round-trip AES-CCM on a 200-byte payload (typical large text message)
+    uint8_t plain[256] __attribute__((__aligned__));
+    uint8_t encrypted[256] __attribute__((__aligned__));
+    uint8_t decrypted[256] __attribute__((__aligned__));
+    CryptoKey k;
+
+    // Default Meshtastic PSK (16 bytes, AES-128)
+    HexToBytes(k.bytes, "d4f1bb3a20290759f0bcffabcf4e6901");
+    k.length = 16;
+    crypto->setKey(k);
+
+    uint32_t fromNode = 0xDEADBEEF;
+    uint64_t packetId = 0x12345678;
+
+    // Fill with recognizable pattern
+    for (int i = 0; i < 200; i++)
+        plain[i] = (uint8_t)(i & 0xFF);
+
+    // Encrypt
+    int ret = crypto->encryptPacketCCM(fromNode, packetId, 200, plain, encrypted);
+    TEST_ASSERT_EQUAL_INT(0, ret);
+
+    // Ciphertext must differ from plaintext
+    TEST_ASSERT_FALSE(memcmp(encrypted, plain, 200) == 0);
+
+    // Decrypt and verify round-trip
+    bool ok = crypto->decryptPacketCCM(fromNode, packetId, 200 + MESHTASTIC_CCM_TAG_SIZE, encrypted, decrypted);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_MEMORY(plain, decrypted, 200);
+}
+
+void test_CCM_bit_corruption_rejects(void)
+{
+    // A single flipped bit in ciphertext must cause CCM auth verification to fail
+    uint8_t plain[32] __attribute__((__aligned__));
+    uint8_t encrypted[48] __attribute__((__aligned__));
+    uint8_t decrypted[32] __attribute__((__aligned__));
+    CryptoKey k;
+
+    HexToBytes(k.bytes, "d4f1bb3a20290759f0bcffabcf4e6901");
+    k.length = 16;
+    crypto->setKey(k);
+
+    uint32_t fromNode = 0x1234;
+    uint64_t packetId = 0xABCD;
+    memset(plain, 0x42, 20);
+
+    int ret = crypto->encryptPacketCCM(fromNode, packetId, 20, plain, encrypted);
+    TEST_ASSERT_EQUAL_INT(0, ret);
+
+    // Flip one bit in the ciphertext body (not the tag)
+    encrypted[10] ^= 0x01;
+
+    bool ok = crypto->decryptPacketCCM(fromNode, packetId, 20 + MESHTASTIC_CCM_TAG_SIZE, encrypted, decrypted);
+    TEST_ASSERT_FALSE(ok);
+}
+
+void test_CTR_legacy_roundtrip(void)
+{
+    // Legacy AES-CTR path: encrypt then decrypt must recover plaintext
+    uint8_t plain[32] __attribute__((__aligned__));
+    uint8_t work[32] __attribute__((__aligned__));
+    CryptoKey k;
+
+    HexToBytes(k.bytes, "d4f1bb3a20290759f0bcffabcf4e6901");
+    k.length = 16;
+    crypto->setKey(k);
+
+    uint32_t fromNode = 0x5678;
+    uint64_t packetId = 0x9ABC;
+
+    memcpy(plain, "Hello from legacy node!!", 24);
+    memcpy(work, plain, 24);
+
+    // Encrypt with CTR (legacy path)
+    crypto->encryptPacket(fromNode, packetId, 24, work);
+    TEST_ASSERT_FALSE(memcmp(work, plain, 24) == 0);
+
+    // Decrypt with CTR (symmetric)
+    crypto->decrypt(fromNode, packetId, 24, work);
+    TEST_ASSERT_EQUAL_MEMORY(plain, work, 24);
+}
+
+void test_CCM_wrong_tag_rejects(void)
+{
+    // Corrupted auth tag must cause decryption to fail
+    uint8_t plain[32] __attribute__((__aligned__));
+    uint8_t encrypted[48] __attribute__((__aligned__));
+    uint8_t decrypted[32] __attribute__((__aligned__));
+    CryptoKey k;
+
+    HexToBytes(k.bytes, "d4f1bb3a20290759f0bcffabcf4e6901");
+    k.length = 16;
+    crypto->setKey(k);
+
+    uint32_t fromNode = 0x1111;
+    uint64_t packetId = 0x2222;
+    memset(plain, 0xAA, 16);
+
+    int ret = crypto->encryptPacketCCM(fromNode, packetId, 16, plain, encrypted);
+    TEST_ASSERT_EQUAL_INT(0, ret);
+
+    // Corrupt the auth tag (bytes 16-23)
+    encrypted[16] ^= 0xFF;
+    encrypted[17] ^= 0xFF;
+
+    bool ok = crypto->decryptPacketCCM(fromNode, packetId, 16 + MESHTASTIC_CCM_TAG_SIZE, encrypted, decrypted);
+    TEST_ASSERT_FALSE(ok);
+}
+
+void test_CCM_oversized_ctr_fallback(void)
+{
+    // Verify both CCM and CTR work at boundary sizes
+    // Router uses CCM when: numbytes + 16 header + 8 tag <= 255
+    // So max CCM plaintext = 255 - 16 - 8 = 231 bytes
+    uint8_t plain[256] __attribute__((__aligned__));
+    uint8_t encrypted[256] __attribute__((__aligned__));
+    uint8_t decrypted[256] __attribute__((__aligned__));
+    uint8_t work[256] __attribute__((__aligned__));
+    CryptoKey k;
+
+    HexToBytes(k.bytes, "d4f1bb3a20290759f0bcffabcf4e6901");
+    k.length = 16;
+    crypto->setKey(k);
+
+    uint32_t fromNode = 0x3333;
+    uint64_t packetId = 0x4444;
+
+    for (int i = 0; i < 239; i++)
+        plain[i] = (uint8_t)(i & 0xFF);
+
+    // 231 bytes: max size that fits CCM in LoRa frame (231 + 8 + 16 = 255)
+    int ret = crypto->encryptPacketCCM(fromNode, packetId, 231, plain, encrypted);
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    bool ok = crypto->decryptPacketCCM(fromNode, packetId, 231 + MESHTASTIC_CCM_TAG_SIZE, encrypted, decrypted);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_MEMORY(plain, decrypted, 231);
+
+    // 239 bytes: too large for CCM in LoRa frame, Router would use CTR
+    // CTR must still work at max payload size
+    memcpy(work, plain, 239);
+    crypto->encryptPacket(fromNode, packetId, 239, work);
+    crypto->decrypt(fromNode, packetId, 239, work);
+    TEST_ASSERT_EQUAL_MEMORY(plain, work, 239);
+}
+
+void test_CCM_both_key_sizes(void)
+{
+    // Verify CCM works with both 16-byte (AES-128) and 32-byte (AES-256) PSKs
+    uint8_t plain[32] __attribute__((__aligned__));
+    uint8_t encrypted128[48] __attribute__((__aligned__));
+    uint8_t encrypted256[48] __attribute__((__aligned__));
+    uint8_t decrypted[32] __attribute__((__aligned__));
+    CryptoKey k;
+
+    uint32_t fromNode = 0x7777;
+    uint64_t packetId = 0x8888;
+    memcpy(plain, "Test both key sizes!", 20);
+
+    // --- AES-128 (16-byte PSK, default Meshtastic) ---
+    HexToBytes(k.bytes, "d4f1bb3a20290759f0bcffabcf4e6901");
+    k.length = 16;
+    crypto->setKey(k);
+
+    int ret = crypto->encryptPacketCCM(fromNode, packetId, 20, plain, encrypted128);
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    bool ok = crypto->decryptPacketCCM(fromNode, packetId, 20 + MESHTASTIC_CCM_TAG_SIZE, encrypted128, decrypted);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_MEMORY(plain, decrypted, 20);
+
+    // --- AES-256 (32-byte PSK) ---
+    HexToBytes(k.bytes, "603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4");
+    k.length = 32;
+    crypto->setKey(k);
+
+    memset(decrypted, 0, sizeof(decrypted));
+    ret = crypto->encryptPacketCCM(fromNode, packetId, 20, plain, encrypted256);
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    ok = crypto->decryptPacketCCM(fromNode, packetId, 20 + MESHTASTIC_CCM_TAG_SIZE, encrypted256, decrypted);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_MEMORY(plain, decrypted, 20);
+
+    // AES-128 and AES-256 must produce different ciphertext+tag for same plaintext
+    TEST_ASSERT_FALSE(memcmp(encrypted128, encrypted256, 20 + MESHTASTIC_CCM_TAG_SIZE) == 0);
+}
+
 void test_AES_CTR(void)
 {
     uint8_t expected[32];
@@ -189,9 +401,16 @@ void setup()
     UNITY_BEGIN(); // IMPORTANT LINE!
     RUN_TEST(test_SHA256);
     RUN_TEST(test_ECB_AES256);
+    RUN_TEST(test_ECB_AES128);
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
     RUN_TEST(test_PKC);
+    RUN_TEST(test_CCM_channel_roundtrip_200bytes);
+    RUN_TEST(test_CCM_bit_corruption_rejects);
+    RUN_TEST(test_CTR_legacy_roundtrip);
+    RUN_TEST(test_CCM_wrong_tag_rejects);
+    RUN_TEST(test_CCM_oversized_ctr_fallback);
+    RUN_TEST(test_CCM_both_key_sizes);
     exit(UNITY_END()); // stop unit testing
 }
 

@@ -22,6 +22,7 @@ struct CryptoKey {
  */
 
 #define MAX_BLOCKSIZE 256
+#define MESHTASTIC_CCM_TAG_SIZE 8 // Auth tag size for AES-CCM channel encryption
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
 
 class CryptoEngine
@@ -47,10 +48,13 @@ class CryptoEngine
     virtual bool setDHPublicKey(uint8_t *publicKey);
     virtual void hash(uint8_t *bytes, size_t numBytes);
 
+    virtual int encryptPacketCCM(uint32_t fromNode, uint64_t packetId, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
+    virtual bool decryptPacketCCM(uint32_t fromNode, uint64_t packetId, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
+
     virtual void aesSetKey(const uint8_t *key, size_t key_len);
 
     virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-    std::unique_ptr<AESSmall256> aes = nullptr;
+    std::unique_ptr<BlockCipher> aes = nullptr;
 
 #endif
 
