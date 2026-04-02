@@ -1037,6 +1037,12 @@ typedef struct _meshtastic_NodeInfo {
     bool is_muted;
 } meshtastic_NodeInfo;
 
+/* Batched NodeInfo wrapper for efficient bulk transfer during want_config flow.
+ Allows multiple NodeInfo messages to be packed into a single FromRadio packet. */
+typedef struct _meshtastic_NodeInfoBatch {
+    pb_callback_t items;
+} meshtastic_NodeInfoBatch;
+
 typedef PB_BYTES_ARRAY_T(16) meshtastic_MyNodeInfo_device_id_t;
 /* Unique local debugging info for this node
  Note: we don't include position or the user info, because that will come in the
@@ -1262,6 +1268,9 @@ typedef struct _meshtastic_FromRadio {
         meshtastic_ClientNotification clientNotification;
         /* Persistent data for device-ui */
         meshtastic_DeviceUIConfig deviceuiConfig;
+        /* Batched NodeInfo messages for efficient bulk transfer.
+     Used when client opts in via special nonce value. */
+        meshtastic_NodeInfoBatch node_info_batch;
     };
 } meshtastic_FromRadio;
 
@@ -1421,6 +1430,7 @@ extern "C" {
 #define meshtastic_MeshPacket_transport_mechanism_ENUMTYPE meshtastic_MeshPacket_TransportMechanism
 
 
+
 #define meshtastic_MyNodeInfo_firmware_edition_ENUMTYPE meshtastic_FirmwareEdition
 
 #define meshtastic_LogRecord_level_ENUMTYPE meshtastic_LogRecord_Level
@@ -1462,6 +1472,7 @@ extern "C" {
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0}
+#define meshtastic_NodeInfoBatch_init_default    {{{NULL}, NULL}}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
@@ -1495,6 +1506,7 @@ extern "C" {
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0}
+#define meshtastic_NodeInfoBatch_init_zero       {{{NULL}, NULL}}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
@@ -1626,6 +1638,7 @@ extern "C" {
 #define meshtastic_NodeInfo_is_ignored_tag       11
 #define meshtastic_NodeInfo_is_key_manually_verified_tag 12
 #define meshtastic_NodeInfo_is_muted_tag         13
+#define meshtastic_NodeInfoBatch_items_tag       1
 #define meshtastic_MyNodeInfo_my_node_num_tag    1
 #define meshtastic_MyNodeInfo_reboot_count_tag   8
 #define meshtastic_MyNodeInfo_min_app_version_tag 11
@@ -1700,6 +1713,7 @@ extern "C" {
 #define meshtastic_FromRadio_fileInfo_tag        15
 #define meshtastic_FromRadio_clientNotification_tag 16
 #define meshtastic_FromRadio_deviceuiConfig_tag  17
+#define meshtastic_FromRadio_node_info_batch_tag 18
 #define meshtastic_Heartbeat_nonce_tag           1
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
@@ -1882,6 +1896,12 @@ X(a, STATIC,   SINGULAR, BOOL,     is_muted,         13)
 #define meshtastic_NodeInfo_position_MSGTYPE meshtastic_Position
 #define meshtastic_NodeInfo_device_metrics_MSGTYPE meshtastic_DeviceMetrics
 
+#define meshtastic_NodeInfoBatch_FIELDLIST(X, a) \
+X(a, CALLBACK, REPEATED, MESSAGE,  items,             1)
+#define meshtastic_NodeInfoBatch_CALLBACK pb_default_field_callback
+#define meshtastic_NodeInfoBatch_DEFAULT NULL
+#define meshtastic_NodeInfoBatch_items_MSGTYPE meshtastic_NodeInfo
+
 #define meshtastic_MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, UINT32,   reboot_count,      8) \
@@ -1926,7 +1946,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,metadata,metadata),  13) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),  14) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,clientNotification,clientNotification),  16) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfig),  17)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfig),  17) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,node_info_batch,node_info_batch),  18)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -1943,6 +1964,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfi
 #define meshtastic_FromRadio_payload_variant_fileInfo_MSGTYPE meshtastic_FileInfo
 #define meshtastic_FromRadio_payload_variant_clientNotification_MSGTYPE meshtastic_ClientNotification
 #define meshtastic_FromRadio_payload_variant_deviceuiConfig_MSGTYPE meshtastic_DeviceUIConfig
+#define meshtastic_FromRadio_payload_variant_node_info_batch_MSGTYPE meshtastic_NodeInfoBatch
 
 #define meshtastic_ClientNotification_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, UINT32,   reply_id,          1) \
@@ -2098,6 +2120,7 @@ extern const pb_msgdesc_t meshtastic_StatusMessage_msg;
 extern const pb_msgdesc_t meshtastic_MqttClientProxyMessage_msg;
 extern const pb_msgdesc_t meshtastic_MeshPacket_msg;
 extern const pb_msgdesc_t meshtastic_NodeInfo_msg;
+extern const pb_msgdesc_t meshtastic_NodeInfoBatch_msg;
 extern const pb_msgdesc_t meshtastic_MyNodeInfo_msg;
 extern const pb_msgdesc_t meshtastic_LogRecord_msg;
 extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
@@ -2133,6 +2156,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_MqttClientProxyMessage_fields &meshtastic_MqttClientProxyMessage_msg
 #define meshtastic_MeshPacket_fields &meshtastic_MeshPacket_msg
 #define meshtastic_NodeInfo_fields &meshtastic_NodeInfo_msg
+#define meshtastic_NodeInfoBatch_fields &meshtastic_NodeInfoBatch_msg
 #define meshtastic_MyNodeInfo_fields &meshtastic_MyNodeInfo_msg
 #define meshtastic_LogRecord_fields &meshtastic_LogRecord_msg
 #define meshtastic_QueueStatus_fields &meshtastic_QueueStatus_msg
@@ -2156,9 +2180,11 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ChunkedPayloadResponse_fields &meshtastic_ChunkedPayloadResponse_msg
 
 /* Maximum encoded size of messages (where known) */
+/* meshtastic_NodeInfoBatch_size depends on runtime parameters */
+/* meshtastic_FromRadio_size depends on runtime parameters */
 /* meshtastic_resend_chunks_size depends on runtime parameters */
 /* meshtastic_ChunkedPayloadResponse_size depends on runtime parameters */
-#define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
+#define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_ToRadio_size
 #define meshtastic_ChunkedPayload_size           245
 #define meshtastic_ClientNotification_size       482
 #define meshtastic_Compressed_size               239
@@ -2166,7 +2192,6 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_DeviceMetadata_size           54
 #define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
-#define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                6
 #define meshtastic_KeyVerificationFinal_size     65
 #define meshtastic_KeyVerificationNumberInform_size 58

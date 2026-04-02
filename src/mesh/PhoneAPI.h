@@ -13,15 +13,14 @@
 // Make sure that we never let our packets grow too large for one BLE packet
 #define MAX_TO_FROM_RADIO_SIZE 512
 
-#if meshtastic_FromRadio_size > MAX_TO_FROM_RADIO_SIZE
-#error "meshtastic_FromRadio_size is too large for our BLE packets"
-#endif
 #if meshtastic_ToRadio_size > MAX_TO_FROM_RADIO_SIZE
 #error "meshtastic_ToRadio_size is too large for our BLE packets"
 #endif
 
 #define SPECIAL_NONCE_ONLY_CONFIG 69420
 #define SPECIAL_NONCE_ONLY_NODES 69421 // ( ͡° ͜ʖ ͡°)
+#define SPECIAL_NONCE_BATCH 69422
+#define SPECIAL_NONCE_BATCH_ONLY_NODES 69423
 
 /**
  * Provides our protobuf based API which phone/PC clients can use to talk to our device
@@ -87,6 +86,9 @@ class PhoneAPI
     static constexpr size_t kNodePrefetchDepth = 4;
     // Protect nodeInfoForPhone + nodeInfoQueue because NimBLE callbacks run in a separate FreeRTOS task.
     concurrency::Lock nodeInfoMutex;
+
+    // When true, bundle multiple NodeInfos per FromRadio packet (opt-in via batch nonce)
+    bool batchNodeInfo = false;
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
