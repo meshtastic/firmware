@@ -67,9 +67,9 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Init settings, and customize defaults
-    inkhud->persistence->settings.userTiles.maxCount = 4;              // 960x540 fits up to 4 tiles comfortably
-    inkhud->persistence->settings.rotation = 0;                        // Landscape (natural hardware orientation)
-    inkhud->persistence->settings.userTiles.count = 2;                 // Two tiles by default
+    inkhud->persistence->settings.userTiles.maxCount = 2;
+    inkhud->persistence->settings.rotation = 3;
+    inkhud->persistence->settings.userTiles.count = 1;                 // One tile by default, keep it simple
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
 
     // Pick applets
