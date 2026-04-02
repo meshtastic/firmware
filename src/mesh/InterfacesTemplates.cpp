@@ -1,5 +1,7 @@
 #include "LR11x0Interface.cpp"
 #include "LR11x0Interface.h"
+#include "LR20x0Interface.cpp"
+#include "LR20x0Interface.h"
 #include "SX126xInterface.cpp"
 #include "SX126xInterface.h"
 #include "SX128xInterface.cpp"
@@ -20,6 +22,9 @@ template class SX128xInterface<SX1280>;
 template class LR11x0Interface<LR1110>;
 template class LR11x0Interface<LR1120>;
 template class LR11x0Interface<LR1121>;
+#endif
+#if RADIOLIB_EXCLUDE_LR20X0 != 1
+template class LR20x0Interface<LR2021>;
 #endif
 #ifdef ARCH_STM32WL
 template class SX126xInterface<STM32WLx>;

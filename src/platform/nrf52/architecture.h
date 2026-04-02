@@ -109,6 +109,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_WIO_WM1110
 #elif defined(TRACKER_T1000_E)
 #define HW_VENDOR meshtastic_HardwareModel_TRACKER_T1000_E
+#elif defined(TRACKER_T1000_E_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_TRACKER_T1000_E_PRO
 #elif defined(ME25LS01_4Y10TD)
 #define HW_VENDOR meshtastic_HardwareModel_ME25LS01_4Y10TD
 #elif defined(MS24SF1)
