@@ -151,14 +151,19 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                         LOG_INFO("Traffic management: exhausting hops for 0x%08x, setting hop_limit=0", getFrom(p));
                     } else if (shouldDecrementHopLimit(p)) {
                         // Use shared logic to determine if hop_limit should be decremented
-                        tosend->hop_limit--; // bump down the hop count
+                        if (tosend->hop_limit > 0)
+                            tosend->hop_limit--; // bump down the hop count
                     } else {
                         LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE rebroadcast: preserving hop_limit");
                     }
 #if USERPREFS_EVENT_MODE
                     if (tosend->hop_limit > 2) {
-                        // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                        tosend->hop_start -= (tosend->hop_limit - 2);
+                        // Correct hop_limit to max 2 for event mode, adjusting hop_start to preserve hops-away metric.
+                        uint8_t reduction = tosend->hop_limit - 2;
+                        if (tosend->hop_start >= reduction)
+                            tosend->hop_start -= reduction;
+                        else
+                            tosend->hop_start = 0; // clamp to prevent uint8_t underflow
                         tosend->hop_limit = 2;
                     }
 #endif
