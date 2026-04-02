@@ -192,15 +192,14 @@ PacketId generatePacketId()
         didInit = true;
 
         // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
-        // Note: we mask the high order bit to ensure that we never pass a 'negative' number to random
-        rollingPacketId = random(UINT32_MAX & 0x7fffffff);
+        rollingPacketId = cryptoSecureRandom32();
         LOG_DEBUG("Initial packet id %u", rollingPacketId);
     }
 
     rollingPacketId++;
 
-    rollingPacketId &= ID_COUNTER_MASK;                                    // Mask out the top 22 bits
-    PacketId id = rollingPacketId | random(UINT32_MAX & 0x7fffffff) << 10; // top 22 bits
+    rollingPacketId &= ID_COUNTER_MASK;                                         // Mask out the top 22 bits
+    PacketId id = rollingPacketId | (cryptoSecureRandom32() & 0xFFFFFC00); // top 22 bits from CSPRNG
     LOG_DEBUG("Partially randomized packet id %u", id);
     return id;
 }

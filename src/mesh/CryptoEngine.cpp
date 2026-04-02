@@ -29,7 +29,8 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     if (myNodeInfo.device_id.size == 16) {
         CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
     }
-    auto noise = random();
+    uint32_t noise;
+    CryptRNG.rand((uint8_t *)&noise, sizeof(noise));
     CryptRNG.stir((uint8_t *)&noise, sizeof(noise));
 
     LOG_DEBUG("Generate Curve25519 keypair");
@@ -106,11 +107,12 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
                                      uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
     uint8_t *auth;
-    long extraNonceTmp = random();
+    uint32_t extraNonceTmp;
+    RNG.rand((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp));
     auth = bytesOut + numBytes;
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
-    LOG_DEBUG("Random nonce value: %d", extraNonceTmp);
+    LOG_DEBUG("Random nonce value: %u", extraNonceTmp);
     if (remotePublic.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found", toNode);
         return false;
@@ -145,7 +147,11 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
 bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
                                      size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
-    const uint8_t *auth = bytes + numBytes - 12; // set to last 8 bytes of text?
+    if (numBytes < 12) {
+        LOG_WARN("PKI decrypt: packet too small (%u bytes), need at least 12 for tag+nonce", numBytes);
+        return false;
+    }
+    const uint8_t *auth = bytes + numBytes - 12; // 8-byte CCM tag + 4-byte extraNonce
     uint32_t extraNonce;                         // pointer was not really used
     memcpy(&extraNonce, auth + 8,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
@@ -290,3 +296,14 @@ void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extr
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;
 #endif
+
+uint32_t cryptoSecureRandom32()
+{
+    uint32_t val;
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    RNG.rand((uint8_t *)&val, sizeof(val));
+#else
+    val = random(UINT32_MAX);
+#endif
+    return val;
+}

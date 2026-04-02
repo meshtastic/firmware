@@ -95,3 +95,9 @@ class CryptoEngine
 };
 
 extern CryptoEngine *crypto;
+
+/**
+ * Generate a cryptographically secure 32-bit random number.
+ * Uses hardware CSPRNG (RNG) when PKI is available, falls back to random() on minimal builds.
+ */
+uint32_t cryptoSecureRandom32();
