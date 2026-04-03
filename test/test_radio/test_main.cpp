@@ -26,9 +26,7 @@ class TestableRadioInterface : public RadioInterface
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }
 
-    // Stubs for pure virtual methods
-    bool isActivelyReceiving() override { return false; }
-    bool isRadioOnline() override { return false; }
+    // Stubs for pure virtual methods required by RadioInterface
     uint32_t getPacketTime(uint32_t, bool) override { return 0; }
     ErrorCode send(meshtastic_MeshPacket *p) override { return ERRNO_OK; }
 };
