@@ -122,8 +122,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     initNonce(fromNode, packetNum, extraNonceTmp);
 
     // Calculate the shared secret with the destination node and encrypt
-    printBytes("Attempt encrypt with nonce: ", nonce, 13);
-    printBytes("Attempt encrypt with shared_key starting with: ", shared_key, 8);
+    LOG_DEBUG("PKI encrypt: nonce and shared key set");
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
                auth); // this can write up to 15 bytes longer than numbytes past bytesOut
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
@@ -163,8 +162,7 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_publ
     hash(shared_key, 32);
 
     initNonce(fromNode, packetNum, extraNonce);
-    printBytes("Attempt decrypt with nonce: ", nonce, 13);
-    printBytes("Attempt decrypt with shared_key starting with: ", shared_key, 8);
+    LOG_DEBUG("PKI decrypt: nonce and shared key set");
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
 }
 

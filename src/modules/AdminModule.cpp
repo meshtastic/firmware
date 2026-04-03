@@ -1467,15 +1467,14 @@ void AdminModule::setPassKey(meshtastic_AdminMessage *res)
     }
     memcpy(res->session_passkey.bytes, session_passkey, 8);
     res->session_passkey.size = 8;
-    printBytes("Set admin key to ", res->session_passkey.bytes, 8);
+    LOG_DEBUG("Session passkey set");
     // if halfway to session_expire, regenerate session_passkey, reset the timeout
     // set the key in the packet
 }
 
 bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
 { // check that the key in the packet is still valid
-    printBytes("Incoming session key: ", res->session_passkey.bytes, 8);
-    printBytes("Expected session key: ", session_passkey, 8);
+    LOG_DEBUG("Checking session passkey");
     return (session_time + 300 > millis() / 1000 && res->session_passkey.size == 8 &&
             memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
 }
