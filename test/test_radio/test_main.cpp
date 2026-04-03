@@ -187,6 +187,11 @@ void setUp(void)
 {
     mockMeshService = new MockMeshService();
     service = mockMeshService;
+
+    // RadioInterface computes slotTimeMsec during construction and expects myRegion to be valid.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
     testRadio = new TestableRadioInterface();
 }
 void tearDown(void)
