@@ -247,7 +247,7 @@ static size_t calculateBatchCount(std::deque<meshtastic_NodeInfo> &items, size_t
 {
     size_t totalSize = 0;
     size_t count = 0;
-    for (auto &info : items) {
+    for (const auto &info : items) {
         pb_ostream_t sizestream = PB_OSTREAM_SIZING;
         if (!pb_encode(&sizestream, meshtastic_NodeInfo_fields, &info))
             break;
@@ -566,7 +566,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 LOG_DEBUG("nodeinfo batch: %d items, %d/%d total", batchCount, readIndex, nodeDB->getNumMeshNodes());
             }
 
-            // Set up the callback-based encoding. The context must stay alive through pb_encode_to_bytes.
+            // Use a local FromRadio so the callback context pointer doesn't outlive its scope.
+            meshtastic_FromRadio batchRadio = {};
             NodeInfoBatchEncodeContext ctx;
             {
                 concurrency::LockGuard guard(&nodeInfoMutex);
@@ -574,12 +575,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 ctx.itemCount = batchCount;
             }
 
-            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_batch_tag;
-            fromRadioScratch.node_info_batch.items.funcs.encode = nodeInfoBatchEncodeCallback;
-            fromRadioScratch.node_info_batch.items.arg = &ctx;
+            batchRadio.which_payload_variant = meshtastic_FromRadio_node_info_batch_tag;
+            batchRadio.node_info_batch.items.funcs.encode = nodeInfoBatchEncodeCallback;
+            batchRadio.node_info_batch.items.arg = &ctx;
 
-            // Encode directly here since the callback context is on the stack
-            size_t numbytes = pb_encode_to_bytes(buf, MAX_TO_FROM_RADIO_SIZE, &meshtastic_FromRadio_msg, &fromRadioScratch);
+            size_t numbytes = pb_encode_to_bytes(buf, MAX_TO_FROM_RADIO_SIZE, &meshtastic_FromRadio_msg, &batchRadio);
 
             // Remove consumed items from the queue
             {
