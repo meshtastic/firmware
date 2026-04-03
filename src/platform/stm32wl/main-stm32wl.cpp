@@ -77,21 +77,24 @@ typedef struct __attribute__((packed)) ContextStateFrame {
         }                                                                                                                        \
     } while (0)
 
-char hardfault_message_buffer[256];
+static char hardfault_message_buffer[256];
 
 // printf directly using srcwrapper's debug UART function.
-void debug_printf(const char *format, ...)
+static void debug_printf(const char *format, ...)
 {
     va_list args;
     va_start(args, format);
-    size_t length = vsprintf(hardfault_message_buffer, format, args);
-    uart_debug_write((uint8_t *)hardfault_message_buffer, length);
+    int length = vsnprintf(hardfault_message_buffer, sizeof(hardfault_message_buffer), format, args);
     va_end(args);
+
+    if (length < 0)
+        return;
+    uart_debug_write((uint8_t *)hardfault_message_buffer, min((unsigned int)length, sizeof(hardfault_message_buffer) - 1));
 }
 
 // N picked by guessing
 #define DOT_TIME 1200000
-void dot()
+static void dot()
 {
     digitalWrite(LED_POWER, LED_STATE_ON);
     for (volatile int i = 0; i < DOT_TIME; i++) { /* busy wait */
@@ -100,16 +103,18 @@ void dot()
     for (volatile int i = 0; i < DOT_TIME; i++) { /* busy wait */
     }
 }
-void dash()
+
+static void dash()
 {
     digitalWrite(LED_POWER, LED_STATE_ON);
-    for (volatile int i = 0; i < (DOT_TIME); i++) { /* busy wait */
+    for (volatile int i = 0; i < (DOT_TIME * 3); i++) { /* busy wait */
     }
     digitalWrite(LED_POWER, LED_STATE_OFF);
     for (volatile int i = 0; i < DOT_TIME; i++) { /* busy wait */
     }
 }
-void space()
+
+static void space()
 {
     for (volatile int i = 0; i < (DOT_TIME * 3); i++) { /* busy wait */
     }
@@ -119,14 +124,6 @@ void space()
 // does not get optimized away
 extern "C" __attribute__((optimize("O0"))) void HardFault_Handler_C(sContextStateFrame *frame)
 {
-    uint32_t r0;
-    uint32_t r1;
-    uint32_t r2;
-    uint32_t r3;
-    uint32_t r12;
-    uint32_t lr;
-    uint32_t return_address;
-    uint32_t xpsr;
     debug_printf("HardFault!\r\n");
     debug_printf("r0: %08x\r\n", frame->r0);
     debug_printf("r1: %08x\r\n", frame->r1);
