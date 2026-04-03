@@ -14,6 +14,25 @@ class MockMeshService : public MeshService
 
 static MockMeshService *mockMeshService;
 
+// Test shim to expose protected radio parameters set by applyModemConfig()
+class TestableRadioInterface : public RadioInterface
+{
+  public:
+    TestableRadioInterface() : RadioInterface() {}
+    uint8_t getCr() const { return cr; }
+    uint8_t getSf() const { return sf; }
+    float getBw() const { return bw; }
+
+    // Override reconfigure to call the base which invokes applyModemConfig()
+    bool reconfigure() override { return RadioInterface::reconfigure(); }
+
+    // Stubs for pure virtual methods
+    bool isActivelyReceiving() override { return false; }
+    bool isRadioOnline() override { return false; }
+    uint32_t getPacketTime(uint32_t, bool) override { return 0; }
+    ErrorCode send(meshtastic_MeshPacket *p) override { return ERRNO_OK; }
+};
+
 static void test_bwCodeToKHz_specialMappings()
 {
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 31.25f, bwCodeToKHz(31));
@@ -100,13 +119,82 @@ static void test_clampConfigLora_validPresetUnchanged()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
 }
 
+// -----------------------------------------------------------------------
+// applyModemConfig() coding rate tests (via reconfigure)
+// -----------------------------------------------------------------------
+
+static TestableRadioInterface *testRadio;
+
+// After fresh flash: coding_rate=0, use_preset=true, modem_preset=LONG_FAST
+// CR should come from the preset (5 for LONG_FAST), not from the zero default.
+static void test_applyModemConfig_freshFlashCodingRateNotZero()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    // coding_rate is 0 (default after init_zero, same as fresh flash)
+
+    testRadio->reconfigure();
+
+    // LONG_FAST preset has cr=5; must never be 0
+    TEST_ASSERT_EQUAL_UINT8(5, testRadio->getCr());
+    TEST_ASSERT_EQUAL_UINT8(11, testRadio->getSf());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 250.0f, testRadio->getBw());
+}
+
+// When coding_rate matches the preset exactly, should still use the preset value
+static void test_applyModemConfig_codingRateMatchesPreset()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    config.lora.coding_rate = 8; // LONG_SLOW default is cr=8
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT8(8, testRadio->getCr());
+}
+
+// Custom CR higher than preset should be used
+static void test_applyModemConfig_customCodingRateHigherThanPreset()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.coding_rate = 7; // LONG_FAST preset has cr=5, 7 > 5
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT8(7, testRadio->getCr());
+}
+
+// Custom CR lower than preset: preset wins (higher is more robust)
+static void test_applyModemConfig_customCodingRateLowerThanPreset()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    config.lora.coding_rate = 5; // LONG_SLOW preset has cr=8, 5 < 8
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT8(8, testRadio->getCr());
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
     service = mockMeshService;
+    testRadio = new TestableRadioInterface();
 }
 void tearDown(void)
 {
+    delete testRadio;
+    testRadio = nullptr;
     service = nullptr;
     delete mockMeshService;
     mockMeshService = nullptr;
@@ -128,6 +216,10 @@ void setup()
     RUN_TEST(test_validateConfigLora_rejectsInvalidPresetForRegion);
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
+    RUN_TEST(test_applyModemConfig_freshFlashCodingRateNotZero);
+    RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
+    RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
+    RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
     exit(UNITY_END());
 }
 
