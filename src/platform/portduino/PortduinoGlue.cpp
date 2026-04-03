@@ -497,7 +497,7 @@ void portduinoSetup()
             dmac[4] = hash[4];
             dmac[5] = hash[5];
             char macBuf[13] = {0};
-            sprintf(macBuf, "%02X%02X%02X%02X%02X%02X", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
+            snprintf(macBuf, sizeof(macBuf), "%02X%02X%02X%02X%02X%02X", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
             portduino_config.mac_address = macBuf;
         }
     }

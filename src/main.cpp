@@ -837,7 +837,8 @@ void setup()
             setenv("TZ", "GMT0", 1);
         } else {
             setenv("TZ", (const char *)slipstreamTZString, 1);
-            strcpy(config.device.tzdef, (const char *)slipstreamTZString);
+            strncpy(config.device.tzdef, (const char *)slipstreamTZString, sizeof(config.device.tzdef) - 1);
+            config.device.tzdef[sizeof(config.device.tzdef) - 1] = '\0';
         }
     }
     tzset();
