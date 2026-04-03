@@ -282,7 +282,7 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     // append \n to format
     size_t len = strlen(format);
     auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
-    strcpy(newFormat.get(), format);
+    memcpy(newFormat.get(), format, len);
     newFormat[len] = '\n';
     newFormat[len + 1] = '\0';
 
@@ -384,7 +384,7 @@ std::string RedirectablePrint::mt_sprintf(const std::string fmt_str, ...)
     va_list ap;
     while (1) {
         formatted.reset(new char[n]); /* Wrap the plain char array into the unique_ptr */
-        strcpy(&formatted[0], fmt_str.c_str());
+        memcpy(&formatted[0], fmt_str.c_str(), fmt_str.size() + 1);
         va_start(ap, fmt_str);
         int final_n = vsnprintf(&formatted[0], n, fmt_str.c_str(), ap);
         va_end(ap);
