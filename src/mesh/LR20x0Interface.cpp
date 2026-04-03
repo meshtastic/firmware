@@ -174,8 +174,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
-    //
-    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain ? 7 : 0);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
     
