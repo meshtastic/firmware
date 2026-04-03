@@ -11,7 +11,7 @@ PacketCacheEntry *PacketCache::cache(const meshtastic_MeshPacket *p, bool preser
     size_t payload_size =
         (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) ? p->encrypted.size : p->decoded.payload.size;
     if (payload_size > MAX_LORA_PAYLOAD_LEN) {
-        LOG_ERROR("PacketCache: payload too large (%u bytes), dropping", payload_size);
+        LOG_ERROR("PacketCache: payload too large (%zu bytes), dropping", payload_size);
         return NULL;
     }
     PacketCacheEntry *e = (PacketCacheEntry *)malloc(sizeof(PacketCacheEntry) + payload_size +
@@ -140,7 +140,7 @@ bool PacketCache::load(void *src, PacketCacheEntry **entries, size_t num_entries
         PacketCacheEntry e{};
         memcpy(&e, pos, sizeof(PacketCacheEntry));
         if (e.payload_len > MAX_LORA_PAYLOAD_LEN) {
-            LOG_ERROR("PacketCache load: corrupt payload_len %u at entry %u, aborting", e.payload_len, i);
+            LOG_ERROR("PacketCache load: corrupt payload_len %u at entry %zu, aborting", e.payload_len, i);
             for (size_t j = 0; j < i; j++) {
                 size -= sizeof(PacketCacheEntry) + entries[j]->payload_len +
                         (entries[j]->has_metadata ? sizeof(PacketCacheMetadata) : 0);
@@ -151,7 +151,6 @@ bool PacketCache::load(void *src, PacketCacheEntry **entries, size_t num_entries
         }
         size_t entry_len = sizeof(PacketCacheEntry) + e.payload_len + (e.has_metadata ? sizeof(PacketCacheMetadata) : 0);
         entries[i] = (PacketCacheEntry *)malloc(entry_len);
-        size += entry_len;
         if (!entries[i]) {
             LOG_ERROR("Unable to allocate memory for packet cache entry");
             for (size_t j = 0; j < i; j++) {
@@ -162,6 +161,7 @@ bool PacketCache::load(void *src, PacketCacheEntry **entries, size_t num_entries
             }
             return false;
         }
+        size += entry_len;
         memcpy(entries[i], pos, entry_len);
         pos += entry_len;
     }
@@ -204,13 +204,13 @@ void PacketCache::rehydrate(const PacketCacheEntry *e, meshtastic_MeshPacket *p)
     if (e->encrypted) {
         size_t len = (e->payload_len <= sizeof(p->encrypted.bytes)) ? e->payload_len : sizeof(p->encrypted.bytes);
         if (len < e->payload_len)
-            LOG_WARN("PacketCache rehydrate: truncating encrypted payload from %u to %u bytes", e->payload_len, len);
+            LOG_WARN("PacketCache rehydrate: truncating encrypted payload from %u to %zu bytes", e->payload_len, len);
         memcpy(p->encrypted.bytes, payload, len);
         p->encrypted.size = len;
     } else {
         size_t len = (e->payload_len <= sizeof(p->decoded.payload.bytes)) ? e->payload_len : sizeof(p->decoded.payload.bytes);
         if (len < e->payload_len)
-            LOG_WARN("PacketCache rehydrate: truncating decoded payload from %u to %u bytes", e->payload_len, len);
+            LOG_WARN("PacketCache rehydrate: truncating decoded payload from %u to %zu bytes", e->payload_len, len);
         memcpy(p->decoded.payload.bytes, payload, len);
         p->decoded.payload.size = len;
         if (e->has_metadata) {
