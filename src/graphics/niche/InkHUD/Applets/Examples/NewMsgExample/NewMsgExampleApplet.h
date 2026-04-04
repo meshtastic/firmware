@@ -34,7 +34,7 @@ class NewMsgExampleApplet : public Applet, public SinglePortModule
     NewMsgExampleApplet() : SinglePortModule("NewMsgExampleApplet", meshtastic_PortNum_TEXT_MESSAGE_APP) {}
 
     // All drawing happens here
-    void onRender() override;
+    void onRender(bool full) override;
 
     // Your applet might also want to use some of these
     // Useful for setting up or tidying up

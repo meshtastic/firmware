@@ -5,10 +5,10 @@
 
 using namespace NicheGraphics;
 
-void InkHUD::PositionsApplet::onRender()
+void InkHUD::PositionsApplet::onRender(bool full)
 {
     // Draw the usual map applet first
-    MapApplet::onRender();
+    MapApplet::onRender(full);
 
     // Draw our latest "node of interest" as a special marker
     // -------------------------------------------------------

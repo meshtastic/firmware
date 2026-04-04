@@ -45,13 +45,10 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (35)
-#define PIN_LED2 (36)
-
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
+#define LED_BLUE (36)
 
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_NOTIFICATION LED_BLUE
 
 #define LED_STATE_ON 1 // State when LED is litted
 
@@ -62,8 +59,6 @@ extern "C" {
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion such as the RAK14014 or RAK14015 TFT modules
 #define BUTTON_NEED_PULLUP
 #define PIN_BUTTON2 12
-#define PIN_BUTTON3 24
-#define PIN_BUTTON4 25
 
 /*
  * Analog pins
@@ -271,8 +266,6 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (1.73F)
 
-#define HAS_RTC 1
-
 #define RAK_4631 1
 
 #define AQ_SET_PIN 10
@@ -283,7 +276,6 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 #define RAK14014 // Tell it we have a RAK14014
 #define USER_SETUP_LOADED 1
-#define DISABLE_ALL_LIBRARY_WARNINGS 1
 #define ST7789_DRIVER 1
 #define TFT_WIDTH 240
 #define TFT_HEIGHT 320
@@ -311,7 +303,6 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 #define USE_VIRTUAL_KEYBOARD 1
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only

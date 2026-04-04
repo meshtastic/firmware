@@ -24,6 +24,11 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
+// Weak empty variant shutdown prep function.
+// May be redefined by variant files.
+void variant_shutdown() __attribute__((weak));
+void variant_shutdown() {}
+
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
@@ -250,6 +255,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 
 #endif // #end ESP32S3_WAKE_TYPE
 #endif
+    variant_shutdown();
 
 #if SOC_PM_SUPPORT_RTC_PERIPH_PD
     // We want RTC peripherals to stay on

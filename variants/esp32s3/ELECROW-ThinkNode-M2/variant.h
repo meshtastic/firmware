@@ -1,6 +1,3 @@
-// Status
-#define LED_PIN 1
-
 #define PIN_BUTTON1 47 // 功能键
 #define PIN_BUTTON2 4  // 电源键
 #define ALT_BUTTON_PIN PIN_BUTTON2

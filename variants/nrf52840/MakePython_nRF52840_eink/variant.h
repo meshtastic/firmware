@@ -27,15 +27,10 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (32 + 10) // LED        P1.15
-#define PIN_LED2 (-1)      //
-
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
 
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
 
-#define LED_STATE_ON 0 // State when LED is litted
+#define LED_STATE_ON 0 // State when LED is lit
 
 /*
  * Buttons

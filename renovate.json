@@ -4,6 +4,7 @@
     ":dependencyDashboard",
     ":semanticCommitTypeAll(chore)",
     ":ignoreModulesAndTests",
+    "schedule:daily",
     "group:recommended",
     "replacements:all",
     "workarounds:all"

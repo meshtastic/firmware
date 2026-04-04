@@ -13,7 +13,7 @@
 #define ADC_CHANNEL ADC_CHANNEL_3
 
 // LED
-#define LED_PIN 21
+#define LED_POWER 21
 
 // Button
 #define BUTTON_PIN 0

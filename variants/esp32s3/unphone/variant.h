@@ -54,7 +54,7 @@
 
 #define SD_SPI_FREQUENCY 25000000
 
-#define LED_PIN 13     // the red part of the RGB LED
+#define LED_POWER 13   // the red part of the RGB LED
 #define LED_STATE_ON 0 // State when LED is lit
 
 #define ALT_BUTTON_PIN 21    // Button 3 - square - top button in landscape mode

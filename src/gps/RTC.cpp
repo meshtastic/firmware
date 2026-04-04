@@ -2,6 +2,7 @@
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "main.h"
+#include "modules/NodeInfoModule.h"
 #include <Throttle.h>
 #include <sys/time.h>
 #include <time.h>
@@ -11,6 +12,14 @@ uint32_t lastSetFromPhoneNtpOrGps = 0;
 
 static uint32_t lastTimeValidationWarning = 0;
 static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
+
+static void triggerNodeInfoCheckOnTimeSource(RTCQuality oldQuality, RTCQuality newQuality)
+{
+    if (oldQuality == RTCQualityNone && newQuality > RTCQualityNone && nodeInfoModule) {
+        LOG_DEBUG("Time source acquired (%s -> %s), triggering NodeInfo recheck", RtcName(oldQuality), RtcName(newQuality));
+        nodeInfoModule->triggerImmediateNodeInfoCheck();
+    }
+}
 
 RTCQuality getRTCQuality()
 {
@@ -61,9 +70,11 @@ RTCSetResult readFromRTC()
         LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
+            RTCQuality oldQuality = currentQuality;
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
+            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     } else {
@@ -72,11 +83,13 @@ RTCSetResult readFromRTC()
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
     if (rtc_found.address == PCF8563_RTC) {
+        SensorPCF8563 rtc;
 #elif defined(PCF85063_RTC)
     if (rtc_found.address == PCF85063_RTC) {
+        SensorPCF85063 rtc;
+
 #endif
         uint32_t now = millis();
-        SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
         rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
@@ -103,9 +116,11 @@ RTCSetResult readFromRTC()
         LOG_DEBUG("Read RTC time from %s getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t.tm_year + 1900,
                   t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
+            RTCQuality oldQuality = currentQuality;
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
+            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     } else {
@@ -137,9 +152,11 @@ RTCSetResult readFromRTC()
             }
 #endif
             if (currentQuality == RTCQualityNone) {
+                RTCQuality oldQuality = currentQuality;
                 timeStartMsec = now;
                 zeroOffsetSecs = tv.tv_sec;
                 currentQuality = RTCQualityDevice;
+                triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
             }
             return RTCSetResultSuccess;
         }
@@ -212,6 +229,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
     }
 
     if (shouldSet) {
+        RTCQuality oldQuality = currentQuality;
         currentQuality = q;
         lastSetMsec = now;
         if (currentQuality >= RTCQualityNTP) {
@@ -221,7 +239,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         // This delta value works on all platforms
         timeStartMsec = now;
         zeroOffsetSecs = tv->tv_sec;
-        // If this platform has a setable RTC, set it
+        // If this platform has a settable RTC, set it
 #ifdef RV3028_RTC
         if (rtc_found.address == RV3028_RTC) {
             Melopero_RV3028 rtc;
@@ -240,10 +258,12 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
         if (rtc_found.address == PCF8563_RTC) {
+            SensorPCF8563 rtc;
 #elif defined(PCF85063_RTC)
         if (rtc_found.address == PCF85063_RTC) {
+            SensorPCF85063 rtc;
+
 #endif
-            SensorRtcHelper rtc;
 
 #if WIRE_INTERFACES_COUNT == 2
             rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
@@ -276,11 +296,8 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         settimeofday(tv, NULL);
 #endif
 
-        // nrf52 doesn't have a readable RTC (yet - software not written)
-#if HAS_RTC
         readFromRTC();
-#endif
-
+        triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
         return RTCSetResultSuccess;
     } else {
         return RTCSetResultNotSet; // RTC was already set with a higher quality time
@@ -312,7 +329,7 @@ const char *RtcName(RTCQuality quality)
  * @param t The time to potentially set the RTC to.
  * @return True if the RTC was set to the provided time, false otherwise.
  */
-RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
 {
     /* Convert to unix time
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
@@ -397,12 +414,23 @@ uint32_t getValidTime(RTCQuality minQuality, bool local)
     return (currentQuality >= minQuality) ? getTime(local) : 0;
 }
 
-time_t gm_mktime(struct tm *tm)
+#ifdef PIO_UNIT_TESTING
+void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot)
+{
+    currentQuality = RTCQualityNone;
+    zeroOffsetSecs = 0;
+    timeStartMsec = millis() - (secondsSinceBoot * 1000);
+    lastSetFromPhoneNtpOrGps = 0;
+    lastTimeValidationWarning = 0;
+}
+#endif
+
+time_t gm_mktime(const struct tm *tm)
 {
 #if !MESHTASTIC_EXCLUDE_TZ
     time_t result = 0;
 
-    // First, get us to the start of tm->year, by calcuating the number of days since the Unix epoch.
+    // First, get us to the start of tm->year, by calculating the number of days since the Unix epoch.
     int year = 1900 + tm->tm_year; // tm_year is years since 1900
     int year_minus_one = year - 1;
     int days_before_this_year = 0;
@@ -413,8 +441,8 @@ time_t gm_mktime(struct tm *tm)
     days_before_this_year -= 719162; // (1969 * 365 + 1969 / 4 - 1969 / 100 + 1969 / 400);
 
     // Now, within this tm->year, compute the days *before* this tm->month starts.
-    int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
-    int days_this_year_before_this_month = days_before_month[tm->tm_mon];                // tm->tm_mon is 0..11
+    static const int days_before_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334}; // non-leap year
+    int days_this_year_before_this_month = days_before_month[tm->tm_mon];                             // tm->tm_mon is 0..11
 
     // If this is a leap year, and we're past February, add a day:
     if (tm->tm_mon >= 2 && (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)) {
@@ -435,6 +463,7 @@ time_t gm_mktime(struct tm *tm)
 
     return result;
 #else
-    return mktime(tm);
+    struct tm tmCopy = *tm;
+    return mktime(&tmCopy);
 #endif
 }

@@ -2,8 +2,10 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "NodeStatus.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
@@ -28,7 +30,8 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     auto p = *pptr;
 
-    if (mp.decoded.want_response) {
+    // Suppress replies to senders we've replied to recently (12H window)
+    if (mp.decoded.want_response && !isFromUs(&mp)) {
         const NodeNum sender = getFrom(&mp);
         const uint32_t now = mp.rx_time ? mp.rx_time : getTime();
         auto it = lastNodeInfoSeen.find(sender);
@@ -115,9 +118,21 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
     }
 }
 
+void NodeInfoModule::triggerImmediateNodeInfoCheck()
+{
+    LOG_DEBUG("NodeInfo: scheduling immediate periodic check");
+    setIntervalFromNow(0);
+}
+
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
-    if (suppressReplyForCurrentRequest) {
+    // Only apply suppression when actually replying to someone else's request, not for periodic broadcasts.
+    const bool isReplyingToExternalRequest = currentRequest &&
+                                             currentRequest->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                                             currentRequest->decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
+                                             currentRequest->decoded.want_response && !isFromUs(currentRequest);
+
+    if (suppressReplyForCurrentRequest && isReplyingToExternalRequest) {
         LOG_DEBUG("Skip send NodeInfo since we heard the requester <12h ago");
         ignoreRequest = true;
         suppressReplyForCurrentRequest = false;
@@ -129,14 +144,18 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         LOG_DEBUG("Skip send NodeInfo > 40%% ch. util");
         return NULL;
     }
-    // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
-    if (!shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 5 * 60 * 1000)) {
-        LOG_DEBUG("Skip send NodeInfo since we sent it <5min ago");
+
+    // Use graduated scaling based on active mesh size (10 minute base, scales with congestion coefficient)
+    uint32_t timeoutMs = Default::getConfiguredOrDefaultMsScaled(0, 10 * 60, nodeStatus->getNumOnline());
+    uint32_t lastNodeInfo = transmitHistory ? transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP) : 0;
+    if (!shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, timeoutMs)) {
+        LOG_DEBUG("Skip send NodeInfo since we sent it <%us ago", timeoutMs / 1000);
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
-    } else if (shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 60 * 1000)) {
+    } else if (shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, 60 * 1000)) {
+        // For interactive/urgent requests (e.g., user-triggered or implicit requests), use a shorter 60s timeout
         LOG_DEBUG("Skip send NodeInfo since we sent it <60s ago");
-        ignoreRequest = true; // Mark it as ignored for MeshModule
+        ignoreRequest = true;
         return NULL;
     } else {
         ignoreRequest = false; // Don't ignore requests anymore
@@ -144,7 +163,7 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
 
         // Strip the public key if the user is licensed
         if (u.is_licensed && u.public_key.size > 0) {
-            u.public_key.bytes[0] = 0;
+            memset(u.public_key.bytes, 0, sizeof(u.public_key.bytes));
             u.public_key.size = 0;
         }
 
@@ -155,7 +174,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         strcpy(u.id, nodeDB->getNodeId().c_str());
 
         LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);
-        lastSentToMesh = millis();
+        if (transmitHistory)
+            transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
         return allocDataProtobuf(u);
     }
 }
