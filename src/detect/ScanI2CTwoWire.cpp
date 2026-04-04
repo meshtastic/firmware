@@ -338,8 +338,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = TDECKKB;
                 }
                 break;
-                SCAN_SIMPLE_CASE(BBQ10_KB_ADDR, BBQ10KB, "BB Q10", (uint8_t)addr.address);
-
+            case BBQ10_KB_ADDR:
+                // Check status register (0xF0) for DS284X status and one-wire reset
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
+                if (registerValue & 0x16) { // One-wire reset after power-on
+                    type = DS248X;
+                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
+                    break;
+                }
+                type = BBQ10KB;
+                logFoundDevice("BB Q10", (uint8_t)addr.address);
+                break;
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "ST7567", (uint8_t)addr.address);
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);
@@ -494,10 +503,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         break;
                     }
 
-                    // Check register 0xF0 for DS284X status and one-wire busy
+                    // Check status register (0xF0) for DS284X status and one-wire reset
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                    LOG_DEBUG("register value 0x%x", registerValue);
-                    if (registerValue & 0x01) { // RAK4631 WisBlock has LIS3DH register at 0x3333
+                    if (registerValue & 0x16) { // One-wire reset after power-on
                         type = DS248X;
                         logFoundDevice("DS248X", (uint8_t)addr.address);
                     }
@@ -544,7 +552,26 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB", (uint8_t)addr.address)
-                SCAN_SIMPLE_CASE(QMC6310U_ADDR, QMC6310U, "QMC6310U", (uint8_t)addr.address)
+            case DS248X_ADDR_ALT3:
+                // Check status register (0xF0) for DS284X status and one-wire reset
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
+                if (registerValue & 0x16) { // One-wire reset after power-on
+                    type = DS248X;
+                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
+                    break;
+                }
+
+            case QMC6310U_ADDR:
+                // Check status register (0xF0) for DS284X status and one-wire reset
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
+                if (registerValue & 0x16) { // One-wire reset after power-on
+                    type = DS248X;
+                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
+                    break;
+                }
+                type = QMC6310U;
+                logFoundDevice("QMC6310U", (uint8_t)addr.address);
+                break;
 
             case QMI8658_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
@@ -570,7 +597,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L", (uint8_t)addr.address)
-                SCAN_SIMPLE_CASE(HMC5883L_ADDR, HMC5883L, "HMC5883L", (uint8_t)addr.address)
+            case HMC5883L_ADDR:
+                // Check status register (0xF0) for DS284X status and one-wire reset
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
+                if (registerValue & 0x16) { // One-wire reset after power-on
+                    type = DS248X;
+                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
+                    break;
+                }
+                type = HMC5883L;
+                logFoundDevice("HMC5883L", (uint8_t)addr.address);
+                break;
 #ifdef HAS_QMA6100P
                 SCAN_SIMPLE_CASE(QMA6100P_ADDR, QMA6100P, "QMA6100P", (uint8_t)addr.address)
 #else
@@ -581,10 +618,20 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
                     type = LIS3DH;
                     logFoundDevice("LIS3DH", (uint8_t)addr.address);
-                } else {
-                    type = BMA423;
-                    logFoundDevice("BMA423", (uint8_t)addr.address);
+                    break;
                 }
+
+                // Check status register (0xF0) for DS284X status and one-wire reset
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
+                if (registerValue & 0x16) { // One-wire reset after power-on
+                    type = DS248X;
+                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
+                    break;
+                }
+
+                type = BMA423;
+                logFoundDevice("BMA423", (uint8_t)addr.address);
+
                 break;
             case TCA9535_ADDR:
             case RAK120352_ADDR:
@@ -632,11 +679,28 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
+            case DFROBOT_RAIN_ADDR:
+                // Check status register (0xF0) for DS284X status and one-wire reset
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
+                if (registerValue & 0x16) { // One-wire reset after power-on
+                    type = DS248X;
+                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
+                    break;
+                }
+                type = DFROBOT_RAIN;
+                logFoundDevice("DFRobot Rain Gauge", (uint8_t)addr.address);
+                break;
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(SCD30_ADDR, SCD30, "SCD30", (uint8_t)addr.address);
             case CST328_ADDR:
+                // Check status register (0xF0) for DS284X status and one-wire reset
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
+                if (registerValue & 0x16) { // One-wire reset after power-on
+                    type = DS248X;
+                    logFoundDevice("DS2482-800", (uint8_t)addr.address);
+                    break;
+                }
                 // Do we have the CST328 or the CST226SE
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xAB), 1);
                 if (registerValue == 0xA9) {

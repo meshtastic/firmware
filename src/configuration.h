@@ -271,7 +271,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LTR553ALS_ADDR 0x23
 #define SEN5X_ADDR 0x69
 #define SCD30_ADDR 0x61
-#define DS248X_ADDR 0x18
+#define DS248X_ADDR 0x18      // same as MCP9808_ADDR, STK8BXX_ADDR and LIS3DH_ADDR
+#define DS248X_ADDR_ALT1 0x19 // same as LIS3DH_ADDR_ALT and BMA423_ADDR
+#define DS248X_ADDR_ALT2 0x1A // same as CST328_ADDR
+#define DS248X_ADDR_ALT3 0x1B
+#define DS248X_ADDR_ALT4 0x1C // same as QMC6310U_ADDR
+#define DS248X_ADDR_ALT5 0x1D // same as DFROBOT_RAIN_ADDR
+#define DS248X_ADDR_ALT6 0x1E // same as HMC5883L_ADDR
+#define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
