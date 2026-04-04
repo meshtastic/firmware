@@ -13,10 +13,15 @@
 #include <WiFi.h>
 #endif
 
-#if HAS_ETHERNET && defined(USE_WS5500)
+#if HAS_ETHERNET
+#if defined(ARCH_ESP32) && defined(ETH_PHY_TYPE)
+#include <ETH.h>
+#endif
+#if defined(USE_WS5500)
 #include <ETHClass2.h>
 #define ETH ETH2
-#endif // HAS_ETHERNET
+#endif
+#endif
 
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
@@ -25,7 +30,7 @@
 #endif
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
-static void WiFiEvent(WiFiEvent_t event);
+static void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info);
 #elif defined(ARCH_RP2040) && HAS_WIFI
 #include <SimpleMDNS.h>
 #endif
@@ -70,6 +75,7 @@ meshtastic::Syslog syslog(syslogClient);
 // Startup Ethernet (Universal: Native or SPI)
 bool initEthernet()
 {
+    WiFi.onEvent(WiFiEvent);
     bool ok = false;
 #if defined(ESP32) && defined(ETH_PHY_TYPE)
     // Native ESP32 Ethernet (LAN8720, etc.)
@@ -82,7 +88,6 @@ bool initEthernet()
 #endif
 
     if (ok) {
-        WiFi.onEvent(WiFiEvent);
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         if (xPortGetFreeHeapSize() > 50000) {
             createSSLCert(); // For WebServer
@@ -159,7 +164,7 @@ static void onNetworkConnected()
 #endif
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            initApiServer();
+            initApiServer(SERVER_API_DEFAULT_PORT);
         }
 #endif
         APStartupComplete = true;
@@ -300,7 +305,9 @@ bool initWifi()
 
 #ifndef ARCH_RP2040
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
-        createSSLCert(); // For WebServer
+        if (xPortGetFreeHeapSize() > 50000) {
+            createSSLCert(); // For WebServer
+        }
 #endif
         WiFi.persistent(false); // Disable flash storage for WiFi credentials
 #endif
@@ -379,7 +386,7 @@ IPv6Address GlobalIPv6()
 }
 #endif
 // Called by the Espressif SDK to
-static void WiFiEvent(WiFiEvent_t event)
+static void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info)
 {
     LOG_DEBUG("Network-Event %d: ", event);
 
