@@ -131,6 +131,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/BH1750Sensor.h"
 #endif
 
+#if __has_include(<Adafruit_DS248x.h>)
+#include "Sensor/DS248XSensor.h"
+#endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -240,6 +244,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // TODO Can we scan for multiple sensors connected on the same bus?
     addSensor<SHTXXSensor>(i2cScanner, ScanI2C::DeviceType::SHTXX);
 #endif
+#if __has_include(<Adafruit_DS248x.h>)
+    addSensor<DS248XSensor>(i2cScanner, ScanI2C::DeviceType::DS248X);
+#endif
+
 #endif
 }
 

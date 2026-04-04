@@ -478,7 +478,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         break;
                     }
 #endif
-
                     // Check register 0x07 for 0x0400 response to ID MCP9808 chip.
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
                     if (registerValue == 0x0400) {
@@ -492,6 +491,15 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
                         type = LIS3DH;
                         logFoundDevice("LIS3DH", (uint8_t)addr.address);
+                        break;
+                    }
+
+                    // Check register 0xF0 for DS284X status and one-wire busy
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
+                    LOG_DEBUG("register value 0x%x", registerValue);
+                    if (registerValue & 0x01) { // RAK4631 WisBlock has LIS3DH register at 0x3333
+                        type = DS248X;
+                        logFoundDevice("DS248X", (uint8_t)addr.address);
                     }
                     break;
                 }
