@@ -97,13 +97,13 @@ bool CryptoEngine::ensurePkiKeys(meshtastic_Config_SecurityConfig &security, mes
  * @param toNode The MeshPacket `to` field.
  * @param fromNode The MeshPacket `from` field.
  * @param remotePublic The remote node's Curve25519 public key.
- * @param packetId The MeshPacket `id` field.
+ * @param packetNum The MeshPacket `id` field.
  * @param numBytes Number of bytes of plaintext in the bytes buffer.
  * @param bytes Buffer containing plaintext input.
  * @param bytesOut Output buffer to be populated with encrypted ciphertext.
  */
 bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
-                                     uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
+                                     uint32_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
     uint8_t *auth;
     long extraNonceTmp = random();
@@ -137,12 +137,12 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
  *
  * @param fromNode The MeshPacket `from` field.
  * @param remotePublic The remote node's Curve25519 public key.
- * @param packetId The MeshPacket `id` field.
+ * @param packetNum The MeshPacket `id` field.
  * @param numBytes Number of bytes of ciphertext in the bytes buffer.
  * @param bytes Buffer containing ciphertext input.
  * @param bytesOut Output buffer to be populated with decrypted plaintext.
  */
-bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
+bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint32_t packetNum,
                                      size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
     const uint8_t *auth = bytes + numBytes - 12; // set to last 8 bytes of text?
@@ -237,7 +237,7 @@ void CryptoEngine::setKey(const CryptoKey &k)
  *
  * @param bytes is updated in place
  */
-void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
+void CryptoEngine::encryptPacket(uint32_t fromNode, uint32_t packetId, size_t numBytes, uint8_t *bytes)
 {
     if (key.length > 0) {
         initNonce(fromNode, packetId);
@@ -249,7 +249,7 @@ void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t nu
     }
 }
 
-void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
+void CryptoEngine::decrypt(uint32_t fromNode, uint32_t packetId, size_t numBytes, uint8_t *bytes)
 {
     // For CTR, the implementation is the same
     encryptPacket(fromNode, packetId, numBytes, bytes);
@@ -277,15 +277,13 @@ void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numByte
 /**
  * Init our 128 bit nonce for a new packet
  */
-void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce)
+void CryptoEngine::initNonce(uint32_t fromNode, uint32_t packetId, uint32_t extraNonce)
 {
     memset(nonce, 0, sizeof(nonce));
 
-    // use memcpy to avoid breaking strict-aliasing
-    memcpy(nonce, &packetId, sizeof(uint64_t));
-    memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
-    if (extraNonce)
-        memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
+    memcpy(nonce, &packetId, sizeof(uint32_t));
+    memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
+    memcpy(nonce + sizeof(uint32_t) * 2, &fromNode, sizeof(uint32_t));
 }
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;
