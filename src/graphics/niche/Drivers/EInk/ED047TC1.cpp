@@ -13,7 +13,7 @@
 */
 
 // Ruler diagnostic — uncomment to draw calibration lines at each physical edge.
-#define EINK_EDGE_LINES
+// #define EINK_EDGE_LINES
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
