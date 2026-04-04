@@ -2,11 +2,11 @@
 
     NicheGraphics parallel E-Ink driver for the LilyGo T5-S3-ePaper-Pro (ED047TC1).
 
-    InkHUD buffer format : 1bpp, horizontal bytes, MSB = leftmost pixel, 0xFF = white
-    FastEPD buffer format: 1bpp, horizontal bytes, MSB = leftmost pixel, 0x00 = white
+    InkHUD buffer format : 1bpp, horizontal bytes, MSB = leftmost pixel, 1 = white
+    FastEPD buffer format: 1bpp, horizontal bytes, MSB = leftmost pixel, 1 = white
 
-    The two formats share the same pixel layout — only polarity differs, so a simple
-    byte-wise inversion is all that is required before handing the buffer to FastEPD.
+    Both formats share the same pixel layout and polarity (1 = white, 0 = black),
+    so a direct copy is all that is needed.
 
 */
 
@@ -57,9 +57,9 @@ void ED047TC1::update(uint8_t *imageData, UpdateTypes type)
     const uint32_t bufSize = rowBytes * height;
     uint8_t *cur = epaper->currentBuffer();
 
-    // Invert polarity: InkHUD 0xFF=white → FastEPD 0x00=white
+    // Direct copy: InkHUD and FastEPD both use 1=white, 0=black
     for (uint32_t i = 0; i < bufSize; i++)
-        cur[i] = ~imageData[i];
+        cur[i] = imageData[i];
 
     if (type == FULL) {
         epaper->fullUpdate(CLEAR_SLOW, false);
