@@ -577,29 +577,25 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     bool hasINA()
     {
-        uint8_t ina_addr = config.power.device_battery_ina_address;
-        #ifdef BATTERY_INA_ADDRESS
-        if (!ina_addr) {
-            ina_addr = BATTERY_INA_ADDRESS;
-            config.power.device_battery_ina_address = ina_addr;
-        }
-        #endif
-        if (!ina_addr) {
+        if (!config.power.device_battery_ina_address) {
             return false;
         }
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == ina_addr) {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
             if (!ina219Sensor.isInitialized())
                 return ina219Sensor.runOnce() > 0;
             return ina219Sensor.isRunning();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first == ina_addr) {
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
+                   config.power.device_battery_ina_address) {
             if (!ina226Sensor.isInitialized())
                 return ina226Sensor.runOnce() > 0;
             return ina226Sensor.isRunning();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first == ina_addr) {
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
+                   config.power.device_battery_ina_address) {
             if (!ina260Sensor.isInitialized())
                 return ina260Sensor.runOnce() > 0;
             return ina260Sensor.isRunning();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first == ina_addr) {
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
+                   config.power.device_battery_ina_address) {
             if (!ina3221Sensor.isInitialized())
                 return ina3221Sensor.runOnce() > 0;
             return ina3221Sensor.isRunning();
@@ -618,24 +614,6 @@ Power::Power() : OSThread("Power")
 #ifdef DEBUG_HEAP
     lastheap = memGet.getFreeHeap();
 #endif
-}
-
-bool Power::inaInit()
-{
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-#ifdef BATTERY_INA_ADDRESS
-    if (!config.power.device_battery_ina_address) {
-        config.power.device_battery_ina_address = BATTERY_INA_ADDRESS;
-    }
-#endif
-    if (config.power.device_battery_ina_address) {
-        batteryLevel = &analogLevel;
-        LOG_INFO("Power: INA battery sensor at 0x%x",
-                 config.power.device_battery_ina_address);
-        return true;
-    }
-#endif
-    return false;
 }
 
 bool Power::analogInit()
@@ -731,8 +709,6 @@ bool Power::setup()
     } else if (serialBatteryInit()) {
         found = true;
     } else if (meshSolarInit()) {
-        found = true;
-    } else if (inaInit()) {
         found = true;
     } else if (analogInit()) {
         found = true;
