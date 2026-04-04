@@ -39,6 +39,6 @@ class ethServerPort : public APIServerPort<ethServerAPI, MeshEthernetServer>
     explicit ethServerPort(int port);
 };
 
-void initApiServer(int port = SERVER_API_DEFAULT_PORT);
-void deInitApiServer();
+void initEthApiServer(int port = SERVER_API_DEFAULT_PORT);
+void deInitEthApiServer();
 #endif

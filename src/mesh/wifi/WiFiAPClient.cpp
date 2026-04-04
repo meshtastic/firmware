@@ -7,6 +7,11 @@
 
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
+
+#if HAS_ETHERNET
+#include "mesh/api/ethServerAPI.h"
+#endif
+
 #include "target_specific.h"
 
 #if HAS_WIFI || defined(ARCH_ESP32)
@@ -164,7 +169,11 @@ static void onNetworkConnected()
 #endif
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+#if HAS_ETHERNET
+            initEthApiServer(SERVER_API_DEFAULT_PORT);
+#else
             initApiServer(SERVER_API_DEFAULT_PORT);
+#endif
         }
 #endif
         APStartupComplete = true;

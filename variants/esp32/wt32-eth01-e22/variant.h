@@ -6,8 +6,6 @@
 #define SCREEN_TYPE_SSD1306
 #define SCREEN_SDA I2C_SDA
 #define SCREEN_SCL I2C_SCL
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
 #define SCREEN_RESET -1
 
 // GPS
