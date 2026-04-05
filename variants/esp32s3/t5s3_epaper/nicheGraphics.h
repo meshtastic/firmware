@@ -61,10 +61,10 @@ void setupNicheGraphics()
     // Set how unhealthy additional FAST updates beyond this number are
     inkhud->setDisplayResilience(7, 1.5);
 
-    // Prepare fonts — use larger sizes to suit the 4.7" screen
-    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
-    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
-    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
+    // Prepare fonts — use larger sizes to suit the 4.7" screen at ~234 DPI
+    InkHUD::Applet::fontLarge = FREESANS_24PT_WIN1253;
+    InkHUD::Applet::fontMedium = FREESANS_18PT_WIN1253;
+    InkHUD::Applet::fontSmall = FREESANS_12PT_WIN1253;
 
     // Init settings, and customize defaults
     inkhud->persistence->settings.userTiles.maxCount = 2;
