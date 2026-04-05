@@ -65,7 +65,7 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     // Try to init One-Wire with max retries
     uint8_t numRetries = 3;
     uint8_t rom[8]{};
-    for (uint8_t retry = 0; retry < numRetries; retry++) {
+    for (uint8_t retry = 1; retry <= numRetries; retry++) {
         bool initError = false;
         if (!ds248x.OneWireReset()) {
             LOG_WARN("%s: One-wire reset unsuccessful (%u/%u)", sensorName, retry, numRetries);
@@ -99,7 +99,7 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
             LOG_INFO("%s: Single-channel DS2484 detected", sensorName);
         }
 
-        if (initError && retry == numRetries - 1) {
+        if (initError && retry == numRetries) {
 #if defined(DS248X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
             reClockI2C(currentClock, _bus, false);
 #endif
