@@ -82,7 +82,7 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
                     ds248x.OneWireReset();
 
                     if (!ds248x.OneWireSearch(ds2482800Data.ds248xData[channel].rom)) {
-                        LOG_WARN("%s: no one-wire rom detected on channel %u (%u/%u)", sensorName, channel, retry, numRetries);
+                        LOG_DEBUG("%s: no one-wire rom detected on channel %u (%u/%u)", sensorName, channel, retry, numRetries);
                         for (uint8_t i = 0; i < 8; i++) {
                             ds2482800Data.ds248xData[channel].rom[i] = 0;
                         }
@@ -135,7 +135,7 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #if defined(DS248X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
             reClockI2C(currentClock, _bus, false);
 #endif
-            LOG_WARN("%s: Max retries for one-wire init (%u/%u). Aborting", sensorName, retry, numRetries);
+            LOG_ERROR("%s: Max retries for one-wire init (%u/%u). Aborting", sensorName, retry, numRetries);
             return false;
         }
 
@@ -217,7 +217,7 @@ float DS248XSensor::readTemperatureROM(uint8_t *rom)
 bool DS248XSensor::readTemperatureChannel(uint8_t channel)
 {
     if (!isValidROM(ds2482800Data.ds248xData[channel].rom)) {
-        LOG_WARN("%s: No ROM in channel %u", sensorName, channel);
+        LOG_DEBUG("%s: No ROM in channel %u", sensorName, channel);
         return false;
     }
     // Select the channel on the DS2482-800
