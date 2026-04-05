@@ -117,6 +117,15 @@ void earlyInitVariant()
     pinMode(GT911_PIN_INT, INPUT); // release INT for interrupt use
 }
 
+void variant_shutdown()
+{
+    // Put touch controller into low-power standby before deep sleep
+    touch.sleep();
+
+    // Ensure frontlight is off during deep sleep
+    digitalWrite(BOARD_BL_EN, LOW);
+}
+
 // T5-S3-ePaper Pro specific (late-) init
 void lateInitVariant(void)
 {
