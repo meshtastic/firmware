@@ -34,6 +34,7 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 
 // Shared NicheGraphics components
 // --------------------------------
+#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
 #include "graphics/niche/Drivers/EInk/ED047TC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
@@ -71,6 +72,7 @@ void setupNicheGraphics()
     inkhud->persistence->settings.rotation = 3;
     inkhud->persistence->settings.userTiles.count = 1;                 // One tile by default, keep it simple
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
+    inkhud->persistence->settings.optionalMenuItems.backlight = true;  // Backlight toggle in settings menu
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
@@ -86,6 +88,11 @@ void setupNicheGraphics()
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet);
+
+    // Backlight
+    // ----------------------------
+    Drivers::LatchingBacklight *backlight = Drivers::LatchingBacklight::getInstance();
+    backlight->setPin(BOARD_BL_EN); // GPIO11 on V2
 
     // Start running InkHUD
     inkhud->begin();
