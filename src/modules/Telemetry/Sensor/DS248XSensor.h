@@ -26,7 +26,7 @@
 typedef enum { DS248X_UNKNOWN = 0, DS248X_DS2484, DS248X_DS2482_800 } ds248x_variant_t;
 
 struct _DS248XData {
-    uint8_t rom[8];
+    uint8_t rom[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     float temperature;
 };
 
@@ -44,7 +44,8 @@ class DS248XSensor : public TelemetrySensor
     _DS248XData ds248xData{};
     _DS2482800Data ds2482800Data{};
     void printROM(uint8_t *rom);
-    bool readTemperatureROM(uint8_t *rom);
+    bool isValidROM(uint8_t *rom);
+    float readTemperatureROM(uint8_t *rom);
     bool readTemperatureChannel(uint8_t channel);
 
   public:
