@@ -108,12 +108,13 @@ void ED047TC1::update(uint8_t *imageData, UpdateTypes type)
 
     if (type == FULL) {
         epaper->fullUpdate(CLEAR_SLOW, false);
+        epaper->backupPlane(); // Sync pPrevious so next partialUpdate has a correct baseline
     } else {
-        // FAST update — InkHUD's setDisplayResilience() handles the FAST/FULL ratio
-        epaper->fullUpdate(CLEAR_FAST, false);
+        // FAST: true partial update — compares pCurrent vs pPrevious and only applies
+        // the update waveform to rows that actually changed. Unchanged rows get a neutral
+        // signal (no visible effect). partialUpdate() updates pPrevious internally.
+        epaper->partialUpdate(false, 0, dstTotalRows - 1);
     }
-
-    epaper->backupPlane();
 
     // Signal InkHUD that the (blocking) update is complete
     beginPolling(1, 0);
