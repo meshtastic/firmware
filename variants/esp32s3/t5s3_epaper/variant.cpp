@@ -100,7 +100,7 @@ void earlyInitVariant()
 void lateInitVariant(void)
 {
     touch.setPins(GT911_PIN_RST, GT911_PIN_INT);
-    if (touch.begin(Wire, GT911_SLAVE_ADDRESS_L, GT911_PIN_SDA, GT911_PIN_SCL)) {
+    if (touch.begin(Wire, GT911_SLAVE_ADDRESS_H, GT911_PIN_SDA, GT911_PIN_SCL)) {
         touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
         touchScreenImpl1->init();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
