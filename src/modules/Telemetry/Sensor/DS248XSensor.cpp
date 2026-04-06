@@ -262,9 +262,9 @@ bool DS248XSensor::getMetrics(meshtastic_Telemetry *measurement)
                               measurement->variant.environment_metrics.temperature);
                 }
                 // measurement->variant.environment_metrics.one_wire_temperature[channel] =
-                // ds2482800Data.ds248xData[channel].temperature; LOG_DEBUG("Got %s readings: temperature_ch%u=%.2f", sensorName,
-                // channel,
-                //             measurement->variant.environment_metrics.one_wire_temperature[channel]);
+                //     ds2482800Data.ds248xData[channel].temperature;
+                // LOG_DEBUG("Got %s readings: temperature_ch%u=%.2f", sensorName, channel,
+                //           measurement->variant.environment_metrics.one_wire_temperature[channel]);
             }
         }
         return readChannel0;
