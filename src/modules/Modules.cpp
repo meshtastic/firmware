@@ -45,6 +45,9 @@
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_PING
+#include "modules/PingModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "modules/WaypointModule.h"
 #endif
@@ -148,6 +151,9 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
     traceRouteModule = new TraceRouteModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_PING
+    pingModule = new PingModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_NEIGHBORINFO
     if (moduleConfig.has_neighbor_info && moduleConfig.neighbor_info.enabled) {

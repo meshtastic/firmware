@@ -47,6 +47,7 @@ class menuHandler
         KeyVerificationInit,
         KeyVerificationFinalPrompt,
         TraceRouteMenu,
+        PingMenu,
         ThrottleMessage,
         MessageResponseMenu,
         MessageViewModeMenu,
@@ -100,6 +101,7 @@ class menuHandler
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
     static void traceRouteMenu();
+    static void pingMenu();
     static void testMenu();
     static void numberTest();
     static void wifiBaseMenu();
