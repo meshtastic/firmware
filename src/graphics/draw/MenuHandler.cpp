@@ -18,6 +18,7 @@
 #include "main.h"
 #include "mesh/Default.h"
 #include "mesh/MeshTypes.h"
+#include "mesh/RadioLibInterface.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
@@ -25,6 +26,7 @@
 #include "modules/TraceRouteModule.h"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <functional>
 #include <utility>
 
@@ -185,31 +187,20 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
+            // Guard: without a reboot, reconfigure() applies the region directly.
+            // Reject LORA_24 on sub-GHz-only hardware — getRadio() used to catch this post-reboot.
+            if (selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_LORA_24 &&
+                !(RadioLibInterface::instance && RadioLibInterface::instance->wideLora())) {
+                LOG_WARN("Radio hardware does not support 2.4 GHz; ignoring LORA_24 selection");
+                return;
+            }
+
             config.lora.region = selectedRegion;
             auto changes = SEGMENT_CONFIG;
 
-        // FIXME: This should be a method consolidated with the same logic in the admin message as well
-        // This is needed as we wait til picking the LoRa region to generate keys for the first time.
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-            if (!owner.is_licensed) {
-                bool keygenSuccess = false;
-                if (config.security.private_key.size == 32) {
-                    // public key is derived from private, so this will always have the same result.
-                    if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                        keygenSuccess = true;
-                    }
-
-                } else {
-                    LOG_INFO("Generate new PKI keys");
-                    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-                    keygenSuccess = true;
-                }
-                if (keygenSuccess) {
-                    config.security.public_key.size = 32;
-                    config.security.private_key.size = 32;
-                    owner.public_key.size = 32;
-                    memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-                }
+            if (crypto) {
+                crypto->ensurePkiKeys(config.security, owner);
             }
 #endif
             config.lora.tx_enabled = true;
@@ -225,7 +216,6 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             }
 
             service->reloadConfig(changes);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         });
 
     bannerOptions.durationMs = duration;
@@ -291,13 +281,24 @@ void menuHandler::FrequencySlotPicker()
     optionsEnumArray[options++] = 0;
 
     // Calculate number of channels (copied from RadioInterface::applyModemConfig())
+
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
     double bw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, myRegion->wideLora)
                                       : bwCodeToKHz(loraConfig.bandwidth);
 
     uint32_t numChannels = 0;
     if (myRegion) {
-        numChannels = (uint32_t)floor((myRegion->freqEnd - myRegion->freqStart) / (myRegion->spacing + (bw / 1000.0)));
+        // Match RadioInterface::applyModemConfig(): include padding, add spacing in numerator, and use round()
+        const double spacing = myRegion->profile->spacing;
+        const double padding = myRegion->profile->padding;
+        const double channelBandwidthMHz = bw / 1000.0;
+        const double numerator = (myRegion->freqEnd - myRegion->freqStart) + spacing;
+        const double denominator = spacing + (padding * 2) + channelBandwidthMHz;
+        if (denominator > 0.0) {
+            numChannels = static_cast<uint32_t>(round(numerator / denominator));
+        } else {
+            LOG_WARN("Invalid region configuration: non-positive channel spacing/width");
+        }
     } else {
         LOG_WARN("Region not set, cannot calculate number of channels");
         return;
@@ -333,7 +334,6 @@ void menuHandler::FrequencySlotPicker()
 
         config.lora.channel_num = selected;
         service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
     };
 
     screen->showOverlayBanner(bannerOptions);
@@ -372,7 +372,6 @@ void menuHandler::radioPresetPicker()
             config.lora.channel_num = 0;        // Reset to default channel for the preset
             config.lora.override_frequency = 0; // Clear any custom frequency
             service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         });
 
     screen->showOverlayBanner(bannerOptions);
@@ -1294,9 +1293,11 @@ void menuHandler::positionBaseMenu()
     };
 
     constexpr size_t baseCount = sizeof(baseOptions) / sizeof(baseOptions[0]);
-    constexpr size_t calibrateCount = sizeof(calibrateOptions) / sizeof(calibrateOptions[0]);
     static std::array<const char *, baseCount> baseLabels{};
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    constexpr size_t calibrateCount = sizeof(calibrateOptions) / sizeof(calibrateOptions[0]);
     static std::array<const char *, calibrateCount> calibrateLabels{};
+#endif
 
     auto onSelection = [](const PositionMenuOption &option, int) -> void {
         if (option.action == OptionsAction::Back) {
@@ -1322,9 +1323,11 @@ void menuHandler::positionBaseMenu()
             screen->runNow();
             break;
         case PositionAction::CompassCalibrate:
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
             if (accelerometerThread) {
                 accelerometerThread->calibrate(30);
             }
+#endif
             break;
         case PositionAction::GPSSmartPosition:
             menuQueue = GpsSmartPositionMenu;
@@ -1342,11 +1345,15 @@ void menuHandler::positionBaseMenu()
     };
 
     BannerOverlayOptions bannerOptions;
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (accelerometerThread) {
         bannerOptions = createStaticBannerOptions("GPS Action", calibrateOptions, calibrateLabels, onSelection);
     } else {
         bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
     }
+#else
+    bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
+#endif
 
     screen->showOverlayBanner(bannerOptions);
 }
@@ -2276,13 +2283,17 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    enum optionsNumbers { Back, ShowChirpy };
-    static const char *optionsArray[3] = {"Back"};
-    static int optionsEnumArray[3] = {Back};
+    enum optionsNumbers { Back, NumberPicker, ShowChirpy, TestAnnounce };
+    static const char *optionsArray[5] = {"Back"};
+    static int optionsEnumArray[5] = {Back};
     int options = 1;
 
     optionsArray[options] = screen->isFrameHidden("chirpy") ? "Show Chirpy" : "Hide Chirpy";
     optionsEnumArray[options++] = ShowChirpy;
+#ifdef HAS_I2S
+    optionsArray[options] = "Test Announce";
+    optionsEnumArray[options++] = TestAnnounce;
+#endif
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Hidden Test Menu";
@@ -2294,6 +2305,10 @@ void menuHandler::testMenu()
             screen->toggleFrameVisibility("chirpy");
             screen->setFrames(Screen::FOCUS_SYSTEM);
 
+        } else if (selected == TestAnnounce) {
+#ifdef HAS_I2S
+            audioThread->readAloud("This is a test of the emergency broadcast system. This is only a test.");
+#endif
         } else {
             menuQueue = SystemBaseMenu;
             screen->runNow();

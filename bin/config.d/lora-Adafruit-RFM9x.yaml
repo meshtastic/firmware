@@ -1,3 +1,9 @@
+Meta:
+  name: Adafruit RFM9x
+  support: deprecated
+  compatible:
+    - raspberry-pi
+
 Lora:
   Module: RF95  # Adafruit RFM9x
   Reset: 25
