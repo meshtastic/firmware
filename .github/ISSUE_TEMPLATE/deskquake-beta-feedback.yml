@@ -1,0 +1,111 @@
+name: DeskQuake Beta Feedback
+description: Report DeskQuake beta test results, regressions, or field observations
+title: "[DeskQuake Beta]: "
+labels: [deskquake, beta, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for DeskQuake beta testing feedback. Include both failures and successful field results when they reveal something useful about sensor behavior, serial tooling, or upload reliability.
+
+  - type: input
+    id: build
+    attributes:
+      label: Beta Build
+      description: Tag, branch, commit, or prerelease name under test.
+      placeholder: deskquake-beta-0.1 / commit abc1234
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware
+      description: Which hardware did you test?
+      multiple: true
+      options:
+        - RAK4631
+        - DeskQuake sensor stack on RAK4631
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Test Area
+      description: What area did this feedback come from?
+      multiple: true
+      options:
+        - Quake detection
+        - Mesh alerting
+        - Serial commands
+        - DFU or UF2 upload flow
+        - Logging and observability
+        - Documentation
+        - Regression
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the result clearly, including expected behavior if this was a failure.
+      placeholder: During bench testing, dqcount updated correctly but dqreset did not clear the last quake timer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps or test procedure
+      description: List the commands, flash method, and physical test setup used.
+      placeholder: |
+        1. Flashed with bin/upload-rak4631-uf2.sh
+        2. Opened serial monitor at 115200
+        3. Ran dqcount and dqreset
+        4. Simulated vibration on the D7S sensor
+    validations:
+      required: true
+
+  - type: dropdown
+    id: upload-path
+    attributes:
+      label: Flash or upload path used
+      description: Which install path did you use for this beta run?
+      options:
+        - pio run -e rak4631 -t upload
+        - bin/upload-rak4631-uf2.sh
+        - Manual UF2 drag and drop
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: commands
+    attributes:
+      label: DeskQuake command checks
+      description: Mark any commands you exercised in this run.
+      options:
+        - label: dqcount
+        - label: dqreset
+        - label: dqdfu
+        - label: dqhelp
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or console output
+      description: Paste the most useful log lines, especially around quake events or DFU handoff.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: followup
+    attributes:
+      label: Follow-up notes
+      description: Include any workaround, suspicion, or recommendation for the next beta.
+    validations:
+      required: false

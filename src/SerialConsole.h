@@ -12,6 +12,8 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
      * If true we are talking to a smart host and all messages (including log messages) must be framed as protobufs.
      */
     bool usingProtobufs = false;
+    char textCommandBuf[32] = {0};
+    size_t textCommandLen = 0;
 
   public:
     SerialConsole();
@@ -39,6 +41,8 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
     virtual bool checkIsConnected() override;
 
     virtual void onNowHasData(uint32_t fromRadioNum) override;
+
+    bool processPlaintextCommand();
 
     /// Possibly switch to protobufs if we see a valid protobuf message
     virtual void log_to_serial(const char *logLevel, const char *format, va_list arg);

@@ -92,6 +92,7 @@ extern bool runASAP;
 extern bool pauseBluetoothLogging;
 
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds(), enterDfuMode();
+bool handleDeskQuakeConsoleCommand(const char *command);
 
 meshtastic_DeviceMetadata getDeviceMetadata();
 #if !MESHTASTIC_EXCLUDE_I2C

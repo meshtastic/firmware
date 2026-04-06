@@ -4,7 +4,10 @@
 #include "PowerFSM.h"
 #include "Throttle.h"
 #include "configuration.h"
+#include "main.h"
 #include "time.h"
+
+#include <ctype.h>
 
 #if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
 #define IS_USB_SERIAL
@@ -78,6 +81,68 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
 #endif
 }
 
+bool SerialConsole::processPlaintextCommand()
+{
+    bool consumed = false;
+
+    while (Port.available()) {
+        int next = Port.peek();
+        if (next < 0) {
+            break;
+        }
+
+        bool isPlaintext = next == '\r' || next == '\n' || next == '\t' || (next >= 32 && next <= 126);
+        if (!isPlaintext) {
+            break;
+        }
+
+        consumed = true;
+        char c = static_cast<char>(Port.read());
+        if (c == '\r' || c == '\n') {
+            if (textCommandLen == 0) {
+                continue;
+            }
+
+            textCommandBuf[textCommandLen] = '\0';
+
+            size_t start = 0;
+            while (textCommandBuf[start] && isspace(static_cast<unsigned char>(textCommandBuf[start]))) {
+                start++;
+            }
+
+            size_t end = strlen(textCommandBuf + start);
+            while (end > 0 && isspace(static_cast<unsigned char>(textCommandBuf[start + end - 1]))) {
+                end--;
+            }
+            textCommandBuf[start + end] = '\0';
+
+            for (size_t index = start; textCommandBuf[index]; ++index) {
+                textCommandBuf[index] = static_cast<char>(tolower(static_cast<unsigned char>(textCommandBuf[index])));
+            }
+
+            const char *command = textCommandBuf + start;
+            if (!handleDeskQuakeConsoleCommand(command) && command[0]) {
+                LOG_INFO("Unknown console command: %s", command);
+                LOG_INFO("DeskQuake commands: dqcount, dqreset");
+            }
+
+            textCommandLen = 0;
+            textCommandBuf[0] = '\0';
+            continue;
+        }
+
+        if (textCommandLen + 1 < sizeof(textCommandBuf)) {
+            textCommandBuf[textCommandLen++] = c;
+        } else {
+            textCommandLen = 0;
+            textCommandBuf[0] = '\0';
+            LOG_WARN("Console command too long, discarded");
+        }
+    }
+
+    return consumed;
+}
+
 int32_t SerialConsole::runOnce()
 {
 #ifdef HELTEC_MESH_SOLAR
@@ -87,6 +152,10 @@ int32_t SerialConsole::runOnce()
         return 250;
     }
 #endif
+
+    if (!usingProtobufs) {
+        processPlaintextCommand();
+    }
 
     int32_t delay = runOncePart();
 #if defined(SERIAL_HAS_ON_RECEIVE) || defined(CONFIG_IDF_TARGET_ESP32S2)
