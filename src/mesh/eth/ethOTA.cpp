@@ -6,6 +6,12 @@
 #include <ErriezCRC32.h>
 #include <SHA256.h>
 #include <Updater.h>
+#ifdef ARCH_RP2040
+#include <hardware/watchdog.h>
+#define FEED_WATCHDOG() watchdog_update()
+#else
+#define FEED_WATCHDOG() ((void)0)
+#endif
 
 /// Protocol header sent by the upload tool
 struct __attribute__((packed)) OTAHeader {
@@ -69,6 +75,7 @@ static bool readExact(EthernetClient &client, uint8_t *buf, size_t len)
             }
             delay(1);
         }
+        FEED_WATCHDOG();
     }
     return true;
 }
@@ -201,6 +208,7 @@ static void handleOTAClient(EthernetClient &client)
                 return;
             }
             delay(1);
+            FEED_WATCHDOG();
             continue;
         }
 
@@ -222,6 +230,7 @@ static void handleOTAClient(EthernetClient &client)
         remaining -= got;
         totalReceived += got;
         lastActivity = millis();
+        FEED_WATCHDOG();
 
         // Progress log every ~10%
         if (totalReceived % (hdr.firmwareSize / 10 + 1) < got) {
