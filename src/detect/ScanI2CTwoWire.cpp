@@ -560,6 +560,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
                 }
+                break;
 
             case QMC6310U_ADDR:
                 // Check status register (0xF0) for DS284X status and one-wire reset
