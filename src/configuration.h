@@ -231,7 +231,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BME_ADDR 0x76
 #define BME_ADDR_ALTERNATE 0x77
 #define MCP9808_ADDR 0x18
-#define INA_ADDR 0x40
+#define INA_ADDR 0x40 // same as SHT2X
 #define INA_ADDR_ALTERNATE 0x41
 #define INA_ADDR_WAVESHARE_UPS 0x43
 #define INA3221_ADDR 0x42
@@ -244,8 +244,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
 #define SFA30_ADDR 0x5D
-#define SHT31_4x_ADDR 0x44
-#define SHT31_4x_ADDR_ALT 0x45
+#define SHTXX_ADDR 0x44
+#define SHTXX_ADDR_ALT 0x45
 #define PMSA003I_ADDR 0x12
 #define QMA6100P_ADDR 0x12
 #define AHT10_ADDR 0x38
