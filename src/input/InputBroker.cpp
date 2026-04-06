@@ -382,11 +382,13 @@ void InputBroker::Init()
     }
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR && portduino_config.i2cdev != "") {
-        seesawRotary = new SeesawRotary("SeesawRotary");
-        if (!seesawRotary->init()) {
-            delete seesawRotary;
-            seesawRotary = nullptr;
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        if (portduino_config.i2cdev != "") {
+            seesawRotary = new SeesawRotary("SeesawRotary");
+            if (!seesawRotary->init()) {
+                delete seesawRotary;
+                seesawRotary = nullptr;
+            }
         }
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
