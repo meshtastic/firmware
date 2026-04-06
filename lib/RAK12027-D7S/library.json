@@ -1,0 +1,33 @@
+{
+	"name": "RAKwireless RGB Matrix library",
+	"version": "1.0.0",
+	"keywords": [
+		"Seismic",
+		"Omron",
+		"D7S",
+		"RAKWireless",
+		"WisBlock",
+		"RAK12027"
+	],
+	"description": "RAKWireless library for the RAK12027 seismic sensor.",
+	"frameworks": [
+		"arduino"
+	],
+	"platforms": [
+		"*"
+	],
+	"license": "Apache",
+	"authors": [
+		{
+			"email": "nero.du@rakwireless.com",
+			"url": "https://rakwireless.com",
+			"maintainer": true,
+			"name": "Nero"
+		}
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/RAKWireless/RAK12027-D7S"
+	},
+	"homepage": "https://rakwireless.com"
+}

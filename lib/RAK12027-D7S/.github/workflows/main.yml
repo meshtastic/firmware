@@ -1,0 +1,23 @@
+name: RAK Library Build CI
+
+on: [pull_request, push, repository_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+    
+    steps:
+    - uses: actions/setup-python@v1
+      with:
+        python-version: '3.x'
+    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2
+      with:
+         repository: RAKWireless/WisBlock-CI
+         path: ci
+
+    - name: pre-install
+      run: bash ci/actions_install.sh
+
+    - name: test platforms
+      run: python3 ci/build_platform.py rak4631 rak11200 rak11300

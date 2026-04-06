@@ -1,0 +1,53 @@
+#######################################
+# Syntax Coloring Map For D7S
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+RAK_D7S		    								KEYWORD1
+D7S_status_t									KEYWORD1
+D7S_axis_settings_t						KEYWORD1
+D7S_axis_state_t							KEYWORD1
+D7S_threshold_t								KEYWORD1
+D7S_mode_status_t							KEYWORD1
+D7S_interrupt_event_t					KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin													KEYWORD2
+getState											KEYWORD2
+getAxisInUse	    						KEYWORD2
+setThreshold									KEYWORD2
+setAxis												KEYWORD2
+getLastestSI									KEYWORD2
+getLastestPGA									KEYWORD2
+getLastestTemperature					KEYWORD2
+getRankedSI										KEYWORD2
+getRankedPGA									KEYWORD2
+getRankedTemperature					KEYWORD2
+getInstantaneusSI							KEYWORD2
+getInstantaneusPGA						KEYWORD2
+clearEarthquakeData						KEYWORD2
+clearInstallationData 				KEYWORD2
+clearLastestOffsetData				KEYWORD2
+clearSelftestData							KEYWORD2
+clearAllData									KEYWORD2
+initialize										KEYWORD2
+selftest											KEYWORD2
+getSelftestResult							KEYWORD2
+acquireOffset									KEYWORD2
+getAcquireOffsetResult				KEYWORD2
+isInCollapse									KEYWORD2
+isInShutoff										KEYWORD2
+resetEvents										KEYWORD2
+isEarthquakeOccuring					KEYWORD2
+isReady												KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
