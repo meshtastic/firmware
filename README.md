@@ -21,6 +21,14 @@
 	<a href="https://meshtastic.org/docs/">Documentation</a>
 </div>
 
+## DeskQuake Beta Build
+
+Current DeskQuake prerelease for RAK4631:
+[DeskQuake Beta 0.1 for RAK4631](https://github.com/kl5pfak/firmware/releases/tag/deskquake-v0.1-beta1)
+
+Direct firmware download:
+[DeskQuake-Beta-0.1-rak4631.uf2](https://github.com/kl5pfak/firmware/releases/download/deskquake-v0.1-beta1/DeskQuake-Beta-0.1-rak4631.uf2)
+
 ## Overview
 
 This repository contains the official device firmware for Meshtastic, an open-source LoRa mesh networking project designed for long-range, low-power communication without relying on internet or cellular infrastructure. The firmware supports various hardware platforms, including ESP32, nRF52, RP2040/RP2350, and Linux-based devices.
