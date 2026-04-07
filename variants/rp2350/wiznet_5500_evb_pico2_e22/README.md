@@ -92,7 +92,7 @@ Módulo GPS conectado por UART1 (Serial2) a 38400 baud.
 ## Compilar
 
 ```bash
-pio run -e wiznet_5500_evb_pico2
+pio run -e wiznet_5500_evb_pico2_e22
 ```
 
 ### Flashear (modo BOOTSEL)
@@ -102,13 +102,13 @@ pio run -e wiznet_5500_evb_pico2
 3. Copia el `.uf2` generado:
 
 ```
-.pio/build/wiznet_5500_evb_pico2/firmware-wiznet_5500_evb_pico2-*.uf2
+.pio/build/wiznet_5500_evb_pico2_e22/firmware-wiznet_5500_evb_pico2_e22-*.uf2
 ```
 
 O directamente con picotool:
 
 ```bash
-pio run -e wiznet_5500_evb_pico2 -t upload
+pio run -e wiznet_5500_evb_pico2_e22 -t upload
 ```
 
 ---
@@ -134,9 +134,9 @@ Servicios habilitados una vez conectado:
 
 | Archivo | Descripción                                                                       |
 |--------------------------------------------------------|------------------------------------|
-| `variants/rp2350/wiznet_5500_evb_pico2/variant.h`      | Definición de pines del hardware   |
-| `variants/rp2350/wiznet_5500_evb_pico2/platformio.ini` | Entorno PlatformIO para esta board |
-| `variants/rp2350/wiznet_5500_evb_pico2/README.md`      | Este archivo                       |
+| `variants/rp2350/wiznet_5500_evb_pico2_e22/variant.h`      | Definición de pines del hardware   |
+| `variants/rp2350/wiznet_5500_evb_pico2_e22/platformio.ini` | Entorno PlatformIO para esta board |
+| `variants/rp2350/wiznet_5500_evb_pico2_e22/README.md`      | Este archivo                       |
 
 ### Archivos modificados
 

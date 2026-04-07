@@ -68,7 +68,7 @@ interrupts();
 
 ## 0.2 Mapa de memoria flash
 
-### Layout actual (wiznet_5500_evb_pico2, 2MB flash)
+### Layout actual (wiznet_5500_evb_pico2_e22, 2MB flash)
 
 ```
 Dirección       Offset    Tamaño     Contenido
@@ -207,7 +207,7 @@ Ver sección "FASE 0 — Resultados de investigación" arriba.
 
 | Tarea | Detalle |
 |-------|---------|
-| 1.1 | Cambiar `board_build.filesystem_size` de `0.5m` a `0.75m` **solo** en los platformio.ini de `wiznet_5500_evb_pico2` y `pico2_w5500_e22`. Esto deja ~1,280KB para código (firmware actual 989KB, margen ~300KB). |
+| 1.1 | Cambiar `board_build.filesystem_size` de `0.5m` a `0.75m` **solo** en los platformio.ini de `wiznet_5500_evb_pico2_e22` y `pico2_w5500_e22`. Esto deja ~1,280KB para código (firmware actual 989KB, margen ~300KB). |
 | 1.2 | Añadir build flag `-D HAS_ETHERNET_OTA` en ambos platformio.ini. |
 | 1.3 | Verificar que `Updater` y `PicoOTA` se resuelven automáticamente (están en arduino-pico core). |
 | 1.4 | Compilar y verificar que el firmware sigue funcionando correctamente. |
@@ -354,7 +354,7 @@ python bin/eth-ota-upload.py --host 192.168.1.100 --port 4243 firmware.bin
 | `src/mesh/eth/ethOTA.h` | **Nuevo** — Servidor TCP OTA |
 | `src/mesh/eth/ethOTA.cpp` | **Nuevo** — Implementación protocolo + Updater |
 | `bin/eth-ota-upload.py` | **Nuevo** — Script de upload Python |
-| `variants/rp2350/wiznet_5500_evb_pico2/platformio.ini` | **Modificar** — `filesystem_size=0.75m` + `HAS_ETHERNET_OTA` |
+| `variants/rp2350/wiznet_5500_evb_pico2_e22/platformio.ini` | **Modificar** — `filesystem_size=0.75m` + `HAS_ETHERNET_OTA` |
 | `variants/rp2350/pico2_w5500_e22/platformio.ini` | **Modificar** — ídem |
 | `src/mesh/eth/ethClient.cpp` | **Modificar** — Inicializar servidor OTA |
 
@@ -402,14 +402,14 @@ Fase 1 (build config)  →  Fase 2 (TCP server + Updater)  →  Fase 3 (integrac
 | `src/mesh/eth/ethOTA.cpp` | **Nuevo** | Implementación: autenticación + protocolo MOTA + Updater |
 | `bin/eth-ota-upload.py` | **Nuevo** | Script Python de upload con auth + progress bar |
 | `src/mesh/eth/ethClient.cpp` | **Modificado** | Integración: include + `initEthOTA()` + `ethOTALoop()` |
-| `variants/rp2350/wiznet_5500_evb_pico2/platformio.ini` | **Modificado** | `filesystem_size=0.75m` + `-D HAS_ETHERNET_OTA` |
+| `variants/rp2350/wiznet_5500_evb_pico2_e22/platformio.ini` | **Modificado** | `filesystem_size=0.75m` + `-D HAS_ETHERNET_OTA` |
 | `variants/rp2350/pico2_w5500_e22/platformio.ini` | **Modificado** | Ídem |
 
 ## Build sizes (Fase 5 — final)
 
 | Variant | Flash | RAM |
 |---------|-------|-----|
-| `wiznet_5500_evb_pico2` (2MB flash) | 77.0% (1,006,724 / 1,306,624 bytes) | 18.1% |
+| `wiznet_5500_evb_pico2_e22` (2MB flash) | 77.0% (1,006,724 / 1,306,624 bytes) | 18.1% |
 | `pico2_w5500_e22` (4MB flash) | 29.6% (1,006,708 / 3,403,776 bytes) | 18.1% |
 
 ---
@@ -666,7 +666,7 @@ Tres bloques de código añadidos, todos protegidos por `#if HAS_ETHERNET && def
 ## Cambios en platformio.ini (ambos variants)
 
 Cambios idénticos en:
-- `variants/rp2350/wiznet_5500_evb_pico2/platformio.ini`
+- `variants/rp2350/wiznet_5500_evb_pico2_e22/platformio.ini`
 - `variants/rp2350/pico2_w5500_e22/platformio.ini`
 
 ### 1. Filesystem size (línea 8)

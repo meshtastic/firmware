@@ -5,7 +5,7 @@ Soporte de Meshtastic para una **Raspberry Pi Pico 2** (RP2350, 4 MB flash) con 
 > **Variante "-2"**: los pines SPI0 del W5500 han sido reubicados de GP16-19 a GP20-23 para evitar un puerto SPI0 dañado. El reset del W5500 se mueve a GP7.
 >
 > **Diferencia con `pico2_w5500_e22`**: misma funcionalidad, solo cambian los pines del W5500.
-> **Diferencia con `wiznet_5500_evb_pico2`**: en el EVB-Pico2 el W5500 está soldado en la PCB con pines fijos y la flash es de 2 MB. Aquí el W5500 es un módulo externo y la Pico 2 tiene 4 MB de flash.
+> **Diferencia con `wiznet_5500_evb_pico2_e22`**: en el EVB-Pico2 el W5500 está soldado en la PCB con pines fijos y la flash es de 2 MB. Aquí el W5500 es un módulo externo y la Pico 2 tiene 4 MB de flash.
 
 ---
 
@@ -191,14 +191,14 @@ Mapeado a `meshtastic_HardwareModel_PRIVATE_HW` — no existe modelo dedicado en
 
 ---
 
-## Diferencias respecto a `wiznet_5500_evb_pico2`
+## Diferencias respecto a `wiznet_5500_evb_pico2_e22`
 
-| Aspecto        | `wiznet_5500_evb_pico2`           | `pico2_w5500_e22` (este)           |
+| Aspecto        | `wiznet_5500_evb_pico2_e22`           | `pico2_w5500_e22` (este)           |
 |----------------|-----------------------------------|------------------------------------|
 | Board          | WIZnet W5500-EVB-Pico2            | Raspberry Pi Pico 2                |
 | Flash          | 2 MB                              | **4 MB**                           |
 | W5500          | Soldado en PCB (pines fijos)      | Módulo externo (mismo pinout)      |
-| `board =`      | `wiznet_5500_evb_pico2`           | `rpipico2`                         |
+| `board =`      | `wiznet_5500_evb_pico2_e22`           | `rpipico2`                         |
 | `variant.h`    | Idéntico en pines                 | Idéntico en pines                  |
 
 ---
