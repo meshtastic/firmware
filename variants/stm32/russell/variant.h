@@ -20,6 +20,11 @@
 #define ENABLE_HWSERIAL1
 #define PIN_SERIAL1_RX PB7
 #define PIN_SERIAL1_TX PB6
+
+// Debug serial (USART2)
+#define ENABLE_HWSERIAL2
+#define PIN_SERIAL2_TX PA2
+#define PIN_SERIAL2_RX PA3
 #define HAS_GPS 1
 #define PIN_GPS_STANDBY PA15
 #define GPS_RX_PIN PB7
