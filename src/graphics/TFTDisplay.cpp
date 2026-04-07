@@ -76,7 +76,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.offset_y = TFT_OFFSET_Y;   // Panel offset amount in Y direction
 #if defined(TFT_OFFSET_ROTATION)
             cfg.offset_rotation = TFT_OFFSET_ROTATION;
-#elif
+#else
             cfg.offset_rotation = 0;       // Rotation direction value offset 0~7 (4~7 is upside down)
 #endif
             cfg.dummy_read_pixel = 8;      // Number of bits for dummy read before pixel readout
