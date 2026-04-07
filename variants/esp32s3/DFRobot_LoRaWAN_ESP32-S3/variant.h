@@ -2,8 +2,6 @@
 
 // DFROBOT  DFR1195
 
-#define DFRobot_LoRaWAN_ESP32_S3
-
 #define LED_POWER 21
 #define BUTTON_PIN 18
 
@@ -31,6 +29,7 @@
 #define TFT_WIDTH 80
 #define TFT_OFFSET_X -24
 #define TFT_OFFSET_Y 0
+#define TFT_OFFSET_ROTATION 2
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
