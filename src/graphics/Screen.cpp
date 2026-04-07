@@ -41,6 +41,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/UIRenderer.h"
 #include "modules/CannedMessageModule.h"
 
+#if defined(USE_ST7789)
+#include "graphics/TFTColorRegions.h"
+#endif
+
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #include "buzz.h"
@@ -366,7 +370,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #endif
 
 #if defined(USE_ST7789)
-    static_cast<ST7789Spi *>(dispdev)->setRGB(TFTPalette::White);
+    dispdev->setRGB(TFTPalette::White, (::TFTColorRegion *)colorRegions);
+    LOG_WARN("pointer %d", (::TFTColorRegion *)colorRegions);
 #elif defined(USE_ST7796)
     static_cast<ST7796Spi *>(dispdev)->setRGB(TFTPalette::White);
 #endif
@@ -556,7 +561,7 @@ void Screen::setup()
 #endif
 
 #if defined(USE_ST7789)
-    static_cast<ST7789Spi *>(dispdev)->setRGB(TFTPalette::White);
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFTPalette::White, (::TFTColorRegion *)colorRegions);
 #endif
 #if defined(MUZI_BASE)
     dispdev->delayPoweron = true;
