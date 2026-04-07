@@ -12,7 +12,6 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "main.h"
-#include "mesh/compression/unishox2.h"
 #include "meshUtils.h"
 #include "meshtastic/atak.pb.h"
 #include "sleep.h"
@@ -307,37 +306,41 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
 meshtastic_MeshPacket *PositionModule::allocAtakPli()
 {
-    LOG_INFO("Send TAK PLI packet");
+    LOG_INFO("Send TAK V2 PLI packet");
     meshtastic_MeshPacket *mp = allocDataPacket();
-    mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN;
+    mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN_V2;
 
-    meshtastic_TAKPacket takPacket = {.is_compressed = true,
-                                      .has_contact = true,
-                                      .contact = meshtastic_Contact_init_default,
-                                      .has_group = true,
-                                      .group = {meshtastic_MemberRole_TeamMember, meshtastic_Team_Cyan},
-                                      .has_status = true,
-                                      .status =
-                                          {
-                                              .battery = powerStatus->getBatteryChargePercent(),
-                                          },
-                                      .which_payload_variant = meshtastic_TAKPacket_pli_tag,
-                                      .payload_variant = {.pli = {
-                                                              .latitude_i = localPosition.latitude_i,
-                                                              .longitude_i = localPosition.longitude_i,
-                                                              .altitude = localPosition.altitude_hae,
-                                                              .speed = localPosition.ground_speed,
-                                                              .course = static_cast<uint16_t>(localPosition.ground_track),
-                                                          }}};
+    meshtastic_TAKPacketV2 takPacket = meshtastic_TAKPacketV2_init_zero;
+    takPacket.cot_type_id = meshtastic_CotType_CotType_a_f_G_U_C;
+    takPacket.how = meshtastic_CotHow_CotHow_m_g;
+    takPacket.team = meshtastic_Team_Cyan;
+    takPacket.role = meshtastic_MemberRole_TeamMember;
+    takPacket.latitude_i = localPosition.latitude_i;
+    takPacket.longitude_i = localPosition.longitude_i;
+    takPacket.altitude = localPosition.altitude_hae;
+    takPacket.speed = localPosition.ground_speed;
+    takPacket.course = static_cast<uint16_t>(localPosition.ground_track);
+    takPacket.battery = powerStatus->getBatteryChargePercent();
+    takPacket.geo_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
+    takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
+    takPacket.which_payload_variant = meshtastic_TAKPacketV2_pli_tag;
+    takPacket.payload_variant.pli = true;
 
-    auto length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign,
-                                          sizeof(takPacket.contact.device_callsign) - 1, USX_PSET_DFLT, NULL);
-    LOG_DEBUG("Uncompressed device_callsign '%s' - %d bytes", owner.long_name, strlen(owner.long_name));
-    LOG_DEBUG("Compressed device_callsign '%s' - %d bytes", takPacket.contact.device_callsign, length);
-    length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.callsign,
-                                     sizeof(takPacket.contact.callsign) - 1, USX_PSET_DFLT, NULL);
-    mp->decoded.payload.size =
-        pb_encode_to_bytes(mp->decoded.payload.bytes, sizeof(mp->decoded.payload.bytes), &meshtastic_TAKPacket_msg, &takPacket);
+    // Callsign - stored as plain string (no compression, apps handle that)
+    strncpy(takPacket.callsign, owner.long_name, sizeof(takPacket.callsign) - 1);
+    strncpy(takPacket.device_callsign, owner.long_name, sizeof(takPacket.device_callsign) - 1);
+
+    // Encode TAKPacketV2 protobuf, leaving room for flags byte prefix
+    uint8_t protobuf_bytes[sizeof(mp->decoded.payload.bytes) - 1];
+    size_t proto_size = pb_encode_to_bytes(protobuf_bytes, sizeof(protobuf_bytes), &meshtastic_TAKPacketV2_msg, &takPacket);
+
+    // Wire format: [flags byte][protobuf bytes]
+    // Flags byte 0xFF = uncompressed raw protobuf (no zstd dictionary)
+    mp->decoded.payload.bytes[0] = 0xFF;
+    memcpy(mp->decoded.payload.bytes + 1, protobuf_bytes, proto_size);
+    mp->decoded.payload.size = proto_size + 1;
+
+    LOG_DEBUG("TAK V2 PLI payload: %d bytes (1 flags + %d protobuf)", mp->decoded.payload.size, proto_size);
     return mp;
 }
 
