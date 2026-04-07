@@ -961,7 +961,7 @@ void RadioInterface::applyModemConfig()
             cr = loraConfig.coding_rate;
             LOG_INFO("Using custom Coding Rate %u", cr);
         } else {
-            cr = loraConfig.coding_rate;
+            cr = newcr;
         }
 
     } else { // if not using preset, then just use the custom settings
