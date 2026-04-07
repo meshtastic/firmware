@@ -38,6 +38,9 @@ void initVariant()
     pinMode(PIN_3V3_ACC_EN, OUTPUT);
     digitalWrite(PIN_3V3_ACC_EN, LOW);
 
+    pinMode(T1000X_SENSOR_EN_PIN, OUTPUT);
+    digitalWrite(T1000X_SENSOR_EN_PIN, HIGH);
+
     pinMode(BUZZER_EN_PIN, OUTPUT);
     digitalWrite(BUZZER_EN_PIN, HIGH);
 

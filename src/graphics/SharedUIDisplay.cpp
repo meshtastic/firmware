@@ -181,18 +181,14 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         }
 
         // === Screen Title ===
-        const int titleWidth = display->getStringWidth(titleStr);
-        const int titleX = (SCREEN_WIDTH / 2) - (titleWidth / 2);
-        const int titleRegionWidth = titleWidth + (config.display.heading_bold ? 3 : 2);
+        const char *headerTitle = titleStr ? titleStr : "";
+        const int titleWidth = UIRenderer::measureStringWithEmotes(display, headerTitle);
+        const int titleX = (SCREEN_WIDTH - titleWidth) / 2;
         if (applyTFTColorRoles) {
+            const int titleRegionWidth = titleWidth + (config.display.heading_bold ? 3 : 2);
             registerTFTColorRegion(TFTColorRole::HeaderTitle, titleX - 1, y, titleRegionWidth, FONT_HEIGHT_SMALL);
         }
-
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(SCREEN_WIDTH / 2, y, titleStr);
-        if (config.display.heading_bold) {
-            display->drawString((SCREEN_WIDTH / 2) + 1, y, titleStr);
-        }
+        UIRenderer::drawStringWithEmotes(display, titleX, y, headerTitle, FONT_HEIGHT_SMALL, 1, config.display.heading_bold);
     }
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 

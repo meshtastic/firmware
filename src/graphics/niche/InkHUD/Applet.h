@@ -3,7 +3,7 @@
 /*
 
     Base class for InkHUD applets
-    Must be overriden
+    Must be overridden
 
     An applet is one "program" which may show info on the display.
 
@@ -15,6 +15,7 @@
 
 #include <GFX.h> // GFXRoot drawing lib
 
+#include "mesh/MeshModule.h"
 #include "mesh/MeshTypes.h"
 
 #include "./AppletFont.h"
