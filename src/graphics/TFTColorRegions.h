@@ -36,5 +36,6 @@ void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor);
 void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t width, int16_t height);
 void clearTFTColorRegions();
 bool isTFTColoringEnabled();
+uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool isset, uint16_t defaultOnColor, uint16_t defaultOffColor);
 
 } // namespace graphics

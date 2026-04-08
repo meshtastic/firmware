@@ -155,4 +155,16 @@ void clearTFTColorRegions()
     colorRegionCount = 0;
 }
 
+uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool isset, uint16_t defaultOnColor, uint16_t defaultOffColor)
+{
+    // Walk registered color regions in reverse order so later (higher-priority) regions win
+    for (int i = static_cast<int>(colorRegionCount) - 1; i >= 0; i--) {
+        const TFTColorRegion &r = colorRegions[i];
+        if (r.enabled && x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height) {
+            return isset ? r.onColorBe : r.offColorBe;
+        }
+    }
+    return isset ? defaultOnColor : defaultOffColor;
+}
+
 } // namespace graphics
