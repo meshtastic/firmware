@@ -7,6 +7,7 @@
 
 namespace graphics
 {
+TFTColorRegion colorRegions[MAX_TFT_COLOR_REGIONS];
 
 namespace
 {
@@ -16,17 +17,6 @@ struct TFTRoleColorsBe {
     uint16_t offColorBe;
 };
 
-struct TFTColorRegion {
-    int16_t x;
-    int16_t y;
-    int16_t width;
-    int16_t height;
-    uint16_t onColorBe;
-    uint16_t offColorBe;
-};
-
-static constexpr size_t MAX_TFT_COLOR_REGIONS = 48;
-static TFTColorRegion colorRegions[MAX_TFT_COLOR_REGIONS];
 static size_t colorRegionCount = 0;
 static TFTRoleColorsBe roleColors[static_cast<size_t>(TFTColorRole::Count)];
 static bool roleColorsInitialized = false;
@@ -157,30 +147,24 @@ void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t wid
     }
 
     const TFTRoleColorsBe &colors = roleColors[roleIndex];
-    colorRegions[colorRegionCount++] = {x, y, width, height, colors.onColorBe, colors.offColorBe};
-}
-
-uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool pixelSet, uint16_t fallbackOnColorBe, uint16_t fallbackOffColorBe)
-{
-    if (!isTFTColoringEnabled()) {
-        return pixelSet ? fallbackOnColorBe : fallbackOffColorBe;
-    }
-
-    initializeRoleColors();
-
-    for (int32_t i = static_cast<int32_t>(colorRegionCount) - 1; i >= 0; --i) {
-        const TFTColorRegion &region = colorRegions[i];
-        if (x >= region.x && x < region.x + region.width && y >= region.y && y < region.y + region.height) {
-            return pixelSet ? region.onColorBe : region.offColorBe;
-        }
-    }
-
-    return pixelSet ? fallbackOnColorBe : fallbackOffColorBe;
+    colorRegions[colorRegionCount++] = {x, y, width, height, colors.onColorBe, colors.offColorBe, true};
 }
 
 void clearTFTColorRegions()
 {
     colorRegionCount = 0;
+}
+
+uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool isset, uint16_t defaultOnColor, uint16_t defaultOffColor)
+{
+    // Walk registered color regions in reverse order so later (higher-priority) regions win
+    for (int i = static_cast<int>(colorRegionCount) - 1; i >= 0; i--) {
+        const TFTColorRegion &r = colorRegions[i];
+        if (r.enabled && x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height) {
+            return isset ? r.onColorBe : r.offColorBe;
+        }
+    }
+    return isset ? defaultOnColor : defaultOffColor;
 }
 
 } // namespace graphics
