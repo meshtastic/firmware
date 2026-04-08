@@ -312,9 +312,19 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
 
     meshtastic_TAKPacketV2 takPacket = meshtastic_TAKPacketV2_init_zero;
     takPacket.cot_type_id = meshtastic_CotType_CotType_a_f_G_U_C;
-    takPacket.how = meshtastic_CotHow_CotHow_m_g;
-    takPacket.team = meshtastic_Team_Cyan;
-    takPacket.role = meshtastic_MemberRole_TeamMember;
+
+    // Use TAK config for team/role if configured, otherwise use defaults (Cyan/TeamMember)
+    if (moduleConfig.has_tak && moduleConfig.tak.team != meshtastic_Team_Unspecifed_Color) {
+        takPacket.team = moduleConfig.tak.team;
+    } else {
+        takPacket.team = meshtastic_Team_Cyan;
+    }
+
+    if (moduleConfig.has_tak && moduleConfig.tak.role != meshtastic_MemberRole_Unspecifed) {
+        takPacket.role = moduleConfig.tak.role;
+    } else {
+        takPacket.role = meshtastic_MemberRole_TeamMember;
+    }
     takPacket.latitude_i = localPosition.latitude_i;
     takPacket.longitude_i = localPosition.longitude_i;
     takPacket.altitude = localPosition.altitude_hae;
@@ -327,8 +337,17 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
         course = 36000;
     takPacket.course = static_cast<uint16_t>(course);
     takPacket.battery = powerStatus->getBatteryChargePercent();
-    takPacket.geo_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
-    takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
+
+    // Map position source to CoT how/geo_src/alt_src
+    if (config.position.fixed_position || localPosition.location_source == meshtastic_Position_LocSource_LOC_MANUAL) {
+        takPacket.how = meshtastic_CotHow_CotHow_h_e;
+        takPacket.geo_src = meshtastic_GeoPointSource_GeoPointSource_USER;
+        takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_USER;
+    } else {
+        takPacket.how = meshtastic_CotHow_CotHow_m_g;
+        takPacket.geo_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
+        takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
+    }
     takPacket.which_payload_variant = meshtastic_TAKPacketV2_pli_tag;
     takPacket.payload_variant.pli = true;
 

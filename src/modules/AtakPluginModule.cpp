@@ -18,8 +18,6 @@ int32_t AtakPluginModule::runOnce()
 
 ProcessMessage AtakPluginModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    // V2 protocol: firmware is a passthrough.
-    // Payloads are zstd dictionary-compressed TAKPacketV2 protobufs.
-    // Apps handle all compression/decompression.
+    (void)mp; // Passthrough — no processing needed, apps handle compression/decompression
     return ProcessMessage::CONTINUE;
 }
