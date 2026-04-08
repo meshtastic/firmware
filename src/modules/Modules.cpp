@@ -64,6 +64,7 @@
 #include "modules/WaypointModule.h"
 #endif
 #if ARCH_PORTDUINO
+#include "modules/DMShell.h"
 #include "modules/Telemetry/HostMetrics.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
 #include "modules/StoreForwardModule.h"
@@ -224,6 +225,7 @@ void setupModules()
 #endif
 #if ARCH_PORTDUINO
     new HostMetricsModule();
+    dmShellModule = new DMShellModule();
 #endif
 #if HAS_TELEMETRY
     new DeviceTelemetryModule();
