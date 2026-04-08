@@ -334,7 +334,9 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
 
     // Callsign - stored as plain string (no compression, apps handle that)
     strncpy(takPacket.callsign, owner.long_name, sizeof(takPacket.callsign) - 1);
+    takPacket.callsign[sizeof(takPacket.callsign) - 1] = '\0';
     strncpy(takPacket.device_callsign, owner.long_name, sizeof(takPacket.device_callsign) - 1);
+    takPacket.device_callsign[sizeof(takPacket.device_callsign) - 1] = '\0';
 
     // Encode TAKPacketV2 protobuf, leaving room for flags byte prefix
     uint8_t protobuf_bytes[sizeof(mp->decoded.payload.bytes) - 1];
