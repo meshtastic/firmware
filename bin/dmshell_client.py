@@ -202,13 +202,14 @@ class SessionState:
     next_seq: int = 1
     last_rx_seq: int = 0
     next_expected_rx_seq: int = 1
+    highest_seen_rx_seq: int = 0
     active: bool = False
     stopped: bool = False
     opened_event: threading.Event = field(default_factory=threading.Event)
     closed_event: threading.Event = field(default_factory=threading.Event)
     event_queue: "queue.Queue[str]" = field(default_factory=queue.Queue)
     tx_lock: threading.Lock = field(default_factory=threading.Lock)
-    tx_history: deque[SentShellFrame] = field(default_factory=lambda: deque(maxlen=10))
+    tx_history: deque[SentShellFrame] = field(default_factory=lambda: deque(maxlen=50))
 
     def alloc_seq(self) -> int:
         with self.tx_lock:
@@ -225,17 +226,32 @@ class SessionState:
             if seq == 0:
                 return ("process", None)
             if seq < self.next_expected_rx_seq:
+                if self.highest_seen_rx_seq >= self.next_expected_rx_seq:
+                    return ("gap", self.next_expected_rx_seq)
                 return ("duplicate", None)
             if seq > self.next_expected_rx_seq:
+                if seq > self.highest_seen_rx_seq:
+                    self.highest_seen_rx_seq = seq
                 return ("gap", self.next_expected_rx_seq)
             self.last_rx_seq = seq
             self.next_expected_rx_seq = seq + 1
+            if seq > self.highest_seen_rx_seq:
+                self.highest_seen_rx_seq = seq
+            if self.highest_seen_rx_seq < self.next_expected_rx_seq:
+                self.highest_seen_rx_seq = 0
             return ("process", None)
+
+    def pending_missing_seq(self) -> Optional[int]:
+        with self.tx_lock:
+            if self.highest_seen_rx_seq >= self.next_expected_rx_seq:
+                return self.next_expected_rx_seq
+            return None
 
     def set_receive_cursor(self, seq: int) -> None:
         with self.tx_lock:
             self.last_rx_seq = seq
             self.next_expected_rx_seq = seq + 1
+            self.highest_seen_rx_seq = seq
 
     def remember_sent_frame(self, frame: SentShellFrame) -> None:
         if frame.seq == 0 or frame.op == self.pb2.mesh.DMShell.ACK:
@@ -247,7 +263,7 @@ class SessionState:
         if ack_seq <= 0:
             return
         with self.tx_lock:
-            self.tx_history = deque((frame for frame in self.tx_history if frame.seq > ack_seq), maxlen=10)
+            self.tx_history = deque((frame for frame in self.tx_history if frame.seq > ack_seq), maxlen=50)
 
     def replay_frames_from(self, start_seq: int) -> list[SentShellFrame]:
         with self.tx_lock:
@@ -332,24 +348,24 @@ def send_ack_frame(sock: socket.socket, state: SessionState, replay_from: Option
 
 
 def replay_frames_from(sock: socket.socket, state: SessionState, start_seq: int) -> None:
-    frames = state.replay_frames_from(start_seq)
-    if not frames:
+    frame = next((f for f in state.replay_frames_from(start_seq) if f.seq == start_seq), None)
+    if frame is None:
         state.event_queue.put(f"replay unavailable from seq={start_seq}")
         return
-    for frame in frames:
-        send_shell_frame(
-            sock,
-            state,
-            frame.op,
-            payload=frame.payload,
-            cols=frame.cols,
-            rows=frame.rows,
-            session_id=frame.session_id,
-            ack_seq=frame.ack_seq,
-            seq=frame.seq,
-            flags=frame.flags,
-            remember=False,
-        )
+    state.event_queue.put(f"replay frame seq={start_seq}")
+    send_shell_frame(
+        sock,
+        state,
+        frame.op,
+        payload=frame.payload,
+        cols=frame.cols,
+        rows=frame.rows,
+        session_id=frame.session_id,
+        ack_seq=frame.ack_seq,
+        seq=frame.seq,
+        flags=frame.flags,
+        remember=False,
+    )
 
 
 def wait_for_config_complete(sock: socket.socket, pb2, timeout: float, verbose: bool) -> None:
@@ -398,6 +414,7 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
                 continue
             state.prune_sent_frames(shell.ack_seq)
             if shell.op == state.pb2.mesh.DMShell.ACK:
+                state.event_queue.put("peer requested replay")
                 replay_from = decode_replay_request(shell.payload)
                 if replay_from is not None:
                     state.event_queue.put(f"peer requested replay from seq={replay_from}")
@@ -437,6 +454,10 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
                 return
             elif shell.op == state.pb2.mesh.DMShell.PONG:
                 state.event_queue.put("pong")
+
+            missing_seq = state.pending_missing_seq()
+            if missing_seq is not None:
+                send_ack_frame(sock, state, replay_from=missing_seq)
         elif state.verbose and variant:
             state.event_queue.put(f"fromradio {variant}")
 
