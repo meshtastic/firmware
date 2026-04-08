@@ -1,6 +1,5 @@
 #pragma once
 #include "SinglePortModule.h"
-#include "concurrency/OSThread.h"
 
 /**
  * ATAK Plugin V2 module - passthrough for ATAK_PLUGIN_V2 payloads.
@@ -10,7 +9,7 @@
  * (Android, iOS, ATAK plugin); firmware forwards the bytes unchanged on the
  * ATAK_PLUGIN_V2 port.
  */
-class AtakPluginModule : public SinglePortModule, private concurrency::OSThread
+class AtakPluginModule : public SinglePortModule
 {
   public:
     /** Constructor
@@ -20,8 +19,6 @@ class AtakPluginModule : public SinglePortModule, private concurrency::OSThread
 
   protected:
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
-    /* Does our periodic broadcast */
-    int32_t runOnce() override;
 };
 
 extern AtakPluginModule *atakPluginModule;
