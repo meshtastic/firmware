@@ -1,8 +1,16 @@
-#define I2C_SDA 45 // I2C pins for touch screen
-#define I2C_SCL 46
+// I2C pins for touch screen or ext connector
+#define I2C_SDA 7
+#define I2C_SCL 8
 
-#define BUTTON_PIN 0
+#define I2C_SDA1 45
+#define I2C_SCL1 46
 
+#define USE_POWERSAVE
+#define WAKE_ON_TOUCH
+#define SCREEN_TOUCH_INT 42
+#define SLEEP_TIME 180
+
+// LoRa
 #define USE_SX1262
 #define LORA_SCK 26
 #define LORA_MISO 47
