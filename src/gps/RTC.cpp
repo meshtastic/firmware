@@ -6,6 +6,9 @@
 #include <Throttle.h>
 #include <sys/time.h>
 #include <time.h>
+#if defined(ARCH_STM32WL) && HAS_RTC
+#include <STM32RTC.h>
+#endif
 
 static RTCQuality currentQuality = RTCQualityNone;
 uint32_t lastSetFromPhoneNtpOrGps = 0;
@@ -161,6 +164,48 @@ RTCSetResult readFromRTC()
             return RTCSetResultSuccess;
         }
     }
+#elif defined(ARCH_STM32WL)
+#if HAS_RTC
+    {
+        uint32_t now = millis();
+        STM32RTC &rtc = STM32RTC::getInstance();
+        if (!rtc.isConfigured()) {
+#ifdef RCC_LSEDRIVE_CONFIG
+            __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_CONFIG);
+#endif
+            rtc.setClockSource(STM32RTC::LSE_CLOCK);
+            rtc.begin();
+        }
+        if (!rtc.isTimeSet()) {
+            return RTCSetResultNotSet;
+        }
+#ifdef HAL_RTC_MODULE_ENABLED
+        // Wait for shadow register sync (RSF flag) after INIT mode exit or a recent
+        // setEpoch() write; without this getEpoch() may return stale data.
+        HAL_RTC_WaitForSynchro(rtc.getHandle());
+#endif
+        tv.tv_sec = rtc.getEpoch();
+        tv.tv_usec = 0;
+        uint32_t printableEpoch = tv.tv_sec;
+        LOG_DEBUG("Read RTC time from STM32 RTC as %ld", printableEpoch);
+#ifdef BUILD_EPOCH
+        if (tv.tv_sec < BUILD_EPOCH) {
+            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                lastTimeValidationWarning = millis();
+            }
+            return RTCSetResultInvalidTime;
+        }
+#endif
+        if (currentQuality == RTCQualityNone) {
+            timeStartMsec = now;
+            zeroOffsetSecs = tv.tv_sec;
+            currentQuality = RTCQualityDevice;
+        }
+        return RTCSetResultSuccess;
+    }
+#endif // HAS_RTC
+    // HAS_RTC == 0: no LSE crystal on this board, fall through to RTCSetResultNotSet
 #else
     if (!gettimeofday(&tv, NULL)) {
         uint32_t now = millis();
@@ -291,6 +336,12 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             } else {
                 LOG_WARN("Failed to set time for RX8130CE");
             }
+        }
+#elif defined(ARCH_STM32WL) && HAS_RTC
+        {
+            STM32RTC &rtc = STM32RTC::getInstance();
+            rtc.setEpoch(tv->tv_sec);
+            LOG_DEBUG("STM32 RTC setEpoch %ld", (uint32_t)tv->tv_sec);
         }
 #elif defined(ARCH_ESP32)
         settimeofday(tv, NULL);

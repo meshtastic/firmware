@@ -29,8 +29,8 @@
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
+#include "RTC.h"
 #include "Throttle.h"
-#include <RTC.h>
 
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;

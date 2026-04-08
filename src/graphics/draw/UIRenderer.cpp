@@ -5,6 +5,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
+#include "RTC.h"
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/GeoCoord.h"
@@ -15,7 +16,6 @@
 #include "main.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
-#include <RTC.h>
 #include <cstring>
 
 // External variables
