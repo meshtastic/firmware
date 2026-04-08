@@ -300,6 +300,16 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TBEAM_1_WATT = 122,
     /* LilyGo T5 S3 ePaper Pro (V1 and V2) */
     meshtastic_HardwareModel_T5_S3_EPAPER_PRO = 123,
+    /* LilyGo T-Beam BPF (144-148Mhz) */
+    meshtastic_HardwareModel_TBEAM_BPF = 124,
+    /* LilyGo T-Mini E-paper S3 Kit */
+    meshtastic_HardwareModel_MINI_EPAPER_S3 = 125,
+    /* LilyGo T-Display S3 Pro LR1121 */
+    meshtastic_HardwareModel_TDISPLAY_S3_PRO = 126,
+    /* Heltec Mesh Node T096 board features an nRF52840 CPU and a TFT screen. */
+    meshtastic_HardwareModel_HELTEC_MESH_NODE_T096 = 127,
+    /* Seeed studio T1000-E Pro tracker card. NRF52840 w/ LR2021 radio, GPS, button, buzzer, and sensors. */
+    meshtastic_HardwareModel_TRACKER_T1000_E_PRO = 128,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
