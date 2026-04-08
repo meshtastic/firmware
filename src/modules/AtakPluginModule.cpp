@@ -13,7 +13,7 @@ AtakPluginModule::AtakPluginModule()
 
 int32_t AtakPluginModule::runOnce()
 {
-    return default_broadcast_interval_secs;
+    return default_broadcast_interval_secs * 1000;
 }
 
 ProcessMessage AtakPluginModule::handleReceived(const meshtastic_MeshPacket &mp)
