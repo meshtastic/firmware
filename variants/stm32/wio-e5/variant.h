@@ -19,4 +19,10 @@ Do not expect a working Meshtastic device with this target.
 
 #define WIO_E5
 
+// Wio-E5 has a built-in 32.768 kHz LSE crystal, so use internal RTC
+// Drive level from here:
+// https://github.com/Seeed-Studio/LoRaWan-E5-Node/blob/main/Projects/Applications/LoRaWAN/LoRaWAN_End_Node/Core/Src/main.c
+#define HAS_RTC 1
+#define RCC_LSEDRIVE_CONFIG RCC_LSEDRIVE_LOW
+
 #endif
