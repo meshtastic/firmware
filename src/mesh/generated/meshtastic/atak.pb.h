@@ -183,7 +183,65 @@ typedef enum _meshtastic_CotType {
     /* a-u-A: Unknown aircraft (generic) */
     meshtastic_CotType_CotType_a_u_A = 45,
     /* a-f-A-M-H-Q: Friendly aircraft military helicopter observation */
-    meshtastic_CotType_CotType_a_f_A_M_H_Q = 46
+    meshtastic_CotType_CotType_a_f_A_M_H_Q = 46,
+    /* a-f-A-C-F: Friendly aircraft civilian fixed-wing */
+    meshtastic_CotType_CotType_a_f_A_C_F = 47,
+    /* a-f-A-C: Friendly aircraft civilian (generic) */
+    meshtastic_CotType_CotType_a_f_A_C = 48,
+    /* a-f-A-C-L: Friendly aircraft civilian lighter-than-air */
+    meshtastic_CotType_CotType_a_f_A_C_L = 49,
+    /* a-f-A: Friendly aircraft (generic) */
+    meshtastic_CotType_CotType_a_f_A = 50,
+    /* a-f-A-M-H-C: Friendly aircraft military helicopter cargo */
+    meshtastic_CotType_CotType_a_f_A_M_H_C = 51,
+    /* a-n-A-M-F-F: Neutral aircraft military fixed-wing fighter */
+    meshtastic_CotType_CotType_a_n_A_M_F_F = 52,
+    /* a-u-A-C-F: Unknown aircraft civilian fixed-wing */
+    meshtastic_CotType_CotType_a_u_A_C_F = 53,
+    /* a-f-G-U-C-F-T-A: Friendly ground unit combat forces theater aviation */
+    meshtastic_CotType_CotType_a_f_G_U_C_F_T_A = 54,
+    /* a-f-G-U-C-V-S: Friendly ground unit combat vehicle support */
+    meshtastic_CotType_CotType_a_f_G_U_C_V_S = 55,
+    /* a-f-G-U-C-R-X: Friendly ground unit combat reconnaissance exploitation */
+    meshtastic_CotType_CotType_a_f_G_U_C_R_X = 56,
+    /* a-f-G-U-C-I-Z: Friendly ground unit combat infantry mechanized */
+    meshtastic_CotType_CotType_a_f_G_U_C_I_Z = 57,
+    /* a-f-G-U-C-E-C-W: Friendly ground unit combat engineer construction wheeled */
+    meshtastic_CotType_CotType_a_f_G_U_C_E_C_W = 58,
+    /* a-f-G-U-C-I-L: Friendly ground unit combat infantry light */
+    meshtastic_CotType_CotType_a_f_G_U_C_I_L = 59,
+    /* a-f-G-U-C-R-O: Friendly ground unit combat reconnaissance other */
+    meshtastic_CotType_CotType_a_f_G_U_C_R_O = 60,
+    /* a-f-G-U-C-R-V: Friendly ground unit combat reconnaissance cavalry */
+    meshtastic_CotType_CotType_a_f_G_U_C_R_V = 61,
+    /* a-f-G-U-H: Friendly ground unit headquarters */
+    meshtastic_CotType_CotType_a_f_G_U_H = 62,
+    /* a-f-G-U-U-M-S-E: Friendly ground unit support medical surgical evacuation */
+    meshtastic_CotType_CotType_a_f_G_U_U_M_S_E = 63,
+    /* a-f-G-U-S-M-C: Friendly ground unit support maintenance collection */
+    meshtastic_CotType_CotType_a_f_G_U_S_M_C = 64,
+    /* a-f-G-E-S: Friendly ground equipment sensor (generic) */
+    meshtastic_CotType_CotType_a_f_G_E_S = 65,
+    /* a-f-G-E: Friendly ground equipment (generic) */
+    meshtastic_CotType_CotType_a_f_G_E = 66,
+    /* a-f-G-E-V-C-U: Friendly ground equipment vehicle utility */
+    meshtastic_CotType_CotType_a_f_G_E_V_C_U = 67,
+    /* a-f-G-E-V-C-ps: Friendly ground equipment vehicle public safety */
+    meshtastic_CotType_CotType_a_f_G_E_V_C_ps = 68,
+    /* a-u-G-E-V: Unknown ground equipment vehicle */
+    meshtastic_CotType_CotType_a_u_G_E_V = 69,
+    /* a-f-S-N-N-R: Friendly sea surface non-naval rescue */
+    meshtastic_CotType_CotType_a_f_S_N_N_R = 70,
+    /* a-f-F-B: Friendly force boundary */
+    meshtastic_CotType_CotType_a_f_F_B = 71,
+    /* b-m-p-s-p-loc: Self-position location marker */
+    meshtastic_CotType_CotType_b_m_p_s_p_loc = 72,
+    /* b-i-v: Imagery/video */
+    meshtastic_CotType_CotType_b_i_v = 73,
+    /* b-f-t-r: File transfer request */
+    meshtastic_CotType_CotType_b_f_t_r = 74,
+    /* b-f-t-a: File transfer acknowledgment */
+    meshtastic_CotType_CotType_b_f_t_a = 75
 } meshtastic_CotType;
 
 /* Geopoint and altitude source */
@@ -387,8 +445,8 @@ extern "C" {
 #define _meshtastic_CotHow_ARRAYSIZE ((meshtastic_CotHow)(meshtastic_CotHow_CotHow_m_s+1))
 
 #define _meshtastic_CotType_MIN meshtastic_CotType_CotType_Other
-#define _meshtastic_CotType_MAX meshtastic_CotType_CotType_a_f_A_M_H_Q
-#define _meshtastic_CotType_ARRAYSIZE ((meshtastic_CotType)(meshtastic_CotType_CotType_a_f_A_M_H_Q+1))
+#define _meshtastic_CotType_MAX meshtastic_CotType_CotType_b_f_t_a
+#define _meshtastic_CotType_ARRAYSIZE ((meshtastic_CotType)(meshtastic_CotType_CotType_b_f_t_a+1))
 
 #define _meshtastic_GeoPointSource_MIN meshtastic_GeoPointSource_GeoPointSource_Unspecified
 #define _meshtastic_GeoPointSource_MAX meshtastic_GeoPointSource_GeoPointSource_NETWORK
