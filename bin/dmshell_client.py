@@ -297,9 +297,9 @@ def drain_events(state: SessionState) -> None:
 
 def run_command_mode(sock: socket.socket, state: SessionState, commands: list[str], close_after: float) -> None:
     for command in commands:
-        send_shell_frame(sock, state, state.mesh_pb2.DMShell.INPUT, (command + "\n").encode("utf-8"))
+        send_shell_frame(sock, state, state.pb2.mesh.DMShell.INPUT, (command + "\n").encode("utf-8"))
     time.sleep(close_after)
-    send_shell_frame(sock, state, state.mesh_pb2.DMShell.CLOSE)
+    send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
     state.closed_event.wait(timeout=close_after + 5.0)
 
 
@@ -330,7 +330,7 @@ def run_interactive_mode(sock: socket.socket, state: SessionState) -> None:
             if len(parts) != 3:
                 print("usage: /resize COLS ROWS", file=sys.stderr)
                 continue
-                send_shell_frame(sock, state, state.pb2.mesh.DMShell.RESIZE, cols=int(parts[1]), rows=int(parts[2]))
+            send_shell_frame(sock, state, state.pb2.mesh.DMShell.RESIZE, cols=int(parts[1]), rows=int(parts[2]))
             continue
 
         send_shell_frame(sock, state, state.pb2.mesh.DMShell.INPUT, (line + "\n").encode("utf-8"))
