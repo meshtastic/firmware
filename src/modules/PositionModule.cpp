@@ -319,7 +319,13 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
     takPacket.longitude_i = localPosition.longitude_i;
     takPacket.altitude = localPosition.altitude_hae;
     takPacket.speed = localPosition.ground_speed;
-    takPacket.course = static_cast<uint16_t>(localPosition.ground_track);
+    // ground_track is stored as degrees * 1e5, course field expects degrees * 100
+    int32_t course = localPosition.ground_track / 1000;
+    if (course < 0)
+        course = 0;
+    else if (course > 36000)
+        course = 36000;
+    takPacket.course = static_cast<uint16_t>(course);
     takPacket.battery = powerStatus->getBatteryChargePercent();
     takPacket.geo_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
     takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
@@ -334,13 +340,20 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
     uint8_t protobuf_bytes[sizeof(mp->decoded.payload.bytes) - 1];
     size_t proto_size = pb_encode_to_bytes(protobuf_bytes, sizeof(protobuf_bytes), &meshtastic_TAKPacketV2_msg, &takPacket);
 
+    if (proto_size == 0) {
+        LOG_ERROR("Failed to encode TAK V2 PLI packet");
+        packetPool.release(mp);
+        return nullptr;
+    }
+
     // Wire format: [flags byte][protobuf bytes]
     // Flags byte 0xFF = uncompressed raw protobuf (no zstd dictionary)
+    // This is a special value checked before dict ID masking per WIRE_FORMAT.md spec
     mp->decoded.payload.bytes[0] = 0xFF;
     memcpy(mp->decoded.payload.bytes + 1, protobuf_bytes, proto_size);
     mp->decoded.payload.size = proto_size + 1;
 
-    LOG_DEBUG("TAK V2 PLI payload: %d bytes (1 flags + %d protobuf)", mp->decoded.payload.size, proto_size);
+    LOG_DEBUG("TAK V2 PLI payload: %zu bytes (1 flags + %zu protobuf)", mp->decoded.payload.size, proto_size);
     return mp;
 }
 
