@@ -38,4 +38,8 @@
 // https://github.com/stm32duino/Arduino_Core_STM32/blob/main/variants/STM32WLxx/WL54CCU_WL55CCU_WLE4C(8-B-C)U_WLE5C(8-B-C)U/variant_RAK3172_MODULE.h
 #define RAK3172
 
+// Use RTC in RAK3172 module
+#define HAS_RTC 1
+#define RCC_LSEDRIVE_CONFIG RCC_LSEDRIVE_LOW
+
 #endif
