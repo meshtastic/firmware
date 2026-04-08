@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import struct
 import os
 import queue
 import random
@@ -14,6 +15,7 @@ import termios
 import threading
 import time
 import tty
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -25,6 +27,7 @@ HEADER_LEN = 4
 DEFAULT_API_PORT = 4403
 DEFAULT_HOP_LIMIT = 3
 LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
+REPLAY_REQUEST_SIZE = 4
 
 
 def parse_args() -> argparse.Namespace:
@@ -178,6 +181,18 @@ def send_stream_frame(sock: socket.socket, payload: bytes) -> None:
 
 
 @dataclass
+class SentShellFrame:
+    op: int
+    session_id: int
+    seq: int
+    ack_seq: int
+    payload: bytes = b""
+    cols: int = 0
+    rows: int = 0
+    flags: int = 0
+
+
+@dataclass
 class SessionState:
     pb2: object  # ProtoModules with mesh and portnums attributes
     target: int
@@ -185,16 +200,68 @@ class SessionState:
     verbose: bool
     session_id: int = field(default_factory=lambda: random.randint(1, 0x7FFFFFFF))
     next_seq: int = 1
+    last_rx_seq: int = 0
+    next_expected_rx_seq: int = 1
     active: bool = False
     stopped: bool = False
     opened_event: threading.Event = field(default_factory=threading.Event)
     closed_event: threading.Event = field(default_factory=threading.Event)
     event_queue: "queue.Queue[str]" = field(default_factory=queue.Queue)
+    tx_lock: threading.Lock = field(default_factory=threading.Lock)
+    tx_history: deque[SentShellFrame] = field(default_factory=lambda: deque(maxlen=10))
 
     def alloc_seq(self) -> int:
-        value = self.next_seq
-        self.next_seq += 1
-        return value
+        with self.tx_lock:
+            value = self.next_seq
+            self.next_seq += 1
+            return value
+
+    def current_ack_seq(self) -> int:
+        with self.tx_lock:
+            return self.last_rx_seq
+
+    def note_received_seq(self, seq: int) -> tuple[str, Optional[int]]:
+        with self.tx_lock:
+            if seq == 0:
+                return ("process", None)
+            if seq < self.next_expected_rx_seq:
+                return ("duplicate", None)
+            if seq > self.next_expected_rx_seq:
+                return ("gap", self.next_expected_rx_seq)
+            self.last_rx_seq = seq
+            self.next_expected_rx_seq = seq + 1
+            return ("process", None)
+
+    def set_receive_cursor(self, seq: int) -> None:
+        with self.tx_lock:
+            self.last_rx_seq = seq
+            self.next_expected_rx_seq = seq + 1
+
+    def remember_sent_frame(self, frame: SentShellFrame) -> None:
+        if frame.seq == 0 or frame.op == self.pb2.mesh.DMShell.ACK:
+            return
+        with self.tx_lock:
+            self.tx_history.append(frame)
+
+    def prune_sent_frames(self, ack_seq: int) -> None:
+        if ack_seq <= 0:
+            return
+        with self.tx_lock:
+            self.tx_history = deque((frame for frame in self.tx_history if frame.seq > ack_seq), maxlen=10)
+
+    def replay_frames_from(self, start_seq: int) -> list[SentShellFrame]:
+        with self.tx_lock:
+            return [frame for frame in self.tx_history if frame.seq >= start_seq]
+
+
+def encode_replay_request(start_seq: int) -> bytes:
+    return struct.pack(">I", start_seq)
+
+
+def decode_replay_request(payload: bytes) -> Optional[int]:
+    if len(payload) < REPLAY_REQUEST_SIZE:
+        return None
+    return struct.unpack(">I", payload[:REPLAY_REQUEST_SIZE])[0]
 
 
 def send_toradio(sock: socket.socket, toradio) -> None:
@@ -221,16 +288,68 @@ def make_toradio_packet(pb2, state: SessionState, shell_msg) -> object:
     return toradio
 
 
-def send_shell_frame(sock: socket.socket, state: SessionState, op: int, payload: bytes = b"", cols: int = 0, rows: int = 0) -> None:
+def send_shell_frame(
+    sock: socket.socket,
+    state: SessionState,
+    op: int,
+    payload: bytes = b"",
+    cols: int = 0,
+    rows: int = 0,
+    session_id: Optional[int] = None,
+    ack_seq: Optional[int] = None,
+    seq: Optional[int] = None,
+    flags: int = 0,
+    remember: bool = True,
+) -> int:
+    if seq is None:
+        seq = 0 if op == state.pb2.mesh.DMShell.ACK else state.alloc_seq()
+    if ack_seq is None:
+        ack_seq = state.current_ack_seq()
+    if session_id is None:
+        session_id = state.session_id
+
     shell = state.pb2.mesh.DMShell()
     shell.op = op
-    shell.session_id = state.session_id
-    shell.seq = state.alloc_seq()
+    shell.session_id = session_id
+    shell.seq = seq
+    shell.ack_seq = ack_seq
     shell.cols = cols
     shell.rows = rows
+    shell.flags = flags
     if payload:
         shell.payload = payload
     send_toradio(sock, make_toradio_packet(state.pb2, state, shell))
+    if remember:
+        state.remember_sent_frame(
+            SentShellFrame(op=op, session_id=session_id, seq=seq, ack_seq=ack_seq, payload=payload, cols=cols, rows=rows, flags=flags)
+        )
+    return seq
+
+
+def send_ack_frame(sock: socket.socket, state: SessionState, replay_from: Optional[int] = None) -> None:
+    payload = b"" if replay_from is None else encode_replay_request(replay_from)
+    send_shell_frame(sock, state, state.pb2.mesh.DMShell.ACK, payload=payload, seq=0, remember=False)
+
+
+def replay_frames_from(sock: socket.socket, state: SessionState, start_seq: int) -> None:
+    frames = state.replay_frames_from(start_seq)
+    if not frames:
+        state.event_queue.put(f"replay unavailable from seq={start_seq}")
+        return
+    for frame in frames:
+        send_shell_frame(
+            sock,
+            state,
+            frame.op,
+            payload=frame.payload,
+            cols=frame.cols,
+            rows=frame.rows,
+            session_id=frame.session_id,
+            ack_seq=frame.ack_seq,
+            seq=frame.seq,
+            flags=frame.flags,
+            remember=False,
+        )
 
 
 def wait_for_config_complete(sock: socket.socket, pb2, timeout: float, verbose: bool) -> None:
@@ -277,8 +396,26 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
             shell = decode_shell_packet(state, fromradio.packet)
             if not shell:
                 continue
+            state.prune_sent_frames(shell.ack_seq)
+            if shell.op == state.pb2.mesh.DMShell.ACK:
+                replay_from = decode_replay_request(shell.payload)
+                if replay_from is not None:
+                    state.event_queue.put(f"peer requested replay from seq={replay_from}")
+                    replay_frames_from(sock, state, replay_from)
+                continue
+
+            action, missing_from = state.note_received_seq(shell.seq)
+            if action == "duplicate":
+                send_ack_frame(sock, state)
+                continue
+            if action == "gap":
+                state.event_queue.put(f"missing frame before seq={shell.seq}, requesting replay from seq={missing_from}")
+                send_ack_frame(sock, state, replay_from=missing_from)
+                continue
+
             if shell.op == state.pb2.mesh.DMShell.OPEN_OK:
                 state.session_id = shell.session_id
+                state.set_receive_cursor(shell.seq)
                 state.active = True
                 state.opened_event.set()
                 pid = int.from_bytes(shell.payload, "big") if shell.payload else 0
