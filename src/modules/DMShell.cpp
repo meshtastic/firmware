@@ -98,26 +98,27 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::STOP;
     }
 
+    // TODO: double-check the sender is the same as the one we have an active session with before processing ACKs
+    if (frame.op == meshtastic_DMShell_OpCode_ACK) {
+        if (session.active && frame.sessionId == session.sessionId && getFrom(&mp) == session.peer) {
+            handleAckFrame(frame);
+        }
+        return ProcessMessage::STOP;
+    }
+
     if (frame.op >= 64) {
-        LOG_WARN("DMShell: ignoring frame with op code %d", frame.op);
+        LOG_WARN("DMShell: ignoring frame with op code %d, seq %d", frame.op, frame.seq);
         return ProcessMessage::CONTINUE;
     }
 
     if (!isAuthorizedPacket(mp)) {
-        LOG_WARN("DMShell: unauthorized sender 0x%x", mp.from);
+        LOG_WARN("DMShell: unauthorized sender 0x%x, %u", mp.from, frame.op);
         myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
         return ProcessMessage::STOP;
     }
 
     if (frame.ackSeq > 0) {
         pruneSentFrames(frame.ackSeq);
-    }
-
-    if (frame.op == meshtastic_DMShell_OpCode_ACK) {
-        if (session.active && frame.sessionId == session.sessionId && getFrom(&mp) == session.peer) {
-            handleAckFrame(frame);
-        }
-        return ProcessMessage::STOP;
     }
 
     if (frame.op == meshtastic_DMShell_OpCode_OPEN) {
@@ -189,6 +190,10 @@ int32_t DMShellModule::runOnce()
         return 100;
     }
 
+    if (RadioLibInterface::instance->packetsInTxQueue() > 1) {
+        return 50;
+    }
+
     uint8_t outBuf[MAX_PTY_READ_SIZE];
     while (session.masterFd >= 0) {
         const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
@@ -196,7 +201,8 @@ int32_t DMShellModule::runOnce()
             LOG_WARN("DMShell: read %d bytes from PTY", bytesRead);
             sendControl(meshtastic_DMShell_OpCode_OUTPUT, outBuf, static_cast<size_t>(bytesRead));
             session.lastActivityMs = millis();
-            continue;
+            // continue;
+            return 50;
         }
 
         if (bytesRead == 0) {
