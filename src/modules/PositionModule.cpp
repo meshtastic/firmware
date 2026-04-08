@@ -368,8 +368,10 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
     }
 
     // Wire format: [flags byte][protobuf bytes]
-    // Flags byte 0xFF = uncompressed raw protobuf (no zstd dictionary)
-    // This is a special value checked before dict ID masking per WIRE_FORMAT.md spec
+    // Flags byte 0xFF is a reserved sentinel meaning the remainder is an
+    // uncompressed raw protobuf payload (that is, no zstd dictionary ID is
+    // encoded in the flags byte). Decoders must check for this sentinel before
+    // applying any dictionary-ID masking/interpretation.
     mp->decoded.payload.bytes[0] = 0xFF;
     memcpy(mp->decoded.payload.bytes + 1, protobuf_bytes, proto_size);
     mp->decoded.payload.size = proto_size + 1;
