@@ -27,6 +27,9 @@ PB_BIND(meshtastic_KeyVerification, meshtastic_KeyVerification, AUTO)
 PB_BIND(meshtastic_StoreForwardPlusPlus, meshtastic_StoreForwardPlusPlus, 2)
 
 
+PB_BIND(meshtastic_DMShell, meshtastic_DMShell, AUTO)
+
+
 PB_BIND(meshtastic_Waypoint, meshtastic_Waypoint, AUTO)
 
 
@@ -103,6 +106,8 @@ PB_BIND(meshtastic_resend_chunks, meshtastic_resend_chunks, AUTO)
 
 
 PB_BIND(meshtastic_ChunkedPayloadResponse, meshtastic_ChunkedPayloadResponse, AUTO)
+
+
 
 
 
