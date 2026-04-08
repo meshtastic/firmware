@@ -83,6 +83,11 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::STOP;
     }
 
+    if (frame.op >= 64) {
+        LOG_WARN("DMShell: ignoring frame with op code %d", frame.op);
+        return ProcessMessage::CONTINUE;
+    }
+
     if (!isAuthorizedPacket(mp)) {
         LOG_WARN("DMShell: unauthorized sender 0x%x", mp.from);
         myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
@@ -234,7 +239,7 @@ bool DMShellModule::isAuthorizedPacket(const meshtastic_MeshPacket &mp) const
 bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const DMShellFrame &frame)
 {
     if (session.active) {
-        closeSession("preempted", true);
+        closeSession("preempted", false);
     }
 
     int masterFd = -1;
