@@ -1,5 +1,6 @@
 #pragma once
 #include "SinglePortModule.h"
+#include "concurrency/OSThread.h"
 
 /**
  * ATAK Plugin V2 module - passthrough for zstd dictionary-compressed CoT payloads.
