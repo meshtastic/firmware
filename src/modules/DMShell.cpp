@@ -103,7 +103,7 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         if (session.active && frame.sessionId == session.sessionId && getFrom(&mp) == session.peer) {
             handleAckFrame(frame);
         }
-        return ProcessMessage::STOP;
+        return ProcessMessage::CONTINUE;
     }
 
     if (frame.op >= 64) {
@@ -319,6 +319,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const DMShellFr
     session.nextTxSeq = 1;
     session.lastAckedRxSeq = frame.seq;
     session.nextExpectedRxSeq = frame.seq + 1;
+    session.highestSeenRxSeq = frame.seq;
     session.lastActivityMs = millis();
 
     uint8_t payload[sizeof(uint32_t)] = {0};
@@ -434,27 +435,23 @@ void DMShellModule::resendFramesFrom(uint32_t startSeq)
         return;
     }
 
-    uint32_t lastSeq = startSeq - 1;
-    for (size_t sentCount = 0; sentCount < session.txHistory.size(); ++sentCount) {
-        DMShellSession::SentFrame *best = nullptr;
-        for (auto &entry : session.txHistory) {
-            if (!entry.valid || entry.seq < startSeq || entry.seq <= lastSeq) {
-                continue;
-            }
-            if (!best || entry.seq < best->seq) {
-                best = &entry;
-            }
+    DMShellSession::SentFrame *match = nullptr;
+    for (auto &entry : session.txHistory) {
+        if (!entry.valid || entry.seq != startSeq) {
+            continue;
         }
-
-        if (!best) {
-            break;
-        }
-
-        LOG_INFO("DMShell: replaying frame seq=%u op=%d", best->seq, best->op);
-        sendFrameToPeer(session.peer, session.channel, best->op, best->sessionId, best->seq, best->payload, best->payloadLen,
-                        best->cols, best->rows, best->ackSeq, best->flags, false);
-        lastSeq = best->seq;
+        match = &entry;
+        break;
     }
+
+    if (!match) {
+        LOG_WARN("DMShell: replay request for seq=%u not found in history", startSeq);
+        return;
+    }
+
+    LOG_INFO("DMShell: replaying frame seq=%u op=%d", match->seq, match->op);
+    sendFrameToPeer(session.peer, session.channel, match->op, match->sessionId, match->seq, match->payload, match->payloadLen,
+                    match->cols, match->rows, match->ackSeq, match->flags, false);
 }
 
 void DMShellModule::sendAck(uint32_t replayFromSeq)
@@ -495,17 +492,32 @@ bool DMShellModule::shouldProcessIncomingFrame(const DMShellFrame &frame)
     }
 
     if (frame.seq < session.nextExpectedRxSeq) {
-        sendAck();
+        if (session.highestSeenRxSeq >= session.nextExpectedRxSeq) {
+            sendAck(session.nextExpectedRxSeq);
+        } else {
+            sendAck();
+        }
         return false;
     }
 
     if (frame.seq > session.nextExpectedRxSeq) {
+        if (frame.seq > session.highestSeenRxSeq) {
+            session.highestSeenRxSeq = frame.seq;
+        }
         sendAck(session.nextExpectedRxSeq);
         return false;
     }
 
     session.lastAckedRxSeq = frame.seq;
     session.nextExpectedRxSeq = frame.seq + 1;
+    if (frame.seq > session.highestSeenRxSeq) {
+        session.highestSeenRxSeq = frame.seq;
+    }
+    if (session.highestSeenRxSeq >= session.nextExpectedRxSeq) {
+        sendAck(session.nextExpectedRxSeq);
+    } else {
+        session.highestSeenRxSeq = 0;
+    }
     return true;
 }
 

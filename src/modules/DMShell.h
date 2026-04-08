@@ -34,6 +34,7 @@ struct DMShellSession {
     uint32_t nextTxSeq = 1;
     uint32_t lastAckedRxSeq = 0;
     uint32_t nextExpectedRxSeq = 1;
+    uint32_t highestSeenRxSeq = 0;
     uint32_t lastActivityMs = 0;
     struct SentFrame {
         bool valid = false;
@@ -47,7 +48,7 @@ struct DMShellSession {
         uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN] = {0};
         size_t payloadLen = 0;
     };
-    std::array<SentFrame, 10> txHistory = {};
+    std::array<SentFrame, 50> txHistory = {};
     size_t txHistoryNext = 0;
 };
 
