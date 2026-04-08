@@ -6,11 +6,14 @@ import queue
 import random
 import shutil
 import socket
+import select
 import subprocess
 import sys
 import tempfile
+import termios
 import threading
 import time
+import tty
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -21,6 +24,7 @@ START2 = 0xC3
 HEADER_LEN = 4
 DEFAULT_API_PORT = 4403
 DEFAULT_HOP_LIMIT = 3
+LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,8 +41,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=DEFAULT_API_PORT, help="meshtasticd API port")
     parser.add_argument("--to", required=True, help="destination node number, e.g. !170896f7 or 0x170896f7")
     parser.add_argument("--channel", type=int, default=0, help="channel index to use")
-    parser.add_argument("--cols", type=int, default=120, help="initial terminal columns")
-    parser.add_argument("--rows", type=int, default=40, help="initial terminal rows")
+    parser.add_argument("--cols", type=int, default=None, help="initial terminal columns (default: detect local terminal)")
+    parser.add_argument("--rows", type=int, default=None, help="initial terminal rows (default: detect local terminal)")
     parser.add_argument("--command", action="append", default=[], help="send a command line after opening")
     parser.add_argument("--close-after", type=float, default=2.0, help="seconds to wait before closing in command mode")
     parser.add_argument("--timeout", type=float, default=10.0, help="seconds to wait for API/session events")
@@ -138,6 +142,20 @@ def recv_exact(sock: socket.socket, length: int) -> bytes:
             raise ConnectionError("connection closed by server")
         chunks.extend(piece)
     return bytes(chunks)
+
+
+def detect_local_terminal_size() -> tuple[int, int]:
+    size = shutil.get_terminal_size(fallback=(100, 40))
+    cols = max(1, int(size.columns))
+    rows = max(1, int(size.lines))
+    return cols, rows
+
+
+def resolve_initial_terminal_size(cols_override: Optional[int], rows_override: Optional[int]) -> tuple[int, int]:
+    detected_cols, detected_rows = detect_local_terminal_size()
+    cols = detected_cols if cols_override is None else max(1, cols_override)
+    rows = detected_rows if rows_override is None else max(1, rows_override)
+    return cols, rows
 
 
 def recv_stream_frame(sock: socket.socket) -> bytes:
@@ -304,36 +322,105 @@ def run_command_mode(sock: socket.socket, state: SessionState, commands: list[st
 
 
 def run_interactive_mode(sock: socket.socket, state: SessionState) -> None:
-    print("Enter shell lines to send. Commands: /close, /ping, /resize COLS ROWS", file=sys.stderr)
-    while not state.closed_event.is_set():
-        drain_events(state)
-        try:
-            line = input("dmshell> ")
-        except EOFError:
-            send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
-            break
-        except KeyboardInterrupt:
-            print("", file=sys.stderr)
-            send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
-            break
+    def read_local_command() -> str:
+        prompt = "\r\n[dmshell] local command (resume|close|ping|resize C R): "
+        sys.stderr.write(prompt)
+        sys.stderr.flush()
+        buf = bytearray()
 
-        if not line:
-            continue
-        if line == "/close":
-            send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
-            break
-        if line == "/ping":
-            send_shell_frame(sock, state, state.pb2.mesh.DMShell.PING)
-            continue
-        if line.startswith("/resize "):
-            parts = line.split()
-            if len(parts) != 3:
-                print("usage: /resize COLS ROWS", file=sys.stderr)
+        while True:
+            ch = os.read(sys.stdin.fileno(), 1)
+            if not ch:
+                sys.stderr.write("\r\n")
+                sys.stderr.flush()
+                return "close"
+
+            b = ch[0]
+            if b in (10, 13):
+                sys.stderr.write("\r\n")
+                sys.stderr.flush()
+                return buf.decode("utf-8", errors="replace").strip()
+
+            if b in (8, 127):
+                if buf:
+                    buf.pop()
+                    sys.stderr.write("\b \b")
+                    sys.stderr.flush()
                 continue
-            send_shell_frame(sock, state, state.pb2.mesh.DMShell.RESIZE, cols=int(parts[1]), rows=int(parts[2]))
-            continue
 
-        send_shell_frame(sock, state, state.pb2.mesh.DMShell.INPUT, (line + "\n").encode("utf-8"))
+            if b < 32:
+                continue
+
+            buf.append(b)
+            sys.stderr.write(chr(b))
+            sys.stderr.flush()
+
+    def handle_local_command(cmd: str) -> bool:
+        if cmd in ("", "resume"):
+            return True
+        if cmd == "close":
+            send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
+            return False
+        if cmd == "ping":
+            send_shell_frame(sock, state, state.pb2.mesh.DMShell.PING)
+            return True
+        if cmd.startswith("resize "):
+            parts = cmd.split()
+            if len(parts) != 3:
+                state.event_queue.put("usage: resize COLS ROWS")
+                return True
+            try:
+                cols = int(parts[1])
+                rows = int(parts[2])
+            except ValueError:
+                state.event_queue.put("usage: resize COLS ROWS")
+                return True
+            send_shell_frame(sock, state, state.pb2.mesh.DMShell.RESIZE, cols=cols, rows=rows)
+            return True
+
+        state.event_queue.put(f"unknown local command: {cmd}")
+        return True
+
+    print(
+        "Raw input mode active. All keys (including Ctrl+C/Ctrl+X) are sent to remote. Ctrl+] for local commands.",
+        file=sys.stderr,
+    )
+
+    if not sys.stdin.isatty():
+        # Fallback for non-TTY stdin: still send input as it arrives.
+        while not state.closed_event.is_set():
+            drain_events(state)
+            data = sys.stdin.buffer.read(1)
+            if not data:
+                send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
+                break
+            send_shell_frame(sock, state, state.pb2.mesh.DMShell.INPUT, data)
+        return
+
+    fd = sys.stdin.fileno()
+    old_attrs = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        while not state.closed_event.is_set():
+            drain_events(state)
+            ready, _, _ = select.select([sys.stdin], [], [], 0.05)
+            if not ready:
+                continue
+
+            data = os.read(fd, 1)
+            if not data:
+                send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
+                break
+
+            if data == LOCAL_ESCAPE_BYTE:
+                keep_running = handle_local_command(read_local_command())
+                if not keep_running:
+                    break
+                continue
+
+            send_shell_frame(sock, state, state.pb2.mesh.DMShell.INPUT, data)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_attrs)
 
 
 def main() -> int:
@@ -347,6 +434,8 @@ def main() -> int:
         verbose=args.verbose,
     )
 
+    cols, rows = resolve_initial_terminal_size(args.cols, args.rows)
+
     with socket.create_connection((args.host, args.port), timeout=args.timeout) as sock:
         sock.settimeout(None)
         wait_for_config_complete(sock, pb2, args.timeout, args.verbose)
@@ -354,7 +443,7 @@ def main() -> int:
         reader = threading.Thread(target=reader_loop, args=(sock, state), daemon=True)
         reader.start()
 
-        send_shell_frame(sock, state, pb2.mesh.DMShell.OPEN, cols=args.cols, rows=args.rows)
+        send_shell_frame(sock, state, pb2.mesh.DMShell.OPEN, cols=cols, rows=rows)
         if not state.opened_event.wait(timeout=args.timeout):
             raise SystemExit("timed out waiting for OPEN_OK from remote DMShell")
 

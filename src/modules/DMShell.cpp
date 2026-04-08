@@ -244,8 +244,16 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const DMShellFr
 
     int masterFd = -1;
     struct winsize ws = {};
-    ws.ws_col = PTY_COLS_DEFAULT;
-    ws.ws_row = PTY_ROWS_DEFAULT;
+    if (frame.rows > 0) {
+        ws.ws_row = frame.rows;
+    } else {
+        ws.ws_row = PTY_ROWS_DEFAULT;
+    }
+    if (frame.cols > 0) {
+        ws.ws_col = frame.cols;
+    } else {
+        ws.ws_col = PTY_COLS_DEFAULT;
+    }
     const pid_t childPid = forkpty(&masterFd, nullptr, nullptr, &ws);
     if (childPid < 0) {
         LOG_ERROR("DMShell: forkpty failed errno=%d", errno);
@@ -281,7 +289,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const DMShellFr
                      (static_cast<uint32_t>(session.childPid) >> 24);
     memcpy(payload, &pidBE, sizeof(payload));
     sendFrameToPeer(session.peer, session.channel, meshtastic_DMShell_OpCode_OPEN_OK, session.sessionId, frame.seq, payload,
-                    sizeof(payload), PTY_COLS_DEFAULT, PTY_ROWS_DEFAULT);
+                    sizeof(payload), ws.ws_col, ws.ws_row);
 
     LOG_INFO("DMShell: opened session=0x%x peer=0x%x pid=%d", session.sessionId, session.peer, session.childPid);
     return true;
