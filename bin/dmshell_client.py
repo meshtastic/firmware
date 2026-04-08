@@ -409,7 +409,7 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
                 send_ack_frame(sock, state)
                 continue
             if action == "gap":
-                state.event_queue.put(f"missing frame before seq={shell.seq}, requesting replay from seq={missing_from}")
+                # state.event_queue.put(f"missing frame before seq={shell.seq}, requesting replay from seq={missing_from}")
                 send_ack_frame(sock, state, replay_from=missing_from)
                 continue
 
