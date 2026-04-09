@@ -5,7 +5,6 @@
 #include "LR1110Interface.h"
 #include "LR1120Interface.h"
 #include "LR1121Interface.h"
-#include "LR2021Interface.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -486,21 +485,6 @@ std::unique_ptr<RadioInterface> initLoRa()
         } else {
             LOG_INFO("SX1280 init success");
             radioType = SX1280_RADIO;
-        }
-    }
-#endif
-
-#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
-    if (!rIf) {
-        rIf = std::unique_ptr<LR2021Interface>(
-            new LR2021Interface(loraHal, LR2021_SPI_NSS_PIN, LR2021_IRQ_PIN, LR2021_NRESET_PIN, LR2021_BUSY_PIN));
-        if (!rIf->init()) {
-            LOG_WARN("No LR2021 radio");
-            rIf = nullptr;
-            RadioLibInterface::instance= NULL;
-        } else {
-            LOG_INFO("LR2021 init success");
-            radioType = LR2021_RADIO;
         }
     }
 #endif

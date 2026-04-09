@@ -128,8 +128,8 @@ extern "C" {
 #define GPS_RESET_MODE HIGH
 
 #define GPS_VRTC_EN (32 + 13)      // P1.13, always high
-#define GPS_SLEEP_INT (0 + 30)     // P1.12, always high
-#define GPS_RTC_INT (0 + 29)       // P0.15, normal is LOW, wake by HIGH
+#define GPS_SLEEP_INT (0 + 30)     // P0.30, always high
+#define GPS_RTC_INT (0 + 29)       // P0.29, normal is LOW, wake by HIGH
 
 #define BATTERY_PIN 2              // P0.02/AIN0, BAT_ADC
 #define BATTERY_IMMUTABLE
