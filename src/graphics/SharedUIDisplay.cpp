@@ -144,7 +144,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 setTFTColorRole(TFTColorRole::HeaderStatus, headerColor, headerStatusColor);
                 registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
             } else {
-                setTFTColorRole(TFTColorRole::HeaderBackground, TFTPalette::Black, headerColor);
+                setTFTColorRole(TFTColorRole::HeaderBackground, headerTextColor, headerColor);
                 setTFTColorRole(TFTColorRole::HeaderTitle, headerTextColor, headerColor);
                 setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, headerColor);
                 registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
