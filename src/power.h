@@ -121,6 +121,8 @@ class Power : private concurrency::OSThread
     bool lipoChargerInit();
     /// Setup a meshSolar battery sensor
     bool meshSolarInit();
+    /// Setup a serial battery sensor
+    bool serialBatteryInit();
 
   private:
     void shutdown();

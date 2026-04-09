@@ -846,7 +846,7 @@ int32_t Screen::runOnce()
 #endif
     }
 #endif
-    if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
+    if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0 && !suppressRebootBanner) {
         showSimpleBanner(UI_STR("Rebooting...", "正在重启..."), 0);
     }
 

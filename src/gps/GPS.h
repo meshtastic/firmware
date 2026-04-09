@@ -16,6 +16,11 @@
 #define GPS_EN_ACTIVE 1
 #endif
 
+// Allow defining the polarity of the STANDBY output.  default is LOW for standby
+#ifndef GPS_STANDBY_ACTIVE
+#define GPS_STANDBY_ACTIVE LOW
+#endif
+
 static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
 static constexpr uint32_t GPS_FIX_HOLD_MAX_MS = 20000;
 

@@ -13,6 +13,7 @@ class menuHandler
         lora_picker,
         device_role_picker,
         radio_preset_picker,
+        frequency_slot,
         no_timeout_lora_picker,
         TZ_picker,
         twelve_hour_picker,
@@ -33,6 +34,8 @@ class menuHandler
         brightness_picker,
         reboot_menu,
         shutdown_menu,
+        NodePicker_menu,
+        Manage_Node_menu,
         add_favorite,
         remove_favorite,
         test_menu,
@@ -55,12 +58,14 @@ class menuHandler
         DisplayUnits
     };
     static screenMenus menuQueue;
+    static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
 
     static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);
     static void loraMenu();
     static void DeviceRolePicker();
     static void RadioPresetPicker();
+    static void FrequencySlotPicker();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
     static void clockMenu();
@@ -90,6 +95,8 @@ class menuHandler
     static void BrightnessPickerMenu();
     static void rebootMenu();
     static void shutdownMenu();
+    static void NodePicker();
+    static void ManageNodeMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
     static void traceRouteMenu();
@@ -149,6 +156,7 @@ using GPSToggleOption = MenuOption<meshtastic_Config_PositionConfig_GpsMode>;
 using GPSFormatOption = MenuOption<meshtastic_DeviceUIConfig_GpsCoordinateFormat>;
 using NodeNameOption = MenuOption<bool>;
 using PositionMenuOption = MenuOption<int>;
+using ManageNodeOption = MenuOption<int>;
 using ClockFaceOption = MenuOption<bool>;
 
 } // namespace graphics

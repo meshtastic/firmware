@@ -13,6 +13,8 @@ StatusLEDModule::StatusLEDModule() : concurrency::OSThread("StatusLEDModule")
 {
     bluetoothStatusObserver.observe(&bluetoothStatus->onNewStatus);
     powerStatusObserver.observe(&powerStatus->onNewStatus);
+    if (inputBroker)
+        inputObserver.observe(inputBroker);
 }
 
 int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
@@ -48,9 +50,10 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
             break;
         }
         case meshtastic::BluetoothStatus::ConnectionState::CONNECTED: {
-            ble_state = connected;
-            PAIRING_LED_starttime = millis();
-            break;
+            if (ble_state != connected) {
+                ble_state = connected;
+                PAIRING_LED_starttime = millis();
+            }
         }
         }
 
@@ -59,6 +62,12 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
     }
     return 0;
 };
+
+int StatusLEDModule::handleInputEvent(const InputEvent *event)
+{
+    lastUserbuttonTime = millis();
+    return 0;
+}
 
 int32_t StatusLEDModule::runOnce()
 {
@@ -103,12 +112,40 @@ int32_t StatusLEDModule::runOnce()
         PAIRING_LED_state = LED_STATE_ON;
     }
 
+    bool chargeIndicatorLED1 = LED_STATE_OFF;
+    bool chargeIndicatorLED2 = LED_STATE_OFF;
+    bool chargeIndicatorLED3 = LED_STATE_OFF;
+    bool chargeIndicatorLED4 = LED_STATE_OFF;
+    if (lastUserbuttonTime + 10 * 1000 > millis() || CHARGE_LED_state == LED_STATE_ON) {
+        // should this be off at very low percentages?
+        chargeIndicatorLED1 = LED_STATE_ON;
+        if (powerStatus && powerStatus->getBatteryChargePercent() >= 25)
+            chargeIndicatorLED2 = LED_STATE_ON;
+        if (powerStatus && powerStatus->getBatteryChargePercent() >= 50)
+            chargeIndicatorLED3 = LED_STATE_ON;
+        if (powerStatus && powerStatus->getBatteryChargePercent() >= 75)
+            chargeIndicatorLED4 = LED_STATE_ON;
+    }
+
 #ifdef LED_CHARGE
     digitalWrite(LED_CHARGE, CHARGE_LED_state);
 #endif
     // digitalWrite(green_LED_PIN, LED_STATE_OFF);
 #ifdef LED_PAIRING
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
+#endif
+
+#ifdef Battery_LED_1
+    digitalWrite(Battery_LED_1, chargeIndicatorLED1);
+#endif
+#ifdef Battery_LED_2
+    digitalWrite(Battery_LED_2, chargeIndicatorLED2);
+#endif
+#ifdef Battery_LED_3
+    digitalWrite(Battery_LED_3, chargeIndicatorLED3);
+#endif
+#ifdef Battery_LED_4
+    digitalWrite(Battery_LED_4, chargeIndicatorLED4);
 #endif
 
     return (my_interval);

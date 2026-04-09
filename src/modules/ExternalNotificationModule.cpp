@@ -463,10 +463,12 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
             bool mutedNode = false;
             if (sender) {
-                mutedNode = (sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK);
+                mutedNode = (sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
             }
             meshtastic_Channel ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
-
+            const bool directToUs = !isBroadcast(mp.to) && isToUs(&mp);
+            const bool mutedChannel = ch.settings.has_module_settings && ch.settings.module_settings.is_muted;
+            const bool isMuted = directToUs ? mutedNode : mutedChannel;
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell");
@@ -517,8 +519,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message && !mutedNode &&
-                (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
+            if (moduleConfig.external_notification.alert_message && !isMuted) {
                 LOG_INFO("externalNotificationModule - Notification Module");
                 isNagging = true;
                 setExternalState(0, true);
@@ -529,8 +530,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_vibra && !mutedNode &&
-                (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
+            if (moduleConfig.external_notification.alert_message_vibra && !isMuted) {
                 LOG_INFO("externalNotificationModule - Notification Module (Vibra)");
                 isNagging = true;
                 setExternalState(1, true);
@@ -541,8 +541,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_message_buzzer && !mutedNode &&
-                (!ch.settings.has_module_settings || !ch.settings.module_settings.is_muted)) {
+            if (moduleConfig.external_notification.alert_message_buzzer && !isMuted) {
                 LOG_INFO("externalNotificationModule - Notification Module (Buzzer)");
                 if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
                     (!isBroadcast(mp.to) && isToUs(&mp))) {

@@ -58,6 +58,11 @@ class TelemetrySensor
 
     // TODO: delete after migration
     bool hasSensor() { return nodeTelemetrySensorsMap[sensorType].first > 0; }
+    // Functions to sleep / wakeup sensors that support it
+    virtual void sleep(){};
+    virtual uint32_t wakeUp() { return 0; }
+    // Return active by default, override per sensor
+    virtual bool isActive() { return true; }
 
 #if WIRE_INTERFACES_COUNT > 1
     // Set to true if Implementation only works first I2C port (Wire)
@@ -65,6 +70,7 @@ class TelemetrySensor
 #endif
     virtual int32_t runOnce() { return INT32_MAX; }
     virtual bool isInitialized() { return initialized; }
+    // TODO: is this used?
     virtual bool isRunning() { return status > 0; }
 
     virtual bool getMetrics(meshtastic_Telemetry *measurement) = 0;

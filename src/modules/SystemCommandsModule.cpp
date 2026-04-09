@@ -6,6 +6,7 @@
 #include "MessageStore.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #endif
 
 #include "GPS.h"
