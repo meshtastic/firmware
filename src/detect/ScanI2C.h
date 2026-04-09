@@ -92,7 +92,8 @@ class ScanI2C
         CW2015,
         SCD30,
         ADS1115,
-        SHTXX
+        SHTXX,
+        ESP32_OTA_COPROCESSOR
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

@@ -788,6 +788,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
             }
 
+#ifdef OUTPUT_GPIO_PIN
+            case 0x42: // ESP32-C5 OTA co-processor
+                type = ESP32_OTA_COPROCESSOR;
+                logFoundDevice("ESP32-C5 OTA coprocessor", (uint8_t)addr.address);
+                break;
+#endif
+
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated", (uint8_t)addr.address);
             }
