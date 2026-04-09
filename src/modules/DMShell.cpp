@@ -148,6 +148,14 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
     case meshtastic_DMShell_OpCode_INPUT:
         if (!writeSessionInput(frame)) {
             sendError("input_write_failed");
+        } else {
+            uint8_t outBuf[MAX_PTY_READ_SIZE];
+            const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
+            if (bytesRead > 0) {
+                LOG_WARN("DMShell: read %d bytes from PTY", bytesRead);
+                sendControl(meshtastic_DMShell_OpCode_OUTPUT, outBuf, static_cast<size_t>(bytesRead));
+                session.lastActivityMs = millis();
+            }
         }
         break;
     case meshtastic_DMShell_OpCode_RESIZE:
@@ -202,6 +210,8 @@ int32_t DMShellModule::runOnce()
             sendControl(meshtastic_DMShell_OpCode_OUTPUT, outBuf, static_cast<size_t>(bytesRead));
             session.lastActivityMs = millis();
             // continue;
+            // do we want to ack every data message, and only send the next on ack?
+            // would require some retry logic. Maybe re-use the wantAck bit
             return 50;
         }
 
