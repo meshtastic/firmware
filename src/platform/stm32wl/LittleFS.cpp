@@ -130,7 +130,9 @@ static int _internal_flash_erase(const struct lfs_config *c, lfs_block_t block)
     /* calculate the absolute page, i.e. what the ST wants */
     EraseInitStruct.Page = (address - STM32WL_FLASH_BASE) / STM32WL_PAGE_SIZE;
     _LFS_DBG("Erasing block %d at 0x%08x... ", block, address);
-    HAL_FLASH_Unlock();
+    if (HAL_FLASH_Unlock() != HAL_OK) {
+        return LFS_ERR_IO;
+    }
     hal_rc = HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
     HAL_FLASH_Lock();
 
