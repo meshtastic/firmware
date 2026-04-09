@@ -23,5 +23,6 @@ void lateInitVariant()
     cfg.i2s.bits = BIT_LENGTH_16BITS;
     cfg.i2s.rate = RATE_44K;
     board.begin(cfg);
+    board.setVolume(75); // 75% volume
 }
 #endif

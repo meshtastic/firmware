@@ -69,6 +69,22 @@ static inline int get_max_num_nodes()
 /// Max number of channels allowed
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))
 
+// Traffic Management module configuration
+// Enable per-variant by defining HAS_TRAFFIC_MANAGEMENT=1 in variant.h
+#ifndef HAS_TRAFFIC_MANAGEMENT
+#define HAS_TRAFFIC_MANAGEMENT 0
+#endif
+
+// Cache size for traffic management (number of nodes to track)
+// Can be overridden per-variant based on available memory
+#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
+#if HAS_TRAFFIC_MANAGEMENT
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000
+#else
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 0
+#endif
+#endif
+
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
 /// returns the encoded packet size
 size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc_t *fields, const void *src_struct);

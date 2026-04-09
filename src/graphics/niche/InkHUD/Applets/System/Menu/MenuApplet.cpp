@@ -177,24 +177,8 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     auto changes = SEGMENT_CONFIG;
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    if (!owner.is_licensed) {
-        bool keygenSuccess = false;
-
-        if (config.security.private_key.size == 32) {
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                keygenSuccess = true;
-            }
-        } else {
-            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-            keygenSuccess = true;
-        }
-
-        if (keygenSuccess) {
-            config.security.public_key.size = 32;
-            config.security.private_key.size = 32;
-            owner.public_key.size = 32;
-            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-        }
+    if (crypto) {
+        crypto->ensurePkiKeys(config.security, owner);
     }
 #endif
 
@@ -349,13 +333,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         handleFreeText = true;
         cm.freeTextItem.rawText.erase(); // clear the previous freetext message
         freeTextMode = true;             // render input field instead of normal menu
-        // Open the on-screen keyboard if the joystick is enabled
-        if (settings->joystick.enabled)
+        // Open the on-screen keyboard only for full joystick devices
+        if (settings->joystick.enabled && !inkhud->twoWayRocker)
             inkhud->openKeyboard();
         break;
 
     case STORE_CANNEDMESSAGE_SELECTION:
-        if (!settings->joystick.enabled)
+        if (!settings->joystick.enabled || inkhud->twoWayRocker)
             cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
         else
             cm.selectedMessageItem = &cm.messageItems.at(cursor - 2); // Minus two: offset for the "Send Ping" and free text entry
@@ -922,7 +906,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (settings->userTiles.maxCount > 1)
             items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
-        if (settings->joystick.enabled)
+        if (settings->joystick.enabled && !inkhud->twoWayRocker)
             items.push_back(MenuItem("Align Joystick", MenuAction::ALIGN_JOYSTICK, MenuPage::EXIT));
         items.push_back(MenuItem("Notifications", MenuAction::TOGGLE_NOTIFICATIONS, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.notifications));
@@ -1751,7 +1735,7 @@ void InkHUD::MenuApplet::populateSendPage()
     items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
 
     // If joystick is available, include the Free Text option
-    if (settings->joystick.enabled)
+    if (settings->joystick.enabled && !inkhud->twoWayRocker)
         items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::SEND));
 
     // One menu item for each canned message
