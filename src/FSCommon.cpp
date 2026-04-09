@@ -80,10 +80,11 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 {
 #ifdef FSCom
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_STM32WL)
     // take SPI Lock
     spiLock->lock();
-    // rename was fixed for ESP32 IDF LittleFS in April
+    // ESP32: rename was fixed for IDF LittleFS in April
+    // STM32WL: STM32_LittleFS::rename() calls lfs_rename() which is atomic
     bool result = FSCom.rename(pathFrom, pathTo);
     spiLock->unlock();
     return result;
