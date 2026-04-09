@@ -102,7 +102,9 @@ static constexpr const char *configFileName = "/prefs/config.proto";
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 static constexpr const char *channelFileName = "/prefs/channels.proto";
+#if !MESHTASTIC_EXCLUDE_BACKUP
 static constexpr const char *backupFileName = "/backups/backup.proto";
+#endif
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
@@ -316,9 +318,11 @@ class NodeDB
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 #endif
 
+#if !MESHTASTIC_EXCLUDE_BACKUP
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+#endif
 
     /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)
@@ -331,9 +335,11 @@ class NodeDB
   private:
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
-    uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
+    uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
+#if !MESHTASTIC_EXCLUDE_BACKUP
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
-    uint32_t lastSort = 0;          // When last sorted the nodeDB
+#endif
+    uint32_t lastSort = 0; // When last sorted the nodeDB
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 

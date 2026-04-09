@@ -2190,6 +2190,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 }
 #endif
 
+#if !MESHTASTIC_EXCLUDE_BACKUP
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
     bool success = false;
@@ -2277,6 +2278,7 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
 #endif
     return success;
 }
+#endif // !MESHTASTIC_EXCLUDE_BACKUP
 
 /// Record an error that should be reported via analytics
 void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, const char *filename)

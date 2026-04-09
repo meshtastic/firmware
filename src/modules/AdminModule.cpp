@@ -499,6 +499,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
         break;
     }
+#if !MESHTASTIC_EXCLUDE_BACKUP
     case meshtastic_AdminMessage_backup_preferences_tag: {
         LOG_INFO("Client requesting to backup preferences");
         if (nodeDB->backupPreferences(r->backup_preferences)) {
@@ -535,6 +536,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
         break;
     }
+#endif // !MESHTASTIC_EXCLUDE_BACKUP
     case meshtastic_AdminMessage_send_input_event_tag: {
         LOG_INFO("Client requesting to send input event");
         handleSendInputEvent(r->send_input_event);
