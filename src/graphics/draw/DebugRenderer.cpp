@@ -471,6 +471,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int chUtil_y = getTextPositions(display)[line] + 3;
 
     int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
+    int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
     int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
     int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
     int chutil_percent = airTime->channelUtilizationPercent();
@@ -482,7 +483,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
     display->drawString(starting_position, getTextPositions(display)[line], chUtil);
 
-    // Force 56% or higher to show a full 100% bar, text would still show related percent.
+    // Force 61% or higher to show a full 100% bar, text would still show related percent.
     if (chutil_percent >= 61) {
         chutil_percent = 100;
     }
@@ -495,9 +496,9 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     float weight3 = 0.20; // Weight for 40–100%
     float totalWeight = weight1 + weight2 + weight3;
 
-    int seg1 = chutil_bar_width * (weight1 / totalWeight);
-    int seg2 = chutil_bar_width * (weight2 / totalWeight);
-    int seg3 = chutil_bar_width * (weight3 / totalWeight);
+    int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
+    int seg2 = chutil_bar_max_fill * (weight2 / totalWeight);
+    int seg3 = chutil_bar_max_fill - seg1 - seg2; // Remainder absorbs rounding errors
 
     int fillRight = 0;
 
@@ -522,10 +523,10 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
                 chUtilFillColor = TFTPalette::Medium;
             }
             setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, TFTPalette::Black);
-            registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x, chUtil_y, fillRight,
-                                   chutil_bar_height);
+            registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
+                                   chutil_bar_height - 2);
         }
-        display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
+        display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
     }
 
     display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
