@@ -25,12 +25,12 @@ START1 = 0x94
 START2 = 0xC3
 HEADER_LEN = 4
 DEFAULT_API_PORT = 4403
-DEFAULT_HOP_LIMIT = 3
+DEFAULT_HOP_LIMIT = 0
 LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
 REPLAY_REQUEST_SIZE = 4
 HEARTBEAT_STATUS_SIZE = 8
 MISSING_SEQ_RETRY_INTERVAL_SEC = 1.0
-INPUT_BATCH_WINDOW_SEC = 0.15
+INPUT_BATCH_WINDOW_SEC = .5
 INPUT_BATCH_MAX_BYTES = 64
 HEARTBEAT_IDLE_DELAY_SEC = 5.0
 HEARTBEAT_REPEAT_SEC = 15.0
@@ -49,6 +49,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--host", default="127.0.0.1", help="meshtasticd API host")
     parser.add_argument("--port", type=int, default=DEFAULT_API_PORT, help="meshtasticd API port")
+    parser.add_argument(
+        "--serial",
+        nargs="?",
+        const="auto",
+        default=None,
+        help="use USB serial transport (optionally provide device path, default: auto-detect)",
+    )
+    parser.add_argument("--baud", type=int, default=115200, help="serial baud rate when using --serial")
     parser.add_argument("--to", required=True, help="destination node number, e.g. !170896f7 or 0x170896f7")
     parser.add_argument("--channel", type=int, default=0, help="channel index to use")
     parser.add_argument("--cols", type=int, default=None, help="initial terminal columns (default: detect local terminal)")
@@ -144,12 +152,87 @@ def parse_node_num(raw: str) -> int:
     return int(value, 10)
 
 
-def recv_exact(sock: socket.socket, length: int) -> bytes:
+class SerialTransport:
+    def __init__(self, serial_obj):
+        self._serial = serial_obj
+
+    def recv(self, length: int) -> bytes:
+        return self._serial.read(length)
+
+    def sendall(self, data: bytes) -> None:
+        self._serial.write(data)
+        self._serial.flush()
+
+    def close(self) -> None:
+        self._serial.close()
+
+
+def detect_meshtastic_serial_port() -> str:
+    try:
+        from serial.tools import list_ports
+    except ImportError as exc:
+        raise SystemExit("python package 'pyserial' is required for --serial mode") from exc
+
+    ports = list(list_ports.comports())
+    if not ports:
+        raise SystemExit("no serial ports found for --serial mode")
+
+    scored: list[tuple[int, str]] = []
+    for port in ports:
+        text = " ".join(
+            filter(
+                None,
+                [port.device, port.description, port.manufacturer, port.product, port.hwid],
+            )
+        ).lower()
+        score = 0
+        if "meshtastic" in text:
+            score += 100
+        if "lora" in text or "mesh" in text:
+            score += 10
+        if "ttyacm" in (port.device or "").lower() or "ttyusb" in (port.device or "").lower():
+            score += 1
+        scored.append((score, port.device))
+
+    scored.sort(reverse=True)
+    best_score, best_device = scored[0]
+    if best_score <= 0 and len(scored) > 1:
+        raise SystemExit(
+            "could not confidently auto-detect a Meshtastic serial port; pass --serial /dev/ttyXXX explicitly"
+        )
+    return best_device
+
+
+def open_transport(args: argparse.Namespace):
+    if args.serial is None:
+        sock = socket.create_connection((args.host, args.port), timeout=args.timeout)
+        sock.settimeout(None)
+        return sock
+
+    serial_path = args.serial
+    if serial_path == "auto":
+        serial_path = detect_meshtastic_serial_port()
+        print(f"[dmshell] using serial port {serial_path}", file=sys.stderr)
+
+    try:
+        import serial
+    except ImportError as exc:
+        raise SystemExit("python package 'pyserial' is required for --serial mode") from exc
+
+    try:
+        serial_obj = serial.Serial(serial_path, baudrate=args.baud, timeout=None, write_timeout=2)
+    except Exception as exc:
+        raise SystemExit(f"failed to open serial device {serial_path}: {exc}") from exc
+
+    return SerialTransport(serial_obj)
+
+
+def recv_exact(transport, length: int) -> bytes:
     chunks = bytearray()
     while len(chunks) < length:
-        piece = sock.recv(length - len(chunks))
+        piece = transport.recv(length - len(chunks))
         if not piece:
-            raise ConnectionError("connection closed by server")
+            raise ConnectionError("connection closed by transport")
         chunks.extend(piece)
     return bytes(chunks)
 
@@ -168,23 +251,23 @@ def resolve_initial_terminal_size(cols_override: Optional[int], rows_override: O
     return cols, rows
 
 
-def recv_stream_frame(sock: socket.socket) -> bytes:
+def recv_stream_frame(transport) -> bytes:
     while True:
-        start = recv_exact(sock, 1)[0]
+        start = recv_exact(transport, 1)[0]
         if start != START1:
             continue
-        if recv_exact(sock, 1)[0] != START2:
+        if recv_exact(transport, 1)[0] != START2:
             continue
-        header = recv_exact(sock, 2)
+        header = recv_exact(transport, 2)
         length = (header[0] << 8) | header[1]
-        return recv_exact(sock, length)
+        return recv_exact(transport, length)
 
 
-def send_stream_frame(sock: socket.socket, payload: bytes) -> None:
+def send_stream_frame(transport, payload: bytes) -> None:
     if len(payload) > 0xFFFF:
         raise ValueError("payload too large for stream API")
     header = bytes((START1, START2, (len(payload) >> 8) & 0xFF, len(payload) & 0xFF))
-    sock.sendall(header + payload)
+    transport.sendall(header + payload)
 
 
 @dataclass
@@ -412,8 +495,8 @@ def decode_heartbeat_status(payload: bytes) -> Optional[tuple[int, int]]:
     return struct.unpack(">II", payload[:HEARTBEAT_STATUS_SIZE])
 
 
-def send_toradio(sock: socket.socket, toradio) -> None:
-    send_stream_frame(sock, toradio.SerializeToString())
+def send_toradio(transport, toradio) -> None:
+    send_stream_frame(transport, toradio.SerializeToString())
 
 
 def make_toradio_packet(pb2, state: SessionState, shell_msg) -> object:
@@ -437,7 +520,7 @@ def make_toradio_packet(pb2, state: SessionState, shell_msg) -> object:
 
 
 def send_shell_frame(
-    sock: socket.socket,
+    transport,
     state: SessionState,
     op: int,
     payload: bytes = b"",
@@ -468,7 +551,7 @@ def send_shell_frame(
     if payload:
         shell.payload = payload
     with state.socket_lock:
-        send_toradio(sock, make_toradio_packet(state.pb2, state, shell))
+        send_toradio(transport, make_toradio_packet(state.pb2, state, shell))
     if remember:
         state.remember_sent_frame(
             SentShellFrame(op=op, session_id=session_id, seq=seq, ack_seq=ack_seq, payload=payload, cols=cols, rows=rows, flags=flags)
@@ -477,21 +560,21 @@ def send_shell_frame(
     return seq
 
 
-def send_ack_frame(sock: socket.socket, state: SessionState, replay_from: Optional[int] = None) -> None:
+def send_ack_frame(transport, state: SessionState, replay_from: Optional[int] = None) -> None:
     payload = b"" if replay_from is None else encode_replay_request(replay_from)
-    send_shell_frame(sock, state, state.pb2.mesh.DMShell.ACK, payload=payload, seq=0, remember=False)
+    send_shell_frame(transport, state, state.pb2.mesh.DMShell.ACK, payload=payload, seq=0, remember=False)
 
 
-def replay_frames_from(sock: socket.socket, state: SessionState, start_seq: int) -> None:
+def replay_frames_from(transport, state: SessionState, start_seq: int) -> None:
     frame = next((f for f in state.replay_frames_from(start_seq) if f.seq == start_seq), None)
     if frame is None:
-        state.event_queue.put(f"replay unavailable from seq={start_seq}")
+        #state.event_queue.put(f"replay unavailable from seq={start_seq}")
         state.log_replay_event("replay_unavailable", start_seq)
         return
     state.log_replay_event("replay_sent", start_seq)
     #state.event_queue.put(f"replay frame seq={start_seq}")
     send_shell_frame(
-        sock,
+        transport,
         state,
         frame.op,
         payload=frame.payload,
@@ -505,16 +588,16 @@ def replay_frames_from(sock: socket.socket, state: SessionState, start_seq: int)
     )
 
 
-def wait_for_config_complete(sock: socket.socket, pb2, timeout: float, verbose: bool) -> None:
+def wait_for_config_complete(transport, pb2, timeout: float, verbose: bool) -> None:
     nonce = random.randint(1, 0x7FFFFFFF)
     toradio = pb2.mesh.ToRadio()
     toradio.want_config_id = nonce
-    send_toradio(sock, toradio)
+    send_toradio(transport, toradio)
 
     deadline = time.time() + timeout
     while time.time() < deadline:
         fromradio = pb2.mesh.FromRadio()
-        fromradio.ParseFromString(recv_stream_frame(sock))
+        fromradio.ParseFromString(recv_stream_frame(transport))
         variant = fromradio.WhichOneof("payload_variant")
         if verbose and variant:
             print(f"[api] fromradio {variant}", file=sys.stderr)
@@ -533,7 +616,7 @@ def decode_shell_packet(state: SessionState, packet) -> Optional[object]:
     return shell
 
 
-def reader_loop(sock: socket.socket, state: SessionState) -> None:
+def reader_loop(transport, state: SessionState) -> None:
     def handle_in_order_shell(shell) -> bool:
         state.note_replayed_seq_received(shell.seq)
         if shell.op == state.pb2.mesh.DMShell.OPEN_OK:
@@ -567,20 +650,20 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
                 remote_last_tx_seq, remote_last_rx_seq = heartbeat_status
                 local_latest_tx_seq = state.highest_sent_seq()
                 if remote_last_rx_seq < local_latest_tx_seq:
-                    replay_frames_from(sock, state, remote_last_rx_seq + 1)
+                    replay_frames_from(transport, state, remote_last_rx_seq + 1)
                 if remote_last_tx_seq > state.current_ack_seq():
                     state.note_peer_reported_tx_seq(remote_last_tx_seq)
                     req = state.request_missing_seq_once()
                     if req is not None:
                         state.note_missing_seq_requested(req, "heartbeat_status")
-                        send_ack_frame(sock, state, replay_from=req)
-            state.event_queue.put("pong")
+                        send_ack_frame(transport, state, replay_from=req)
+            #state.event_queue.put("pong")
         return False
 
     while not state.stopped:
         try:
             fromradio = state.pb2.mesh.FromRadio()
-            fromradio.ParseFromString(recv_stream_frame(sock))
+            fromradio.ParseFromString(recv_stream_frame(transport))
         except Exception as exc:
             if not state.stopped:
                 state.event_queue.put(f"connection error: {exc}")
@@ -593,13 +676,13 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
             if not shell:
                 continue
             state.note_inbound_packet()
-            state.prune_sent_frames(shell.ack_seq)
+            #state.prune_sent_frames(shell.ack_seq)
             if shell.op == state.pb2.mesh.DMShell.ACK:
                 #state.event_queue.put("peer requested replay")
                 replay_from = decode_replay_request(shell.payload)
                 if replay_from is not None:
                     #state.event_queue.put(f"peer requested replay from seq={replay_from}")
-                    replay_frames_from(sock, state, replay_from)
+                    replay_frames_from(transport, state, replay_from)
                 continue
 
             action, missing_from = state.note_received_seq(shell.seq)
@@ -607,14 +690,14 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
                 req = state.request_missing_seq_once()
                 if req is not None:
                     state.note_missing_seq_requested(req, "duplicate")
-                    send_ack_frame(sock, state, replay_from=req)
+                    send_ack_frame(transport, state, replay_from=req)
                 continue
             if action == "gap":
                 state.remember_out_of_order_frame(shell)
                 req = state.request_missing_seq_once()
                 if req is not None:
                     state.note_missing_seq_requested(req, "gap")
-                    send_ack_frame(sock, state, replay_from=req)
+                    send_ack_frame(transport, state, replay_from=req)
                 continue
 
             if handle_in_order_shell(shell):
@@ -634,7 +717,7 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
             req = state.request_missing_seq_once()
             if req is not None:
                 state.note_missing_seq_requested(req, "post_process_gap")
-                send_ack_frame(sock, state, replay_from=req)
+                send_ack_frame(transport, state, replay_from=req)
         elif state.verbose and variant:
             state.event_queue.put(f"fromradio {variant}")
 
@@ -648,7 +731,7 @@ def drain_events(state: SessionState) -> None:
         print(f"[dmshell] {event}", file=sys.stderr)
 
 
-def heartbeat_loop(sock: socket.socket, state: SessionState) -> None:
+def heartbeat_loop(transport, state: SessionState) -> None:
     while not state.stopped and not state.closed_event.is_set():
         if not state.active:
             time.sleep(HEARTBEAT_POLL_INTERVAL_SEC)
@@ -656,7 +739,7 @@ def heartbeat_loop(sock: socket.socket, state: SessionState) -> None:
         if state.heartbeat_due():
             try:
                 send_shell_frame(
-                    sock,
+                    transport,
                     state,
                     state.pb2.mesh.DMShell.PING,
                     payload=state.heartbeat_payload(),
@@ -671,15 +754,15 @@ def heartbeat_loop(sock: socket.socket, state: SessionState) -> None:
         time.sleep(HEARTBEAT_POLL_INTERVAL_SEC)
 
 
-def run_command_mode(sock: socket.socket, state: SessionState, commands: list[str], close_after: float) -> None:
+def run_command_mode(transport, state: SessionState, commands: list[str], close_after: float) -> None:
     for command in commands:
-        send_shell_frame(sock, state, state.pb2.mesh.DMShell.INPUT, (command + "\n").encode("utf-8"))
+        send_shell_frame(transport, state, state.pb2.mesh.DMShell.INPUT, (command + "\n").encode("utf-8"))
     time.sleep(close_after)
-    send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
+    send_shell_frame(transport, state, state.pb2.mesh.DMShell.CLOSE)
     state.closed_event.wait(timeout=close_after + 5.0)
 
 
-def run_interactive_mode(sock: socket.socket, state: SessionState) -> None:
+def run_interactive_mode(transport, state: SessionState) -> None:
     def read_local_command() -> str:
         prompt = "\r\n[dmshell] local command (resume|close|ping|resize C R): "
         sys.stderr.write(prompt)
@@ -717,10 +800,10 @@ def run_interactive_mode(sock: socket.socket, state: SessionState) -> None:
         if cmd in ("", "resume"):
             return True
         if cmd == "close":
-            send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
+            send_shell_frame(transport, state, state.pb2.mesh.DMShell.CLOSE)
             return False
         if cmd == "ping":
-            send_shell_frame(sock, state, state.pb2.mesh.DMShell.PING)
+            send_shell_frame(transport, state, state.pb2.mesh.DMShell.PING)
             return True
         if cmd.startswith("resize "):
             parts = cmd.split()
@@ -733,7 +816,7 @@ def run_interactive_mode(sock: socket.socket, state: SessionState) -> None:
             except ValueError:
                 state.event_queue.put("usage: resize COLS ROWS")
                 return True
-            send_shell_frame(sock, state, state.pb2.mesh.DMShell.RESIZE, cols=cols, rows=rows)
+            send_shell_frame(transport, state, state.pb2.mesh.DMShell.RESIZE, cols=cols, rows=rows)
             return True
 
         state.event_queue.put(f"unknown local command: {cmd}")
@@ -750,9 +833,9 @@ def run_interactive_mode(sock: socket.socket, state: SessionState) -> None:
             drain_events(state)
             data = sys.stdin.buffer.read(INPUT_BATCH_MAX_BYTES)
             if not data:
-                send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
+                send_shell_frame(transport, state, state.pb2.mesh.DMShell.CLOSE)
                 break
-            send_shell_frame(sock, state, state.pb2.mesh.DMShell.INPUT, data)
+            send_shell_frame(transport, state, state.pb2.mesh.DMShell.INPUT, data)
         return
 
     fd = sys.stdin.fileno()
@@ -767,7 +850,7 @@ def run_interactive_mode(sock: socket.socket, state: SessionState) -> None:
 
             data = os.read(fd, 1)
             if not data:
-                send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
+                send_shell_frame(transport, state, state.pb2.mesh.DMShell.CLOSE)
                 break
 
             if data == LOCAL_ESCAPE_BYTE:
@@ -794,9 +877,12 @@ def run_interactive_mode(sock: socket.socket, state: SessionState) -> None:
                     enter_local_command = True
                     break
                 batched.extend(next_byte)
+                if next_byte == b'\r' or next_byte == b'\t':
+                    break
+                deadline = time.monotonic() + INPUT_BATCH_WINDOW_SEC
 
             if batched:
-                send_shell_frame(sock, state, state.pb2.mesh.DMShell.INPUT, bytes(batched))
+                send_shell_frame(transport, state, state.pb2.mesh.DMShell.INPUT, bytes(batched))
 
             if enter_local_command:
                 keep_running = handle_local_command(read_local_command())
@@ -819,31 +905,33 @@ def main() -> int:
 
     cols, rows = resolve_initial_terminal_size(args.cols, args.rows)
 
-    with socket.create_connection((args.host, args.port), timeout=args.timeout) as sock:
-        sock.settimeout(None)
-        wait_for_config_complete(sock, pb2, args.timeout, args.verbose)
+    transport = open_transport(args)
+    try:
+        wait_for_config_complete(transport, pb2, args.timeout, args.verbose)
 
-        reader = threading.Thread(target=reader_loop, args=(sock, state), daemon=True)
+        reader = threading.Thread(target=reader_loop, args=(transport, state), daemon=True)
         reader.start()
 
-        send_shell_frame(sock, state, pb2.mesh.DMShell.OPEN, cols=cols, rows=rows)
+        send_shell_frame(transport, state, pb2.mesh.DMShell.OPEN, cols=cols, rows=rows)
         if not state.opened_event.wait(timeout=args.timeout):
             raise SystemExit("timed out waiting for OPEN_OK from remote DMShell")
 
-        heartbeat = threading.Thread(target=heartbeat_loop, args=(sock, state), daemon=True)
+        heartbeat = threading.Thread(target=heartbeat_loop, args=(transport, state), daemon=True)
         heartbeat.start()
 
         drain_events(state)
         if args.command:
-            run_command_mode(sock, state, args.command, args.close_after)
+            run_command_mode(transport, state, args.command, args.close_after)
         else:
-            run_interactive_mode(sock, state)
+            run_interactive_mode(transport, state)
 
         state.stopped = True
         drain_events(state)
         reader.join(timeout=1.0)
         heartbeat.join(timeout=1.0)
         state.close_replay_log()
+    finally:
+        transport.close()
 
     return 0
 
