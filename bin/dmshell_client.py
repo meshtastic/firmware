@@ -18,7 +18,7 @@ import tty
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TextIO
 
 
 START1 = 0x94
@@ -28,6 +28,7 @@ DEFAULT_API_PORT = 4403
 DEFAULT_HOP_LIMIT = 3
 LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
 REPLAY_REQUEST_SIZE = 4
+MISSING_SEQ_RETRY_INTERVAL_SEC = 1.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -210,6 +211,13 @@ class SessionState:
     event_queue: "queue.Queue[str]" = field(default_factory=queue.Queue)
     tx_lock: threading.Lock = field(default_factory=threading.Lock)
     tx_history: deque[SentShellFrame] = field(default_factory=lambda: deque(maxlen=50))
+    pending_rx_frames: dict[int, object] = field(default_factory=dict)
+    last_requested_missing_seq: int = 0
+    last_missing_request_time: float = 0.0
+    requested_missing_seqs: set[int] = field(default_factory=set)
+    replay_log_lock: threading.Lock = field(default_factory=threading.Lock)
+    replay_log_file: Optional[TextIO] = None
+    replay_log_path: Optional[Path] = None
 
     def alloc_seq(self) -> int:
         with self.tx_lock:
@@ -235,11 +243,26 @@ class SessionState:
                 return ("gap", self.next_expected_rx_seq)
             self.last_rx_seq = seq
             self.next_expected_rx_seq = seq + 1
+            if self.last_requested_missing_seq != 0 and self.next_expected_rx_seq > self.last_requested_missing_seq:
+                self.last_requested_missing_seq = 0
             if seq > self.highest_seen_rx_seq:
                 self.highest_seen_rx_seq = seq
             if self.highest_seen_rx_seq < self.next_expected_rx_seq:
                 self.highest_seen_rx_seq = 0
             return ("process", None)
+
+    def remember_out_of_order_frame(self, shell) -> None:
+        with self.tx_lock:
+            if shell.seq <= self.next_expected_rx_seq:
+                return
+            if shell.seq not in self.pending_rx_frames:
+                self.pending_rx_frames[shell.seq] = shell
+            if shell.seq > self.highest_seen_rx_seq:
+                self.highest_seen_rx_seq = shell.seq
+
+    def pop_next_buffered_frame(self):
+        with self.tx_lock:
+            return self.pending_rx_frames.pop(self.next_expected_rx_seq, None)
 
     def pending_missing_seq(self) -> Optional[int]:
         with self.tx_lock:
@@ -247,11 +270,67 @@ class SessionState:
                 return self.next_expected_rx_seq
             return None
 
+    def request_missing_seq_once(self) -> Optional[int]:
+        with self.tx_lock:
+            if self.highest_seen_rx_seq < self.next_expected_rx_seq:
+                return None
+            now = time.monotonic()
+            if (
+                self.last_requested_missing_seq == self.next_expected_rx_seq
+                and (now - self.last_missing_request_time) < MISSING_SEQ_RETRY_INTERVAL_SEC
+            ):
+                return None
+            self.last_requested_missing_seq = self.next_expected_rx_seq
+            self.last_missing_request_time = now
+            return self.last_requested_missing_seq
+
     def set_receive_cursor(self, seq: int) -> None:
         with self.tx_lock:
             self.last_rx_seq = seq
             self.next_expected_rx_seq = seq + 1
             self.highest_seen_rx_seq = seq
+
+    def open_replay_log(self, session_id: int) -> None:
+        with self.replay_log_lock:
+            if self.replay_log_file is not None:
+                return
+            path = Path.cwd() / f"{session_id:08x}.log"
+            self.replay_log_file = path.open("a", encoding="utf-8")
+            self.replay_log_path = path
+            self.replay_log_file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} session_open session=0x{session_id:08x}\n")
+            self.replay_log_file.flush()
+
+    def log_replay_event(self, event: str, seq: int, detail: str = "") -> None:
+        with self.replay_log_lock:
+            if self.replay_log_file is None:
+                return
+            extra = f" {detail}" if detail else ""
+            self.replay_log_file.write(
+                f"{time.strftime('%Y-%m-%d %H:%M:%S')} {event} seq={seq}{extra}\n"
+            )
+            self.replay_log_file.flush()
+
+    def note_missing_seq_requested(self, seq: int, reason: str) -> None:
+        with self.tx_lock:
+            self.requested_missing_seqs.add(seq)
+        self.log_replay_event("missing_requested", seq, f"reason={reason}")
+
+    def note_replayed_seq_received(self, seq: int) -> None:
+        with self.tx_lock:
+            was_requested = seq in self.requested_missing_seqs
+            if was_requested:
+                self.requested_missing_seqs.remove(seq)
+        if was_requested:
+            self.log_replay_event("replay_received", seq)
+
+    def close_replay_log(self) -> None:
+        with self.replay_log_lock:
+            if self.replay_log_file is None:
+                return
+            self.replay_log_file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} session_close\n")
+            self.replay_log_file.flush()
+            self.replay_log_file.close()
+            self.replay_log_file = None
 
     def remember_sent_frame(self, frame: SentShellFrame) -> None:
         if frame.seq == 0 or frame.op == self.pb2.mesh.DMShell.ACK:
@@ -351,8 +430,10 @@ def replay_frames_from(sock: socket.socket, state: SessionState, start_seq: int)
     frame = next((f for f in state.replay_frames_from(start_seq) if f.seq == start_seq), None)
     if frame is None:
         state.event_queue.put(f"replay unavailable from seq={start_seq}")
+        state.log_replay_event("replay_unavailable", start_seq)
         return
-    state.event_queue.put(f"replay frame seq={start_seq}")
+    state.log_replay_event("replay_sent", start_seq)
+    #state.event_queue.put(f"replay frame seq={start_seq}")
     send_shell_frame(
         sock,
         state,
@@ -397,6 +478,37 @@ def decode_shell_packet(state: SessionState, packet) -> Optional[object]:
 
 
 def reader_loop(sock: socket.socket, state: SessionState) -> None:
+    def handle_in_order_shell(shell) -> bool:
+        state.note_replayed_seq_received(shell.seq)
+        if shell.op == state.pb2.mesh.DMShell.OPEN_OK:
+            state.session_id = shell.session_id
+            state.open_replay_log(state.session_id)
+            state.set_receive_cursor(shell.seq)
+            state.active = True
+            state.opened_event.set()
+            pid = int.from_bytes(shell.payload, "big") if shell.payload else 0
+            state.event_queue.put(
+                f"opened session=0x{shell.session_id:08x} cols={shell.cols} rows={shell.rows} pid={pid}"
+            )
+            if state.replay_log_path is not None:
+                state.event_queue.put(f"replay log: {state.replay_log_path}")
+        elif shell.op == state.pb2.mesh.DMShell.OUTPUT:
+            if shell.payload:
+                sys.stdout.buffer.write(shell.payload)
+                sys.stdout.buffer.flush()
+        elif shell.op == state.pb2.mesh.DMShell.ERROR:
+            message = shell.payload.decode("utf-8", errors="replace")
+            state.event_queue.put(f"remote error: {message}")
+        elif shell.op == state.pb2.mesh.DMShell.CLOSED:
+            message = shell.payload.decode("utf-8", errors="replace")
+            state.event_queue.put(f"session closed: {message}")
+            state.closed_event.set()
+            state.active = False
+            return True
+        elif shell.op == state.pb2.mesh.DMShell.PONG:
+            state.event_queue.put("pong")
+        return False
+
     while not state.stopped:
         try:
             fromradio = state.pb2.mesh.FromRadio()
@@ -414,50 +526,46 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
                 continue
             state.prune_sent_frames(shell.ack_seq)
             if shell.op == state.pb2.mesh.DMShell.ACK:
-                state.event_queue.put("peer requested replay")
+                #state.event_queue.put("peer requested replay")
                 replay_from = decode_replay_request(shell.payload)
                 if replay_from is not None:
-                    state.event_queue.put(f"peer requested replay from seq={replay_from}")
+                    #state.event_queue.put(f"peer requested replay from seq={replay_from}")
                     replay_frames_from(sock, state, replay_from)
                 continue
 
             action, missing_from = state.note_received_seq(shell.seq)
             if action == "duplicate":
-                send_ack_frame(sock, state)
+                req = state.request_missing_seq_once()
+                if req is not None:
+                    state.note_missing_seq_requested(req, "duplicate")
+                    send_ack_frame(sock, state, replay_from=req)
                 continue
             if action == "gap":
-                # state.event_queue.put(f"missing frame before seq={shell.seq}, requesting replay from seq={missing_from}")
-                send_ack_frame(sock, state, replay_from=missing_from)
+                state.remember_out_of_order_frame(shell)
+                req = state.request_missing_seq_once()
+                if req is not None:
+                    state.note_missing_seq_requested(req, "gap")
+                    send_ack_frame(sock, state, replay_from=req)
                 continue
 
-            if shell.op == state.pb2.mesh.DMShell.OPEN_OK:
-                state.session_id = shell.session_id
-                state.set_receive_cursor(shell.seq)
-                state.active = True
-                state.opened_event.set()
-                pid = int.from_bytes(shell.payload, "big") if shell.payload else 0
-                state.event_queue.put(
-                    f"opened session=0x{shell.session_id:08x} cols={shell.cols} rows={shell.rows} pid={pid}"
-                )
-            elif shell.op == state.pb2.mesh.DMShell.OUTPUT:
-                if shell.payload:
-                    sys.stdout.buffer.write(shell.payload)
-                    sys.stdout.buffer.flush()
-            elif shell.op == state.pb2.mesh.DMShell.ERROR:
-                message = shell.payload.decode("utf-8", errors="replace")
-                state.event_queue.put(f"remote error: {message}")
-            elif shell.op == state.pb2.mesh.DMShell.CLOSED:
-                message = shell.payload.decode("utf-8", errors="replace")
-                state.event_queue.put(f"session closed: {message}")
-                state.closed_event.set()
-                state.active = False
+            if handle_in_order_shell(shell):
                 return
-            elif shell.op == state.pb2.mesh.DMShell.PONG:
-                state.event_queue.put("pong")
 
-            missing_seq = state.pending_missing_seq()
-            if missing_seq is not None:
-                send_ack_frame(sock, state, replay_from=missing_seq)
+            while True:
+                buffered_shell = state.pop_next_buffered_frame()
+                if buffered_shell is None:
+                    break
+                buffered_action, _ = state.note_received_seq(buffered_shell.seq)
+                if buffered_action != "process":
+                    state.remember_out_of_order_frame(buffered_shell)
+                    break
+                if handle_in_order_shell(buffered_shell):
+                    return
+
+            req = state.request_missing_seq_once()
+            if req is not None:
+                state.note_missing_seq_requested(req, "post_process_gap")
+                send_ack_frame(sock, state, replay_from=req)
         elif state.verbose and variant:
             state.event_queue.put(f"fromradio {variant}")
 
@@ -614,6 +722,7 @@ def main() -> int:
         state.stopped = True
         drain_events(state)
         reader.join(timeout=1.0)
+        state.close_replay_log()
 
     return 0
 
