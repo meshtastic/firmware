@@ -84,30 +84,29 @@ static int _internal_flash_prog(const struct lfs_config *c, lfs_block_t block, l
     LFS_UNUSED(c);
 
     _LFS_DBG("Programming %d bytes/%d doublewords at address 0x%08x/block %d, offset %d.", size, dw_count, address, block, off);
+
+    // Validate the full write range before touching flash
+    lfs_block_t addr_end = address + (lfs_block_t)(dw_count * 8) - 1;
+    if ((address < LFS_FLASH_ADDR_BASE) || (addr_end > LFS_FLASH_ADDR_END)) {
+        _LFS_DBG("Wanted to program out of bound of FLASH: 0x%08x-0x%08x.\n", address, addr_end);
+        return LFS_ERR_INVAL;
+    }
+
     if (HAL_FLASH_Unlock() != HAL_OK) {
         return LFS_ERR_IO;
     }
     for (uint32_t i = 0; i < dw_count; i++) {
-        if ((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END)) {
-            _LFS_DBG("Wanted to program out of bound of FLASH: 0x%08x.\n", address);
-            HAL_FLASH_Lock();
-            return LFS_ERR_INVAL;
-        }
         hal_rc = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, address, *bufp);
         if (hal_rc != HAL_OK) {
-            /* Error occurred while writing data in Flash memory.
-             * User can add here some code to deal with this error.
-             */
             _LFS_DBG("Program error at (0x%08x), 0x%X, error: 0x%08x\n", address, hal_rc, HAL_FLASH_GetError());
+            break; // Do not continue programming after a failure
         }
         address += 8;
         bufp += 1;
     }
-    if (HAL_FLASH_Lock() != HAL_OK) {
-        return LFS_ERR_IO;
-    }
+    HAL_FLASH_Lock();
 
-    return hal_rc == HAL_OK ? LFS_ERR_OK : LFS_ERR_IO; // If HAL_OK, return LFS_ERR_OK, else return LFS_ERR_IO
+    return hal_rc == HAL_OK ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
 // Erase a block. A block must be erased before being programmed.
