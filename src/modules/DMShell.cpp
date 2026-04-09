@@ -30,6 +30,7 @@ constexpr uint16_t PTY_COLS_DEFAULT = 120;
 constexpr uint16_t PTY_ROWS_DEFAULT = 40;
 constexpr size_t MAX_PTY_READ_SIZE = 200;
 constexpr size_t REPLAY_REQUEST_SIZE = sizeof(uint32_t);
+constexpr size_t HEARTBEAT_STATUS_SIZE = sizeof(uint32_t) * 2;
 
 struct BytesDecodeState {
     uint8_t *buf;
@@ -81,6 +82,22 @@ uint32_t decodeUint32BE(const uint8_t *src)
 {
     return (static_cast<uint32_t>(src[0]) << 24) | (static_cast<uint32_t>(src[1]) << 16) | (static_cast<uint32_t>(src[2]) << 8) |
            static_cast<uint32_t>(src[3]);
+}
+
+void encodeHeartbeatStatus(uint8_t *dest, uint32_t lastTxSeq, uint32_t lastRxSeq)
+{
+    encodeUint32BE(dest, lastTxSeq);
+    encodeUint32BE(dest + sizeof(uint32_t), lastRxSeq);
+}
+
+bool decodeHeartbeatStatus(const uint8_t *src, size_t len, uint32_t &lastTxSeq, uint32_t &lastRxSeq)
+{
+    if (len < HEARTBEAT_STATUS_SIZE) {
+        return false;
+    }
+    lastTxSeq = decodeUint32BE(src);
+    lastRxSeq = decodeUint32BE(src + sizeof(uint32_t));
+    return true;
 }
 } // namespace
 
@@ -168,9 +185,21 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
             }
         }
         break;
-    case meshtastic_DMShell_OpCode_PING:
-        sendControl(meshtastic_DMShell_OpCode_PONG, nullptr, 0);
+    case meshtastic_DMShell_OpCode_PING: {
+        uint32_t peerLastTxSeq = 0;
+        uint32_t peerLastRxSeq = frame.ackSeq;
+        if (decodeHeartbeatStatus(frame.payload, frame.payloadLen, peerLastTxSeq, peerLastRxSeq)) {
+            const uint32_t nextMissingForPeer = peerLastRxSeq + 1;
+            if (nextMissingForPeer > 0 && nextMissingForPeer < session.nextTxSeq) {
+                resendFramesFrom(nextMissingForPeer);
+            }
+        }
+
+        uint8_t heartbeatPayload[HEARTBEAT_STATUS_SIZE] = {0};
+        encodeHeartbeatStatus(heartbeatPayload, session.nextTxSeq > 0 ? session.nextTxSeq - 1 : 0, session.lastAckedRxSeq);
+        sendControl(meshtastic_DMShell_OpCode_PONG, heartbeatPayload, sizeof(heartbeatPayload));
         break;
+    }
     case meshtastic_DMShell_OpCode_CLOSE:
         closeSession("peer_close", true);
         break;
