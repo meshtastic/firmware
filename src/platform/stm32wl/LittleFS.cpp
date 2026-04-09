@@ -83,6 +83,11 @@ static int _internal_flash_prog(const struct lfs_config *c, lfs_block_t block, l
 
     LFS_UNUSED(c);
 
+    // STM32WL HAL minimum write unit is one 64-bit doubleword (8 bytes)
+    if (size % 8 != 0) {
+        return LFS_ERR_INVAL;
+    }
+
     _LFS_DBG("Programming %d bytes/%d doublewords at address 0x%08x/block %d, offset %d.", size, dw_count, address, block, off);
 
     // Validate the full write range before touching flash
