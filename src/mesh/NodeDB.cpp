@@ -1604,7 +1604,8 @@ bool NodeDB::saveToDisk(int saveWhat)
 
     if (!success) {
         LOG_ERROR("Failed to save to disk, retrying");
-#ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
+#if defined(ARCH_NRF52) ||                                                                                                       \
+    defined(ARCH_STM32WL) // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
         spiLock->lock();
         FSCom.format();
         spiLock->unlock();
