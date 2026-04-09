@@ -95,6 +95,7 @@ static int _internal_flash_prog(const struct lfs_config *c, lfs_block_t block, l
     if (HAL_FLASH_Unlock() != HAL_OK) {
         return LFS_ERR_IO;
     }
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
     for (uint32_t i = 0; i < dw_count; i++) {
         hal_rc = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, address, *bufp);
         if (hal_rc != HAL_OK) {
@@ -132,6 +133,7 @@ static int _internal_flash_erase(const struct lfs_config *c, lfs_block_t block)
     if (HAL_FLASH_Unlock() != HAL_OK) {
         return LFS_ERR_IO;
     }
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
     hal_rc = HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
     HAL_FLASH_Lock();
 
