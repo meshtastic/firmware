@@ -19,6 +19,8 @@
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
+#define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
+
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
  */
@@ -61,6 +63,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
   protected:
+    ModemType_t modemType = RADIOLIB_MODEM_LORA;
+    DataRate_t getDataRate() const { return {.lora = {.spreadingFactor = sf, .bandwidth = bw, .codingRate = cr}}; }
+    PacketConfig_t getPacketConfig() const
+    {
+        return {.lora = {.preambleLength = preambleLength,
+                         .implicitHeader = false,
+                         .crcEnabled = true,
+                         // We use auto LDRO, meaning it is enabled if the symbol time is >= 16msec
+                         .ldrOptimize = (1 << sf) / bw >= 16}};
+    }
+
     /**
      * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old
      * loads 0x14) Note: do not use 0x34 - that is reserved for lorawan
@@ -102,9 +115,22 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void enableInterrupt(void (*)()) = 0;
 
     /**
+     * Poll as a backup to catch missed edge-triggered interrupts.
+     */
+    void pollMissedIrqs();
+
+    /**
+     * Reset AGC by power-cycling the analog frontend.
+     * Subclasses override with chip-specific calibration sequences.
+     * Safe to call periodically — skips if currently sending or receiving.
+     */
+    virtual void resetAGC();
+
+    /**
      * Debugging counts
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
+    uint16_t txDrop = 0;
 
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
@@ -161,7 +187,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * timer scaled to SNR of to be flooded packet
      * @return Timestamp after which the packet may be sent
      */
-    void startTransmitTimerSNR(float snr);
+    void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
 
     void handleTransmitInterrupt();
     void handleReceiveInterrupt();
@@ -209,10 +235,49 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void setStandby();
 
+    /**
+     * Derive packet time either for a received (using header info) or a transmitted packet
+     */
+    template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received)
+    {
+        if (received) {
+            // First get the actual coding rate and CRC status from the received packet
+            uint8_t rxCR;
+            bool hasCRC;
+            lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC);
+            // Go from raw header value to denominator
+            if (rxCR < 5) {
+                rxCR += 4;
+            } else if (rxCR == 7) {
+                rxCR = 8;
+            }
+
+            // Received packet configuration must be the same as configured, except for coding rate and CRC
+            DataRate_t dr = getDataRate();
+            dr.lora.codingRate = rxCR;
+
+            PacketConfig_t pc = getPacketConfig();
+            pc.lora.crcEnabled = hasCRC;
+
+            return lora.calculateTimeOnAir(modemType, dr, pc, pl) / 1000;
+        }
+
+        return lora.getTimeOnAir(pl) / 1000;
+    }
+
     const char *radioLibErr = "RadioLib err=";
 
     /**
      * If the packet is not already in the late rebroadcast window, move it there
      */
     void clampToLateRebroadcastWindow(NodeNum from, PacketId id);
+
+    /**
+     * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
+     * @return Whether a pending packet was removed
+     */
+
+    bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
+
+    void checkRxDoneIrqFlag();
 };

@@ -44,6 +44,7 @@ struct UIFrameEvent {
         REDRAW_ONLY,                    // Don't change which frames are show, just redraw, asap
         REGENERATE_FRAMESET,            // Regenerate (change? add? remove?) screen frames, honoring requestFocus()
         REGENERATE_FRAMESET_BACKGROUND, // Regenerate screen frames, Attempt to remain on the same frame throughout
+        SWITCH_TO_TEXTMESSAGE           // Jump directly to the Text Message screen
     } action = REDRAW_ONLY;
 
     // We might want to pass additional data inside this struct at some point
@@ -75,7 +76,7 @@ class MeshModule
      */
     static void callModules(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
-    static std::vector<MeshModule *> GetMeshModulesWithUIFrames();
+    static std::vector<MeshModule *> GetMeshModulesWithUIFrames(int startIndex);
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
     static AdminMessageHandleResult handleAdminMessageForAllModules(const meshtastic_MeshPacket &mp,
                                                                     meshtastic_AdminMessage *request,
@@ -104,6 +105,18 @@ class MeshModule
 
     /* We allow modules to ignore a request without sending an error if they have a specific reason for it. */
     bool ignoreRequest = false;
+
+    /**
+     * Check if the current request is a multi-hop broadcast. Modules should call this in allocReply()
+     * and return NULL to prevent reply storms from broadcast requests that have already been relayed.
+     */
+    bool isMultiHopBroadcastRequest()
+    {
+        if (currentRequest && isBroadcast(currentRequest->to) && currentRequest->hop_limit < currentRequest->hop_start) {
+            return true;
+        }
+        return false;
+    }
 
     /** If a bound channel name is set, we will only accept received packets that come in on that channel.
      * A special exception (FIXME, not sure if this is a good idea) - packets that arrive on the local interface

@@ -7,9 +7,7 @@
     "cpu": "cortex-m4",
     "extra_flags": "-DARDUINO_MDBT50Q_RX -DNRF52840_XXAA",
     "f_cpu": "64000000L",
-    "hwids": [
-      ["0x2886", "0x0166"]
-    ],
+    "hwids": [["0x2886", "0x0166"]],
     "usb_product": "XIAO-BOOT",
     "mcu": "nrf52840",
     "variant": "seeed_xiao_nrf52840_kit",

@@ -7,16 +7,29 @@
 #include "Channels.h"
 #include "FSCommon.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
-#include "PowerFSM.h" // needed for button bypass
 #include "SPILock.h"
+#include "buzz.h"
 #include "detect/ScanI2C.h"
-#include "input/ScanAndSelect.h"
+#include "gps/RTC.h"
+#include "graphics/EmoteRenderer.h"
+#include "graphics/Screen.h"
+#include "graphics/SharedUIDisplay.h"
+#include "graphics/draw/MessageRenderer.h"
+#include "graphics/draw/NotificationRenderer.h"
+#include "graphics/draw/UIRenderer.h"
+#include "graphics/emotes.h"
+#include "graphics/images.h"
+#include "input/SerialKeyboard.h"
+#include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
-
-#include "main.h"                               // for cardkb_found
 #include "modules/ExternalNotificationModule.h" // for buzzer control
+extern MessageStore messageStore;
+#if HAS_TRACKBALL
+#include "input/TrackballInterruptImpl1.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
@@ -34,9 +47,17 @@
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
 
+namespace graphics
+{
+extern int bannerSignalBars;
+}
 extern ScanI2C::DeviceAddress cardkb_found;
+extern bool osk_found;
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
+static NodeNum lastDest = NODENUM_BROADCAST;
+static uint8_t lastChannel = 0;
+static bool lastDestSet = false;
 
 meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 
@@ -45,358 +66,962 @@ CannedMessageModule *cannedMessageModule;
 CannedMessageModule::CannedMessageModule()
     : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessage")
 {
-    if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
-        this->loadProtoForModule();
-        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
-            !CANNED_MESSAGE_MODULE_ENABLE) {
-            LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
-            this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
-            disable();
-        } else {
-            LOG_INFO("CannedMessageModule is enabled");
-
-            // T-Watch interface currently has no way to select destination type, so default to 'node'
-#if defined(USE_VIRTUAL_KEYBOARD)
-            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
-#endif
-
-            this->inputObserver.observe(inputBroker);
-        }
-    } else {
-        this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
+    this->loadProtoForModule();
+    if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE) {
+        LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
+        this->updateState(CANNED_MESSAGE_RUN_STATE_DISABLED);
         disable();
+    } else {
+        LOG_INFO("CannedMessageModule is enabled");
+        moduleConfig.canned_message.enabled = true;
+        this->inputObserver.observe(inputBroker);
     }
 }
 
+void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
+{
+    // Do NOT override explicit broadcast replies
+    // Only reuse lastDest in LaunchRepeatDestination()
+
+    dest = newDest;
+    channel = newChannel;
+
+    lastDest = dest;
+    lastChannel = channel;
+    lastDestSet = true;
+
+    // Upon activation, highlight "[Select Destination]"
+    int selectDestination = 0;
+    for (int i = 0; i < messagesCount; ++i) {
+        if (strcmp(messages[i], "[Select Destination]") == 0) {
+            selectDestination = i;
+            break;
+        }
+    }
+    currentMessageIndex = selectDestination;
+
+    // This triggers the canned message list
+    updateState(CANNED_MESSAGE_RUN_STATE_ACTIVE, true);
+    UIFrameEvent e;
+    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+    notifyObservers(&e);
+
+    LOG_DEBUG("[CannedMessage] LaunchWithDestination dest=0x%08x ch=%d", dest, channel);
+}
+
+void CannedMessageModule::LaunchRepeatDestination()
+{
+    if (!lastDestSet) {
+        LaunchWithDestination(NODENUM_BROADCAST, 0);
+    } else {
+        LaunchWithDestination(lastDest, lastChannel);
+    }
+}
+
+void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
+{
+    // Do NOT override explicit broadcast replies
+    // Only reuse lastDest in LaunchRepeatDestination()
+
+    dest = newDest;
+    channel = newChannel;
+
+    lastDest = dest;
+    lastChannel = channel;
+    lastDestSet = true;
+
+    updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+    UIFrameEvent e;
+    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+    notifyObservers(&e);
+
+    LOG_DEBUG("[CannedMessage] LaunchFreetextWithDestination dest=0x%08x ch=%d", dest, channel);
+}
+
+static bool returnToCannedList = false;
+bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
+{
+    return node && node->has_user && node->user.public_key.size > 0;
+}
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
  *     starting points of the string this->messageStore
  *
  * @return int Returns the number of messages found.
  */
-// FIXME: This is just one set of messages now
+
 int CannedMessageModule::splitConfiguredMessages()
 {
-    int messageIndex = 0;
     int i = 0;
 
     String canned_messages = cannedMessageModuleConfig.messages;
 
-#if defined(USE_VIRTUAL_KEYBOARD)
-    String separator = canned_messages.length() ? "|" : "";
+    // Copy all message parts into the buffer
+    strncpy(this->messageBuffer, canned_messages.c_str(), sizeof(this->messageBuffer));
 
-    canned_messages = "[---- Free Text ----]" + separator + canned_messages;
+    // Temporary array to allow for insertion
+    const char *tempMessages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT + 3] = {0};
+    int tempCount = 0;
+    // Insert at position 0 (top)
+    tempMessages[tempCount++] = "[Select Destination]";
+#if defined(USE_VIRTUAL_KEYBOARD)
+    // Add a "Free Text" entry at the top if using a touch screen virtual keyboard
+    tempMessages[tempCount++] = "[-- Free Text --]";
+#else
+    if (osk_found && screen) {
+        tempMessages[tempCount++] = "[-- Free Text --]";
+    }
 #endif
 
-    // collect all the message parts
-    strncpy(this->messageStore, canned_messages.c_str(), sizeof(this->messageStore));
+    // First message always starts at buffer start
+    tempMessages[tempCount++] = this->messageBuffer;
+    int upTo = strlen(this->messageBuffer) - 1;
 
-    // The first message points to the beginning of the store.
-    this->messages[messageIndex++] = this->messageStore;
-    int upTo = strlen(this->messageStore) - 1;
-
+    // Walk buffer, splitting on '|'
     while (i < upTo) {
-        if (this->messageStore[i] == '|') {
-            // Message ending found, replace it with string-end character.
-            this->messageStore[i] = '\0';
-
-            // hit our max messages, bail
-            if (messageIndex >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT) {
-                this->messagesCount = messageIndex;
-                return this->messagesCount;
-            }
-
-            // Next message starts after pipe (|) just found.
-            this->messages[messageIndex++] = (this->messageStore + i + 1);
+        if (this->messageBuffer[i] == '|') {
+            this->messageBuffer[i] = '\0'; // End previous message
+            if (tempCount >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT)
+                break;
+            tempMessages[tempCount++] = (this->messageBuffer + i + 1);
         }
         i += 1;
     }
-    if (strlen(this->messages[messageIndex - 1]) > 0) {
-        // We have a last message.
-        LOG_DEBUG("CannedMessage %d is: '%s'", messageIndex - 1, this->messages[messageIndex - 1]);
-        this->messagesCount = messageIndex;
-    } else {
-        this->messagesCount = messageIndex - 1;
+
+    // Add [Exit] as the last entry
+    tempMessages[tempCount++] = "[Exit]";
+
+    // Copy to the member array
+    for (int k = 0; k < tempCount; ++k) {
+        this->messages[k] = (char *)tempMessages[k];
     }
+    this->messagesCount = tempCount;
 
     return this->messagesCount;
 }
+void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char *buffer)
+{
+    (void)buffer;
 
+    char header[96];
+    if (this->dest == NODENUM_BROADCAST) {
+        const char *channelName = channels.getName(this->channel);
+        snprintf(header, sizeof(header), "To: #%s", channelName ? channelName : "?");
+    } else {
+        snprintf(header, sizeof(header), "To: @%s", getNodeName(this->dest));
+    }
+
+    const int maxWidth = std::max(0, display->getWidth() - x);
+    char truncatedHeader[96];
+    graphics::UIRenderer::truncateStringWithEmotes(display, header, truncatedHeader, sizeof(truncatedHeader), maxWidth);
+    graphics::UIRenderer::drawStringWithEmotes(display, x, y, truncatedHeader, FONT_HEIGHT_SMALL, 1, false);
+}
+
+void CannedMessageModule::resetSearch()
+{
+    int previousDestIndex = destIndex;
+
+    searchQuery = "";
+    updateDestinationSelectionList();
+
+    // Adjust scrollIndex so previousDestIndex is still visible
+    int totalEntries = activeChannelIndices.size() + filteredNodes.size();
+    this->visibleRows = (displayHeight - FONT_HEIGHT_SMALL * 2) / FONT_HEIGHT_SMALL;
+    if (this->visibleRows < 1)
+        this->visibleRows = 1;
+    int maxScrollIndex = std::max(0, totalEntries - visibleRows);
+    scrollIndex = std::min(std::max(previousDestIndex - (visibleRows / 2), 0), maxScrollIndex);
+
+    lastUpdateMillis = millis();
+    requestFocus();
+}
+void CannedMessageModule::updateDestinationSelectionList()
+{
+    static size_t lastNumMeshNodes = 0;
+    static String lastSearchQuery = "";
+
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
+    bool nodesChanged = (numMeshNodes != lastNumMeshNodes);
+    lastNumMeshNodes = numMeshNodes;
+
+    // Early exit if nothing changed
+    if (searchQuery == lastSearchQuery && !nodesChanged)
+        return;
+    lastSearchQuery = searchQuery;
+    needsUpdate = false;
+
+    this->filteredNodes.clear();
+    this->activeChannelIndices.clear();
+
+    NodeNum myNodeNum = nodeDB->getNodeNum();
+    String lowerSearchQuery = searchQuery;
+    lowerSearchQuery.toLowerCase();
+
+    // Preallocate space to reduce reallocation
+    this->filteredNodes.reserve(numMeshNodes);
+
+    for (size_t i = 0; i < numMeshNodes; ++i) {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        if (!node || node->num == myNodeNum || !node->has_user || node->user.public_key.size != 32)
+            continue;
+
+        const String &nodeName = node->user.long_name;
+
+        if (searchQuery.length() == 0) {
+            this->filteredNodes.push_back({node, sinceLastSeen(node)});
+        } else {
+            // Avoid unnecessary lowercase conversion if already matched
+            String lowerNodeName = nodeName;
+            lowerNodeName.toLowerCase();
+
+            if (lowerNodeName.indexOf(lowerSearchQuery) != -1) {
+                this->filteredNodes.push_back({node, sinceLastSeen(node)});
+            }
+        }
+    }
+
+    meshtastic_MeshPacket *p = allocDataPacket();
+    p->pki_encrypted = true;
+    p->channel = 0;
+
+    // Populate active channels
+    std::vector<String> seenChannels;
+    seenChannels.reserve(channels.getNumChannels());
+    for (uint8_t i = 0; i < channels.getNumChannels(); ++i) {
+        String name = channels.getName(i);
+        if (name.length() > 0 && std::find(seenChannels.begin(), seenChannels.end(), name) == seenChannels.end()) {
+            this->activeChannelIndices.push_back(i);
+            seenChannels.push_back(name);
+        }
+    }
+
+    scrollIndex = 0; // Show first result at the top
+    destIndex = 0;   // Highlight the first entry
+    if (nodesChanged && runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        LOG_INFO("Nodes changed, forcing UI refresh.");
+        screen->forceDisplay();
+    }
+}
+
+// Returns true if character input is currently allowed (used for search/freetext states)
+bool CannedMessageModule::isCharInputAllowed() const
+{
+    return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
+}
+
+static int getRowHeightForEmoteText(const char *text, int minimumHeight, int emoteSpacing = 2)
+{
+    // Grow the row only when an emote is taller than the font.
+    const auto metrics =
+        graphics::EmoteRenderer::analyzeLine(nullptr, text ? text : "", 0, graphics::emotes, graphics::numEmotes, emoteSpacing);
+    return std::max(minimumHeight, metrics.tallestHeight + 2);
+}
+
+static void drawCenteredEmoteText(OLEDDisplay *display, int x, int y, int rowHeight, const char *text, int emoteSpacing = 2)
+{
+    // Center mixed text and emotes inside the row height.
+    const auto metrics = graphics::EmoteRenderer::analyzeLine(nullptr, text ? text : "", FONT_HEIGHT_SMALL, graphics::emotes,
+                                                              graphics::numEmotes, emoteSpacing);
+    const int contentHeight = std::max(FONT_HEIGHT_SMALL, metrics.tallestHeight);
+    const int drawY = y + ((rowHeight - contentHeight) / 2);
+    graphics::EmoteRenderer::drawStringWithEmotes(display, x, drawY, text ? text : "", FONT_HEIGHT_SMALL, graphics::emotes,
+                                                  graphics::numEmotes, emoteSpacing, false);
+}
+
+static size_t firstWrappedTokenLen(const char *text)
+{
+    // Fall back to one full emote or one UTF-8 glyph when width is tiny.
+    if (!text || !*text)
+        return 0;
+
+    const size_t textLen = strlen(text);
+    size_t matchLen = 0;
+    if (graphics::EmoteRenderer::findEmoteAt(text, textLen, 0, matchLen, graphics::emotes, graphics::numEmotes))
+        return matchLen;
+
+    return graphics::EmoteRenderer::utf8CharLen(static_cast<uint8_t>(text[0]));
+}
+
+static void drawWrappedEmoteText(OLEDDisplay *display, int x, int y, const char *text, int maxWidth, int minimumRowHeight,
+                                 int emoteSpacing = 2)
+{
+    // Wrap onto multiple rows without splitting emotes.
+    if (!display || !text || maxWidth <= 0)
+        return;
+
+    constexpr size_t kLineBufferSize = 256;
+    char lineBuffer[kLineBufferSize];
+    const size_t textLen = strlen(text);
+    size_t offset = 0;
+    int yCursor = y;
+
+    while (offset < textLen) {
+        size_t copied = graphics::EmoteRenderer::truncateToWidth(display, text + offset, lineBuffer, sizeof(lineBuffer), maxWidth,
+                                                                 "", graphics::emotes, graphics::numEmotes, emoteSpacing);
+        size_t consumed = copied;
+
+        if (copied == 0) {
+            consumed = firstWrappedTokenLen(text + offset);
+            if (consumed == 0)
+                break;
+
+            const size_t fallbackLen = std::min(consumed, sizeof(lineBuffer) - 1);
+            memcpy(lineBuffer, text + offset, fallbackLen);
+            lineBuffer[fallbackLen] = '\0';
+            consumed = fallbackLen;
+        } else if (text[offset + copied] != '\0') {
+            // Prefer wrapping at the last space when a full line does not fit.
+            size_t lastSpace = copied;
+            while (lastSpace > 0 && lineBuffer[lastSpace - 1] != ' ')
+                --lastSpace;
+
+            if (lastSpace > 0) {
+                consumed = lastSpace;
+                while (consumed > 0 && lineBuffer[consumed - 1] == ' ')
+                    --consumed;
+                lineBuffer[consumed] = '\0';
+            }
+        }
+
+        if (lineBuffer[0]) {
+            const int rowHeight = getRowHeightForEmoteText(lineBuffer, minimumRowHeight, emoteSpacing);
+            drawCenteredEmoteText(display, x, yCursor, rowHeight, lineBuffer, emoteSpacing);
+            yCursor += rowHeight;
+        }
+
+        offset += std::max<size_t>(consumed, 1);
+        while (offset < textLen && text[offset] == ' ')
+            ++offset;
+    }
+}
+/**
+ * Main input event dispatcher for CannedMessageModule.
+ * Routes keyboard/button/touch input to the correct handler based on the current runState.
+ * Only one handler (per state) processes each event, eliminating redundancy.
+ */
 int CannedMessageModule::handleInputEvent(const InputEvent *event)
 {
-    if ((strlen(moduleConfig.canned_message.allow_input_source) > 0) &&
-        (strcasecmp(moduleConfig.canned_message.allow_input_source, event->source) != 0) &&
-        (strcasecmp(moduleConfig.canned_message.allow_input_source, "_any") != 0)) {
-        // Event source is not accepted.
-        // Event only accepted if source matches the configured one, or
-        //   the configured one is "_any" (or if there is no configured
-        //   source at all)
+    // Block ALL input if an alert banner is active
+    if (screen && screen->isOverlayBannerShowing()) {
         return 0;
     }
-    if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
-        return 0; // Ignore input while sending
-    }
-    bool validEvent = false;
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
-        if (this->messagesCount > 0) {
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
-            validEvent = true;
-        }
-    }
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
-        if (this->messagesCount > 0) {
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
-            validEvent = true;
-        }
-    }
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
 
-#if defined(USE_VIRTUAL_KEYBOARD)
-        if (this->currentMessageIndex == 0) {
-            this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+    // Tab key: Always allow switching between canned/destination screens
+    if (event->kbchar == INPUT_BROKER_MSG_TAB && handleTabSwitch(event))
+        return 1;
 
-            requestFocus(); // Tell Screen::setFrames to move to our module's frame, next time it runs
+    // Matrix keypad: If matrix key, trigger action select for canned message
+    if (event->inputEvent == INPUT_BROKER_MATRIXKEY) {
+        updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT, true);
+        payload = INPUT_BROKER_MATRIXKEY;
+        currentMessageIndex = event->kbchar - 1;
+        lastTouchMillis = millis();
+        return 1;
+    }
+
+    // Always normalize navigation/select buttons for further handlers
+    bool isUp = isUpEvent(event);
+    bool isDown = isDownEvent(event);
+    bool isSelect = isSelectEvent(event);
+
+    // Route event to handler for current UI state (no double-handling)
+    switch (runState) {
+    // Node/Channel destination selection mode: Handles character search, arrows, select, cancel, backspace
+    case CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION:
+        if (handleDestinationSelectionInput(event, isUp, isDown, isSelect))
+            return 1;
+        return 0; // prevent fall-through to selector input
+
+    // Free text input mode: Handles character input, cancel, backspace, select, etc.
+    case CANNED_MESSAGE_RUN_STATE_FREETEXT:
+        return handleFreeTextInput(event); // All allowed input for this state
+
+    // Virtual keyboard mode: Show virtual keyboard and handle input
+
+    // If sending, block all input except global/system (handled above)
+    case CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE:
+        return 1;
+
+    // If sending, block all input except global/system (handled above)
+    case CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER:
+        return handleEmotePickerInput(event);
+
+    case CANNED_MESSAGE_RUN_STATE_INACTIVE:
+        if (event->inputEvent == INPUT_BROKER_ALT_LONG) {
+            LaunchWithDestination(NODENUM_BROADCAST);
+            return 1;
+        }
+        // Printable char (ASCII) opens free text compose
+        if (event->kbchar >= 32 && event->kbchar <= 126) {
+            updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
             UIFrameEvent e;
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-            this->notifyObservers(&e);
-
-            return 0;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            notifyObservers(&e);
+            // Immediately process the input in the new state (freetext)
+            return handleFreeTextInput(event);
         }
-#endif
+        return 0;
+        break;
 
-        // when inactive, call the onebutton shortpress instead. Activate Module only on up/down
-        if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
-            powerFSM.trigger(EVENT_PRESS);
-        } else {
-            this->payload = this->runState;
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
-            validEvent = true;
-        }
+    // (Other states can be added here as needed)
+    default:
+        break;
     }
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
-        UIFrameEvent e;
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-        this->currentMessageIndex = -1;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
-        this->freetext = ""; // clear freetext
-        this->cursor = 0;
-        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
+    // If no state handler above processed the event, let the message selector try to handle it
+    // (Handles up/down/select on canned message list, exit/return)
+    if (handleMessageSelectorInput(event, isUp, isDown, isSelect))
+        return 1;
 
-        this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        this->notifyObservers(&e);
+    // Default: event not handled by canned message system, allow others to process
+    return 0;
+}
+
+void CannedMessageModule::updateState(cannedMessageModuleRunState newState, bool shouldRequestFocus)
+{
+    runState = newState;
+    if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        inputBroker->menuMode =
+            false; // Allow any key input to be sent to the message composer instead of being interpreted as menu navigation
+    } else {
+        inputBroker->menuMode = true; // Re-enable menu navigation for destination selection
     }
-    if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
-        (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
-        (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
-
-#if defined(USE_VIRTUAL_KEYBOARD)
-        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-            this->payload = INPUT_BROKER_MSG_LEFT;
-        } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-            this->payload = INPUT_BROKER_MSG_RIGHT;
-        }
-#else
-        // tweak for left/right events generated via trackball/touch with empty kbchar
-        if (!event->kbchar) {
-            if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-                this->payload = INPUT_BROKER_MSG_LEFT;
-            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-                this->payload = INPUT_BROKER_MSG_RIGHT;
-            }
-        } else {
-            // pass the pressed key
-            this->payload = event->kbchar;
-        }
-#endif
-
-        this->lastTouchMillis = millis();
-        validEvent = true;
+    if (shouldRequestFocus) {
+        requestFocus();
     }
-    if (event->inputEvent == static_cast<char>(ANYKEY)) {
-        // when inactive, this will switch to the freetext mode
-        if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) ||
-            (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
-            this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-        }
+}
 
-        validEvent = false; // If key is normal than it will be set to true.
+bool CannedMessageModule::isUpEvent(const InputEvent *event)
+{
+    return event->inputEvent == INPUT_BROKER_UP ||
+           ((runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
+             runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) &&
+            (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS));
+}
+bool CannedMessageModule::isDownEvent(const InputEvent *event)
+{
+    return event->inputEvent == INPUT_BROKER_DOWN ||
+           ((runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
+             runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) &&
+            (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS));
+}
+bool CannedMessageModule::isSelectEvent(const InputEvent *event)
+{
+    return event->inputEvent == INPUT_BROKER_SELECT;
+}
 
-        // Run modifier key code below, (doesnt inturrupt typing or reset to start screen page)
-        switch (event->kbchar) {
-        case INPUT_BROKER_MSG_BRIGHTNESS_UP: // make screen brighter
-            if (screen)
-                screen->increaseBrightness();
-            LOG_DEBUG("Increase Screen Brightness");
-            break;
-        case INPUT_BROKER_MSG_BRIGHTNESS_DOWN: // make screen dimmer
-            if (screen)
-                screen->decreaseBrightness();
-            LOG_DEBUG("Decrease Screen Brightness");
-            break;
-        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbol
-            if (screen)
-                screen->setFunctionSymbol("Fn");
-            break;
-        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbol
-            if (screen)
-                screen->removeFunctionSymbol("Fn");
-            break;
-        // mute (switch off/toggle) external notifications on fn+m
-        case INPUT_BROKER_MSG_MUTE_TOGGLE:
-            if (moduleConfig.external_notification.enabled == true) {
-                if (externalNotificationModule->getMute()) {
-                    externalNotificationModule->setMute(false);
-                    showTemporaryMessage("Notifications \nEnabled");
-                    if (screen)
-                        screen->removeFunctionSymbol("M"); // remove the mute symbol from the bottom right corner
-                } else {
-                    externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
-                    externalNotificationModule->setMute(true);
-                    showTemporaryMessage("Notifications \nDisabled");
-                    if (screen)
-                        screen->setFunctionSymbol("M"); // add the mute symbol to the bottom right corner
-                }
-            }
-            break;
-        case INPUT_BROKER_MSG_GPS_TOGGLE: // toggle GPS like triple press does
-#if !MESHTASTIC_EXCLUDE_GPS
-            if (gps != nullptr) {
-                gps->toggleGpsMode();
-            }
-            if (screen)
-                screen->forceDisplay();
-            showTemporaryMessage("GPS Toggled");
-#endif
-            break;
-        case INPUT_BROKER_MSG_BLUETOOTH_TOGGLE: // toggle Bluetooth on/off
-            if (config.bluetooth.enabled == true) {
-                config.bluetooth.enabled = false;
-                LOG_INFO("User toggled Bluetooth");
-                nodeDB->saveToDisk();
-                disableBluetooth();
-                showTemporaryMessage("Bluetooth OFF");
-            } else if (config.bluetooth.enabled == false) {
-                config.bluetooth.enabled = true;
-                LOG_INFO("User toggled Bluetooth");
-                nodeDB->saveToDisk();
-                rebootAtMsec = millis() + 2000;
-                showTemporaryMessage("Bluetooth ON\nReboot");
-            }
-            break;
-        case INPUT_BROKER_MSG_SEND_PING: // fn+space send network ping like double press does
-            service->refreshLocalMeshNode();
-            if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-                showTemporaryMessage("Position \nUpdate Sent");
-            } else {
-                showTemporaryMessage("Node Info \nUpdate Sent");
-            }
-            break;
-        case INPUT_BROKER_MSG_DISMISS_FRAME: // fn+del: dismiss screen frames like text or waypoint
-            // Avoid opening the canned message screen frame
-            // We're only handling the keypress here by convention, this has nothing to do with canned messages
-            this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-            // Attempt to close whatever frame is currently shown on display
-            screen->dismissCurrentFrame();
-            return 0;
-        default:
-            // pass the pressed key
-            // LOG_DEBUG("Canned message ANYKEY (%x)", event->kbchar);
-            this->payload = event->kbchar;
-            this->lastTouchMillis = millis();
-            validEvent = true;
-            break;
-        }
-        if (screen && (event->kbchar != INPUT_BROKER_MSG_FN_SYMBOL_ON)) {
-            screen->removeFunctionSymbol("Fn"); // remove modifier (function) symbol
+bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
+{
+    if (event->kbchar != 0x09)
+        return false;
+
+    const cannedMessageModuleRunState targetState = (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
+                                                        ? CANNED_MESSAGE_RUN_STATE_FREETEXT
+                                                        : CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
+
+    destIndex = 0;
+    scrollIndex = 0;
+    if (targetState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
+        updateDestinationSelectionList();
+
+    updateState(targetState, true);
+
+    UIFrameEvent e;
+    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+    notifyObservers(&e);
+    screen->forceDisplay();
+    return true;
+}
+
+int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect)
+{
+    // Override isDown and isSelect ONLY for destination selector behavior
+    if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        if (event->inputEvent == INPUT_BROKER_USER_PRESS) {
+            isDown = true;
+        } else if (event->inputEvent == INPUT_BROKER_SELECT) {
+            isSelect = true;
         }
     }
 
-#if defined(USE_VIRTUAL_KEYBOARD)
-    if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        String keyTapped = keyForCoordinates(event->touchX, event->touchY);
-
-        if (keyTapped == "⇧") {
-            this->highlight = -1;
-
-            this->payload = 0x00;
-
-            validEvent = true;
-
-            this->shift = !this->shift;
-        } else if (keyTapped == "⌫") {
-#ifndef RAK14014
-            this->highlight = keyTapped[0];
-#endif
-
-            this->payload = 0x08;
-
-            validEvent = true;
-
-            this->shift = false;
-        } else if (keyTapped == "123" || keyTapped == "ABC") {
-            this->highlight = -1;
-
-            this->payload = 0x00;
-
-            this->charSet = this->charSet == 0 ? 1 : 0;
-
-            validEvent = true;
-        } else if (keyTapped == " ") {
-#ifndef RAK14014
-            this->highlight = keyTapped[0];
-#endif
-
-            this->payload = keyTapped[0];
-
-            validEvent = true;
-
-            this->shift = false;
-        } else if (keyTapped == "↵") {
-            this->highlight = 0x00;
-
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
-
-            this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-
-            this->currentMessageIndex = event->kbchar - 1;
-
-            validEvent = true;
-
-            this->shift = false;
-        } else if (keyTapped != "") {
-#ifndef RAK14014
-            this->highlight = keyTapped[0];
-#endif
-
-            this->payload = this->shift ? keyTapped[0] : std::tolower(keyTapped[0]);
-
-            validEvent = true;
-
-            this->shift = false;
+    if (event->kbchar >= 32 && event->kbchar <= 126 && !isUp && !isDown && event->inputEvent != INPUT_BROKER_LEFT &&
+        event->inputEvent != INPUT_BROKER_RIGHT && event->inputEvent != INPUT_BROKER_SELECT) {
+        this->searchQuery += (char)event->kbchar;
+        needsUpdate = true;
+        if ((millis() - lastFilterUpdate) > filterDebounceMs) {
+            runOnce(); // update filter immediately
+            lastFilterUpdate = millis();
         }
-    }
-#endif
-
-    if (event->inputEvent == static_cast<char>(MATRIXKEY)) {
-        // this will send the text immediately on matrix press
-        this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
-        this->payload = MATRIXKEY;
-        this->currentMessageIndex = event->kbchar - 1;
-        this->lastTouchMillis = millis();
-        validEvent = true;
+        return 1;
     }
 
-    if (validEvent) {
-        requestFocus(); // Tell Screen::setFrames to move to our module's frame, next time it runs
+    size_t numMeshNodes = filteredNodes.size();
+    int totalEntries = numMeshNodes + activeChannelIndices.size();
+    int columns = 1;
+    int totalRows = totalEntries;
+    int maxScrollIndex = std::max(0, totalRows - visibleRows);
+    scrollIndex = clamp(scrollIndex, 0, maxScrollIndex);
 
-        // Let runOnce to be called immediately.
-        if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
-            setIntervalFromNow(0); // on fast keypresses, this isn't fast enough.
-        } else {
+    // Handle backspace
+    if (event->inputEvent == INPUT_BROKER_BACK) {
+        if (searchQuery.length() > 0) {
+            searchQuery.remove(searchQuery.length() - 1);
+            needsUpdate = true;
             runOnce();
         }
+        if (searchQuery.length() == 0) {
+            resetSearch();
+            needsUpdate = false;
+        }
+        return 1;
+    }
+
+    if (isUp) {
+        if (destIndex > 0) {
+            destIndex--;
+        } else if (totalEntries > 0) {
+            destIndex = totalEntries - 1;
+        }
+
+        if ((destIndex / columns) < scrollIndex)
+            scrollIndex = destIndex / columns;
+        else if ((destIndex / columns) >= (scrollIndex + visibleRows))
+            scrollIndex = (destIndex / columns) - visibleRows + 1;
+
+        screen->forceDisplay(true);
+        return 1;
+    }
+
+    if (isDown) {
+        if (destIndex + 1 < totalEntries) {
+            destIndex++;
+        } else if (totalEntries > 0) {
+            destIndex = 0;
+            scrollIndex = 0;
+        }
+
+        if ((destIndex / columns) >= (scrollIndex + visibleRows))
+            scrollIndex = (destIndex / columns) - visibleRows + 1;
+
+        screen->forceDisplay(true);
+        return 1;
+    }
+
+    // SELECT
+    if (isSelect) {
+        if (destIndex < static_cast<int>(activeChannelIndices.size())) {
+            dest = NODENUM_BROADCAST;
+            channel = activeChannelIndices[destIndex];
+            lastDest = dest;
+            lastChannel = channel;
+            lastDestSet = true;
+        } else {
+            int nodeIndex = destIndex - static_cast<int>(activeChannelIndices.size());
+            if (nodeIndex >= 0 && nodeIndex < static_cast<int>(filteredNodes.size())) {
+                const meshtastic_NodeInfoLite *selectedNode = filteredNodes[nodeIndex].node;
+                if (selectedNode) {
+                    dest = selectedNode->num;
+                    channel = selectedNode->channel;
+                    // Already saves here, but for clarity, also:
+                    lastDest = dest;
+                    lastChannel = channel;
+                    lastDestSet = true;
+                }
+            }
+        }
+
+        updateState(returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+        returnToCannedList = false;
+        screen->forceDisplay(true);
+        return 1;
+    }
+
+    // CANCEL
+    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
+        updateState(returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+        returnToCannedList = false;
+        searchQuery = "";
+
+        // UIFrameEvent e;
+        // e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        // notifyObservers(&e);
+        screen->forceDisplay(true);
+        return 1;
+    }
+
+    return 0;
+}
+
+bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect)
+{
+    // Override isDown and isSelect ONLY for canned message list behavior
+    if (runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
+        if (event->inputEvent == INPUT_BROKER_USER_PRESS) {
+            isDown = true;
+        } else if (event->inputEvent == INPUT_BROKER_SELECT) {
+            isSelect = true;
+        }
+    }
+
+    if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
+        return false;
+
+    // Handle Cancel key: go inactive, clear UI state
+    if (runState != CANNED_MESSAGE_RUN_STATE_INACTIVE &&
+        (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG)) {
+        updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+        freetext = "";
+        cursor = 0;
+        payload = 0;
+        currentMessageIndex = -1;
+
+        // Notify UI that we want to redraw/close this screen
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        notifyObservers(&e);
+        screen->forceDisplay();
+        return true;
+    }
+
+    bool handled = false;
+
+    // Handle up/down navigation
+    if (isUp && messagesCount > 0) {
+        updateState(CANNED_MESSAGE_RUN_STATE_ACTION_UP);
+        handled = true;
+    } else if (isDown && messagesCount > 0) {
+        updateState(CANNED_MESSAGE_RUN_STATE_ACTION_DOWN);
+        handled = true;
+    } else if (isSelect) {
+        const char *current = messages[currentMessageIndex];
+
+        // [Select Destination] triggers destination selection UI
+        if (strcmp(current, "[Select Destination]") == 0) {
+            returnToCannedList = true;
+            updateState(CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION, true);
+            destIndex = 0;
+            scrollIndex = 0;
+            updateDestinationSelectionList(); // Make sure list is fresh
+            screen->forceDisplay();
+            return true;
+        }
+
+        // [Exit] returns to the main/inactive screen
+        if (strcmp(current, "[Exit]") == 0) {
+            // Set runState to inactive so we return to main UI
+            updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+            currentMessageIndex = -1;
+
+            // Notify UI to regenerate frame set and redraw
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            notifyObservers(&e);
+            screen->forceDisplay();
+            return true;
+        }
+
+        // [Free Text] triggers the free text input (virtual keyboard)
+#if defined(USE_VIRTUAL_KEYBOARD)
+        if (strcmp(current, "[-- Free Text --]") == 0) {
+            updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            notifyObservers(&e);
+            return true;
+        }
+#else
+        if (strcmp(current, "[-- Free Text --]") == 0) {
+            if (osk_found && screen) {
+                char headerBuffer[64];
+                if (this->dest == NODENUM_BROADCAST) {
+                    snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
+                } else {
+                    snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(this->dest));
+                }
+                screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
+                    if (!text.empty()) {
+                        this->freetext = text.c_str();
+                        this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+                        updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
+                        currentMessageIndex = -1;
+
+                        UIFrameEvent e;
+                        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                        this->notifyObservers(&e);
+                        screen->forceDisplay();
+
+                        setIntervalFromNow(500);
+                        return;
+                    } else {
+                        // Don't delete virtual keyboard immediately - it might still be executing
+                        // Instead, just clear the callback and reset banner to stop input processing
+                        graphics::NotificationRenderer::textInputCallback = nullptr;
+                        graphics::NotificationRenderer::resetBanner();
+
+                        // Return to inactive state
+                        this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+                        this->currentMessageIndex = -1;
+                        this->freetext = "";
+                        this->cursor = 0;
+
+                        // Force display update to show normal screen
+                        UIFrameEvent e;
+                        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                        this->notifyObservers(&e);
+                        screen->forceDisplay();
+
+                        // Schedule cleanup for next loop iteration to ensure safe deletion
+                        setIntervalFromNow(50);
+                        return;
+                    }
+                });
+
+                return true;
+            }
+        }
+#endif
+
+        // Normal canned message selection
+        if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
+        } else {
+#if CANNED_MESSAGE_ADD_CONFIRMATION
+            const int savedIndex = currentMessageIndex;
+            graphics::menuHandler::showConfirmationBanner("Send message?", [this, savedIndex]() {
+                this->currentMessageIndex = savedIndex;
+                this->payload = this->runState;
+                this->updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT);
+                this->setIntervalFromNow(0);
+            });
+#else
+            payload = runState;
+            updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT);
+#endif
+            // Do not immediately set runState; wait for confirmation
+            handled = true;
+        }
+    }
+
+    if (handled) {
+        requestFocus();
+        if (runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT)
+            setIntervalFromNow(0);
+        else
+            runOnce();
+    }
+
+    return handled;
+}
+bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
+{
+    // Always process only if in FREETEXT mode
+    if (runState != CANNED_MESSAGE_RUN_STATE_FREETEXT)
+        return false;
+
+#if defined(USE_VIRTUAL_KEYBOARD)
+    // Cancel (dismiss freetext screen)
+    if (event->inputEvent == INPUT_BROKER_LEFT) {
+        updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+        freetext = "";
+        cursor = 0;
+        payload = 0;
+        currentMessageIndex = -1;
+
+        // Notify UI that we want to redraw/close this screen
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        notifyObservers(&e);
+        screen->forceDisplay();
+        return true;
+    }
+    // Touch input (virtual keyboard) handling
+    // Only handle if touch coordinates present (CardKB won't set these)
+    if (event->touchX != 0 || event->touchY != 0) {
+        String keyTapped = keyForCoordinates(event->touchX, event->touchY);
+        bool valid = false;
+
+        if (keyTapped == "⇧") {
+            highlight = -1;
+            payload = 0x00;
+            shift = !shift;
+            valid = true;
+        } else if (keyTapped == "⌫") {
+#ifndef RAK14014
+            highlight = keyTapped[0];
+#endif
+            payload = 0x08;
+            shift = false;
+            valid = true;
+        } else if (keyTapped == "123" || keyTapped == "ABC") {
+            highlight = -1;
+            payload = 0x00;
+            charSet = (charSet == 0 ? 1 : 0);
+            valid = true;
+        } else if (keyTapped == " ") {
+#ifndef RAK14014
+            highlight = keyTapped[0];
+#endif
+            payload = keyTapped[0];
+            shift = false;
+            valid = true;
+        }
+        // Touch enter/submit
+        else if (keyTapped == "↵") {
+            updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT); // Send the message!
+            payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            currentMessageIndex = -1;
+            shift = false;
+            valid = true;
+        } else if (!(keyTapped == "")) {
+#ifndef RAK14014
+            highlight = keyTapped[0];
+#endif
+            payload = shift ? keyTapped[0] : std::tolower(keyTapped[0]);
+            shift = false;
+            valid = true;
+        }
+
+        if (valid) {
+            lastTouchMillis = millis();
+            runOnce();
+            payload = 0;
+            return true; // STOP: We handled a VKB touch
+        }
+    }
+#endif // USE_VIRTUAL_KEYBOARD
+
+    // All hardware keys fall through to here (CardKB, physical, etc.)
+
+    if (event->kbchar == INPUT_BROKER_MSG_EMOTE_LIST) {
+        updateState(CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
+        screen->forceDisplay();
+        return true;
+    }
+    // Confirm select (Enter)
+    bool isSelect = isSelectEvent(event);
+    if (isSelect) {
+        LOG_DEBUG("[SELECT] handleFreeTextInput: runState=%d, dest=%u, channel=%d, freetext='%s'", (int)runState, dest, channel,
+                  freetext.c_str());
+        if (dest == 0)
+            dest = NODENUM_BROADCAST;
+        // Defensive: If channel isn't valid, pick the first available channel
+        if (channel >= channels.getNumChannels())
+            channel = 0;
+
+        payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+        currentMessageIndex = -1;
+        updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT);
+        lastTouchMillis = millis();
+        runOnce();
+        return true;
+    }
+
+    // Backspace
+    if (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() > 0) {
+        payload = 0x08;
+        lastTouchMillis = millis();
+        requestFocus();
+        runOnce();
+        return true;
+    }
+
+    // Move cursor left
+    if (event->inputEvent == INPUT_BROKER_LEFT) {
+        payload = INPUT_BROKER_LEFT;
+        lastTouchMillis = millis();
+        requestFocus();
+        runOnce();
+        return true;
+    }
+    // Move cursor right
+    if (event->inputEvent == INPUT_BROKER_RIGHT) {
+        payload = INPUT_BROKER_RIGHT;
+        lastTouchMillis = millis();
+        requestFocus();
+        runOnce();
+        return true;
+    }
+
+    // Cancel (dismiss freetext screen)
+    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG ||
+        (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() == 0)) {
+        updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+        freetext = "";
+        cursor = 0;
+        payload = 0;
+        currentMessageIndex = -1;
+
+        // Notify UI that we want to redraw/close this screen
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        notifyObservers(&e);
+        screen->forceDisplay();
+        return true;
+    }
+
+    // Tab (switch destination)
+    if (event->kbchar == INPUT_BROKER_MSG_TAB) {
+        return handleTabSwitch(event); // Reuse tab logic
+    }
+
+    // Printable ASCII (add char to draft)
+    if (event->kbchar >= 32 && event->kbchar <= 126) {
+        payload = event->kbchar;
+        lastTouchMillis = millis();
+        runOnce();
+        return true;
+    }
+
+    return false;
+}
+
+int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
+{
+    int numEmotes = graphics::numEmotes;
+
+    // Override isDown and isSelect ONLY for emote picker behavior
+    bool isUp = isUpEvent(event);
+    bool isDown = isDownEvent(event);
+    bool isSelect = isSelectEvent(event);
+    if (runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
+        if (event->inputEvent == INPUT_BROKER_USER_PRESS) {
+            isDown = true;
+        } else if (event->inputEvent == INPUT_BROKER_SELECT) {
+            isSelect = true;
+        }
+    }
+
+    // Scroll emote list
+    if (isUp && emotePickerIndex > 0) {
+        emotePickerIndex--;
+        screen->forceDisplay();
+        return 1;
+    }
+    if (isDown && emotePickerIndex < numEmotes - 1) {
+        emotePickerIndex++;
+        screen->forceDisplay();
+        return 1;
+    }
+
+    // Select emote: insert into freetext at cursor and return to freetext
+    if (isSelect) {
+        String label = graphics::emotes[emotePickerIndex].label;
+        String emoteInsert = label; // Just the text label, e.g., ":thumbsup:"
+        if (cursor == freetext.length()) {
+            freetext += emoteInsert;
+        } else {
+            freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
+        }
+        cursor += emoteInsert.length();
+        updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+        screen->forceDisplay();
+        return 1;
+    }
+
+    // Cancel returns to freetext
+    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
+        updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+        screen->forceDisplay();
+        return 1;
     }
 
     return 0;
@@ -404,278 +1029,356 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
 {
+    lastDest = dest;
+    lastChannel = channel;
+    lastDestSet = true;
+
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
     p->channel = channel;
     p->want_ack = true;
-    p->decoded.payload.size = strlen(message);
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
-        p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
-        p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
-        p->decoded.payload.size++;
+    p->decoded.dest = dest; // Mirror picker: NODENUM_BROADCAST or node->num
+
+    this->lastSentNode = dest;
+    this->incoming = dest;
+
+    // Manually find the node by number to check PKI capability
+    meshtastic_NodeInfoLite *node = nullptr;
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
+    for (size_t i = 0; i < numMeshNodes; ++i) {
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        if (n && n->num == dest) {
+            node = n;
+            break;
+        }
     }
 
-    // Only receive routing messages when expecting ACK for a canned message
-    // Prevents the canned message module from regenerating the screen's frameset at unexpected times,
-    // or raising a UIFrameEvent before another module has the chance
+    NodeNum myNodeNum = nodeDB->getNodeNum();
+    if (node && node->num != myNodeNum && node->has_user && node->user.public_key.size == 32) {
+        p->pki_encrypted = true;
+        p->channel = 0; // force PKI
+    }
+
+    // Track this packet’s request ID for matching ACKs
+    this->lastRequestId = p->id;
+
+    // Copy payload
+    p->decoded.payload.size = strlen(message);
+    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+
+    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+        p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
+        p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
+    }
+
     this->waitingForAck = true;
 
-    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    // Send to mesh (PKI-encrypted if conditions above matched)
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-    service->sendToMesh(
-        p, RX_SRC_LOCAL,
-        true); // send to mesh, cc to phone. Even if there's no phone connected, this stores the message to match ACKs
+    // Show banner immediately
+    if (screen) {
+        graphics::BannerOverlayOptions opts;
+        opts.message = "Sending...";
+        opts.durationMs = 2000;
+        screen->showOverlayBanner(opts);
+    }
+
+    // Save outgoing message
+    StoredMessage sm;
+
+    // Always use our local time, consistent with other paths
+    uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
+    sm.timestamp = (nowSecs > 0) ? nowSecs : millis() / 1000;
+    sm.isBootRelative = (nowSecs == 0);
+
+    sm.sender = nodeDB->getNodeNum(); // us
+    sm.channelIndex = channel;
+    size_t len = strnlen(message, MAX_MESSAGE_SIZE - 1);
+    sm.textOffset = MessageStore::storeText(message, len);
+    sm.textLength = len;
+
+    // Classify broadcast vs DM
+    if (dest == NODENUM_BROADCAST) {
+        sm.dest = NODENUM_BROADCAST;
+        sm.type = MessageType::BROADCAST;
+    } else {
+        sm.dest = dest;
+        sm.type = MessageType::DM_TO_US;
+        // Only add as favorite if our role is not router-like (ROUTER, ROUTER_LATE, CLIENT_BASE)
+        if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
+            config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE &&
+            config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+            LOG_INFO("Proactively adding %x as favorite node", dest);
+            nodeDB->set_favorite(true, dest);
+        } else {
+            LOG_DEBUG("Not favoriting node %x because role is router-like", dest);
+        }
+    }
+    sm.ackStatus = AckStatus::NONE;
+
+    messageStore.addLiveMessage(std::move(sm));
+
+    // Auto-switch thread view on outgoing message
+    if (sm.type == MessageType::BROADCAST) {
+        graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, sm.channelIndex);
+    } else {
+        graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, sm.dest);
+    }
+
+    playComboTune();
+
+    this->updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
+    this->payload = wantReplies ? 1 : 0;
+
+    // Tell Screen to switch to TextMessage frame via UIFrameEvent
+    UIFrameEvent e;
+    e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
+    notifyObservers(&e);
 }
 
 int32_t CannedMessageModule::runOnce()
 {
-    if (((!moduleConfig.canned_message.enabled) && !CANNED_MESSAGE_MODULE_ENABLE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
-        temporaryMessage = "";
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION && needsUpdate) {
+        updateDestinationSelectionList();
+        needsUpdate = false;
+    }
+
+    // If we're in node selection, do nothing except keep alive
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        return INACTIVATE_AFTER_MS;
+    }
+
+    // Normal module disable/idle handling
+    if ((this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
+        // Clean up virtual keyboard if needed when going inactive
+        if (graphics::NotificationRenderer::virtualKeyboard && graphics::NotificationRenderer::textInputCallback == nullptr) {
+            LOG_INFO("Performing delayed virtual keyboard cleanup");
+            graphics::OnScreenKeyboardModule::instance().stop(false);
+        }
+
         return INT32_MAX;
     }
-    // LOG_DEBUG("Check status");
-    UIFrameEvent e;
-    if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
-        // TODO: might have some feedback of sending state
-        this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        temporaryMessage = "";
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-        this->currentMessageIndex = -1;
-        this->freetext = ""; // clear freetext
-        this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
-        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
+    // Handle delayed virtual keyboard message sending
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        // Virtual keyboard message sending case - text was not empty
+        if (this->freetext.length() > 0) {
+            LOG_INFO("Processing delayed virtual keyboard send: '%s'", this->freetext.c_str());
+            sendText(this->dest, this->channel, this->freetext.c_str(), true);
 
-        this->notifyObservers(&e);
-    } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
-               !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
-        // Reset module
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-        this->currentMessageIndex = -1;
-        this->freetext = ""; // clear freetext
-        this->cursor = 0;
-
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
-        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
-
-        this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        this->notifyObservers(&e);
-    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
-        if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-            if (this->freetext.length() > 0) {
-                sendText(this->dest, indexChannels[this->channel], this->freetext.c_str(), true);
-                this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
-            } else {
-                this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            // Clean up virtual keyboard after sending
+            if (graphics::NotificationRenderer::virtualKeyboard) {
+                LOG_INFO("Cleaning up virtual keyboard after message send");
+                graphics::OnScreenKeyboardModule::instance().stop(false);
+                graphics::NotificationRenderer::resetBanner();
             }
+
+            // Clear payload to indicate virtual keyboard processing is complete
+            // But keep SENDING_ACTIVE state to show "Sending..." screen for 2 seconds
+            this->payload = 0;
         } else {
-            if ((this->messagesCount > this->currentMessageIndex) && (strlen(this->messages[this->currentMessageIndex]) > 0)) {
-                if (strcmp(this->messages[this->currentMessageIndex], "~") == 0) {
-                    powerFSM.trigger(EVENT_PRESS);
-                    return INT32_MAX;
-                } else {
-#if defined(USE_VIRTUAL_KEYBOARD)
-                    sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
-#else
-                    sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
-#endif
-                }
-                this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
-            } else {
-                // LOG_DEBUG("Reset message is empty");
-                this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-            }
+            // Empty message, just go inactive
+            LOG_INFO("Empty freetext detected in delayed processing, returning to inactive state");
+            this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
         }
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
+
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
-        this->freetext = ""; // clear freetext
+        this->freetext = "";
         this->cursor = 0;
-
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
-        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
-
         this->notifyObservers(&e);
         return 2000;
-    } else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
-        this->currentMessageIndex = 0;
-        LOG_DEBUG("First touch (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-        this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+    }
+
+    UIFrameEvent e;
+    if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload != 0 &&
+         this->payload != CANNED_MESSAGE_RUN_STATE_FREETEXT) ||
+        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) ||
+        (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE_SELECTION)) {
+        this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        this->currentMessageIndex = -1;
+        this->freetext = "";
+        this->cursor = 0;
+        this->notifyObservers(&e);
+    }
+    // Handle SENDING_ACTIVE state transition after virtual keyboard message
+    else if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload == 0) {
+        this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+        this->currentMessageIndex = -1;
+        this->freetext = "";
+        this->cursor = 0;
+        return INT32_MAX;
+    } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
+               !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
+        // Reset module on inactivity
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        this->currentMessageIndex = -1;
+        this->freetext = "";
+        this->cursor = 0;
+        this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+
+        // Clean up virtual keyboard if it exists during timeout
+        if (graphics::NotificationRenderer::virtualKeyboard) {
+            LOG_INFO("Cleaning up virtual keyboard due to module timeout");
+            graphics::OnScreenKeyboardModule::instance().stop(false);
+            graphics::NotificationRenderer::resetBanner();
+        }
+
+        this->notifyObservers(&e);
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
+        if (this->payload == 0) {
+            // [Exit] button pressed - return to inactive state
+            LOG_INFO("Processing [Exit] action - returning to inactive state");
+            this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+        } else if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+            if (this->freetext.length() > 0) {
+                sendText(this->dest, this->channel, this->freetext.c_str(), true);
+
+                // Clean up state but *don’t* deactivate yet
+                this->currentMessageIndex = -1;
+                this->freetext = "";
+                this->cursor = 0;
+
+                // Tell Screen to jump straight to the TextMessage frame
+                e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
+                this->notifyObservers(&e);
+
+                // Now deactivate this module
+                this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+
+                return INT32_MAX; // don't fall back into canned list
+            } else {
+                this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+            }
+        } else {
+            if (strcmp(this->messages[this->currentMessageIndex], "[Select Destination]") == 0) {
+                this->updateState(CANNED_MESSAGE_RUN_STATE_ACTIVE);
+                return INT32_MAX;
+            }
+            if ((this->messagesCount > this->currentMessageIndex) && (strlen(this->messages[this->currentMessageIndex]) > 0)) {
+                if (strcmp(this->messages[this->currentMessageIndex], "~") == 0) {
+                    return INT32_MAX;
+                } else {
+                    sendText(this->dest, this->channel, this->messages[this->currentMessageIndex], true);
+
+                    // Clean up state
+                    this->currentMessageIndex = -1;
+                    this->freetext = "";
+                    this->cursor = 0;
+
+                    // Tell Screen to jump straight to the TextMessage frame
+                    e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
+                    this->notifyObservers(&e);
+
+                    // Now deactivate this module
+                    this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+
+                    return INT32_MAX; // don't fall back into canned list
+                }
+            } else {
+                this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+            }
+        }
+        // fallback clean-up if nothing above returned
+        this->currentMessageIndex = -1;
+        this->freetext = "";
+        this->cursor = 0;
+
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        this->notifyObservers(&e);
+
+        // Immediately stop, don't linger on canned screen
+        return INT32_MAX;
+    }
+    // Highlight [Select Destination] initially when entering the message list
+    else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
+        // Only auto-highlight [Select Destination] if we’re ACTIVELY browsing,
+        // not when coming back from a sent message.
+        if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
+            int selectDestination = 0;
+            for (int i = 0; i < this->messagesCount; ++i) {
+                if (strcmp(this->messages[i], "[Select Destination]") == 0) {
+                    selectDestination = i;
+                    break;
+                }
+            }
+            this->currentMessageIndex = selectDestination;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = getPrevIndex();
-            this->freetext = ""; // clear freetext
+            this->freetext = "";
             this->cursor = 0;
-
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
-            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
-
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            LOG_DEBUG("MOVE UP (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
+            this->updateState(CANNED_MESSAGE_RUN_STATE_ACTIVE);
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = this->getNextIndex();
-            this->freetext = ""; // clear freetext
+            this->freetext = "";
             this->cursor = 0;
-
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
-            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
-
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            LOG_DEBUG("MOVE DOWN (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
+            this->updateState(CANNED_MESSAGE_RUN_STATE_ACTIVE);
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
-        case INPUT_BROKER_MSG_LEFT:
-            if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                size_t numMeshNodes = nodeDB->getNumMeshNodes();
-                if (this->dest == NODENUM_BROADCAST) {
-                    this->dest = nodeDB->getNodeNum();
-                }
-                for (unsigned int i = 0; i < numMeshNodes; i++) {
-                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
-                        this->dest =
-                            (i > 0) ? nodeDB->getMeshNodeByIndex(i - 1)->num : nodeDB->getMeshNodeByIndex(numMeshNodes - 1)->num;
-                        break;
-                    }
-                }
-                if (this->dest == nodeDB->getNodeNum()) {
-                    this->dest = NODENUM_BROADCAST;
-                }
-            } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
-                for (unsigned int i = 0; i < channels.getNumChannels(); i++) {
-                    if ((channels.getByIndex(i).role == meshtastic_Channel_Role_SECONDARY) ||
-                        (channels.getByIndex(i).role == meshtastic_Channel_Role_PRIMARY)) {
-                        indexChannels[numChannels] = i;
-                        numChannels++;
-                    }
-                }
-                if (this->channel == 0) {
-                    this->channel = numChannels - 1;
-                } else {
-                    this->channel--;
-                }
-            } else {
-                if (this->cursor > 0) {
-                    this->cursor--;
-                }
+        case INPUT_BROKER_LEFT:
+            if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor > 0) {
+                this->cursor--;
             }
             break;
-        case INPUT_BROKER_MSG_RIGHT:
-            if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                size_t numMeshNodes = nodeDB->getNumMeshNodes();
-                if (this->dest == NODENUM_BROADCAST) {
-                    this->dest = nodeDB->getNodeNum();
-                }
-                for (unsigned int i = 0; i < numMeshNodes; i++) {
-                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
-                        this->dest =
-                            (i < numMeshNodes - 1) ? nodeDB->getMeshNodeByIndex(i + 1)->num : nodeDB->getMeshNodeByIndex(0)->num;
-                        break;
-                    }
-                }
-                if (this->dest == nodeDB->getNodeNum()) {
-                    this->dest = NODENUM_BROADCAST;
-                }
-            } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
-                for (unsigned int i = 0; i < channels.getNumChannels(); i++) {
-                    if ((channels.getByIndex(i).role == meshtastic_Channel_Role_SECONDARY) ||
-                        (channels.getByIndex(i).role == meshtastic_Channel_Role_PRIMARY)) {
-                        indexChannels[numChannels] = i;
-                        numChannels++;
-                    }
-                }
-                if (this->channel == numChannels - 1) {
-                    this->channel = 0;
-                } else {
-                    this->channel++;
-                }
-            } else {
-                if (this->cursor < this->freetext.length()) {
-                    this->cursor++;
-                }
+        case INPUT_BROKER_RIGHT:
+            if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor < this->freetext.length()) {
+                this->cursor++;
             }
             break;
         default:
             break;
         }
         if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-            switch (this->payload) { // code below all trigger the freetext window (where you type to send a message) or reset the
-                                     // display back to the default window
-            case 0x08:               // backspace
-                if (this->freetext.length() > 0 && this->highlight == 0x00) {
-                    if (this->cursor == this->freetext.length()) {
-                        this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
-                    } else {
-                        this->freetext = this->freetext.substring(0, this->cursor - 1) +
-                                         this->freetext.substring(this->cursor, this->freetext.length());
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            switch (this->payload) {
+            case 0x08: // backspace
+                if (this->freetext.length() > 0) {
+                    if (this->cursor > 0) {
+                        if (this->cursor == this->freetext.length()) {
+                            this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
+                        } else {
+                            this->freetext = this->freetext.substring(0, this->cursor - 1) +
+                                             this->freetext.substring(this->cursor, this->freetext.length());
+                        }
+                        this->cursor--;
                     }
-                    this->cursor--;
-                }
-                break;
-            case 0x09: // tab
-                if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
-                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-                } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL;
                 } else {
-                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
                 }
                 break;
-            case INPUT_BROKER_MSG_LEFT:
-            case INPUT_BROKER_MSG_RIGHT:
-                // already handled above
-                break;
-                // handle fn+s for shutdown
-            case INPUT_BROKER_MSG_SHUTDOWN:
-                if (screen)
-                    screen->startAlert("Shutting down...");
-                shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                break;
-            // and fn+r for reboot
-            case INPUT_BROKER_MSG_REBOOT:
-                if (screen)
-                    screen->startAlert("Rebooting...");
-                rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            case INPUT_BROKER_MSG_TAB: // Tab key: handled by input handler
+                return 0;
+            case INPUT_BROKER_LEFT:
+            case INPUT_BROKER_RIGHT:
                 break;
             default:
-                if (this->highlight != 0x00) {
-                    break;
-                }
-
-                if (this->cursor == this->freetext.length()) {
-                    this->freetext += this->payload;
-                } else {
-                    this->freetext =
-                        this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
-                }
-
-                this->cursor += 1;
-
-                uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
-                if (this->freetext.length() > maxChars) {
-                    this->cursor = maxChars;
-                    this->freetext = this->freetext.substring(0, maxChars);
+                // Only insert ASCII printable characters (32–126)
+                if (this->payload >= 32 && this->payload <= 126) {
+                    requestFocus();
+                    if (this->cursor == this->freetext.length()) {
+                        this->freetext += (char)this->payload;
+                    } else {
+                        this->freetext = this->freetext.substring(0, this->cursor) + (char)this->payload +
+                                         this->freetext.substring(this->cursor);
+                    }
+                    this->cursor++;
+                    const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
+                    if (this->freetext.length() > maxChars) {
+                        this->cursor = maxChars;
+                        this->freetext = this->freetext.substring(0, maxChars);
+                    }
                 }
                 break;
             }
-            if (screen)
-                screen->removeFunctionSymbol("Fn");
         }
-
         this->lastTouchMillis = millis();
         this->notifyObservers(&e);
         return INACTIVATE_AFTER_MS;
@@ -686,7 +1389,6 @@ int32_t CannedMessageModule::runOnce()
         this->notifyObservers(&e);
         return INACTIVATE_AFTER_MS;
     }
-
     return INT32_MAX;
 }
 
@@ -709,30 +1411,25 @@ const char *CannedMessageModule::getMessageByIndex(int index)
 
 const char *CannedMessageModule::getNodeName(NodeNum node)
 {
-    if (node == NODENUM_BROADCAST) {
+    if (node == NODENUM_BROADCAST)
         return "Broadcast";
-    } else {
-        meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
-        if (info != NULL) {
-            return info->user.long_name;
-        } else {
-            return "Unknown";
-        }
+
+    meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
+    if (info && info->has_user && strlen(info->user.long_name) > 0) {
+        return info->user.long_name;
     }
+
+    static char fallback[12];
+    snprintf(fallback, sizeof(fallback), "0x%08x", node);
+    return fallback;
 }
 
 bool CannedMessageModule::shouldDraw()
 {
-    if (!moduleConfig.canned_message.enabled && !CANNED_MESSAGE_MODULE_ENABLE) {
-        return false;
-    }
-
-    // If using "scan and select" input, don't draw the module frame just to say "disabled"
-    // The scanAndSelectInput class will draw its own temporary alert for user, when the input button is pressed
-    else if (scanAndSelectInput != nullptr && !hasMessages())
-        return false;
-
-    return (currentMessageIndex != -1) || (this->runState != CANNED_MESSAGE_RUN_STATE_INACTIVE);
+    // Only allow drawing when we're in an interactive UI state.
+    return (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
+            this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION ||
+            this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
 }
 
 // Has the user defined any canned messages?
@@ -758,16 +1455,6 @@ int CannedMessageModule::getPrevIndex()
     } else {
         return this->currentMessageIndex - 1;
     }
-}
-void CannedMessageModule::showTemporaryMessage(const String &message)
-{
-    temporaryMessage = message;
-    UIFrameEvent e;
-    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-    notifyObservers(&e);
-    runState = CANNED_MESSAGE_RUN_STATE_MESSAGE;
-    // run this loop again in 2 seconds, next iteration will clear the display
-    setIntervalFromNow(2000);
 }
 
 #if defined(USE_VIRTUAL_KEYBOARD)
@@ -983,188 +1670,595 @@ bool CannedMessageModule::interceptingKeyboardInput()
     }
 }
 
-#if !HAS_TFT
+// Draw the node/channel selection screen
+void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    requestFocus();
+    display->setColor(WHITE); // Always draw cleanly
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    // Header
+    int titleY = 2;
+    String titleText = "Select Destination";
+    titleText += searchQuery.length() > 0 ? " [" + searchQuery + "]" : " [ ]";
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(display->getWidth() / 2, titleY, titleText);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    // List Items
+    int rowYOffset = titleY + (FONT_HEIGHT_SMALL - 4);
+    int numActiveChannels = this->activeChannelIndices.size();
+    int totalEntries = numActiveChannels + this->filteredNodes.size();
+    int columns = 1;
+    this->visibleRows = (display->getHeight() - (titleY + FONT_HEIGHT_SMALL)) / (FONT_HEIGHT_SMALL - 4);
+    if (this->visibleRows < 1)
+        this->visibleRows = 1;
+
+    // Clamp scrolling
+    if (scrollIndex > totalEntries / columns)
+        scrollIndex = totalEntries / columns;
+    if (scrollIndex < 0)
+        scrollIndex = 0;
+
+    for (int row = 0; row < visibleRows; row++) {
+        int itemIndex = scrollIndex + row;
+        if (itemIndex >= totalEntries)
+            break;
+
+        int xOffset = 0;
+        int yOffset = row * (FONT_HEIGHT_SMALL - 4) + rowYOffset;
+        std::string entryText;
+
+        // Draw Channels First
+        if (itemIndex < numActiveChannels) {
+            uint8_t channelIndex = this->activeChannelIndices[itemIndex];
+            const char *channelName = channels.getName(channelIndex);
+            entryText = std::string("#") + (channelName ? channelName : "?");
+        }
+        // Then Draw Nodes
+        else {
+            int nodeIndex = itemIndex - numActiveChannels;
+            if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
+                meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                if (node) {
+                    if (display->getWidth() <= 64) {
+                        entryText = node->user.short_name;
+                    } else if (node->user.long_name[0]) {
+                        entryText = node->user.long_name;
+                    } else {
+                        entryText = node->user.short_name;
+                    }
+                }
+
+                int availWidth = display->getWidth() -
+                                 ((graphics::currentResolution == graphics::ScreenResolution::High) ? 40 : 20) -
+                                 ((node && node->is_favorite) ? 10 : 0);
+                if (availWidth < 0)
+                    availWidth = 0;
+                char truncatedEntry[96];
+                graphics::UIRenderer::truncateStringWithEmotes(display, entryText.c_str(), truncatedEntry, sizeof(truncatedEntry),
+                                                               availWidth);
+                entryText = truncatedEntry;
+
+                // Prepend "* " if this is a favorite
+                if (node && node->is_favorite) {
+                    entryText = "* " + entryText;
+                }
+                graphics::UIRenderer::truncateStringWithEmotes(display, entryText.c_str(), truncatedEntry, sizeof(truncatedEntry),
+                                                               availWidth);
+                entryText = truncatedEntry;
+            }
+        }
+
+        if (entryText.empty() || entryText == "Unknown")
+            entryText = "?";
+
+        // Highlight background (if selected)
+        if (itemIndex == destIndex) {
+            int scrollPadding = 8; // Reserve space for scrollbar
+            display->fillRect(0, yOffset + 2, display->getWidth() - scrollPadding, FONT_HEIGHT_SMALL - 5);
+            display->setColor(BLACK);
+        }
+
+        // Draw entry text
+        graphics::UIRenderer::drawStringWithEmotes(display, xOffset + 2, yOffset, entryText.c_str(), FONT_HEIGHT_SMALL, 1, false);
+        display->setColor(WHITE);
+
+        // Draw key icon (after highlight)
+        /*
+        if (itemIndex >= numActiveChannels) {
+            int nodeIndex = itemIndex - numActiveChannels;
+            if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
+                const meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                if (node && hasKeyForNode(node)) {
+                    int iconX = display->getWidth() - key_symbol_width - 15;
+                    int iconY = yOffset + (FONT_HEIGHT_SMALL - key_symbol_height) / 2;
+
+                    if (itemIndex == destIndex) {
+                        display->setColor(INVERSE);
+                    } else {
+                        display->setColor(WHITE);
+                    }
+                    display->drawXbm(iconX, iconY, key_symbol_width, key_symbol_height, key_symbol);
+                }
+            }
+        }
+        */
+    }
+
+    // Scrollbar
+    if (totalEntries > visibleRows) {
+        int scrollbarHeight = visibleRows * (FONT_HEIGHT_SMALL - 4);
+        int totalScrollable = totalEntries;
+        int scrollTrackX = display->getWidth() - 6;
+        display->drawRect(scrollTrackX, rowYOffset, 4, scrollbarHeight);
+        int scrollHeight = (scrollbarHeight * visibleRows) / totalScrollable;
+        int scrollPos = rowYOffset + (scrollbarHeight * scrollIndex) / totalScrollable;
+        display->fillRect(scrollTrackX, scrollPos, 4, scrollHeight);
+    }
+}
+
+void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    const int headerFontHeight = FONT_HEIGHT_SMALL; // Make sure this matches your actual small font height
+    const int headerMargin = 2;                     // Extra pixels below header
+    const int labelGap = 4;
+    const int bitmapGapX = 4;
+
+    const int maxEmoteHeight = graphics::EmoteRenderer::maxEmoteHeight();
+    const int rowHeight = maxEmoteHeight + 2;
+
+    // Place header at top, then compute start of emote list
+    int headerY = y;
+    int listTop = headerY + headerFontHeight + headerMargin;
+
+    int _visibleRows = (display->getHeight() - listTop - 2) / rowHeight;
+    int numEmotes = graphics::numEmotes;
+
+    // keep member variable in sync
+    this->visibleRows = _visibleRows;
+
+    // Clamp highlight index
+    if (emotePickerIndex < 0)
+        emotePickerIndex = 0;
+    if (emotePickerIndex >= numEmotes)
+        emotePickerIndex = numEmotes - 1;
+
+    // Determine which emote is at the top
+    int topIndex = emotePickerIndex - _visibleRows / 2;
+    if (topIndex < 0)
+        topIndex = 0;
+    if (topIndex > numEmotes - _visibleRows)
+        topIndex = std::max(0, numEmotes - _visibleRows);
+
+    // Draw header/title
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(display->getWidth() / 2, headerY, "Select Emote");
+
+    // Draw emote rows
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    for (int vis = 0; vis < _visibleRows; ++vis) {
+        int emoteIdx = topIndex + vis;
+        if (emoteIdx >= numEmotes)
+            break;
+        const graphics::Emote &emote = graphics::emotes[emoteIdx];
+        int rowY = listTop + vis * rowHeight;
+
+        // Draw highlight box 2px taller than emote (1px margin above and below)
+        if (emoteIdx == emotePickerIndex) {
+            display->fillRect(x, rowY, display->getWidth() - 8, emote.height + 2);
+            display->setColor(BLACK);
+        }
+
+        // Emote bitmap (left), centered inside the row
+        int labelStartX = x + bitmapGapX;
+        const int emoteY = rowY + ((rowHeight - emote.height) / 2);
+        display->drawXbm(labelStartX, emoteY, emote.width, emote.height, emote.bitmap);
+        labelStartX += emote.width;
+
+        // Emote label (right of bitmap)
+        display->setFont(FONT_MEDIUM);
+        int labelY = rowY + ((rowHeight - FONT_HEIGHT_MEDIUM) / 2);
+        display->drawString(labelStartX + labelGap, labelY, emote.label);
+
+        if (emoteIdx == emotePickerIndex)
+            display->setColor(WHITE);
+    }
+
+    // Draw scrollbar if needed
+    if (numEmotes > _visibleRows) {
+        int scrollbarHeight = _visibleRows * rowHeight;
+        int scrollTrackX = display->getWidth() - 6;
+        display->drawRect(scrollTrackX, listTop, 4, scrollbarHeight);
+        int scrollBarLen = std::max(6, (scrollbarHeight * _visibleRows) / numEmotes);
+        int scrollBarPos = listTop + (scrollbarHeight * topIndex) / numEmotes;
+        display->fillRect(scrollTrackX, scrollBarPos, 4, scrollBarLen);
+    }
+}
+
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    this->displayHeight = display->getHeight(); // Store display height for later use
     char buffer[50];
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
 
-    if (temporaryMessage.length() != 0) {
-        requestFocus(); // Tell Screen::setFrames to move to our module's frame
-        LOG_DEBUG("Draw temporary message: %s", temporaryMessage.c_str());
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
-        display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
-    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
-        requestFocus();                        // Tell Screen::setFrames to move to our module's frame
-        EINK_ADD_FRAMEFLAG(display, COSMETIC); // Clean after this popup. Layout makes ghosting particularly obvious
+    // Never draw if state is outside our UI modes
+    if (!(runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
+          runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER)) {
+        return; // bail if not in a UI state that should render
+    }
 
-#ifdef USE_EINK
-        display->setFont(FONT_SMALL); // No chunky text
-#else
-        display->setFont(FONT_MEDIUM); // Chunky text
-#endif
+    // Emote Picker Screen
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
+        drawEmotePickerScreen(display, state, x, y); // <-- Call your emote picker drawer here
+        return;
+    }
 
-        String displayString;
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        if (this->ack) {
-            displayString = "Delivered to\n%s";
-        } else {
-            displayString = "Delivery failed\nto %s";
-        }
-        display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, displayString,
-                             cannedMessageModule->getNodeName(this->incoming));
+    // Destination Selection
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        drawDestinationSelectionScreen(display, state, x, y);
+        return;
+    }
 
-        display->setFont(FONT_SMALL);
-
-        String snrString = "Last Rx SNR: %f";
-        String rssiString = "Last Rx RSSI: %d";
-
-        // Don't bother drawing snr and rssi for tiny displays
-        if (display->getHeight() > 100) {
-
-            // Original implementation used constants of y = 100 and y = 130. Shrink this if screen is *slightly* small
-            int16_t snrY = 100;
-            int16_t rssiY = 130;
-
-            // If dislay is *slighly* too small for the original consants, squish up a bit
-            if (display->getHeight() < rssiY + FONT_HEIGHT_SMALL) {
-                snrY = display->getHeight() - ((1.5) * FONT_HEIGHT_SMALL);
-                rssiY = display->getHeight() - ((2.5) * FONT_HEIGHT_SMALL);
-            }
-
-            if (this->ack) {
-                display->drawStringf(display->getWidth() / 2 + x, snrY + y, buffer, snrString, this->lastRxSnr);
-                display->drawStringf(display->getWidth() / 2 + x, rssiY + y, buffer, rssiString, this->lastRxRssi);
-            }
-        }
-    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
-        // E-Ink: clean the screen *after* this pop-up
-        EINK_ADD_FRAMEFLAG(display, COSMETIC);
-
-        requestFocus(); // Tell Screen::setFrames to move to our module's frame
-
-#ifdef USE_EINK
-        display->setFont(FONT_SMALL); // No chunky text
-#else
-        display->setFont(FONT_MEDIUM); // Chunky text
-#endif
-
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(display->getWidth() / 2 + x, 0 + y + 12, "Sending...");
-    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
+    // Disabled Screen
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
-    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        requestFocus(); // Tell Screen::setFrames to move to our module's frame
+        return;
+    }
+
+    // Free Text Input Screen
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        requestFocus();
 #if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
         EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
-        einkDisplay->enableUnlimitedFastMode(); // Enable unlimited fast refresh while typing
+        einkDisplay->enableUnlimitedFastMode();
 #endif
-
 #if defined(USE_VIRTUAL_KEYBOARD)
         drawKeyboard(display, state, 0, 0);
 #else
-
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
-        if (this->destSelect != CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
-            display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-            display->setColor(BLACK);
-        }
-        switch (this->destSelect) {
-        case CANNED_MESSAGE_DESTINATION_TYPE_NODE:
-            display->drawStringf(1 + x, 0 + y, buffer, "To: >%s<@%s", cannedMessageModule->getNodeName(this->dest),
-                                 channels.getName(indexChannels[this->channel]));
-            display->drawStringf(0 + x, 0 + y, buffer, "To: >%s<@%s", cannedMessageModule->getNodeName(this->dest),
-                                 channels.getName(indexChannels[this->channel]));
-            break;
-        case CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL:
-            display->drawStringf(1 + x, 0 + y, buffer, "To: %s@>%s<", cannedMessageModule->getNodeName(this->dest),
-                                 channels.getName(indexChannels[this->channel]));
-            display->drawStringf(0 + x, 0 + y, buffer, "To: %s@>%s<", cannedMessageModule->getNodeName(this->dest),
-                                 channels.getName(indexChannels[this->channel]));
-            break;
-        default:
-            if (display->getWidth() > 128) {
-                display->drawStringf(0 + x, 0 + y, buffer, "To: %s@%s", cannedMessageModule->getNodeName(this->dest),
-                                     channels.getName(indexChannels[this->channel]));
-            } else {
-                display->drawStringf(0 + x, 0 + y, buffer, "To: %.5s@%.5s", cannedMessageModule->getNodeName(this->dest),
-                                     channels.getName(indexChannels[this->channel]));
-            }
-            break;
-        }
-        // used chars right aligned, only when not editing the destination
-        if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
+
+        // Draw node/channel header at the top
+        drawHeader(display, x, y, buffer);
+
+        // Char count right-aligned
+        if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
             uint16_t charsLeft =
                 meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
-        display->setColor(WHITE);
-        display->drawStringMaxWidth(
-            0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(),
-            cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
-#endif
-    } else {
-        if (this->messagesCount > 0) {
-            display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+#if INPUTBROKER_SERIAL_TYPE == 1
+        // Chatter Modifier key mode label (right side)
+        {
+            uint8_t mode = globalSerialKeyboard ? globalSerialKeyboard->getShift() : 0;
+            const char *label = (mode == 0) ? "a" : (mode == 1) ? "A" : "#";
+
             display->setFont(FONT_SMALL);
-            display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
-            int lines = (display->getHeight() / FONT_HEIGHT_SMALL) - 1;
-            if (lines == 3) {
-                display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-                display->setColor(BLACK);
-                display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, cannedMessageModule->getCurrentMessage());
-                display->setColor(WHITE);
-                if (this->messagesCount > 1) {
-                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getPrevMessage());
-                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
-                }
-            } else {
-                int topMsg = (messagesCount > lines && currentMessageIndex >= lines - 1) ? currentMessageIndex - lines + 2 : 0;
-                for (int i = 0; i < std::min(messagesCount, lines); i++) {
-                    if (i == currentMessageIndex - topMsg) {
-#ifdef USE_EINK
-                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), ">");
-                        display->drawString(12 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
-                                            cannedMessageModule->getCurrentMessage());
-#else
-                        display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), x + display->getWidth(),
-                                          y + FONT_HEIGHT_SMALL);
-                        display->setColor(BLACK);
-                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), cannedMessageModule->getCurrentMessage());
-                        display->setColor(WHITE);
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+            const int16_t th = FONT_HEIGHT_SMALL;
+            const int16_t tw = display->getStringWidth(label);
+            const int16_t padX = 3;
+            const int16_t padY = 2;
+            const int16_t r = 3;
+
+            const int16_t bw = tw + padX * 2;
+            const int16_t bh = th + padY * 2;
+
+            const int16_t bx = x + display->getWidth() - bw - 2;
+            const int16_t by = y + display->getHeight() - bh - 2;
+
+            display->setColor(WHITE);
+            display->fillRect(bx + r, by, bw - r * 2, bh);
+            display->fillRect(bx, by + r, r, bh - r * 2);
+            display->fillRect(bx + bw - r, by + r, r, bh - r * 2);
+            display->fillCircle(bx + r, by + r, r);
+            display->fillCircle(bx + bw - r - 1, by + r, r);
+            display->fillCircle(bx + r, by + bh - r - 1, r);
+            display->fillCircle(bx + bw - r - 1, by + bh - r - 1, r);
+
+            display->setColor(BLACK);
+            display->drawString(bx + padX, by + padY, label);
+        }
+
+        // LEFT-SIDE DESTINATION-HINT BOX (“Dest: Shift + ◄”)
+        {
+            display->setFont(FONT_SMALL);
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+            const char *label = "Dest: Shift + ";
+            int16_t labelW = display->getStringWidth(label);
+
+            // triangle size visually matches glyph height, not full line height
+            const int triH = FONT_HEIGHT_SMALL - 3;
+            const int triW = triH * 0.7;
+
+            const int16_t padX = 3;
+            const int16_t padY = 2;
+            const int16_t r = 3;
+
+            const int16_t bw = labelW + triW + padX * 2 + 2;
+            const int16_t bh = FONT_HEIGHT_SMALL + padY * 2;
+
+            const int16_t bx = x + 2;
+            const int16_t by = y + display->getHeight() - bh - 2;
+
+            // Rounded white box
+            display->setColor(WHITE);
+            display->fillRect(bx + r, by, bw - (r * 2), bh);
+            display->fillRect(bx, by + r, r, bh - (r * 2));
+            display->fillRect(bx + bw - r, by + r, r, bh - (r * 2));
+            display->fillCircle(bx + r, by + r, r);
+            display->fillCircle(bx + bw - r - 1, by + r, r);
+            display->fillCircle(bx + r, by + bh - r - 1, r);
+            display->fillCircle(bx + bw - r - 1, by + bh - r - 1, r);
+
+            // Draw text
+            display->setColor(BLACK);
+            display->drawString(bx + padX, by + padY, label);
+
+            // Perfectly center triangle on text baseline
+            int16_t tx = bx + padX + labelW;
+            int16_t ty = by + padY + (FONT_HEIGHT_SMALL / 2) - (triH / 2) - 1; // -1 for optical centering
+
+            // ◄ Left-pointing triangle
+            display->fillTriangle(tx + triW, ty,       // top-right
+                                  tx, ty + triH / 2,   // left center
+                                  tx + triW, ty + triH // bottom-right
+            );
+        }
 #endif
-                    } else if (messagesCount > 1) { // Only draw others if there are multiple messages
-                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
-                                            cannedMessageModule->getMessageByIndex(topMsg + i));
-                    }
-                }
+        // Draw Free Text input with multi-emote support and proper line wrapping
+        display->setColor(WHITE);
+        {
+            int inputY = 0 + y + FONT_HEIGHT_SMALL;
+            String msgWithCursor = this->drawWithCursor(this->freetext, this->cursor);
+            drawWrappedEmoteText(display, x, inputY, msgWithCursor.c_str(), display->getWidth() - x, FONT_HEIGHT_SMALL);
+        }
+#endif
+        return;
+    }
+
+    // Canned Messages List
+    if (this->messagesCount > 0) {
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->setFont(FONT_SMALL);
+
+        // Precompute per-row heights based on emotes (centered if present)
+        const int baseRowSpacing = FONT_HEIGHT_SMALL - 4;
+
+        int topMsg;
+        int _visibleRows;
+
+        // Draw header (To: ...)
+        drawHeader(display, x, y, buffer);
+
+        // Shift message list upward by 3 pixels to reduce spacing between header and first message
+        const int listYOffset = y + FONT_HEIGHT_SMALL - 3;
+        _visibleRows = (display->getHeight() - listYOffset) / baseRowSpacing;
+
+        // Figure out which messages are visible and their needed heights
+        topMsg = (messagesCount > _visibleRows && currentMessageIndex >= _visibleRows - 1)
+                     ? currentMessageIndex - _visibleRows + 2
+                     : 0;
+        int countRows = std::min(messagesCount, _visibleRows);
+
+        // Draw all message rows with multi-emote support
+        int yCursor = listYOffset;
+        for (int vis = 0; vis < countRows; vis++) {
+            int msgIdx = topMsg + vis;
+            int lineY = yCursor;
+            const char *msg = getMessageByIndex(msgIdx);
+            int rowHeight = getRowHeightForEmoteText(msg, baseRowSpacing);
+            bool _highlight = (msgIdx == currentMessageIndex);
+
+            // Vertically center based on rowHeight
+            int textYOffset = (rowHeight - FONT_HEIGHT_SMALL) / 2;
+
+#ifdef USE_EINK
+            int nextX = x + (_highlight ? 12 : 0);
+            if (_highlight)
+                display->drawString(x + 0, lineY + textYOffset, ">");
+#else
+            int scrollPadding = 8;
+            if (_highlight) {
+                display->fillRect(x + 0, lineY, display->getWidth() - scrollPadding, rowHeight);
+                display->setColor(BLACK);
             }
+            int nextX = x + (_highlight ? 2 : 0);
+#endif
+
+            if (msg && *msg)
+                drawCenteredEmoteText(display, nextX, lineY, rowHeight, msg);
+#ifndef USE_EINK
+            if (_highlight)
+                display->setColor(WHITE);
+#endif
+
+            yCursor += rowHeight;
+        }
+
+        // Scrollbar
+        if (messagesCount > _visibleRows) {
+            int scrollHeight = display->getHeight() - listYOffset;
+            int scrollTrackX = display->getWidth() - 6;
+            display->drawRect(scrollTrackX, listYOffset, 4, scrollHeight);
+            int barHeight = (scrollHeight * _visibleRows) / messagesCount;
+            int scrollPos = listYOffset + (scrollHeight * topMsg) / messagesCount;
+            display->fillRect(scrollTrackX, scrollPos, 4, barHeight);
         }
     }
 }
-#endif //! HAS_TFT
+
+// Return SNR limit based on modem preset
+static float getSnrLimit(meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    switch (preset) {
+    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+        return -6.0f;
+    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+        return -5.5f;
+    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+        return -4.5f;
+    default:
+        return -6.0f;
+    }
+}
+
+// Return Good/Fair/Bad label and set 1–5 bars based on SNR and RSSI
+static const char *getSignalGrade(float snr, int32_t rssi, float snrLimit, int &bars)
+{
+    // 5-bar logic: strength inside Good/Fair/Bad category
+    if (snr > snrLimit && rssi > -10) {
+        bars = 5; // very strong good
+        return "Good";
+    } else if (snr > snrLimit && rssi > -20) {
+        bars = 4; // normal good
+        return "Good";
+    } else if (snr > 0 && rssi > -50) {
+        bars = 3; // weaker good (on edge of fair)
+        return "Good";
+    } else if (snr > -10 && rssi > -100) {
+        bars = 2; // fair
+        return "Fair";
+    } else {
+        bars = 1; // bad
+        return "Bad";
+    }
+}
 
 ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP && waitingForAck) {
-        // look for a request_id
+    // Only process routing ACK/NACK packets that are responses to our own outbound
+    if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP && waitingForAck && mp.to == nodeDB->getNodeNum() &&
+        mp.decoded.request_id == this->lastRequestId) // only ACKs for our last sent packet
+    {
         if (mp.decoded.request_id != 0) {
-            UIFrameEvent e;
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-            requestFocus(); // Tell Screen::setFrames that our module's frame should be shown, even if not "first" in the frameset
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
-            this->incoming = service->getNodenumFromRequestId(mp.decoded.request_id);
+            // Decode the routing response
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
             pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
-            this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE;
-            waitingForAck = false; // No longer want routing packets
-            this->notifyObservers(&e);
-            // run the next time 2 seconds later
-            setIntervalFromNow(2000);
+
+            // Determine ACK/NACK status
+            bool isAck = (decoded.error_reason == meshtastic_Routing_Error_NONE);
+            bool isFromDest = (mp.from == this->lastSentNode);
+            bool wasBroadcast = (this->lastSentNode == NODENUM_BROADCAST);
+
+            // Identify the responding node
+            if (wasBroadcast && mp.from != nodeDB->getNodeNum()) {
+                this->incoming = mp.from; // relayed by another node
+            } else {
+                this->incoming = this->lastSentNode; // direct reply
+            }
+
+            // Final ACK/NACK logic
+            if (wasBroadcast) {
+                // Any ACK counts for broadcast
+                this->ack = isAck;
+                waitingForAck = false;
+            } else if (isFromDest) {
+                // Only ACK from destination counts as final
+                this->ack = isAck;
+                waitingForAck = false;
+            } else if (isAck) {
+                // Relay ACK → mark as RELAYED, still no final ACK
+                this->ack = false;
+                waitingForAck = false;
+            } else {
+                // Explicit failure
+                this->ack = false;
+                waitingForAck = false;
+            }
+
+            // Update last sent StoredMessage with ACK/NACK/RELAYED result
+            if (!messageStore.getMessages().empty()) {
+                StoredMessage &last = const_cast<StoredMessage &>(messageStore.getMessages().back());
+                if (last.sender == nodeDB->getNodeNum()) { // only update our own messages
+                    if (wasBroadcast && isAck) {
+                        last.ackStatus = AckStatus::ACKED;
+                    } else if (isFromDest && isAck) {
+                        last.ackStatus = AckStatus::ACKED;
+                    } else if (!isFromDest && isAck) {
+                        last.ackStatus = AckStatus::RELAYED;
+                    } else {
+                        last.ackStatus = AckStatus::NACKED;
+                    }
+                }
+            }
+
+            // Capture radio metrics
+            this->lastRxRssi = mp.rx_rssi;
+            this->lastRxSnr = mp.rx_snr;
+
+            // Show overlay banner
+            if (screen) {
+                auto *display = screen->getDisplayDevice();
+                graphics::BannerOverlayOptions opts;
+                static char buf[128];
+
+                const char *channelName = channels.getName(this->channel);
+                const char *src = getNodeName(this->incoming);
+                char nodeName[48];
+                strncpy(nodeName, src, sizeof(nodeName) - 1);
+                nodeName[sizeof(nodeName) - 1] = '\0';
+
+                int availWidth =
+                    display->getWidth() - ((graphics::currentResolution == graphics::ScreenResolution::High) ? 60 : 30);
+                if (availWidth < 0)
+                    availWidth = 0;
+
+                size_t origLen = strlen(nodeName);
+                while (nodeName[0] && display->getStringWidth(nodeName) > availWidth) {
+                    nodeName[strlen(nodeName) - 1] = '\0';
+                }
+                if (strlen(nodeName) < origLen) {
+                    strcat(nodeName, "...");
+                }
+
+                // Calculate signal quality and bars based on preset, SNR, and RSSI
+                float snrLimit = getSnrLimit(config.lora.modem_preset);
+                int bars = 0;
+                const char *qualityLabel = getSignalGrade(this->lastRxSnr, this->lastRxRssi, snrLimit, bars);
+
+                if (this->ack) {
+                    if (this->lastSentNode == NODENUM_BROADCAST) {
+                        snprintf(buf, sizeof(buf), "Message sent to\n#%s\n\nSignal: %s",
+                                 (channelName && channelName[0]) ? channelName : "unknown", qualityLabel);
+                    } else {
+                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSignal: %s",
+                                 (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
+                    }
+                } else if (isAck && !isFromDest) {
+                    // Relay ACK banner
+                    snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)\n%s\n\nSignal: %s",
+                             (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
+                } else {
+                    if (this->lastSentNode == NODENUM_BROADCAST) {
+                        snprintf(buf, sizeof(buf), "Message failed to\n#%s",
+                                 (channelName && channelName[0]) ? channelName : "unknown");
+                    } else {
+                        snprintf(buf, sizeof(buf), "DM failed to\n@%s", (nodeName && nodeName[0]) ? nodeName : "unknown");
+                    }
+                }
+
+                opts.message = buf;
+                opts.durationMs = 3000;
+                graphics::bannerSignalBars = bars; // tell banner renderer how many bars to draw
+                screen->showOverlayBanner(opts);   // this triggers drawNotificationBox()
+            }
         }
     }
 
@@ -1206,7 +2300,7 @@ bool CannedMessageModule::saveProtoForModule()
  */
 void CannedMessageModule::installDefaultCannedMessageModuleConfig()
 {
-    memset(cannedMessageModuleConfig.messages, 0, sizeof(cannedMessageModuleConfig.messages));
+    strncpy(cannedMessageModuleConfig.messages, "Hi|Bye|Yes|No|Ok", sizeof(cannedMessageModuleConfig.messages));
 }
 
 /**
@@ -1267,6 +2361,9 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
 
     if (changed) {
         this->saveProtoForModule();
+        if (splitConfiguredMessages()) {
+            moduleConfig.canned_message.enabled = true;
+        }
     }
 }
 

@@ -81,29 +81,29 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
 uint8_t InkHUD::NodeListApplet::maxCards()
 {
     // Cache result. Shouldn't change during execution
-    static uint8_t cards = 0;
+    static uint8_t maxCardCount = 0;
 
-    if (!cards) {
+    if (!maxCardCount) {
         const uint16_t height = Tile::maxDisplayDimension();
 
         // Use a loop instead of arithmetic, because it's easier for my brain to follow
         // Add cards one by one, until the latest card extends below screen
 
         uint16_t y = cardH; // First card: no margin above
-        cards = 1;
+        maxCardCount = 1;
 
         while (y < height) {
             y += cardMarginH;
             y += cardH;
-            cards++;
+            maxCardCount++;
         }
     }
 
-    return cards;
+    return maxCardCount;
 }
 
 // Draw, using info which derived applet placed into NodeListApplet::cards for us
-void InkHUD::NodeListApplet::onRender()
+void InkHUD::NodeListApplet::onRender(bool full)
 {
 
     // ================================
@@ -120,38 +120,67 @@ void InkHUD::NodeListApplet::onRender()
     // Draw the main node list
     // ========================
 
-    // Imaginary vertical line dividing left-side and right-side info
-    // Long-name will crop here
-    const uint16_t dividerX = (width() - 1) - getTextWidth("X Hops");
+    // Leave a small gutter between long-name text and right-side card content
+    constexpr uint8_t rightContentGap = 2;
+
+    // Truncate with trailing "...", sized using the current font.
+    auto ellipsizeToWidth = [this](std::string text, uint16_t maxWidth) {
+        constexpr const char *ellipsis = "...";
+        const uint16_t ellipsisW = getTextWidth(ellipsis);
+        uint16_t textW = getTextWidth(text);
+        if (maxWidth == 0)
+            return std::string();
+        if (textW <= maxWidth)
+            return text;
+        if (ellipsisW > maxWidth)
+            return std::string();
+        while (!text.empty() && (textW + ellipsisW > maxWidth)) {
+            text.pop_back();
+            textW = getTextWidth(text);
+        }
+        return text + ellipsis;
+    };
 
     // Y value (top) of the current card. Increases as we draw.
     uint16_t cardTopY = headerDivY + padDivH;
+
+    // Clean up deleted nodes before drawing
+    cards.erase(
+        std::remove_if(cards.begin(), cards.end(), [](const CardInfo &c) { return nodeDB->getMeshNode(c.nodeNum) == nullptr; }),
+        cards.end());
 
     // -- Each node in list --
     for (auto card = cards.begin(); card != cards.end(); ++card) {
 
         // Gather info
         // ========================================
-        NodeNum &nodeNum = card->nodeNum;
+        const NodeNum &nodeNum = card->nodeNum;
         SignalStrength &signal = card->signal;
         std::string longName;  // handled below
         std::string shortName; // handled below
-        std::string distance;  // handled below;
-        uint8_t &hopsAway = card->hopsAway;
+        std::string distance;  // handled below
+        const uint8_t &hopsAway = card->hopsAway;
 
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
 
+        // Skip deleted nodes
+        if (!node) {
+            continue;
+        }
+
         // -- Shortname --
-        // use "?" if unknown
-        if (node && node->has_user)
-            shortName = node->user.short_name;
+        // Parse special chars in the short name
+        // Use "?" if unknown
+        if (node)
+            shortName = parseShortName(node);
         else
             shortName = "?";
 
         // -- Longname --
-        // use node id if unknown
+        // Parse special chars in long name
+        // Use node id if unknown
         if (node && node->has_user)
-            longName = node->user.long_name; // Found in nodeDB
+            longName = parse(node->user.long_name); // Found in nodeDB
         else {
             // Not found in nodeDB, show a hex nodeid instead
             longName = hexifyNodeNum(nodeNum);
@@ -166,48 +195,56 @@ void InkHUD::NodeListApplet::onRender()
 
         // Define two lines of text for the card
         // We will center our text on these lines
-        uint16_t lineAY = cardTopY + (fontLarge.lineHeight() / 2);
-        uint16_t lineBY = cardTopY + fontLarge.lineHeight() + (fontSmall.lineHeight() / 2);
+        uint16_t lineAY = cardTopY + (fontMedium.lineHeight() / 2);
+        uint16_t lineBY = cardTopY + fontMedium.lineHeight() + (fontSmall.lineHeight() / 2);
 
         // Print the short name
-        setFont(fontLarge);
+        setFont(fontMedium);
         printAt(0, lineAY, shortName, LEFT, MIDDLE);
 
-        // Print the distance
+        // Right-side labels and long name are rendered in small font.
         setFont(fontSmall);
-        printAt(width() - 1, lineBY, distance, RIGHT, MIDDLE);
+        uint16_t rightContentW = 0;
 
-        // If we have a direct connection to the node, draw the signal indicator
-        if (hopsAway == 0 && signal != SIGNAL_UNKNOWN) {
-            uint16_t signalW = getTextWidth("Xkm"); // Indicator should be similar width to distance label
-            uint16_t signalH = fontLarge.lineHeight() * 0.75;
-            int16_t signalY = lineAY + (fontLarge.lineHeight() / 2) - (fontLarge.lineHeight() * 0.75);
-            int16_t signalX = width() - signalW;
-            drawSignalIndicator(signalX, signalY, signalW, signalH, signal);
+        // Bottom row right: distance.
+        if (!distance.empty()) {
+            rightContentW = std::max(rightContentW, getTextWidth(distance));
+            printAt(width() - 1, lineBY, distance, RIGHT, MIDDLE);
         }
-        // Otherwise, print "hops away" info, if available
-        else if (hopsAway != CardInfo::HOPS_UNKNOWN) {
-            std::string hopString = to_string(node->hops_away);
-            hopString += " Hop";
-            if (node->hops_away != 1)
-                hopString += "s"; // Append s for "Hops", rather than "Hop"
 
+        // Top row right: direct-link signal only.
+        if (hopsAway == 0 && signal != SIGNAL_UNKNOWN) {
+            uint16_t signalW = getTextWidth("Xkm"); // Indicator width tuned to a short right-side label
+            uint16_t signalH = fontMedium.lineHeight() * 0.75;
+            int16_t signalY = lineAY + (fontMedium.lineHeight() / 2) - (fontMedium.lineHeight() * 0.75);
+            int16_t signalX = width() - signalW;
+            rightContentW = std::max(rightContentW, signalW);
+            drawSignalIndicator(signalX, signalY, signalW, signalH, signal);
+        } else if (hopsAway != CardInfo::HOPS_UNKNOWN) {
+            std::string hopString = to_string(hopsAway) + (hopsAway == 1 ? " Hop" : " Hops");
+            rightContentW = std::max(rightContentW, getTextWidth(hopString));
             printAt(width() - 1, lineAY, hopString, RIGHT, MIDDLE);
         }
 
-        // Print the long name, cropping to prevent overflow onto the right-side info
-        setCrop(0, 0, dividerX - 1, height());
-        printAt(0, lineBY, longName, LEFT, MIDDLE);
+        // Give long names as much room as possible while still avoiding right side signal and hop space
+        const uint16_t longNameMaxW =
+            (rightContentW + rightContentGap < width()) ? (width() - rightContentW - rightContentGap) : 0;
+        const std::string longNameShown = ellipsizeToWidth(longName, longNameMaxW);
 
-        // GFX effect: "hatch" the right edge of longName area
-        // If a longName has been cropped, it will appear to fade out,
-        // creating a soft barrier with the right-side info
-        const int16_t hatchLeft = dividerX - 1 - (fontSmall.lineHeight());
-        const int16_t hatchWidth = fontSmall.lineHeight();
-        hatchRegion(hatchLeft, cardTopY, hatchWidth, cardH, 2, WHITE);
+        // Safety crop
+        setCrop(0, cardTopY, longNameMaxW, cardH);
+        printAt(0, lineBY, longNameShown, LEFT, MIDDLE);
+
+        resetCrop();
+
+        // Draw separator between cards
+        const int16_t separatorY = cardTopY + cardH - 1;
+        if (separatorY < height() - 1 && (card + 1) != cards.end()) {
+            for (int16_t xSep = 0; xSep < width(); xSep += 2)
+                drawPixel(xSep, separatorY, BLACK);
+        }
 
         // Prepare to draw the next card
-        resetCrop();
         cardTopY += cardH;
 
         // Once we've run out of screen, stop drawing cards

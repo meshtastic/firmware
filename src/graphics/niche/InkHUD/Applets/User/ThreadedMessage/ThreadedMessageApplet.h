@@ -7,7 +7,7 @@ Displays a thread-view of incoming and outgoing message for a specific channel
 The channel for this applet is set in the constructor,
 when the applet is added to WindowManager in the setupNicheGraphics method.
 
-Several messages are saved to flash at shutdown, to preseve applet between reboots.
+Several messages are saved to flash at shutdown, to preserve applet between reboots.
 This class has its own internal method for saving and loading to fs, which interacts directly with the FSCommon layer.
 If the amount of flash usage is unacceptable, we could keep these in RAM only.
 
@@ -30,27 +30,22 @@ namespace NicheGraphics::InkHUD
 
 class Applet;
 
-class ThreadedMessageApplet : public Applet
+class ThreadedMessageApplet : public Applet, public SinglePortModule
 {
   public:
     explicit ThreadedMessageApplet(uint8_t channelIndex);
     ThreadedMessageApplet() = delete;
 
-    void onRender() override;
+    void onRender(bool full) override;
 
     void onActivate() override;
     void onDeactivate() override;
     void onShutdown() override;
-    int onReceiveTextMessage(const meshtastic_MeshPacket *p);
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
     bool approveNotification(Notification &n) override; // Which notifications to suppress
 
   protected:
-    // Used to register our text message callback
-    CallbackObserver<ThreadedMessageApplet, const meshtastic_MeshPacket *> textMessageObserver =
-        CallbackObserver<ThreadedMessageApplet, const meshtastic_MeshPacket *>(this,
-                                                                               &ThreadedMessageApplet::onReceiveTextMessage);
-
     void saveMessagesToFlash();
     void loadMessagesFromFlash();
 

@@ -47,6 +47,19 @@ int32_t ICM20948Sensor::runOnce()
 int32_t ICM20948Sensor::runOnce()
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
+    if (screen && !screen->isScreenOn() && !config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
+        if (!isAsleep) {
+            LOG_DEBUG("sleeping IMU");
+            sensor->sleep(true);
+            isAsleep = true;
+        }
+        return MOTION_SENSOR_CHECK_INTERVAL_MS;
+    }
+    if (isAsleep) {
+        sensor->sleep(false);
+        isAsleep = false;
+    }
+
     float magX = 0, magY = 0, magZ = 0;
     if (sensor->dataReady()) {
         sensor->getAGMT();
@@ -60,7 +73,8 @@ int32_t ICM20948Sensor::runOnce()
         if (!showingScreen) {
             powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
             showingScreen = true;
-            screen->startAlert((FrameCallback)drawFrameCalibration);
+            if (screen)
+                screen->startAlert((FrameCallback)drawFrameCalibration);
         }
 
         if (magX > highestX)
@@ -81,7 +95,8 @@ int32_t ICM20948Sensor::runOnce()
             doCalibration = false;
             endCalibrationAt = 0;
             showingScreen = false;
-            screen->endAlert();
+            if (screen)
+                screen->endAlert();
         }
 
         // LOG_DEBUG("ICM20948 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
@@ -124,8 +139,8 @@ int32_t ICM20948Sensor::runOnce()
         heading += 270;
         break;
     }
-
-    screen->setHeading(heading);
+    if (screen)
+        screen->setHeading(heading);
 #endif
 
     // Wake on motion using polling  - this is not as efficient as using hardware interrupt pin (see above)
@@ -154,12 +169,26 @@ int32_t ICM20948Sensor::runOnce()
 void ICM20948Sensor::calibrate(uint16_t forSeconds)
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
+    LOG_DEBUG("Old calibration data: highestX = %f, lowestX = %f, highestY = %f, lowestY = %f, highestZ = %f, lowestZ = %f",
+              highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
     LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
+    if (sensor->dataReady()) {
+        sensor->getAGMT();
+        highestX = sensor->agmt.mag.axes.x;
+        lowestX = sensor->agmt.mag.axes.x;
+        highestY = sensor->agmt.mag.axes.y;
+        lowestY = sensor->agmt.mag.axes.y;
+        highestZ = sensor->agmt.mag.axes.z;
+        lowestZ = sensor->agmt.mag.axes.z;
+    } else {
+        highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+    }
 
     doCalibration = true;
     uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
     endCalibrationAt = millis() + calibrateFor;
-    screen->setEndCalibration(endCalibrationAt);
+    if (screen)
+        screen->setEndCalibration(endCalibrationAt);
 #endif
 }
 // ----------------------------------------------------------------------
@@ -189,13 +218,19 @@ bool ICM20948Singleton::init(ScanI2C::FoundDevice device)
     enableDebugging();
 #endif
 
-// startup
-#ifdef Wire1
-    ICM_20948_Status_e status =
-        begin(device.address.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire, device.address.address == ICM20948_ADDR ? 1 : 0);
+    // startup
+#if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)
+    TwoWire &bus = (device.address.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
-    ICM_20948_Status_e status = begin(Wire, device.address.address == ICM20948_ADDR ? 1 : 0);
+    TwoWire &bus = Wire; // fallback if only one I2C interface
 #endif
+
+    bool bAddr = (device.address.address == 0x69);
+    delay(100);
+
+    LOG_DEBUG("ICM20948 begin on addr 0x%02X (port=%d, bAddr=%d)", device.address.address, device.address.port, bAddr);
+
+    ICM_20948_Status_e status = begin(bus, bAddr);
     if (status != ICM_20948_Stat_Ok) {
         LOG_DEBUG("ICM20948 init begin - %s", statusString());
         return false;

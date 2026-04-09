@@ -46,7 +46,7 @@ class NodeListApplet : public Applet, public MeshModule
   public:
     NodeListApplet(const char *name);
 
-    void onRender() override;
+    void onRender(bool full) override;
 
     bool wantPacket(const meshtastic_MeshPacket *p) override;
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
@@ -65,8 +65,8 @@ class NodeListApplet : public Applet, public MeshModule
 
     // Card Dimensions
     // - for rendering and for maxCards calc
-    const uint8_t cardMarginH = fontSmall.lineHeight() / 2;                               // Gap between cards
-    const uint16_t cardH = fontLarge.lineHeight() + fontSmall.lineHeight() + cardMarginH; // Height of card
+    uint8_t cardMarginH = 1; // Gap between cards (minimal to fit more rows)
+    uint16_t cardH = fontMedium.lineHeight() + fontSmall.lineHeight() + cardMarginH; // Height of card
 };
 
 } // namespace NicheGraphics::InkHUD

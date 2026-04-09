@@ -1,13 +1,14 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
 #include "./PositionsApplet.h"
+#include "NodeDB.h"
 
 using namespace NicheGraphics;
 
-void InkHUD::PositionsApplet::onRender()
+void InkHUD::PositionsApplet::onRender(bool full)
 {
     // Draw the usual map applet first
-    MapApplet::onRender();
+    MapApplet::onRender(full);
 
     // Draw our latest "node of interest" as a special marker
     // -------------------------------------------------------
@@ -49,8 +50,8 @@ ProcessMessage InkHUD::PositionsApplet::handleReceived(const meshtastic_MeshPack
     if (!hasPosition)
         return ProcessMessage::CONTINUE;
 
-    bool hasHopsAway = (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start); // From NodeDB::updateFrom
-    uint8_t hopsAway = mp.hop_start - mp.hop_limit;
+    const int8_t hopsAway = getHopsAway(mp);
+    const bool hasHopsAway = hopsAway >= 0;
 
     // Determine if the position packet would change anything on-screen
     // -----------------------------------------------------------------

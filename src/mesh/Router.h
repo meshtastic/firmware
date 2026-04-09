@@ -8,6 +8,7 @@
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
+#include <memory>
 
 /**
  * A mesh aware router that supports multiple interfaces.
@@ -20,7 +21,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     PointerQueue<meshtastic_MeshPacket> fromRadioQueue;
 
   protected:
-    RadioInterface *iface = NULL;
+    std::unique_ptr<RadioInterface> iface = nullptr;
 
   public:
     /**
@@ -32,7 +33,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /**
      * Currently we only allow one interface, that may change in the future
      */
-    void addInterface(RadioInterface *_iface) { iface = _iface; }
+    void addInterface(std::unique_ptr<RadioInterface> _iface) { iface = std::move(_iface); }
 
     /**
      * do idle processing
@@ -57,14 +58,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
      * The returned packet is guaranteed to have a unique packet ID already assigned
      */
-    meshtastic_MeshPacket *allocForSending();
+    [[nodiscard]] meshtastic_MeshPacket *allocForSending();
 
     /** Return Underlying interface's TX queue status */
-    meshtastic_QueueStatus getQueueStatus();
+    [[nodiscard]] meshtastic_QueueStatus getQueueStatus();
 
     /**
      * @return our local nodenum */
-    NodeNum getNodeNum();
+    [[nodiscard]] NodeNum getNodeNum();
 
     /** Wake up the router thread ASAP, because we just queued a message for it.
      * FIXME, this is kinda a hack because we don't have a nice way yet to say 'wake us because we are 'blocked on this queue'
@@ -91,6 +92,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
 
+    // pointer to the encrypted packet
+    meshtastic_MeshPacket *p_encrypted = nullptr;
+
   protected:
     friend class RoutingModule;
 
@@ -105,6 +109,18 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) { return false; }
 
     /**
+     * Determine if hop_limit should be decremented for a relay operation.
+     * Returns false (preserve hop_limit) only if all conditions are met:
+     * - It's NOT the first hop (first hop must always decrement)
+     * - Local device is a ROUTER, ROUTER_LATE, or CLIENT_BASE
+     * - Previous relay is a favorite ROUTER, ROUTER_LATE, or CLIENT_BASE
+     *
+     * @param p The packet being relayed
+     * @return true if hop_limit should be decremented, false to preserve it
+     */
+    bool shouldDecrementHopLimit(const meshtastic_MeshPacket *p);
+
+    /**
      * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
      * update routing tables etc... based on what we overhear (even for messages not destined to our node)
      */
@@ -113,7 +129,8 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /**
      * Send an ack or a nak packet back towards whoever sent idFrom
      */
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0);
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool ackWantsAck = false);
 
   private:
     /**

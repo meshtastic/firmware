@@ -11,7 +11,7 @@ NullSensor::NullSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SENSOR
 
 int32_t NullSensor::runOnce()
 {
-    return 0;
+    return INT32_MAX;
 }
 
 void NullSensor::setup() {}
@@ -20,4 +20,15 @@ bool NullSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     return false;
 }
+
+uint16_t NullSensor::getBusVoltageMv()
+{
+    return 0;
+}
+
+int16_t NullSensor::getCurrentMa()
+{
+    return 0;
+}
+
 #endif

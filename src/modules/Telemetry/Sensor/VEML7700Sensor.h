@@ -16,12 +16,9 @@ class VEML7700Sensor : public TelemetrySensor
     float computeLux(uint16_t rawALS, bool corrected);
     float getResolution(void);
 
-  protected:
-    virtual void setup() override;
-
   public:
     VEML7700Sensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 #endif

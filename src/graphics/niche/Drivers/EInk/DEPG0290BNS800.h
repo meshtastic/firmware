@@ -5,7 +5,7 @@ E-Ink display driver
     - Manufacturer: DKE
     - Size: 2.9 inch
     - Resolution: 128px x 296px
-    - Flex connector marking: FPC-7519 rev.b
+    - Flex connector marking (not a unique identifier): FPC-7519 rev.b
 
 */
 
@@ -35,7 +35,7 @@ class DEPG0290BNS800 : public SSD16XX
     void configWaveform() override;
     void configUpdateSequence() override;
     void detachFromUpdate() override;
-    void finalizeUpdate() override; // Only overriden for a slight optimization
+    void finalizeUpdate() override; // Only overridden for a slight optimization
 };
 
 } // namespace NicheGraphics::Drivers

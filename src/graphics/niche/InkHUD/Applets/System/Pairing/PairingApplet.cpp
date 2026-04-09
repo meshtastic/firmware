@@ -9,23 +9,23 @@ InkHUD::PairingApplet::PairingApplet()
     bluetoothStatusObserver.observe(&bluetoothStatus->onNewStatus);
 }
 
-void InkHUD::PairingApplet::onRender()
+void InkHUD::PairingApplet::onRender(bool full)
 {
     // Header
-    setFont(fontLarge);
+    setFont(fontMedium);
     printAt(X(0.5), Y(0.25), "Bluetooth", CENTER, BOTTOM);
     setFont(fontSmall);
     printAt(X(0.5), Y(0.25), "Enter this code", CENTER, TOP);
 
     // Passkey
-    setFont(fontLarge);
+    setFont(fontMedium);
     printThick(X(0.5), Y(0.5), passkey.substr(0, 3) + " " + passkey.substr(3), 3, 2);
 
     // Device's bluetooth name, if it will fit
     setFont(fontSmall);
-    std::string name = "Name: " + std::string(getDeviceName());
+    std::string name = "Name: " + parse(getDeviceName());
     if (getTextWidth(name) > width()) // Too wide, try without the leading "Name: "
-        name = std::string(getDeviceName());
+        name = parse(getDeviceName());
     if (getTextWidth(name) < width()) // Does it fit?
         printAt(X(0.5), Y(0.75), name, CENTER, MIDDLE);
 }
@@ -45,7 +45,7 @@ void InkHUD::PairingApplet::onBackground()
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
 }
 
 int InkHUD::PairingApplet::onBluetoothStatusUpdate(const meshtastic::Status *status)
@@ -55,12 +55,12 @@ int InkHUD::PairingApplet::onBluetoothStatusUpdate(const meshtastic::Status *sta
     // We'll mimic that behavior, just to keep in line with the other Statuses,
     // even though I'm not sure what the original reason for jumping through these extra hoops was.
     assert(status->getStatusType() == STATUS_TYPE_BLUETOOTH);
-    meshtastic::BluetoothStatus *bluetoothStatus = (meshtastic::BluetoothStatus *)status;
+    const auto *btStatus = static_cast<const meshtastic::BluetoothStatus *>(status);
 
     // When pairing begins
-    if (bluetoothStatus->getConnectionState() == meshtastic::BluetoothStatus::ConnectionState::PAIRING) {
+    if (btStatus->getConnectionState() == meshtastic::BluetoothStatus::ConnectionState::PAIRING) {
         // Store the passkey for rendering
-        passkey = bluetoothStatus->getPasskey();
+        passkey = btStatus->getPasskey();
 
         // Show pairing screen
         bringToForeground();

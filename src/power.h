@@ -13,26 +13,9 @@
 #define NUM_OCV_POINTS 11
 #endif
 
+// Device specific curves go in variant.h
 #ifndef OCV_ARRAY
-#ifdef CELL_TYPE_LIFEPO4
-#define OCV_ARRAY 3400, 3350, 3320, 3290, 3270, 3260, 3250, 3230, 3200, 3120, 3000
-#elif defined(CELL_TYPE_LEADACID)
-#define OCV_ARRAY 2120, 2090, 2070, 2050, 2030, 2010, 1990, 1980, 1970, 1960, 1950
-#elif defined(CELL_TYPE_ALKALINE)
-#define OCV_ARRAY 1580, 1400, 1350, 1300, 1280, 1250, 1230, 1190, 1150, 1100, 1000
-#elif defined(CELL_TYPE_NIMH)
-#define OCV_ARRAY 1400, 1300, 1280, 1270, 1260, 1250, 1240, 1230, 1210, 1150, 1000
-#elif defined(CELL_TYPE_LTO)
-#define OCV_ARRAY 2700, 2560, 2540, 2520, 2500, 2460, 2420, 2400, 2380, 2320, 1500
-#elif defined(TRACKER_T1000_E)
-#define OCV_ARRAY 4190, 4078, 4017, 3969, 3887, 3818, 3798, 3791, 3766, 3712, 3100
-#elif defined(HELTEC_MESH_POCKET_BATTERY_5000)
-#define OCV_ARRAY 4300, 4240, 4120, 4000, 3888, 3800, 3740, 3698, 3655, 3580, 3400
-#elif defined(HELTEC_MESH_POCKET_BATTERY_10000)
-#define OCV_ARRAY 4100, 4060, 3960, 3840, 3729, 3625, 3550, 3500, 3420, 3345, 3100
-#else // LiIon
 #define OCV_ARRAY 4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
-#endif
 #endif
 
 /*Note: 12V lead acid is 6 cells, most board accept only 1 cell LiIon/LiPo*/
@@ -77,9 +60,9 @@ extern NullSensor ina3221Sensor;
 
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_STM32WL)
-#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #if __has_include(<Adafruit_MAX1704X.h>)
+#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 extern MAX17048Sensor max17048Sensor;
 #else
 extern NullSensor max17048Sensor;
@@ -106,7 +89,7 @@ class Power : private concurrency::OSThread
 
     Power();
 
-    void shutdown();
+    void powerCommandsCheck();
     void readPowerStatus();
     virtual bool setup();
     virtual int32_t runOnce() override;
@@ -120,15 +103,28 @@ class Power : private concurrency::OSThread
     bool axpChipInit();
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
-    /// Setup a Lipo battery level sensor
-    bool lipoInit();
+    /// Setup cw2015 battery level sensor
+    bool cw2015Init();
+    /// Setup a 17048 battery level sensor
+    bool max17048Init();
+    /// Setup a Lipo charger
+    bool lipoChargerInit();
+    /// Setup a meshSolar battery sensor
+    bool meshSolarInit();
+    /// Setup a serial battery sensor
+    bool serialBatteryInit();
 
   private:
+    void shutdown();
+    void reboot();
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
+    uint32_t lastLogTime = 0;
 #ifdef DEBUG_HEAP
     uint32_t lastheap;
 #endif
 };
+
+void battery_adcEnable();
 
 extern Power *power;

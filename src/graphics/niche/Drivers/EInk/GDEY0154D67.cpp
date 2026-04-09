@@ -9,12 +9,9 @@ void GDEY0154D67::configScanning()
 {
     // "Driver output control"
     sendCommand(0x01);
-    sendData(0xC7);
+    sendData(0xC7); // Scan until gate 199 (200px vertical res.)
     sendData(0x00);
     sendData(0x00);
-
-    // To-do: delete this method?
-    // Values set here might be redundant: C7, 00, 00 seems to be default
 }
 
 // Specify which information is used to control the sequence of voltages applied to move the pixels
@@ -52,10 +49,10 @@ void GDEY0154D67::detachFromUpdate()
 {
     switch (updateType) {
     case FAST:
-        return beginPolling(50, 500); // At least 500ms for fast refresh
+        return beginPolling(50, 300); // At least 300ms for fast refresh
     case FULL:
     default:
-        return beginPolling(100, 2000); // At least 2 seconds for full refresh
+        return beginPolling(100, 1500); // At least 1.5 seconds for full refresh
     }
 }
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

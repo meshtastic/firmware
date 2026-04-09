@@ -61,11 +61,11 @@ static int cmd_send(uint8_t cmd, const char *p_data, uint8_t len)
     return -1;
 }
 
-int32_t IndicatorSensor::runOnce()
+bool IndicatorSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("%s: init", sensorName);
     setup();
-    return 2 * DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS; // give it some time to start up
+    return true;
 }
 
 void IndicatorSensor::setup()

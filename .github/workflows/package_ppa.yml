@@ -16,8 +16,7 @@ on:
         type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   build-debian-src:
@@ -32,12 +31,10 @@ jobs:
     needs: build-debian-src
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           path: meshtasticd
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Install deps
         shell: bash
@@ -46,7 +43,7 @@ jobs:
           sudo apt-get install -y dput
 
       - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
+        uses: crazy-max/ghaction-import-gpg@v7
         with:
           gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
         id: gpg
@@ -60,7 +57,7 @@ jobs:
         id: version
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: firmware-debian-${{ steps.version.outputs.deb }}~${{ inputs.series }}-src
           merge-multiple: true
@@ -70,5 +67,6 @@ jobs:
 
       - name: Publish with dput
         if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
+        timeout-minutes: 15 # dput is terrible, sometimes runs 'forever'
         run: |
           dput ${{ inputs.ppa_repo }} meshtasticd_${{ steps.version.outputs.deb }}~${{ inputs.series }}_source.changes

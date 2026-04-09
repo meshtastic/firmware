@@ -3,14 +3,15 @@
 # trunk-ignore-all(hadolint/DL3018): Do not pin apk package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
-FROM python:3.13-alpine3.21 AS builder
+FROM python:3.14-alpine3.22 AS builder
 ARG PIO_ENV=native
 ENV PIP_ROOT_USER_ACTION=ignore
 
 RUN apk --no-cache add \
-        bash g++ libstdc++-dev linux-headers zip git ca-certificates libgpiod-dev yaml-cpp-dev bluez-dev \
+        bash g++ libstdc++-dev linux-headers zip git ca-certificates libbsd-dev \
+        libgpiod-dev yaml-cpp-dev bluez-dev \
         libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \
-        libx11-dev libinput-dev libxkbcommon-dev \
+        libx11-dev libinput-dev libxkbcommon-dev sqlite-dev sdl2-dev \
     && rm -rf /var/cache/apk/* \
     && pip install --no-cache-dir -U platformio \
     && mkdir /tmp/firmware
@@ -27,21 +28,28 @@ RUN bash ./bin/build-native.sh "$PIO_ENV" && \
 
 # ##### PRODUCTION BUILD #############
 
-FROM alpine:3.21
+FROM alpine:3.23
+LABEL org.opencontainers.image.title="Meshtastic" \
+      org.opencontainers.image.description="Alpine Meshtastic daemon" \
+      org.opencontainers.image.url="https://meshtastic.org" \
+      org.opencontainers.image.documentation="https://meshtastic.org/docs/" \
+      org.opencontainers.image.authors="Meshtastic" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/meshtastic/firmware/"
 
 # nosemgrep: dockerfile.security.last-user-is-root.last-user-is-root
 USER root
 
 RUN apk --no-cache add \
-        libstdc++ libgpiod yaml-cpp libusb i2c-tools libuv \
-        libx11 libinput libxkbcommon \
+        shadow libstdc++ libbsd libgpiod yaml-cpp libusb \
+        i2c-tools libuv libx11 libinput libxkbcommon sdl2 \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \
     && mkdir -p /etc/meshtasticd/ssl
 
 # Fetch compiled binary from the builder
-COPY --from=builder /tmp/firmware/release/meshtasticd /usr/sbin/
+COPY --from=builder /tmp/firmware/release/meshtasticd /usr/bin/
 # Copy config templates
 COPY ./bin/config.d /etc/meshtasticd/available.d
 

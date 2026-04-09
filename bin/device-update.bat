@@ -6,14 +6,17 @@ SET "SCRIPT_NAME=%~nx0"
 SET "DEBUG=0"
 SET "PYTHON="
 SET "ESPTOOL_BAUD=115200"
+SET "RESET_BAUD=1200"
+SET "UPDATE_OFFSET=0x10000"
 SET "ESPTOOL_CMD="
 SET "LOGCOUNTER=0"
+SET "CHANGE_MODE=0"
 
 GOTO getopts
 :help
 ECHO Flash image file to device, but leave existing system intact.
 ECHO.
-ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python]
+ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python] [--change-mode]
 ECHO.
 ECHO Options:
 ECHO     -f filename      The update .bin file to flash.  Custom to your device type and region. (required)
@@ -23,12 +26,15 @@ ECHO                      If not set, ESPTOOL iterates all ports (Dangerous).
 ECHO     -P python        Specify alternate python interpreter to use to invoke esptool. (default: python)
 ECHO                      If supplied the script will use python.
 ECHO                      If not supplied the script will try to find esptool in Path.
+ECHO     --change-mode    Attempt to place the device in correct mode. (1200bps Reset)
+ECHO                      Some hardware requires this twice.
 ECHO.
-ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4-update.bin -p COM11
+ECHO Example: %SCRIPT_NAME% -p COM17 --change-mode
+ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4.bin -p COM11
 GOTO eof
 
 :version
-ECHO %SCRIPT_NAME% [Version 2.6.1]
+ECHO %SCRIPT_NAME% [Version 2.7.0]
 ECHO Meshtastic
 GOTO eof
 
@@ -44,9 +50,12 @@ IF /I "%~1"=="-f" SET "FILENAME=%~2" & SHIFT
 IF "%~1"=="-p" SET "ESPTOOL_PORT=%~2" & SHIFT
 IF /I "%~1"=="--port" SET "ESPTOOL_PORT=%~2" & SHIFT
 IF "%~1"=="-P" SET "PYTHON=%~2" & SHIFT
+IF /I "%~1"=="--change-mode" SET "CHANGE_MODE=1"
 SHIFT
 GOTO getopts
 :endopts
+
+IF %CHANGE_MODE% EQU 1 GOTO skip-filename
 
 CALL :LOG_MESSAGE DEBUG "Checking FILENAME parameter..."
 IF "__!FILENAME!__"=="____" (
@@ -69,20 +78,22 @@ IF NOT EXIST !FILENAME! (
     GOTO eof
 )
 
-IF "!FILENAME:update=!"=="!FILENAME!" (
-    CALL :LOG_MESSAGE DEBUG "We are NOT working with a *update* file. !FILENAME!"
+IF NOT "__!FILENAME:.factory.bin=!__"=="__!FILENAME!__" (
+    CALL :LOG_MESSAGE DEBUG "We are working with a *.factory.bin* file. !FILENAME!"
     CALL :LOG_MESSAGE INFO "Use script device-install.bat to flash !FILENAME!."
     GOTO eof
 ) ELSE (
-    CALL :LOG_MESSAGE DEBUG "We are working with a *update* file. !FILENAME!"
+    CALL :LOG_MESSAGE DEBUG "We are not working with a *.factory.bin* file. !FILENAME!"
 )
+
+:skip-filename
 
 CALL :LOG_MESSAGE DEBUG "Determine the correct esptool command to use..."
 IF NOT "__%PYTHON%__"=="____" (
-    SET "ESPTOOL_CMD=!PYTHON! -m esptool"
+    SET "ESPTOOL_CMD=""!PYTHON!"" -m esptool"
     CALL :LOG_MESSAGE DEBUG "Python interpreter supplied."
 ) ELSE (
-    CALL :LOG_MESSAGE DEBUG "Python interpreter NOT supplied. Looking for esptool...
+    CALL :LOG_MESSAGE DEBUG "Python interpreter NOT supplied. Looking for esptool..."
     WHERE esptool >nul 2>&1
     IF %ERRORLEVEL% EQU 0 (
         @REM WHERE exits with code 0 if esptool is found.
@@ -95,11 +106,11 @@ IF NOT "__%PYTHON%__"=="____" (
 
 CALL :LOG_MESSAGE DEBUG "Checking esptool command !ESPTOOL_CMD!..."
 !ESPTOOL_CMD! >nul 2>&1
-IF %ERRORLEVEL% GEQ 2 (
-    @REM esptool exits with code 1 if help is displayed.
+CALL :LOG_MESSAGE DEBUG "esptool exit code: %ERRORLEVEL%"
+IF %ERRORLEVEL% EQU 9009 (
+    @REM 9009 = command not found on Windows
     CALL :LOG_MESSAGE ERROR "esptool not found: !ESPTOOL_CMD!"
     EXIT /B 1
-    GOTO eof
 )
 IF %DEBUG% EQU 1 (
     CALL :LOG_MESSAGE DEBUG "Skipping ESPTOOL_CMD steps."
@@ -115,9 +126,15 @@ IF "__!ESPTOOL_PORT!__" == "____" (
 )
 CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."
 
+IF %CHANGE_MODE% EQU 1 (
+    @REM Attempt to change mode via 1200bps Reset.
+    CALL :RUN_ESPTOOL !RESET_BAUD! --after no_reset read_flash_status
+    GOTO eof
+)
+
 @REM Flashing operations.
-CALL :LOG_MESSAGE INFO "Trying to flash update "!FILENAME!" at OFFSET 0x10000..."
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash 0x10000 "!FILENAME!" || GOTO eof
+CALL :LOG_MESSAGE INFO "Trying to flash update "!FILENAME!" at OFFSET !UPDATE_OFFSET!..."
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write-flash !UPDATE_OFFSET! "!FILENAME!" || GOTO eof
 
 CALL :LOG_MESSAGE INFO "Script complete!."
 
@@ -129,12 +146,13 @@ EXIT /B %ERRORLEVEL%
 :RUN_ESPTOOL
 @REM Subroutine used to run ESPTOOL_CMD with arguments.
 @REM Also handles %ERRORLEVEL%.
-@REM CALL :RUN_ESPTOOL [Baud] [erase_flash|write_flash] [OFFSET] [Filename]
+@REM CALL :RUN_ESPTOOL [Baud] [erase-flash|write-flash] [OFFSET] [Filename]
 @REM.
-@REM Example:: CALL :RUN_ESPTOOL 115200 write_flash 0x10000 "firmwarefile.bin"
+@REM Example:: CALL :RUN_ESPTOOL 115200 write-flash 0x10000 "firmwarefile.bin"
 IF %DEBUG% EQU 1 CALL :LOG_MESSAGE DEBUG "About to run command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
 CALL :RESET_ERROR
 !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4
+IF %CHANGE_MODE% EQU 1 GOTO :eof
 IF %ERRORLEVEL% NEQ 0 (
     CALL :LOG_MESSAGE ERROR "Error running command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
     EXIT /B %ERRORLEVEL%

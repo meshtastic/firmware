@@ -1,5 +1,6 @@
 #include "UpDownInterruptImpl1.h"
 #include "InputBroker.h"
+extern bool osk_found;
 
 UpDownInterruptImpl1 *upDownInterruptImpl1;
 
@@ -7,6 +8,14 @@ UpDownInterruptImpl1::UpDownInterruptImpl1() : UpDownInterruptBase("upDown1") {}
 
 bool UpDownInterruptImpl1::init()
 {
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER) && defined(INPUTDRIVER_TWO_WAY_ROCKER_LEFT) && defined(INPUTDRIVER_TWO_WAY_ROCKER_RIGHT)
+    moduleConfig.canned_message.updown1_enabled = true;
+    moduleConfig.canned_message.inputbroker_pin_a = INPUTDRIVER_TWO_WAY_ROCKER_LEFT;
+    moduleConfig.canned_message.inputbroker_pin_b = INPUTDRIVER_TWO_WAY_ROCKER_RIGHT;
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
+    moduleConfig.canned_message.inputbroker_pin_press = INPUTDRIVER_TWO_WAY_ROCKER_BTN;
+#endif
+#endif
 
     if (!moduleConfig.canned_message.updown1_enabled) {
         // Input device is disabled.
@@ -17,13 +26,20 @@ bool UpDownInterruptImpl1::init()
     uint8_t pinDown = moduleConfig.canned_message.inputbroker_pin_b;
     uint8_t pinPress = moduleConfig.canned_message.inputbroker_pin_press;
 
-    char eventDown = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
-    char eventUp = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP);
-    char eventPressed = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
+    input_broker_event eventDown = INPUT_BROKER_USER_PRESS; // acts like RIGHT/DOWN
+    input_broker_event eventUp = INPUT_BROKER_ALT_PRESS;    // acts like LEFT/UP
+    input_broker_event eventPressed = INPUT_BROKER_SELECT;
+    input_broker_event eventPressedLong = INPUT_BROKER_SELECT_LONG;
+    input_broker_event eventUpLong = INPUT_BROKER_UP_LONG;
+    input_broker_event eventDownLong = INPUT_BROKER_DOWN_LONG;
 
-    UpDownInterruptBase::init(pinDown, pinUp, pinPress, eventDown, eventUp, eventPressed, UpDownInterruptImpl1::handleIntDown,
-                              UpDownInterruptImpl1::handleIntUp, UpDownInterruptImpl1::handleIntPressed);
+    UpDownInterruptBase::init(pinDown, pinUp, pinPress, eventDown, eventUp, eventPressed, eventPressedLong, eventUpLong,
+                              eventDownLong, UpDownInterruptImpl1::handleIntDown, UpDownInterruptImpl1::handleIntUp,
+                              UpDownInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
+#ifndef HAS_PHYSICAL_KEYBOARD
+    osk_found = true;
+#endif
     return true;
 }
 

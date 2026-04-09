@@ -4,6 +4,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "memGet.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <assert.h>
 #include <cstring>
@@ -17,7 +18,7 @@
 #endif
 
 #if HAS_NETWORKING
-extern Syslog syslog;
+extern meshtastic::Syslog syslog;
 #endif
 void RedirectablePrint::rpInit()
 {
@@ -57,7 +58,7 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
 #endif
 
 #ifdef ARCH_PORTDUINO
-    bool color = !settingsMap[ascii_logs];
+    bool color = !portduino_config.ascii_logs;
 #else
     bool color = true;
 #endif
@@ -99,7 +100,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
     size_t r = 0;
 
 #ifdef ARCH_PORTDUINO
-    bool color = !settingsMap[ascii_logs];
+    bool color = !portduino_config.ascii_logs;
 #else
     bool color = true;
 #endif
@@ -130,6 +131,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         int hour = hms / SEC_PER_HOUR;
         int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
         int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+
 #ifdef ARCH_PORTDUINO
         ::printf("%s ", logLevel);
         if (color) {
@@ -166,6 +168,16 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         print(thread->ThreadName);
         print("] ");
     }
+
+#ifdef DEBUG_HEAP
+    // Add heap free space bytes prefix before every log message
+#ifdef ARCH_PORTDUINO
+    ::printf("[heap %u] ", memGet.getFreeHeap());
+#else
+    printf("[heap %u] ", memGet.getFreeHeap());
+#endif
+#endif // DEBUG_HEAP
+
     r += vprintf(logLevel, format, arg);
 }
 
@@ -215,34 +227,21 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
 #endif
         if (isBleConnected) {
-            char *message;
-            size_t initialLen;
-            size_t len;
-            initialLen = strlen(format);
-            message = new char[initialLen + 1];
-            len = vsnprintf(message, initialLen + 1, format, arg);
-            if (len > initialLen) {
-                delete[] message;
-                message = new char[len + 1];
-                vsnprintf(message, len + 1, format, arg);
-            }
             auto thread = concurrency::OSThread::currentThread;
             meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
             logRecord.level = getLogLevel(logLevel);
-            strcpy(logRecord.message, message);
+            vsprintf(logRecord.message, format, arg);
             if (thread)
                 strcpy(logRecord.source, thread->ThreadName.c_str());
             logRecord.time = getValidTime(RTCQuality::RTCQualityDevice, true);
 
-            uint8_t *buffer = new uint8_t[meshtastic_LogRecord_size];
-            size_t size = pb_encode_to_bytes(buffer, meshtastic_LogRecord_size, meshtastic_LogRecord_fields, &logRecord);
+            auto buffer = std::unique_ptr<uint8_t[]>(new uint8_t[meshtastic_LogRecord_size]);
+            size_t size = pb_encode_to_bytes(buffer.get(), meshtastic_LogRecord_size, meshtastic_LogRecord_fields, &logRecord);
 #ifdef ARCH_ESP32
-            nimbleBluetooth->sendLog(buffer, size);
+            nimbleBluetooth->sendLog(buffer.get(), size);
 #elif defined(ARCH_NRF52)
-            nrf52Bluetooth->sendLog(buffer, size);
+            nrf52Bluetooth->sendLog(buffer.get(), size);
 #endif
-            delete[] message;
-            delete[] buffer;
         }
     }
 #else
@@ -280,15 +279,15 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 
     // append \n to format
     size_t len = strlen(format);
-    char *newFormat = new char[len + 2];
-    strcpy(newFormat, format);
+    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
+    strcpy(newFormat.get(), format);
     newFormat[len] = '\n';
     newFormat[len + 1] = '\0';
 
 #if ARCH_PORTDUINO
     // level trace is special, two possible ways to handle it.
     if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
-        if (settingsStrings[traceFilename] != "") {
+        if (portduino_config.traceFilename != "") {
             va_list arg;
             va_start(arg, format);
             try {
@@ -297,24 +296,19 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
             }
             va_end(arg);
         }
-        if (settingsMap[logoutputlevel] < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
-            delete[] newFormat;
+        if (portduino_config.logoutputlevel < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
             return;
         }
     }
-    if (settingsMap[logoutputlevel] < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
-        delete[] newFormat;
+    if (portduino_config.logoutputlevel < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         return;
-    } else if (settingsMap[logoutputlevel] < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0) {
-        delete[] newFormat;
+    } else if (portduino_config.logoutputlevel < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0) {
         return;
-    } else if (settingsMap[logoutputlevel] < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0) {
-        delete[] newFormat;
+    } else if (portduino_config.logoutputlevel < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0) {
         return;
     }
 #endif
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
-        delete[] newFormat;
         return;
     }
 
@@ -326,11 +320,19 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #endif
 
         va_list arg;
+        va_list arg_copy;
+
         va_start(arg, format);
 
-        log_to_serial(logLevel, newFormat, arg);
-        log_to_syslog(logLevel, newFormat, arg);
-        log_to_ble(logLevel, newFormat, arg);
+        va_copy(arg_copy, arg);
+        log_to_serial(logLevel, newFormat.get(), arg_copy);
+        va_end(arg_copy);
+
+        va_copy(arg_copy, arg);
+        log_to_syslog(logLevel, newFormat.get(), arg_copy);
+        va_end(arg_copy);
+
+        log_to_ble(logLevel, newFormat.get(), arg);
 
         va_end(arg);
 #ifdef HAS_FREE_RTOS
@@ -340,11 +342,10 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #endif
     }
 
-    delete[] newFormat;
     return;
 }
 
-void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16_t len)
+void RedirectablePrint::hexDump(const char *logLevel, const unsigned char *buf, uint16_t len)
 {
     const char alphabet[17] = "0123456789abcdef";
     log(logLevel, "    +------------------------------------------------+ +----------------+");
@@ -352,8 +353,8 @@ void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16
     for (uint16_t i = 0; i < len; i += 16) {
         if (i % 128 == 0)
             log(logLevel, "    +------------------------------------------------+ +----------------+");
-        char s[] = "|                                                | |                |\n";
-        uint8_t ix = 1, iy = 52;
+        char s[] = "     |                                                | |                |\n";
+        uint8_t ix = 5, iy = 56;
         for (uint8_t j = 0; j < 16; j++) {
             if (i + j < len) {
                 uint8_t c = buf[i + j];
@@ -367,10 +368,8 @@ void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16
             }
         }
         uint8_t index = i / 16;
-        if (i < 256)
-            log(logLevel, " ");
-        log(logLevel, "%02x", index);
-        log(logLevel, ".");
+        sprintf(s, "%03x", index);
+        s[3] = '.';
         log(logLevel, s);
     }
     log(logLevel, "    +------------------------------------------------+ +----------------+");

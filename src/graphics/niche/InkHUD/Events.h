@@ -13,7 +13,7 @@ however this class handles general events which concern InkHUD as a whole, e.g. 
 
 #include "configuration.h"
 
-#include "Observer.h"
+#include "modules/AdminModule.h"
 
 #include "./InkHUD.h"
 #include "./Persistence.h"
@@ -29,11 +29,23 @@ class Events
 
     void onButtonShort(); // User button: short press
     void onButtonLong();  // User button: long press
+    void applyingChanges();
+    void onExitShort(); // Exit button: short press
+    void onExitLong();  // Exit button: long press
+    void onNavUp();     // Navigate up
+    void onNavDown();   // Navigate down
+    void onNavLeft();   // Navigate left
+    void onNavRight();  // Navigate right
+
+    // Free text typing events
+    void onFreeText(char c); // New freetext character input
+    void onFreeTextDone();
+    void onFreeTextCancel();
 
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int beforeReboot(void *unused);                                // Prepare for reboot
     int onReceiveTextMessage(const meshtastic_MeshPacket *packet); // Store most recent text message
-    int onAdminMessage(const meshtastic_AdminMessage *message);    // Handle incoming admin messages
+    int onAdminMessage(AdminModule_ObserverData *data);            // Handle incoming admin messages
 #ifdef ARCH_ESP32
     int beforeLightSleep(void *unused); // Prepare for light sleep
 #endif
@@ -54,13 +66,16 @@ class Events
         CallbackObserver<Events, const meshtastic_MeshPacket *>(this, &Events::onReceiveTextMessage);
 
     // Get notified of incoming admin messages, and handle any which are relevant to InkHUD
-    CallbackObserver<Events, const meshtastic_AdminMessage *> adminMessageObserver =
-        CallbackObserver<Events, const meshtastic_AdminMessage *>(this, &Events::onAdminMessage);
+    CallbackObserver<Events, AdminModule_ObserverData *> adminMessageObserver =
+        CallbackObserver<Events, AdminModule_ObserverData *>(this, &Events::onAdminMessage);
 
 #ifdef ARCH_ESP32
     // Get notified when the system is entering light sleep
     CallbackObserver<Events, void *> lightSleepObserver = CallbackObserver<Events, void *>(this, &Events::beforeLightSleep);
 #endif
+
+    // End any externalNotification beeping, buzzing, blinking etc
+    bool dismissExternalNotification();
 
     // If set, InkHUD's data will be erased during onReboot
     bool eraseOnReboot = false;
