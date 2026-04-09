@@ -310,6 +310,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_MESH_NODE_T096 = 127,
     /* Seeed studio T1000-E Pro tracker card. NRF52840 w/ LR2021 radio, GPS, button, buzzer, and sensors. */
     meshtastic_HardwareModel_TRACKER_T1000_E_PRO = 128,
+    /* Nordic nRF54L15-DK development board (PCA10156). ARM Cortex-M33, external SX1262 LoRa. */
+    meshtastic_HardwareModel_NRF54L15_DK = 129,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

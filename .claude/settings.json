@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(~/.platformio/penv/Scripts/pio run:*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,':',v\\) for k,v in d.get\\('packages',{}\\).items\\(\\) if 'zephyr' in k.lower\\(\\)]\")",
+      "Bash(~/.platformio/penv/Scripts/python -c \"import json; d=json.load\\(open\\('/c/Users/cvald/.platformio/platforms/Seeed Studio/platform.json'\\)\\); [print\\(k,':',json.dumps\\(v,indent=2\\)\\) for k,v in d.get\\('packages',{}\\).items\\(\\) if 'zephyr' in k.lower\\(\\) or 'nrf' in k.lower\\(\\)]\")",
+      "Bash(~/.platformio/penv/Scripts/python -c \"import json; d=json.load\\(open\\('C:/Users/cvald/.platformio/platforms/Seeed Studio/platform.json'\\)\\); [print\\(k,':',json.dumps\\(v,indent=2\\)\\) for k,v in d.get\\('packages',{}\\).items\\(\\) if 'zephyr' in k.lower\\(\\) or 'nrf' in k.lower\\(\\)]\")",
+      "Bash(~/.platformio/penv/Scripts/pip install:*)",
+      "Bash(grep -E \"sconsign|\\\\.db$\")",
+      "Bash(rm -f \".pio/build/nrf54l15dk/.sconsign311.dblite\")",
+      "Bash(rm -f \".pio/build/nrf54l15dk/zephyr/linker_zephyr_pre0.cmd\")"
     ]
   }
 }

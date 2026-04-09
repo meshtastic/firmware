@@ -216,6 +216,13 @@ NodeDB::NodeDB()
     } else {
         LOG_WARN("Failed to read unique id from efuse");
     }
+#elif defined(ARCH_NRF54L15)
+    // nRF54L15: DEVICEID is under FICR->INFO sub-struct (not top-level as on nRF52)
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->INFO.DEVICEID[1] << 32) | NRF_FICR->INFO.DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
+    memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    myNodeInfo.device_id.size = 16;
 #elif defined(ARCH_NRF52)
     // Nordic applies a FIPS compliant Random ID to each chip at the factory
     // We concatenate the device address to the Random ID to create a unique ID for now

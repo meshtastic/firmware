@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(pio run:*)",
-      "Bash(\"/c/Users/cvald/.platformio/penv/Scripts/pio.exe\" run -e wiznet_5500_evb_pico2_e22)"
+      "Bash(\"/c/Users/cvald/.platformio/penv/Scripts/pio.exe\" run -e wiznet_5500_evb_pico2_e22)",
+      "WebSearch"
     ]
   }
 }
