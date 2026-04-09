@@ -28,7 +28,13 @@ DEFAULT_API_PORT = 4403
 DEFAULT_HOP_LIMIT = 3
 LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
 REPLAY_REQUEST_SIZE = 4
+HEARTBEAT_STATUS_SIZE = 8
 MISSING_SEQ_RETRY_INTERVAL_SEC = 1.0
+INPUT_BATCH_WINDOW_SEC = 0.15
+INPUT_BATCH_MAX_BYTES = 64
+HEARTBEAT_IDLE_DELAY_SEC = 5.0
+HEARTBEAT_REPEAT_SEC = 15.0
+HEARTBEAT_POLL_INTERVAL_SEC = 0.25
 
 
 def parse_args() -> argparse.Namespace:
@@ -210,6 +216,7 @@ class SessionState:
     closed_event: threading.Event = field(default_factory=threading.Event)
     event_queue: "queue.Queue[str]" = field(default_factory=queue.Queue)
     tx_lock: threading.Lock = field(default_factory=threading.Lock)
+    socket_lock: threading.Lock = field(default_factory=threading.Lock)
     tx_history: deque[SentShellFrame] = field(default_factory=lambda: deque(maxlen=50))
     pending_rx_frames: dict[int, object] = field(default_factory=dict)
     last_requested_missing_seq: int = 0
@@ -218,6 +225,8 @@ class SessionState:
     replay_log_lock: threading.Lock = field(default_factory=threading.Lock)
     replay_log_file: Optional[TextIO] = None
     replay_log_path: Optional[Path] = None
+    last_transport_activity_time: float = field(default_factory=time.monotonic)
+    last_heartbeat_sent_time: float = 0.0
 
     def alloc_seq(self) -> int:
         with self.tx_lock:
@@ -228,6 +237,40 @@ class SessionState:
     def current_ack_seq(self) -> int:
         with self.tx_lock:
             return self.last_rx_seq
+
+    def highest_sent_seq(self) -> int:
+        with self.tx_lock:
+            return max(0, self.next_seq - 1)
+
+    def heartbeat_payload(self) -> bytes:
+        with self.tx_lock:
+            return encode_heartbeat_status(max(0, self.next_seq - 1), self.last_rx_seq)
+
+    def note_outbound_packet(self, heartbeat: bool = False) -> None:
+        with self.tx_lock:
+            now = time.monotonic()
+            if heartbeat:
+                self.last_heartbeat_sent_time = now
+            else:
+                self.last_transport_activity_time = now
+
+    def note_inbound_packet(self) -> None:
+        with self.tx_lock:
+            self.last_transport_activity_time = time.monotonic()
+
+    def heartbeat_due(self) -> bool:
+        with self.tx_lock:
+            now = time.monotonic()
+            if (now - self.last_transport_activity_time) < HEARTBEAT_IDLE_DELAY_SEC:
+                return False
+            if self.last_heartbeat_sent_time <= self.last_transport_activity_time:
+                return True
+            return (now - self.last_heartbeat_sent_time) >= HEARTBEAT_REPEAT_SEC
+
+    def note_peer_reported_tx_seq(self, seq: int) -> None:
+        with self.tx_lock:
+            if seq > self.highest_seen_rx_seq:
+                self.highest_seen_rx_seq = seq
 
     def note_received_seq(self, seq: int) -> tuple[str, Optional[int]]:
         with self.tx_lock:
@@ -359,6 +402,16 @@ def decode_replay_request(payload: bytes) -> Optional[int]:
     return struct.unpack(">I", payload[:REPLAY_REQUEST_SIZE])[0]
 
 
+def encode_heartbeat_status(last_tx_seq: int, last_rx_seq: int) -> bytes:
+    return struct.pack(">II", last_tx_seq, last_rx_seq)
+
+
+def decode_heartbeat_status(payload: bytes) -> Optional[tuple[int, int]]:
+    if len(payload) < HEARTBEAT_STATUS_SIZE:
+        return None
+    return struct.unpack(">II", payload[:HEARTBEAT_STATUS_SIZE])
+
+
 def send_toradio(sock: socket.socket, toradio) -> None:
     send_stream_frame(sock, toradio.SerializeToString())
 
@@ -395,6 +448,7 @@ def send_shell_frame(
     seq: Optional[int] = None,
     flags: int = 0,
     remember: bool = True,
+    heartbeat: bool = False,
 ) -> int:
     if seq is None:
         seq = 0 if op == state.pb2.mesh.DMShell.ACK else state.alloc_seq()
@@ -413,11 +467,13 @@ def send_shell_frame(
     shell.flags = flags
     if payload:
         shell.payload = payload
-    send_toradio(sock, make_toradio_packet(state.pb2, state, shell))
+    with state.socket_lock:
+        send_toradio(sock, make_toradio_packet(state.pb2, state, shell))
     if remember:
         state.remember_sent_frame(
             SentShellFrame(op=op, session_id=session_id, seq=seq, ack_seq=ack_seq, payload=payload, cols=cols, rows=rows, flags=flags)
         )
+    state.note_outbound_packet(heartbeat=heartbeat)
     return seq
 
 
@@ -506,6 +562,18 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
             state.active = False
             return True
         elif shell.op == state.pb2.mesh.DMShell.PONG:
+            heartbeat_status = decode_heartbeat_status(shell.payload)
+            if heartbeat_status is not None:
+                remote_last_tx_seq, remote_last_rx_seq = heartbeat_status
+                local_latest_tx_seq = state.highest_sent_seq()
+                if remote_last_rx_seq < local_latest_tx_seq:
+                    replay_frames_from(sock, state, remote_last_rx_seq + 1)
+                if remote_last_tx_seq > state.current_ack_seq():
+                    state.note_peer_reported_tx_seq(remote_last_tx_seq)
+                    req = state.request_missing_seq_once()
+                    if req is not None:
+                        state.note_missing_seq_requested(req, "heartbeat_status")
+                        send_ack_frame(sock, state, replay_from=req)
             state.event_queue.put("pong")
         return False
 
@@ -524,6 +592,7 @@ def reader_loop(sock: socket.socket, state: SessionState) -> None:
             shell = decode_shell_packet(state, fromradio.packet)
             if not shell:
                 continue
+            state.note_inbound_packet()
             state.prune_sent_frames(shell.ack_seq)
             if shell.op == state.pb2.mesh.DMShell.ACK:
                 #state.event_queue.put("peer requested replay")
@@ -577,6 +646,29 @@ def drain_events(state: SessionState) -> None:
         except queue.Empty:
             return
         print(f"[dmshell] {event}", file=sys.stderr)
+
+
+def heartbeat_loop(sock: socket.socket, state: SessionState) -> None:
+    while not state.stopped and not state.closed_event.is_set():
+        if not state.active:
+            time.sleep(HEARTBEAT_POLL_INTERVAL_SEC)
+            continue
+        if state.heartbeat_due():
+            try:
+                send_shell_frame(
+                    sock,
+                    state,
+                    state.pb2.mesh.DMShell.PING,
+                    payload=state.heartbeat_payload(),
+                    remember=True,
+                    heartbeat=True,
+                )
+            except Exception as exc:
+                if not state.stopped:
+                    state.event_queue.put(f"heartbeat error: {exc}")
+                    state.closed_event.set()
+                    return
+        time.sleep(HEARTBEAT_POLL_INTERVAL_SEC)
 
 
 def run_command_mode(sock: socket.socket, state: SessionState, commands: list[str], close_after: float) -> None:
@@ -656,7 +748,7 @@ def run_interactive_mode(sock: socket.socket, state: SessionState) -> None:
         # Fallback for non-TTY stdin: still send input as it arrives.
         while not state.closed_event.is_set():
             drain_events(state)
-            data = sys.stdin.buffer.read(1)
+            data = sys.stdin.buffer.read(INPUT_BATCH_MAX_BYTES)
             if not data:
                 send_shell_frame(sock, state, state.pb2.mesh.DMShell.CLOSE)
                 break
@@ -684,7 +776,32 @@ def run_interactive_mode(sock: socket.socket, state: SessionState) -> None:
                     break
                 continue
 
-            send_shell_frame(sock, state, state.pb2.mesh.DMShell.INPUT, data)
+            # Coalesce a short burst of bytes to reduce packet overhead for fast typing.
+            batched = bytearray(data)
+            enter_local_command = False
+            deadline = time.monotonic() + INPUT_BATCH_WINDOW_SEC
+            while len(batched) < INPUT_BATCH_MAX_BYTES:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                more_ready, _, _ = select.select([sys.stdin], [], [], remaining)
+                if not more_ready:
+                    break
+                next_byte = os.read(fd, 1)
+                if not next_byte:
+                    break
+                if next_byte == LOCAL_ESCAPE_BYTE:
+                    enter_local_command = True
+                    break
+                batched.extend(next_byte)
+
+            if batched:
+                send_shell_frame(sock, state, state.pb2.mesh.DMShell.INPUT, bytes(batched))
+
+            if enter_local_command:
+                keep_running = handle_local_command(read_local_command())
+                if not keep_running:
+                    break
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_attrs)
 
@@ -713,6 +830,9 @@ def main() -> int:
         if not state.opened_event.wait(timeout=args.timeout):
             raise SystemExit("timed out waiting for OPEN_OK from remote DMShell")
 
+        heartbeat = threading.Thread(target=heartbeat_loop, args=(sock, state), daemon=True)
+        heartbeat.start()
+
         drain_events(state)
         if args.command:
             run_command_mode(sock, state, args.command, args.close_after)
@@ -722,6 +842,7 @@ def main() -> int:
         state.stopped = True
         drain_events(state)
         reader.join(timeout=1.0)
+        heartbeat.join(timeout=1.0)
         state.close_replay_log()
 
     return 0
