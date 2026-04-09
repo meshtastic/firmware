@@ -6,6 +6,7 @@
 #include "NotificationRenderer.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include "graphics/images.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -68,7 +69,7 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
 {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
-    display->drawString(64 + x, y, "Creating SSL certificate");
+    display->drawString(64 + x, y, UI_STR("Creating SSL certificate", "正在创建SSL证书"));
 
 #ifdef ARCH_ESP32
     yield();
@@ -77,9 +78,9 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
     display->setFont(FONT_SMALL);
     if ((millis() / 1000) % 2) {
-        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, UI_STR("Please wait . . .", "请稍候 . . ."));
     } else {
-        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
+        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, UI_STR("Please wait . .  ", "请稍候 . .  "));
     }
 }
 
@@ -450,13 +451,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
         if (i == curSelected) {
             if (currentResolution == ScreenResolution::High) {
-                strncpy(lineBuffer, "> ", 3);
-                strncpy(lineBuffer + 2, optionsArrayPtr[i], 36);
-                strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 2, " <", 3);
+                snprintf(lineBuffer, sizeof(lineBuffer), "> %.35s <", optionsArrayPtr[i]);
             } else {
-                strncpy(lineBuffer, ">", 2);
-                strncpy(lineBuffer + 1, optionsArrayPtr[i], 37);
-                strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 1, "<", 2);
+                snprintf(lineBuffer, sizeof(lineBuffer), ">%.37s<", optionsArrayPtr[i]);
             }
             lineBuffer[39] = '\0';
             linePointers[linesShown] = lineBuffer;
@@ -494,6 +491,10 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     // Track widest line INCLUDING bars (but don't change per-line widths)
     uint16_t widestLineWithBars = 0;
 
+    const char *signalLabel = UI_STR("Signal:", "信号:");
+    const size_t signalLabelLen = strlen(signalLabel);
+    const char *alertReceivedLabel = UI_STR("Alert Received", "收到警报");
+
     while (lines[lineCount] != nullptr) {
         auto newlinePointer = strchr(lines[lineCount], '\n');
         if (newlinePointer)
@@ -505,7 +506,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
         // Consider extra width for signal bars on lines that contain "Signal:"
         uint16_t potentialWidth = lineWidths[lineCount];
-        if (graphics::bannerSignalBars >= 0 && strncmp(lines[lineCount], "Signal:", 7) == 0) {
+        if (graphics::bannerSignalBars >= 0 && strncmp(lines[lineCount], signalLabel, signalLabelLen) == 0) {
             const int totalBars = 5;
             const int barWidth = 3;
             const int barSpacing = 2;
@@ -518,7 +519,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             widestLineWithBars = potentialWidth;
 
         if (!is_picker) {
-            needs_bell |= (strstr(alertBannerMessage, "Alert Received") != nullptr);
+            needs_bell |= (strstr(alertBannerMessage, alertReceivedLabel) != nullptr);
             if (lineWidths[lineCount] > maxWidth)
                 maxWidth = lineWidths[lineCount];
         }
@@ -613,7 +614,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
         } else {
             // Pop-up
             // If this is the Signal line, center text + bars as one group
-            bool isSignalLine = (graphics::bannerSignalBars >= 0 && strstr(lineBuffer, "Signal:") != nullptr);
+            bool isSignalLine = (graphics::bannerSignalBars >= 0 && strstr(lineBuffer, signalLabel) != nullptr);
             if (isSignalLine) {
                 const int totalBars = 5;
                 const int barWidth = 3;
@@ -672,23 +673,24 @@ void NotificationRenderer::drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisp
     display->setFont(FONT_MEDIUM);
 
     char tempBuf[24];
-    snprintf(tempBuf, sizeof(tempBuf), "Critical fault #%d", error_code);
+    snprintf(tempBuf, sizeof(tempBuf), UI_STR("Critical fault #%d", "严重故障 #%d"), error_code);
     display->drawString(0 + x, 0 + y, tempBuf);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please visit \nmeshtastic.org");
+    display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y,
+                        UI_STR("For help, please visit \nmeshtastic.org", "需要帮助请访问\nmeshtastic.org"));
 }
 
 void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_MEDIUM);
-    display->drawString(64 + x, y, "Updating");
+    display->drawString(64 + x, y, UI_STR("Updating", "正在更新"));
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawStringMaxWidth(0 + x, 2 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(),
-                                "Please be patient and do not power off.");
+                                UI_STR("Please be patient and do not power off.", "请耐心等待，不要断电。"));
 }
 
 void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state)
@@ -700,10 +702,8 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             // Cancel virtual keyboard - call callback with empty string to indicate timeout
             auto callback = textInputCallback; // Store callback before clearing
 
-            // Clean up first to prevent re-entry
-            delete virtualKeyboard;
-            virtualKeyboard = nullptr;
-            textInputCallback = nullptr;
+            // Route cleanup through the module so the shared keyboard pointer is deleted exactly once.
+            OnScreenKeyboardModule::instance().stop(false);
             resetBanner();
 
             // Call callback after cleanup
@@ -722,9 +722,8 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             bool handled = OnScreenKeyboardModule::processVirtualKeyboardInput(inEvent, virtualKeyboard);
             if (!handled && inEvent.inputEvent == INPUT_BROKER_CANCEL) {
                 auto callback = textInputCallback;
-                delete virtualKeyboard;
-                virtualKeyboard = nullptr;
-                textInputCallback = nullptr;
+                // Route cleanup through the module so the shared keyboard pointer is deleted exactly once.
+                OnScreenKeyboardModule::instance().stop(false);
                 resetBanner();
                 if (callback) {
                     callback("");

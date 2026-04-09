@@ -4,6 +4,7 @@
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include "graphics/draw/UIRenderer.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -275,7 +276,8 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     }
 
     if (config.display.use_12h_clock) {
-        display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - 1, isPM ? "pm" : "am");
+        display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - 1,
+                            isPM ? UI_STR("pm", "下午") : UI_STR("am", "上午"));
     }
 
 #ifndef USE_EINK
@@ -350,8 +352,8 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #ifdef USE_EINK
             yOffset += 3;
 #endif
-            display->drawString(centerX - (display->getStringWidth(isPM ? "pm" : "am") / 2), centerY + yOffset,
-                                isPM ? "pm" : "am");
+            display->drawString(centerX - (display->getStringWidth(isPM ? UI_STR("pm", "下午") : UI_STR("am", "上午")) / 2),
+                                centerY + yOffset, isPM ? UI_STR("pm", "下午") : UI_STR("am", "上午"));
         }
         hour %= 12;
         if (hour == 0)

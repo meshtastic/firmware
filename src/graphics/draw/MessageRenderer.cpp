@@ -11,6 +11,7 @@
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/emotes.h"
 #include "main.h"
@@ -482,17 +483,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // Title string depending on mode
     static char titleBuf[32];
-    const char *titleStr = "Messages";
+    const char *titleStr = UI_STR("Messages", "消息");
     switch (currentMode) {
     case ThreadMode::ALL:
-        titleStr = "Messages";
+        titleStr = UI_STR("Messages", "消息");
         break;
     case ThreadMode::CHANNEL: {
         const char *cname = channels.getName(currentChannel);
         if (cname && cname[0]) {
             snprintf(titleBuf, sizeof(titleBuf), "#%s", cname);
         } else {
-            snprintf(titleBuf, sizeof(titleBuf), "Ch%d", currentChannel);
+            snprintf(titleBuf, sizeof(titleBuf), UI_STR("Ch%d", "信道%d"), currentChannel);
         }
         titleStr = titleBuf;
         break;
@@ -520,7 +521,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // Still in ALL mode and no messages at all → show placeholder
         graphics::drawCommonHeader(display, x, y, titleStr);
         didReset = false;
-        const char *messageString = "No messages";
+        const char *messageString = UI_STR("No messages", "暂无消息");
         int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
         display->drawString(center_text, getTextPositions(display)[2], messageString);
         graphics::drawCommonFooter(display, x, y);
@@ -577,13 +578,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         if (invalidTime) {
             snprintf(timeBuf, sizeof(timeBuf), "???");
         } else if (seconds < 60) {
-            snprintf(timeBuf, sizeof(timeBuf), "%us", seconds);
+            snprintf(timeBuf, sizeof(timeBuf), UI_STR("%us", "%u秒"), seconds);
         } else if (seconds < 3600) {
-            snprintf(timeBuf, sizeof(timeBuf), "%um", seconds / 60);
+            snprintf(timeBuf, sizeof(timeBuf), UI_STR("%um", "%u分"), seconds / 60);
         } else if (seconds < 86400) {
-            snprintf(timeBuf, sizeof(timeBuf), "%uh", seconds / 3600);
+            snprintf(timeBuf, sizeof(timeBuf), UI_STR("%uh", "%u时"), seconds / 3600);
         } else {
-            snprintf(timeBuf, sizeof(timeBuf), "%ud", seconds / 86400);
+            snprintf(timeBuf, sizeof(timeBuf), UI_STR("%ud", "%u天"), seconds / 86400);
         }
 
         // Build header line for this message
@@ -965,9 +966,9 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 
         if (isAlert) {
             if (longName && longName[0])
-                snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+                snprintf(banner, sizeof(banner), UI_STR("Alert Received from\n%s", "收到警报来自\n%s"), longName);
             else
-                strcpy(banner, "Alert Received");
+                strcpy(banner, UI_STR("Alert Received", "收到警报"));
         } else {
             // Skip muted channels unless it's an alert
             if (isChannelMuted)
@@ -975,12 +976,12 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 
             if (longName && longName[0]) {
                 if (currentResolution == ScreenResolution::UltraLow) {
-                    strcpy(banner, "New Message");
+                    strcpy(banner, UI_STR("New Message", "新消息"));
                 } else {
-                    snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+                    snprintf(banner, sizeof(banner), UI_STR("New Message from\n%s", "新消息来自\n%s"), longName);
                 }
             } else
-                strcpy(banner, "New Message");
+                strcpy(banner, UI_STR("New Message", "新消息"));
         }
 
         // Append context (which channel or DM) so the banner shows where the message arrived
@@ -989,9 +990,9 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             if (sm.type == MessageType::BROADCAST) {
                 const char *cname = channels.getName(sm.channelIndex);
                 if (cname && cname[0])
-                    snprintf(contextBuf, sizeof(contextBuf), "in #%s", cname);
+                    snprintf(contextBuf, sizeof(contextBuf), UI_STR("in #%s", "在#%s"), cname);
                 else
-                    snprintf(contextBuf, sizeof(contextBuf), "in Ch%d", sm.channelIndex);
+                    snprintf(contextBuf, sizeof(contextBuf), UI_STR("in Ch%d", "在信道%d"), sm.channelIndex);
             }
 
             if (contextBuf[0]) {

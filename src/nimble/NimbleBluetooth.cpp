@@ -688,6 +688,12 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             return;
 #endif
 
+        if (passkeyShowing) {
+            passkeyShowing = false;
+            if (screen)
+                screen->endAlert();
+        }
+
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
 

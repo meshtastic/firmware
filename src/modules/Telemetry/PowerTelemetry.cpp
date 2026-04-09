@@ -11,6 +11,7 @@
 #include "RTC.h"
 #include "Router.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
@@ -123,8 +124,8 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     graphics::drawCommonHeader(display, x, y, titleStr);
 
     if (lastMeasurementPacket == nullptr) {
-        // In case of no valid packet, display "Power Telemetry", "No measurement"
-        display->drawString(x, graphics::getTextPositions(display)[line++], "No measurement");
+        // In case of no valid packet, display "Power Telemetry", No measurement
+        display->drawString(x, graphics::getTextPositions(display)[line++], UI_STR("No measurement", "无测量"));
         return;
     }
 
@@ -135,7 +136,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
-        display->drawString(x, graphics::getTextPositions(display)[line++], "Measurement Error");
+        display->drawString(x, graphics::getTextPositions(display)[line++], UI_STR("Measurement Error", "测量错误"));
         LOG_ERROR("Unable to decode last packet");
         return;
     }

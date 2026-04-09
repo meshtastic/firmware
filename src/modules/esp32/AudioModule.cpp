@@ -6,6 +6,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "graphics/UiStrings.h"
 
 /*
     AudioModule
@@ -126,17 +127,17 @@ void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     display->setFont(FONT_SMALL);
     display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
     display->setColor(BLACK);
-    display->drawStringf(0 + x, 0 + y, buffer, "Codec2 Mode %d Audio",
+    display->drawStringf(0 + x, 0 + y, buffer, UI_STR("Codec2 Mode %d Audio", "Codec2 模式 %d 音频"),
                          (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
     display->setColor(WHITE);
     display->setFont(FONT_LARGE);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     switch (radio_state) {
     case RadioState::tx:
-        display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, "PTT");
+        display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, UI_STR("PTT", "发射"));
         break;
     default:
-        display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, "Receive");
+        display->drawString(display->getWidth() / 2 + x, (display->getHeight() - FONT_HEIGHT_SMALL) / 2 + y, UI_STR("Receive", "接收"));
         break;
     }
 }

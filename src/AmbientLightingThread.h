@@ -1,5 +1,8 @@
 #include "Observer.h"
+#include "AmbientLightingEffects.h"
+#include "AmbientLightLock.h"
 #include "configuration.h"
+#include <Arduino.h>
 
 #ifdef HAS_NCP5623
 #include <graphics/RAKled.h>
@@ -77,7 +80,12 @@ class AmbientLightingThread : public concurrency::OSThread
                 pixels.clear(); // Set all pixel colors to 'off'
                 pixels.setBrightness(moduleConfig.ambient_lighting.current);
 #endif
+#if defined(TINYLORA_MV_WS2812_EFFECTS) && defined(HAS_NEOPIXEL)
+                setLightingOff(nullptr);
+                _ledOff = true;
+#else
                 setLighting();
+#endif
 #endif
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
             }
@@ -88,6 +96,35 @@ class AmbientLightingThread : public concurrency::OSThread
         int32_t runOnce() override
         {
 #ifdef HAS_RGB_LED
+#if defined(TINYLORA_MV_WS2812_EFFECTS) && defined(HAS_NEOPIXEL)
+            if (moduleConfig.ambient_lighting.led_state) {
+                const uint32_t now = millis();
+
+                if (isBusy) {
+                    _ledOff = false;
+                    return 100;
+                }
+
+                if (ambientLightingMessageEffectActive()) {
+                    showBreathingRainbow(now, 220, 1800, 7);
+                    _ledOff = false;
+                    return 16;
+                }
+
+                if (static_cast<int32_t>(_bootEffectUntil - now) > 0) {
+                    showBreathingRainbow(now, 210, 2200, 6);
+                    _ledOff = false;
+                    return 16;
+                }
+
+                if (!_ledOff) {
+                    setLightingOff(nullptr);
+                    _ledOff = true;
+                }
+
+                return 250;
+            }
+#endif
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
             if ((_type == ScanI2C::NCP5623 || _type == ScanI2C::LP5562) && moduleConfig.ambient_lighting.led_state) {
 #endif
@@ -106,6 +143,37 @@ class AmbientLightingThread : public concurrency::OSThread
 
       private:
         ScanI2C::DeviceType _type = ScanI2C::DeviceType::NONE;
+        uint32_t _bootEffectUntil = millis() + 3200;
+        bool _ledOff = false;
+
+#if defined(TINYLORA_MV_WS2812_EFFECTS) && defined(HAS_NEOPIXEL)
+        static uint32_t colorWheel(uint8_t pos)
+        {
+            pos = 255 - pos;
+            if (pos < 85) {
+                return pixels.Color(255 - pos * 3, 0, pos * 3);
+            }
+            if (pos < 170) {
+                pos -= 85;
+                return pixels.Color(0, pos * 3, 255 - pos * 3);
+            }
+
+            pos -= 170;
+            return pixels.Color(pos * 3, 255 - pos * 3, 0);
+        }
+
+        void showBreathingRainbow(uint32_t now, uint8_t maxBrightness, uint16_t breathPeriodMs, uint8_t hueStepMs)
+        {
+            const uint16_t phase = (now % breathPeriodMs) * 512UL / breathPeriodMs;
+            const uint16_t breathValue = phase < 256 ? phase : 511 - phase;
+            const uint8_t brightness = ((uint32_t)breathValue * maxBrightness) / 255;
+            const uint8_t hue = (now / hueStepMs) & 0xFF;
+
+            pixels.setBrightness(brightness);
+            pixels.fill(colorWheel(hue), 0, NEOPIXEL_COUNT);
+            pixels.show();
+        }
+#endif
 
         // Turn RGB lighting off, is used in junction to shutdown()
         int setLightingOff(void *unused)
@@ -126,6 +194,7 @@ class AmbientLightingThread : public concurrency::OSThread
             LOG_INFO("OFF: LP5562 Ambient lighting");
 #endif
 #ifdef HAS_NEOPIXEL
+            pixels.setBrightness(0);
             pixels.clear();
             pixels.show();
             LOG_INFO("OFF: NeoPixel Ambient lighting");

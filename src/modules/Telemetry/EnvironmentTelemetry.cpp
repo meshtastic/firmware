@@ -13,6 +13,7 @@
 #include "UnitConversions.h"
 #include "buzz.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
@@ -378,7 +379,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     int line = 1;
 
     // === Set Title
-    const char *titleStr = (graphics::currentResolution == graphics::ScreenResolution::High) ? "Environment" : "Env.";
+    const char *titleStr = (graphics::currentResolution == graphics::ScreenResolution::High) ? UI_STR("Environment", "环境") : UI_STR("Env.", "环境");
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -389,7 +390,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     // === Show "No Telemetry" if no data available ===
     if (!lastMeasurementPacket) {
-        display->drawString(x, currentY, "No Telemetry");
+        display->drawString(x, currentY, UI_STR("No Telemetry", "无遥测"));
         return;
     }
 
@@ -397,7 +398,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     meshtastic_Telemetry telemetry;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &telemetry)) {
-        display->drawString(x, currentY, "No Telemetry");
+        display->drawString(x, currentY, UI_STR("No Telemetry", "无遥测"));
         return;
     }
 
@@ -408,7 +409,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
                   m.current != 0 || m.lux != 0 || m.white_lux != 0 || m.weight != 0 || m.distance != 0 || m.radiation != 0;
 
     if (!hasAny) {
-        display->drawString(x, currentY, "No Telemetry");
+        display->drawString(x, currentY, UI_STR("No Telemetry", "无遥测"));
         return;
     }
 
@@ -428,35 +429,35 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     if (m.has_temperature) {
         String tempStr = moduleConfig.telemetry.environment_display_fahrenheit
-                             ? "Tmp: " + String(UnitConversions::CelsiusToFahrenheit(m.temperature), 1) + "°F"
-                             : "Tmp: " + String(m.temperature, 1) + "°C";
+                             ? UI_STR("Tmp: ", "温度: ") + String(UnitConversions::CelsiusToFahrenheit(m.temperature), 1) + "°F"
+                             : UI_STR("Tmp: ", "温度: ") + String(m.temperature, 1) + "°C";
         entries.push_back(tempStr);
     }
     if (m.has_relative_humidity)
-        entries.push_back("Hum: " + String(m.relative_humidity, 0) + "%");
+        entries.push_back(UI_STR("Hum: ", "湿度: ") + String(m.relative_humidity, 0) + "%");
     if (m.barometric_pressure != 0)
-        entries.push_back("Prss: " + String(m.barometric_pressure, 0) + " hPa");
+        entries.push_back(UI_STR("Prss: ", "气压: ") + String(m.barometric_pressure, 0) + " hPa");
     if (m.iaq != 0) {
-        String aqi = "IAQ: " + String(m.iaq);
+        String aqi = UI_STR("IAQ: ", "IAQ: ") + String(m.iaq);
         const char *bannerMsg = nullptr; // Default: no banner
 
         if (m.iaq <= 25)
-            aqi += " (Excellent)";
+            aqi += UI_STR(" (Excellent)", " (优)");
         else if (m.iaq <= 50)
-            aqi += " (Good)";
+            aqi += UI_STR(" (Good)", " (好)");
         else if (m.iaq <= 100)
-            aqi += " (Moderate)";
+            aqi += UI_STR(" (Moderate)", " (中)");
         else if (m.iaq <= 150)
-            aqi += " (Poor)";
+            aqi += UI_STR(" (Poor)", " (差)");
         else if (m.iaq <= 200) {
-            aqi += " (Unhealthy)";
-            bannerMsg = "Unhealthy IAQ";
+            aqi += UI_STR(" (Unhealthy)", " (不健康)");
+            bannerMsg = UI_STR("Unhealthy IAQ", "不健康的空气质量");
         } else if (m.iaq <= 300) {
-            aqi += " (Very Unhealthy)";
-            bannerMsg = "Very Unhealthy IAQ";
+            aqi += UI_STR(" (Very Unhealthy)", " (非常不健康)");
+            bannerMsg = UI_STR("Very Unhealthy IAQ", "非常不健康的空气质量");
         } else {
-            aqi += " (Hazardous)";
-            bannerMsg = "Hazardous IAQ";
+            aqi += UI_STR(" (Hazardous)", " (危险)");
+            bannerMsg = UI_STR("Hazardous IAQ", "危险的空气质量");
         }
 
         entries.push_back(aqi);
@@ -483,15 +484,15 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (m.voltage != 0 || m.current != 0)
         entries.push_back(String(m.voltage, 1) + "V / " + String(m.current, 0) + "mA");
     if (m.lux != 0)
-        entries.push_back("Light: " + String(m.lux, 0) + "lx");
+        entries.push_back(UI_STR("Light: ", "光照: ") + String(m.lux, 0) + "lx");
     if (m.white_lux != 0)
-        entries.push_back("White: " + String(m.white_lux, 0) + "lx");
+        entries.push_back(UI_STR("White: ", "白光: ") + String(m.white_lux, 0) + "lx");
     if (m.weight != 0)
-        entries.push_back("Weight: " + String(m.weight, 0) + "kg");
+        entries.push_back(UI_STR("Weight: ", "重量: ") + String(m.weight, 0) + "kg");
     if (m.distance != 0)
-        entries.push_back("Level: " + String(m.distance, 0) + "mm");
+        entries.push_back(UI_STR("Level: ", "距离: ") + String(m.distance, 0) + "mm");
     if (m.radiation != 0)
-        entries.push_back("Rad: " + String(m.radiation, 2) + " µR/h");
+        entries.push_back(UI_STR("Rad: ", "辐射: ") + String(m.radiation, 2) + " µR/h");
 
     // === Show first available metric on top-right of first line ===
     if (!entries.empty()) {

@@ -50,6 +50,14 @@ const int DURATION_1_2 = 500;  // 1/2 note
 const int DURATION_3_4 = 750;  // 3/4 note
 const int DURATION_1_1 = 1000; // 1/1 note
 
+#ifdef ARCH_ESP32
+// Track whether buzzer has been initialized
+static bool buzzerInitialized = false;
+static uint8_t lastBuzzerPin = 0;
+#define BUZZER_LEDC_CHANNEL 0
+#define BUZZER_LEDC_RESOLUTION 10
+#endif
+
 void playTones(const ToneDuration *tone_durations, int size)
 {
     if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
@@ -62,6 +70,27 @@ void playTones(const ToneDuration *tone_durations, int size)
         config.device.buzzer_gpio = PIN_BUZZER;
 #endif
     if (config.device.buzzer_gpio) {
+#ifdef ARCH_ESP32
+        // Initialize LEDC for buzzer if not already done or pin changed
+        if (!buzzerInitialized || lastBuzzerPin != config.device.buzzer_gpio) {
+#if defined(ESP_IDF_VERSION)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+            // ESP32 Arduino Core 3.0+ (ESP-IDF 5.0+)
+            ledcAttach(config.device.buzzer_gpio, 1000, BUZZER_LEDC_RESOLUTION);
+#else
+            // ESP32 Arduino Core 2.x (ESP-IDF 4.4)
+            ledcSetup(BUZZER_LEDC_CHANNEL, 1000, BUZZER_LEDC_RESOLUTION);
+            ledcAttachPin(config.device.buzzer_gpio, BUZZER_LEDC_CHANNEL);
+#endif
+#else
+            // Fallback for older versions
+            ledcSetup(BUZZER_LEDC_CHANNEL, 1000, BUZZER_LEDC_RESOLUTION);
+            ledcAttachPin(config.device.buzzer_gpio, BUZZER_LEDC_CHANNEL);
+#endif
+            buzzerInitialized = true;
+            lastBuzzerPin = config.device.buzzer_gpio;
+        }
+#endif
         for (int i = 0; i < size; i++) {
             const auto &tone_duration = tone_durations[i];
             tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);

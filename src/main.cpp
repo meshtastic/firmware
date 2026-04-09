@@ -30,6 +30,7 @@
 #include "detect/einkScan.h"
 #include "graphics/RAKled.h"
 #include "graphics/Screen.h"
+#include "graphics/UiStrings.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
@@ -1462,7 +1463,7 @@ void setup()
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting");
             if (screen) {
-                screen->showSimpleBanner("Rebooting...");
+                screen->showSimpleBanner(UI_STR("Rebooting...", "正在重启..."));
             }
             rebootAtMsec = millis() + 5000;
         }

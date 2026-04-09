@@ -20,6 +20,7 @@
 #include "main.h"
 #include "meshUtils.h"
 #include "sleep.h"
+#include "graphics/UiStrings.h"
 
 #if defined(ARCH_PORTDUINO)
 #include "api/WiFiServerAPI.h"
@@ -775,11 +776,13 @@ void Power::shutdown()
 #if HAS_SCREEN
     if (screen) {
 #ifdef T_DECK_PRO
-        screen->showSimpleBanner("Device is powered off.\nConnect USB to start!", 0); // T-Deck Pro has no power button
+        screen->showSimpleBanner(UI_STR("Device is powered off.\nConnect USB to start!", "设备已关机。\n连接USB以启动！"),
+                                 0); // T-Deck Pro has no power button
 #elif defined(USE_EINK)
-        screen->showSimpleBanner("Shutting Down...", 2250); // dismiss after 3 seconds to avoid the banner on the sleep screen
+        screen->showSimpleBanner(UI_STR("Shutting Down...", "正在关机..."),
+                                 2250); // dismiss after 3 seconds to avoid the banner on the sleep screen
 #else
-        screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
+        screen->showSimpleBanner(UI_STR("Shutting Down...", "正在关机..."), 0); // stays on screen
 #endif
     }
 #endif

@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
+#include "AmbientLightingEffects.h"
 #include "configuration.h"
 #include "meshUtils.h"
 #if HAS_SCREEN
@@ -53,6 +54,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 // #include "graphics/emotes.h"
 #include "graphics/images.h"
 #include "input/TouchScreenImpl1.h"
@@ -91,6 +93,7 @@ uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
 #endif
 
 #if OLED_CJK
+#include <utf8_10x10.h>
 #include <utf8_12x12.h>
 #include <utf8_16x16.h>
 #include <utf8_24x24.h>
@@ -235,7 +238,7 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
     NotificationRenderer::textInputCallback = textCallback;
 
     // Store the message and set the expiration timestamp (use same pattern as other notifications)
-    strncpy(NotificationRenderer::alertBannerMessage, header ? header : "Text Input", 255);
+    strncpy(NotificationRenderer::alertBannerMessage, header ? header : UI_STR("Text Input", "文本输入"), 255);
     NotificationRenderer::alertBannerMessage[255] = '\0';
     NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
     NotificationRenderer::pauseBanner = false;
@@ -628,7 +631,7 @@ void Screen::setup()
     alertFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
 #ifdef ARCH_ESP32
         if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1)
-            graphics::UIRenderer::drawFrameText(display, state, x, y, "Resuming...");
+            graphics::UIRenderer::drawFrameText(display, state, x, y, UI_STR("Resuming...", "继续中..."));
         else
 #endif
         {
@@ -661,7 +664,9 @@ void Screen::setup()
 #endif
 
 #if (defined(OLED_CJK) && OLED_CJK==1)
-    #if OLED_CJK_SIZE==12
+    #if OLED_CJK_SIZE==10
+    dispdev->setUtf8Font(&utf8_10x10_font);
+    #elif OLED_CJK_SIZE==12
     dispdev->setUtf8Font(&utf8_12x12_font);
     #elif OLED_CJK_SIZE==16
     dispdev->setUtf8Font(&utf8_16x16_font);
@@ -842,7 +847,7 @@ int32_t Screen::runOnce()
     }
 #endif
     if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
-        showSimpleBanner("Rebooting...", 0);
+        showSimpleBanner(UI_STR("Rebooting...", "正在重启..."), 0);
     }
 
     // Process incoming commands.
@@ -891,6 +896,7 @@ int32_t Screen::runOnce()
             break;
         case Cmd::STOP_ALERT_FRAME:
             NotificationRenderer::pauseBanner = false;
+            setFrames(FOCUS_PRESERVE);
             break;
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
@@ -1486,6 +1492,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             devicestate.has_rx_text_message = true; // Needed to include the message frame
             hasUnreadMessage = true;                // Enables mail icon in the header
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view (no-op during text_input)
+            ambientLightingTriggerMessageEffect();
 
             // Only wake/force display if the configuration allows it
             if (shouldWakeOnReceivedMessage()) {
@@ -1532,7 +1539,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                     std::string t = sanitizeString(longName);
                     strncpy(titleBuf, t.c_str(), sizeof(titleBuf) - 1);
                 } else {
-                    strncpy(titleBuf, "Message", sizeof(titleBuf) - 1);
+                    strncpy(titleBuf, UI_STR("Message", "消息"), sizeof(titleBuf) - 1);
                 }
 
                 // Content: payload bytes may not be null-terminated, remove ASCII_BELL and sanitize
@@ -1564,20 +1571,20 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 // No keyboard active: use regular banner flow, respecting mute settings
                 if (isAlert) {
                     if (longName && longName[0]) {
-                        snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+                        snprintf(banner, sizeof(banner), UI_STR("Alert Received from\n%s", "收到警报来自\n%s"), longName);
                     } else {
-                        strcpy(banner, "Alert Received");
+                        strcpy(banner, UI_STR("Alert Received", "收到警报"));
                     }
                     screen->showSimpleBanner(banner, 3000);
                 } else if (!channel.settings.has_module_settings || !channel.settings.module_settings.is_muted) {
                     if (longName && longName[0]) {
                         if (currentResolution == ScreenResolution::UltraLow) {
-                            strcpy(banner, "New Message");
+                            strcpy(banner, UI_STR("New Message", "新消息"));
                         } else {
-                            snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+                            snprintf(banner, sizeof(banner), UI_STR("New Message from\n%s", "新消息来自\n%s"), longName);
                         }
                     } else {
-                        strcpy(banner, "New Message");
+                        strcpy(banner, UI_STR("New Message", "新消息"));
                     }
 #if defined(M5STACK_UNITC6L)
                     screen->setOn(true);
@@ -1690,6 +1697,28 @@ int Screen::handleInputEvent(const InputEvent *event)
                 return 0;
             }
         }
+
+#ifdef TINYLORA_MV
+        if (event->inputEvent == INPUT_BROKER_UP_LONG) {
+            if (messageStore.getMessages().empty()) {
+                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+            } else {
+                graphics::MessageRenderer::scrollUp();
+                setFastFramerate();
+                return 0;
+            }
+        }
+
+        if (event->inputEvent == INPUT_BROKER_DOWN_LONG) {
+            if (messageStore.getMessages().empty()) {
+                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+            } else {
+                graphics::MessageRenderer::scrollDown();
+                setFastFramerate();
+                return 0;
+            }
+        }
+#endif
     }
     // UP/DOWN in node list screens scrolls through node pages
     if (ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_nodes ||
@@ -1709,6 +1738,7 @@ int Screen::handleInputEvent(const InputEvent *event)
             setFastFramerate();
             return 0;
         }
+
     }
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose
@@ -1800,6 +1830,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
                     menuHandler::wifiBaseMenu();
                 }
+#ifdef TINYLORA_MV
+            } else if (event->inputEvent == INPUT_BROKER_SELECT_LONG) {
+                setOn(false);
+#endif
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showFrame(FrameDirection::PREVIOUS);
             } else if (event->inputEvent == INPUT_BROKER_CANCEL) {

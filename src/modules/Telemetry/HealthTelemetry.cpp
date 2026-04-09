@@ -15,6 +15,7 @@
 #include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
+#include "graphics/UiStrings.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
@@ -99,9 +100,9 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     display->setFont(FONT_SMALL);
 
     if (lastMeasurementPacket == nullptr) {
-        // If there's no valid packet, display "Health"
-        display->drawString(x, y, "Health");
-        display->drawString(x, y += _fontHeight(FONT_SMALL), "No measurement");
+        // If there's no valid packet, display Health
+        display->drawString(x, y, UI_STR("Health", "健康"));
+        display->drawString(x, y += _fontHeight(FONT_SMALL), UI_STR("No measurement", "无测量"));
         return;
     }
 
@@ -112,14 +113,14 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
-        display->drawString(x, y, "Measurement Error");
+        display->drawString(x, y, UI_STR("Measurement Error", "测量错误"));
         LOG_ERROR("Unable to decode last packet");
         return;
     }
 
     // Display "Health From: ..." on its own
     char headerStr[64];
-    snprintf(headerStr, sizeof(headerStr), "Health From: %s(%ds)", lastSender, (int)agoSecs);
+    snprintf(headerStr, sizeof(headerStr), UI_STR("Health From: %s(%ds)", "健康来自:%s(%ds)"), lastSender, (int)agoSecs);
     display->drawString(x, y, headerStr);
 
     char last_temp[16];
@@ -132,16 +133,16 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
 
     // Continue with the remaining details
     char tempStr[32];
-    snprintf(tempStr, sizeof(tempStr), "Temp: %s", last_temp);
+    snprintf(tempStr, sizeof(tempStr), UI_STR("Temp: %s", "温度:%s"), last_temp);
     display->drawString(x, y += _fontHeight(FONT_SMALL), tempStr);
     if (lastMeasurement.variant.health_metrics.has_heart_bpm) {
         char heartStr[32];
-        snprintf(heartStr, sizeof(heartStr), "Heart Rate: %u bpm", lastMeasurement.variant.health_metrics.heart_bpm);
+        snprintf(heartStr, sizeof(heartStr), UI_STR("Heart Rate: %u bpm", "心率:%u bpm"), lastMeasurement.variant.health_metrics.heart_bpm);
         display->drawString(x, y += _fontHeight(FONT_SMALL), heartStr);
     }
     if (lastMeasurement.variant.health_metrics.has_spO2) {
         char spo2Str[32];
-        snprintf(spo2Str, sizeof(spo2Str), "spO2: %u %%", lastMeasurement.variant.health_metrics.spO2);
+        snprintf(spo2Str, sizeof(spo2Str), UI_STR("spO2: %u %%", "血氧:%u%%"), lastMeasurement.variant.health_metrics.spO2);
         display->drawString(x, y += _fontHeight(FONT_SMALL), spo2Str);
     }
 }

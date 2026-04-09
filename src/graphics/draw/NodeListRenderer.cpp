@@ -8,6 +8,7 @@
 #include "gps/RTC.h" // for getTime() function
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include "graphics/images.h"
 #include "meshUtils.h"
 #include <algorithm>
@@ -139,15 +140,15 @@ const char *getCurrentModeTitle_Nodes(int screenWidth)
 {
     switch (currentMode_Nodes) {
     case MODE_LAST_HEARD:
-        return "Last Heard";
+        return UI_STR("Last Heard", "最近收到");
     case MODE_HOP_SIGNAL:
 #ifdef USE_EINK
-        return "Hops/Sig";
+        return UI_STR("Hops/Sig", "跳/信");
 #else
-        return (currentResolution == ScreenResolution::High) ? "Hops/Signal" : "Hops/Sig";
+        return (currentResolution == ScreenResolution::High) ? UI_STR("Hops/Signal", "跳数/信号") : UI_STR("Hops/Sig", "跳/信");
 #endif
     default:
-        return "Nodes";
+        return UI_STR("Nodes", "节点");
     }
 }
 
@@ -155,11 +156,11 @@ const char *getCurrentModeTitle_Location(int screenWidth)
 {
     switch (currentMode_Location) {
     case MODE_DISTANCE:
-        return "Distance";
+        return UI_STR("Distance", "距离");
     case MODE_BEARING:
-        return "Bearings";
+        return UI_STR("Bearings", "方位");
     default:
-        return "Nodes";
+        return UI_STR("Nodes", "节点");
     }
 }
 
@@ -215,13 +216,16 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
         snprintf(timeStr, sizeof(timeStr), "?");
     } else {
         uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
-        snprintf(timeStr, sizeof(timeStr), (days > 365 ? "?" : "%d%c"),
-                 (days    ? days
-                  : hours ? hours
-                          : minutes),
-                 (days    ? 'd'
-                  : hours ? 'h'
-                          : 'm'));
+        if (days > 365) {
+            snprintf(timeStr, sizeof(timeStr), "?");
+        } else {
+            const char *unitDays = UI_STR("d", "天");
+            const char *unitHours = UI_STR("h", "时");
+            const char *unitMinutes = UI_STR("m", "分");
+            uint32_t value = (days ? days : hours ? hours : minutes);
+            const char *unit = (days ? unitDays : hours ? unitHours : unitMinutes);
+            snprintf(timeStr, sizeof(timeStr), "%d%s", value, unit);
+        }
     }
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -465,9 +469,9 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
     bool locationScreen = false;
 
-    if (strcmp(title, "Bearings") == 0)
+    if (strcmp(title, UI_STR("Bearings", "方位")) == 0)
         locationScreen = true;
-    else if (strcmp(title, "Distance") == 0)
+    else if (strcmp(title, UI_STR("Distance", "距离")) == 0)
         locationScreen = true;
     display->clear();
 
@@ -588,7 +592,8 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         popupMaxPage = std::max(1, (totalEntries + perPage - 1) / perPage);
 
         char buf[32];
-        snprintf(buf, sizeof(buf), "%d-%d/%d  Pg %d/%d", popupStart, popupEnd, popupTotal, popupPage, popupMaxPage);
+        snprintf(buf, sizeof(buf), UI_STR("%d-%d/%d  Pg %d/%d", "%d-%d/%d  页 %d/%d"), popupStart, popupEnd, popupTotal,
+                 popupPage, popupMaxPage);
 
         display->setTextAlignment(TEXT_ALIGN_LEFT);
 
@@ -719,23 +724,23 @@ void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *st
 #ifdef USE_EINK
 void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    const char *title = "Last Heard";
+    const char *title = UI_STR("Last Heard", "最近收到");
     drawNodeListScreen(display, state, x, y, title, drawEntryLastHeard);
 }
 
 void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
 #ifdef USE_EINK
-    const char *title = "Hops/Sig";
+    const char *title = UI_STR("Hops/Sig", "跳/信");
 #else
 
-    const char *title = "Hops/Signal";
+    const char *title = UI_STR("Hops/Signal", "跳数/信号");
 #endif
     drawNodeListScreen(display, state, x, y, title, drawEntryHopSignal);
 }
 void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    const char *title = "Distance";
+    const char *title = UI_STR("Distance", "距离");
     drawNodeListScreen(display, state, x, y, title, drawNodeDistance);
 }
 #endif
@@ -769,7 +774,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
         if (!validHeading)
             return;
     }
-    drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
+    drawNodeListScreen(display, state, x, y, UI_STR("Bearings", "方位"), drawEntryCompass, drawCompassArrow, heading, lat, lon);
 }
 
 /// Draw a series of fields in a column, wrapping to multiple columns if needed

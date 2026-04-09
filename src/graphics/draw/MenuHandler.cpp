@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "ClockRenderer.h"
+#include "AmbientLightLock.h"
 #include "Default.h"
 #include "GPS.h"
 #include "MenuHandler.h"
@@ -11,6 +12,7 @@
 #include "buzz.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
@@ -23,6 +25,9 @@
 #include "modules/ExternalNotificationModule.h"
 #include "modules/KeyVerificationModule.h"
 #include "modules/TraceRouteModule.h"
+#ifdef HAS_NEOPIXEL
+#include <graphics/NeoPixel.h>
+#endif
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -64,10 +69,15 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {"Back", "Device Role", "Radio Preset", "LoRa Region"};
+    static const char *optionsArray[] = {
+        UI_STR("Back", "返回"),
+        UI_STR("Device Role", "设备角色"),
+        UI_STR("Radio Preset", "电台预设"),
+        UI_STR("LoRa Region", "LoRa区域"),
+    };
     enum optionsNumbers { Back = 0, device_role_picker = 1, radio_preset_picker = 2, lora_picker = 3 };
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "LoRa Actions";
+    bannerOptions.message = UI_STR("LoRa Actions", "LoRa操作");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -86,15 +96,18 @@ void menuHandler::loraMenu()
 
 void menuHandler::OnboardMessage()
 {
-    static const char *optionsArray[] = {"OK", "Got it!"};
+    static const char *optionsArray[] = {UI_STR("OK", "确定"), UI_STR("Got it!", "知道了")};
     enum optionsNumbers { OK, got };
     BannerOverlayOptions bannerOptions;
 #if HAS_TFT
-    bannerOptions.message = "Welcome to Meshtastic!\nSwipe to navigate and\nlong press to select\nor open a menu.";
+    bannerOptions.message = UI_STR("Welcome to Meshtastic!\nSwipe to navigate and\nlong press to select\nor open a menu.",
+                                   "欢迎使用Meshtastic!\n滑动切换\n长按选择\n或打开菜单。");
 #elif defined(BUTTON_PIN)
-    bannerOptions.message = "Welcome to Meshtastic!\nClick to navigate and\nlong press to select\nor open a menu.";
+    bannerOptions.message = UI_STR("Welcome to Meshtastic!\nClick to navigate and\nlong press to select\nor open a menu.",
+                                   "欢迎使用Meshtastic!\n点击切换\n长按选择\n或打开菜单。");
 #else
-    bannerOptions.message = "Welcome to Meshtastic!\nUse the Select button\nto open menus\nand make selections.";
+    bannerOptions.message = UI_STR("Welcome to Meshtastic!\nUse the Select button\nto open menus\nand make selections.",
+                                   "欢迎使用Meshtastic!\n按选择键打开菜单\n并进行选择。");
 #endif
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
@@ -108,7 +121,7 @@ void menuHandler::OnboardMessage()
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
     static const LoraRegionOption regionOptions[] = {
-        {"Back", OptionsAction::Back},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
         {"US", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_US},
         {"EU_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_433},
         {"EU_868", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_868},
@@ -140,9 +153,9 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
     constexpr size_t regionCount = sizeof(regionOptions) / sizeof(regionOptions[0]);
     static std::array<const char *, regionCount> regionLabels{};
 
-    const char *bannerMessage = "Set the LoRa region";
+    const char *bannerMessage = UI_STR("Set the LoRa region", "设置LoRa区域");
     if (currentResolution == ScreenResolution::UltraLow) {
-        bannerMessage = "LoRa Region";
+        bannerMessage = UI_STR("LoRa Region", "LoRa区域");
     }
 
     auto bannerOptions =
@@ -215,7 +228,11 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 
 void menuHandler::DeviceRolePicker()
 {
-    static const char *optionsArray[] = {"Back", "Client", "Client Mute", "Lost and Found", "Tracker"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"),
+                                         UI_STR("Client", "客户端"),
+                                         UI_STR("Client Mute", "客户端静音"),
+                                         UI_STR("Lost and Found", "失物招领"),
+                                         UI_STR("Tracker", "追踪器")};
     enum optionsNumbers {
         Back = 0,
         devicerole_client = 1,
@@ -224,7 +241,7 @@ void menuHandler::DeviceRolePicker()
         devicerole_tracker = 4
     };
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Device Role";
+    bannerOptions.message = UI_STR("Device Role", "设备角色");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -250,7 +267,7 @@ void menuHandler::DeviceRolePicker()
 void menuHandler::RadioPresetPicker()
 {
     static const RadioPresetOption presetOptions[] = {
-        {"Back", OptionsAction::Back},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
         {"LongTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO},
         {"LongModerate", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE},
         {"LongFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
@@ -265,7 +282,8 @@ void menuHandler::RadioPresetPicker()
     static std::array<const char *, presetCount> presetLabels{};
 
     auto bannerOptions =
-        createStaticBannerOptions("Radio Preset", presetOptions, presetLabels, [](const RadioPresetOption &option, int) -> void {
+        createStaticBannerOptions(UI_STR("Radio Preset", "电台预设"), presetOptions, presetLabels,
+                                  [](const RadioPresetOption &option, int) -> void {
             if (option.action == OptionsAction::Back) {
                 menuHandler::menuQueue = menuHandler::lora_Menu;
                 screen->runNow();
@@ -286,10 +304,10 @@ void menuHandler::RadioPresetPicker()
 
 void menuHandler::TwelveHourPicker()
 {
-    static const char *optionsArray[] = {"Back", "12-hour", "24-hour"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("12-hour", "12小时制"), UI_STR("24-hour", "24小时制")};
     enum optionsNumbers { Back = 0, twelve = 1, twentyfour = 2 };
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Time Format";
+    bannerOptions.message = UI_STR("Time Format", "时间格式");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -309,7 +327,7 @@ void menuHandler::TwelveHourPicker()
 // Reusable confirmation prompt function
 void menuHandler::showConfirmationBanner(const char *message, std::function<void()> onConfirm)
 {
-    static const char *confirmOptions[] = {"No", "Yes"};
+    static const char *confirmOptions[] = {UI_STR("No", "否"), UI_STR(UI_STR("Yes", "是"), "是")};
     BannerOverlayOptions confirmBanner;
     confirmBanner.message = message;
     confirmBanner.optionsArrayPtr = confirmOptions;
@@ -325,15 +343,15 @@ void menuHandler::showConfirmationBanner(const char *message, std::function<void
 void menuHandler::ClockFacePicker()
 {
     static const ClockFaceOption clockFaceOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"Digital", OptionsAction::Select, false},
-        {"Analog", OptionsAction::Select, true},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
+        {UI_STR("Digital", "数字"), OptionsAction::Select, false},
+        {UI_STR("Analog", "指针"), OptionsAction::Select, true},
     };
 
     constexpr size_t clockFaceCount = sizeof(clockFaceOptions) / sizeof(clockFaceOptions[0]);
     static std::array<const char *, clockFaceCount> clockFaceLabels{};
 
-    auto bannerOptions = createStaticBannerOptions("Which Face?", clockFaceOptions, clockFaceLabels,
+    auto bannerOptions = createStaticBannerOptions(UI_STR("Which Face?", "选择表盘"), clockFaceOptions, clockFaceLabels,
                                                    [](const ClockFaceOption &option, int) -> void {
                                                        if (option.action == OptionsAction::Back) {
                                                            menuHandler::menuQueue = menuHandler::clock_menu;
@@ -361,7 +379,7 @@ void menuHandler::ClockFacePicker()
 void menuHandler::TZPicker()
 {
     static const TimezoneOption timezoneOptions[] = {
-        {"Back", OptionsAction::Back},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
         {"US/Hawaii", OptionsAction::Select, "HST10"},
         {"US/Alaska", OptionsAction::Select, "AKST9AKDT,M3.2.0,M11.1.0"},
         {"US/Pacific", OptionsAction::Select, "PST8PDT,M3.2.0,M11.1.0"},
@@ -386,7 +404,7 @@ void menuHandler::TZPicker()
     static std::array<const char *, timezoneCount> timezoneLabels{};
 
     auto bannerOptions = createStaticBannerOptions(
-        "Pick Timezone", timezoneOptions, timezoneLabels, [](const TimezoneOption &option, int) -> void {
+        UI_STR("Pick Timezone", "选择时区"), timezoneOptions, timezoneLabels, [](const TimezoneOption &option, int) -> void {
             if (option.action == OptionsAction::Back) {
                 menuHandler::menuQueue = menuHandler::clock_menu;
                 screen->runNow();
@@ -424,13 +442,14 @@ void menuHandler::TZPicker()
 void menuHandler::clockMenu()
 {
 #if defined(M5STACK_UNITC6L)
-    static const char *optionsArray[] = {"Back", "Time Format", "Timezone"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("Time Format", "时间格式"), UI_STR("Timezone", "时区")};
 #else
-    static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("Clock Face", "表盘"),
+                                         UI_STR("Time Format", "时间格式"), UI_STR("Timezone", "时区")};
 #endif
     enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3 };
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Clock Action";
+    bannerOptions.message = UI_STR("Clock Action", "时钟操作");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -458,14 +477,14 @@ void menuHandler::messageResponseMenu()
     auto mode = graphics::MessageRenderer::getThreadMode();
     int threadChannel = graphics::MessageRenderer::getThreadChannel();
 
-    optionsArray[options] = "Back";
+    optionsArray[options] = UI_STR("Back", "返回");
     optionsEnumArray[options++] = Back;
 
     // New Reply submenu (replaces Preset and Freetext directly in this menu)
-    optionsArray[options] = "Reply";
+    optionsArray[options] = UI_STR("Reply", "回复");
     optionsEnumArray[options++] = ReplyMenu;
 
-    optionsArray[options] = "View Chats";
+    optionsArray[options] = UI_STR("View Chats", "对话");
     optionsEnumArray[options++] = ViewMode;
 
     // If viewing ALL chats, hide “Mute Chat”
@@ -473,23 +492,24 @@ void menuHandler::messageResponseMenu()
         const uint8_t chIndex = (threadChannel != 0) ? (uint8_t)threadChannel : channels.getPrimaryIndex();
         auto &chan = channels.getByIndex(chIndex);
 
-        optionsArray[options] = chan.settings.module_settings.is_muted ? "Unmute Channel" : "Mute Channel";
+        optionsArray[options] = chan.settings.module_settings.is_muted ? UI_STR("Unmute Channel", "取消静音")
+                                                                       : UI_STR("Mute Channel", "静音频道");
         optionsEnumArray[options++] = MuteChannel;
     }
 
     // Delete submenu
-    optionsArray[options] = "Delete";
+    optionsArray[options] = UI_STR("Delete", "删除");
     optionsEnumArray[options++] = DeleteMenu;
 
 #ifdef HAS_I2S
-    optionsArray[options] = "Read Aloud";
+    optionsArray[options] = UI_STR("Read Aloud", "朗读");
     optionsEnumArray[options++] = Aloud;
 #endif
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Message Action";
+    bannerOptions.message = UI_STR("Message Action", "消息操作");
     if (currentResolution == ScreenResolution::UltraLow) {
-        bannerOptions.message = "Message";
+        bannerOptions.message = UI_STR("Message", "消息");
     }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -544,16 +564,16 @@ void menuHandler::replyMenu()
     int options = 0;
 
     // Back
-    optionsArray[options] = "Back";
+    optionsArray[options] = UI_STR("Back", "返回");
     optionsEnumArray[options++] = Back;
 
     // Preset reply
-    optionsArray[options] = "With Preset";
+    optionsArray[options] = UI_STR("With Preset", "预设回复");
     optionsEnumArray[options++] = ReplyPreset;
 
     // Freetext reply (only when keyboard exists)
     if (kb_found) {
-        optionsArray[options] = "With Freetext";
+        optionsArray[options] = UI_STR("With Freetext", "自由输入");
         optionsEnumArray[options++] = ReplyFreetext;
     }
 
@@ -562,12 +582,12 @@ void menuHandler::replyMenu()
     // Dynamic title based on thread mode
     auto mode = graphics::MessageRenderer::getThreadMode();
     if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
-        bannerOptions.message = "Reply to Channel";
+        bannerOptions.message = UI_STR("Reply to Channel", "回复频道");
     } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
-        bannerOptions.message = "Reply to DM";
+        bannerOptions.message = UI_STR("Reply to DM", "回复私信");
     } else {
         // View All
-        bannerOptions.message = "Reply to Last Msg";
+        bannerOptions.message = UI_STR("Reply to Last Msg", "回复上条");
     }
 
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -640,26 +660,26 @@ void menuHandler::deleteMessagesMenu()
 
     auto mode = graphics::MessageRenderer::getThreadMode();
 
-    optionsArray[options] = "Back";
+    optionsArray[options] = UI_STR("Back", "返回");
     optionsEnumArray[options++] = Back;
 
-    optionsArray[options] = "Delete Oldest";
+    optionsArray[options] = UI_STR("Delete Oldest", "删最旧");
     optionsEnumArray[options++] = DeleteOldest;
 
     // If viewing ALL chats → hide “Delete This Chat”
     if (mode != graphics::MessageRenderer::ThreadMode::ALL) {
-        optionsArray[options] = "Delete This Chat";
+        optionsArray[options] = UI_STR("Delete This Chat", "删当前");
         optionsEnumArray[options++] = DeleteThis;
     }
     if (currentResolution == ScreenResolution::UltraLow) {
-        optionsArray[options] = "Delete All";
+        optionsArray[options] = UI_STR("Delete All", "全删");
     } else {
-        optionsArray[options] = "Delete All Chats";
+        optionsArray[options] = UI_STR("Delete All Chats", "删除全部");
     }
     optionsEnumArray[options++] = DeleteAll;
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Delete Messages";
+    bannerOptions.message = UI_STR("Delete Messages", "删除消息");
 
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -724,9 +744,9 @@ void menuHandler::messageViewModeMenu()
     ids.clear();
     idToPeer.clear();
 
-    labels.push_back("Back");
+    labels.push_back(UI_STR("Back", "返回"));
     ids.push_back(-1);
-    labels.push_back("View All Chats");
+    labels.push_back(UI_STR("View All Chats", "查看所有聊天"));
     ids.push_back(-2);
 
     // Channels with messages
@@ -824,7 +844,7 @@ void menuHandler::messageViewModeMenu()
     }
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Select Conversation";
+    bannerOptions.message = UI_STR("Select Conversation", "选择对话");
     bannerOptions.optionsArrayPtr = options.data();
     bannerOptions.optionsEnumPtr = optionIds.data();
     bannerOptions.optionsCount = options.size();
@@ -853,39 +873,43 @@ void menuHandler::messageViewModeMenu()
 
 void menuHandler::homeBaseMenu()
 {
-    enum optionsNumbers { Back, Mute, Backlight, Position, Preset, Freetext, Sleep, enumEnd };
+    enum optionsNumbers { Back, Mute, Backlight, Position, Preset, Freetext, Sleep, Flashlight, enumEnd };
 
-    static const char *optionsArray[enumEnd] = {"Back"};
+    static const char *optionsArray[enumEnd] = {UI_STR("Back", "返回")};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
     if (moduleConfig.external_notification.enabled && externalNotificationModule &&
         config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED) {
         if (!externalNotificationModule->getMute()) {
-            optionsArray[options] = "Temporarily Mute";
+            optionsArray[options] = UI_STR("Temporarily Mute", "临时静音");
         } else {
-            optionsArray[options] = "Unmute";
+            optionsArray[options] = UI_STR("Unmute", "取消静音");
         }
         optionsEnumArray[options++] = Mute;
     }
 #if defined(PIN_EINK_EN) || defined(PCA_PIN_EINK_EN)
-    optionsArray[options] = "Toggle Backlight";
+    optionsArray[options] = UI_STR("Toggle Backlight", "背光开关");
     optionsEnumArray[options++] = Backlight;
 #else
-    optionsArray[options] = "Sleep Screen";
+    optionsArray[options] = UI_STR("Sleep Screen", "息屏");
     optionsEnumArray[options++] = Sleep;
 #endif
     if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        optionsArray[options] = "Send Position";
+        optionsArray[options] = UI_STR("Send Position", "发送位置");
     } else {
-        optionsArray[options] = "Send Node Info";
+        optionsArray[options] = UI_STR("Send Node Info", "发送节点");
     }
     optionsEnumArray[options++] = Position;
+#if defined(TINYLORA_MV_WS2812_EFFECTS) && defined(HAS_NEOPIXEL)
+    optionsArray[options] = isBusy ? UI_STR("Flashlight Off", "关闭手电") : UI_STR("Flashlight", "手电筒");
+    optionsEnumArray[options++] = Flashlight;
+#endif
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Home Action";
+    bannerOptions.message = UI_STR("Home Action", "主页操作");
     if (currentResolution == ScreenResolution::UltraLow) {
-        bannerOptions.message = "Home";
+        bannerOptions.message = UI_STR("Home", "主页");
     }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -922,10 +946,24 @@ void menuHandler::homeBaseMenu()
         } else if (selected == Position) {
             service->refreshLocalMeshNode();
             if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-                IF_SCREEN(screen->showSimpleBanner("Position\nSent", 3000));
+                IF_SCREEN(screen->showSimpleBanner(UI_STR("Position\nSent", "位置\n已发"), 3000));
             } else {
-                IF_SCREEN(screen->showSimpleBanner("Node Info\nSent", 3000));
+                IF_SCREEN(screen->showSimpleBanner(UI_STR("Node Info\nSent", "节点信息\n已发"), 3000));
             }
+        } else if (selected == Flashlight) {
+#if defined(TINYLORA_MV_WS2812_EFFECTS) && defined(HAS_NEOPIXEL)
+            if (isBusy) {
+                pixels.setBrightness(0);
+                pixels.clear();
+                pixels.show();
+                isBusy = false;
+            } else {
+                isBusy = true;
+                pixels.setBrightness(255);
+                pixels.fill(pixels.Color(255, 255, 255), 0, NEOPIXEL_COUNT);
+                pixels.show();
+            }
+#endif
         } else if (selected == Preset) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
         } else if (selected == Freetext) {
@@ -944,18 +982,18 @@ void menuHandler::textMessageBaseMenu()
 {
     enum optionsNumbers { Back, Preset, Freetext, enumEnd };
 
-    static const char *optionsArray[enumEnd] = {"Back"};
+    static const char *optionsArray[enumEnd] = {UI_STR("Back", "返回")};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
-    optionsArray[options] = "New Preset Msg";
+    optionsArray[options] = UI_STR("New Preset Msg", "新预设消息");
     optionsEnumArray[options++] = Preset;
     if (kb_found) {
-        optionsArray[options] = "New Freetext Msg";
+        optionsArray[options] = UI_STR("New Freetext Msg", "新自由文本");
         optionsEnumArray[options++] = Freetext;
     }
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Message Action";
+    bannerOptions.message = UI_STR("Message Action", "消息操作");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
@@ -972,43 +1010,43 @@ void menuHandler::textMessageBaseMenu()
 void menuHandler::systemBaseMenu()
 {
     enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, enumEnd };
-    static const char *optionsArray[enumEnd] = {"Back"};
+    static const char *optionsArray[enumEnd] = {UI_STR("Back", "返回")};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-    optionsArray[options] = "Notifications";
+    optionsArray[options] = UI_STR("Notifications", "通知");
     optionsEnumArray[options++] = Notifications;
 
-    optionsArray[options] = "Display Options";
+    optionsArray[options] = UI_STR("Display Options", "显示设置");
     optionsEnumArray[options++] = ScreenOptions;
 
     if (currentResolution == ScreenResolution::UltraLow) {
-        optionsArray[options] = "Bluetooth";
+        optionsArray[options] = UI_STR("Bluetooth", "蓝牙");
     } else {
-        optionsArray[options] = "Bluetooth Toggle";
+        optionsArray[options] = UI_STR("Bluetooth Toggle", "蓝牙开关");
     }
     optionsEnumArray[options++] = Bluetooth;
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
-    optionsArray[options] = "WiFi Toggle";
+    optionsArray[options] = UI_STR("WiFi Toggle", "WiFi开关");
     optionsEnumArray[options++] = WiFiToggle;
 #endif
 
     if (currentResolution == ScreenResolution::UltraLow) {
-        optionsArray[options] = "Power";
+        optionsArray[options] = UI_STR("Power", "电源");
     } else {
-        optionsArray[options] = "Reboot/Shutdown";
+        optionsArray[options] = UI_STR("Reboot/Shutdown", "重启/关机");
     }
     optionsEnumArray[options++] = PowerMenu;
 
     if (test_enabled) {
-        optionsArray[options] = "Test Menu";
+        optionsArray[options] = UI_STR("Test Menu", "测试菜单");
         optionsEnumArray[options++] = Test;
     }
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "System Action";
+    bannerOptions.message = UI_STR("System Action", "系统操作");
     if (currentResolution == ScreenResolution::UltraLow) {
-        bannerOptions.message = "System";
+        bannerOptions.message = UI_STR("System", "系统");
     }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
@@ -1048,7 +1086,7 @@ void menuHandler::favoriteBaseMenu()
 {
     enum optionsNumbers { Back, Preset, Freetext, GoToChat, Remove, TraceRoute, enumEnd };
 
-    static const char *optionsArray[enumEnd] = {"Back"};
+    static const char *optionsArray[enumEnd] = {UI_STR("Back", "返回")};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
@@ -1062,32 +1100,32 @@ void menuHandler::favoriteBaseMenu()
         }
     }
     if (hasConversation) {
-        optionsArray[options] = "Go To Chat";
+        optionsArray[options] = UI_STR("Go To Chat", "进入聊天");
         optionsEnumArray[options++] = GoToChat;
     }
     if (currentResolution == ScreenResolution::UltraLow) {
-        optionsArray[options] = "New Preset";
+        optionsArray[options] = UI_STR("New Preset", "新预设");
     } else {
-        optionsArray[options] = "New Preset Msg";
+        optionsArray[options] = UI_STR("New Preset Msg", "新预设消息");
     }
     optionsEnumArray[options++] = Preset;
 
     if (kb_found) {
-        optionsArray[options] = "New Freetext Msg";
+        optionsArray[options] = UI_STR("New Freetext Msg", "新自由文本");
         optionsEnumArray[options++] = Freetext;
     }
 
     if (currentResolution != ScreenResolution::UltraLow) {
-        optionsArray[options] = "Trace Route";
+        optionsArray[options] = UI_STR("Trace Route", "路由追踪");
         optionsEnumArray[options++] = TraceRoute;
     }
-    optionsArray[options] = "Remove Favorite";
+    optionsArray[options] = UI_STR("Remove Favorite", "取消收藏");
     optionsEnumArray[options++] = Remove;
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Favorites Action";
+    bannerOptions.message = UI_STR("Favorites Action", "收藏操作");
     if (currentResolution == ScreenResolution::UltraLow) {
-        bannerOptions.message = "Favorites";
+        bannerOptions.message = UI_STR("Favorites", "收藏");
     }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -1133,24 +1171,24 @@ void menuHandler::positionBaseMenu()
     };
 
     static const PositionMenuOption baseOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"On/Off Toggle", OptionsAction::Select, static_cast<int>(PositionAction::GpsToggle)},
-        {"Format", OptionsAction::Select, static_cast<int>(PositionAction::GpsFormat)},
-        {"Smart Position", OptionsAction::Select, static_cast<int>(PositionAction::GPSSmartPosition)},
-        {"Update Interval", OptionsAction::Select, static_cast<int>(PositionAction::GPSUpdateInterval)},
-        {"Broadcast Interval", OptionsAction::Select, static_cast<int>(PositionAction::GPSPositionBroadcast)},
-        {"Compass", OptionsAction::Select, static_cast<int>(PositionAction::CompassMenu)},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
+        {UI_STR("On/Off Toggle", "开关"), OptionsAction::Select, static_cast<int>(PositionAction::GpsToggle)},
+        {UI_STR("Format", "格式"), OptionsAction::Select, static_cast<int>(PositionAction::GpsFormat)},
+        {UI_STR("Smart Position", "智能位置"), OptionsAction::Select, static_cast<int>(PositionAction::GPSSmartPosition)},
+        {UI_STR("Update Interval", "更新间隔"), OptionsAction::Select, static_cast<int>(PositionAction::GPSUpdateInterval)},
+        {UI_STR("Broadcast Interval", "广播间隔"), OptionsAction::Select, static_cast<int>(PositionAction::GPSPositionBroadcast)},
+        {UI_STR("Compass", "罗盘"), OptionsAction::Select, static_cast<int>(PositionAction::CompassMenu)},
     };
 
     static const PositionMenuOption calibrateOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"On/Off Toggle", OptionsAction::Select, static_cast<int>(PositionAction::GpsToggle)},
-        {"Format", OptionsAction::Select, static_cast<int>(PositionAction::GpsFormat)},
-        {"Smart Position", OptionsAction::Select, static_cast<int>(PositionAction::GPSSmartPosition)},
-        {"Update Interval", OptionsAction::Select, static_cast<int>(PositionAction::GPSUpdateInterval)},
-        {"Broadcast Interval", OptionsAction::Select, static_cast<int>(PositionAction::GPSPositionBroadcast)},
-        {"Compass", OptionsAction::Select, static_cast<int>(PositionAction::CompassMenu)},
-        {"Compass Calibrate", OptionsAction::Select, static_cast<int>(PositionAction::CompassCalibrate)},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
+        {UI_STR("On/Off Toggle", "开关"), OptionsAction::Select, static_cast<int>(PositionAction::GpsToggle)},
+        {UI_STR("Format", "格式"), OptionsAction::Select, static_cast<int>(PositionAction::GpsFormat)},
+        {UI_STR("Smart Position", "智能位置"), OptionsAction::Select, static_cast<int>(PositionAction::GPSSmartPosition)},
+        {UI_STR("Update Interval", "更新间隔"), OptionsAction::Select, static_cast<int>(PositionAction::GPSUpdateInterval)},
+        {UI_STR("Broadcast Interval", "广播间隔"), OptionsAction::Select, static_cast<int>(PositionAction::GPSPositionBroadcast)},
+        {UI_STR("Compass", "罗盘"), OptionsAction::Select, static_cast<int>(PositionAction::CompassMenu)},
+        {UI_STR("Compass Calibrate", "罗盘校准"), OptionsAction::Select, static_cast<int>(PositionAction::CompassCalibrate)},
     };
 
     constexpr size_t baseCount = sizeof(baseOptions) / sizeof(baseOptions[0]);
@@ -1203,9 +1241,9 @@ void menuHandler::positionBaseMenu()
 
     BannerOverlayOptions bannerOptions;
     if (accelerometerThread) {
-        bannerOptions = createStaticBannerOptions("GPS Action", calibrateOptions, calibrateLabels, onSelection);
+        bannerOptions = createStaticBannerOptions(UI_STR("GPS Action", "GPS操作"), calibrateOptions, calibrateLabels, onSelection);
     } else {
-        bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
+        bannerOptions = createStaticBannerOptions(UI_STR("GPS Action", "GPS操作"), baseOptions, baseLabels, onSelection);
     }
 
     screen->showOverlayBanner(bannerOptions);
@@ -1214,29 +1252,29 @@ void menuHandler::positionBaseMenu()
 void menuHandler::nodeListMenu()
 {
     enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
-    static const char *optionsArray[enumEnd] = {"Back"};
+    static const char *optionsArray[enumEnd] = {UI_STR("Back", "返回")};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-    optionsArray[options] = "Add Favorite";
+    optionsArray[options] = UI_STR("Add Favorite", "添加收藏");
     optionsEnumArray[options++] = Favorite;
-    optionsArray[options] = "Trace Route";
+    optionsArray[options] = UI_STR("Trace Route", "路由追踪");
     optionsEnumArray[options++] = TraceRoute;
 
     if (currentResolution != ScreenResolution::UltraLow) {
-        optionsArray[options] = "Key Verification";
+        optionsArray[options] = UI_STR("Key Verification", "密钥验证");
         optionsEnumArray[options++] = Verify;
     }
 
     if (currentResolution != ScreenResolution::UltraLow) {
-        optionsArray[options] = "Show Long/Short Name";
+        optionsArray[options] = UI_STR("Show Long/Short Name", "显示长/短名称");
         optionsEnumArray[options++] = NodeNameLength;
     }
-    optionsArray[options] = "Reset NodeDB";
+    optionsArray[options] = UI_STR("Reset NodeDB", "重置节点库");
     optionsEnumArray[options++] = Reset;
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Node Action";
+    bannerOptions.message = UI_STR("Node Action", "节点操作");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -1264,15 +1302,15 @@ void menuHandler::nodeListMenu()
 void menuHandler::nodeNameLengthMenu()
 {
     static const NodeNameOption nodeNameOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"Long", OptionsAction::Select, true},
-        {"Short", OptionsAction::Select, false},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
+        {UI_STR("Long", "长"), OptionsAction::Select, true},
+        {UI_STR("Short", "短"), OptionsAction::Select, false},
     };
 
     constexpr size_t nodeNameCount = sizeof(nodeNameOptions) / sizeof(nodeNameOptions[0]);
     static std::array<const char *, nodeNameCount> nodeNameLabels{};
 
-    auto bannerOptions = createStaticBannerOptions("Node Name Length", nodeNameOptions, nodeNameLabels,
+    auto bannerOptions = createStaticBannerOptions(UI_STR("Node Name Length", "名称长度"), nodeNameOptions, nodeNameLabels,
                                                    [](const NodeNameOption &option, int) -> void {
                                                        if (option.action == OptionsAction::Back) {
                                                            menuQueue = node_base_menu;
@@ -1300,9 +1338,9 @@ void menuHandler::nodeNameLengthMenu()
 
 void menuHandler::resetNodeDBMenu()
 {
-    static const char *optionsArray[] = {"Back", "Reset All", "Preserve Favorites"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("Reset All", "重置全部"), UI_STR("Preserve Favorites", "保留收藏")};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Confirm Reset NodeDB";
+    bannerOptions.message = UI_STR("Confirm Reset NodeDB", "确认重置节点库");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -1329,7 +1367,7 @@ void menuHandler::resetNodeDBMenu()
 void menuHandler::compassNorthMenu()
 {
     static const CompassOption compassOptions[] = {
-        {"Back", OptionsAction::Back},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
         {"Dynamic", OptionsAction::Select, meshtastic_CompassMode_DYNAMIC},
         {"Fixed Ring", OptionsAction::Select, meshtastic_CompassMode_FIXED_RING},
         {"Freeze Heading", OptionsAction::Select, meshtastic_CompassMode_FREEZE_HEADING},
@@ -1338,7 +1376,7 @@ void menuHandler::compassNorthMenu()
     constexpr size_t compassCount = sizeof(compassOptions) / sizeof(compassOptions[0]);
     static std::array<const char *, compassCount> compassLabels{};
 
-    auto bannerOptions = createStaticBannerOptions("North Directions?", compassOptions, compassLabels,
+    auto bannerOptions = createStaticBannerOptions(UI_STR("North Directions?", "方向设置?"), compassOptions, compassLabels,
                                                    [](const CompassOption &option, int) -> void {
                                                        if (option.action == OptionsAction::Back) {
                                                            menuQueue = position_base_menu;
@@ -1375,16 +1413,17 @@ void menuHandler::compassNorthMenu()
 void menuHandler::GPSToggleMenu()
 {
     static const GPSToggleOption gpsToggleOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"Enabled", OptionsAction::Select, meshtastic_Config_PositionConfig_GpsMode_ENABLED},
-        {"Disabled", OptionsAction::Select, meshtastic_Config_PositionConfig_GpsMode_DISABLED},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
+        {UI_STR("Enabled", "开启"), OptionsAction::Select, meshtastic_Config_PositionConfig_GpsMode_ENABLED},
+        {UI_STR("Disabled", "关闭"), OptionsAction::Select, meshtastic_Config_PositionConfig_GpsMode_DISABLED},
     };
 
     constexpr size_t toggleCount = sizeof(gpsToggleOptions) / sizeof(gpsToggleOptions[0]);
     static std::array<const char *, toggleCount> toggleLabels{};
 
     auto bannerOptions =
-        createStaticBannerOptions("Toggle GPS", gpsToggleOptions, toggleLabels, [](const GPSToggleOption &option, int) -> void {
+        createStaticBannerOptions(UI_STR("Toggle GPS", "GPS开关"), gpsToggleOptions, toggleLabels,
+                                  [](const GPSToggleOption &option, int) -> void {
             if (option.action == OptionsAction::Back) {
                 menuQueue = position_base_menu;
                 screen->runNow();
@@ -1424,25 +1463,25 @@ void menuHandler::GPSToggleMenu()
 void menuHandler::GPSFormatMenu()
 {
     static const GPSFormatOption formatOptionsHigh[] = {
-        {"Back", OptionsAction::Back},
-        {"Decimal Degrees", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC},
-        {"Degrees Minutes Seconds", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS},
-        {"Universal Transverse Mercator", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM},
-        {"Military Grid Reference System", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS},
-        {"Open Location Code", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC},
-        {"Ordnance Survey Grid Ref", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR},
-        {"Maidenhead Locator", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
+        {UI_STR("Decimal Degrees", "十进制度"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC},
+        {UI_STR("Degrees Minutes Seconds", "度分秒"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS},
+        {UI_STR("Universal Transverse Mercator", "UTM坐标"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM},
+        {UI_STR("Military Grid Reference System", "MGRS网格"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS},
+        {UI_STR("Open Location Code", "开放位置码"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC},
+        {UI_STR("Ordnance Survey Grid Ref", "OSGR坐标"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR},
+        {UI_STR("Maidenhead Locator", "梅登网格"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS},
     };
 
     static const GPSFormatOption formatOptionsLow[] = {
-        {"Back", OptionsAction::Back},
-        {"DEC", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC},
-        {"DMS", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS},
-        {"UTM", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM},
-        {"MGRS", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS},
-        {"OLC", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC},
-        {"OSGR", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR},
-        {"MLS", OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
+        {UI_STR("DEC", "十进"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_DEC},
+        {UI_STR("DMS", "度分"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS},
+        {UI_STR("UTM", "UTM"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_UTM},
+        {UI_STR("MGRS", "MGRS"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_MGRS},
+        {UI_STR("OLC", "OLC"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC},
+        {UI_STR("OSGR", "OSGR"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_OSGR},
+        {UI_STR("MLS", "MLS"), OptionsAction::Select, meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS},
     };
 
     constexpr size_t formatCount = sizeof(formatOptionsHigh) / sizeof(formatOptionsHigh[0]);
@@ -1496,11 +1535,11 @@ void menuHandler::GPSFormatMenu()
 
 void menuHandler::GPSSmartPositionMenu()
 {
-    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("Enabled", "开启"), UI_STR("Disabled", "关闭")};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Toggle Smart Position";
+    bannerOptions.message = UI_STR("Toggle Smart Position", "智能位置开关");
     if (currentResolution == ScreenResolution::UltraLow) {
-        bannerOptions.message = "Smrt Postn";
+        bannerOptions.message = UI_STR("Smrt Postn", "智能位置");
     }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
@@ -1526,11 +1565,24 @@ void menuHandler::GPSSmartPositionMenu()
 
 void menuHandler::GPSUpdateIntervalMenu()
 {
-    static const char *optionsArray[] = {"Back",      "8 seconds", "20 seconds", "40 seconds",  "1 minute",   "80 seconds",
-                                         "2 minutes", "5 minutes", "10 minutes", "15 minutes",  "30 minutes", "1 hour",
-                                         "6 hours",   "12 hours",  "24 hours",   "At Boot Only"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"),
+                                         UI_STR("8 seconds", "8秒"),
+                                         UI_STR("20 seconds", "20秒"),
+                                         UI_STR("40 seconds", "40秒"),
+                                         UI_STR("1 minute", "1分钟"),
+                                         UI_STR("80 seconds", "80秒"),
+                                         UI_STR("2 minutes", "2分钟"),
+                                         UI_STR("5 minutes", "5分钟"),
+                                         UI_STR("10 minutes", "10分钟"),
+                                         UI_STR("15 minutes", "15分钟"),
+                                         UI_STR("30 minutes", "30分钟"),
+                                         UI_STR("1 hour", "1小时"),
+                                         UI_STR("6 hours", "6小时"),
+                                         UI_STR("12 hours", "12小时"),
+                                         UI_STR("24 hours", "24小时"),
+                                         UI_STR("At Boot Only", "仅开机时")};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Update Interval";
+    bannerOptions.message = UI_STR("Update Interval", "更新间隔");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 16;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -1614,11 +1666,25 @@ void menuHandler::GPSUpdateIntervalMenu()
 
 void menuHandler::GPSPositionBroadcastMenu()
 {
-    static const char *optionsArray[] = {"Back",     "1 minute", "90 seconds", "5 minutes", "15 minutes", "1 hour",
-                                         "2 hours",  "3 hours",  "4 hours",    "5 hours",   "6 hours",    "12 hours",
-                                         "18 hours", "24 hours", "36 hours",   "48 hours",  "72 hours"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"),
+                                         UI_STR("1 minute", "1分钟"),
+                                         UI_STR("90 seconds", "90秒"),
+                                         UI_STR("5 minutes", "5分钟"),
+                                         UI_STR("15 minutes", "15分钟"),
+                                         UI_STR("1 hour", "1小时"),
+                                         UI_STR("2 hours", "2小时"),
+                                         UI_STR("3 hours", "3小时"),
+                                         UI_STR("4 hours", "4小时"),
+                                         UI_STR("5 hours", "5小时"),
+                                         UI_STR("6 hours", "6小时"),
+                                         UI_STR("12 hours", "12小时"),
+                                         UI_STR("18 hours", "18小时"),
+                                         UI_STR("24 hours", "24小时"),
+                                         UI_STR("36 hours", "36小时"),
+                                         UI_STR("48 hours", "48小时"),
+                                         UI_STR("72 hours", "72小时")};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Broadcast Interval";
+    bannerOptions.message = UI_STR("Broadcast Interval", "广播间隔");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 17;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -1708,11 +1774,11 @@ void menuHandler::GPSPositionBroadcastMenu()
 
 void menuHandler::BluetoothToggleMenu()
 {
-    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("Enabled", "开启"), UI_STR("Disabled", "关闭")};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Toggle Bluetooth";
+    bannerOptions.message = UI_STR("Toggle Bluetooth", "蓝牙开关");
     if (currentResolution == ScreenResolution::UltraLow) {
-        bannerOptions.message = "Bluetooth";
+        bannerOptions.message = UI_STR("Bluetooth", "蓝牙");
     }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
@@ -1730,9 +1796,13 @@ void menuHandler::BluetoothToggleMenu()
 
 void menuHandler::BuzzerModeMenu()
 {
-    static const char *optionsArray[] = {"All Enabled", "All Disabled", "Notifications", "System Only", "DMs Only"};
+    static const char *optionsArray[] = {UI_STR("All Enabled", "全开"),
+                                         UI_STR("All Disabled", "全关"),
+                                         UI_STR("Notifications", "通知"),
+                                         UI_STR("System Only", "仅系统"),
+                                         UI_STR("DMs Only", "仅私信")};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Notification Sounds";
+    bannerOptions.message = UI_STR("Notification Sounds", "通知声音");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -1745,7 +1815,8 @@ void menuHandler::BuzzerModeMenu()
 
 void menuHandler::BrightnessPickerMenu()
 {
-    static const char *optionsArray[] = {"Back", "Low", "Medium", "High"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("Low", "低"), UI_STR("Medium", "中"),
+                                         UI_STR("High", "高")};
 
     // Get current brightness level to set initial selection
     int currentSelection = 1; // Default to Medium
@@ -1758,7 +1829,7 @@ void menuHandler::BrightnessPickerMenu()
     }
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Brightness";
+    bannerOptions.message = UI_STR("Brightness", "亮度");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -1793,7 +1864,7 @@ void menuHandler::BrightnessPickerMenu()
 
 void menuHandler::switchToMUIMenu()
 {
-    static const char *optionsArray[] = {"No", "Yes"};
+    static const char *optionsArray[] = {"No", UI_STR("Yes", "是")};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Switch to MUI?";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -1812,7 +1883,7 @@ void menuHandler::switchToMUIMenu()
 void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
 {
     static const ScreenColorOption colorOptions[] = {
-        {"Back", OptionsAction::Back},
+        {UI_STR("Back", "返回"), OptionsAction::Back},
         {"Default", OptionsAction::Select, ScreenColor(0, 0, 0, true)},
         {"Meshtastic Green", OptionsAction::Select, ScreenColor(0x67, 0xEA, 0x94)},
         {"Yellow", OptionsAction::Select, ScreenColor(255, 255, 128)},
@@ -1832,7 +1903,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     static std::array<const char *, colorCount> colorLabels{};
 
     auto bannerOptions = createStaticBannerOptions(
-        "Select Screen Color", colorOptions, colorLabels, [display](const ScreenColorOption &option, int) -> void {
+        UI_STR("Select Screen Color", "选择屏幕颜色"), colorOptions, colorLabels, [display](const ScreenColorOption &option, int) -> void {
             if (option.action == OptionsAction::Back) {
                 menuQueue = system_base_menu;
                 screen->runNow();
@@ -1914,17 +1985,17 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
 
 void menuHandler::rebootMenu()
 {
-    static const char *optionsArray[] = {"Back", "Confirm"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), "Confirm"};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Reboot Device?";
+    bannerOptions.message = UI_STR("Reboot Device?", "重启设备?");
     if (currentResolution == ScreenResolution::UltraLow) {
-        bannerOptions.message = "Reboot";
+        bannerOptions.message = UI_STR("Reboot", "重启");
     }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
-            IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
+            IF_SCREEN(screen->showSimpleBanner(UI_STR("Rebooting...", "正在重启..."), 0));
             nodeDB->saveToDisk();
             messageStore.saveToFlash();
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
@@ -1938,11 +2009,11 @@ void menuHandler::rebootMenu()
 
 void menuHandler::shutdownMenu()
 {
-    static const char *optionsArray[] = {"Back", "Confirm"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), "Confirm"};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Shutdown Device?";
+    bannerOptions.message = UI_STR("Shutdown Device?", "关机?");
     if (currentResolution == ScreenResolution::UltraLow) {
-        bannerOptions.message = "Shutdown";
+        bannerOptions.message = UI_STR("Shutdown", "关机");
     }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
@@ -1962,9 +2033,9 @@ void menuHandler::addFavoriteMenu()
 {
     const char *NODE_PICKER_TITLE;
     if (currentResolution == ScreenResolution::UltraLow) {
-        NODE_PICKER_TITLE = "Node Favorite";
+        NODE_PICKER_TITLE = UI_STR("Node Favorite", "节点收藏");
     } else {
-        NODE_PICKER_TITLE = "Node To Favorite";
+        NODE_PICKER_TITLE = UI_STR("Node To Favorite", "选择收藏节点");
     }
     screen->showNodePicker(NODE_PICKER_TITLE, 30000, [](uint32_t nodenum) -> void {
         LOG_WARN("Nodenum: %u", nodenum);
@@ -1976,9 +2047,9 @@ void menuHandler::addFavoriteMenu()
 void menuHandler::removeFavoriteMenu()
 {
 
-    static const char *optionsArray[] = {"Back", "Yes"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("Yes", "是")};
     BannerOverlayOptions bannerOptions;
-    std::string message = "Unfavorite This Node?\n";
+    std::string message = UI_STR("Unfavorite This Node?\n", "取消收藏该节点?\n");
     auto node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
     if (node && node->has_user) {
         message += sanitizeString(node->user.long_name).substr(0, 15);
@@ -1998,7 +2069,7 @@ void menuHandler::removeFavoriteMenu()
 
 void menuHandler::traceRouteMenu()
 {
-    screen->showNodePicker("Node to Trace", 30000, [](uint32_t nodenum) -> void {
+    screen->showNodePicker(UI_STR("Node to Trace", "选择追踪节点"), 30000, [](uint32_t nodenum) -> void {
         LOG_INFO("Menu: Node picker selected node 0x%08x, traceRouteModule=%p", nodenum, traceRouteModule);
         if (traceRouteModule) {
             traceRouteModule->startTraceRoute(nodenum);
@@ -2010,7 +2081,7 @@ void menuHandler::testMenu()
 {
 
     enum optionsNumbers { Back, NumberPicker, ShowChirpy };
-    static const char *optionsArray[4] = {"Back"};
+    static const char *optionsArray[4] = {UI_STR("Back", "返回")};
     static int optionsEnumArray[4] = {Back};
     int options = 1;
 
@@ -2051,9 +2122,9 @@ void menuHandler::wifiBaseMenu()
 {
     enum optionsNumbers { Back, Wifi_toggle };
 
-    static const char *optionsArray[] = {"Back", "WiFi Toggle"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("WiFi Toggle", "WiFi开关")};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "WiFi Menu";
+    bannerOptions.message = UI_STR("WiFi Menu", "WiFi菜单");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -2069,9 +2140,10 @@ void menuHandler::wifiToggleMenu()
 {
     enum optionsNumbers { Back, Wifi_disable, Wifi_enable };
 
-    static const char *optionsArray[] = {"Back", "WiFi Disabled", "WiFi Enabled"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("WiFi Disabled", "WiFi关闭"),
+                                         UI_STR("WiFi Enabled", "WiFi开启")};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "WiFi Actions";
+    bannerOptions.message = UI_STR("WiFi Actions", "WiFi操作");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     if (config.network.wifi_enabled == true)
@@ -2108,31 +2180,31 @@ void menuHandler::screenOptionsMenu()
 #endif
 
     enum optionsNumbers { Back, Brightness, ScreenColor, FrameToggles, DisplayUnits };
-    static const char *optionsArray[5] = {"Back"};
+    static const char *optionsArray[5] = {UI_STR("Back", "返回")};
     static int optionsEnumArray[5] = {Back};
     int options = 1;
 
     // Only show brightness for B&W displays
     if (hasSupportBrightness) {
-        optionsArray[options] = "Brightness";
+        optionsArray[options] = UI_STR("Brightness", "亮度");
         optionsEnumArray[options++] = Brightness;
     }
 
     // Only show screen color for TFT displays
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
     HAS_TFT || defined(HACKADAY_COMMUNICATOR)
-    optionsArray[options] = "Screen Color";
+    optionsArray[options] = UI_STR("Screen Color", "屏幕颜色");
     optionsEnumArray[options++] = ScreenColor;
 #endif
 
-    optionsArray[options] = "Frame Visibility";
+    optionsArray[options] = UI_STR("Frame Visibility", "框架可见性");
     optionsEnumArray[options++] = FrameToggles;
 
-    optionsArray[options] = "Display Units";
+    optionsArray[options] = UI_STR("Display Units", "显示单元");
     optionsEnumArray[options++] = DisplayUnits;
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Display Options";
+    bannerOptions.message = UI_STR("Display Options", "显示设置");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -2161,14 +2233,14 @@ void menuHandler::powerMenu()
 {
 
     enum optionsNumbers { Back, Reboot, Shutdown, MUI };
-    static const char *optionsArray[4] = {"Back"};
+    static const char *optionsArray[4] = {UI_STR("Back", "返回")};
     static int optionsEnumArray[4] = {Back};
     int options = 1;
 
-    optionsArray[options] = "Reboot";
+    optionsArray[options] = UI_STR("Reboot", "重启");
     optionsEnumArray[options++] = Reboot;
 
-    optionsArray[options] = "Shutdown";
+    optionsArray[options] = UI_STR("Shutdown", "关机");
     optionsEnumArray[options++] = Shutdown;
 
 #if HAS_TFT
@@ -2177,9 +2249,9 @@ void menuHandler::powerMenu()
 #endif
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Reboot / Shutdown";
+    bannerOptions.message = UI_STR("Reboot / Shutdown", "重启/关机");
     if (currentResolution == ScreenResolution::UltraLow) {
-        bannerOptions.message = "Power";
+        bannerOptions.message = UI_STR("Power", "电源");
     }
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
@@ -2204,7 +2276,7 @@ void menuHandler::powerMenu()
 
 void menuHandler::keyVerificationInitMenu()
 {
-    screen->showNodePicker("Node to Verify", 30000,
+    screen->showNodePicker(UI_STR("Node to Verify", "选择验证节点"), 30000,
                            [](uint32_t selected) -> void { keyVerificationModule->sendInitialRequest(selected); });
 }
 
@@ -2251,7 +2323,7 @@ void menuHandler::FrameToggles_menu()
         show_power,
         enumEnd
     };
-    static const char *optionsArray[enumEnd] = {"Finish"};
+    static const char *optionsArray[enumEnd] = {UI_STR("Finish", "完成")};
     static int optionsEnumArray[enumEnd] = {Finish};
     int options = 1;
 
@@ -2259,47 +2331,51 @@ void menuHandler::FrameToggles_menu()
     static int lastSelectedIndex = 0;
 
 #ifndef USE_EINK
-    optionsArray[options] = screen->isFrameHidden("nodelist_nodes") ? "Show Node Lists" : "Hide Node Lists";
+    optionsArray[options] = screen->isFrameHidden("nodelist_nodes") ? UI_STR("Show Node Lists", "显示节点列表") : UI_STR("Hide Node Lists", "隐藏节点列表");
     optionsEnumArray[options++] = nodelist_nodes;
 #else
-    optionsArray[options] = screen->isFrameHidden("nodelist_lastheard") ? "Show NL - Last Heard" : "Hide NL - Last Heard";
+    optionsArray[options] = screen->isFrameHidden("nodelist_lastheard") ? UI_STR("Show NL - Last Heard", "显示列表-最近收到") : UI_STR("Hide NL - Last Heard", "隐藏列表-最近收到");
     optionsEnumArray[options++] = nodelist_lastheard;
-    optionsArray[options] = screen->isFrameHidden("nodelist_hopsignal") ? "Show NL - Hops/Signal" : "Hide NL - Hops/Signal";
+    optionsArray[options] = screen->isFrameHidden("nodelist_hopsignal") ? UI_STR("Show NL - Hops/Signal", "显示列表-跳/信") : UI_STR("Hide NL - Hops/Signal", "隐藏列表-跳/信");
     optionsEnumArray[options++] = nodelist_hopsignal;
 #endif
 
 #if HAS_GPS
 #ifndef USE_EINK
-    optionsArray[options] = screen->isFrameHidden("nodelist_location") ? "Show Position Lists" : "Hide Position Lists";
+    optionsArray[options] = screen->isFrameHidden("nodelist_location") ? UI_STR("Show Position Lists", "显示位置列表")
+                                                                       : UI_STR("Hide Position Lists", "隐藏位置列表");
     optionsEnumArray[options++] = nodelist_location;
 #else
-    optionsArray[options] = screen->isFrameHidden("nodelist_distance") ? "Show NL - Distance" : "Hide NL - Distance";
+    optionsArray[options] = screen->isFrameHidden("nodelist_distance") ? UI_STR("Show NL - Distance", "显示列表-距离") : UI_STR("Hide NL - Distance", "隐藏列表-距离");
     optionsEnumArray[options++] = nodelist_distance;
-    optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? "Show NL - Bearings" : "Hide NL - Bearings";
+    optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? UI_STR("Show NL - Bearings", "显示列表-方位") : UI_STR("Hide NL - Bearings", "隐藏列表-方位");
     optionsEnumArray[options++] = nodelist_bearings;
 #endif
 
-    optionsArray[options] = screen->isFrameHidden("gps") ? "Show Position" : "Hide Position";
+    optionsArray[options] = screen->isFrameHidden("gps") ? UI_STR("Show Position", "显示位置")
+                                                         : UI_STR("Hide Position", "隐藏位置");
     optionsEnumArray[options++] = gps;
 #endif
 
-    optionsArray[options] = screen->isFrameHidden("lora") ? "Show LoRa" : "Hide LoRa";
+    optionsArray[options] = screen->isFrameHidden("lora") ? UI_STR("Show LoRa", "显示LoRa")
+                                                          : UI_STR("Hide LoRa", "隐藏LoRa");
     optionsEnumArray[options++] = lora;
 
-    optionsArray[options] = screen->isFrameHidden("clock") ? "Show Clock" : "Hide Clock";
+    optionsArray[options] = screen->isFrameHidden("clock") ? UI_STR("Show Clock", "显示时钟") : UI_STR("Hide Clock", "隐藏时钟");
     optionsEnumArray[options++] = clock;
 
-    optionsArray[options] = screen->isFrameHidden("show_favorites") ? "Show Favorites" : "Hide Favorites";
+    optionsArray[options] = screen->isFrameHidden("show_favorites") ? UI_STR("Show Favorites", "显示收藏") : UI_STR("Hide Favorites", "隐藏收藏");
     optionsEnumArray[options++] = show_favorites;
 
-    optionsArray[options] = moduleConfig.telemetry.environment_screen_enabled ? "Hide Telemetry" : "Show Telemetry";
+    optionsArray[options] = moduleConfig.telemetry.environment_screen_enabled ? UI_STR("Hide Telemetry", "隐藏遥测") : UI_STR("Show Telemetry", "显示遥测");
     optionsEnumArray[options++] = show_telemetry;
 
-    optionsArray[options] = moduleConfig.telemetry.power_screen_enabled ? "Hide Power" : "Show Power";
+    optionsArray[options] = moduleConfig.telemetry.power_screen_enabled ? UI_STR("Hide Power", "隐藏电源")
+                                                                        : UI_STR("Show Power", "显示电源");
     optionsEnumArray[options++] = show_power;
 
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Show/Hide Frames";
+    bannerOptions.message = UI_STR("Show/Hide Frames", "显示/隐藏页面");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
@@ -2373,9 +2449,9 @@ void menuHandler::DisplayUnits_menu()
 {
     enum optionsNumbers { Back, MetricUnits, ImperialUnits };
 
-    static const char *optionsArray[] = {"Back", "Metric", "Imperial"};
+    static const char *optionsArray[] = {UI_STR("Back", "返回"), UI_STR("Metric", "公制"), UI_STR("Imperial", "英制")};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = " Select display units";
+    bannerOptions.message = UI_STR("Select display units", "选择显示单位");
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
@@ -2524,7 +2600,7 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         DisplayUnits_menu();
         break;
     case throttle_message:
-        screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);
+        screen->showSimpleBanner(UI_STR("Too Many Attempts\nTry again in 60 seconds.", "尝试次数过多\n60秒后再试。"), 5000);
         break;
     case message_response_menu:
         messageResponseMenu();

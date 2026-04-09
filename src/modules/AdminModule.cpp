@@ -17,6 +17,7 @@
 #endif
 #include "Router.h"
 #include "configuration.h"
+#include "graphics/UiStrings.h"
 #include "main.h"
 #ifdef ARCH_NRF52
 #include "main.h"
@@ -428,7 +429,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
         LOG_INFO("Client requesting to enter DFU mode");
 #if HAS_SCREEN
-        IF_SCREEN(screen->showSimpleBanner("Device is rebooting\ninto DFU mode.", 0));
+        IF_SCREEN(screen->showSimpleBanner(UI_STR("Device is rebooting\ninto DFU mode.", "设备正在重启\n进入DFU模式。"), 0));
 #endif
 #if defined(ARCH_NRF52) || defined(ARCH_RP2040)
         enterDfuMode();
@@ -1316,7 +1317,7 @@ void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
-        screen->showSimpleBanner("Rebooting...", 0); // stays on screen
+        screen->showSimpleBanner(UI_STR("Rebooting...", "正在重启..."), 0); // stays on screen
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 

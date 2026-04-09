@@ -6,6 +6,7 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/UIRenderer.h"
+#include "graphics/UiStrings.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
 #include "modules/ExternalNotificationModule.h"
@@ -246,7 +247,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             hour %= 12;
             if (hour == 0)
                 hour = 12;
-            snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
+            snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? UI_STR("p", "下") : UI_STR("a", "上"));
         }
 
         if (show_date) {

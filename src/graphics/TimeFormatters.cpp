@@ -2,6 +2,7 @@
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
+#include "graphics/UiStrings.h"
 #include <cstring>
 
 bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int32_t *daysAgo)
@@ -87,9 +88,10 @@ void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
     else if (useTimestamp && agoSecs < 15 * SECONDS_IN_MINUTE) // Last 15 minutes
         snprintf(timeStr, maxLength, "%u minutes ago", agoSecs / SECONDS_IN_MINUTE);
     else if (useTimestamp && daysAgo == 0) // Today
-        snprintf(timeStr, maxLength, "Last seen: %02u:%02u", (unsigned int)timestampHours, (unsigned int)timestampMinutes);
+        snprintf(timeStr, maxLength, UI_STR("Last seen: %02u:%02u", "上次: %02u:%02u"), (unsigned int)timestampHours,
+                 (unsigned int)timestampMinutes);
     else if (useTimestamp && daysAgo == 1) // Yesterday
-        snprintf(timeStr, maxLength, "Seen yesterday");
+        snprintf(timeStr, maxLength, UI_STR("Seen yesterday", "昨日"));
     else if (useTimestamp && daysAgo > 1) // Last six months (capped by deltaToTimestamp method)
         snprintf(timeStr, maxLength, "%li days ago", (long)daysAgo);
     // -- if using time delta instead --
@@ -99,7 +101,7 @@ void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
     else if ((agoSecs / 60 / 60) < (730 * 6))
         snprintf(timeStr, maxLength, "%u hours ago", agoSecs / 60 / 60);
     else
-        snprintf(timeStr, maxLength, "unknown age");
+        snprintf(timeStr, maxLength, UI_STR("unknown age", "未知"));
 }
 
 void getUptimeStr(uint32_t uptimeMillis, const char *prefix, char *uptimeStr, uint8_t maxLength, bool includeSecs)

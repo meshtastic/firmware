@@ -15,6 +15,7 @@
 #include "main.h"
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"
+#include "graphics/UiStrings.h"
 
 SystemCommandsModule *systemCommandsModule;
 
@@ -47,7 +48,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         if (moduleConfig.external_notification.enabled && externalNotificationModule) {
             externalNotificationModule->setMute(!externalNotificationModule->getMute());
             IF_SCREEN(if (!externalNotificationModule->getMute()) externalNotificationModule->stopNow(); screen->showSimpleBanner(
-                externalNotificationModule->getMute() ? "Notifications\nDisabled" : "Notifications\nEnabled", 3000);)
+                externalNotificationModule->getMute() ? UI_STR("Notifications\nDisabled", "通知\n已关闭") : UI_STR("Notifications\nEnabled", "通知\n已开启"), 3000);)
         }
         return 0;
     // Bluetooth
@@ -58,24 +59,24 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 #if defined(ARDUINO_ARCH_NRF52)
         if (!config.bluetooth.enabled) {
             disableBluetooth();
-            IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF\nRebooting", 3000));
+            IF_SCREEN(screen->showSimpleBanner(UI_STR("Bluetooth OFF\nRebooting", "蓝牙关闭\n正在重启"), 3000));
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 2000;
         } else {
-            IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
+            IF_SCREEN(screen->showSimpleBanner(UI_STR("Bluetooth ON\nRebooting", "蓝牙开启\n正在重启"), 3000));
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         }
 #else
         if (!config.bluetooth.enabled) {
             disableBluetooth();
-            IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF", 3000));
+            IF_SCREEN(screen->showSimpleBanner(UI_STR("Bluetooth OFF", "蓝牙关闭"), 3000));
         } else {
-            IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
+            IF_SCREEN(screen->showSimpleBanner(UI_STR("Bluetooth ON\nRebooting", "蓝牙开启\n正在重启"), 3000));
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         }
 #endif
         return 0;
     case INPUT_BROKER_MSG_REBOOT:
-        IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
+        IF_SCREEN(screen->showSimpleBanner(UI_STR("Rebooting...", "正在重启..."), 0));
         nodeDB->saveToDisk();
 #if HAS_SCREEN
         messageStore.saveToFlash();
@@ -97,7 +98,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
             }
             gps->toggleGpsMode();
             const char *msg =
-                (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) ? "GPS Enabled" : "GPS Disabled";
+                (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) ? UI_STR("GPS Enabled", "GPS已开启") : UI_STR("GPS Disabled", "GPS已关闭");
             IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner(msg, 3000);)
         }
 #endif
@@ -106,9 +107,9 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     case INPUT_BROKER_SEND_PING:
         service->refreshLocalMeshNode();
         if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-            IF_SCREEN(screen->showSimpleBanner("Position\nSent", 3000));
+            IF_SCREEN(screen->showSimpleBanner(UI_STR("Position\nSent", "位置已发"), 3000));
         } else {
-            IF_SCREEN(screen->showSimpleBanner("Node Info\nSent", 3000));
+            IF_SCREEN(screen->showSimpleBanner(UI_STR("Node Info\nSent", "节点信息已发"), 3000));
         }
         return true;
     // Power control

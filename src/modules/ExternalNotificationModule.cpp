@@ -432,7 +432,8 @@ ExternalNotificationModule::ExternalNotificationModule()
 #ifdef HAS_NEOPIXEL
         pixels.begin(); // Initialise the pixel(s)
         pixels.clear(); // Set all pixel colors to 'off'
-        pixels.setBrightness(moduleConfig.ambient_lighting.current);
+        pixels.setBrightness(0);
+        pixels.show();
 #endif
     } else {
         LOG_INFO("External Notification Module Disabled");

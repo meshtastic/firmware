@@ -15,6 +15,7 @@
 #include "gps/RTC.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/NotificationRenderer.h"
 #include "graphics/emotes.h"
@@ -125,6 +126,10 @@ static NodeNum lastDest = NODENUM_BROADCAST;
 static uint8_t lastChannel = 0;
 static bool lastDestSet = false;
 
+static const char *kSelectDestinationLabel = UI_STR("[Select Destination]", "[选择目的地]");
+static const char *kFreeTextLabel = UI_STR("[-- Free Text --]", "[-- 自由输入 --]");
+static const char *kExitLabel = UI_STR("[Exit]", "[退出]");
+
 meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 
 CannedMessageModule *cannedMessageModule;
@@ -160,7 +165,7 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     // Upon activation, highlight "[Select Destination]"
     int selectDestination = 0;
     for (int i = 0; i < messagesCount; ++i) {
-        if (strcmp(messages[i], "[Select Destination]") == 0) {
+        if (strcmp(messages[i], kSelectDestinationLabel) == 0) {
             selectDestination = i;
             break;
         }
@@ -232,13 +237,13 @@ int CannedMessageModule::splitConfiguredMessages()
     const char *tempMessages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT + 3] = {0};
     int tempCount = 0;
     // Insert at position 0 (top)
-    tempMessages[tempCount++] = "[Select Destination]";
+    tempMessages[tempCount++] = kSelectDestinationLabel;
 #if defined(USE_VIRTUAL_KEYBOARD)
     // Add a "Free Text" entry at the top if using a touch screen virtual keyboard
-    tempMessages[tempCount++] = "[-- Free Text --]";
+    tempMessages[tempCount++] = kFreeTextLabel;
 #else
     if (osk_found && screen) {
-        tempMessages[tempCount++] = "[-- Free Text --]";
+        tempMessages[tempCount++] = kFreeTextLabel;
     }
 #endif
 
@@ -258,7 +263,7 @@ int CannedMessageModule::splitConfiguredMessages()
     }
 
     // Add [Exit] as the last entry
-    tempMessages[tempCount++] = "[Exit]";
+    tempMessages[tempCount++] = kExitLabel;
 
     // Copy to the member array
     for (int k = 0; k < tempCount; ++k) {
@@ -272,15 +277,15 @@ void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y,
 {
     if (graphics::currentResolution == graphics::ScreenResolution::High) {
         if (this->dest == NODENUM_BROADCAST) {
-            display->drawStringf(x, y, buffer, "To: #%s", channels.getName(this->channel));
+            display->drawStringf(x, y, buffer, UI_STR("To: #%s", "到: #%s"), channels.getName(this->channel));
         } else {
-            display->drawStringf(x, y, buffer, "To: @%s", getNodeName(this->dest));
+            display->drawStringf(x, y, buffer, UI_STR("To: @%s", "到: @%s"), getNodeName(this->dest));
         }
     } else {
         if (this->dest == NODENUM_BROADCAST) {
-            display->drawStringf(x, y, buffer, "To: #%.20s", channels.getName(this->channel));
+            display->drawStringf(x, y, buffer, UI_STR("To: #%.20s", "到: #%.20s"), channels.getName(this->channel));
         } else {
-            display->drawStringf(x, y, buffer, "To: @%s", getNodeName(this->dest));
+            display->drawStringf(x, y, buffer, UI_STR("To: @%s", "到: @%s"), getNodeName(this->dest));
         }
     }
 }
@@ -665,7 +670,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         const char *current = messages[currentMessageIndex];
 
         // [Select Destination] triggers destination selection UI
-        if (strcmp(current, "[Select Destination]") == 0) {
+        if (strcmp(current, kSelectDestinationLabel) == 0) {
             returnToCannedList = true;
             runState = CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
             destIndex = 0;
@@ -676,7 +681,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         }
 
         // [Exit] returns to the main/inactive screen
-        if (strcmp(current, "[Exit]") == 0) {
+        if (strcmp(current, kExitLabel) == 0) {
             // Set runState to inactive so we return to main UI
             runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             currentMessageIndex = -1;
@@ -691,7 +696,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
 
         // [Free Text] triggers the free text input (virtual keyboard)
 #if defined(USE_VIRTUAL_KEYBOARD)
-        if (strcmp(current, "[-- Free Text --]") == 0) {
+        if (strcmp(current, kFreeTextLabel) == 0) {
             runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
             requestFocus();
             UIFrameEvent e;
@@ -700,13 +705,15 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
             return true;
         }
 #else
-        if (strcmp(current, "[-- Free Text --]") == 0) {
+        if (strcmp(current, kFreeTextLabel) == 0) {
             if (osk_found && screen) {
                 char headerBuffer[64];
                 if (this->dest == NODENUM_BROADCAST) {
-                    snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
+                    snprintf(headerBuffer, sizeof(headerBuffer), UI_STR("To: #%s", "到: #%s"),
+                             channels.getName(this->channel));
                 } else {
-                    snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(this->dest));
+                    snprintf(headerBuffer, sizeof(headerBuffer), UI_STR("To: @%s", "到: @%s"),
+                             getNodeName(this->dest));
                 }
                 screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
                     if (!text.empty()) {
@@ -1250,7 +1257,7 @@ int32_t CannedMessageModule::runOnce()
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         } else {
-            if (strcmp(this->messages[this->currentMessageIndex], "[Select Destination]") == 0) {
+            if (strcmp(this->messages[this->currentMessageIndex], kSelectDestinationLabel) == 0) {
                 this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
                 return INT32_MAX;
             }
@@ -1298,7 +1305,7 @@ int32_t CannedMessageModule::runOnce()
         if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
             int selectDestination = 0;
             for (int i = 0; i < this->messagesCount; ++i) {
-                if (strcmp(this->messages[i], "[Select Destination]") == 0) {
+                if (strcmp(this->messages[i], kSelectDestinationLabel) == 0) {
                     selectDestination = i;
                     break;
                 }
@@ -1678,7 +1685,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
 
     // Header
     int titleY = 2;
-    String titleText = "Select Destination";
+    String titleText = UI_STR("Select Destination", "选择目的地");
     titleText += searchQuery.length() > 0 ? " [" + searchQuery + "]" : " [ ]";
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(display->getWidth() / 2, titleY, titleText);
@@ -1914,7 +1921,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
-        display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
+        display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL,
+                            UI_STR("Canned Message\nModule disabled.", "预设消息\n模块已禁用。"));
         return;
     }
 
@@ -1938,7 +1946,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
             uint16_t charsLeft =
                 meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
-            snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
+            snprintf(buffer, sizeof(buffer), UI_STR("%d left", "剩余 %d"), charsLeft);
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
 
@@ -2361,22 +2369,23 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
 
                 if (this->ack) {
                     if (this->lastSentNode == NODENUM_BROADCAST) {
-                        snprintf(buf, sizeof(buf), "Message sent to\n#%s\n\nSignal: %s",
-                                 (channelName && channelName[0]) ? channelName : "unknown", qualityLabel);
+                        snprintf(buf, sizeof(buf), UI_STR("Message sent to\n#%s\n\nSignal: %s", "消息已发送到\n#%s\n\n信号: %s"),
+                                 (channelName && channelName[0]) ? channelName : UI_STR("unknown", "未知"), qualityLabel);
                     } else {
-                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSignal: %s",
-                                 (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
+                        snprintf(buf, sizeof(buf), UI_STR("DM sent to\n@%s\n\nSignal: %s", "私信已发送给\n@%s\n\n信号: %s"),
+                                 (nodeName && nodeName[0]) ? nodeName : UI_STR("unknown", "未知"), qualityLabel);
                     }
                 } else if (isAck && !isFromDest) {
                     // Relay ACK banner
-                    snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)\n%s\n\nSignal: %s",
-                             (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
+                    snprintf(buf, sizeof(buf), UI_STR("DM Relayed\n(Status Unknown)\n%s\n\nSignal: %s", "私信已转发\n(状态未知)\n%s\n\n信号: %s"),
+                             (nodeName && nodeName[0]) ? nodeName : UI_STR("unknown", "未知"), qualityLabel);
                 } else {
                     if (this->lastSentNode == NODENUM_BROADCAST) {
-                        snprintf(buf, sizeof(buf), "Message failed to\n#%s",
-                                 (channelName && channelName[0]) ? channelName : "unknown");
+                        snprintf(buf, sizeof(buf), UI_STR("Message failed to\n#%s", "消息发送失败\n#%s"),
+                                 (channelName && channelName[0]) ? channelName : UI_STR("unknown", "未知"));
                     } else {
-                        snprintf(buf, sizeof(buf), "DM failed to\n@%s", (nodeName && nodeName[0]) ? nodeName : "unknown");
+                        snprintf(buf, sizeof(buf), UI_STR("DM failed to\n@%s", "私信发送失败\n@%s"),
+                                 (nodeName && nodeName[0]) ? nodeName : UI_STR("unknown", "未知"));
                     }
                 }
 
@@ -2426,7 +2435,8 @@ bool CannedMessageModule::saveProtoForModule()
  */
 void CannedMessageModule::installDefaultCannedMessageModuleConfig()
 {
-    strncpy(cannedMessageModuleConfig.messages, "Hi|Bye|Yes|No|Ok", sizeof(cannedMessageModuleConfig.messages));
+    strncpy(cannedMessageModuleConfig.messages, UI_STR("Hi|Bye|Yes|No|Ok", "你好|再见|是|否|好的"),
+            sizeof(cannedMessageModuleConfig.messages));
 }
 
 /**

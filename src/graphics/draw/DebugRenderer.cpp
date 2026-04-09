@@ -11,6 +11,7 @@
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -163,7 +164,7 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     int line = 1;
 
     // === Set Title
-    const char *titleStr = "WiFi";
+    const char *titleStr = UI_STR("WiFi", "WiFi");
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -171,12 +172,12 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     const char *wifiName = config.network.wifi_ssid;
 
     if (WiFi.status() != WL_CONNECTED) {
-        display->drawString(x, getTextPositions(display)[line++], "WiFi: Not Connected");
+        display->drawString(x, getTextPositions(display)[line++], UI_STR("WiFi: Not Connected", "WiFi:未连接"));
     } else {
-        display->drawString(x, getTextPositions(display)[line++], "WiFi: Connected");
+        display->drawString(x, getTextPositions(display)[line++], UI_STR("WiFi: Connected", "WiFi:已连接"));
 
         char rssiStr[32];
-        snprintf(rssiStr, sizeof(rssiStr), "RSSI: %d", WiFi.RSSI());
+        snprintf(rssiStr, sizeof(rssiStr), UI_STR("RSSI: %d", "RSSI:%d"), WiFi.RSSI());
         display->drawString(x, getTextPositions(display)[line++], rssiStr);
     }
 
@@ -194,16 +195,16 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     */
     if (WiFi.status() == WL_CONNECTED) {
         char ipStr[64];
-        snprintf(ipStr, sizeof(ipStr), "IP: %s", WiFi.localIP().toString().c_str());
+        snprintf(ipStr, sizeof(ipStr), UI_STR("IP: %s", "IP:%s"), WiFi.localIP().toString().c_str());
         display->drawString(x, getTextPositions(display)[line++], ipStr);
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
-        display->drawString(x, getTextPositions(display)[line++], "SSID Not Found");
+        display->drawString(x, getTextPositions(display)[line++], UI_STR("SSID Not Found", "SSID未找到"));
     } else if (WiFi.status() == WL_CONNECTION_LOST) {
-        display->drawString(x, getTextPositions(display)[line++], "Connection Lost");
+        display->drawString(x, getTextPositions(display)[line++], UI_STR("Connection Lost", "连接丢失"));
     } else if (WiFi.status() == WL_IDLE_STATUS) {
-        display->drawString(x, getTextPositions(display)[line++], "Idle ... Reconnecting");
+        display->drawString(x, getTextPositions(display)[line++], UI_STR("Idle ... Reconnecting", "空闲...重连"));
     } else if (WiFi.status() == WL_CONNECT_FAILED) {
-        display->drawString(x, getTextPositions(display)[line++], "Connection Failed");
+        display->drawString(x, getTextPositions(display)[line++], UI_STR("Connection Failed", "连接失败"));
     }
 #ifdef ARCH_ESP32
     else {
@@ -215,16 +216,16 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 #else
     else {
         char statusStr[32];
-        snprintf(statusStr, sizeof(statusStr), "Unknown status: %d", WiFi.status());
+        snprintf(statusStr, sizeof(statusStr), UI_STR("Unknown status: %d", "未知状态:%d"), WiFi.status());
         display->drawString(x, getTextPositions(display)[line++], statusStr);
     }
 #endif
 
     char ssidStr[64];
-    snprintf(ssidStr, sizeof(ssidStr), "SSID: %s", wifiName);
+    snprintf(ssidStr, sizeof(ssidStr), UI_STR("SSID: %s", "SSID:%s"), wifiName);
     display->drawString(x, getTextPositions(display)[line++], ssidStr);
 
-    display->drawString(x, getTextPositions(display)[line++], "URL: http://meshtastic.local");
+    display->drawString(x, getTextPositions(display)[line++], UI_STR("URL: http://meshtastic.local", "URL:meshtastic.local"));
 
     graphics::drawCommonFooter(display, x, y);
 
@@ -307,11 +308,11 @@ void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
         char timebuf[12];
 
         if (config.display.use_12h_clock) {
-            std::string meridiem = "am";
+            std::string meridiem = UI_STR("am", "上午");
             if (hour >= 12) {
                 if (hour > 12)
                     hour -= 12;
-                meridiem = "pm";
+                meridiem = UI_STR("pm", "下午");
             }
             if (hour == 00) {
                 hour = 12;
@@ -328,7 +329,7 @@ void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
 
     // Display Channel Utilization
     char chUtil[13];
-    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
+    snprintf(chUtil, sizeof(chUtil), UI_STR("ChUtil %2.0f%%", "信道 %2.0f%%"), airTime->channelUtilizationPercent());
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
 
 #if HAS_GPS
@@ -378,7 +379,8 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int line = 1;
 
     // === Set Title
-    const char *titleStr = (currentResolution == ScreenResolution::High) ? "LoRa Info" : "LoRa";
+    const char *titleStr =
+        (currentResolution == ScreenResolution::High) ? UI_STR("LoRa Info", "LoRa信息") : UI_STR("LoRa", "LoRa");
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -393,7 +395,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     if (currentResolution == ScreenResolution::UltraLow) {
         snprintf(shortnameble, sizeof(shortnameble), "%s", screen->ourId);
     } else {
-        snprintf(shortnameble, sizeof(shortnameble), "BLE: %s", screen->ourId);
+        snprintf(shortnameble, sizeof(shortnameble), UI_STR("BLE: %s", "BLE:%s"), screen->ourId);
     }
     int textWidth = display->getStringWidth(shortnameble);
     int nameX = (SCREEN_WIDTH - textWidth);
@@ -402,14 +404,13 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // === Second Row: Role ===
     auto role = DisplayFormatters::getDeviceRole(config.device.role);
     char device_role[25];
-    snprintf(device_role, sizeof(device_role), "Role: %s", role);
+    snprintf(device_role, sizeof(device_role), UI_STR("Role: %s", "角色:%s"), role);
     textWidth = display->getStringWidth(device_role);
     nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(nameX, getTextPositions(display)[line++], device_role);
 
     // === Third Row: Radio Preset ===
     auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
-
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
     if (region != nullptr) {
@@ -422,7 +423,6 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     textWidth = display->getStringWidth(regionradiopreset);
     nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(nameX, getTextPositions(display)[line++], regionradiopreset);
-
     // === Fourth Row: Frequency / ChanNum ===
     char frequencyslot[35];
     char freqStr[16];
@@ -432,13 +432,14 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         if (currentResolution == ScreenResolution::UltraLow) {
             snprintf(frequencyslot, sizeof(frequencyslot), "%sMHz", freqStr);
         } else {
-            snprintf(frequencyslot, sizeof(frequencyslot), "Freq: %sMHz", freqStr);
+            snprintf(frequencyslot, sizeof(frequencyslot), UI_STR("Freq: %sMHz", "频率:%sMHz"), freqStr);
         }
     } else {
         if (currentResolution == ScreenResolution::UltraLow) {
             snprintf(frequencyslot, sizeof(frequencyslot), "%sMHz (%d)", freqStr, config.lora.channel_num);
         } else {
-            snprintf(frequencyslot, sizeof(frequencyslot), "Freq/Ch: %sMHz (%d)", freqStr, config.lora.channel_num);
+            snprintf(frequencyslot, sizeof(frequencyslot), UI_STR("Freq/Ch: %sMHz (%d)", "频率/信道:%sMHz(%d)"), freqStr,
+                     config.lora.channel_num);
         }
     }
     size_t len = strlen(frequencyslot);
@@ -451,7 +452,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
 #if !defined(M5STACK_UNITC6L)
     // === Fifth Row: Channel Utilization ===
-    const char *chUtil = "ChUtil:";
+    const char *chUtil = UI_STR("ChUtil:", "信道:");
     char chUtilPercentage[10];
     snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
 
@@ -521,7 +522,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // === Set Title
-    const char *titleStr = "System";
+    const char *titleStr = UI_STR("System", "系统");
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -605,20 +606,20 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     #endif
     */
     // === Draw memory rows
-    drawUsageRow("Heap:", heapUsed, heapTotal, true);
+    drawUsageRow(UI_STR("Heap:", "堆内存:"), heapUsed, heapTotal, true);
 #ifdef ESP32
     if (psramUsed > 0) {
         line += 1;
-        drawUsageRow("PSRAM:", psramUsed, psramTotal);
+        drawUsageRow(UI_STR("PSRAM:", "PSRAM:"), psramUsed, psramTotal);
     }
     if (flashTotal > 0) {
         line += 1;
-        drawUsageRow("Flash:", flashUsed, flashTotal);
+        drawUsageRow(UI_STR("Flash:", "Flash:"), flashUsed, flashTotal);
     }
 #endif
     if (hasSD && sdTotal > 0) {
         line += 1;
-        drawUsageRow("SD:", sdUsed, sdTotal);
+        drawUsageRow(UI_STR("SD:", "SD:"), sdUsed, sdTotal);
     }
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -642,18 +643,19 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         if (lastDot != nullptr) {
             *lastDot = '\0';
         }
-        snprintf(appversionstr, sizeof(appversionstr), "Ver: %s", verbuf);
+        snprintf(appversionstr, sizeof(appversionstr), UI_STR("Ver: %s", "版本:%s"), verbuf);
     } else {
         if (lastDot) {
             size_t prefixLen = (size_t)(lastDot - verbuf);
-            snprintf(appversionstr_formatted, sizeof(appversionstr_formatted), "Ver: %.*s", (int)prefixLen, verbuf);
+            snprintf(appversionstr_formatted, sizeof(appversionstr_formatted), UI_STR("Ver: %.*s", "版本:%.*s"),
+                     (int)prefixLen, verbuf);
             strncat(appversionstr_formatted, " (", sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
             strncat(appversionstr_formatted, lastDot + 1, sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
             strncat(appversionstr_formatted, ")", sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
             strncpy(appversionstr, appversionstr_formatted, sizeof(appversionstr) - 1);
             appversionstr[sizeof(appversionstr) - 1] = '\0';
         } else {
-            snprintf(appversionstr, sizeof(appversionstr), "Ver: %s", verbuf);
+            snprintf(appversionstr, sizeof(appversionstr), UI_STR("Ver: %s", "版本:%s"), verbuf);
         }
     }
     int textWidth = display->getStringWidth(appversionstr);
@@ -663,7 +665,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
-        getUptimeStr(millis(), "Up", uptimeStr, sizeof(uptimeStr));
+        getUptimeStr(millis(), UI_STR("Up", "运行"), uptimeStr, sizeof(uptimeStr));
         textWidth = display->getStringWidth(uptimeStr);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
@@ -675,24 +677,24 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
         // Determine if narrow or wide screen
         if (currentResolution == ScreenResolution::High) {
-            clientWord = "Client";
+            clientWord = UI_STR("Client", "客户端");
         } else {
-            clientWord = "App";
+            clientWord = UI_STR("App", "应用");
         }
-        snprintf(api_state, sizeof(api_state), "No %ss Connected", clientWord);
+        snprintf(api_state, sizeof(api_state), UI_STR("No %ss Connected", "无%s连接"), clientWord);
 
         if (service->api_state == service->STATE_BLE) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (BLE)", clientWord);
+            snprintf(api_state, sizeof(api_state), UI_STR("%s Connected (BLE)", "%s已连接(BLE)"), clientWord);
         } else if (service->api_state == service->STATE_WIFI) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (WiFi)", clientWord);
+            snprintf(api_state, sizeof(api_state), UI_STR("%s Connected (WiFi)", "%s已连接(WiFi)"), clientWord);
         } else if (service->api_state == service->STATE_SERIAL) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (Serial)", clientWord);
+            snprintf(api_state, sizeof(api_state), UI_STR("%s Connected (Serial)", "%s已连接(串口)"), clientWord);
         } else if (service->api_state == service->STATE_PACKET) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (Internal)", clientWord);
+            snprintf(api_state, sizeof(api_state), UI_STR("%s Connected (Internal)", "%s已连接(内部)"), clientWord);
         } else if (service->api_state == service->STATE_HTTP) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (HTTP)", clientWord);
+            snprintf(api_state, sizeof(api_state), UI_STR("%s Connected (HTTP)", "%s已连接(HTTP)"), clientWord);
         } else if (service->api_state == service->STATE_ETH) {
-            snprintf(api_state, sizeof(api_state), "%s Connected (Ethernet)", clientWord);
+            snprintf(api_state, sizeof(api_state), UI_STR("%s Connected (Ethernet)", "%s已连接(以太网)"), clientWord);
         }
         if (api_state[0] != '\0') {
             display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],
@@ -736,10 +738,11 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
         display->drawXbm(iconX, iconY, chirpy_width, chirpy_height, chirpy);
     }
 
-    int textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("Hello") / 2);
-    display->drawString(textX, getTextPositions(display)[line++], "Hello");
-    textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("World!") / 2);
-    display->drawString(textX, getTextPositions(display)[line++], "World!");
+    int textX =
+        (display->getWidth() / 2) - textX_offset - (display->getStringWidth(UI_STR("Hello", "你好")) / 2);
+    display->drawString(textX, getTextPositions(display)[line++], UI_STR("Hello", "你好"));
+    textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth(UI_STR("World!", "世界")) / 2);
+    display->drawString(textX, getTextPositions(display)[line++], UI_STR("World!", "世界"));
 }
 
 } // namespace DebugRenderer

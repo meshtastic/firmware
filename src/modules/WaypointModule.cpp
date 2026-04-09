@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/CompassRenderer.h"
+#include "graphics/UiStrings.h"
 
 #if HAS_SCREEN
 #include "gps/RTC.h"
@@ -87,7 +88,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     int line = 1;
 
     // === Set Title
-    const char *titleStr = "Waypoint";
+    const char *titleStr = UI_STR("Waypoint", "航点");
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);

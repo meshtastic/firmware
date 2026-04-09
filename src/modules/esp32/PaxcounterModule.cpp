@@ -5,6 +5,7 @@
 #include "PaxcounterModule.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include "graphics/images.h"
 #include <assert.h>
 
@@ -125,7 +126,7 @@ void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     int line = 1;
 
     // === Set Title
-    const char *titleStr = "Pax";
+    const char *titleStr = UI_STR("Pax", "人流");
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -139,8 +140,8 @@ void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
     display->drawStringf(display->getWidth() / 2 + x, graphics::getTextPositions(display)[line++], buffer,
-                         "WiFi: %d\nBLE: %d\nUptime: %ds", count_from_libpax.wifi_count, count_from_libpax.ble_count,
-                         millis() / 1000);
+                         UI_STR("WiFi: %d\nBLE: %d\nUptime: %ds", "WiFi:%d\nBLE:%d\n运行:%ds"),
+                         count_from_libpax.wifi_count, count_from_libpax.ble_count, millis() / 1000);
     graphics::drawCommonFooter(display, x, y);
 }
 #endif // HAS_SCREEN

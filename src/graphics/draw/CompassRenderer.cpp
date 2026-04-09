@@ -7,6 +7,7 @@
 #include "gps/GeoCoord.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/UiStrings.h"
 #include <cmath>
 
 namespace graphics
@@ -59,13 +60,14 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setColor(BLACK);
+    const char *northLabel = UI_STR("N", "北");
     if (currentResolution == ScreenResolution::High) {
-        display->fillRect(north.x - 8, north.y - 1, display->getStringWidth("N") + 3, FONT_HEIGHT_SMALL - 6);
+        display->fillRect(north.x - 8, north.y - 1, display->getStringWidth(northLabel) + 3, FONT_HEIGHT_SMALL - 6);
     } else {
-        display->fillRect(north.x - 4, north.y - 1, display->getStringWidth("N") + 2, FONT_HEIGHT_SMALL - 6);
+        display->fillRect(north.x - 4, north.y - 1, display->getStringWidth(northLabel) + 2, FONT_HEIGHT_SMALL - 6);
     }
     display->setColor(WHITE);
-    display->drawString(north.x, north.y - 3, "N");
+    display->drawString(north.x, north.y - 3, northLabel);
 }
 
 void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian)
