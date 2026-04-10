@@ -1,3 +1,4 @@
+#include "DebugConfiguration.h"
 #include "configuration.h"
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
@@ -71,7 +72,8 @@ int32_t AirQualityTelemetryModule::runOnce()
     }
 
     if (firstTime) {
-        // This is the first time the OSThread library has called this function, so do some setup
+        // This is the first time the OSThread library has called this function, so
+        // do some setup
         firstTime = false;
 
         if (moduleConfig.telemetry.air_quality_enabled) {
@@ -256,9 +258,11 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
-        LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, pm100_standard=%i", sender,
-                 t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
-                 t->variant.air_quality_metrics.pm100_standard);
+        if (t->variant.air_quality_metrics.has_pm10_standard)
+            LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, "
+                     "pm100_standard=%i",
+                     sender, t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
+                     t->variant.air_quality_metrics.pm100_standard);
 
         // TODO - Decide what to do with these
         // LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",

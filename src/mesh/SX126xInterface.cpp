@@ -6,6 +6,10 @@
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
+#if defined(ARCH_ESP32)
+#include <driver/rtc_io.h>
+#include <esp_sleep.h>
+#endif
 
 #include "Throttle.h"
 
@@ -171,6 +175,14 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", result);
     }
 
+    // Undocumented SX1262 register patch recommended by Heltec/Semtech for improved RX sensitivity.
+    // Sets bit 0 of register 0x8B5.
+    if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) == RADIOLIB_ERR_NONE) {
+        LOG_INFO("Applied SX1262 register 0x8B5 patch for RX improvement");
+    } else {
+        LOG_WARN("Failed to apply SX1262 register 0x8B5 patch for RX improvement");
+    }
+
 #if 0
     // Read/write a register we are not using (only used for FSK mode) to test SPI comms
     uint8_t crcLSB = 0;
@@ -328,6 +340,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag();
 #endif
 }
 
@@ -368,6 +381,26 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
     return receiveDetected(lora.getIrqFlags(), RADIOLIB_SX126X_IRQ_HEADER_VALID, RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
 }
 
+template <typename T> void SX126xInterface<T>::resetAGC()
+{
+#ifdef SX126X_AGC_RESET
+    // Safety: don't reset while TX/RX activity is in progress.
+    if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
+        return;
+
+    LOG_DEBUG("SX126x AGC reset: standby + warm sleep");
+    setStandby();
+    lora.sleep(true);
+    lora.standby();
+
+    // Restore receive gain mode that may be lost across analog frontend reset.
+    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    startReceive();
+#else
+    RadioLibInterface::resetAGC();
+#endif
+}
+
 template <typename T> bool SX126xInterface<T>::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
@@ -387,15 +420,10 @@ template <typename T> bool SX126xInterface<T>::sleep()
     digitalWrite(SX126X_POWER_EN, LOW);
 #endif
 
-#if defined(USE_GC1109_PA)
-    /*
-     * Do not switch the power on and off frequently.
-     * After turning off LORA_PA_EN, the power consumption has dropped to the uA level.
-     *  // digitalWrite(LORA_PA_POWER, LOW);
-     */
-    digitalWrite(LORA_PA_EN, LOW);
-    digitalWrite(LORA_PA_TX_EN, LOW);
+#if HAS_LORA_FEM
+    loraFEMInterface.setSleepModeEnable();
 #endif
+
     return true;
 }
 

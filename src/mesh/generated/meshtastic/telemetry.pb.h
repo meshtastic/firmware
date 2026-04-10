@@ -371,6 +371,24 @@ typedef struct _meshtastic_LocalStats {
     int32_t noise_floor;
 } meshtastic_LocalStats;
 
+/* Traffic management statistics for mesh network optimization */
+typedef struct _meshtastic_TrafficManagementStats {
+    /* Total number of packets inspected by traffic management */
+    uint32_t packets_inspected;
+    /* Number of position packets dropped due to deduplication */
+    uint32_t position_dedup_drops;
+    /* Number of NodeInfo requests answered from cache */
+    uint32_t nodeinfo_cache_hits;
+    /* Number of packets dropped due to rate limiting */
+    uint32_t rate_limit_drops;
+    /* Number of unknown/undecryptable packets dropped */
+    uint32_t unknown_packet_drops;
+    /* Number of packets with hop_limit exhausted for local-only broadcast */
+    uint32_t hop_exhausted_packets;
+    /* Number of times router hop preservation was applied */
+    uint32_t router_hops_preserved;
+} meshtastic_TrafficManagementStats;
+
 /* Health telemetry metrics */
 typedef struct _meshtastic_HealthMetrics {
     /* Heart rate (beats per minute) */
@@ -430,6 +448,8 @@ typedef struct _meshtastic_Telemetry {
         meshtastic_HealthMetrics health_metrics;
         /* Linux host metrics */
         meshtastic_HostMetrics host_metrics;
+        /* Traffic management statistics */
+        meshtastic_TrafficManagementStats traffic_management_stats;
     } variant;
 } meshtastic_Telemetry;
 
@@ -607,6 +627,7 @@ extern "C" {
 #define meshtastic_Telemetry_local_stats_tag     6
 #define meshtastic_Telemetry_health_metrics_tag  7
 #define meshtastic_Telemetry_host_metrics_tag    8
+#define meshtastic_Telemetry_traffic_management_stats_tag 9
 #define meshtastic_Nau7802Config_zeroOffset_tag  1
 #define meshtastic_Nau7802Config_calibrationFactor_tag 2
 #define meshtastic_SEN5XState_last_cleaning_time_tag 1
@@ -720,6 +741,17 @@ X(a, STATIC,   SINGULAR, INT32,    noise_floor,      15)
 #define meshtastic_LocalStats_CALLBACK NULL
 #define meshtastic_LocalStats_DEFAULT NULL
 
+#define meshtastic_TrafficManagementStats_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   packets_inspected,   1) \
+X(a, STATIC,   SINGULAR, UINT32,   position_dedup_drops,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   nodeinfo_cache_hits,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   rate_limit_drops,   4) \
+X(a, STATIC,   SINGULAR, UINT32,   unknown_packet_drops,   5) \
+X(a, STATIC,   SINGULAR, UINT32,   hop_exhausted_packets,   6) \
+X(a, STATIC,   SINGULAR, UINT32,   router_hops_preserved,   7)
+#define meshtastic_TrafficManagementStats_CALLBACK NULL
+#define meshtastic_TrafficManagementStats_DEFAULT NULL
+
 #define meshtastic_HealthMetrics_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, UINT32,   heart_bpm,         1) \
 X(a, STATIC,   OPTIONAL, UINT32,   spO2,              2) \
@@ -748,7 +780,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,air_quality_metrics,variant.air_qual
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,power_metrics,variant.power_metrics),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,local_stats,variant.local_stats),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,health_metrics,variant.health_metrics),   7) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,host_metrics,variant.host_metrics),   8)
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,host_metrics,variant.host_metrics),   8) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,traffic_management_stats,variant.traffic_management_stats),   9)
 #define meshtastic_Telemetry_CALLBACK NULL
 #define meshtastic_Telemetry_DEFAULT NULL
 #define meshtastic_Telemetry_variant_device_metrics_MSGTYPE meshtastic_DeviceMetrics
@@ -758,6 +791,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,host_metrics,variant.host_metrics), 
 #define meshtastic_Telemetry_variant_local_stats_MSGTYPE meshtastic_LocalStats
 #define meshtastic_Telemetry_variant_health_metrics_MSGTYPE meshtastic_HealthMetrics
 #define meshtastic_Telemetry_variant_host_metrics_MSGTYPE meshtastic_HostMetrics
+#define meshtastic_Telemetry_variant_traffic_management_stats_MSGTYPE meshtastic_TrafficManagementStats
 
 #define meshtastic_Nau7802Config_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    zeroOffset,        1) \
@@ -780,6 +814,7 @@ extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
 extern const pb_msgdesc_t meshtastic_PowerMetrics_msg;
 extern const pb_msgdesc_t meshtastic_AirQualityMetrics_msg;
 extern const pb_msgdesc_t meshtastic_LocalStats_msg;
+extern const pb_msgdesc_t meshtastic_TrafficManagementStats_msg;
 extern const pb_msgdesc_t meshtastic_HealthMetrics_msg;
 extern const pb_msgdesc_t meshtastic_HostMetrics_msg;
 extern const pb_msgdesc_t meshtastic_Telemetry_msg;
@@ -792,6 +827,7 @@ extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 #define meshtastic_PowerMetrics_fields &meshtastic_PowerMetrics_msg
 #define meshtastic_AirQualityMetrics_fields &meshtastic_AirQualityMetrics_msg
 #define meshtastic_LocalStats_fields &meshtastic_LocalStats_msg
+#define meshtastic_TrafficManagementStats_fields &meshtastic_TrafficManagementStats_msg
 #define meshtastic_HealthMetrics_fields &meshtastic_HealthMetrics_msg
 #define meshtastic_HostMetrics_fields &meshtastic_HostMetrics_msg
 #define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
@@ -810,6 +846,7 @@ extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 #define meshtastic_PowerMetrics_size             81
 #define meshtastic_SEN5XState_size               27
 #define meshtastic_Telemetry_size                272
+#define meshtastic_TrafficManagementStats_size   42
 
 #ifdef __cplusplus
 } /* extern "C" */

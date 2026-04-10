@@ -29,12 +29,13 @@ class HttpAPI : public PhoneAPI
   public:
     HttpAPI() { api_type = TYPE_HTTP; }
 
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
+
   private:
     // Nothing here yet
 
   protected:
-    /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
 };
 
 class PiWebServerThread

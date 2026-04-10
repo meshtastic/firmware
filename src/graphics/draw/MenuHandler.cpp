@@ -559,7 +559,7 @@ void menuHandler::messageResponseMenu()
     // If viewing ALL chats, hide “Mute Chat”
     if (mode != graphics::MessageRenderer::ThreadMode::ALL && mode != graphics::MessageRenderer::ThreadMode::DIRECT) {
         const uint8_t chIndex = (threadChannel != 0) ? (uint8_t)threadChannel : channels.getPrimaryIndex();
-        auto &chan = channels.getByIndex(chIndex);
+        const auto &chan = channels.getByIndex(chIndex);
 
         optionsArray[options] = chan.settings.module_settings.is_muted ? UI_STR("Unmute Channel", "取消静音")
                                                                        : UI_STR("Mute Channel", "静音频道");
@@ -852,7 +852,7 @@ void menuHandler::messageViewModeMenu()
     // Gather unique peers
     auto dms = messageStore.getDirectMessages();
     std::vector<uint32_t> uniquePeers;
-    for (auto &m : dms) {
+    for (const auto &m : dms) {
         uint32_t peer = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
         if (peer != nodeDB->getNodeNum() && std::find(uniquePeers.begin(), uniquePeers.end(), peer) == uniquePeers.end())
             uniquePeers.push_back(peer);
@@ -2380,14 +2380,13 @@ void menuHandler::wifiToggleMenu()
 void menuHandler::screenOptionsMenu()
 {
     // Check if brightness is supported
-    bool hasSupportBrightness = false;
-#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
-    hasSupportBrightness = true;
-#endif
-
 #if defined(T_DECK)
     // TDeck Doesn't seem to support brightness at all, at least not reliably
-    hasSupportBrightness = false;
+    bool hasSupportBrightness = false;
+#elif defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
+    bool hasSupportBrightness = true;
+#else
+    bool hasSupportBrightness = false;
 #endif
 
     enum optionsNumbers { Back, Brightness, ScreenColor, FrameToggles, DisplayUnits, MessageBubbles };
@@ -2532,7 +2531,7 @@ void menuHandler::frameTogglesMenu()
         nodelist_hopsignal,
         nodelist_distance,
         nodelist_bearings,
-        gps,
+        gps_position,
         lora,
         clock,
         show_favorites,
@@ -2572,7 +2571,7 @@ void menuHandler::frameTogglesMenu()
 
     optionsArray[options] = screen->isFrameHidden("gps") ? UI_STR("Show Position", "显示位置")
                                                          : UI_STR("Hide Position", "隐藏位置");
-    optionsEnumArray[options++] = gps;
+    optionsEnumArray[options++] = gps_position;
 #endif
 
     optionsArray[options] = screen->isFrameHidden("lora") ? UI_STR("Show LoRa", "显示LoRa")
@@ -2641,7 +2640,7 @@ void menuHandler::frameTogglesMenu()
             screen->toggleFrameVisibility("nodelist_bearings");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
-        } else if (selected == gps) {
+        } else if (selected == gps_position) {
             screen->toggleFrameVisibility("gps");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();

@@ -223,7 +223,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         // This delta value works on all platforms
         timeStartMsec = now;
         zeroOffsetSecs = tv->tv_sec;
-        // If this platform has a setable RTC, set it
+        // If this platform has a settable RTC, set it
 #ifdef RV3028_RTC
         if (rtc_found.address == RV3028_RTC) {
             Melopero_RV3028 rtc;
@@ -312,7 +312,7 @@ const char *RtcName(RTCQuality quality)
  * @param t The time to potentially set the RTC to.
  * @return True if the RTC was set to the provided time, false otherwise.
  */
-RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
 {
     /* Convert to unix time
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
@@ -402,7 +402,7 @@ time_t gm_mktime(const struct tm *tm)
 #if !MESHTASTIC_EXCLUDE_TZ
     time_t result = 0;
 
-    // First, get us to the start of tm->year, by calcuating the number of days since the Unix epoch.
+    // First, get us to the start of tm->year, by calculating the number of days since the Unix epoch.
     int year = 1900 + tm->tm_year; // tm_year is years since 1900
     int year_minus_one = year - 1;
     int days_before_this_year = 0;

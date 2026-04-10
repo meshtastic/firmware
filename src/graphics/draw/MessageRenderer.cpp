@@ -6,7 +6,6 @@
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
-#include "configuration.h"
 #include "gps/RTC.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
@@ -21,7 +20,6 @@
 
 // External declarations
 extern bool hasUnreadMessage;
-extern meshtastic_DeviceState devicestate;
 extern graphics::Screen *screen;
 
 // Use new EmoteFont system
@@ -53,7 +51,7 @@ static inline size_t utf8CharLen(uint8_t c)
 }
 
 // Remove variation selectors (FE0F) and skin tone modifiers from emoji so they match your labels
-std::string normalizeEmoji(const std::string &s)
+static std::string normalizeEmoji(const std::string &s)
 {
     std::string out;
     for (size_t i = 0; i < s.size();) {
@@ -86,6 +84,7 @@ uint32_t pauseStart = 0;
 bool waitingToReset = false;
 bool scrollStarted = false;
 static bool didReset = false;
+static constexpr int MESSAGE_BLOCK_GAP = 6;
 
 void scrollUp()
 {
@@ -417,6 +416,66 @@ static inline int getRenderedLineWidth(OLEDDisplay *display, const std::string &
     return totalWidth;
 }
 
+struct MessageBlock {
+    size_t start;
+    size_t end;
+    bool mine;
+};
+
+static int getDrawnLinePixelBottom(int lineTopY, const std::string &line, bool isHeaderLine)
+{
+    if (isHeaderLine) {
+        return lineTopY + (FONT_HEIGHT_SMALL - 1);
+    }
+
+    int tallest = FONT_HEIGHT_SMALL;
+    for (size_t i = 0; i < line.length();) {
+        size_t consumed = 0;
+        int emoteIdx = matchEmoteAt(line.c_str() + i, &consumed);
+        if (emoteIdx >= 0) {
+            tallest = std::max(tallest, static_cast<int>(emoteFont.h));
+            break;
+        }
+        i += (consumed > 0) ? consumed : utf8CharLen(static_cast<uint8_t>(line[i]));
+    }
+
+    const int lineHeight = std::max(FONT_HEIGHT_SMALL, tallest);
+    const int iconTop = lineTopY + (lineHeight - tallest) / 2;
+
+    return iconTop + tallest - 1;
+}
+
+static std::vector<MessageBlock> buildMessageBlocks(const std::vector<bool> &isHeaderVec, const std::vector<bool> &isMineVec)
+{
+    std::vector<MessageBlock> blocks;
+    if (isHeaderVec.empty())
+        return blocks;
+
+    size_t start = 0;
+    bool mine = isMineVec[0];
+
+    for (size_t i = 1; i < isHeaderVec.size(); ++i) {
+        if (isHeaderVec[i]) {
+            MessageBlock b;
+            b.start = start;
+            b.end = i - 1;
+            b.mine = mine;
+            blocks.push_back(b);
+
+            start = i;
+            mine = isMineVec[i];
+        }
+    }
+
+    MessageBlock last;
+    last.start = start;
+    last.end = isHeaderVec.size() - 1;
+    last.mine = mine;
+    blocks.push_back(last);
+
+    return blocks;
+}
+
 static void drawMessageScrollbar(OLEDDisplay *display, int visibleHeight, int totalHeight, int scrollOffset, int startY)
 {
     if (totalHeight <= visibleHeight)
@@ -476,9 +535,18 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     constexpr int LEFT_MARGIN = 2;
     constexpr int RIGHT_MARGIN = 2;
     constexpr int SCROLLBAR_WIDTH = 3;
+    constexpr int BUBBLE_PAD_X = 3;
+    constexpr int BUBBLE_PAD_Y = 4;
+    constexpr int BUBBLE_RADIUS = 4;
+    constexpr int BUBBLE_MIN_W = 24;
+    constexpr int BUBBLE_TEXT_INDENT = 2;
 
-    const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN;
+    // Check if bubbles are enabled
+    const bool showBubbles = config.display.enable_message_bubbles;
+    const int textIndent = showBubbles ? (BUBBLE_PAD_X + BUBBLE_TEXT_INDENT) : LEFT_MARGIN;
 
+    // Derived widths
+    const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - (showBubbles ? (BUBBLE_PAD_X * 2) : 0);
     const int rightTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - SCROLLBAR_WIDTH;
 
     // Title string depending on mode
@@ -541,7 +609,28 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         char chanType[32] = "";
         if (currentMode == ThreadMode::ALL) {
             if (m.dest == NODENUM_BROADCAST) {
-                snprintf(chanType, sizeof(chanType), "#%s", channels.getName(m.channelIndex));
+                const char *name = channels.getName(m.channelIndex);
+                if (currentResolution == ScreenResolution::Low || currentResolution == ScreenResolution::UltraLow) {
+                    if (strcmp(name, "ShortTurbo") == 0)
+                        name = "ShortT";
+                    else if (strcmp(name, "ShortSlow") == 0)
+                        name = "ShortS";
+                    else if (strcmp(name, "ShortFast") == 0)
+                        name = "ShortF";
+                    else if (strcmp(name, "MediumSlow") == 0)
+                        name = "MedS";
+                    else if (strcmp(name, "MediumFast") == 0)
+                        name = "MedF";
+                    else if (strcmp(name, "LongSlow") == 0)
+                        name = "LongS";
+                    else if (strcmp(name, "LongFast") == 0)
+                        name = "LongF";
+                    else if (strcmp(name, "LongTurbo") == 0)
+                        name = "LongT";
+                    else if (strcmp(name, "LongMod") == 0)
+                        name = "LongM";
+                }
+                snprintf(chanType, sizeof(chanType), "#%s", name);
             } else {
                 snprintf(chanType, sizeof(chanType), "(DM)");
             }
@@ -608,8 +697,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 
         // Shrink Sender name if needed
-        int availWidth = SCREEN_WIDTH - display->getStringWidth(timeBuf) - display->getStringWidth(chanType) -
-                         display->getStringWidth(" @...") - 10;
+        int availWidth = (mine ? rightTextWidth : leftTextWidth) - display->getStringWidth(timeBuf) -
+                         display->getStringWidth(chanType) - display->getStringWidth("   @...");
         if (availWidth < 0)
             availWidth = 0;
 
@@ -661,6 +750,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     cachedLines = allLines;
     cachedHeights = calculateLineHeights(cachedLines, isHeader);
 
+    std::vector<MessageBlock> blocks = buildMessageBlocks(isHeader, isMine);
+
     // Scrolling logic (unchanged)
     int totalHeight = 0;
     for (size_t i = 0; i < cachedHeights.size(); ++i)
@@ -708,12 +799,127 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int finalScroll = (int)scrollY;
     int yOffset = -finalScroll + getTextPositions(display)[1];
+    const int contentTop = getTextPositions(display)[1];
+    const int contentBottom = scrollBottom; // already excludes nav line
+    const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
+    const int bubbleGapY = std::max(1, MESSAGE_BLOCK_GAP / 2);
+
+    std::vector<int> lineTop;
+    lineTop.resize(cachedLines.size());
+    {
+        int acc = 0;
+        for (size_t i = 0; i < cachedLines.size(); ++i) {
+            lineTop[i] = yOffset + acc;
+            acc += cachedHeights[i];
+        }
+    }
+
+    // Draw bubbles (only if enabled)
+    if (showBubbles) {
+        for (size_t bi = 0; bi < blocks.size(); ++bi) {
+            const auto &b = blocks[bi];
+            if (b.start >= cachedLines.size() || b.end >= cachedLines.size() || b.start > b.end)
+                continue;
+
+            int visualTop = lineTop[b.start];
+
+            int topY;
+            if (isHeader[b.start]) {
+                // Header start
+                constexpr int BUBBLE_PAD_TOP_HEADER = 1; // try 1 or 2
+                topY = visualTop - BUBBLE_PAD_TOP_HEADER;
+            } else {
+                // Body start
+                bool thisLineHasEmote = false;
+                for (size_t ci = 0; ci < cachedLines[b.start].length();) {
+                    size_t consumed = 0;
+                    int emoteIdx = matchEmoteAt(cachedLines[b.start].c_str() + ci, &consumed);
+                    if (emoteIdx >= 0) {
+                        thisLineHasEmote = true;
+                        break;
+                    }
+                    ci += (consumed > 0) ? consumed : utf8CharLen(static_cast<uint8_t>(cachedLines[b.start][ci]));
+                }
+                if (thisLineHasEmote) {
+                    constexpr int EMOTE_PADDING_ABOVE = 4;
+                    visualTop -= EMOTE_PADDING_ABOVE;
+                }
+                topY = visualTop - BUBBLE_PAD_Y;
+            }
+            int visualBottom = getDrawnLinePixelBottom(lineTop[b.end], cachedLines[b.end], isHeader[b.end]);
+            int bottomY = visualBottom + BUBBLE_PAD_Y;
+
+            if (bi + 1 < blocks.size()) {
+                int nextHeaderIndex = (int)blocks[bi + 1].start;
+                int nextTop = lineTop[nextHeaderIndex];
+                int maxBottom = nextTop - 1 - bubbleGapY;
+                if (bottomY > maxBottom)
+                    bottomY = maxBottom;
+            }
+
+            if (bottomY <= topY + 2)
+                continue;
+
+            if (bottomY < contentTop || topY > contentBottom - 1)
+                continue;
+
+            int maxLineW = 0;
+
+            for (size_t i = b.start; i <= b.end; ++i) {
+                int w = 0;
+                if (isHeader[i]) {
+                    w = display->getStringWidth(cachedLines[i].c_str());
+                    if (b.mine)
+                        w += 12; // room for ACK/NACK/relay mark
+                } else {
+                    w = getRenderedLineWidth(display, cachedLines[i]);
+                }
+                if (w > maxLineW)
+                    maxLineW = w;
+            }
+
+            int bubbleW = std::max(BUBBLE_MIN_W, maxLineW + (textIndent * 2));
+            int bubbleH = (bottomY - topY) + 1;
+            int bubbleX = 0;
+            if (b.mine) {
+                bubbleX = rightEdge - bubbleW;
+            } else {
+                bubbleX = x;
+            }
+            if (bubbleX < x)
+                bubbleX = x;
+            if (bubbleX + bubbleW > rightEdge)
+                bubbleW = std::max(1, rightEdge - bubbleX);
+
+            // Draw rounded rectangle bubble
+            if (bubbleW > BUBBLE_RADIUS * 2 && bubbleH > BUBBLE_RADIUS * 2) {
+                const int r = BUBBLE_RADIUS;
+                const int bx = bubbleX;
+                const int by = topY;
+                const int bw = bubbleW;
+                const int bh = bubbleH;
+
+                // Draw the 4 corner arcs using drawCircleQuads
+                display->drawCircleQuads(bx + r, by + r, r, 0x2);                   // Top-left
+                display->drawCircleQuads(bx + bw - r - 1, by + r, r, 0x1);          // Top-right
+                display->drawCircleQuads(bx + r, by + bh - r - 1, r, 0x4);          // Bottom-left
+                display->drawCircleQuads(bx + bw - r - 1, by + bh - r - 1, r, 0x8); // Bottom-right
+
+                // Draw the 4 edges between corners
+                display->drawHorizontalLine(bx + r, by, bw - 2 * r);          // Top edge
+                display->drawHorizontalLine(bx + r, by + bh - 1, bw - 2 * r); // Bottom edge
+                display->drawVerticalLine(bx, by + r, bh - 2 * r);            // Left edge
+                display->drawVerticalLine(bx + bw - 1, by + r, bh - 2 * r);   // Right edge
+            } else if (bubbleW > 1 && bubbleH > 1) {
+                // Fallback to simple rectangle for very small bubbles
+                display->drawRect(bubbleX, topY, bubbleW, bubbleH);
+            }
+        }
+    } // end if (showBubbles)
 
     // Render visible lines
+    int lineY = yOffset;
     for (size_t i = 0; i < cachedLines.size(); ++i) {
-        int lineY = yOffset;
-        for (size_t j = 0; j < i; ++j)
-            lineY += cachedHeights[j];
 
         if (lineY > -cachedHeights[i] && lineY < scrollBottom) {
             if (isHeader[i]) {
@@ -722,13 +928,27 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 int headerX;
                 if (isMine[i]) {
                     // push header left to avoid overlap with scrollbar
-                    headerX = SCREEN_WIDTH - w - SCROLLBAR_WIDTH - RIGHT_MARGIN;
+                    headerX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - w - (showBubbles ? textIndent : 0);
                     if (headerX < LEFT_MARGIN)
                         headerX = LEFT_MARGIN;
                 } else {
-                    headerX = x;
+                    headerX = x + textIndent;
                 }
                 display->drawString(headerX, lineY, cachedLines[i].c_str());
+
+                // Draw underline just under header text
+                int underlineY = lineY + FONT_HEIGHT_SMALL;
+
+                int underlineW = w;
+                int maxW = rightEdge - headerX;
+                if (maxW < 0)
+                    maxW = 0;
+                if (underlineW > maxW)
+                    underlineW = maxW;
+
+                for (int px = 0; px < underlineW; ++px) {
+                    display->setPixel(headerX + px, underlineY);
+                }
 
                 // Draw ACK/NACK mark for our own messages
                 if (isMine[i]) {
@@ -747,11 +967,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     // AckStatus::NONE → show nothing
                 }
 
-                // Draw underline just under header text
-                int underlineY = lineY + FONT_HEIGHT_SMALL;
-                for (int px = 0; px < w; ++px) {
-                    display->setPixel(headerX + px, underlineY);
-                }
             } else {
                 // Render message line
                 if (isMine[i]) {
@@ -767,12 +982,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 }
             }
         }
+
+        lineY += cachedHeights[i];
     }
-    int totalContentHeight = totalHeight;
-    int visibleHeight = usableHeight;
 
     // Draw scrollbar
-    drawMessageScrollbar(display, visibleHeight, totalContentHeight, finalScroll, getTextPositions(display)[1]);
+    drawMessageScrollbar(display, usableHeight, totalHeight, finalScroll, getTextPositions(display)[1]);
     graphics::drawCommonHeader(display, x, y, titleStr);
     graphics::drawCommonFooter(display, x, y);
 }
@@ -869,6 +1084,7 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines,
     for (size_t idx = 0; idx < lines.size(); ++idx) {
         const auto &line = lines[idx];
         const int baseHeight = FONT_HEIGHT_SMALL;
+        int lineHeight = baseHeight;
 
         // Detect if THIS line or NEXT line contains an emote
         bool hasEmote = lineContainsEmote(line);
@@ -878,8 +1094,6 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines,
         if (idx + 1 < lines.size()) {
             nextHasEmote = lineContainsEmote(lines[idx + 1]);
         }
-
-        int lineHeight = baseHeight;
 
         if (isHeaderVec[idx]) {
             // Header line spacing
@@ -932,7 +1146,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 
         // Banner logic
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
-        char longName[48] = "???";
+        char longName[48] = "?";
         if (node && node->user.long_name) {
             strncpy(longName, node->user.long_name, sizeof(longName) - 1);
             longName[sizeof(longName) - 1] = '\0';

@@ -42,7 +42,7 @@ USER root
 
 RUN apk --no-cache add \
         shadow libstdc++ libbsd libgpiod yaml-cpp libusb \
-        i2c-tools libuv libx11 libinput libxkbcommon \
+        i2c-tools libuv libx11 libinput libxkbcommon sdl2 \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \

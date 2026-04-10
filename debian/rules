@@ -9,7 +9,10 @@
 PIO_ENV:=\
 	PLATFORMIO_CORE_DIR=pio/core \
 	PLATFORMIO_LIBDEPS_DIR=pio/libdeps \
-	PLATFORMIO_PACKAGES_DIR=pio/packages
+	PLATFORMIO_PACKAGES_DIR=pio/packages \
+	PLATFORMIO_SETTING_ENABLE_TELEMETRY=0 \
+	PLATFORMIO_SETTING_CHECK_PLATFORMIO_INTERVAL=3650 \
+	PLATFORMIO_SETTING_CHECK_PRUNE_SYSTEM_THRESHOLD=10240
 
 # Raspbian armhf builds should be compatible with armv6-hardfloat
 # https://www.valvers.com/open-software/raspberry-pi/bare-metal-programming-in-c-part-1/#rpi1-compiler-flags

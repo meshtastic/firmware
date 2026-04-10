@@ -210,6 +210,12 @@ void InkHUD::InkHUD::prevApplet()
     windowManager->prevApplet();
 }
 
+// Returns the currently active applet
+InkHUD::Applet *InkHUD::InkHUD::getActiveApplet()
+{
+    return windowManager->getActiveApplet();
+}
+
 // Show the menu (on the the focused tile)
 // The applet previously displayed there will be restored once the menu closes
 void InkHUD::InkHUD::openMenu()

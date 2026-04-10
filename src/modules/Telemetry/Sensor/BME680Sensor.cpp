@@ -8,6 +8,10 @@
 #include "SPILock.h"
 #include "TelemetrySensor.h"
 
+#if __has_include(<Adafruit_BME680.h>)
+#include <cmath>
+#endif
+
 BME680Sensor::BME680Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BME680, "BME680") {}
 
 #if __has_include(<bsec2.h>)
@@ -96,7 +100,6 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.temperature = bme680->readTemperature();
     measurement->variant.environment_metrics.relative_humidity = bme680->readHumidity();
     measurement->variant.environment_metrics.barometric_pressure = bme680->readPressure() / 100.0F;
-    measurement->variant.environment_metrics.gas_resistance = bme680->readGas() / 1000.0;
 
 #endif
     return true;

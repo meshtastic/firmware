@@ -38,11 +38,13 @@ uint32_t Default::getConfiguredOrDefault(uint32_t configured, uint32_t defaultVa
 uint32_t Default::getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes)
 {
     // If we are a router, we don't scale the value. It's already significantly higher.
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER)
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)
         return getConfiguredOrDefaultMs(configured, defaultValue);
 
     // Additionally if we're a tracker or sensor, we want priority to send position and telemetry
-    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_SENSOR, meshtastic_Config_DeviceConfig_Role_TRACKER))
+    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_SENSOR, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER))
         return getConfiguredOrDefaultMs(configured, defaultValue);
 
     return getConfiguredOrDefaultMs(configured, defaultValue) * congestionScalingCoefficient(numOnlineNodes);

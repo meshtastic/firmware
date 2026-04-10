@@ -5,6 +5,7 @@
 #include "NodeStatus.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
@@ -148,7 +149,7 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
 
         // Strip the public key if the user is licensed
         if (u.is_licensed && u.public_key.size > 0) {
-            u.public_key.bytes[0] = 0;
+            memset(u.public_key.bytes, 0, sizeof(u.public_key.bytes));
             u.public_key.size = 0;
         }
 
@@ -160,6 +161,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
 
         LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);
         lastSentToMesh = millis();
+        if (transmitHistory)
+            transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
         return allocDataProtobuf(u);
     }
 }

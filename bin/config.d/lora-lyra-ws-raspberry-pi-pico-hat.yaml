@@ -1,0 +1,25 @@
+# For use with Armbian luckfox-lyra // luckfox-lyra-plus
+# Enable overlay 'luckfox-lyra-plus-spi0-cs0_rmio13-spidev' with armbian-config
+# Waveshare LoRa HAT for Raspberry Pi Pico
+# https://www.waveshare.com/wiki/Pico-LoRa-SX1262
+Lora:
+  Module: sx1262
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  spidev: spidev0.0
+  CS: # GPIO0_B5
+    pin: 13
+    gpiochip: 0
+    line: 13
+  IRQ: # GPIO1_C2
+    pin: 50
+    gpiochip: 1
+    line: 18
+  Busy: # GPIO0_B4
+    pin: 12
+    gpiochip: 0
+    line: 12
+  Reset: # GPIO0_A2
+    pin: 2
+    gpiochip: 0
+    line: 2

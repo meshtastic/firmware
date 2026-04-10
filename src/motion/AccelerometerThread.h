@@ -10,6 +10,9 @@
 #ifdef HAS_BMA423
 #include "BMA423Sensor.h"
 #endif
+#ifdef HAS_BMI270
+#include "BMI270Sensor.h"
+#endif
 #include "BMM150Sensor.h"
 #include "BMX160Sensor.h"
 #include "ICM20948Sensor.h"

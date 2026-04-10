@@ -922,7 +922,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (settings->userTiles.maxCount > 1)
             items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
-        if (settings->joystick.enabled)
+        if (settings->joystick.enabled && !inkhud->twoWayRocker)
             items.push_back(MenuItem("Align Joystick", MenuAction::ALIGN_JOYSTICK, MenuPage::EXIT));
         items.push_back(MenuItem("Notifications", MenuAction::TOGGLE_NOTIFICATIONS, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.notifications));
@@ -1759,7 +1759,7 @@ void InkHUD::MenuApplet::populateRecipientPage()
 
     for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
         // Get the channel, and check if it's enabled
-        meshtastic_Channel &channel = channels.getByIndex(i);
+        const meshtastic_Channel &channel = channels.getByIndex(i);
         if (!channel.has_settings || channel.role == meshtastic_Channel_Role_DISABLED)
             continue;
 
@@ -2004,7 +2004,7 @@ void InkHUD::MenuApplet::sendText(NodeNum dest, ChannelIndex channel, const char
     service->sendToMesh(p, RX_SRC_LOCAL, true); // Send to mesh, cc to phone
 }
 
-// Free up any heap mmemory we'd used while selecting / sending canned messages
+// Free up any heap memory we'd used while selecting / sending canned messages
 void InkHUD::MenuApplet::freeCannedMessageResources()
 {
     cm.selectedMessageItem = nullptr;

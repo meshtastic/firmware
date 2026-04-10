@@ -74,6 +74,7 @@ class InkHUD
 
     void nextApplet();
     void prevApplet();
+    NicheGraphics::InkHUD::Applet *getActiveApplet();
     void openMenu();
     void openAlignStick();
     void openKeyboard();

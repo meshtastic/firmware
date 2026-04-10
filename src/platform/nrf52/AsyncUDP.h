@@ -31,6 +31,7 @@ class AsyncUDP : public Print, private concurrency::OSThread
   private:
     EthernetUDP udp;
     uint16_t localPort;
+    volatile bool isSending = false;
     std::function<void(AsyncUDPPacket)> _onPacket;
     virtual int32_t runOnce() override;
 };
@@ -38,7 +39,7 @@ class AsyncUDP : public Print, private concurrency::OSThread
 class AsyncUDPPacket
 {
   public:
-    AsyncUDPPacket(EthernetUDP &source);
+    explicit AsyncUDPPacket(EthernetUDP &source);
 
     IPAddress remoteIP();
     uint16_t length();

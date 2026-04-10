@@ -42,7 +42,7 @@ jobs:
           sudo mk-build-deps --install --remove --tool='apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends --yes' debian/control
 
       - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
+        uses: crazy-max/ghaction-import-gpg@v7
         with:
           gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
         id: gpg
@@ -64,7 +64,7 @@ jobs:
           PKG_VERSION: ${{ steps.version.outputs.deb }}
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-debian-${{ steps.version.outputs.deb }}~${{ inputs.series }}-src
           overwrite: true
