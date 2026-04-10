@@ -598,6 +598,10 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     const bool applyNotificationBorderTheme = isTFTColoringEnabled();
     const bool applyActionMenuTheme = applyNotificationBorderTheme && alertBannerOptions > 0;
 
+    if (applyNotificationBorderTheme) {
+        clearTFTColorRegions();
+    }
+
     // Draw Box
     display->setColor(BLACK);
     display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
