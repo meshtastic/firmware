@@ -49,11 +49,19 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
                                                                          MODEM_PRESET_END};
 
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST, meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW, MODEM_PRESET_END};
+
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST, MODEM_PRESET_END};
+
 // Region profiles: bundle preset list + regulatory parameters shared across regions
 // presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle, override slot
-const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 0, 0, 0};
-const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 0, 0, 0};
-const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 0, 0, 0};
+const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 1, 1, 0};
+const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 1, 1, 0};
+const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1, 0};
+const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.375F, false, false, 0, 10, 10, 0};
+const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1, 1};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr)                   \
     {                                                                                                                            \
@@ -229,9 +237,23 @@ const RegionInfo regions[] = {
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_STD),
 
     /*
+        EU 866MHz band (Band no. 46b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD)
+        Gives 4 channels at 865.7/866.3/866.9/867.5 MHz, 400 kHz gap plus 37.5 kHz padding between channels, 27 dBm,
+        duty cycle 2.5% (mobile) or 10% (fixed) https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006D0771(01)-20250123
+    */
+    RDEF(EU_866, 865.6f, 867.6f, 2.5, 27, false, false, PROFILE_LITE),
+
+    /*
+        EU 868MHz band: 3 channels at 869.410/869.4625/869.577 MHz
+        Channel centres at 869.442/869.525/869.608 MHz,
+        10.4 kHz padding on channels, 27 dBm, duty cycle 10%
+    */
+    RDEF(NARROW_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_NARROW),
+
+    /*
         This needs to be last. Same as US.
     */
-    RDEF(UNSET, 902.0f, 928.0f, 100, 30, false, false, PROFILE_UNDEF)
+    RDEF(UNSET, 902.0f, 928.0f, 100, 30, false, false, PROFILE_UNDEF),
 
 };
 
@@ -529,6 +551,23 @@ const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
     for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != code; r++)
         ;
     return r;
+}
+
+/**
+ * Get duty cycle for current region. EU_866: 10% for routers, 2.5% for mobile.
+ */
+float getEffectiveDutyCycle()
+{
+    if (myRegion->code == meshtastic_Config_LoRaConfig_RegionCode_EU_866) {
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+            return 10.0f;
+        } else {
+            return 2.5f;
+        }
+    }
+    // For all other regions, return the standard duty cycle
+    return myRegion->dutyCycle;
 }
 
 uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool received)

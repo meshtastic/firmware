@@ -22,11 +22,18 @@ struct RegionProfile {
     uint8_t overrideSlot;     // a per-region override slot for if we need to fix it in place
 };
 
+/**
+ * Get the effective duty cycle for the current region based on device role.
+ * For EU_866, returns 10% for fixed devices (ROUTER, ROUTER_LATE) and 2.5% for mobile devices.
+ * For other regions, returns the standard duty cycle.
+ */
+extern float getEffectiveDutyCycle();
+
 extern const RegionProfile PROFILE_STD;
 extern const RegionProfile PROFILE_EU868;
 extern const RegionProfile PROFILE_UNDEF;
-// extern const RegionProfile  PROFILE_LITE;
-// extern const RegionProfile  PROFILE_NARROW;
+extern const RegionProfile PROFILE_LITE;
+extern const RegionProfile PROFILE_NARROW;
 // extern const RegionProfile  PROFILE_HAM;
 
 // Map from old region names to new region enums

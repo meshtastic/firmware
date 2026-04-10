@@ -179,7 +179,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 #endif
             config.lora.tx_enabled = true;
             initRegion();
-            if (myRegion->dutyCycle < 100) {
+            if (getEffectiveDutyCycle() < 100) {
                 config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
             }
 
