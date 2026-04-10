@@ -76,7 +76,6 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     void closeSession(const char *reason, bool notifyPeer);
     void reapChildIfExited();
 
-    uint32_t allocTxSeq();
     void rememberSentFrame(meshtastic_DMShell_OpCode op, uint32_t sessionId, uint32_t seq, const uint8_t *payload,
                            size_t payloadLen, uint32_t cols, uint32_t rows, uint32_t ackSeq, uint32_t flags);
     void pruneSentFrames(uint32_t ackSeq);
