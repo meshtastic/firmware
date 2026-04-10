@@ -1501,10 +1501,6 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int sideClearPadding = arrowOffset + arrowMaxWidth + 1;
     const int clearX = max(0, rectX - sideClearPadding);
     const int clearWidth = min(SCREEN_WIDTH - clearX, rectWidth + (sideClearPadding * 2));
-    const bool drawCompactHiddenBar = !navBarVisible;
-
-    const int bgX = (applyTFTColorRoles && !drawCompactHiddenBar) ? clearX : rectX;
-    const int bgWidth = (applyTFTColorRoles && !drawCompactHiddenBar) ? clearWidth : rectWidth;
 
     // Clear background and draw border
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
@@ -1516,8 +1512,8 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setColor(BLACK);
     if (applyTFTColorRoles) {
         setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, navBgColor);
-        registerTFTColorRegion(TFTColorRole::HeaderStatus, bgX, rectY, bgWidth, rectHeight);
-        display->fillRect(bgX, rectY, bgWidth, rectHeight);
+        registerTFTColorRegion(TFTColorRole::HeaderStatus, rectX, rectY, rectWidth, rectHeight);
+        display->fillRect(rectX, rectY, rectWidth, rectHeight);
     } else {
         // Keep legacy OLED behavior untouched.
         display->fillRect(rectX + 1, rectY, rectWidth - 2, rectHeight - 2);
@@ -1613,21 +1609,11 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 
     // Knock the corners off the square
-    if (isTFTColoringEnabled()) {
-        // Full TFT styling only
-        // This won't compile because I did not commit drawNavigation
-        // setTFTColorRole(TFTColorRole::drawNavigation, TFTPalette::Black, TFTPalette::Black);
-        // registerTFTColorRegion(TFTColorRole::drawNavigation, rectX, rectY, 1, 1);
-        // registerTFTColorRegion(TFTColorRole::drawNavigation, rectX + rectWidth - 1, rectY, 1, 1);
-        display->fillRect(rectX, rectY, 1, 1);
-        display->fillRect(rectX + rectWidth - 1, rectY, 1, 1);
-    } else {
-        // monochrome styling only
-        display->setColor(BLACK);
-        display->drawRect(rectX, rectY, 1, 1);
-        display->drawRect(rectX + rectWidth - 1, rectY, 1, 1);
-        display->setColor(WHITE);
-    }
+    // Works for both TFT and Monochrome: just draw black pixels in the corners to mask them out
+    display->setColor(BLACK);
+    display->drawRect(rectX, rectY, 1, 1);
+    display->drawRect(rectX + rectWidth - 1, rectY, 1, 1);
+    display->setColor(WHITE);
 }
 
 void UIRenderer::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
