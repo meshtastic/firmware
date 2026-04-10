@@ -165,18 +165,30 @@ void esp32Setup()
 // #define APP_WATCHDOG_SECS 45
 #define APP_WATCHDOG_SECS 90
 
-#ifdef CONFIG_IDF_TARGET_ESP32C6
-    esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
-    wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
-    wdt_config->trigger_panic = true;
-    res = esp_task_wdt_init(wdt_config);
-    assert(res == ESP_OK);
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+    // IDF 5.1+ uses esp_task_wdt_reconfigure to handle pre-initialized TWDT
+    esp_task_wdt_config_t wdt_config;
+    wdt_config.timeout_ms = APP_WATCHDOG_SECS * 1000;
+    wdt_config.trigger_panic = true;
+    res = esp_task_wdt_reconfigure(&wdt_config);
+    if (res == ESP_ERR_INVALID_STATE) {
+        // TWDT not yet initialized, initialize it now
+        res = esp_task_wdt_init(&wdt_config);
+    }
+    if (res != ESP_OK) {
+        LOG_WARN("Failed to (re)configure watchdog timer: 0x%x", res);
+    }
 #else
+    // IDF < 5.1: use legacy init, TWDT not pre-initialized by the framework
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
-    assert(res == ESP_OK);
+    if (res != ESP_OK) {
+        LOG_WARN("Failed to initialize watchdog timer: 0x%x", res);
+    }
 #endif
     res = esp_task_wdt_add(NULL);
-    assert(res == ESP_OK);
+    if (res != ESP_OK) {
+        LOG_WARN("Failed to add task to watchdog timer: 0x%x", res);
+    }
 
 #if HAS_32768HZ
     enableSlowCLK();

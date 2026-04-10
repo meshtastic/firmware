@@ -401,7 +401,9 @@ static void WiFiEvent(WiFiEvent_t event)
             WiFi.disconnect(false, true);
             syslog.disable();
             needReconnect = true;
-            wifiReconnect->setIntervalFromNow(1000);
+            if (wifiReconnect) {
+                wifiReconnect->setIntervalFromNow(1000);
+            }
         }
         break;
     case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
@@ -431,7 +433,9 @@ static void WiFiEvent(WiFiEvent_t event)
             WiFi.disconnect(false, true);
             syslog.disable();
             needReconnect = true;
-            wifiReconnect->setIntervalFromNow(1000);
+            if (wifiReconnect) {
+                wifiReconnect->setIntervalFromNow(1000);
+            }
         }
         break;
     case ARDUINO_EVENT_WPS_ER_SUCCESS:
