@@ -153,6 +153,15 @@ void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t wid
 void clearTFTColorRegions()
 {
     colorRegionCount = 0;
+    for (size_t i = 0; i < MAX_TFT_COLOR_REGIONS; ++i) {
+        colorRegions[i].enabled = false;
+        colorRegions[i].x = 0;
+        colorRegions[i].y = 0;
+        colorRegions[i].width = 0;
+        colorRegions[i].height = 0;
+        colorRegions[i].onColorBe = 0;
+        colorRegions[i].offColorBe = 0;
+    }
 }
 
 uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool isset, uint16_t defaultOnColor, uint16_t defaultOffColor)
