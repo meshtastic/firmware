@@ -7,6 +7,10 @@
 #include "TDeckProKeyboard.h"
 #elif defined(T_LORA_PAGER)
 #include "TLoraPagerKeyboard.h"
+#elif defined(M5STACK_CARDPUTER_ADV)
+#include "CardputerKeyboard.h"
+#elif defined(HACKADAY_COMMUNICATOR)
+#include "HackadayCommunicatorKeyboard.h"
 #else
 #include "TCA8418Keyboard.h"
 #endif
@@ -20,6 +24,10 @@ KbI2cBase::KbI2cBase(const char *name)
       TCAKeyboard(*(new TDeckProKeyboard()))
 #elif defined(T_LORA_PAGER)
       TCAKeyboard(*(new TLoraPagerKeyboard()))
+#elif defined(M5STACK_CARDPUTER_ADV)
+      TCAKeyboard(*(new CardputerKeyboard()))
+#elif defined(HACKADAY_COMMUNICATOR)
+      TCAKeyboard(*(new HackadayCommunicatorKeyboard()))
 #else
       TCAKeyboard(*(new TCA8418Keyboard()))
 #endif
