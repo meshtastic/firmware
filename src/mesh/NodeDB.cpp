@@ -819,7 +819,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
-#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION)
+#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION) || defined(PCA_LED_NOTIFICATION)
     moduleConfig.external_notification.enabled = true;
 #endif
 #if defined(PIN_BUZZER)
