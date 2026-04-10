@@ -2,6 +2,7 @@
 #if HAS_SCREEN
 #include "ClockRenderer.h"
 #include "Default.h"
+#include "DisplayFormatters.h"
 #include "GPS.h"
 #include "MenuHandler.h"
 #include "MeshRadio.h"
@@ -117,6 +118,8 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"US", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_US},
         {"EU_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_433},
         {"EU_868", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_868},
+        {"EU_866", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_866},
+        {"EU_868_NARROW", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NARROW_868},
         {"CN", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_CN},
         {"JP", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_JP},
         {"ANZ", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ANZ},
@@ -140,6 +143,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"KZ_863", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_KZ_863},
         {"NP_865", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NP_865},
         {"BR_902", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_BR_902},
+
     };
 
     constexpr size_t regionCount = sizeof(regionOptions) / sizeof(regionOptions[0]);
@@ -315,42 +319,64 @@ void menuHandler::FrequencySlotPicker()
     screen->showOverlayBanner(bannerOptions);
 }
 
+// Maximum presets any region can have + 1 for Back
+static constexpr int MAX_PRESET_OPTIONS = 16;
+
+static BannerOverlayOptions buildRegionPresetBanner()
+{
+    // Static storage reused each call — safe because the banner is shown immediately after.
+    static const char *optionsArray[MAX_PRESET_OPTIONS];
+    static int optionsEnumArray[MAX_PRESET_OPTIONS];
+    static char presetLabelBuf[MAX_PRESET_OPTIONS][12]; // scratch space for name copies
+    int count = 0;
+
+    optionsArray[count] = "Back";
+    optionsEnumArray[count++] = -1;
+
+    if (myRegion && myRegion->profile) {
+        const meshtastic_Config_LoRaConfig_ModemPreset *presets = myRegion->getAvailablePresets();
+        size_t numPresets = myRegion->getNumPresets();
+        for (size_t i = 0; i < numPresets && count < MAX_PRESET_OPTIONS; ++i) {
+            const char *name = DisplayFormatters::getModemPresetDisplayName(presets[i], false, true);
+            strncpy(presetLabelBuf[count], name, sizeof(presetLabelBuf[count]) - 1);
+            presetLabelBuf[count][sizeof(presetLabelBuf[count]) - 1] = '\0';
+            optionsArray[count] = presetLabelBuf[count];
+            optionsEnumArray[count++] = static_cast<int>(presets[i]);
+        }
+    }
+
+    int initialSelection = 0;
+    for (int i = 1; i < count; ++i) {
+        if (optionsEnumArray[i] == static_cast<int>(config.lora.modem_preset)) {
+            initialSelection = i;
+            break;
+        }
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Radio Preset";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = static_cast<uint8_t>(count);
+    bannerOptions.InitialSelected = initialSelection;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == -1) {
+            menuHandler::menuQueue = menuHandler::LoraMenu;
+            screen->runNow();
+            return;
+        }
+        config.lora.use_preset = true;
+        config.lora.modem_preset = static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(selected);
+        config.lora.channel_num = 0;        // Reset to default channel for the preset
+        config.lora.override_frequency = 0; // Clear any custom frequency
+        service->reloadConfig(SEGMENT_CONFIG);
+    };
+    return bannerOptions;
+}
+
 void menuHandler::radioPresetPicker()
 {
-    static const RadioPresetOption presetOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"LongTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO},
-        {"LongModerate", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE},
-        {"LongFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
-        {"MediumSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW},
-        {"MediumFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST},
-        {"ShortSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW},
-        {"ShortFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST},
-        {"ShortTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO},
-    };
-
-    constexpr size_t presetCount = sizeof(presetOptions) / sizeof(presetOptions[0]);
-    static std::array<const char *, presetCount> presetLabels{};
-
-    auto bannerOptions =
-        createStaticBannerOptions("Radio Preset", presetOptions, presetLabels, [](const RadioPresetOption &option, int) -> void {
-            if (option.action == OptionsAction::Back) {
-                menuHandler::menuQueue = menuHandler::LoraMenu;
-                screen->runNow();
-                return;
-            }
-
-            if (!option.hasValue) {
-                return;
-            }
-
-            config.lora.modem_preset = option.value;
-            config.lora.channel_num = 0;        // Reset to default channel for the preset
-            config.lora.override_frequency = 0; // Clear any custom frequency
-            service->reloadConfig(SEGMENT_CONFIG);
-        });
-
-    screen->showOverlayBanner(bannerOptions);
+    screen->showOverlayBanner(buildRegionPresetBanner());
 }
 
 void menuHandler::twelveHourPicker()
