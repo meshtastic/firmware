@@ -32,44 +32,6 @@ constexpr size_t MAX_PTY_READ_SIZE = 200;
 constexpr size_t REPLAY_REQUEST_SIZE = sizeof(uint32_t);
 constexpr size_t HEARTBEAT_STATUS_SIZE = sizeof(uint32_t) * 2;
 
-struct BytesDecodeState {
-    uint8_t *buf;
-    size_t maxLen;
-    size_t outLen;
-};
-
-struct BytesEncodeState {
-    const uint8_t *buf;
-    size_t len;
-};
-
-bool decodeBytesField(pb_istream_t *stream, const pb_field_iter_t *field, void **arg)
-{
-    (void)field;
-    auto *state = static_cast<BytesDecodeState *>(*arg);
-    const size_t fieldLen = stream->bytes_left;
-    if (fieldLen > state->maxLen) {
-        return false;
-    }
-    if (!pb_read(stream, state->buf, fieldLen)) {
-        return false;
-    }
-    state->outLen = fieldLen;
-    return true;
-}
-
-bool encodeBytesField(pb_ostream_t *stream, const pb_field_iter_t *field, void *const *arg)
-{
-    auto *state = static_cast<const BytesEncodeState *>(*arg);
-    if (!state || !state->buf || state->len == 0) {
-        return true;
-    }
-    if (!pb_encode_tag_for_field(stream, field)) {
-        return false;
-    }
-    return pb_encode_string(stream, state->buf, state->len);
-}
-
 void encodeUint32BE(uint8_t *dest, uint32_t value)
 {
     dest[0] = static_cast<uint8_t>((value >> 24) & 0xff);
@@ -110,6 +72,11 @@ DMShellModule::DMShellModule()
 ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     DMShellFrame frame;
+    if (!mp.pki_encrypted) {
+        LOG_WARN("DMShell: ignoring packet without PKI from 0x%x", mp.from);
+        return ProcessMessage::STOP;
+    }
+
     if (!parseFrame(mp, frame)) {
         LOG_WARN("DMShell: ignoring malformed frame");
         return ProcessMessage::STOP;
@@ -132,10 +99,6 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         LOG_WARN("DMShell: unauthorized sender 0x%x, %u", mp.from, frame.op);
         myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
         return ProcessMessage::STOP;
-    }
-
-    if (frame.ackSeq > 0) {
-        pruneSentFrames(frame.ackSeq);
     }
 
     if (frame.op == meshtastic_DMShell_OpCode_OPEN) {
@@ -366,8 +329,8 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const DMShellFr
                      ((static_cast<uint32_t>(session.childPid) << 8) & 0xff0000) |
                      (static_cast<uint32_t>(session.childPid) >> 24);
     memcpy(payload, &pidBE, sizeof(payload));
-    sendFrameToPeer(session.peer, session.channel, meshtastic_DMShell_OpCode_OPEN_OK, session.sessionId, allocTxSeq(), payload,
-                    sizeof(payload), ws.ws_col, ws.ws_row, frame.seq);
+    sendFrameToPeer(session.peer, session.channel, meshtastic_DMShell_OpCode_OPEN_OK, session.sessionId, session.nextTxSeq++,
+                    payload, sizeof(payload), ws.ws_col, ws.ws_row, frame.seq);
 
     LOG_INFO("DMShell: opened session=0x%x peer=0x%x pid=%d", session.sessionId, session.peer, session.childPid);
     return true;
@@ -426,11 +389,6 @@ void DMShellModule::reapChildIfExited()
     }
 }
 
-uint32_t DMShellModule::allocTxSeq()
-{
-    return session.nextTxSeq++;
-}
-
 void DMShellModule::rememberSentFrame(meshtastic_DMShell_OpCode op, uint32_t sessionId, uint32_t seq, const uint8_t *payload,
                                       size_t payloadLen, uint32_t cols, uint32_t rows, uint32_t ackSeq, uint32_t flags)
 {
@@ -453,19 +411,6 @@ void DMShellModule::rememberSentFrame(meshtastic_DMShell_OpCode op, uint32_t ses
     }
 
     session.txHistoryNext = (session.txHistoryNext + 1) % session.txHistory.size();
-}
-
-void DMShellModule::pruneSentFrames(uint32_t ackSeq)
-{
-    if (ackSeq == 0) {
-        return;
-    }
-
-    for (auto &entry : session.txHistory) {
-        if (entry.valid && entry.seq <= ackSeq) {
-            entry.valid = false;
-        }
-    }
 }
 
 void DMShellModule::resendFramesFrom(uint32_t startSeq)
@@ -511,7 +456,7 @@ void DMShellModule::sendAck(uint32_t replayFromSeq)
 
 void DMShellModule::sendControl(meshtastic_DMShell_OpCode op, const uint8_t *payload, size_t payloadLen)
 {
-    sendFrameToPeer(session.peer, session.channel, op, session.sessionId, allocTxSeq(), payload, payloadLen, 0, 0,
+    sendFrameToPeer(session.peer, session.channel, op, session.sessionId, session.nextTxSeq++, payload, payloadLen, 0, 0,
                     session.lastAckedRxSeq);
 }
 
@@ -576,6 +521,7 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, uint8_t channel, meshtastic_DM
     packet->to = peer;
     packet->channel = channel;
     packet->want_ack = false;
+    packet->pki_encrypted = true;
     packet->priority = meshtastic_MeshPacket_Priority_RELIABLE;
     service->sendToMesh(packet);
 }
