@@ -1,7 +1,7 @@
 #define I2C_SCL SCL
 #define I2C_SDA SDA
 
-#define LED_PIN LED
+#define LED_POWER LED
 
 // active low, powers the Battery reader, but no lora antenna boost (?)
 // #define VEXT_ENABLE Vext

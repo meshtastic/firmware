@@ -1,7 +1,7 @@
 #define I2C_SDA 8 // I2C pins for this board
 #define I2C_SCL 9
 
-#define LED_PIN 7      // If defined we will blink this LED
+#define LED_POWER 7    // If defined we will blink this LED
 #define LED_STATE_ON 0 // State when LED is lit
 
 #define USE_SX1262

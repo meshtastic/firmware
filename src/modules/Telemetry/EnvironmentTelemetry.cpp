@@ -10,6 +10,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "UnitConversions.h"
 #include "buzz.h"
 #include "graphics/SharedUIDisplay.h"
@@ -65,16 +66,8 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/MCP9808Sensor.h"
 #endif
 
-#if __has_include(<Adafruit_SHT31.h>)
-#include "Sensor/SHT31Sensor.h"
-#endif
-
 #if __has_include(<Adafruit_LPS2X.h>)
 #include "Sensor/LPS22HBSensor.h"
-#endif
-
-#if __has_include(<Adafruit_SHTC3.h>)
-#include "Sensor/SHTC3Sensor.h"
 #endif
 
 #if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
@@ -93,8 +86,8 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/OPT3001Sensor.h"
 #endif
 
-#if __has_include(<Adafruit_SHT4x.h>)
-#include "Sensor/SHT4XSensor.h"
+#if __has_include(<SHTSensor.h>)
+#include "Sensor/SHTXXSensor.h"
 #endif
 
 #if __has_include(<SparkFun_MLX90632_Arduino_Library.h>)
@@ -145,12 +138,23 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
+static constexpr uint16_t TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY = 0x8002;
+
 void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
     if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
         return;
     }
     LOG_INFO("Environment Telemetry adding I2C devices...");
+
+    /*
+        Uncomment the preferences below if you want to use the module
+        without having to configure it from the PythonAPI or WebUI.
+    */
+
+    // moduleConfig.telemetry.environment_measurement_enabled = 1;
+    // moduleConfig.telemetry.environment_screen_enabled = 1;
+    // moduleConfig.telemetry.environment_update_interval = 15;
 
     // order by priority of metrics/values (low top, high bottom)
 
@@ -199,14 +203,8 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_MCP9808.h>)
     addSensor<MCP9808Sensor>(i2cScanner, ScanI2C::DeviceType::MCP9808);
 #endif
-#if __has_include(<Adafruit_SHT31.h>)
-    addSensor<SHT31Sensor>(i2cScanner, ScanI2C::DeviceType::SHT31);
-#endif
 #if __has_include(<Adafruit_LPS2X.h>)
     addSensor<LPS22HBSensor>(i2cScanner, ScanI2C::DeviceType::LPS22HB);
-#endif
-#if __has_include(<Adafruit_SHTC3.h>)
-    addSensor<SHTC3Sensor>(i2cScanner, ScanI2C::DeviceType::SHTC3);
 #endif
 #if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
     addSensor<RAK12035Sensor>(i2cScanner, ScanI2C::DeviceType::RAK12035);
@@ -220,13 +218,9 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<ClosedCube_OPT3001.h>)
     addSensor<OPT3001Sensor>(i2cScanner, ScanI2C::DeviceType::OPT3001);
 #endif
-#if __has_include(<Adafruit_SHT4x.h>)
-    addSensor<SHT4XSensor>(i2cScanner, ScanI2C::DeviceType::SHT4X);
-#endif
 #if __has_include(<SparkFun_MLX90632_Arduino_Library.h>)
     addSensor<MLX90632Sensor>(i2cScanner, ScanI2C::DeviceType::MLX90632);
 #endif
-
 #if __has_include(<Adafruit_BMP3XX.h>)
     addSensor<BMP3XXSensor>(i2cScanner, ScanI2C::DeviceType::BMP_3XX);
 #endif
@@ -242,7 +236,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<BH1750_WE.h>)
     addSensor<BH1750Sensor>(i2cScanner, ScanI2C::DeviceType::BH1750);
 #endif
-
+#if __has_include(<SHTSensor.h>)
+    // TODO Can we scan for multiple sensors connected on the same bus?
+    addSensor<SHTXXSensor>(i2cScanner, ScanI2C::DeviceType::SHTXX);
+#endif
 #endif
 }
 
@@ -257,14 +254,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
     }
 
     uint32_t result = UINT32_MAX;
-    /*
-        Uncomment the preferences below if you want to use the module
-        without having to configure it from the PythonAPI or WebUI.
-    */
-
-    // moduleConfig.telemetry.environment_measurement_enabled = 1;
-    // moduleConfig.telemetry.environment_screen_enabled = 1;
-    // moduleConfig.telemetry.environment_update_interval = 15;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled ||
           ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE)) {
@@ -297,7 +286,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
                 // sensormap here.
 #ifdef HAS_RAKPROT
-            result = rak9154Sensor.runOnce();
+            if (rak9154Sensor.hasSensor())
+                result = rak9154Sensor.runOnce();
 #endif
 #endif
         }
@@ -317,14 +307,17 @@ int32_t EnvironmentTelemetryModule::runOnce()
             }
         }
 
-        if (((lastSentToMesh == 0) ||
-             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                               moduleConfig.telemetry.environment_update_interval,
-                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+        uint32_t lastTelemetry =
+            transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY) : 0;
+        if (((lastTelemetry == 0) ||
+             !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
+                                                              moduleConfig.telemetry.environment_update_interval,
+                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = millis();
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
@@ -567,9 +560,11 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
 #endif
 #ifdef HAS_RAKPROT
-    get_metrics = rak9154Sensor.getMetrics(m);
-    valid = valid || get_metrics;
-    hasSensor = true;
+    if (rak9154Sensor.hasSensor()) {
+        get_metrics = rak9154Sensor.getMetrics(m);
+        valid = valid || get_metrics;
+        hasSensor = true;
+    }
 #endif
     return valid && hasSensor;
 }
@@ -577,6 +572,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
 meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
 {
     if (currentRequest) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
         auto req = *currentRequest;
         const auto &p = req.decoded;
         meshtastic_Telemetry scratch;

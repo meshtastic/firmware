@@ -43,7 +43,7 @@ static const uint8_t SCK = 33;
 #undef GPS_TX_PIN
 #define GPS_TX_PIN (TX1)
 
-#define LED_PIN LED_BLUE
+#define LED_POWER LED_BLUE
 
 #define PIN_VBAT WB_A0
 #define BATTERY_PIN PIN_VBAT
