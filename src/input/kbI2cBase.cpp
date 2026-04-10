@@ -344,6 +344,26 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_TAB;
                 break;
+            case TCA8418KeyboardBase::FUNCTION_F1:
+                e.inputEvent = INPUT_BROKER_FN_F1;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F2:
+                e.inputEvent = INPUT_BROKER_FN_F2;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F3:
+                e.inputEvent = INPUT_BROKER_FN_F3;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F4:
+                e.inputEvent = INPUT_BROKER_FN_F4;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F5:
+                e.inputEvent = INPUT_BROKER_FN_F5;
+                e.kbchar = 0x00;
+                break;
             default:
                 if (nextEvent > 127) {
                     e.inputEvent = INPUT_BROKER_NONE;

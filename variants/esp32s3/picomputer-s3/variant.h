@@ -52,8 +52,6 @@
 // Picomputer gets a white on black display
 #define TFT_MESH_OVERRIDE COLOR565(255, 255, 255)
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
-
 #define INPUTBROKER_MATRIX_TYPE 1
 
 #define KEYS_COLS                                                                                                                \

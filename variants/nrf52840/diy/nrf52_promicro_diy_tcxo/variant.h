@@ -81,7 +81,6 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 
 // LED
 #define PIN_LED1 (0 + 15) // P0.15
-#define LED_BUILTIN PIN_LED1
 // Actually red
 #define LED_BLUE PIN_LED1
 #define LED_STATE_ON 1 // State when LED is lit

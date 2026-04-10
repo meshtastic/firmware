@@ -22,6 +22,7 @@ class AsyncUDP : public Print, private concurrency::OSThread
 
     bool listenMulticast(IPAddress multicastIP, uint16_t port, uint8_t ttl = 64);
     bool writeTo(const uint8_t *data, size_t len, IPAddress ip, uint16_t port);
+    void close();
 
     size_t write(uint8_t b) override;
     size_t write(const uint8_t *data, size_t len) override;

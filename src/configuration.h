@@ -254,6 +254,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define NAU7802_ADDR 0x2A
 #define MAX30102_ADDR 0x57
 #define SCD4X_ADDR 0x62
+#define CW2015_ADDR 0x62
 #define MLX90614_ADDR_DEF 0x5A
 #define CGRADSENS_ADDR 0x66
 #define LTR390UV_ADDR 0x53
@@ -262,6 +263,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BQ27220_ADDR 0x55 // same address as TDECK_KB
 #define BQ25896_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
+#define SEN5X_ADDR 0x69
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -411,9 +413,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_RADIO
 #define HAS_RADIO 0
 #endif
-#ifndef HAS_RTC
-#define HAS_RTC 0
-#endif
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 0
 #endif
@@ -449,11 +448,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_RGB_LED
 #endif
 
-#ifndef LED_STATE_OFF
-#define LED_STATE_OFF 0
-#endif
 #ifndef LED_STATE_ON
 #define LED_STATE_ON 1
+#endif
+#ifndef LED_STATE_OFF
+#define LED_STATE_OFF (LED_STATE_ON ^ 1)
+#endif
+
+#ifndef ledOff
+#define ledOff(pin) pinMode(pin, INPUT)
 #endif
 
 // default mapping of pins

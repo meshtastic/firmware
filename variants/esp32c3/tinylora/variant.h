@@ -134,6 +134,10 @@
 #define I2C_SDA 20
 #define I2C_SCL 21
 
+// TinyLoRa keeps running even when the ADC reports critically low battery.
+#define DISABLE_LOW_BATTERY_SHUTDOWN
+
+
 #elif defined(TINYLORA_MV)
 
 #define HAS_PCF8574_BUTTON

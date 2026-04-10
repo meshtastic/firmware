@@ -45,7 +45,6 @@
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
-#define HAS_RTC 1
 
 #define I2C_SDA 10 // For QMC6310 sensors and screens
 #define I2C_SCL 11 // For QMC6310 sensors and screens

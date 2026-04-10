@@ -47,6 +47,7 @@ class InkHUD
     void setDriver(Drivers::EInk *driver);
     void setDisplayResilience(uint8_t fastPerFull = 5, float stressMultiplier = 2.0);
     void addApplet(const char *name, Applet *a, bool defaultActive = false, bool defaultAutoshow = false, uint8_t onTile = -1);
+    void notifyApplyingChanges();
 
     void begin();
 
@@ -62,6 +63,11 @@ class InkHUD
     void navLeft();
     void navRight();
 
+    // Freetext handlers
+    void freeText(char c);
+    void freeTextDone();
+    void freeTextCancel();
+
     // Trigger UI changes
     // - called by various InkHUD components
     // - suitable(?) for use by aux button, connected in variant nicheGraphics.h
@@ -70,17 +76,23 @@ class InkHUD
     void prevApplet();
     void openMenu();
     void openAlignStick();
+    void openKeyboard();
+    void closeKeyboard();
     void nextTile();
     void prevTile();
     void rotate();
     void rotateJoystick(uint8_t angle = 1); // rotate 90 deg by default
     void toggleBatteryIcon();
 
+    // Used by TipsApplet to force menu to start on Region selection
+    bool forceRegionMenu = false;
+
     // Updating the display
     // - called by various InkHUD components
 
     void requestUpdate();
-    void forceUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED, bool async = true);
+    void forceUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED, bool all = false,
+                     bool async = true);
     void awaitUpdate();
 
     // (Re)configuring WindowManager

@@ -32,9 +32,13 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void onNavDown() override;
     void onNavLeft() override;
     void onNavRight() override;
-    void onRender() override;
+    void onFreeText(char c) override;
+    void onFreeTextDone() override;
+    void onFreeTextCancel() override;
+    void onRender(bool full) override;
 
     void show(Tile *t); // Open the menu, onto a user tile
+    void setStartPage(MenuPage page);
 
   protected:
     Drivers::LatchingBacklight *backlight = nullptr; // Convenient access to the backlight singleton
@@ -50,20 +54,32 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void populateAutoshowPage();  // Dynamically create MenuItems for selecting which applets can autoshow
     void populateRecentsPage();   // Create menu items: a choice of values for settings.recentlyActiveSeconds
 
+    void drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height,
+                        std::string text); // Draw input field for free text
     uint16_t getSystemInfoPanelHeight();
     void drawSystemInfoPanel(int16_t left, int16_t top, uint16_t width,
                              uint16_t *height = nullptr);                   // Info panel at top of root menu
     void sendText(NodeNum dest, ChannelIndex channel, const char *message); // Send a text message to mesh
     void freeCannedMessageResources();                                      // Clear MenuApplet's canned message processing data
 
+    MenuPage startPageOverride = MenuPage::ROOT;
     MenuPage currentPage = MenuPage::ROOT;
     MenuPage previousPage = MenuPage::EXIT;
     uint8_t cursor = 0;       // Which menu item is currently highlighted
     bool cursorShown = false; // Is *any* item highlighted? (Root menu: no initial selection)
-
+    bool freeTextMode = false;
     uint16_t systemInfoPanelHeight = 0; // Need to know before we render
+    uint16_t menuTextLimit = 200;
 
-    std::vector<MenuItem> items; // MenuItems for the current page. Filled by ShowPage
+    std::vector<MenuItem> items;               // MenuItems for the current page. Filled by ShowPage
+    std::vector<std::string> nodeConfigLabels; // Persistent labels for Node Config pages
+    uint8_t selectedChannelIndex = 0;          // Currently selected LoRa channel (Node Config → Radio → Channel)
+    bool channelPositionEnabled = false;
+    bool gpsEnabled = false;
+
+    // Recents menu checkbox state (derived from settings.recentlyActiveSeconds)
+    static constexpr uint8_t RECENTS_COUNT = 6;
+    bool recentsSelected[RECENTS_COUNT] = {};
 
     // Data for selecting and sending canned messages via the menu
     // Placed into a sub-class for organization only
@@ -94,6 +110,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
         // Cleared onBackground (when MenuApplet closes)
         std::vector<MessageItem> messageItems;
         std::vector<RecipientItem> recipientItems;
+
+        MessageItem freeTextItem;
     } cm;
 
     Applet *borrowedTileOwner = nullptr; // Which applet we have temporarily replaced while displaying menu

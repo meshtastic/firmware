@@ -5,9 +5,13 @@
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
-#include "input/InputBroker.h"
+#include "main.h"
 #include <Arduino.h>
 #include <functional>
+
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+#include "input/InputBroker.h"
+#endif
 
 class StatusLEDModule : private concurrency::OSThread
 {
@@ -17,8 +21,11 @@ class StatusLEDModule : private concurrency::OSThread
     StatusLEDModule();
 
     int handleStatusUpdate(const meshtastic::Status *);
-
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
     int handleInputEvent(const InputEvent *arg);
+#endif
+
+    void setPowerLED(bool);
 
   protected:
     unsigned int my_interval = 1000; // interval in millisconds
@@ -28,8 +35,10 @@ class StatusLEDModule : private concurrency::OSThread
         CallbackObserver<StatusLEDModule, const meshtastic::Status *>(this, &StatusLEDModule::handleStatusUpdate);
     CallbackObserver<StatusLEDModule, const meshtastic::Status *> powerStatusObserver =
         CallbackObserver<StatusLEDModule, const meshtastic::Status *>(this, &StatusLEDModule::handleStatusUpdate);
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
     CallbackObserver<StatusLEDModule, const InputEvent *> inputObserver =
         CallbackObserver<StatusLEDModule, const InputEvent *>(this, &StatusLEDModule::handleInputEvent);
+#endif
 
   private:
     bool CHARGE_LED_state = LED_STATE_OFF;

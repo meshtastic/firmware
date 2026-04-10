@@ -21,11 +21,12 @@ class LogoApplet : public SystemApplet, public concurrency::OSThread
 {
   public:
     LogoApplet();
-    void onRender() override;
+    void onRender(bool full) override;
     void onForeground() override;
     void onBackground() override;
     void onShutdown() override;
     void onReboot() override;
+    void onApplyingChanges();
 
   protected:
     int32_t runOnce() override;

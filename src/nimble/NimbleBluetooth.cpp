@@ -686,6 +686,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #ifdef NIMBLE_TWO
         if (ble->isDeInit)
             return;
+#else
+        if (nimbleBluetooth && nimbleBluetooth->isDeInit)
+            return;
 #endif
 
         if (passkeyShowing) {
@@ -760,11 +763,7 @@ void NimbleBluetooth::deinit()
     isDeInit = true;
 
 #ifdef BLE_LED
-#ifdef BLE_LED_INVERTED
-    digitalWrite(BLE_LED, HIGH);
-#else
-    digitalWrite(BLE_LED, LOW);
-#endif
+    digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
 #ifndef NIMBLE_TWO
     NimBLEDevice::deinit();

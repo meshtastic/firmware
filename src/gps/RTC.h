@@ -54,7 +54,7 @@ uint32_t getValidTime(RTCQuality minQuality, bool local = false);
 
 RTCSetResult readFromRTC();
 
-time_t gm_mktime(struct tm *tm);
+time_t gm_mktime(const struct tm *tm);
 
 #define SEC_PER_DAY 86400
 #define SEC_PER_HOUR 3600

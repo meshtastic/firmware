@@ -91,10 +91,21 @@ template <typename T> bool LR11x0Interface<T>::init()
     LOG_DEBUG("Set RF1 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
 #endif
 
+    // Allow extra time for TCXO to stabilize after power-on
+    delay(10);
+
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+
+    // Retry if we get SPI command failed - some units need extra TCXO stabilization time
+    if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
+        LOG_WARN("LR11x0 init failed with %d (SPI_CMD_FAILED), retrying after delay...", res);
+        delay(100);
+        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+    }
+
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", res);
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND)
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
 
     LR11x0VersionInfo_t version;
@@ -159,7 +170,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    err = lora.setCodingRate(cr);
+    err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 

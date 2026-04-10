@@ -30,7 +30,7 @@ Expansion Board Infomation : https://www.seeedstudio.com/Seeeduino-XIAO-Expansio
 L76K GPS Module Information : https://www.seeedstudio.com/L76K-GNSS-Module-for-Seeed-Studio-XIAO-p-5864.html
 */
 
-#define LED_PIN 48
+#define LED_POWER 48
 #define LED_STATE_ON 1 // State when LED is lit
 
 #define BUTTON_PIN 21 // This is the Program Button

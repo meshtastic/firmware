@@ -65,7 +65,7 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
     return 0;
 }
 
-void InkHUD::NotificationApplet::onRender()
+void InkHUD::NotificationApplet::onRender(bool full)
 {
     // Clear the region beneath the tile
     // Most applets are drawing onto an empty frame buffer and don't need to do this
@@ -139,54 +139,47 @@ void InkHUD::NotificationApplet::onForeground()
 void InkHUD::NotificationApplet::onBackground()
 {
     handleInput = false;
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
 }
 
 void InkHUD::NotificationApplet::onButtonShortPress()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onButtonLongPress()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onExitShort()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onExitLong()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavUp()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavDown()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavLeft()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::NotificationApplet::onNavRight()
 {
     dismiss();
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 // Ask the WindowManager to check whether any displayed applets are already displaying the info from this notification

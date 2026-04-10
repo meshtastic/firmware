@@ -8,9 +8,8 @@
 #define GPS_RX_PIN 9
 #define GPS_TX_PIN 10
 
-#define LED_PIN 13 // 13 red, 2 blue, 15 red
+#define LED_POWER 13 // 13 red, 2 blue, 15 red
 
-// #define HAS_BUTTON 0
 #define BUTTON_PIN 0
 #define BUTTON_NEED_PULLUP
 

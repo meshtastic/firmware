@@ -37,7 +37,6 @@ class CryptoEngine
     virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
 
 #endif
-    void clearKeys();
     void setDHPrivateKey(uint8_t *_private_key);
     virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
                                    uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);

@@ -1,4 +1,4 @@
-#define LED_PIN 18
+#define LED_POWER 18
 
 #define _VARIANT_HELTEC_WIRELESS_TRACKER
 

@@ -174,7 +174,7 @@ class BasicExampleApplet : public Applet
     // You must have an onRender() method
     // All drawing happens here
 
-    void onRender() override;
+    void onRender(bool full) override;
 };
 ```
 
@@ -183,7 +183,7 @@ The `onRender` method is called when the display image is redrawn. This can happ
 ```cpp
 // All drawing happens here
 // Our basic example doesn't do anything useful. It just passively prints some text.
-void InkHUD::BasicExampleApplet::onRender()
+void InkHUD::BasicExampleApplet::onRender(bool full)
 {
     printAt(0, 0, "Hello, world!");
 }

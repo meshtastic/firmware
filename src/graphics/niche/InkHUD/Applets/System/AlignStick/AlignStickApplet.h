@@ -23,7 +23,7 @@ class AlignStickApplet : public SystemApplet
   public:
     AlignStickApplet();
 
-    void onRender() override;
+    void onRender(bool full) override;
     void onForeground() override;
     void onBackground() override;
     void onButtonLongPress() override;

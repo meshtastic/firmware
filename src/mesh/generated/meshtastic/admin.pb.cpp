@@ -27,6 +27,15 @@ PB_BIND(meshtastic_SharedContact, meshtastic_SharedContact, AUTO)
 PB_BIND(meshtastic_KeyVerificationAdmin, meshtastic_KeyVerificationAdmin, AUTO)
 
 
+PB_BIND(meshtastic_SensorConfig, meshtastic_SensorConfig, AUTO)
+
+
+PB_BIND(meshtastic_SCD4X_config, meshtastic_SCD4X_config, AUTO)
+
+
+PB_BIND(meshtastic_SEN5X_config, meshtastic_SEN5X_config, AUTO)
+
+
 
 
 
