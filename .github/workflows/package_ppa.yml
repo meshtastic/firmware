@@ -51,12 +51,6 @@ jobs:
           gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
         id: gpg
 
-      - name: Import SSH key
-        uses: webfactory/ssh-agent@v0.10.0
-        with:
-          ssh-private-key: ${{ secrets.PPA_SFTP_PRIVATE_KEY }}
-        id: ssh
-
       - name: Get release version string
         working-directory: meshtasticd
         run: |
@@ -97,8 +91,14 @@ jobs:
           login                   = ${ppa_login}
           EOF
 
+      - name: Import SSH key
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.PPA_SFTP_PRIVATE_KEY }}
+        id: ssh
+
       - name: Publish with dput (sftp)
-        timeout-minutes: 15 # dput is terrible, sometimes runs 'forever'
+        timeout-minutes: 30 # dput is terrible, sometimes runs 'forever'
         run: >
           dput -c /etc/meshtastic-dput.cf
           ssh-${{ inputs.ppa_repo }}
