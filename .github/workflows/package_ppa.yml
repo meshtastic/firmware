@@ -74,6 +74,11 @@ jobs:
           ssh-private-key: ${{ secrets.PPA_SFTP_PRIVATE_KEY }}
         id: ssh
 
+      - name: Trust Launchpad's SSH key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ppa.launchpad.net >> ~/.ssh/known_hosts
+
       - name: Setup dput config
         env:
           ppa_login: meshtasticorg
