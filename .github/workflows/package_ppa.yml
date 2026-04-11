@@ -51,6 +51,12 @@ jobs:
           gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
         id: gpg
 
+      - name: Import SSH key
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.PPA_SFTP_PRIVATE_KEY }}
+        id: ssh
+
       - name: Get release version string
         working-directory: meshtasticd
         run: |
@@ -67,12 +73,6 @@ jobs:
 
       - name: Display structure of downloaded files
         run: ls -lah
-
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.10.0
-        with:
-          ssh-private-key: ${{ secrets.PPA_SFTP_PRIVATE_KEY }}
-        id: ssh
 
       - name: Trust Launchpad's SSH key
         run: |
