@@ -1,0 +1,36 @@
+Meta:
+  name: RAK6421 + RAK13300 Slot 2
+  support: community # Promote when tested
+  compatible:
+    - luckfox-lyra-zero-w # Armbian
+
+Lora:
+  Module: sx1262
+  IRQ: # GPIO0_B6 (IO6)
+    pin: 14
+    gpiochip: 0
+    line: 14
+  Reset: # GPIO0_B4 (IO4)
+    pin: 12
+    gpiochip: 0
+    line: 12
+  Busy: # GPIO1_C0 (IO5)
+    pin: 48
+    gpiochip: 1
+    line: 16
+  # Ant_sw: # GPIO0_B5 (IO3)
+  #   pin: 13
+  #   gpiochip: 0
+  #   line: 13
+  Enable_Pins:
+    - pin: 51 # GPIO1_C3
+      gpiochip: 1
+      line: 19
+    - pin: 13 # GPIO0_B5
+      gpiochip: 0
+      line: 13
+  spidev: spidev0.1
+  # CS: # GPIO0_B1
+  #   pin: 9
+  #   gpiochip: 0
+  #   line: 9

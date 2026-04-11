@@ -1,0 +1,33 @@
+# MeshAdv Mini E22-900M22S
+# https://github.com/chrismyers2000/MeshAdv-Mini
+Meta:
+  name: MeshAdv Mini E22-900M22S
+  support: community
+  compatible:
+    - luckfox-lyra-zero-w # Armbian
+
+Lora:
+  Module: sx1262 # Ebyte E22-900M22S
+  CS: # GPIO0_B2_d (phys 24, RPi CE0)
+    pin: 10
+    gpiochip: 0
+    line: 10
+  IRQ: # GPIO1_D1_d (phys 36, RPi GPIO16)
+    pin: 57
+    gpiochip: 1
+    line: 25
+  Busy: # GPIO0_C1_d (phys 38, RPi GPIO20)
+    pin: 17
+    gpiochip: 0
+    line: 17
+  Reset: # GPIO0_B4_d (phys 18, RPi GPIO24)
+    pin: 12
+    gpiochip: 0
+    line: 12
+  RXen: # GPIO1_D2_d (phys 32, RPi GPIO12)
+    pin: 58
+    gpiochip: 1
+    line: 26
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  spidev: spidev0.0

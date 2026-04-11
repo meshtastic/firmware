@@ -24,6 +24,18 @@ PB_BIND(meshtastic_Contact, meshtastic_Contact, AUTO)
 PB_BIND(meshtastic_PLI, meshtastic_PLI, AUTO)
 
 
+PB_BIND(meshtastic_AircraftTrack, meshtastic_AircraftTrack, AUTO)
+
+
+PB_BIND(meshtastic_TAKPacketV2, meshtastic_TAKPacketV2, 2)
+
+
+
+
+
+
+
+
 
 
 

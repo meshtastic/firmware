@@ -150,6 +150,10 @@ typedef enum _meshtastic_PortNum {
  arbitrary telemetry over meshtastic that is not covered by telemetry.proto
  ENCODING: CayenneLLP */
     meshtastic_PortNum_CAYENNE_APP = 77,
+    /* ATAK Plugin V2
+ Portnum for payloads from the official Meshtastic ATAK plugin using
+ TAKPacketV2 with zstd dictionary compression. */
+    meshtastic_PortNum_ATAK_PLUGIN_V2 = 78,
     /* GroupAlarm integration
  Used for transporting GroupAlarm-related messages between Meshtastic nodes
  and companion applications/services. */

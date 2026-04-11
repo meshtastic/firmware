@@ -32,8 +32,8 @@
 #define default_map_publish_interval_secs 60 * 60
 
 // Traffic management defaults
-#define default_traffic_mgmt_position_precision_bits 24         // ~10m grid cells
-#define default_traffic_mgmt_position_min_interval_secs ONE_DAY // 1 day between identical positions
+#define default_traffic_mgmt_position_precision_bits 24               // ~10m grid cells
+#define default_traffic_mgmt_position_min_interval_secs (ONE_DAY / 2) // 12 hours between identical positions
 
 #ifdef USERPREFS_RINGTONE_NAG_SECS
 #define default_ringtone_nag_secs USERPREFS_RINGTONE_NAG_SECS
