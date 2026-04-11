@@ -4,10 +4,10 @@
 #include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
+#include "HardwareRNG.h"
 #include "NodeDB.h"
 #include "aes-ccm.h"
 #include "meshUtils.h"
-#include "HardwareRNG.h"
 #include <Crypto.h>
 #include <Curve25519.h>
 #include <RNG.h>
