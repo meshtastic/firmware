@@ -36,6 +36,30 @@ constexpr uint8_t kMaxCuckooKicks = 16;                  // Max displacement cha
 constexpr uint32_t kRouterDefaultMaxHops = 3; // Routers: max 3 hops (can set lower via config)
 constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot increase)
 
+const meshtastic_ModuleConfig_TrafficManagementConfig &trafficManagementConfig()
+{
+#ifdef meshtastic_LocalModuleConfig_traffic_management_tag
+    return moduleConfig.traffic_management;
+#else
+    static const meshtastic_ModuleConfig_TrafficManagementConfig fallback = [] {
+        meshtastic_ModuleConfig_TrafficManagementConfig cfg = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
+        cfg.position_precision_bits = default_traffic_mgmt_position_precision_bits;
+        cfg.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
+        return cfg;
+    }();
+    return fallback;
+#endif
+}
+
+bool trafficManagementEnabled()
+{
+#ifdef meshtastic_LocalModuleConfig_traffic_management_tag
+    return moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled;
+#else
+    return false;
+#endif
+}
+
 /**
  * Convert seconds to milliseconds with overflow protection.
  */
@@ -159,19 +183,19 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     // Module configuration
     isPromiscuous = true; // See all packets, not just those addressed to us
     encryptedOk = true;   // Can process encrypted packets
-    stats = meshtastic_TrafficManagementStats_init_zero;
+    memset(&stats, 0, sizeof(stats));
 
     // Initialize rolling epoch for relative timestamps
     cacheEpochMs = millis();
 
     // Calculate adaptive time resolutions from config (config changes require reboot)
     // Resolution = max(60, min(339, interval/2)) for ~24 hour range with good precision
-    posTimeResolution = calcTimeResolution(Default::getConfiguredOrDefault(
-        moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
-    rateTimeResolution = calcTimeResolution(moduleConfig.traffic_management.rate_limit_window_secs);
+    const auto &cfg = trafficManagementConfig();
+    posTimeResolution =
+        calcTimeResolution(Default::getConfiguredOrDefault(cfg.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
+    rateTimeResolution = calcTimeResolution(cfg.rate_limit_window_secs);
     unknownTimeResolution = calcTimeResolution(kUnknownResetMs / 1000); // ~5 min default
 
-    const auto &cfg = moduleConfig.traffic_management;
     TM_LOG_INFO("Enabled: pos_dedup=%d nodeinfo_resp=%d rate_limit=%d drop_unknown=%d exhaust_telem=%d exhaust_pos=%d "
                 "preserve_hops=%d",
                 cfg.position_dedup_enabled, cfg.nodeinfo_direct_response, cfg.rate_limit_enabled, cfg.drop_unknown_enabled,
@@ -274,12 +298,12 @@ meshtastic_TrafficManagementStats TrafficManagementModule::getStats() const
 void TrafficManagementModule::resetStats()
 {
     concurrency::LockGuard guard(&cacheLock);
-    stats = meshtastic_TrafficManagementStats_init_zero;
+    memset(&stats, 0, sizeof(stats));
 }
 
 void TrafficManagementModule::recordRouterHopPreserved()
 {
-    if (!moduleConfig.has_traffic_management || !moduleConfig.traffic_management.enabled)
+    if (!trafficManagementEnabled())
         return;
     incrementStat(&stats.router_hops_preserved);
 }
@@ -884,7 +908,7 @@ uint8_t TrafficManagementModule::computePositionFingerprint(int32_t lat_truncate
 //   force hop_limit=0 on the rebroadcast copy, allowing one final relay hop.
 ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (!moduleConfig.has_traffic_management || !moduleConfig.traffic_management.enabled)
+    if (!trafficManagementEnabled())
         return ProcessMessage::CONTINUE;
 
     ignoreRequest = false;
@@ -893,7 +917,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     exhaustRequestedId = 0;
     incrementStat(&stats.packets_inspected);
 
-    const auto &cfg = moduleConfig.traffic_management;
+    const auto &cfg = trafficManagementConfig();
     const uint32_t nowMs = millis();
 
     // -------------------------------------------------------------------------
@@ -983,7 +1007,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
 
 void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
 {
-    if (!moduleConfig.has_traffic_management || !moduleConfig.traffic_management.enabled)
+    if (!trafficManagementEnabled())
         return;
 
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag)
@@ -998,7 +1022,7 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     // For relayed telemetry or position broadcasts from other nodes, optionally
     // set hop_limit=0 so they don't propagate further through the mesh.
 
-    const auto &cfg = moduleConfig.traffic_management;
+    const auto &cfg = trafficManagementConfig();
     const bool isTelemetry = mp.decoded.portnum == meshtastic_PortNum_TELEMETRY_APP;
     const bool isPosition = mp.decoded.portnum == meshtastic_PortNum_POSITION_APP;
     const bool shouldExhaust = (isTelemetry && cfg.exhaust_hop_telemetry) || (isPosition && cfg.exhaust_hop_position);
@@ -1031,7 +1055,7 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
 
 int32_t TrafficManagementModule::runOnce()
 {
-    if (!moduleConfig.has_traffic_management || !moduleConfig.traffic_management.enabled)
+    if (!trafficManagementEnabled())
         return INT32_MAX;
 
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
@@ -1045,11 +1069,12 @@ int32_t TrafficManagementModule::runOnce()
     }
 
     // Calculate TTLs for cache expiration
-    const uint32_t positionIntervalMs = secsToMs(Default::getConfiguredOrDefault(
-        moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
+    const auto &cfg = trafficManagementConfig();
+    const uint32_t positionIntervalMs =
+        secsToMs(Default::getConfiguredOrDefault(cfg.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
     const uint32_t positionTtlMs = positionIntervalMs * 4;
 
-    const uint32_t rateIntervalMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
+    const uint32_t rateIntervalMs = secsToMs(cfg.rate_limit_window_secs);
     const uint32_t rateTtlMs = (rateIntervalMs > 0) ? rateIntervalMs * 2 : (10 * 60 * 1000UL);
 
     const uint32_t unknownTtlMs = kUnknownResetMs * 5;
@@ -1141,15 +1166,16 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     if (!pos->has_latitude_i || !pos->has_longitude_i)
         return false;
 
-    uint8_t precision = Default::getConfiguredOrDefault(moduleConfig.traffic_management.position_precision_bits,
-                                                        default_traffic_mgmt_position_precision_bits);
+    const auto &cfg = trafficManagementConfig();
+    uint8_t precision =
+        Default::getConfiguredOrDefault(cfg.position_precision_bits, default_traffic_mgmt_position_precision_bits);
     precision = sanitizePositionPrecision(precision);
 
     const int32_t lat_truncated = truncateLatLon(pos->latitude_i, precision);
     const int32_t lon_truncated = truncateLatLon(pos->longitude_i, precision);
     const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
-    const uint32_t minIntervalMs = secsToMs(Default::getConfiguredOrDefault(
-        moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
+    const uint32_t minIntervalMs =
+        secsToMs(Default::getConfiguredOrDefault(cfg.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
 
     bool isNew = false;
     concurrency::LockGuard guard(&cacheLock);
@@ -1293,7 +1319,8 @@ bool TrafficManagementModule::isMinHopsFromRequestor(const meshtastic_MeshPacket
                               meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
 
     uint32_t roleLimit = isRouter ? kRouterDefaultMaxHops : kClientDefaultMaxHops;
-    uint32_t configValue = moduleConfig.traffic_management.nodeinfo_direct_response_max_hops;
+    const auto &cfg = trafficManagementConfig();
+    uint32_t configValue = cfg.nodeinfo_direct_response_max_hops;
 
     // Use config value if set, otherwise use role default, but always clamp to role limit
     uint32_t maxHops = (configValue > 0) ? configValue : roleLimit;
@@ -1313,8 +1340,9 @@ bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
     (void)nowMs;
     return false;
 #else
-    const uint32_t windowMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
-    if (windowMs == 0 || moduleConfig.traffic_management.rate_limit_max_packets == 0)
+    const auto &cfg = trafficManagementConfig();
+    const uint32_t windowMs = secsToMs(cfg.rate_limit_window_secs);
+    if (windowMs == 0 || cfg.rate_limit_max_packets == 0)
         return false;
 
     bool isNew = false;
@@ -1334,7 +1362,7 @@ bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
     saturatingIncrement(entry->rate_count);
 
     // Check against threshold (uint8_t max is 255, but config is uint32_t)
-    uint32_t threshold = moduleConfig.traffic_management.rate_limit_max_packets;
+    uint32_t threshold = cfg.rate_limit_max_packets;
     if (threshold > 255)
         threshold = 255;
 
@@ -1354,12 +1382,13 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
     (void)nowMs;
     return false;
 #else
-    if (!moduleConfig.traffic_management.drop_unknown_enabled || moduleConfig.traffic_management.unknown_packet_threshold == 0)
+    const auto &cfg = trafficManagementConfig();
+    if (!cfg.drop_unknown_enabled || cfg.unknown_packet_threshold == 0)
         return false;
 
     uint32_t windowMs = kUnknownResetMs;
-    if (moduleConfig.traffic_management.rate_limit_window_secs > 0)
-        windowMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
+    if (cfg.rate_limit_window_secs > 0)
+        windowMs = secsToMs(cfg.rate_limit_window_secs);
 
     bool isNew = false;
     concurrency::LockGuard guard(&cacheLock);
@@ -1377,7 +1406,7 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
     saturatingIncrement(entry->unknown_count);
 
     // Check against threshold
-    uint32_t threshold = moduleConfig.traffic_management.unknown_packet_threshold;
+    uint32_t threshold = cfg.unknown_packet_threshold;
     if (threshold > 255)
         threshold = 255;
 

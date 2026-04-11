@@ -16,8 +16,7 @@ on:
         type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   build-debian-src:
@@ -36,8 +35,6 @@ jobs:
         with:
           submodules: recursive
           path: meshtasticd
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Install deps
         shell: bash
@@ -70,5 +67,6 @@ jobs:
 
       - name: Publish with dput
         if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
+        timeout-minutes: 15 # dput is terrible, sometimes runs 'forever'
         run: |
           dput ${{ inputs.ppa_repo }} meshtasticd_${{ steps.version.outputs.deb }}~${{ inputs.series }}_source.changes

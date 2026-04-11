@@ -6,7 +6,7 @@ permissions: read-all
 jobs:
   update-protobufs:
     runs-on: ubuntu-latest
-    permissions:
+    permissions: # Needed for peter-evans/create-pull-request.
       contents: write
       pull-requests: write
     steps:

@@ -25,6 +25,8 @@
 #include "power.h"
 #include <power/PowerHAL.h>
 
+#include "Nrf52SaadcLock.h"
+#include "concurrency/LockGuard.h"
 #include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
@@ -50,6 +52,10 @@ uint16_t getVDDVoltage();
 // May be redefined by variant files.
 void variant_shutdown() __attribute__((weak));
 void variant_shutdown() {}
+
+// Optional variant hook called each nrf52Loop(); e.g. for low-VDD System OFF.
+void variant_nrf52LoopHook(void) __attribute__((weak));
+void variant_nrf52LoopHook(void) {}
 
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
@@ -328,6 +334,8 @@ void nrf52Loop()
 
     checkSDEvents();
     reportLittleFSCorruptionOnce();
+
+    variant_nrf52LoopHook(); // Optional variant hook called each nrf52Loop();
 }
 
 #ifdef USE_SEMIHOSTING

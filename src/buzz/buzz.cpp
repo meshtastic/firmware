@@ -6,6 +6,11 @@
 #include "Tone.h"
 #endif
 
+#if defined(HAS_I2S)
+#include "main.h"
+#include <unordered_map>
+#endif
+
 #if !defined(ARCH_PORTDUINO)
 extern "C" void delay(uint32_t dwMs);
 #endif
@@ -65,7 +70,13 @@ void playTones(const ToneDuration *tone_durations, int size)
         // Buzzer is disabled or not set to system tones
         return;
     }
-#ifdef PIN_BUZZER
+#ifdef HAS_I2S
+    if (moduleConfig.external_notification.use_i2s_as_buzzer && audioThread) {
+        playTonesRTTTL(tone_durations, size);
+        return;
+    }
+#endif
+#if defined(PIN_BUZZER)
     if (!config.device.buzzer_gpio)
         config.device.buzzer_gpio = PIN_BUZZER;
 #endif

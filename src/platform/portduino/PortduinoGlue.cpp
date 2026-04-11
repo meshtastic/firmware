@@ -551,6 +551,65 @@ void portduinoSetup()
             }
         }
     }
+    printf("Initializing extra pins\n");
+    for (auto i : portduino_config.extra_pins) {
+        // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
+        // Those GPIO are handled in our usermode driver instead.
+        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+            continue;
+        }
+        if (i.enabled) {
+            if (used_pins.find(i.pin) != used_pins.end()) {
+                printf("Pin %d is in use for multiple purposes\n", i.pin);
+            } else {
+                if (initGPIOPin(i.pin, gpioChipName + std::to_string(i.gpiochip), i.line) != ERRNO_OK) {
+                    printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i.line);
+                    exit(EXIT_FAILURE);
+                }
+                used_pins.insert(i.pin);
+            }
+        }
+    }
+
+    // In one test, this dance seemed necessary to trigger the pin to detect properly.
+    if (portduino_config.lora_pa_detect_pin.enabled) {
+        pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLDOWN);
+        sleep(1);
+        if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == LOW) {
+            std::cout << "Pin " << portduino_config.lora_pa_detect_pin.pin << " PULLDOWN is LOW" << std::endl;
+        }
+        pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLUP);
+        sleep(1);
+        if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == HIGH) {
+            std::cout << "Pin " << portduino_config.lora_pa_detect_pin.pin << " PULLUP is HIGH, dropping PA curve" << std::endl;
+            portduino_config.num_pa_points = 1;
+            portduino_config.tx_gain_lora[0] = 0;
+        } else {
+            std::cout << "Pin " << portduino_config.lora_pa_detect_pin.pin << " PULLUP is LOW, using PA curve" << std::endl;
+        }
+
+        // disable bias once finished
+        pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT);
+    } else if (portduino_config.hat_plus_custom_fields.find("io_slot1") != portduino_config.hat_plus_custom_fields.end()) {
+        printf("Hat+ io_slot1 is %s\n", portduino_config.hat_plus_custom_fields["io_slot1"].c_str());
+        if (portduino_config.hat_plus_custom_fields["io_slot1"] != "RAK13302") {
+            std::cout << "Hat+ io_slot1 is not RAK13302, skipping PA curve" << std::endl;
+            portduino_config.num_pa_points = 1;
+            portduino_config.tx_gain_lora[0] = 0;
+        }
+    }
+
+    for (auto i : portduino_config.extra_pins) {
+        // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
+        // Those GPIO are handled in our usermode driver instead.
+        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+            continue;
+        }
+        if (i.enabled && i.default_high) {
+            pinMode(i.pin, OUTPUT);
+            digitalWrite(i.pin, HIGH);
+        }
+    }
 
     // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
     if (portduino_config.lora_spi_dev != "" && portduino_config.lora_spi_dev != "ch341") {

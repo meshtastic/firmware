@@ -107,6 +107,7 @@ extern struct portduino_config_struct {
     pinMapping lora_reset_pin = {"Lora", "Reset"};
     pinMapping lora_txen_pin = {"Lora", "TXen"};
     pinMapping lora_rxen_pin = {"Lora", "RXen"};
+    pinMapping lora_pa_detect_pin = {"Lora", "PA_DETECT"};
     pinMapping lora_sx126x_ant_sw_pin = {"Lora", "SX126X_ANT_SW"};
     std::vector<pinMapping> extra_pins = {};
 

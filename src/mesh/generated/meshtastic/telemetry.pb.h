@@ -26,7 +26,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_INA219 = 5,
     /* High accuracy temperature and pressure */
     meshtastic_TelemetrySensorType_BMP280 = 6,
-    /* High accuracy temperature and humidity */
+    /* TODO - REMOVE High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHTC3 = 7,
     /* High accuracy pressure */
     meshtastic_TelemetrySensorType_LPS22 = 8,
@@ -36,7 +36,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_QMI8658 = 10,
     /* 3-Axis magnetic sensor */
     meshtastic_TelemetrySensorType_QMC5883L = 11,
-    /* High accuracy temperature and humidity */
+    /* TODO - REMOVE High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT31 = 12,
     /* PM2.5 air quality sensor */
     meshtastic_TelemetrySensorType_PMSA003I = 13,
@@ -46,7 +46,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_BMP085 = 15,
     /* RCWL-9620 Doppler Radar Distance Sensor, used for water level detection */
     meshtastic_TelemetrySensorType_RCWL9620 = 16,
-    /* Sensirion High accuracy temperature and humidity */
+    /* TODO - REMOVE Sensirion High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT4X = 17,
     /* VEML7700 high accuracy ambient light(Lux) digital 16-bit resolution sensor. */
     meshtastic_TelemetrySensorType_VEML7700 = 18,

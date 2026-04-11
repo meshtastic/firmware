@@ -12,7 +12,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 jobs:
@@ -86,8 +86,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Get release version string
         run: |
@@ -146,7 +144,7 @@ jobs:
 
       - name: Docker meta (Debian)
         id: meta_debian
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: meshtastic/meshtasticd
           tags: |
@@ -167,7 +165,7 @@ jobs:
 
       - name: Docker meta (Alpine)
         id: meta_alpine
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: meshtastic/meshtasticd
           tags: |

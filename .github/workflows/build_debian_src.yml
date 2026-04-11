@@ -16,8 +16,7 @@ on:
         type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   build-debian-src:
@@ -28,8 +27,6 @@ jobs:
         with:
           submodules: recursive
           path: meshtasticd
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Install deps
         shell: bash
@@ -60,7 +57,7 @@ jobs:
         run: debian/ci_pack_sdeb.sh
         env:
           SERIES: ${{ inputs.series }}
-          GPG_KEY_ID: ${{ steps.gpg.outputs.keyid }}
+          GPG_KEY_ID: ${{ steps.gpg.outputs.keyid || '' }}
           PKG_VERSION: ${{ steps.version.outputs.deb }}
 
       - name: Store binaries as an artifact

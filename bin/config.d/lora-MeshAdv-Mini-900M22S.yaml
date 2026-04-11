@@ -1,5 +1,11 @@
 # MeshAdv Mini E22-900M22S
 # https://github.com/chrismyers2000/MeshAdv-Mini
+Meta:
+  name: MeshAdv Mini E22-900M22S
+  support: community
+  compatible:
+    - raspberry-pi
+
 Lora:
   Module: sx1262  # Ebyte E22-900M22S 
   CS: 8
