@@ -402,7 +402,8 @@ void nrf52Setup()
     uint32_t seed = 0;
     if (!HardwareRNG::seed(seed)) {
         LOG_WARN("Hardware RNG seed unavailable, using PRNG fallback");
-        seed = random();
+        // Use a hardware timer value as a fallback seed for better entropy
+        seed = micros();
     }
     LOG_DEBUG("Set random seed %u", seed);
     randomSeed(seed);
