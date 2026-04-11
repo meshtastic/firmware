@@ -198,9 +198,11 @@ RTCSetResult readFromRTC()
         }
 #endif
         if (currentQuality == RTCQualityNone) {
+            RTCQuality oldQuality = currentQuality;
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
+            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     }
