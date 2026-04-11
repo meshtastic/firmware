@@ -123,9 +123,6 @@ bool fill(uint8_t *buffer, size_t length)
         fillWithRandomDevice(buffer, length);
         filled = true;
     }
-#else
-    fillWithRandomDevice(buffer, length);
-    filled = true;
 #endif
 
     if (!filled) {
@@ -137,8 +134,9 @@ bool fill(uint8_t *buffer, size_t length)
 
 #if HAS_RADIO
     // Best-effort: if the radio is active and can provide modem entropy, XOR it over the
-    // buffer to improve overall quality. We ignore failures to keep RNG usable even when
-    // radio hardware is powered down or uninitialized.
+    // buffer to improve overall quality. We consider the filling a success if either a
+    // good platform RNG or the modem RNG provided data, so we return true as long as at
+    // least one of those steps succeeded.
     filled = mixWithLoRaEntropy(buffer, length) || filled;
 #endif
 
