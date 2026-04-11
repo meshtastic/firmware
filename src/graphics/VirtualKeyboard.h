@@ -65,12 +65,19 @@ class VirtualKeyboard
 
     enum _IMEStatus { ACTIVE, INACTIVE } IMEStatus = INACTIVE;
     uint8_t processedWords = 0;
+#if defined(TINYLORA_ADVANCED_IME)
+    int resultsOffset = 0;
+    int resultsfulllen = 0;
+    std::vector<std::string> displayList = {};
+    std::vector<uint8_t> selectionPos = {};
+#else
     uint8_t selectableChars = 0;
     int selectListfulllen = 0;
     int selectListOffset = 0;
     std::string selectList = "";
-    std::vector<uint8_t> inputTextLayout = {};
     std::vector<uint8_t> selectListLayout = {};
+#endif
+    std::vector<uint8_t> inputTextLayout = {};
 
     // Timeout management for auto-exit
     uint32_t lastActivityTime;
@@ -89,7 +96,9 @@ class VirtualKeyboard
     void deleteCharacter();
     void submitText();
     uint8_t getUtf8Length(const char *c, uint8_t pos);
+#if !defined(TINYLORA_ADVANCED_IME)
     uint8_t getChineseChar(uint8_t c);
+#endif
     void selectChineseChar(uint8_t chridx);
     void showNextSelection();
 };

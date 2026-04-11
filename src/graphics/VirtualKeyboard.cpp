@@ -5,9 +5,13 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "main.h"
+#if defined(TINYLORA_ADVANCED_IME)
+#include "pinyin_trie_helpers.h"
+#else
+#include <pinyin_simple_backend.h>
+#endif
 #include <Arduino.h>
 #include <vector>
-#include <pinyin_simple_backend.h>
 
 namespace graphics
 {
@@ -40,9 +44,15 @@ void VirtualKeyboard::initializeKeyboard()
     static_assert(LAYOUT_ROWS == KEYBOARD_ROWS, "LAYOUT rows must equal KEYBOARD_ROWS");
     static_assert(LAYOUT_COLS == KEYBOARD_COLS, "LAYOUT cols must equal KEYBOARD_COLS");
 
+#if defined(TINYLORA_ADVANCED_IME)
+    displayList = {};
+    selectionPos = {};
+    resultsOffset = 0;
+#else
     selectList = "";
     selectListLayout = {};
     selectListOffset = 0;
+#endif
 
     // Initialize all keys to empty first
     for (int row = 0; row < LAYOUT_ROWS; row++) {
@@ -237,8 +247,35 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
 
     // Chinese selecting area display
 
-    if (IMEStatus == ACTIVE && !inputText.empty()) {
+    if (IMEStatus == ACTIVE) {
         std::string currentPinyin = inputText.substr(processedWords, inputText.length() - processedWords);
+#if defined(TINYLORA_ADVANCED_IME)
+        int fulllen = 0;
+        std::vector<std::string> results = unified_search(currentPinyin, 60);
+        resultsfulllen = results.size() - 1;
+        displayList = {};
+        selectionPos = {};
+
+        for (int i = resultsOffset; i <= resultsfulllen; i++) {
+            if (results.empty()) {
+                break;
+            }
+            uint8_t lastpos = fulllen;
+            uint8_t width = display->getStringWidth(results[i].c_str(), results[i].length(), true);
+            fulllen += width + 6;
+            if (fulllen < display->getWidth() - 5) {
+                selectionPos.push_back(fulllen - 6);
+                displayList.push_back(results[i]);
+                display->drawString(lastpos, boxHeight - chineseArea, results[i].c_str());
+                if ((i - resultsOffset) == cursorCol) {
+                    display->drawHorizontalLine(lastpos, boxHeight, width);
+                    display->drawHorizontalLine(lastpos, boxHeight + 1, width);
+                }
+            } else {
+                break;
+            }
+        }
+#else
         uint8_t gotChars = 0;
         uint8_t copiedBytes = 0;
         selectList = "";
@@ -254,30 +291,37 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
             }
             bytesToCopy = getUtf8Length(str.c_str(), copiedBytes);
             if (cursorCol == gotChars) {
-                uint8_t width = display->getStringWidth(selectList.c_str(), selectList.length(), true);//screen->getCJKwidth(display, selectList.c_str());
-                display->drawHorizontalLine(width, boxHeight, 12);     // display the current selected word.
-                display->drawHorizontalLine(width, boxHeight + 1, 12); // double underline cuz i'm short-sighted.
+                uint8_t width = display->getStringWidth(selectList.c_str(), selectList.length(), true);
+                display->drawHorizontalLine(width, boxHeight, 12);
+                display->drawHorizontalLine(width, boxHeight + 1, 12);
             }
             selectList.append(str.substr(copiedBytes, bytesToCopy));
             selectListLayout.push_back(bytesToCopy);
             copiedBytes += bytesToCopy;
             gotChars++;
         }
+        selectableChars = gotChars;
+        display->drawString(0, boxHeight - chineseArea, selectList.c_str());
+#endif
         display->drawString(display->width() - 10, boxHeight - chineseArea, ">");
         if (cursorCol == 9) {
-            display->drawHorizontalLine(display->width() - 10, boxHeight,
-                                        display->getStringWidth(">")); // display the current selected word.
-            display->drawHorizontalLine(display->width() - 10, boxHeight + 1,
-                                        display->getStringWidth(">")); // double underline cuz i'm short-sighted.
+            display->drawHorizontalLine(display->width() - 10, boxHeight, display->getStringWidth(">"));
+            display->drawHorizontalLine(display->width() - 10, boxHeight + 1, display->getStringWidth(">"));
         }
-        selectableChars = gotChars;
-        display->drawString( 0, boxHeight - chineseArea, selectList.c_str()); // FIXME:support multiple pages.
     }
 
     // Text rendering: multi-line if space allows (>= 2 lines), else single-line with leading ellipsis
     const int textX = boxX + 2;
     const int maxTextWidth = boxWidth - 4;
     const int maxLines = (boxHeight - 2) / inputLineH;
+#if defined(TINYLORA_ADVANCED_IME)
+    auto textWidth = [&](const std::string &text) { return display->getStringWidth(text.c_str(), text.length(), true); };
+    auto drawText = [&](int16_t x, int16_t y, const std::string &text) { display->drawString(x, y, text.c_str()); };
+#else
+    auto textWidth = [&](const std::string &text) { return display->getStringWidth(text.c_str()); };
+    auto drawText = [&](int16_t x, int16_t y, const std::string &text) { display->drawString(x, y, text.c_str()); };
+#endif
+
     if (maxLines >= 2) {
         // Inner bounds for caret clamping
         const int innerLeft = boxX + 1;
@@ -292,7 +336,7 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
             while (!remaining.empty()) {
                 int bestLen = 0;
                 for (int len = 1; len <= (int)remaining.size(); ++len) {
-                    int w = display->getStringWidth(remaining.substr(0, len).c_str());
+                    int w = textWidth(remaining.substr(0, len));
                     if (w <= maxTextWidth)
                         bestLen = len;
                     else
@@ -336,8 +380,8 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
 
         for (int i = 0; i < linesToShow; ++i) {
             const std::string &chunk = lines[startIndex + i];
-            display->drawString(textX, lineY, chunk.c_str());
-            caretX = textX + display->getStringWidth(chunk.c_str());
+            drawText(textX, lineY, chunk);
+            caretX = textX + textWidth(chunk);
             caretY = lineY;
             lineY += lineStep;
         }
@@ -364,27 +408,27 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
         }
     } else {
         std::string displayText = inputText;
-        int textW = display->getStringWidth(displayText.c_str());
+        int textW = textWidth(displayText);
         std::string scrolled = displayText;
         if (textW > maxTextWidth) {
             // Trim from the left until it fits
             while (textW > maxTextWidth && !scrolled.empty()) {
                 scrolled.erase(0, 1);
-                textW = display->getStringWidth(scrolled.c_str());
+                textW = textWidth(scrolled);
             }
             // Add leading ellipsis and ensure it still fits
             if (scrolled != displayText) {
                 scrolled = "..." + scrolled;
-                textW = display->getStringWidth(scrolled.c_str());
+                textW = textWidth(scrolled);
                 // If adding ellipsis causes overflow, trim more after the ellipsis
                 while (textW > maxTextWidth && scrolled.size() > 3) {
                     scrolled.erase(3, 1); // remove chars after the ellipsis
-                    textW = display->getStringWidth(scrolled.c_str());
+                    textW = textWidth(scrolled);
                 }
             }
         } else {
             // Keep textW in sync with what we draw
-            textW = display->getStringWidth(scrolled.c_str());
+            textW = textWidth(scrolled);
         }
 
         const int innerLeft = boxX + 1;
@@ -399,7 +443,7 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
         if (textY < boxY)
             textY = boxY;
         if (!scrolled.empty()) {
-            display->drawString(textX, textY, scrolled.c_str());
+            drawText(textX, textY, scrolled);
         }
 
         int cursorX = textX + textW;
@@ -451,7 +495,11 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
         }
     }
 
+#if defined(TINYLORA_ADVANCED_IME)
+    int textWidth = display->getStringWidth(keyText.c_str(), keyText.length(), true);
+#else
     int textWidth = display->getStringWidth(keyText.c_str());
+#endif
     // Label alignment
     // - Rightmost action column: right-align text with a small right padding (~2px) so it hugs screen edge neatly.
     // - Other keys: center horizontally; use ceil-style rounding to avoid appearing left-biased on odd widths.
@@ -682,11 +730,22 @@ void VirtualKeyboard::handleLongPress()
 void VirtualKeyboard::insertCharacter(char c)
 {
     if (IMEStatus == ACTIVE) {
-        if (c >= '1' && c <= '9' && !selectList.empty()) { // digits for chinese selection
+        if (c >= '1' && c <= '9'
+#if defined(TINYLORA_ADVANCED_IME)
+            && !displayList.empty()
+#else
+            && !selectList.empty()
+#endif
+        ) { // digits for chinese selection
             selectChineseChar(cursorCol);
         } else if (c >= 'a' && c <= 'z') { // pinyin input
+#if defined(TINYLORA_ADVANCED_IME)
+            if (resultsOffset != 0)
+                resultsOffset = 0; // reset offset when input more chars.
+#else
             if (selectListOffset != 0)
                 selectListOffset = 0; // reset offset when input more chars.
+#endif
             inputText += c;
             inputTextLayout.push_back(1);
         } else if (c == '0') {
@@ -725,9 +784,15 @@ void VirtualKeyboard::submitText()
     // Only submit if text is not empty
     if (!inputText.empty() && onTextEntered) {
         // Store callback and text to submit before clearing callback
+#if defined(TINYLORA_ADVANCED_IME)
+        displayList = {};
+        selectionPos = {};
+        resultsOffset = 0;
+#else
         selectList = "";
         selectListLayout = {};
         selectListOffset = 0;
+#endif
 
         std::function<void(const std::string &)> callback = onTextEntered;
         std::string textToSubmit = inputText;
@@ -780,9 +845,15 @@ bool VirtualKeyboard::isTimedOut() const
 void VirtualKeyboard::toggleIME()
 {
     if (IMEStatus == ACTIVE) { // reset vars
+#if defined(TINYLORA_ADVANCED_IME)
+        displayList = {};
+        selectionPos = {};
+        resultsOffset = 0;
+#else
         selectList = "";
         selectListLayout = {};
         selectListOffset = 0;
+#endif
     } else {
         processedWords = inputText.length(); // mark previous chars as processed
     }
@@ -809,6 +880,7 @@ uint8_t VirtualKeyboard::getUtf8Length(const char *c, uint8_t pos)
     return 0;
 }
 
+#if !defined(TINYLORA_ADVANCED_IME)
 uint8_t VirtualKeyboard::getChineseChar(uint8_t c)
 {
     int ret = 0;
@@ -817,27 +889,53 @@ uint8_t VirtualKeyboard::getChineseChar(uint8_t c)
     }
     return ret;
 }
+#endif
 
 void VirtualKeyboard::selectChineseChar(uint8_t chridx)
 {
+#if defined(TINYLORA_ADVANCED_IME)
+    if (chridx + 1 > displayList.size())
+        return; // make sure it won't overflow.
+#else
     if (chridx > selectableChars)
         return; // make sure it won't overflow.
+#endif
     int pinyinLength = inputText.length() - processedWords;
     inputText.erase(inputText.length() - pinyinLength, inputText.length());
     inputTextLayout.erase(inputTextLayout.end() - pinyinLength, inputTextLayout.end());
+#if defined(TINYLORA_ADVANCED_IME)
+    std::string word = displayList[chridx];
+#else
     std::string word = selectList.substr(getChineseChar(chridx), selectListLayout[chridx]);
+#endif
     inputText.append(word);
+#if defined(TINYLORA_ADVANCED_IME)
+    for (int len = 0; len < word.length();) {
+        uint8_t charLength = getUtf8Length(word.c_str(), len);
+        inputTextLayout.push_back(charLength);
+        processedWords += charLength;
+        len += charLength;
+    }
+    resultsOffset = 0;
+#else
     uint8_t charLength = getUtf8Length(word.c_str(), 0);
     inputTextLayout.push_back(charLength);
     processedWords += charLength;
     selectListOffset = 0;
+#endif
 }
 
 void VirtualKeyboard::showNextSelection()
 {
+#if defined(TINYLORA_ADVANCED_IME)
+    uint8_t listlen = displayList.size();
+    uint8_t nextOffset = resultsOffset + listlen;
+    resultsOffset = nextOffset > resultsfulllen ? 0 : nextOffset;
+#else
     uint8_t listlen = selectList.length();
     uint8_t nextOffset = selectListOffset + listlen;
     selectListOffset = nextOffset >= selectListfulllen ? 0 : nextOffset;
+#endif
 }
 
 } // namespace graphics
