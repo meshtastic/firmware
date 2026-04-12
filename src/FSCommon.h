@@ -45,7 +45,25 @@ using namespace STM32_LittleFS_Namespace;
 #include "InternalFileSystem.h"
 #define FSCom InternalFS
 #define FSBegin() FSCom.begin() // InternalFS formats on failure
+#include "Adafruit_LittleFS.h"
 using namespace Adafruit_LittleFS_Namespace;
+
+/**
+ * Optional external LittleFS instance (e.g. QSPI flash on boards that define
+ * EXTERNAL_FLASH_USE_QSPI in their variant.h).
+ *
+ * Null by default.  Set by extFSInit() when a board or firmware module
+ * initialises an external flash filesystem.  XModem uses this pointer to
+ * route "/ext/" paths to external storage instead of InternalFS.
+ */
+extern Adafruit_LittleFS *extFS;
+
+/**
+ * Called from fsInit() to initialise the external filesystem.
+ * The default weak implementation is a no-op; override in a platform or
+ * firmware module to mount the QSPI (or SPI) flash and assign extFS.
+ */
+void extFSInit();
 #endif
 
 void fsInit();

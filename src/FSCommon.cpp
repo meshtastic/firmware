@@ -284,6 +284,22 @@ void rmDir(const char *dirname)
  */
 __attribute__((weak, noinline)) void preFSBegin() {}
 
+#if defined(ARCH_NRF52)
+// Default null; set by extFSInit() when external flash is available.
+Adafruit_LittleFS *extFS = nullptr;
+
+/**
+ * Default weak implementation — no external filesystem.
+ * Override in your firmware to mount a QSPI/SPI flash chip and assign extFS:
+ *
+ *   void extFSInit() {
+ *       static MyExternalFS myFS;
+ *       if (myFS.begin()) extFS = &myFS;
+ *   }
+ */
+__attribute__((weak, noinline)) void extFSInit() {}
+#endif
+
 void fsInit()
 {
 #ifdef FSCom
@@ -293,6 +309,12 @@ void fsInit()
         LOG_ERROR("Filesystem mount failed");
         // assert(0); This auto-formats the partition, so no need to fail here.
     }
+#if defined(ARCH_NRF52)
+    extFSInit();
+    if (extFS) {
+        LOG_DEBUG("External filesystem mounted OK");
+    }
+#endif
 #if defined(ARCH_ESP32)
     LOG_DEBUG("Filesystem files (%d/%d Bytes):", FSCom.usedBytes(), FSCom.totalBytes());
 #else

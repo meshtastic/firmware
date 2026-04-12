@@ -121,6 +121,7 @@ External serial flash WP25R1635FZUIL0
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES MX25R1635F
 #define EXTERNAL_FLASH_USE_QSPI
+#define MESHTASTIC_EXTERNAL_FLASH_FS
 
 /*
  * Lora radio
