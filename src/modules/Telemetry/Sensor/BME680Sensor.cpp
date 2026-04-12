@@ -8,6 +8,10 @@
 #include "SPILock.h"
 #include "TelemetrySensor.h"
 
+#if __has_include(<Adafruit_BME680.h>)
+#include <cmath>
+#endif
+
 BME680Sensor::BME680Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BME680, "BME680") {}
 
 #if __has_include(<bsec2.h>)
@@ -96,8 +100,28 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.temperature = bme680->readTemperature();
     measurement->variant.environment_metrics.relative_humidity = bme680->readHumidity();
     measurement->variant.environment_metrics.barometric_pressure = bme680->readPressure() / 100.0F;
-    measurement->variant.environment_metrics.gas_resistance = bme680->readGas() / 1000.0;
 
+    float gasRaw = bme680->readGas();
+    measurement->variant.environment_metrics.gas_resistance = gasRaw / 1000.0;
+
+    // IAQ approximation: humidity-compensated logarithmic mapping of gas resistance
+    // Gas sensor resistance drops with humidity; compensate to a 40% RH reference baseline
+    // Map compensated gas resistance (Ohms) to IAQ 0-500 using log-linear interpolation
+    // Clean air reference ~400 kOhm, polluted reference ~5 kOhm
+    if (gasRaw > 0.0f && !isfinite(gasRaw)) {
+
+        static constexpr float LOG_UPPER = 12.899219f;                          // log(400k)
+        static constexpr float LOG_RANGE_INV = 1.0f / (12.899219f - 8.517193f); // 1 / (log(400k) - log(5k))
+        measurement->variant.environment_metrics.has_iaq = true;
+        measurement->variant.environment_metrics.iaq = (uint16_t)(fminf(
+            fmaxf(((LOG_UPPER -
+                    logf(fmaxf(gasRaw * expf(0.035f * (measurement->variant.environment_metrics.relative_humidity - 40.0f)),
+                               1.0f))) *
+                   LOG_RANGE_INV) *
+                      500.0f,
+                  0.0f),
+            500.0f));
+    }
 #endif
     return true;
 }

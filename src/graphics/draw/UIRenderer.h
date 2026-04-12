@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NodeDB.h"
+#include "graphics/EmoteRenderer.h"
 #include "graphics/Screen.h"
 #include "graphics/emotes.h"
 #include <OLEDDisplay.h>
@@ -49,7 +50,7 @@ class UIRenderer
     // Navigation bar overlay
     static void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state);
 
-    static void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y);
+    static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
     static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
@@ -79,6 +80,28 @@ class UIRenderer
 
     static std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
     static int formatDateTime(char *buffer, size_t bufferSize, uint32_t rtc_sec, OLEDDisplay *display, bool showTime);
+
+    // Shared BaseUI emote helpers.
+    static int measureStringWithEmotes(OLEDDisplay *display, const char *line, int emoteSpacing = 1);
+    static inline int measureStringWithEmotes(OLEDDisplay *display, const std::string &line, int emoteSpacing = 1)
+    {
+        return measureStringWithEmotes(display, line.c_str(), emoteSpacing);
+    }
+    static size_t truncateStringWithEmotes(OLEDDisplay *display, const char *line, char *out, size_t outSize, int maxWidth,
+                                           const char *ellipsis = "...", int emoteSpacing = 1);
+    static inline std::string truncateStringWithEmotes(OLEDDisplay *display, const std::string &line, int maxWidth,
+                                                       const std::string &ellipsis = "...", int emoteSpacing = 1)
+    {
+        return graphics::EmoteRenderer::truncateToWidth(display, line, maxWidth, ellipsis, graphics::emotes, graphics::numEmotes,
+                                                        emoteSpacing);
+    }
+    static void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const char *line, int fontHeight, int emoteSpacing = 1,
+                                     bool fauxBold = true);
+    static inline void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, int fontHeight,
+                                            int emoteSpacing = 1, bool fauxBold = true)
+    {
+        drawStringWithEmotes(display, x, y, line.c_str(), fontHeight, emoteSpacing, fauxBold);
+    }
 
     // Check if the display can render a string (detect special chars; emoji)
     static bool haveGlyphs(const char *str);

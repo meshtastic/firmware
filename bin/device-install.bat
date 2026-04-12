@@ -156,16 +156,8 @@ IF %BPS_RESET% EQU 1 (
 SET "PROGNAME=!FILENAME:.factory.bin=!"
 CALL :LOG_MESSAGE DEBUG "Computed PROGNAME: !PROGNAME!"
 
-IF "__!MCU!__" == "__esp32s3__" (
-    @REM We are working with ESP32-S3
-    SET "OTA_FILENAME=bleota-s3.bin"
-) ELSE IF "__!MCU!__" == "__esp32c3__" (
-    @REM We are working with ESP32-C3
-    SET "OTA_FILENAME=bleota-c3.bin"
-) ELSE (
-    @REM Everything else
-    SET "OTA_FILENAME=bleota.bin"
-)
+@REM Determine OTA filename based on MCU type (unified OTA format)
+SET "OTA_FILENAME=mt-!MCU!-ota.bin"
 CALL :LOG_MESSAGE DEBUG "Set OTA_FILENAME to: !OTA_FILENAME!"
 
 @REM Set SPIFFS filename with "littlefs-" prefix.

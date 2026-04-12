@@ -9,6 +9,7 @@
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
+#include <Throttle.h>
 #include <WebServer.h>
 #include <WiFi.h>
 
@@ -55,6 +56,12 @@ static const int32_t ACTIVE_INTERVAL_MS = 50;
 static const int32_t MEDIUM_INTERVAL_MS = 200;
 static const int32_t IDLE_INTERVAL_MS = 1000;
 
+// Maximum concurrent HTTPS connections (reduced from default 4 to save memory)
+static const uint8_t MAX_HTTPS_CONNECTIONS = 2;
+
+// Minimum free heap required for SSL handshake (~40KB for mbedTLS contexts)
+static const uint32_t MIN_HEAP_FOR_SSL = 40000;
+
 static SSLCert *cert;
 static HTTPSServer *secureServer;
 static HTTPServer *insecureServer;
@@ -67,8 +74,20 @@ static void handleWebResponse()
     if (isWifiAvailable()) {
 
         if (isWebServerReady) {
-            if (secureServer)
-                secureServer->loop();
+            // Check heap before HTTPS processing - SSL requires significant memory
+            if (secureServer) {
+                uint32_t freeHeap = ESP.getFreeHeap();
+                if (freeHeap >= MIN_HEAP_FOR_SSL) {
+                    secureServer->loop();
+                } else {
+                    // Skip HTTPS when memory is low to prevent SSL setup failures
+                    static uint32_t lastHeapWarning = 0;
+                    if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
+                        LOG_WARN("Low heap (%u bytes), skipping HTTPS processing", freeHeap);
+                        lastHeapWarning = millis();
+                    }
+                }
+            }
             insecureServer->loop();
         }
     }
@@ -229,7 +248,7 @@ void initWebServer()
     LOG_DEBUG("Init Web Server");
 
     // We can now use the new certificate to setup our server as usual.
-    secureServer = new HTTPSServer(cert);
+    secureServer = new HTTPSServer(cert, 443, MAX_HTTPS_CONNECTIONS);
     insecureServer = new HTTPServer();
 
     registerHandlers(insecureServer, secureServer);

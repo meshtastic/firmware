@@ -21,8 +21,8 @@
 #define BUTTON_PIN 15 // Right side button - if not available, set device.button_gpio to 0 from Meshtastic client
 
 // LEDs
-#define LED_PIN 13 // Tx LED
-#define USER_LED 2 // Rx LED
+#define LED_POWER 13 // Tx LED
+#define USER_LED 2   // Rx LED
 
 // Buzzer
 #define PIN_BUZZER 33
