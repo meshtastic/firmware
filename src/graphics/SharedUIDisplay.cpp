@@ -112,8 +112,10 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     // Color TFT headers use a fixed dark background + white glyphs.
     // Keep legacy inverted bitmap behavior only for monochrome displays.
     const bool useInvertedHeaderStyle = (isInverted && !force_no_invert && !isTFTColoringEnabled() && !transparent_background);
+#if GRAPHICS_TFT_COLORING_ENABLED
     int statusLeftEndX = 0;
     int statusRightStartX = screenW;
+#endif
 
     {
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
@@ -218,6 +220,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     bool useHorizontalBattery = (currentResolution == ScreenResolution::High && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+#if GRAPHICS_TFT_COLORING_ENABLED
     auto batteryFillColorForPercent = [](int percent) {
         if (percent <= 20) {
             return TFTPalette::Bad;
@@ -227,6 +230,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         }
         return TFTPalette::Good;
     };
+#endif
     bool hasBatteryFillRegion = false;
     int16_t batteryFillRegionX = 0;
     int16_t batteryFillRegionY = 0;
@@ -299,7 +303,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             batteryX += 9; // Icon + 2 pixels
         }
     }
+#if GRAPHICS_TFT_COLORING_ENABLED
     statusLeftEndX = batteryX + 2;
+#endif
 
     if (chargePercent != 101) {
         // === Battery % Display ===
@@ -310,11 +316,15 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         const int percentX = batteryX + chargeNumWidth - 1;
         display->drawString(batteryX, textY, chargeStr);
         display->drawString(percentX, textY, "%");
+#if GRAPHICS_TFT_COLORING_ENABLED
         statusLeftEndX = percentX + percentWidth + 2;
+#endif
         if (isBold) {
             display->drawString(batteryX + 1, textY, chargeStr);
             display->drawString(percentX + 1, textY, "%");
+#if GRAPHICS_TFT_COLORING_ENABLED
             statusLeftEndX = percentX + percentWidth + 3;
+#endif
         }
     }
 
@@ -359,7 +369,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             timeStrWidth = display->getStringWidth(timeStr);
         }
         timeX = screenW - xOffset - timeStrWidth + 3;
+#if GRAPHICS_TFT_COLORING_ENABLED
         statusRightStartX = timeX - (useHorizontalBattery ? 22 : 16);
+#endif
 
         // === Show Mail or Mute Icon to the Left of Time ===
         int iconRightEdge = timeX - 2;
@@ -458,8 +470,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     } else {
         // === No Time Available: Mail/Mute Icon Moves to Far Right ===
         int iconRightEdge = screenW - xOffset;
+#if GRAPHICS_TFT_COLORING_ENABLED
         statusRightStartX = screenW - (useHorizontalBattery ? 22 : 12);
-
+#endif
         bool showMail = false;
 
 #ifndef USE_EINK
