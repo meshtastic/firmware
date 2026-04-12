@@ -11,8 +11,7 @@ on:
         type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   build-copr-hook:
@@ -22,8 +21,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ github.ref }}
-          repository: ${{ github.repository }}
 
       - name: Trigger COPR build
         uses: vidplace7/copr-build@main
