@@ -515,17 +515,17 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
     // Fill progress
     if (fillRight > 0) {
-        if (isTFTColoringEnabled()) {
-            uint16_t chUtilFillColor = TFTPalette::Good;
-            if (raw_chutil_percent >= 60) {
-                chUtilFillColor = TFTPalette::Bad;
-            } else if (raw_chutil_percent >= 35) {
-                chUtilFillColor = TFTPalette::Medium;
-            }
-            setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, TFTPalette::Black);
-            registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
-                                   chutil_bar_height - 2);
+#if GRAPHICS_TFT_COLORING_ENABLED
+        uint16_t chUtilFillColor = TFTPalette::Good;
+        if (raw_chutil_percent >= 60) {
+            chUtilFillColor = TFTPalette::Bad;
+        } else if (raw_chutil_percent >= 35) {
+            chUtilFillColor = TFTPalette::Medium;
         }
+        setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, TFTPalette::Black);
+        registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
+                               chutil_bar_height - 2);
+#endif
         display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
     }
 

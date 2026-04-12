@@ -595,9 +595,6 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     }
 #endif
 
-    const bool applyNotificationBorderTheme = isTFTColoringEnabled();
-    const bool applyActionMenuTheme = applyNotificationBorderTheme && alertBannerOptions > 0;
-
     // Draw Box
     display->setColor(BLACK);
     display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
@@ -613,20 +610,20 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
     display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
     display->setColor(WHITE);
-    if (applyNotificationBorderTheme) {
-        setTFTColorRole(TFTColorRole::ActionMenuBody, TFTPalette::White, TFTPalette::Black);
-        // Prevent shadow bleed from stale regions.
-        registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
-        registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop - 2, boxWidth, 1);
-        registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
-        registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 2, boxTop, 1, boxHeight);
-        registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
-        setTFTColorRole(TFTColorRole::ActionMenuBorder, TFTPalette::DarkGray, TFTPalette::Black);
-        registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, boxWidth, 1);
-        registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop + boxHeight - 1, boxWidth, 1);
-        registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, 1, boxHeight);
-        registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft + boxWidth - 1, boxTop, 1, boxHeight);
-    }
+#if GRAPHICS_TFT_COLORING_ENABLED
+    setTFTColorRole(TFTColorRole::ActionMenuBody, TFTPalette::White, TFTPalette::Black);
+    // Prevent shadow bleed from stale regions.
+    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop - 2, boxWidth, 1);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 2, boxTop, 1, boxHeight);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
+    setTFTColorRole(TFTColorRole::ActionMenuBorder, TFTPalette::DarkGray, TFTPalette::Black);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, boxWidth, 1);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop + boxHeight - 1, boxWidth, 1);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, 1, boxHeight);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft + boxWidth - 1, boxTop, 1, boxHeight);
+#endif
 
     // Draw Content
     int16_t lineY = boxTop + vPadding;
@@ -652,10 +649,12 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             const int16_t titleBarY = boxTop + 1;
             const int16_t titleBarHeight = effectiveLineHeight - background_yOffset;
             display->fillRect(boxLeft, titleBarY, boxWidth, titleBarHeight);
-            if (applyActionMenuTheme) {
+#if GRAPHICS_TFT_COLORING_ENABLED
+            if (alertBannerOptions > 0) {
                 setTFTColorRole(TFTColorRole::ActionMenuTitle, TFTPalette::DarkGray, TFTPalette::White);
                 registerTFTColorRegion(TFTColorRole::ActionMenuTitle, boxLeft, titleBarY, boxWidth, titleBarHeight);
             }
+#endif
             display->setColor(BLACK);
             int yOffset = 3;
             if (current_notification_type == notificationTypeEnum::node_picker) {
@@ -690,8 +689,8 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
                 int baseX = groupStartX + textWidth + gap;
                 int baseY = lineY + effectiveLineHeight - 1;
-                const bool colorSignalBars = isTFTColoringEnabled() && graphics::bannerSignalBars > 0;
-                if (colorSignalBars) {
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (graphics::bannerSignalBars > 0) {
                     uint16_t signalBarsColor = TFTPalette::Medium;
                     if (graphics::bannerSignalBars <= 1) {
                         signalBarsColor = TFTPalette::Bad;
@@ -700,15 +699,18 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                     }
                     setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black);
                 }
+#endif
                 for (int b = 0; b < totalBars; b++) {
                     int barHeight = (b + 1) * barHeightStep;
                     int x = baseX + b * (barWidth + barSpacing);
                     int y = baseY - barHeight;
 
                     if (b < graphics::bannerSignalBars) {
-                        if (colorSignalBars) {
+#if GRAPHICS_TFT_COLORING_ENABLED
+                        if (graphics::bannerSignalBars > 0) {
                             registerTFTColorRegion(TFTColorRole::SignalBars, x, baseY - maxBarHeight, barWidth, maxBarHeight);
                         }
+#endif
                         display->fillRect(x, y, barWidth, barHeight);
                     } else {
                         display->drawRect(x, y, barWidth, barHeight);

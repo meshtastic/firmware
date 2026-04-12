@@ -1208,29 +1208,29 @@ void TFTDisplay::display(bool fromBlank)
     colorTftWhite = (graphics::TFTPalette::White >> 8) | ((graphics::TFTPalette::White & 0xFF) << 8);
     colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
 
-    if (graphics::isTFTColoringEnabled()) {
-        // When TFT color regions are active, color can change even if monochrome glyph bits do not.
-        // Force a full repaint so header/background regions never retain stale colors across frame swaps.
-        for (y = 0; y < displayHeight; y++) {
-            y_byteIndex = (y / 8) * displayWidth;
-            y_byteMask = (1 << (y & 7));
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // When TFT color regions are active, color can change even if monochrome glyph bits do not.
+    // Force a full repaint so header/background regions never retain stale colors across frame swaps.
+    for (y = 0; y < displayHeight; y++) {
+        y_byteIndex = (y / 8) * displayWidth;
+        y_byteMask = (1 << (y & 7));
 
-            for (x = 0; x < displayWidth; x++) {
-                isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
-                linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                    colorTftWhite, colorTftBlack);
-            }
-#if defined(HACKADAY_COMMUNICATOR)
-            tft->draw16bitBeRGBBitmap(0, y, linePixelBuffer, displayWidth, 1);
-#else
-            tft->pushRect(0, y, displayWidth, 1, linePixelBuffer);
-#endif
+        for (x = 0; x < displayWidth; x++) {
+            isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
+            linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
+                                                                colorTftWhite, colorTftBlack);
         }
-
-        memcpy(buffer_back, buffer, displayBufferSize);
-        graphics::clearTFTColorRegions();
-        return;
+#if defined(HACKADAY_COMMUNICATOR)
+        tft->draw16bitBeRGBBitmap(0, y, linePixelBuffer, displayWidth, 1);
+#else
+        tft->pushRect(0, y, displayWidth, 1, linePixelBuffer);
+#endif
     }
+
+    memcpy(buffer_back, buffer, displayBufferSize);
+    graphics::clearTFTColorRegions();
+    return;
+#endif
 
     y = 0;
     while (y < displayHeight) {

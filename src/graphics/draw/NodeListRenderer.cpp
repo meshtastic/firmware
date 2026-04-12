@@ -220,7 +220,9 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
+#if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     char timeStr[10];
@@ -277,7 +279,9 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
+#if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -349,7 +353,9 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
+#if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
     char distStr[10] = "";
 
@@ -456,7 +462,9 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
+#if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -697,20 +705,20 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
         display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
         display->setColor(WHITE);
-        if (isTFTColoringEnabled()) {
-            setTFTColorRole(TFTColorRole::ActionMenuBody, TFTPalette::White, TFTPalette::Black);
-            // Prevent shadow bleed from stale regions.
-            registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
-            registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop - 2, boxWidth, 1);
-            registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
-            registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 2, boxTop, 1, boxHeight);
-            registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
-            setTFTColorRole(TFTColorRole::ActionMenuBorder, TFTPalette::DarkGray, TFTPalette::Black);
-            registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, boxWidth, 1);
-            registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop + boxHeight - 1, boxWidth, 1);
-            registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, 1, boxHeight);
-            registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft + boxWidth - 1, boxTop, 1, boxHeight);
-        }
+#if GRAPHICS_TFT_COLORING_ENABLED
+        setTFTColorRole(TFTColorRole::ActionMenuBody, TFTPalette::White, TFTPalette::Black);
+        // Prevent shadow bleed from stale regions.
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop - 2, boxWidth, 1);
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 2, boxTop, 1, boxHeight);
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
+        setTFTColorRole(TFTColorRole::ActionMenuBorder, TFTPalette::DarkGray, TFTPalette::Black);
+        registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, boxWidth, 1);
+        registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop + boxHeight - 1, boxWidth, 1);
+        registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, 1, boxHeight);
+        registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft + boxWidth - 1, boxTop, 1, boxHeight);
+#endif
 
         // Text
         display->drawString(boxLeft + padding, boxTop + padding, buf);

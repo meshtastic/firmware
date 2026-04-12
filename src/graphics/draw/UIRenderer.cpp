@@ -900,17 +900,17 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     // Fill progress
     if (fillRight > 0) {
-        if (isTFTColoringEnabled()) {
-            uint16_t chUtilFillColor = TFTPalette::Good;
-            if (raw_chutil_percent >= 60) {
-                chUtilFillColor = TFTPalette::Bad;
-            } else if (raw_chutil_percent >= 35) {
-                chUtilFillColor = TFTPalette::Medium;
-            }
-            setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, TFTPalette::Black);
-            registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
-                                   chutil_bar_height - 2);
+#if GRAPHICS_TFT_COLORING_ENABLED
+        uint16_t chUtilFillColor = TFTPalette::Good;
+        if (raw_chutil_percent >= 60) {
+            chUtilFillColor = TFTPalette::Bad;
+        } else if (raw_chutil_percent >= 35) {
+            chUtilFillColor = TFTPalette::Medium;
         }
+        setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, TFTPalette::Black);
+        registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
+                               chutil_bar_height - 2);
+#endif
         display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
     }
 
@@ -1459,7 +1459,6 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
-    const bool applyTFTColorRoles = isTFTColoringEnabled();
 
     const bool navBarVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
     const int y = navBarVisible ? (SCREEN_HEIGHT - iconSize - 1) : SCREEN_HEIGHT;
@@ -1510,19 +1509,20 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 #endif
 
     display->setColor(BLACK);
-    if (applyTFTColorRoles) {
-        setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, navBgColor);
-        registerTFTColorRegion(TFTColorRole::HeaderStatus, rectX, rectY, rectWidth, rectHeight);
-        display->fillRect(rectX, rectY, rectWidth, rectHeight);
-    } else {
-        // Keep legacy OLED behavior untouched.
-        display->fillRect(rectX + 1, rectY, rectWidth - 2, rectHeight - 2);
-        display->setColor(WHITE);
-        display->drawRect(rectX, rectY, rectWidth, rectHeight);
-    }
+#if GRAPHICS_TFT_COLORING_ENABLED
+    setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, navBgColor);
+    registerTFTColorRegion(TFTColorRole::HeaderStatus, rectX, rectY, rectWidth, rectHeight);
+    display->fillRect(rectX, rectY, rectWidth, rectHeight);
+#else
+    // Keep legacy OLED behavior untouched.
+    display->fillRect(rectX + 1, rectY, rectWidth - 2, rectHeight - 2);
+    display->setColor(WHITE);
+    display->drawRect(rectX, rectY, rectWidth, rectHeight);
+#endif
 
+#if GRAPHICS_TFT_COLORING_ENABLED
     // TFT: force edge refresh to clear nav artifacts.
-    if (applyTFTColorRoles && navBarVisible && clearWidth > 1) {
+    if (navBarVisible && clearWidth > 1) {
         setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::Black, TFTPalette::Black);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX, rectY, 1, rectHeight);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX + clearWidth - 1, rectY, 1, rectHeight);
@@ -1531,6 +1531,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         display->drawVerticalLine(clearX + clearWidth - 1, rectY, rectHeight);
         display->setColor(WHITE);
     }
+#endif
 
     // Icons are 1-bit glyphs and must be drawn with WHITE to set pixels.
     display->setColor(WHITE);
@@ -1540,14 +1541,9 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         const uint8_t *icon = screen->indicatorIcons[i];
         const int x = xStart + (i - pageStart) * (iconSize + spacing);
         const bool isActive = (i == static_cast<size_t>(frameToHighlight));
-        const bool drawActiveHighlightMono = isActive && !applyTFTColorRoles;
-        const bool drawActiveHighlightTFT = isActive && applyTFTColorRoles;
 
-        if (drawActiveHighlightMono) {
-            display->setColor(WHITE);
-            display->fillRect(x - 2, y - 2, iconSize + 4, iconSize + 4);
-            display->setColor(BLACK);
-        } else if (drawActiveHighlightTFT) {
+        if (isActive) {
+#if GRAPHICS_TFT_COLORING_ENABLED
             // Active icon inverts on TFT: white chip with black glyph.
             // Keep the buffer visibly different too, so dirty-rect updates include this region.
             setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, TFTPalette::Black);
@@ -1555,6 +1551,11 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             display->setColor(WHITE);
             display->fillRect(x - 1, y - 1, iconSize + 2, iconSize + 2);
             display->setColor(BLACK);
+#else
+            display->setColor(WHITE);
+            display->fillRect(x - 2, y - 2, iconSize + 4, iconSize + 4);
+            display->setColor(BLACK);
+#endif
         }
 
         if (currentResolution == ScreenResolution::High) {
@@ -1563,7 +1564,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             display->drawXbm(x, y, iconSize, iconSize, icon);
         }
 
-        if (drawActiveHighlightMono || drawActiveHighlightTFT) {
+        if (isActive) {
             display->setColor(WHITE);
         }
     }
@@ -1609,19 +1610,19 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 
     // Knock the corners off the square
-    if (isTFTColoringEnabled()) {
-        // TFT corner mask
-        display->setColor(BLACK);
-        display->fillRect(rectX, rectY, 1, 1);
-        display->fillRect(rectX + rectWidth - 1, rectY, 1, 1);
-        display->setColor(WHITE);
-    } else {
-        // monochrome styling only
-        display->setColor(BLACK);
-        display->drawRect(rectX, rectY, 1, 1);
-        display->drawRect(rectX + rectWidth - 1, rectY, 1, 1);
-        display->setColor(WHITE);
-    }
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // TFT corner mask
+    display->setColor(BLACK);
+    display->fillRect(rectX, rectY, 1, 1);
+    display->fillRect(rectX + rectWidth - 1, rectY, 1, 1);
+    display->setColor(WHITE);
+#else
+    // monochrome styling only
+    display->setColor(BLACK);
+    display->drawRect(rectX, rectY, 1, 1);
+    display->drawRect(rectX + rectWidth - 1, rectY, 1, 1);
+    display->setColor(WHITE);
+#endif
 }
 
 void UIRenderer::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)

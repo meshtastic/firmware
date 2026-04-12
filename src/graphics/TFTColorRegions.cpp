@@ -58,9 +58,9 @@ static TFTRoleColorsBe roleColors[static_cast<size_t>(TFTColorRole::Count)] = {
 
 void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
 {
-    if (!isTFTColoringEnabled()) {
-        return;
-    }
+#if !GRAPHICS_TFT_COLORING_ENABLED
+    return;
+#endif
 
     const uint8_t index = static_cast<uint8_t>(role);
     if (index >= static_cast<uint8_t>(TFTColorRole::Count)) {
@@ -73,9 +73,9 @@ void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
 
 void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t width, int16_t height)
 {
-    if (!isTFTColoringEnabled()) {
-        return;
-    }
+#if !GRAPHICS_TFT_COLORING_ENABLED
+    return;
+#endif
 
     if (width <= 0 || height <= 0) {
         return;
