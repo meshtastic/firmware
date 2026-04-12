@@ -118,19 +118,22 @@ void FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
 bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 {
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
         // ROUTER, ROUTER_LATE should never cancel relaying a packet (i.e. we should always rebroadcast),
         // even if we've heard another station rebroadcast it already.
+
+        //MXN: CLIENT_BASE act like router
         return false;
     }
 
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+/*    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
         // CLIENT_BASE: if the packet is from or to a favorited node,
         // we should act like a ROUTER and should never cancel a rebroadcast (i.e. we should always rebroadcast),
         // even if we've heard another station rebroadcast it already.
         return !nodeDB->isFromOrToFavoritedNode(*p);
     }
-
+*/
     // All other roles (such as CLIENT) should cancel a rebroadcast if they hear another station's rebroadcast.
     return true;
 }
