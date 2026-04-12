@@ -719,9 +719,10 @@ void Screen::setup()
 
 void Screen::setOn(bool on, FrameCallback einkScreensaver)
 {
-#if defined(T_LORA_PAGER)
-    if (cardKbI2cImpl)
-        cardKbI2cImpl->toggleBacklight(on);
+#if defined(T_LORA_PAGER) || defined(T_DECK)
+    if (cardKbI2cImpl) {
+        cardKbI2cImpl->suspendBacklightForSleep(!on);
+    }
 #endif
     if (!on)
         // We handle off commands immediately, because they might be called because the CPU is shutting down

@@ -548,9 +548,53 @@ int32_t KbI2cBase::runOnce()
     return 300;
 }
 
+static constexpr uint8_t TDECK_KB_ADDR = 0x55;
+static constexpr uint8_t LILYGO_KB_BRIGHTNESS_CMD = 0x01;
+static constexpr uint8_t DEFAULT_TDECK_KB_LEVEL = 127;
+
+void KbI2cBase::setBacklightLevel(uint8_t level)
+{
+#if defined(T_DECK)
+    if (!i2cBus) {
+        return;
+    }
+
+    i2cBus->beginTransmission(TDECK_KB_ADDR);
+    i2cBus->write(LILYGO_KB_BRIGHTNESS_CMD);
+    i2cBus->write(level);
+    i2cBus->endTransmission();
+
+    kbBacklightLevel = level;
+    kbBacklightEnabled = (level > 0);
+
+#elif defined(T_LORA_PAGER)
+    TCAKeyboard.setBacklight(level > 0);
+#endif
+}
+
+void KbI2cBase::suspendBacklightForSleep(bool sleeping)
+{
+#if defined(T_DECK)
+    if (sleeping) {
+        kbBacklightWasEnabledBeforeSleep = kbBacklightEnabled;
+        setBacklightLevel(0);
+    } else {
+        if (kbBacklightWasEnabledBeforeSleep) {
+            setBacklightLevel(kbBacklightLevel > 0 ? kbBacklightLevel : DEFAULT_TDECK_KB_LEVEL);
+        }
+    }
+
+#elif defined(T_LORA_PAGER)
+    TCAKeyboard.setBacklight(!sleeping);
+#endif
+}
+
 void KbI2cBase::toggleBacklight(bool on)
 {
-#if defined(T_LORA_PAGER)
+#if defined(T_DECK)
+    setBacklightLevel(on ? (kbBacklightLevel > 0 ? kbBacklightLevel : DEFAULT_TDECK_KB_LEVEL) : 0);
+
+#elif defined(T_LORA_PAGER)
     TCAKeyboard.setBacklight(on);
 #endif
 }
