@@ -20,7 +20,7 @@ constexpr uint16_t LightGray = 0xC618;
 
 constexpr uint16_t Red = rgb565(255, 0, 0);
 constexpr uint16_t Green = rgb565(0, 255, 0);
-constexpr uint16_t Blue = rgb565(0, 0, 255);
+constexpr uint16_t Blue = rgb565(0, 130, 252);
 constexpr uint16_t Yellow = rgb565(255, 255, 0);
 constexpr uint16_t Orange = rgb565(255, 165, 0);
 constexpr uint16_t Cyan = rgb565(0, 255, 255);
