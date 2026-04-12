@@ -148,20 +148,22 @@ void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t wid
 
     const TFTRoleColorsBe &colors = roleColors[roleIndex];
     colorRegions[colorRegionCount++] = {x, y, width, height, colors.onColorBe, colors.offColorBe, true};
+    // Keep a disabled terminator after active regions.
+    if (colorRegionCount < MAX_TFT_COLOR_REGIONS) {
+        colorRegions[colorRegionCount].enabled = false;
+    }
 }
 
 void clearTFTColorRegions()
 {
-    colorRegionCount = 0;
-    for (size_t i = 0; i < MAX_TFT_COLOR_REGIONS; ++i) {
+    // Clear enabled flags so external drivers don't reuse stale regions.
+    for (size_t i = 0; i < colorRegionCount && i < MAX_TFT_COLOR_REGIONS; i++) {
         colorRegions[i].enabled = false;
-        colorRegions[i].x = 0;
-        colorRegions[i].y = 0;
-        colorRegions[i].width = 0;
-        colorRegions[i].height = 0;
-        colorRegions[i].onColorBe = 0;
-        colorRegions[i].offColorBe = 0;
     }
+    if (colorRegionCount < MAX_TFT_COLOR_REGIONS) {
+        colorRegions[colorRegionCount].enabled = false;
+    }
+    colorRegionCount = 0;
 }
 
 uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool isset, uint16_t defaultOnColor, uint16_t defaultOffColor)

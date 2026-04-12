@@ -850,7 +850,6 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         chutil_bar_width = (currentResolution == ScreenResolution::High) ? 80 : 40;
 #endif
     }
-    int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
     int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
     int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
     if (!config.bluetooth.enabled) {
@@ -881,9 +880,9 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     float weight3 = 0.20; // Weight for 40–100%
     float totalWeight = weight1 + weight2 + weight3;
 
-    int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
-    int seg2 = chutil_bar_max_fill * (weight2 / totalWeight);
-    int seg3 = chutil_bar_max_fill - seg1 - seg2; // Remainder absorbs rounding errors
+    int seg1 = chutil_bar_width * (weight1 / totalWeight);
+    int seg2 = chutil_bar_width * (weight2 / totalWeight);
+    int seg3 = chutil_bar_width * (weight3 / totalWeight);
 
     int fillRight = 0;
 
@@ -1501,6 +1500,8 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int sideClearPadding = arrowOffset + arrowMaxWidth + 1;
     const int clearX = max(0, rectX - sideClearPadding);
     const int clearWidth = min(SCREEN_WIDTH - clearX, rectWidth + (sideClearPadding * 2));
+    const int bgX = rectX;
+    const int bgWidth = rectWidth;
 
     // Clear background and draw border
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
@@ -1512,8 +1513,8 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setColor(BLACK);
     if (applyTFTColorRoles) {
         setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, navBgColor);
-        registerTFTColorRegion(TFTColorRole::HeaderStatus, rectX, rectY, rectWidth, rectHeight);
-        display->fillRect(rectX, rectY, rectWidth, rectHeight);
+        registerTFTColorRegion(TFTColorRole::HeaderStatus, bgX, rectY, bgWidth, rectHeight);
+        display->fillRect(bgX, rectY, bgWidth, rectHeight);
     } else {
         // Keep legacy OLED behavior untouched.
         display->fillRect(rectX + 1, rectY, rectWidth - 2, rectHeight - 2);
@@ -1521,15 +1522,15 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         display->drawRect(rectX, rectY, rectWidth, rectHeight);
     }
 
-    // TFT-only: draw invisible side sentinels so visible->hidden always forces a row refresh
-    // across the prior nav footprint, clearing side artifacts from color-role changes.
+    // TFT: force edge refresh to clear nav artifacts.
     if (applyTFTColorRoles && navBarVisible && clearWidth > 1) {
         setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::Black, TFTPalette::Black);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX, rectY, 1, rectHeight);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX + clearWidth - 1, rectY, 1, rectHeight);
-        display->setColor(WHITE);
+        display->setColor(BLACK);
         display->drawVerticalLine(clearX, rectY, rectHeight);
         display->drawVerticalLine(clearX + clearWidth - 1, rectY, rectHeight);
+        display->setColor(WHITE);
     }
 
     // Icons are 1-bit glyphs and must be drawn with WHITE to set pixels.
@@ -1609,11 +1610,19 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 
     // Knock the corners off the square
-    // Works for both TFT and Monochrome: just draw black pixels in the corners to mask them out
-    display->setColor(BLACK);
-    display->drawRect(rectX, rectY, 1, 1);
-    display->drawRect(rectX + rectWidth - 1, rectY, 1, 1);
-    display->setColor(WHITE);
+    if (isTFTColoringEnabled()) {
+        // TFT corner mask
+        display->setColor(BLACK);
+        display->fillRect(rectX, rectY, 1, 1);
+        display->fillRect(rectX + rectWidth - 1, rectY, 1, 1);
+        display->setColor(WHITE);
+    } else {
+        // monochrome styling only
+        display->setColor(BLACK);
+        display->drawRect(rectX, rectY, 1, 1);
+        display->drawRect(rectX + rectWidth - 1, rectY, 1, 1);
+        display->setColor(WHITE);
+    }
 }
 
 void UIRenderer::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
