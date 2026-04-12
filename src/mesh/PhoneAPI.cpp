@@ -122,6 +122,8 @@ void PhoneAPI::close()
         }
         packetForPhone = NULL;
         filesManifest.clear();
+        filesManifest.shrink_to_fit();
+        lastPortNumToRadio.clear();
         fromRadioNum = 0;
         config_nonce = 0;
         config_state = 0;
@@ -446,6 +448,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Send module config: paxcounter");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             fromRadioScratch.moduleConfig.payload_variant.paxcounter = moduleConfig.paxcounter;
+            break;
+        case meshtastic_ModuleConfig_traffic_management_tag:
+            LOG_DEBUG("Send module config: traffic management");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
+            fromRadioScratch.moduleConfig.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
         default:
             LOG_ERROR("Unknown module config type %d", config_state);

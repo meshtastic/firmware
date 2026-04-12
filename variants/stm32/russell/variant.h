@@ -4,7 +4,7 @@
 #define USE_STM32WLx
 
 // I/O
-#define LED_PIN PA0 // Red LED
+#define LED_POWER PA0 // Red LED
 #define LED_STATE_ON 1
 #define BUTTON_PIN PH3 // Shared with BOOT0
 #define BUTTON_NEED_PULLUP

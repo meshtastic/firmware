@@ -240,8 +240,7 @@ bool RF95Interface::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
-        power = RF95_MAX_POWER;
+    limitPower(RF95_MAX_POWER);
 
 #ifdef USE_RF95_RFO
     err = lora->setOutputPower(power, true);
@@ -301,6 +300,7 @@ void RF95Interface::startReceive()
 
     // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag();
 }
 
 bool RF95Interface::isChannelActive()

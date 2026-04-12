@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
+#include <memory>
 
 extern concurrency::Lock *cryptLock;
 
@@ -35,6 +36,7 @@ class CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
     virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
+    virtual bool ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user);
 
 #endif
     void setDHPrivateKey(uint8_t *_private_key);
@@ -48,7 +50,7 @@ class CryptoEngine
     virtual void aesSetKey(const uint8_t *key, size_t key_len);
 
     virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-    AESSmall256 *aes = NULL;
+    std::unique_ptr<AESSmall256> aes = nullptr;
 
 #endif
 
@@ -77,7 +79,6 @@ class CryptoEngine
     /** Our per packet nonce */
     uint8_t nonce[16] = {0};
     CryptoKey key = {};
-    CTRCommon *ctr = NULL;
 #if !(MESHTASTIC_EXCLUDE_PKI)
     uint8_t shared_key[32] = {0};
     uint8_t private_key[32] = {0};

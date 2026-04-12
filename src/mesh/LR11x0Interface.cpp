@@ -71,12 +71,10 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     RadioLibInterface::init();
 
-    limitPower(LR1110_MAX_POWER);
-
-    if ((power > LR1120_MAX_POWER) &&
-        (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) { // clamp again if wide freq range
-        power = LR1120_MAX_POWER;
-        preambleLength = 12; // 12 is the default for operation above 2GHz
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
+        limitPower(LR1120_MAX_POWER);
+    } else {
+        limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
     }
 
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
@@ -177,6 +175,12 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     err = lora.setSyncWord(syncWord);
     assert(err == RADIOLIB_ERR_NONE);
 
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
+        limitPower(LR1120_MAX_POWER);
+    } else {
+        limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
+    }
+
     err = lora.setPreambleLength(preambleLength);
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -184,13 +188,13 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > LR1110_MAX_POWER) // This chip has lower power limits than some
-        power = LR1110_MAX_POWER;
-    if ((power > LR1120_MAX_POWER) && (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) // 2.4G power limit
-        power = LR1120_MAX_POWER;
-
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
+
+    // Apply RX gain mode — valid in STDBY, matches resetAGC() pattern
+    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_WARN("LR11x0 setRxBoostedGainMode %s%d", radioLibErr, err);
 
     startReceive(); // restart receiving
 
@@ -263,6 +267,7 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag();
 #endif
 }
 
@@ -297,6 +302,38 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
     return receiveDetected(lora.getIrqStatus(), RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID,
                            RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED);
 }
+
+#ifdef LR11X0_AGC_RESET
+template <typename T> void LR11x0Interface<T>::resetAGC()
+{
+    // Safety: don't reset mid-packet
+    if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
+        return;
+
+    LOG_DEBUG("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
+
+    // 1. Warm sleep — powers down the analog frontend, resetting AGC state
+    lora.sleep(true, 0);
+
+    // 2. Wake to RC standby for stable calibration
+    lora.standby(RADIOLIB_LR11X0_STANDBY_RC, true);
+
+    // 3. Calibrate all blocks (PLL, ADC, image, RC oscillators)
+    //    calibrate() is protected on LR11x0, so use raw SPI (same as internal implementation)
+    uint8_t calData = RADIOLIB_LR11X0_CALIBRATE_ALL;
+    module.SPIwriteStream(RADIOLIB_LR11X0_CMD_CALIBRATE, &calData, 1, true, true);
+
+    // 4. Re-calibrate image rejection for actual operating frequency
+    //    Calibrate(0x3F) defaults to 902-928 MHz which is wrong for other regions.
+    lora.calibrateImageRejection(getFreq() - 4.0f, getFreq() + 4.0f);
+
+    // 5. Re-apply RX boosted gain mode
+    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+
+    // 6. Resume receiving
+    startReceive();
+}
+#endif
 
 template <typename T> bool LR11x0Interface<T>::sleep()
 {

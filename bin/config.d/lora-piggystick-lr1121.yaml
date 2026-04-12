@@ -1,3 +1,9 @@
+Meta:
+  name: Lora Meshstick SX1262
+  support: community
+  compatible:
+    - usb
+
 Lora:
   Module: lr1121
   CS: 0

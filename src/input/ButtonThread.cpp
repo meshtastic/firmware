@@ -271,12 +271,13 @@ int32_t ButtonThread::runOnce()
             break;
         } // end multipress event
 
-            // Do actual shutdown when button released, otherwise the button release
-        // may wake the board immediatedly.
+        // Do actual shutdown when button released, otherwise the button release
+        // may wake the board immediately.
         case BUTTON_EVENT_LONG_RELEASED: {
 
             LOG_INFO("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
-            if (millis() > 30000 && _longLongPress != INPUT_BROKER_NONE &&
+            // Require press started after boot holdoff to avoid phantom shutdown from floating pins
+            if (millis() > 30000 && buttonPressStartTime > 30000 && _longLongPress != INPUT_BROKER_NONE &&
                 (millis() - buttonPressStartTime) >= _longLongPressTime && leadUpPlayed) {
                 evt.inputEvent = _longLongPress;
                 this->notifyObservers(&evt);

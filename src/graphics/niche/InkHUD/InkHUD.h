@@ -74,6 +74,7 @@ class InkHUD
 
     void nextApplet();
     void prevApplet();
+    NicheGraphics::InkHUD::Applet *getActiveApplet();
     void openMenu();
     void openAlignStick();
     void openKeyboard();
@@ -86,6 +87,9 @@ class InkHUD
 
     // Used by TipsApplet to force menu to start on Region selection
     bool forceRegionMenu = false;
+
+    // Input mode hint for devices that use a left/right rocker plus center button
+    bool twoWayRocker = false;
 
     // Updating the display
     // - called by various InkHUD components

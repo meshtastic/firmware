@@ -14,7 +14,7 @@ class MPR121Keyboard
 
     MPR121States state;
 
-    int8_t last_key;
+    uint8_t last_key;
     uint32_t last_tap;
     uint8_t char_idx;
 

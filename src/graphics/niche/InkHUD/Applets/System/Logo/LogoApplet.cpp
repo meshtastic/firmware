@@ -45,7 +45,7 @@ void InkHUD::LogoApplet::onRender(bool full)
     int16_t logoCY = Y(0.5 - 0.05);
 
     // Invert colors if black-on-white
-    // Used during shutdown, to resport display health
+    // Used during shutdown, to report display health
     // Todo: handle this in InkHUD::Renderer instead
     if (inverted) {
         fillScreen(BLACK);

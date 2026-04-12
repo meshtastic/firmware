@@ -11,11 +11,15 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
 #include "Default.h"
 #if ARCH_PORTDUINO
+#include "Throttle.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
@@ -93,6 +97,20 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     if (!localIsRouter) {
         return true;
     }
+
+#if HAS_TRAFFIC_MANAGEMENT
+    // When router_preserve_hops is enabled, preserve hops for decoded packets that are not
+    // position or telemetry (those have their own exhaust_hop controls).
+    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled &&
+        moduleConfig.traffic_management.router_preserve_hops && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        p->decoded.portnum != meshtastic_PortNum_POSITION_APP && p->decoded.portnum != meshtastic_PortNum_TELEMETRY_APP) {
+        LOG_DEBUG("Router hop preserved: port=%d from=0x%08x (traffic_management)", p->decoded.portnum, getFrom(p));
+        if (trafficManagementModule) {
+            trafficManagementModule->recordRouterHopPreserved();
+        }
+        return false;
+    }
+#endif
 
     // For subsequent hops, check if previous relay is a favorite router
     // Optimized search for favorite routers with matching last byte
@@ -532,6 +550,25 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
         } else if (portduino_config.JSONFilename != "") {
+            if (portduino_config.JSONFileRotate != 0) {
+                static uint32_t fileage = 0;
+
+                if (portduino_config.JSONFileRotate != 0 &&
+                    (fileage == 0 || !Throttle::isWithinTimespanMs(fileage, portduino_config.JSONFileRotate * 60 * 1000))) {
+                    time_t timestamp = time(NULL);
+                    struct tm *timeinfo;
+                    char buffer[80];
+                    timeinfo = localtime(&timestamp);
+                    strftime(buffer, 80, "%Y%m%d-%H%M%S", timeinfo);
+
+                    std::string datetime(buffer);
+                    if (JSONFile.is_open()) {
+                        JSONFile.close();
+                    }
+                    JSONFile.open(portduino_config.JSONFilename + "_" + datetime, std::ios::out | std::ios::app);
+                    fileage = millis();
+                }
+            }
             if (portduino_config.JSONFilter == (_meshtastic_PortNum)0 || portduino_config.JSONFilter == p->decoded.portnum) {
                 JSONFile << MeshPacketSerializer::JsonSerialize(p, false) << std::endl;
             }
@@ -765,8 +802,32 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                 p_encrypted->pki_encrypted = true;
             // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
             if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
-                !isFromUs(p) && mqtt)
+                !isFromUs(p) && mqtt) {
+                if (decodedState == DecodeState::DECODE_SUCCESS && p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP &&
+                    moduleConfig.mqtt.encryption_enabled) {
+                    // For TRACEROUTE_APP packets release the original encrypted packet and encrypt a new from the changed packet
+                    // Only release the original after successful allocation to avoid losing an incomplete but valid packet
+                    auto *p_encrypted_new = packetPool.allocCopy(*p);
+                    if (p_encrypted_new) {
+                        auto encodeResult = perhapsEncode(p_encrypted_new);
+                        if (encodeResult != meshtastic_Routing_Error_NONE) {
+                            // Encryption failed, release the new packet and fall back to sending the original encrypted packet to
+                            // MQTT
+                            LOG_WARN("Encryption of new TR packet failed, sending original TR to MQTT");
+                            packetPool.release(p_encrypted_new);
+                            p_encrypted_new = nullptr;
+                        } else {
+                            // Successfully re-encrypted, release the original encrypted packet and use the new one for MQTT
+                            packetPool.release(p_encrypted);
+                            p_encrypted = p_encrypted_new;
+                        }
+                    } else {
+                        // Allocation failed, log a warning and fall back to sending the original encrypted packet to MQTT
+                        LOG_WARN("Failed to allocate new encrypted packet for TR, sending original TR to MQTT");
+                    }
+                }
                 mqtt->onSend(*p_encrypted, *p, p->channel);
+            }
         }
 #endif
     }
@@ -810,6 +871,12 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 
     if (config.lora.ignore_mqtt && p->via_mqtt) {
         LOG_DEBUG("Msg came in via MQTT from 0x%x", p->from);
+        packetPool.release(p);
+        return;
+    }
+
+    if (shouldDropPacketForPreHop(*p)) {
+        logHopStartDrop(*p, "pre-hop drop");
         packetPool.release(p);
         return;
     }

@@ -63,4 +63,18 @@ bool isAllowedPunctuation(char c);
 
 std::string sanitizeString(const std::string &input);
 
+static inline bool isAPIConnected(uint8_t state)
+{
+    static constexpr bool connectedStates[] = {
+        /* STATE_NONE    */ false,
+        /* STATE_BLE     */ true,
+        /* STATE_WIFI    */ true,
+        /* STATE_SERIAL  */ true,
+        /* STATE_PACKET  */ true,
+        /* STATE_HTTP    */ true,
+        /* STATE_ETH     */ true,
+    };
+    return state < sizeof(connectedStates) ? connectedStates[state] : false;
+}
+
 } // namespace graphics

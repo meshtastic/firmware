@@ -1,3 +1,9 @@
+Meta:
+  name: OpenWRT One mikroBUS sx1262
+  support: community
+  compatible:
+    - openwrt_one # OpenWrt target
+
 Lora:
   Module: sx1262
   IRQ: 10

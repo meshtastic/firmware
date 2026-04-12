@@ -143,9 +143,8 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
     digitalWrite(rst, HIGH);
     delay(10);
 
-    uint32_t ID = 0;
-    ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
-    ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst); // ST7789 needs twice
+    readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
+    uint32_t ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst); // ST7789 needs twice
     return ID;
 }
 
@@ -322,10 +321,10 @@ NodeDB::NodeDB()
     // Uncomment below to always enable UDP broadcasts
     // config.network.enabled_protocols = meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
 
-    // If we are setup to broadcast on the default channel, ensure that the telemetry intervals are coerced to the minimum value
-    // of 30 minutes or more
-    if (channels.isDefaultChannel(channels.getPrimaryIndex())) {
-        LOG_DEBUG("Coerce telemetry to min of 30 minutes on defaults");
+    // If we are setup to broadcast on any default channel slot (with default frequency slot semantics),
+    // ensure that the telemetry intervals are coerced to the role-aware minimum value.
+    if (channels.hasDefaultChannel()) {
+        LOG_DEBUG("Coerce telemetry to role-aware minimum on defaults");
         moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.device_update_interval, min_default_telemetry_interval_secs);
         moduleConfig.telemetry.environment_update_interval = Default::getConfiguredOrMinimumValue(
@@ -348,7 +347,7 @@ NodeDB::NodeDB()
         }
     }
     if (positionUsesDefaultChannel) {
-        LOG_DEBUG("Coerce position broadcasts to min of 1 hour and smart broadcast min of 5 minutes on defaults");
+        LOG_DEBUG("Coerce position broadcasts to role-aware minimum and smart broadcast min of 5 minutes on defaults");
         config.position.position_broadcast_secs =
             Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, min_default_broadcast_interval_secs);
         config.position.broadcast_smart_minimum_interval_secs = Default::getConfiguredOrMinimumValue(
@@ -569,9 +568,18 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
+#if HAS_LORA_FEM
+    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED;
+#else
+    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
+#endif
 
 #if HAS_TFT // For the devices that support MUI, default to that
     config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+#endif
+
+#if defined(TFT_WIDTH) && defined(TFT_HEIGHT) && (TFT_WIDTH >= 200 || TFT_HEIGHT >= 200)
+    config.display.enable_message_bubbles = true;
 #endif
 
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
@@ -664,7 +672,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = default_broadcast_smart_minimum_interval_secs;
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
+        config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.security.serial_enabled = true;
     config.security.admin_channel_enabled = false;
@@ -810,26 +819,28 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
-#if defined(PIN_BUZZER)
+#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION) || defined(PCA_LED_NOTIFICATION)
     moduleConfig.external_notification.enabled = true;
+#endif
+#if defined(PIN_BUZZER)
     moduleConfig.external_notification.output_buzzer = PIN_BUZZER;
     moduleConfig.external_notification.use_pwm = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
-    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 #if defined(PIN_VIBRATION)
-    moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output_vibra = PIN_VIBRATION;
     moduleConfig.external_notification.alert_message_vibra = true;
     moduleConfig.external_notification.output_ms = 500;
-    moduleConfig.external_notification.nag_timeout = 2;
 #endif
 #if defined(LED_NOTIFICATION)
-    moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = LED_NOTIFICATION;
     moduleConfig.external_notification.active = LED_STATE_ON;
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
+#endif
+#if defined(PIN_VIBRATION)
+    moduleConfig.external_notification.nag_timeout = 2;
+#elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION)
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 
@@ -1288,8 +1299,12 @@ void NodeDB::loadFromDisk()
     // Coerce LoRa config fields derived from presets while bootstrapping.
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
     if (config.has_lora && config.lora.use_preset) {
-        RadioInterface::bootstrapLoRaConfigFromPreset(config.lora);
+        RadioInterface::clampConfigLora(config.lora);
     }
+
+#if defined(USERPREFS_LORA_TX_DISABLED) && USERPREFS_LORA_TX_DISABLED
+    config.lora.tx_enabled = false;
+#endif
 
     if (backupSecurity.private_key.size > 0) {
         LOG_DEBUG("Restoring backup of security config");
@@ -1411,7 +1426,7 @@ void NodeDB::loadFromDisk()
         moduleConfig.statusmessage.node_status[sizeof(moduleConfig.statusmessage.node_status) - 1] = '\0';
     }
     if (portduino_config.enable_UDP) {
-        config.network.enabled_protocols = true;
+        config.network.enabled_protocols = meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
     }
 
 #endif
@@ -1635,6 +1650,25 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
     return delta;
 }
 
+HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p)
+{
+    // Guard against invalid values.
+    if (p.hop_start < p.hop_limit)
+        return HopStartStatus::INVALID;
+
+    if (p.hop_start == 0) {
+        // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
+        // bitfield that is always present. Use the presence of the bitfield to determine if the origin's firmware
+        // version is guaranteed to have hop_start populated. Note that this can only be done for decoded packets as
+        // the bitfield is encrypted under the channel encryption key.
+        if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.has_bitfield)
+            return HopStartStatus::VALID;
+        return HopStartStatus::MISSING_OR_UNKNOWN;
+    }
+
+    return HopStartStatus::VALID;
+}
+
 int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown)
 {
     // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
@@ -1671,6 +1705,22 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 
 #include "MeshModule.h"
 #include "Throttle.h"
+
+static constexpr uint32_t HOPSTART_DROP_LOG_INTERVAL_MS = 15000;
+
+void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context)
+{
+    static uint32_t lastLogMs = 0;
+    if (Throttle::isWithinTimespanMs(lastLogMs, HOPSTART_DROP_LOG_INTERVAL_MS)) {
+        return;
+    }
+    lastLogMs = millis();
+    const bool decoded = (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag);
+    const bool hasBitfield = decoded && p.decoded.has_bitfield;
+    LOG_DEBUG(
+        "Drop packet (%s): hop_start invalid/missing (from=0x%x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)",
+        context ? context : "unknown", p.from, p.id, p.hop_start, p.hop_limit, decoded, hasBitfield);
+}
 
 /** Update position info for this node based on received position data
  */
@@ -1768,7 +1818,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         info->has_device_metrics = false;
         info->has_position = false;
         info->user.public_key.size = 0;
-        info->user.public_key.bytes[0] = 0;
+        memset(info->user.public_key.bytes, 0, sizeof(info->user.public_key.bytes));
     } else {
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!

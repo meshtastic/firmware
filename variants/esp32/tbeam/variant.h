@@ -9,7 +9,7 @@
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
 #define LED_STATE_ON 0 // State when LED is lit
-#define LED_PIN 4      // Newer tbeams (1.1) have an extra led on GPIO4
+#define LED_POWER 4    // Newer tbeams (1.1) have an extra led on GPIO4
 
 // TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262
@@ -49,7 +49,7 @@
 
 #undef EXT_NOTIFY_OUT
 #undef LED_STATE_ON
-#undef LED_PIN
+#undef LED_POWER
 
 #define HAS_CST226SE 1
 #define HAS_TOUCHSCREEN 1

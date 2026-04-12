@@ -103,8 +103,10 @@ class Power : private concurrency::OSThread
     bool axpChipInit();
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
-    /// Setup a Lipo battery level sensor
-    bool lipoInit();
+    /// Setup cw2015 battery level sensor
+    bool cw2015Init();
+    /// Setup a 17048 battery level sensor
+    bool max17048Init();
     /// Setup a Lipo charger
     bool lipoChargerInit();
     /// Setup a meshSolar battery sensor
