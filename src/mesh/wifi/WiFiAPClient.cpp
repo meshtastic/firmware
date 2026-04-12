@@ -15,6 +15,12 @@
 #define ETH ETH2
 #endif // HAS_ETHERNET
 
+#if HAS_ETHERNET && defined(USE_CH390D)
+#include "ESP32_CH390.h"
+#include "hal/spi_types.h"
+#define ETH CH390
+#endif // HAS_ETHERNET
+
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
@@ -68,6 +74,32 @@ bool initEthernet()
 {
     if ((config.network.eth_enabled) && (ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
                                                    ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN))) {
+        WiFi.onEvent(WiFiEvent);
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+        createSSLCert(); // For WebServer
+#endif
+        return true;
+    }
+
+    return false;
+}
+#endif
+
+#ifdef USE_CH390D
+// Startup Ethernet
+bool initEthernet()
+{
+    // Configure CH390
+    ch390_config_t ch390_conf = CH390_DEFAULT_CONFIG();
+    ch390_conf.spi_host = SPI3_HOST;  // SPI2_HOST or SPI3_HOST
+    ch390_conf.spi_cs_gpio = ETH_CS_PIN;
+    ch390_conf.spi_sck_gpio = ETH_SCLK_PIN;
+    ch390_conf.spi_mosi_gpio = ETH_MOSI_PIN;
+    ch390_conf.spi_miso_gpio = ETH_MISO_PIN;
+    ch390_conf.int_gpio = ETH_INT_PIN;
+    ch390_conf.reset_gpio = ETH_RST_PIN;
+    ch390_conf.spi_clock_mhz = 20;
+    if ((config.network.eth_enabled) && (ETH.begin(ch390_conf))) {
         WiFi.onEvent(WiFiEvent);
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer

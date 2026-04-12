@@ -7,7 +7,7 @@
 
 #define LED_PIN 6 // The blue LORA LED
 #define LED_STATE_ON 0
-#define BUTTON_PIN 4 // the external user button of the device, BOOT and RESET are not accessible without opening it up.
+#define BUTTON_PIN 4 // the external user button of the device, BOOT and RESET are not accessible without opening it.
 
 #define USE_SX1262
 #define LORA_SCK 42
@@ -24,13 +24,13 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #define PIN_POWER_EN 45
 
-// #define HAS_ETHERNET 1
-// #define USE_CH390D 1 // this driver uses the same stack as the ESP32 Wifi driver
+#define HAS_ETHERNET 1
+#define USE_CH390D 1 // this driver uses the same stack as the ESP32 Wifi driver
 
-// #define ETH_MISO_PIN 47
-// #define ETH_MOSI_PIN 21
-// #define ETH_SCLK_PIN 48
-// #define ETH_CS_PIN 45
-// #define ETH_INT_PIN 14
-// #define ETH_RST_PIN -1
-// #define ETH_ADDR 1
+#define ETH_MISO_PIN 12
+#define ETH_MOSI_PIN 11
+#define ETH_SCLK_PIN 13
+#define ETH_CS_PIN 14
+#define ETH_INT_PIN 10
+#define ETH_RST_PIN 9
+//#define ETH_ADDR 1

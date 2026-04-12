@@ -26,7 +26,7 @@ bool isWifiAvailable();
 
 uint8_t getWifiDisconnectReason();
 
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_CH390D)
 // Startup Ethernet
 bool initEthernet();
 #endif
