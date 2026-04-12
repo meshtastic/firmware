@@ -1,9 +1,6 @@
-.pio
-pio
-pio.tar
 web
 web.tar
-
+.pio
 # ignore vscode IDE settings files
 .vscode/*
 !.vscode/settings.json
