@@ -843,6 +843,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int chUtil_y = getTextPositions(display)[line] + 3;
 
     int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
+    int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
     if (!config.bluetooth.enabled) {
 #if defined(USE_EINK)
         chutil_bar_width = (currentResolution == ScreenResolution::High) ? 50 : 30;
@@ -880,9 +881,9 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     float weight3 = 0.20; // Weight for 40–100%
     float totalWeight = weight1 + weight2 + weight3;
 
-    int seg1 = chutil_bar_width * (weight1 / totalWeight);
-    int seg2 = chutil_bar_width * (weight2 / totalWeight);
-    int seg3 = chutil_bar_width * (weight3 / totalWeight);
+    int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
+    int seg2 = chutil_bar_max_fill * (weight2 / totalWeight);
+    int seg3 = chutil_bar_max_fill - seg1 - seg2; // Remainder absorbs rounding errors
 
     int fillRight = 0;
 
@@ -1500,8 +1501,6 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int sideClearPadding = arrowOffset + arrowMaxWidth + 1;
     const int clearX = max(0, rectX - sideClearPadding);
     const int clearWidth = min(SCREEN_WIDTH - clearX, rectWidth + (sideClearPadding * 2));
-    const int bgX = rectX;
-    const int bgWidth = rectWidth;
 
     // Clear background and draw border
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
@@ -1513,8 +1512,8 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setColor(BLACK);
     if (applyTFTColorRoles) {
         setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, navBgColor);
-        registerTFTColorRegion(TFTColorRole::HeaderStatus, bgX, rectY, bgWidth, rectHeight);
-        display->fillRect(bgX, rectY, bgWidth, rectHeight);
+        registerTFTColorRegion(TFTColorRole::HeaderStatus, rectX, rectY, rectWidth, rectHeight);
+        display->fillRect(rectX, rectY, rectWidth, rectHeight);
     } else {
         // Keep legacy OLED behavior untouched.
         display->fillRect(rectX + 1, rectY, rectWidth - 2, rectHeight - 2);
