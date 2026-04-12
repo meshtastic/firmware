@@ -9,13 +9,16 @@
 namespace concurrency
 {
 
-#ifdef ARCH_PORTDUINO
+#ifndef HAS_FREE_RTOS
 
 class BinarySemaphorePosix
 {
+
+#ifdef ARCH_PORTDUINO
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     bool signaled;
+#endif
 
   public:
     BinarySemaphorePosix();

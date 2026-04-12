@@ -4,10 +4,11 @@
 #include <errno.h>
 #include <sys/time.h>
 
-#ifdef ARCH_PORTDUINO
+#ifndef HAS_FREE_RTOS
 
 namespace concurrency
 {
+#ifdef ARCH_PORTDUINO
 
 BinarySemaphorePosix::BinarySemaphorePosix()
 {
@@ -68,6 +69,25 @@ IRAM_ATTR void BinarySemaphorePosix::giveFromISR(BaseType_t *pxHigherPriorityTas
     if (pxHigherPriorityTaskWoken)
         *pxHigherPriorityTaskWoken = true;
 }
+#else
+
+BinarySemaphorePosix::BinarySemaphorePosix() {}
+
+BinarySemaphorePosix::~BinarySemaphorePosix() {}
+
+/**
+ * Returns false if we timed out
+ */
+bool BinarySemaphorePosix::take(uint32_t msec)
+{
+    delay(msec); // FIXME
+    return false;
+}
+
+void BinarySemaphorePosix::give() {}
+
+IRAM_ATTR void BinarySemaphorePosix::giveFromISR(BaseType_t *pxHigherPriorityTaskWoken) {}
+#endif
 
 } // namespace concurrency
 
