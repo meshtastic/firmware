@@ -120,10 +120,11 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
             // NULL packet has the destination filename
             memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+            activeRoute_ = fsRoute(filename);
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
                 spiLock->lock();
-                file = FSCom.open(filename, FILE_O_WRITE);
+                file = fsOpenWrite(activeRoute_);
                 spiLock->unlock();
                 if (file) {
                     sendControl(meshtastic_XModem_Control_ACK);
@@ -137,7 +138,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             } else { // Transmit this file from Flash
                 LOG_INFO("XModem: Transmit file %s", filename);
                 spiLock->lock();
-                file = FSCom.open(filename, FILE_O_READ);
+                file = fsOpenRead(activeRoute_);
                 spiLock->unlock();
                 if (file) {
                     packetno = 1;
@@ -200,8 +201,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         spiLock->lock();
         file.flush();
         file.close();
-
-        FSCom.remove(filename);
+        fsRemove(activeRoute_);
         spiLock->unlock();
         isReceiving = false;
         break;
@@ -255,7 +255,6 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             xmodemStore.seq = packetno;
             spiLock->lock();
             file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
-
             xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
             spiLock->unlock();
             xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);

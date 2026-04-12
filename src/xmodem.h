@@ -67,7 +67,8 @@ class XModemAdapter
     File file;
 #endif
 
-    char filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
+    char     filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
+    FSRoute  activeRoute_; // resolved once at SOH, reused for DATA/EOT/CAN
 
   protected:
     meshtastic_XModem xmodemStore = meshtastic_XModem_init_zero;

@@ -324,6 +324,100 @@ void fsInit()
 #endif
 }
 
+// ── FSRoute virtual mount-point routing ──────────────────────────────────────
+
+#ifdef FSCom
+
+FSRoute fsRoute(const char *path)
+{
+    FSRoute r;
+    if (strncmp(path, "/__ext__/", 9) == 0) {
+        r.mount  = FsMount::External;
+        r.path[0] = '/';
+        strlcpy(r.path + 1, path + 9, sizeof(r.path) - 1);
+    } else if (strncmp(path, "/__int__/", 9) == 0) {
+        r.mount  = FsMount::Internal;
+        r.path[0] = '/';
+        strlcpy(r.path + 1, path + 9, sizeof(r.path) - 1);
+    } else if (strncmp(path, "/__sd__/", 8) == 0) {
+        r.mount  = FsMount::SD;
+        r.path[0] = '/';
+        strlcpy(r.path + 1, path + 8, sizeof(r.path) - 1);
+    } else {
+        r.mount = FsMount::Internal;
+        strlcpy(r.path, path, sizeof(r.path));
+    }
+    return r;
+}
+
+// ── FS selection helper ───────────────────────────────────────────────────────
+// Returns the correct FS object for the given mount, falling back to FSCom
+// when the requested mount is unavailable.
+
+#if defined(ARCH_NRF52)
+static Adafruit_LittleFS &_fsForMount(FsMount mount)
+{
+    if (mount == FsMount::External && extFS != nullptr)
+        return *extFS;
+    // SD: future
+    return (Adafruit_LittleFS &)FSCom;
+}
+#endif
+
+// ── Public helpers ────────────────────────────────────────────────────────────
+
+File fsOpenRead(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    return _fsForMount(r.mount).open(r.path, FILE_O_READ);
+#else
+    (void)r.mount;
+    return FSCom.open(r.path, FILE_O_READ);
+#endif
+}
+
+File fsOpenWrite(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    return _fsForMount(r.mount).open(r.path, FILE_O_WRITE);
+#else
+    (void)r.mount;
+    return FSCom.open(r.path, FILE_O_WRITE);
+#endif
+}
+
+bool fsRemove(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    return _fsForMount(r.mount).remove(r.path);
+#else
+    (void)r.mount;
+    return FSCom.remove(r.path);
+#endif
+}
+
+bool fsMkdir(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    return _fsForMount(r.mount).mkdir(r.path);
+#else
+    (void)r.mount;
+    return FSCom.mkdir(r.path);
+#endif
+}
+
+bool fsExists(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    return _fsForMount(r.mount).exists(r.path);
+#else
+    (void)r.mount;
+    return FSCom.exists(r.path);
+#endif
+}
+
+#endif // FSCom
+
 /**
  * Initializes the SD card and mounts the file system.
  */

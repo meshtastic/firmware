@@ -74,3 +74,43 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
 void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
+
+#ifdef FSCom
+/**
+ * Virtual filesystem mount-point routing.
+ *
+ * Path-prefix convention (double-underscore delimiters avoid collisions):
+ *   /__int__/foo  →  internal flash  (InternalFS / LittleFS)
+ *   /__ext__/foo  →  external flash  (QSPI LittleFS if mounted, else internal)
+ *   /__sd__/foo   →  SD card         (if mounted, else internal)
+ *   /foo          →  internal flash  (bare paths passed through unchanged)
+ *
+ * This provides a lightweight mount-point convention without a full VFS.
+ * All consumers call fsRoute() + the helpers below; when Meshtastic gains a
+ * proper VFS layer these functions become the adapter to it.
+ */
+enum class FsMount { Internal, External, SD };
+
+struct FSRoute {
+    FsMount mount = FsMount::Internal;
+    char    path[128] = {};   // real path after prefix stripped
+};
+
+/** Resolve a path string to an FSRoute (mount + stripped path). */
+FSRoute fsRoute(const char *path);
+
+/** Open a file for reading on the routed filesystem. */
+File fsOpenRead(const FSRoute &r);
+
+/** Open a file for writing on the routed filesystem. */
+File fsOpenWrite(const FSRoute &r);
+
+/** Remove a file on the routed filesystem. Returns true on success. */
+bool fsRemove(const FSRoute &r);
+
+/** Create a directory (and parents) on the routed filesystem. */
+bool fsMkdir(const FSRoute &r);
+
+/** Return true if the path exists on the routed filesystem. */
+bool fsExists(const FSRoute &r);
+#endif // FSCom
