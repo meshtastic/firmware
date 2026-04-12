@@ -548,7 +548,6 @@ int32_t KbI2cBase::runOnce()
     return 300;
 }
 
-static constexpr uint8_t TDECK_KB_ADDR = 0x55;
 static constexpr uint8_t LILYGO_KB_BRIGHTNESS_CMD = 0x01;
 static constexpr uint8_t DEFAULT_TDECK_KB_LEVEL = 127;
 
