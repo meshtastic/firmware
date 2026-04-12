@@ -99,7 +99,11 @@ jobs:
 
       - name: Publish with dput (sftp)
         timeout-minutes: 30 # dput is terrible, sometimes runs 'forever'
+        env:
+          up_ppa_repo: ${{ inputs.ppa_repo }}
+          up_series: ${{ inputs.series }}
+          up_version: ${{ steps.version.outputs.deb }}
         run: >
           dput -c /etc/meshtastic-dput.cf
-          ssh-${{ inputs.ppa_repo }}
-          meshtasticd_${{ steps.version.outputs.deb }}~${{ inputs.series }}_source.changes
+          ssh-${up_ppa_repo}
+          meshtasticd_${up_version}~${up_series}_source.changes
