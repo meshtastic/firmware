@@ -1,0 +1,29 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "esp32c3_out.ld"
+    },
+    "core": "esp32",
+    "f_cpu": "160000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "dio",
+    "extra_flags": "-DARDUINO_ESP32C3_DEV",
+    "mcu": "esp32c3",
+    "variant": "esp32c3"
+  },
+  "connectivity": ["wifi", "bluetooth"],
+  "debug": {
+    "openocd_target": "esp32c3.cfg"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "name": "TinyLora C3 Lora devkit",
+  "upload": {
+    "flash_size": "8MB",
+    "maximum_ram_size": 327680,
+    "maximum_size": 8388608,
+    "require_upload_port": true,
+    "speed": 460800
+  },
+  "url": "https://docs.espressif.com/projects/esp-idf/en/latest/esp32c3/hw-reference/esp32c3/user-guide-devkitm-1.html",
+  "vendor": "Espressif"
+}
