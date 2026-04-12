@@ -29,6 +29,7 @@ enum class TFTColorRole : uint8_t {
     ChannelUtilization,
     FavoriteNode,
     ActionMenuBorder,
+    ActionMenuBody,
     ActionMenuTitle,
     Count
 };

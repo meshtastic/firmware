@@ -697,6 +697,20 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
         display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
         display->setColor(WHITE);
+        if (isTFTColoringEnabled()) {
+            setTFTColorRole(TFTColorRole::ActionMenuBody, TFTPalette::White, TFTPalette::Black);
+            // Prevent shadow bleed from stale regions.
+            registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
+            registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop - 2, boxWidth, 1);
+            registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
+            registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 2, boxTop, 1, boxHeight);
+            registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
+            setTFTColorRole(TFTColorRole::ActionMenuBorder, TFTPalette::DarkGray, TFTPalette::Black);
+            registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, boxWidth, 1);
+            registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop + boxHeight - 1, boxWidth, 1);
+            registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, 1, boxHeight);
+            registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft + boxWidth - 1, boxTop, 1, boxHeight);
+        }
 
         // Text
         display->drawString(boxLeft + padding, boxTop + padding, buf);
