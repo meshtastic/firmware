@@ -1,7 +1,6 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "ClockRenderer.h"
-#include "AmbientLightLock.h"
 #include "Default.h"
 #include "GPS.h"
 #include "MenuHandler.h"
@@ -25,9 +24,6 @@
 #include "modules/ExternalNotificationModule.h"
 #include "modules/KeyVerificationModule.h"
 #include "modules/TraceRouteModule.h"
-#ifdef HAS_NEOPIXEL
-#include <graphics/NeoPixel.h>
-#endif
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -970,8 +966,9 @@ void menuHandler::homeBaseMenu()
         optionsArray[options] = UI_STR("Send Node Info", "发送节点");
     }
     optionsEnumArray[options++] = Position;
-#if defined(TINYLORA_MV_WS2812_EFFECTS) && defined(HAS_NEOPIXEL)
-    optionsArray[options] = isBusy ? UI_STR("Flashlight Off", "关闭手电") : UI_STR("Flashlight", "手电筒");
+#if defined(HAS_NEOPIXEL)
+    const bool flashlightActive = (ambientLightingThread != nullptr) && ambientLightingThread->isFlashlightModeActive();
+    optionsArray[options] = flashlightActive ? UI_STR("Flashlight Off", "关闭手电") : UI_STR("Flashlight", "手电筒");
     optionsEnumArray[options++] = Flashlight;
 #endif
 
@@ -1020,17 +1017,16 @@ void menuHandler::homeBaseMenu()
                 IF_SCREEN(screen->showSimpleBanner(UI_STR("Node Info\nSent", "节点信息\n已发"), 3000));
             }
         } else if (selected == Flashlight) {
-#if defined(TINYLORA_MV_WS2812_EFFECTS) && defined(HAS_NEOPIXEL)
-            if (isBusy) {
-                pixels.setBrightness(0);
-                pixels.clear();
-                pixels.show();
-                isBusy = false;
-            } else {
-                isBusy = true;
-                pixels.setBrightness(255);
-                pixels.fill(pixels.Color(255, 255, 255), 0, NEOPIXEL_COUNT);
-                pixels.show();
+#if defined(HAS_NEOPIXEL)
+            if (ambientLightingThread != nullptr) {
+                if (ambientLightingThread->isFlashlightModeActive()) {
+                    ambientLightingThread->setFlashlightMode(false);
+                } else {
+                    if (externalNotificationModule != nullptr) {
+                        externalNotificationModule->stopNow();
+                    }
+                    ambientLightingThread->setFlashlightMode(true);
+                }
             }
 #endif
         } else if (selected == Preset) {

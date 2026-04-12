@@ -209,6 +209,5 @@
 #define NEOPIXEL_COUNT 1 // How many neopixels are connected
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
 #define ENABLE_AMBIENTLIGHTING
-#define TINYLORA_MV_WS2812_EFFECTS
 
 #endif

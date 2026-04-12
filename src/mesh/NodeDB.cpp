@@ -915,7 +915,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.detection_sensor.minimum_broadcast_secs = 45;
 
     moduleConfig.has_ambient_lighting = true;
-    moduleConfig.ambient_lighting.current = 10;
+    moduleConfig.ambient_lighting.current = 0;
     // Default to a color based on our node number
     moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
     moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;

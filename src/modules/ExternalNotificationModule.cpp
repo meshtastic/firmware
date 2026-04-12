@@ -103,6 +103,11 @@ int32_t ExternalNotificationModule::runOnce()
                 setExternalState(2, !getExternal(2));
             }
 #if defined(HAS_RGB_LED)
+            const bool flashlightActive = (ambientLightingThread != nullptr) && ambientLightingThread->isFlashlightModeActive();
+            if (!flashlightActive) {
+#if defined(HAS_NEOPIXEL)
+                ambientLightingThread->showNotificationMarquee();
+#else
             red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
             green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
             blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
@@ -122,8 +127,10 @@ int32_t ExternalNotificationModule::runOnce()
                     colorState = 1;
                 }
             }
-            // we need fast updates for the color change
-            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
+#endif
+                // we need fast updates for the color change
+                delay = EXT_NOTIFICATION_FAST_THREAD_MS;
+            }
 #endif
 
 #ifdef HAS_DRV2605
@@ -211,13 +218,16 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
     }
 
 #if defined(HAS_RGB_LED)
-    if (!on) {
-        red = 0;
-        green = 0;
-        blue = 0;
-        white = 0;
+    const bool flashlightActive = (ambientLightingThread != nullptr) && ambientLightingThread->isFlashlightModeActive();
+    if (!flashlightActive) {
+        if (!on) {
+            red = 0;
+            green = 0;
+            blue = 0;
+            white = 0;
+        }
+        ambientLightingThread->setLighting(moduleConfig.ambient_lighting.current, red, green, blue);
     }
-    ambientLightingThread->setLighting(moduleConfig.ambient_lighting.current, red, green, blue);
 #endif
 
 #ifdef HAS_DRV2605

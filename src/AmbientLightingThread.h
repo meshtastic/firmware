@@ -2,8 +2,6 @@
 #define AMBIENTLIGHTINGTHREAD_H
 
 #include "Observer.h"
-#include "AmbientLightingEffects.h"
-#include "AmbientLightLock.h"
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "sleep.h"
@@ -21,6 +19,12 @@
 
 #ifdef HAS_NEOPIXEL
 #include <graphics/NeoPixel.h>
+#if defined(ESP32)
+#include <esp_pm.h>
+#endif
+#if HAS_SCREEN
+#include <graphics/Screen.h>
+#endif
 #endif
 
 #ifdef UNPHONE
@@ -45,6 +49,10 @@ class AmbientLightingThread : public concurrency::OSThread
   public:
     explicit AmbientLightingThread(ScanI2C::DeviceType type) : OSThread("AmbientLighting")
     {
+        // Keep this thread responsive so LED state transitions are applied promptly.
+        setInterval(25);
+        canSleep = false;
+
         notifyDeepSleepObserver.observe(&notifyDeepSleep); // Let us know when shutdown() is issued.
 
 // Enables Ambient Lighting by default if conditions are meet.
@@ -88,59 +96,72 @@ class AmbientLightingThread : public concurrency::OSThread
 #ifdef HAS_NEOPIXEL
                 pixels.begin(); // Initialise the pixel(s)
                 pixels.clear(); // Set all pixel colors to 'off'
-                pixels.setBrightness(moduleConfig.ambient_lighting.current);
+                pixels.setBrightness(0); //moduleConfig.ambient_lighting.current
+#if defined(ESP32)
+                if (_neoPixelApbLock == nullptr) {
+                    esp_err_t err = esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "neopixel", &_neoPixelApbLock);
+                    if (err != ESP_OK) {
+                        _neoPixelApbLock = nullptr;
+                    }
+                }
 #endif
-#if defined(TINYLORA_MV_WS2812_EFFECTS) && defined(HAS_NEOPIXEL)
-                setLightingOff(nullptr);
-                _ledOff = true;
-#else
-                setLighting();
 #endif
+                // setLighting();
 #endif
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
             }
 #endif
         }
 
+        bool isFlashlightModeActive() const { return _flashlightOverrideActive; }
+
+        void setFlashlightMode(bool enabled)
+        {
+            _flashlightOverrideActive = enabled;
+            if (enabled) {
+                setLighting(255, 255, 255, 255);
+            } else {
+                // if (moduleConfig.ambient_lighting.led_state) {
+                //     setLighting();
+                // } else {
+                    setLightingOff(nullptr);
+                // }
+            }
+        }
+
       protected:
         int32_t runOnce() override
         {
 #ifdef HAS_RGB_LED
-#if defined(TINYLORA_MV_WS2812_EFFECTS) && defined(HAS_NEOPIXEL)
-            if (moduleConfig.ambient_lighting.led_state) {
-                const uint32_t now = millis();
-
-                if (isBusy) {
-                    _ledOff = false;
-                    return 100;
-                }
-
-                if (ambientLightingMessageEffectActive()) {
-                    showBreathingRainbow(now, 220, 1800, 7);
-                    _ledOff = false;
-                    return 16;
-                }
-
-                if (static_cast<int32_t>(_bootEffectUntil - now) > 0) {
-                    showBreathingRainbow(now, 210, 2200, 6);
-                    _ledOff = false;
-                    return 16;
-                }
-
-                if (!_ledOff) {
-                    setLightingOff(nullptr);
-                    _ledOff = true;
-                }
-
+            if (_flashlightOverrideActive) {
                 return 250;
+            }
+#ifdef HAS_NEOPIXEL
+            if (!_bootMarqueeDone) {
+                bool bootAnimationActive = false;
+#if HAS_SCREEN
+                if (screen) {
+                    bootAnimationActive = !screen->isShowingNormalScreen();
+                } else
+#endif
+                {
+                    bootAnimationActive = (static_cast<int32_t>(_bootEffectUntil - millis()) > 0);
+                }
+
+                if (bootAnimationActive) {
+                    showNotificationMarquee();
+                    return 16;
+                }
+                setLightingOff(NULL);
+                _bootMarqueeDone = true;
             }
 #endif
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
             if ((_type == ScanI2C::NCP5623 || _type == ScanI2C::LP5562) && moduleConfig.ambient_lighting.led_state) {
 #endif
-                setLighting(moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red,
-                            moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
-                return 30000; // 30 seconds to reset from any animations that may have been running from Ext. Notification
+                // setLighting(moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red,
+                //             moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+                return 30000; // Poll faster so lighting state updates feel immediate.
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
             }
 #endif
@@ -155,36 +176,30 @@ class AmbientLightingThread : public concurrency::OSThread
       private:
         ScanI2C::DeviceType _type = ScanI2C::DeviceType::NONE;
         uint32_t _bootEffectUntil = millis() + 3200;
+        bool _bootMarqueeDone = false;
         bool _ledOff = false;
-
-#if defined(TINYLORA_MV_WS2812_EFFECTS) && defined(HAS_NEOPIXEL)
-        uint32_t colorWheel(uint8_t pos)
-        {
-            pos = 255 - pos;
-            if (pos < 85) {
-                return pixels.Color(255 - pos * 3, 0, pos * 3);
-            }
-            if (pos < 170) {
-                pos -= 85;
-                return pixels.Color(0, pos * 3, 255 - pos * 3);
-            }
-
-            pos -= 170;
-            return pixels.Color(pos * 3, 255 - pos * 3, 0);
-        }
-
-        void showBreathingRainbow(uint32_t now, uint8_t maxBrightness, uint16_t breathPeriodMs, uint8_t hueStepMs)
-        {
-            const uint16_t phase = (now % breathPeriodMs) * 512UL / breathPeriodMs;
-            const uint16_t breathValue = phase < 256 ? phase : 511 - phase;
-            const uint8_t brightness = ((uint32_t)breathValue * maxBrightness) / 255;
-            const uint8_t hue = (now / hueStepMs) & 0xFF;
-
-            pixels.setBrightness(brightness);
-            pixels.fill(colorWheel(hue), 0, NEOPIXEL_COUNT);
-            pixels.show();
-        }
+        bool _flashlightOverrideActive = false;
+#if defined(HAS_NEOPIXEL) && defined(ESP32)
+        esp_pm_lock_handle_t _neoPixelApbLock = nullptr;
 #endif
+
+        void acquireNeoPixelClockLock()
+        {
+#if defined(HAS_NEOPIXEL) && defined(ESP32)
+            if (_neoPixelApbLock != nullptr) {
+                esp_pm_lock_acquire(_neoPixelApbLock);
+            }
+#endif
+        }
+
+        void releaseNeoPixelClockLock()
+        {
+#if defined(HAS_NEOPIXEL) && defined(ESP32)
+            if (_neoPixelApbLock != nullptr) {
+                esp_pm_lock_release(_neoPixelApbLock);
+            }
+#endif
+        }
 
         // Turn RGB lighting off, is used in junction to shutdown()
         int setLightingOff(void *unused)
@@ -205,9 +220,10 @@ class AmbientLightingThread : public concurrency::OSThread
             LOG_INFO("OFF: LP5562 Ambient lighting");
 #endif
 #ifdef HAS_NEOPIXEL
-            pixels.setBrightness(0);
             pixels.clear();
+            acquireNeoPixelClockLock();
             pixels.show();
+            releaseNeoPixelClockLock();
             LOG_INFO("OFF: NeoPixel Ambient lighting");
 #endif
 #ifdef RGBLED_CA
@@ -227,8 +243,32 @@ class AmbientLightingThread : public concurrency::OSThread
 #endif
             return 0;
         }
-
+        
       protected:
+        void showNotificationMarquee()
+        {
+#ifdef HAS_NEOPIXEL
+            static uint16_t marqueeStep = 0;
+            const uint16_t hue = (marqueeStep * 2048U) & 0xFFFF;
+            const uint8_t maxBrightness = 255;
+
+            pixels.setBrightness(maxBrightness);
+#if (NEOPIXEL_COUNT > 1)
+            const uint16_t head = marqueeStep % NEOPIXEL_COUNT;
+            const uint16_t tail = (head + NEOPIXEL_COUNT - 1) % NEOPIXEL_COUNT;
+            pixels.clear();
+            pixels.setPixelColor(head, Adafruit_NeoPixel::ColorHSV(hue, 255, 255));
+            pixels.setPixelColor(tail, Adafruit_NeoPixel::ColorHSV(hue, 255, 96));
+#else
+            pixels.setPixelColor(0, Adafruit_NeoPixel::ColorHSV(hue, 255, 255));
+#endif
+            acquireNeoPixelClockLock();
+            pixels.show();
+            releaseNeoPixelClockLock();
+            marqueeStep++;
+#endif
+        }
+
         void setLighting()
         {
             setLighting(moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red,
@@ -237,6 +277,9 @@ class AmbientLightingThread : public concurrency::OSThread
 
         void setLighting(float current, uint8_t red, uint8_t green, uint8_t blue)
         {
+            if (_flashlightOverrideActive && !(red == 255 && green == 255 && blue == 255 && current == 255)) {
+                return;
+            }
 #ifdef HAS_NCP5623
             rgb.setCurrent(current);
             rgb.setRed(red);
@@ -252,6 +295,16 @@ class AmbientLightingThread : public concurrency::OSThread
             LOG_DEBUG("Init LP5562 Ambient light w/ current=%f, red=%d, green=%d, blue=%d", current, red, green, blue);
 #endif
 #ifdef HAS_NEOPIXEL
+            const bool allOff = (current <= 0.0f) || (red == 0 && green == 0 && blue == 0);
+            if (allOff) {
+                // NeoPixel brightness "0" is not hard-off in Adafruit library internals; clear explicitly.
+                pixels.clear();
+                acquireNeoPixelClockLock();
+                pixels.show();
+                releaseNeoPixelClockLock();
+                return;
+            }
+
             pixels.setBrightness(current);
             pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
 
@@ -263,7 +316,9 @@ class AmbientLightingThread : public concurrency::OSThread
 #if defined(BUTTON2_COLOR) && defined(BUTTON2_COLOR_INDEX)
             pixels.fill(BUTTON2_COLOR, BUTTON2_COLOR_INDEX, 1);
 #endif
+            acquireNeoPixelClockLock();
             pixels.show();
+            releaseNeoPixelClockLock();
             // LOG_DEBUG("Init NeoPixel Ambient light w/ brightness(current)=%f, red=%d, green=%d, blue=%d",
             //        current, red, green, blue);
 #endif

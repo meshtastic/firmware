@@ -252,6 +252,7 @@ class Screen : public concurrency::OSThread
     bool isOverlayBannerShowing();
 
     bool isScreenOn() { return screenOn; }
+    bool isShowingNormalScreen() const { return showingNormalScreen; }
 
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
     // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class

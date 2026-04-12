@@ -24,7 +24,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
-#include "AmbientLightingEffects.h"
 #include "configuration.h"
 #include "meshUtils.h"
 #if HAS_SCREEN
@@ -1514,7 +1513,6 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             devicestate.has_rx_text_message = true; // Needed to include the message frame
             hasUnreadMessage = true;                // Enables mail icon in the header
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view (no-op during text_input)
-            ambientLightingTriggerMessageEffect();
 
             // Only wake/force display if the configuration allows it
             if (shouldWakeOnReceivedMessage()) {
