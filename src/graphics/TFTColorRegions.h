@@ -1,5 +1,6 @@
 #pragma once
 
+#include "configuration.h"
 #include <stdint.h>
 
 namespace graphics
@@ -32,10 +33,23 @@ enum class TFTColorRole : uint8_t {
     Count
 };
 
+#if HAS_TFT || defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||                 \
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
+    defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
+#define GRAPHICS_TFT_COLORING_ENABLED 1
+#else
+#define GRAPHICS_TFT_COLORING_ENABLED 0
+#endif
+
+static constexpr bool kTFTColoringEnabled = GRAPHICS_TFT_COLORING_ENABLED != 0;
+constexpr bool isTFTColoringEnabled()
+{
+    return kTFTColoringEnabled;
+}
+
 void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor);
 void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t width, int16_t height);
 void clearTFTColorRegions();
-bool isTFTColoringEnabled();
 uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool isset, uint16_t defaultOnColor, uint16_t defaultOffColor);
 
 } // namespace graphics

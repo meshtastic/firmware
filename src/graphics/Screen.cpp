@@ -371,7 +371,6 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 
 #if defined(USE_ST7789)
     dispdev->setRGB(TFTPalette::White, (::TFTColorRegion *)colorRegions);
-    LOG_WARN("pointer %d", (::TFTColorRegion *)colorRegions);
 #elif defined(USE_ST7796)
     static_cast<ST7796Spi *>(dispdev)->setRGB(TFTPalette::White);
 #endif
