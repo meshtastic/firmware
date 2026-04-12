@@ -86,7 +86,7 @@ uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
-#if defined(T_LORA_PAGER)
+#if defined(T_LORA_PAGER) || defined(T_DECK)
 // KB backlight control
 #include "input/cardKbI2cImpl.h"
 #endif
