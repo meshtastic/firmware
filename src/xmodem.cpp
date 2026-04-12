@@ -124,6 +124,8 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
                 spiLock->lock();
+                // Remove existing file first so we truncate rather than append
+                if (FSCom.exists(filename)) FSCom.remove(filename);
                 file = fsOpenWrite(activeRoute_);
                 spiLock->unlock();
                 if (file) {
