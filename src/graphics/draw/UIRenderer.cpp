@@ -1541,8 +1541,6 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int arrowOffset = (currentResolution == ScreenResolution::High) ? 3 : 1;
     const int arrowMaxWidth = 4;
     const int sideClearPadding = arrowOffset + arrowMaxWidth + 1;
-    const int clearX = max(0, rectX - sideClearPadding);
-    const int clearWidth = min(SCREEN_WIDTH - clearX, rectWidth + (sideClearPadding * 2));
 
     // Clear background and draw border
     const uint16_t navBgColor = getThemeHeaderBg();
@@ -1558,19 +1556,6 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->fillRect(rectX + 1, rectY, rectWidth - 2, rectHeight - 2);
     display->setColor(WHITE);
     display->drawRect(rectX, rectY, rectWidth, rectHeight);
-#endif
-
-#if GRAPHICS_TFT_COLORING_ENABLED
-    // TFT: force edge refresh to clear nav artifacts.
-    if (navBarVisible && clearWidth > 1) {
-        setTFTColorRole(TFTColorRole::HeaderStatus, navBgColor, navBgColor);
-        registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX, rectY, 1, rectHeight);
-        registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX + clearWidth - 1, rectY, 1, rectHeight);
-        display->setColor(BLACK);
-        display->drawVerticalLine(clearX, rectY, rectHeight);
-        display->drawVerticalLine(clearX + clearWidth - 1, rectY, rectHeight);
-        display->setColor(WHITE);
-    }
 #endif
 
     // Icons are 1-bit glyphs and must be drawn with WHITE to set pixels.
