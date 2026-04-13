@@ -50,9 +50,81 @@
 
 #include "xmodem.h"
 #include "SPILock.h"
+#include <cstdio>
 #include <cstring>
+#include <vector>
 
 #ifdef FSCom
+
+static const char kMflistPrefix[] = "MFLIST ";
+static const size_t kMflistMaxBytes = 65536;
+
+/** Parse `MFLIST <path> [<depth>]` from @p cmd (NUL-terminated). Default depth 0 = files in that directory only. */
+static bool parseMflist(const char *cmd, char *pathOut, size_t pathCap, uint8_t *depthOut)
+{
+    if (strncmp(cmd, kMflistPrefix, strlen(kMflistPrefix)) != 0)
+        return false;
+    strlcpy(pathOut, cmd + strlen(kMflistPrefix), pathCap);
+    while (pathOut[0] == ' ')
+        memmove(pathOut, pathOut + 1, strlen(pathOut) + 1);
+    *depthOut = 0;
+    char *lastsp = strrchr(pathOut, ' ');
+    if (lastsp && lastsp > pathOut) {
+        bool allDigit = true;
+        for (const char *q = lastsp + 1; *q; q++) {
+            if (*q < '0' || *q > '9') {
+                allDigit = false;
+                break;
+            }
+        }
+        if (allDigit && *(lastsp + 1)) {
+            int d = atoi(lastsp + 1);
+            if (d < 0)
+                d = 0;
+            if (d > 255)
+                d = 255;
+            *depthOut = (uint8_t)d;
+            *lastsp = '\0';
+            while (lastsp > pathOut && lastsp[-1] == ' ')
+                *--lastsp = '\0';
+        }
+    }
+    return pathOut[0] != '\0';
+}
+
+static bool appendUtf8(std::vector<uint8_t> &out, const char *s, size_t kMax)
+{
+    for (; *s; s++) {
+        if (out.size() >= kMax) {
+            const char *tail = "\n# MFLIST_TRUNCATED\n";
+            for (const char *p = tail; *p && out.size() < kMax; p++)
+                out.push_back((uint8_t)*p);
+            return false;
+        }
+        out.push_back((uint8_t)*s);
+    }
+    return true;
+}
+
+/** UTF-8 lines `virtual_path\\tsize_bytes\\n` for XMODEM listing download. */
+static bool buildListingBlob(const FSRoute &dirRoute, uint8_t levels, std::vector<uint8_t> &out)
+{
+    if (!fsIsDirectory(dirRoute))
+        return false;
+
+    std::vector<meshtastic_FileInfo> files;
+    spiLock->lock();
+    files = getFilesForRoute(dirRoute, levels);
+    spiLock->unlock();
+
+    char line[sizeof(meshtastic_FileInfo::file_name) + 32];
+    for (const auto &fi : files) {
+        snprintf(line, sizeof(line), "%s\t%u\n", fi.file_name, (unsigned)fi.size_bytes);
+        if (!appendUtf8(out, line, kMflistMaxBytes))
+            return true;
+    }
+    return true;
+}
 
 /** Create every parent directory for @p route.path (file path) on the routed FS. */
 static bool mkdirParentsForRoute(const FSRoute &route)
@@ -143,7 +215,52 @@ meshtastic_XModem XModemAdapter::getForPhone()
 
 void XModemAdapter::resetForPhone()
 {
+    // Clears the last fragment handed to PhoneAPI after it was read; do not reset transfer state here.
     xmodemStore = meshtastic_XModem_init_zero;
+}
+
+void XModemAdapter::captureSessionKey(const uint8_t *bytes, size_t len)
+{
+    if (len > sizeof(sessionKey))
+        len = sizeof(sessionKey);
+    memcpy(sessionKey, bytes, len);
+    sessionKeyLen_ = len;
+}
+
+bool XModemAdapter::matchesSessionKey(const meshtastic_XModem &p) const
+{
+    return sessionKeyLen_ > 0 && p.buffer.size == sessionKeyLen_ &&
+           memcmp(p.buffer.bytes, sessionKey, sessionKeyLen_) == 0;
+}
+
+void XModemAdapter::clearListing()
+{
+    listingBlob_.clear();
+    listingReadOffset_ = 0;
+    listingActive_ = false;
+}
+
+void XModemAdapter::primeTransmitPacket()
+{
+    xmodemStore = meshtastic_XModem_init_zero;
+    xmodemStore.control = meshtastic_XModem_Control_SOH;
+    xmodemStore.seq = packetno;
+    if (listingActive_) {
+        const size_t chunkMax = sizeof(meshtastic_XModem_buffer_t::bytes);
+        size_t remain = listingBlob_.size() > listingReadOffset_ ? listingBlob_.size() - listingReadOffset_ : 0;
+        size_t chunk = remain > chunkMax ? chunkMax : remain;
+        memcpy(xmodemStore.buffer.bytes, listingBlob_.data() + listingReadOffset_, chunk);
+        xmodemStore.buffer.size = chunk;
+        listingReadOffset_ += chunk;
+    } else {
+        spiLock->lock();
+        xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+        spiLock->unlock();
+    }
+    xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
+    isEOT = (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes));
+    LOG_DEBUG("XModem: prime packet %d, %u bytes, EOT=%d", packetno, (unsigned)xmodemStore.buffer.size, (int)isEOT);
+    packetReady.notifyObservers(packetno);
 }
 
 void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
@@ -158,16 +275,46 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                 n = sizeof(filename) - 1;
             memcpy(filename, xmodemPacket.buffer.bytes, n);
             filename[n] = '\0';
-            activeRoute_ = fsRoute(filename);
+            size_t openKeyLen = xmodemPacket.buffer.size;
+            if (openKeyLen > sizeof(sessionKey))
+                openKeyLen = sizeof(sessionKey);
 
-            if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
+            if (xmodemPacket.control == meshtastic_XModem_Control_SOH) {
+                if (strncmp(filename, kMflistPrefix, strlen(kMflistPrefix)) == 0) {
+                    char pathBuf[sizeof(filename)];
+                    uint8_t listDepth = 0;
+                    if (!parseMflist(filename, pathBuf, sizeof(pathBuf), &listDepth)) {
+                        sendControl(meshtastic_XModem_Control_NAK);
+                        break;
+                    }
+                    FSRoute listRoute = fsRoute(pathBuf);
+                    clearListing();
+                    if (!buildListingBlob(listRoute, listDepth, listingBlob_)) {
+                        sendControl(meshtastic_XModem_Control_NAK);
+                        break;
+                    }
+                    listingActive_ = true;
+                    listingReadOffset_ = 0;
+                    captureSessionKey(xmodemPacket.buffer.bytes, openKeyLen);
+                    sendControl(meshtastic_XModem_Control_ACK);
+                    isTransmitting = true;
+                    packetno = 1;
+                    retrans = MAXRETRANS;
+                    isEOT = false;
+                    LOG_INFO("XModem: MFLIST %s depth=%u (%u bytes)", pathBuf, listDepth, (unsigned)listingBlob_.size());
+                    primeTransmitPacket();
+                    break;
+                }
+
+                // Receive this file and put to Flash
+                activeRoute_ = fsRoute(filename);
                 spiLock->lock();
-                // Remove existing file first so we truncate rather than append (use routed path, not raw filename)
                 if (fsExists(activeRoute_)) fsRemove(activeRoute_);
                 mkdirParentsForRoute(activeRoute_);
                 file = fsOpenWrite(activeRoute_);
                 spiLock->unlock();
                 if (file) {
+                    captureSessionKey(xmodemPacket.buffer.bytes, openKeyLen);
                     sendControl(meshtastic_XModem_Control_ACK);
                     isReceiving = true;
                     packetno = 1;
@@ -176,49 +323,42 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                 sendControl(meshtastic_XModem_Control_NAK);
                 isReceiving = false;
                 break;
-            } else { // Transmit this file from Flash
-                LOG_INFO("XModem: Transmit file %s", filename);
-                spiLock->lock();
-                file = fsOpenRead(activeRoute_);
-                spiLock->unlock();
-                if (file) {
-                    packetno = 1;
-                    isTransmitting = true;
-                    xmodemStore = meshtastic_XModem_init_zero;
-                    xmodemStore.control = meshtastic_XModem_Control_SOH;
-                    xmodemStore.seq = packetno;
-                    spiLock->lock();
-                    xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
-                    spiLock->unlock();
-                    xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
-                    LOG_DEBUG("XModem: STX Notify Send packet %d, %d Bytes", packetno, xmodemStore.buffer.size);
-                    if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
-                        isEOT = true;
-                        // send EOT on next Ack
-                    }
-                    packetReady.notifyObservers(packetno);
-                    break;
-                }
-                sendControl(meshtastic_XModem_Control_NAK);
-                isTransmitting = false;
+            }
+
+            // STX — transmit this file from flash
+            activeRoute_ = fsRoute(filename);
+            LOG_INFO("XModem: Transmit file %s", filename);
+            spiLock->lock();
+            file = fsOpenRead(activeRoute_);
+            spiLock->unlock();
+            if (file) {
+                captureSessionKey(xmodemPacket.buffer.bytes, openKeyLen);
+                packetno = 1;
+                isTransmitting = true;
+                retrans = MAXRETRANS;
+                isEOT = false;
+                primeTransmitPacket();
                 break;
             }
+            sendControl(meshtastic_XModem_Control_NAK);
+            isTransmitting = false;
+            break;
         } else {
+            if (isTransmitting && xmodemPacket.seq == 0 && matchesSessionKey(xmodemPacket)) {
+                sendControl(meshtastic_XModem_Control_ACK);
+                break;
+            }
             if (isReceiving) {
                 if (xmodemPacket.seq == 0) {
-                    // Duplicate OPEN retry (client re-sent while already receiving) — re-ACK so Python proceeds.
                     sendControl(meshtastic_XModem_Control_ACK);
                     break;
                 }
                 if (xmodemPacket.seq + 1 == packetno) {
-                    // Already-delivered packet still in flight (stale serial buffer retry) — re-ACK.
                     sendControl(meshtastic_XModem_Control_ACK);
                     break;
                 }
-                // normal file data packet
                 if ((xmodemPacket.seq == packetno) &&
                     check(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size, xmodemPacket.crc16)) {
-                    // valid packet
                     spiLock->lock();
                     file.write(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
                     spiLock->unlock();
@@ -226,102 +366,93 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                     packetno++;
                     break;
                 }
-                // invalid packet
                 sendControl(meshtastic_XModem_Control_NAK);
                 break;
             } else if (isTransmitting) {
-                // just received something weird.
                 sendControl(meshtastic_XModem_Control_CAN);
                 isTransmitting = false;
+                clearListing();
+                sessionKeyLen_ = 0;
+                if (file)
+                    file.close();
                 break;
             }
         }
         break;
     case meshtastic_XModem_Control_EOT:
-        // End of transmission
         sendControl(meshtastic_XModem_Control_ACK);
         spiLock->lock();
-        file.flush();
-        file.close();
+        if (file) {
+            file.flush();
+            file.close();
+        }
         spiLock->unlock();
         isReceiving = false;
         break;
     case meshtastic_XModem_Control_CAN:
-        // Cancel transmission and remove file
         sendControl(meshtastic_XModem_Control_ACK);
         spiLock->lock();
-        file.flush();
-        file.close();
-        fsRemove(activeRoute_);
+        if (file) {
+            file.flush();
+            file.close();
+            fsRemove(activeRoute_);
+        }
         spiLock->unlock();
         isReceiving = false;
         break;
     case meshtastic_XModem_Control_ACK:
-        // Acknowledge Send the next packet
         if (isTransmitting) {
             if (isEOT) {
                 sendControl(meshtastic_XModem_Control_EOT);
                 spiLock->lock();
-                file.close();
+                if (!listingActive_ && file)
+                    file.close();
                 spiLock->unlock();
-                LOG_INFO("XModem: Finished send file %s", filename);
+                if (listingActive_) {
+                    LOG_INFO("XModem: Finished MFLIST (%u bytes)", (unsigned)listingBlob_.size());
+                    clearListing();
+                } else {
+                    LOG_INFO("XModem: Finished send file %s", filename);
+                }
                 isTransmitting = false;
                 isEOT = false;
+                sessionKeyLen_ = 0;
                 break;
             }
-            retrans = MAXRETRANS; // reset retransmit counter
+            retrans = MAXRETRANS;
             packetno++;
-            xmodemStore = meshtastic_XModem_init_zero;
-            xmodemStore.control = meshtastic_XModem_Control_SOH;
-            xmodemStore.seq = packetno;
-            spiLock->lock();
-            xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
-            spiLock->unlock();
-            xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
-            LOG_DEBUG("XModem: ACK Notify Send packet %d, %d Bytes", packetno, xmodemStore.buffer.size);
-            if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
-                isEOT = true;
-                // send EOT on next Ack
-            }
-            packetReady.notifyObservers(packetno);
+            primeTransmitPacket();
         } else {
-            // just received something weird.
             sendControl(meshtastic_XModem_Control_CAN);
         }
         break;
     case meshtastic_XModem_Control_NAK:
-        // Negative acknowledge. Send the same buffer again
         if (isTransmitting) {
             if (--retrans <= 0) {
                 sendControl(meshtastic_XModem_Control_CAN);
                 spiLock->lock();
-                file.close();
+                if (!listingActive_ && file)
+                    file.close();
                 spiLock->unlock();
-                LOG_INFO("XModem: Retransmit timeout, cancel file %s", filename);
+                clearListing();
+                sessionKeyLen_ = 0;
+                LOG_INFO("XModem: Retransmit timeout, cancel %s", filename);
                 isTransmitting = false;
                 break;
             }
-            xmodemStore = meshtastic_XModem_init_zero;
-            xmodemStore.control = meshtastic_XModem_Control_SOH;
-            xmodemStore.seq = packetno;
-            spiLock->lock();
-            file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
-            xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
-            spiLock->unlock();
-            xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
-            LOG_DEBUG("XModem: NAK Notify Send packet %d, %d Bytes", packetno, xmodemStore.buffer.size);
-            if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
-                isEOT = true;
-                // send EOT on next Ack
+            if (listingActive_)
+                listingReadOffset_ = (packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes);
+            else {
+                spiLock->lock();
+                file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
+                spiLock->unlock();
             }
-            packetReady.notifyObservers(packetno);
+            primeTransmitPacket();
         } else {
-            // just received something weird.
             sendControl(meshtastic_XModem_Control_CAN);
         }
         break;
     default:
-        // Unknown control character
         break;
     }
 }

@@ -416,6 +416,102 @@ bool fsExists(const FSRoute &r)
 #endif
 }
 
+bool fsIsDirectory(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    File t = _fsForMount(r.mount).open(r.path, FILE_O_READ);
+#else
+    File t = FSCom.open(r.path, FILE_O_READ);
+#endif
+    if (!t)
+        return false;
+    bool isdir = t.isDirectory();
+    t.close();
+    return isdir;
+}
+
+static void joinFsPath(const char *dir, const char *name, char *out, size_t cap)
+{
+    if (!name || !name[0]) {
+        strlcpy(out, dir, cap);
+        return;
+    }
+    if (strcmp(dir, "/") == 0)
+        snprintf(out, cap, "/%s", name);
+    else
+        snprintf(out, cap, "%s/%s", dir, name);
+}
+
+static void toVirtualPath(FsMount m, const char *pathOnFs, char *out, size_t cap)
+{
+    if (!pathOnFs || !pathOnFs[0]) {
+        out[0] = '\0';
+        return;
+    }
+    if (m == FsMount::External) {
+        if (pathOnFs[0] == '/')
+            snprintf(out, cap, "/__ext__%s", pathOnFs);
+        else
+            snprintf(out, cap, "/__ext__/%s", pathOnFs);
+    } else if (m == FsMount::SD) {
+        if (pathOnFs[0] == '/')
+            snprintf(out, cap, "/__sd__%s", pathOnFs);
+        else
+            snprintf(out, cap, "/__sd__/%s", pathOnFs);
+    } else {
+        strlcpy(out, pathOnFs, cap);
+    }
+}
+
+std::vector<meshtastic_FileInfo> getFilesForRoute(const FSRoute &r, uint8_t levels)
+{
+    std::vector<meshtastic_FileInfo> filenames;
+#if defined(ARCH_NRF52)
+    File root = _fsForMount(r.mount).open(r.path, FILE_O_READ);
+#else
+    File root = FSCom.open(r.path, FILE_O_READ);
+#endif
+    if (!root)
+        return filenames;
+    if (!root.isDirectory()) {
+        root.close();
+        return filenames;
+    }
+
+    File file = root.openNextFile();
+    while (file && file.name()[0]) {
+        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
+            if (levels > 0) {
+                FSRoute sub = r;
+#if defined(ARCH_ESP32)
+                strlcpy(sub.path, file.path(), sizeof(sub.path));
+#else
+                joinFsPath(r.path, file.name(), sub.path, sizeof(sub.path));
+#endif
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFilesForRoute(sub, levels - 1);
+                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
+            }
+            file.close();
+        } else {
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
+            char onMount[sizeof(FSRoute::path) * 2];
+#if defined(ARCH_ESP32)
+            strlcpy(onMount, file.path(), sizeof(onMount));
+#else
+            joinFsPath(r.path, file.name(), onMount, sizeof(onMount));
+#endif
+            toVirtualPath(r.mount, onMount, fileInfo.file_name, sizeof(fileInfo.file_name));
+            if (!String(fileInfo.file_name).endsWith(".")) {
+                filenames.push_back(fileInfo);
+            }
+            file.close();
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+    return filenames;
+}
+
 #endif // FSCom
 
 /**

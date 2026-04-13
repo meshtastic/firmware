@@ -113,4 +113,10 @@ bool fsMkdir(const FSRoute &r);
 
 /** Return true if the path exists on the routed filesystem. */
 bool fsExists(const FSRoute &r);
+
+/** True if @p r is an existing directory on the routed filesystem. */
+bool fsIsDirectory(const FSRoute &r);
+
+/** Like getFiles(), but opens @p dirRoute on the correct FS (internal / external / SD on nRF52). */
+std::vector<meshtastic_FileInfo> getFilesForRoute(const FSRoute &dirRoute, uint8_t levels);
 #endif // FSCom
