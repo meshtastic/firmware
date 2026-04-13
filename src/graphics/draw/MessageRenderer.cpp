@@ -422,7 +422,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::vector<bool> isMine;   // track alignment
     std::vector<bool> isHeader; // track header lines
     std::vector<AckStatus> ackForLine;
-    const size_t estimatedLines = std::max<size_t>(filtered.size(), 1U) * 3U;
+    const size_t estimatedLines = std::max(filtered.size(), size_t{1}) * size_t{3};
     allLines.reserve(estimatedLines);
     isMine.reserve(estimatedLines);
     isHeader.reserve(estimatedLines);
