@@ -103,17 +103,20 @@ namespace graphics
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
-
+#if GRAPHICS_TFT_COLORING_ENABLED
 static inline void prepareFrameColorRegions()
 {
 #if GRAPHICS_TFT_COLORING_ENABLED
     clearTFTColorRegions();
 #endif
 }
+#endif
 
 static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
+#if GRAPHICS_TFT_COLORING_ENABLED
     prepareFrameColorRegions();
+#endif
     ui->update();
 }
 // Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
@@ -1356,11 +1359,15 @@ void Screen::blink()
     dispdev->setBrightness(254);
     while (count > 0) {
         dispdev->fillRect(0, 0, dispdev->getWidth(), dispdev->getHeight());
+#if GRAPHICS_TFT_COLORING_ENABLED
         prepareFrameColorRegions();
+#endif
         dispdev->display();
         delay(50);
         dispdev->clear();
+#if GRAPHICS_TFT_COLORING_ENABLED
         prepareFrameColorRegions();
+#endif
         dispdev->display();
         delay(50);
         count = count - 1;
@@ -1428,7 +1435,9 @@ void Screen::setFastFramerate()
 {
 #if defined(M5STACK_UNITC6L)
     dispdev->clear();
+#if GRAPHICS_TFT_COLORING_ENABLED
     prepareFrameColorRegions();
+#endif
     dispdev->display();
 #endif
     // We are about to start a transition so speed up fps
