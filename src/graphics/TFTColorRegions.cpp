@@ -215,6 +215,34 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::White,    // bodyFg
         false,                // fullFrameInvert
     },
+
+    // ── Creamsicle (ThemeID::Creamsicle = 5) — light variant ─────────
+    {
+        ThemeID::Creamsicle, // id
+        "Creamsicle",        // name
+        {
+            {TFTPalette::CreamOrange, TFTPalette::Black}, // HeaderBackground
+            {TFTPalette::CreamOrange, TFTPalette::White}, // HeaderTitle
+            {TFTPalette::CreamOrange, TFTPalette::White}, // HeaderStatus
+            {TFTPalette::DeepOrange, TFTPalette::Cream},  // SignalBars
+            {TFTPalette::DeepOrange, TFTPalette::Cream},  // BatteryFill
+            {TFTPalette::CreamOrange, TFTPalette::Cream}, // ConnectionIcon
+            {TFTPalette::DeepOrange, TFTPalette::Cream},  // UtilizationFill
+            {TFTPalette::Black, TFTPalette::CreamOrange}, // FavoriteNode
+            {TFTPalette::CreamOrange, TFTPalette::Cream}, // ActionMenuBorder
+            {TFTPalette::Black, TFTPalette::Cream},       // ActionMenuBody
+            {TFTPalette::CreamOrange, TFTPalette::White}, // ActionMenuTitle
+            {TFTPalette::Black, TFTPalette::White},       // FrameMono
+            {TFTPalette::White, TFTPalette::CreamOrange}, // BootSplash
+            {TFTPalette::Black, TFTPalette::CreamOrange}, // BodyYellow
+        },
+        TFTPalette::CreamOrange, // headerBg
+        TFTPalette::White,       // headerText
+        TFTPalette::White,       // headerStatus
+        TFTPalette::Cream,       // bodyBg
+        TFTPalette::Black,       // bodyFg
+        true,                    // fullFrameInvert
+    },
 };
 
 static constexpr size_t kInternalThemeCount = sizeof(kThemes) / sizeof(kThemes[0]);
@@ -388,6 +416,11 @@ void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
             if (offColor == TFTPalette::Black)
                 offColor = TFTPalette::Navy;
             break;
+        case ThemeID::Creamsicle:
+            // Orange-on-cream: high-contrast dark on orange.
+            onColor = TFTPalette::Black;
+            offColor = TFTPalette::CreamOrange;
+            break;
         default:
             break;
         }
@@ -428,6 +461,18 @@ void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
                 onColor = TFTPalette::SkyBlue;
             if (offColor == TFTPalette::Black)
                 offColor = TFTPalette::Navy;
+            break;
+        case ThemeID::Creamsicle:
+            // Invert body colours for readability on cream frames.
+            if (offColor == TFTPalette::Black) {
+                offColor = TFTPalette::Cream;
+            }
+            if (onColor == TFTPalette::White) {
+                onColor = TFTPalette::Black;
+            }
+            if (onColor == TFTPalette::Yellow) {
+                onColor = TFTPalette::DeepOrange;
+            }
             break;
         default:
             break;

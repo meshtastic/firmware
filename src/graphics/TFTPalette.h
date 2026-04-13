@@ -46,5 +46,10 @@ constexpr uint16_t SkyBlue = rgb565(100, 180, 255);
 constexpr uint16_t Navy = rgb565(15, 15, 50);
 constexpr uint16_t DeepBlue = rgb565(30, 60, 120);
 
+// Creamsicle theme colors (light variant)
+constexpr uint16_t CreamOrange = rgb565(255, 140, 50);
+constexpr uint16_t DeepOrange = rgb565(220, 100, 20);
+constexpr uint16_t Cream = rgb565(255, 248, 235);
+
 } // namespace TFTPalette
 } // namespace graphics
