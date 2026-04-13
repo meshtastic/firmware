@@ -640,8 +640,8 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             display->fillRect(boxLeft, titleBarY, boxWidth, titleBarHeight);
 #if GRAPHICS_TFT_COLORING_ENABLED
             if (alertBannerOptions > 0) {
-                setTFTColorRole(TFTColorRole::ActionMenuTitle, getThemeBodyFg(), getThemeBodyBg());
-                registerTFTColorRegion(TFTColorRole::ActionMenuTitle, boxLeft, titleBarY, boxWidth, titleBarHeight);
+                setTFTColorRole(TFTColorRole::ActionMenuTitle, getThemeHeaderBg(), getThemeHeaderText());
+                registerTFTColorRegion(TFTColorRole::ActionMenuTitle, boxLeft, titleBarY - 1, boxWidth, titleBarHeight + 1);
             }
 #endif
             display->setColor(BLACK);

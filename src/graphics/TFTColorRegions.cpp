@@ -157,7 +157,7 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::Gold,         // headerStatus
         TFTPalette::Pine,         // bodyBg
         TFTPalette::White,        // bodyFg
-        false,                    // fullFrameInvert
+        true,                     // fullFrameInvert
     },
 
     // ── Pink (ThemeID::Pink = 3) — light variant ─────────────────────
