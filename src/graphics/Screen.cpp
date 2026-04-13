@@ -39,11 +39,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/NodeListRenderer.h"
 #include "draw/NotificationRenderer.h"
 #include "draw/UIRenderer.h"
-#include "modules/CannedMessageModule.h"
-
-#if defined(USE_ST7789)
 #include "graphics/TFTColorRegions.h"
-#endif
+#include "modules/CannedMessageModule.h"
 
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -106,6 +103,19 @@ namespace graphics
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
+
+static inline void prepareFrameColorRegions()
+{
+#if GRAPHICS_TFT_COLORING_ENABLED
+    clearTFTColorRegions();
+#endif
+}
+
+static inline void updateUiFrame(OLEDDisplayUi *ui)
+{
+    prepareFrameColorRegions();
+    ui->update();
+}
 // Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
@@ -170,7 +180,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     ui->setTargetFPS(60);
-    ui->update();
+    updateUiFrame(ui);
 }
 
 // Called to trigger a banner with custom message and duration
@@ -192,7 +202,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     ui->setTargetFPS(60);
-    ui->update();
+    updateUiFrame(ui);
 }
 
 // Called to trigger a banner with custom message and duration
@@ -216,7 +226,7 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     ui->setTargetFPS(60);
-    ui->update();
+    updateUiFrame(ui);
 }
 
 void Screen::showTextInput(const char *header, const char *initialText, uint32_t durationMs,
@@ -239,7 +249,7 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     ui->setTargetFPS(60);
-    ui->update();
+    updateUiFrame(ui);
 }
 
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -651,9 +661,9 @@ void Screen::setup()
     //  Turn on display and trigger first draw
     handleSetOn(true);
     graphics::currentResolution = graphics::determineScreenResolution(dispdev->height(), dispdev->width());
-    ui->update();
+    updateUiFrame(ui);
 #ifndef USE_EINK
-    ui->update(); // Some SSD1306 clones drop the first draw, so run twice
+    updateUiFrame(ui); // Some SSD1306 clones drop the first draw, so run twice
 #endif
     serialSinceMsec = millis();
 
@@ -726,7 +736,7 @@ void Screen::forceDisplay(bool forceUiUpdate)
         do {
             startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
             delay(10);
-            ui->update();
+            updateUiFrame(ui);
         } while (ui->getUiState()->lastUpdate < startUpdate);
 
         // Return to normal frame rate
@@ -797,9 +807,9 @@ int32_t Screen::runOnce()
         static FrameCallback bootOEMFrames[] = {graphics::UIRenderer::drawOEMBootScreen};
         static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
         ui->setFrames(bootOEMFrames, bootOEMFrameCount);
-        ui->update();
+        updateUiFrame(ui);
 #ifndef USE_EINK
-        ui->update();
+        updateUiFrame(ui);
 #endif
         showingOEMBootScreen = false;
     }
@@ -890,7 +900,7 @@ int32_t Screen::runOnce()
 
     // this must be before the frameState == FIXED check, because we always
     // want to draw at least one FIXED frame before doing forceDisplay
-    ui->update();
+    updateUiFrame(ui);
 
     // Switch to a low framerate (to save CPU) when we are not in transition
     // but we should only call setTargetFPS when framestate changes, because
@@ -939,7 +949,7 @@ void Screen::setSSLFrames()
         // LOG_DEBUG("Show SSL frames");
         static FrameCallback sslFrames[] = {NotificationRenderer::drawSSLScreen};
         ui->setFrames(sslFrames, 1);
-        ui->update();
+        updateUiFrame(ui);
     }
 }
 
@@ -975,7 +985,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     do {
         startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
         delay(1);
-        ui->update();
+        updateUiFrame(ui);
     } while (ui->getUiState()->lastUpdate < startUpdate);
 
 #if defined(USE_EINK_PARALLELDISPLAY)
@@ -1346,9 +1356,11 @@ void Screen::blink()
     dispdev->setBrightness(254);
     while (count > 0) {
         dispdev->fillRect(0, 0, dispdev->getWidth(), dispdev->getHeight());
+        prepareFrameColorRegions();
         dispdev->display();
         delay(50);
         dispdev->clear();
+        prepareFrameColorRegions();
         dispdev->display();
         delay(50);
         count = count - 1;
@@ -1416,6 +1428,7 @@ void Screen::setFastFramerate()
 {
 #if defined(M5STACK_UNITC6L)
     dispdev->clear();
+    prepareFrameColorRegions();
     dispdev->display();
 #endif
     // We are about to start a transition so speed up fps
@@ -1627,7 +1640,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
         setFastFramerate(); // Draw ASAP
-        ui->update();
+        updateUiFrame(ui);
         return 0;
     }
 
@@ -1642,7 +1655,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
         setFastFramerate(); // Draw ASAP
-        ui->update();
+        updateUiFrame(ui);
 
         menuHandler::handleMenuSwitch(dispdev);
         return 0;
