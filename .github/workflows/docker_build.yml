@@ -37,7 +37,7 @@ on:
         value: ${{ jobs.docker-build.outputs.digest }}
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 jobs:
@@ -50,35 +50,41 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Get release version string
         run: |
           echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
-      - name: Docker login
-        if: ${{ inputs.push }}
-        uses: docker/login-action@v3
-        with:
-          username: meshtastic
-          password: ${{ secrets.DOCKER_FIRMWARE_TOKEN }}
-
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
+        with:
+          cache-image: true
 
       - name: Docker setup
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
+        with:
+          # Add Google/Amazon DockerHub mirrors to buildkit config
+          # https://docs.docker.com/build/ci/github-actions/configure-builder/#registry-mirror
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io", "public.ecr.aws"]
 
       - name: Sanitize platform string
         id: sanitize_platform
         # Replace slashes with underscores
         run: echo "cleaned_platform=${{ inputs.platform }}" | sed 's/\//_/g' >> $GITHUB_OUTPUT
 
+      - name: Docker login
+        if: ${{ inputs.push }}
+        uses: docker/login-action@v4
+        with:
+          username: meshtastic
+          password: ${{ secrets.DOCKER_FIRMWARE_TOKEN }}
+
       - name: Docker tag
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: meshtastic/meshtasticd
           tags: |
@@ -86,7 +92,7 @@ jobs:
           flavor: latest=false
 
       - name: Docker build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         id: docker_variant
         with:
           context: .
@@ -97,3 +103,6 @@ jobs:
           platforms: ${{ inputs.platform }}
           build-args: |
             PIO_ENV=${{ inputs.pio_env }}
+          # Cache image layers in GitHub Actions cache to speed up subsequent builds.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
