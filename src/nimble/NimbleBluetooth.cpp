@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH && !defined(CONFIG_IDF_TARGET_ESP32P4)
 #include "BluetoothCommon.h"
 #include "NimbleBluetooth.h"
 #include "PowerFSM.h"
@@ -575,13 +575,13 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
 class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
-#ifdef NIMBLE_TWO
   public:
     NimbleBluetoothServerCallback(NimbleBluetooth *ble) { this->ble = ble; }
 
   private:
     NimbleBluetooth *ble;
 
+#ifdef NIMBLE_TWO
     virtual uint32_t onPassKeyDisplay()
 #else
     virtual uint32_t onPassKeyRequest()
@@ -691,13 +691,8 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         LOG_INFO("BLE disconnect");
 #endif
-#ifdef NIMBLE_TWO
-        if (ble->isDeInit)
+        if (ble && ble->isDeInit)
             return;
-#else
-        if (nimbleBluetooth && nimbleBluetooth->isDeInit)
-            return;
-#endif
 
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
@@ -862,7 +857,7 @@ void NimbleBluetooth::setup()
 #ifdef NIMBLE_TWO
     NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback(this);
 #else
-    NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback();
+    NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback(this);
 #endif
     bleServer->setCallbacks(serverCallbacks, true);
     setupService();
@@ -961,7 +956,7 @@ void NimbleBluetooth::startAdvertising()
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    if ((config.bluetooth.enabled == true) && bleServer && nimbleBluetooth->isConnected()) {
+    if ((config.bluetooth.enabled == true) && bleServer && bluetoothApi && bluetoothApi->isConnected()) {
         BatteryCharacteristic->setValue(&level, 1);
 #ifdef NIMBLE_TWO
         BatteryCharacteristic->notify(&level, 1, BLE_HS_CONN_HANDLE_NONE);
@@ -996,4 +991,14 @@ void clearNVS()
     ESP.restart();
 #endif
 }
+
+#else
+
+void updateBatteryLevel(uint8_t level)
+{
+    (void)level;
+}
+
+void clearNVS() {}
+
 #endif
