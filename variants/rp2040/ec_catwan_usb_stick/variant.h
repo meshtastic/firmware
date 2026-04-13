@@ -6,8 +6,6 @@
 //   Radio: RST=GPIO21, DIO0=GPIO10, DIO1=GPIO11, DIO2=GPIO12
 //   LED: GPIO25
 
-#define ARDUINO_ARCH_AVR
-
 #define HAS_SCREEN 0
 #define HAS_GPS 0
 #undef GPS_RX_PIN
