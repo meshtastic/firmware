@@ -126,15 +126,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         const bool isClockHeader = transparent_background && show_date && (!titleStr || titleStr[0] == '\0');
         if (isClockHeader) {
             const auto activeThemeId = getActiveTheme().id;
-            if (activeThemeId == ThemeID::Pink) {
-                headerStatusColor = TFTPalette::HotPink;
-            } else if (activeThemeId == ThemeID::Creamsicle) {
-                headerStatusColor = TFTPalette::CreamOrange;
+            if (activeThemeId == ThemeID::Pink || activeThemeId == ThemeID::Creamsicle) {
+                headerStatusColor = getThemeHeaderBg();
             }
         }
-#endif
 
-#if GRAPHICS_TFT_COLORING_ENABLED
         if (transparent_background) {
             const uint16_t transparentBgColor = getThemeBodyBg();
             setTFTColorRole(TFTColorRole::HeaderTitle, headerTitleColorForRole, transparentBgColor);

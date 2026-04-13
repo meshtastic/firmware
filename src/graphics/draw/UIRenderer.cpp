@@ -1540,8 +1540,32 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int rectHeight = iconSize + 6;
 
     // Clear background and draw border
+    const auto activeThemeId = getActiveTheme().id;
+
     const uint16_t navBgColor = getThemeHeaderBg();
     const uint16_t navFgColor = getThemeHeaderStatus();
+
+    uint16_t arrowBgColor = getThemeBodyBg();
+    uint16_t arrowFgColor = getThemeHeaderText();
+    // Arrow colors depend on theme to ensure visibility against nav bar and consistency with icon colors.
+    // These are all the expections, if it matches the primary arrowBg / arrowFg colors above, it will just work without needing
+    // to be listed here.
+    switch (activeThemeId) {
+    case ThemeID::Pink:
+        arrowBgColor = getThemeBodyBg();
+        arrowFgColor = getThemeHeaderBg();
+        break;
+
+    case ThemeID::Blue:
+        arrowBgColor = TFTPalette::Black;
+        arrowFgColor = getThemeHeaderStatus();
+        break;
+
+    case ThemeID::Creamsicle:
+        arrowBgColor = getThemeHeaderText();
+        arrowFgColor = getThemeHeaderBg();
+        break;
+    }
 
     display->setColor(BLACK);
 #if GRAPHICS_TFT_COLORING_ENABLED
@@ -1623,7 +1647,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         int regionX = baseX;
 
 #if GRAPHICS_TFT_COLORING_ENABLED
-        setTFTColorRole(TFTColorRole::HeaderStatus, navBgColor, navFgColor);
+        setTFTColorRole(TFTColorRole::HeaderStatus, arrowFgColor, arrowBgColor);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, regionX, top, maxW, halfH);
 #endif
 
@@ -1636,7 +1660,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         int regionX = baseX - maxW + 1;
 
 #if GRAPHICS_TFT_COLORING_ENABLED
-        setTFTColorRole(TFTColorRole::HeaderStatus, navBgColor, navFgColor);
+        setTFTColorRole(TFTColorRole::HeaderStatus, arrowFgColor, arrowBgColor);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, regionX, top, maxW, halfH);
 #endif
 
