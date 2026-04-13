@@ -33,8 +33,6 @@
 
 portduino_config_struct portduino_config;
 portduino_status_struct portduino_status;
-std::ofstream traceFile;
-std::ofstream JSONFile;
 Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
 char *optionMac = nullptr;
@@ -622,31 +620,6 @@ void portduinoSetup()
         SPI.begin(portduino_config.lora_spi_dev.c_str());
     }
 
-    if (portduino_config.traceFilename != "") {
-        try {
-            traceFile.open(portduino_config.traceFilename, std::ios::out | std::ios::app);
-        } catch (std::ofstream::failure &e) {
-            std::cout << "*** traceFile Exception " << e.what() << std::endl;
-            exit(EXIT_FAILURE);
-        }
-        if (!traceFile.is_open()) {
-            std::cout << "*** traceFile open failure" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    } else if (portduino_config.JSONFilename != "") {
-        try {
-            if (portduino_config.JSONFileRotate == 0) {
-                JSONFile.open(portduino_config.JSONFilename, std::ios::out | std::ios::app);
-            }
-        } catch (std::ofstream::failure &e) {
-            std::cout << "*** JSONFile Exception " << e.what() << std::endl;
-            exit(EXIT_FAILURE);
-        }
-        if (!JSONFile.is_open()) {
-            std::cout << "*** JSONFile open failure" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    }
     if (verboseEnabled && portduino_config.logoutputlevel != level_trace) {
         portduino_config.logoutputlevel = level_debug;
     }
@@ -692,31 +665,6 @@ bool loadConfig(const char *configPath)
             } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "error") {
                 portduino_config.logoutputlevel = level_error;
             }
-            portduino_config.traceFilename = yamlConfig["Logging"]["TraceFile"].as<std::string>("");
-            portduino_config.JSONFilename = yamlConfig["Logging"]["JSONFile"].as<std::string>("");
-            portduino_config.JSONFileRotate = yamlConfig["Logging"]["JSONFileRotate"].as<int>(0);
-            portduino_config.JSONFilter = (_meshtastic_PortNum)yamlConfig["Logging"]["JSONFilter"].as<int>(0);
-            if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "textmessage")
-                portduino_config.JSONFilter = meshtastic_PortNum_TEXT_MESSAGE_APP;
-            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "telemetry")
-                portduino_config.JSONFilter = meshtastic_PortNum_TELEMETRY_APP;
-            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "nodeinfo")
-                portduino_config.JSONFilter = meshtastic_PortNum_NODEINFO_APP;
-            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "position")
-                portduino_config.JSONFilter = meshtastic_PortNum_POSITION_APP;
-            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "waypoint")
-                portduino_config.JSONFilter = meshtastic_PortNum_WAYPOINT_APP;
-            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "neighborinfo")
-                portduino_config.JSONFilter = meshtastic_PortNum_NEIGHBORINFO_APP;
-            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "traceroute")
-                portduino_config.JSONFilter = meshtastic_PortNum_TRACEROUTE_APP;
-            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "detection")
-                portduino_config.JSONFilter = meshtastic_PortNum_DETECTION_SENSOR_APP;
-            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "paxcounter")
-                portduino_config.JSONFilter = meshtastic_PortNum_PAXCOUNTER_APP;
-            else if (yamlConfig["Logging"]["JSONFilter"].as<std::string>("") == "remotehardware")
-                portduino_config.JSONFilter = meshtastic_PortNum_REMOTE_HARDWARE_APP;
-
             if (yamlConfig["Logging"]["AsciiLogs"]) {
                 // Default is !isatty(1) but can be set explicitly in config.yaml
                 portduino_config.ascii_logs = yamlConfig["Logging"]["AsciiLogs"].as<bool>();
