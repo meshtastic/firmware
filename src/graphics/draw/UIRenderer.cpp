@@ -907,14 +907,14 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     // Fill progress
     if (fillRight > 0) {
 #if GRAPHICS_TFT_COLORING_ENABLED
-        uint16_t chUtilFillColor = TFTPalette::Good;
+        uint16_t UtilizationFillColor = TFTPalette::Good;
         if (raw_chutil_percent >= 60) {
-            chUtilFillColor = TFTPalette::Bad;
+            UtilizationFillColor = TFTPalette::Bad;
         } else if (raw_chutil_percent >= 35) {
-            chUtilFillColor = TFTPalette::Medium;
+            UtilizationFillColor = TFTPalette::Medium;
         }
-        setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, TFTPalette::Black);
-        registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
+        setTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black);
+        registerTFTColorRegion(TFTColorRole::UtilizationFill, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
                                chutil_bar_height - 2);
 #endif
         display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);

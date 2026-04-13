@@ -516,14 +516,14 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // Fill progress
     if (fillRight > 0) {
 #if GRAPHICS_TFT_COLORING_ENABLED
-        uint16_t chUtilFillColor = TFTPalette::Good;
+        uint16_t UtilizationFillColor = TFTPalette::Good;
         if (raw_chutil_percent >= 60) {
-            chUtilFillColor = TFTPalette::Bad;
+            UtilizationFillColor = TFTPalette::Bad;
         } else if (raw_chutil_percent >= 35) {
-            chUtilFillColor = TFTPalette::Medium;
+            UtilizationFillColor = TFTPalette::Medium;
         }
-        setTFTColorRole(TFTColorRole::ChannelUtilization, chUtilFillColor, TFTPalette::Black);
-        registerTFTColorRegion(TFTColorRole::ChannelUtilization, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
+        setTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black);
+        registerTFTColorRegion(TFTColorRole::UtilizationFill, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
                                chutil_bar_height - 2);
 #endif
         display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
@@ -598,6 +598,17 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         int barY = getTextPositions(display)[line] + (FONT_HEIGHT_SMALL - barHeight) / 2;
         display->setColor(WHITE);
         display->drawRect(barX, barY, adjustedBarWidth, barHeight);
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+        uint16_t UtilizationFillColor = TFTPalette::Good;
+        if (percent >= 80) {
+            UtilizationFillColor = TFTPalette::Bad;
+        } else if (percent >= 60) {
+            UtilizationFillColor = TFTPalette::Medium;
+        }
+        setTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black);
+        registerTFTColorRegion(TFTColorRole::UtilizationFill, barX + 1, barY + 1, fillWidth - 1, barHeight - 2);
+#endif
 
         display->fillRect(barX, barY, fillWidth, barHeight);
         display->setColor(WHITE);

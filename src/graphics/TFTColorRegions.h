@@ -26,7 +26,7 @@ enum class TFTColorRole : uint8_t {
     SignalBars,
     BatteryFill,
     ConnectionIcon,
-    ChannelUtilization,
+    UtilizationFill,
     FavoriteNode,
     ActionMenuBorder,
     ActionMenuBody,

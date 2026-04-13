@@ -87,7 +87,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Good, TFTPalette::Black},     // SignalBars
             {TFTPalette::Good, TFTPalette::Black},     // BatteryFill
             {TFTPalette::Blue, TFTPalette::Black},     // ConnectionIcon
-            {TFTPalette::Good, TFTPalette::Black},     // ChannelUtilization
+            {TFTPalette::Good, TFTPalette::Black},     // UtilizationFill
             {TFTPalette::Yellow, TFTPalette::Black},   // FavoriteNode
             {TFTPalette::DarkGray, TFTPalette::Black}, // ActionMenuBorder
             {TFTPalette::White, TFTPalette::Black},    // ActionMenuBody
@@ -115,7 +115,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Good, TFTPalette::White},      // SignalBars
             {TFTPalette::Good, TFTPalette::White},      // BatteryFill
             {TFTPalette::Blue, TFTPalette::White},      // ConnectionIcon
-            {TFTPalette::Good, TFTPalette::White},      // ChannelUtilization
+            {TFTPalette::Good, TFTPalette::White},      // UtilizationFill
             {TFTPalette::Black, TFTPalette::Yellow},    // FavoriteNode
             {TFTPalette::DarkGray, TFTPalette::White},  // ActionMenuBorder
             {TFTPalette::Black, TFTPalette::White},     // ActionMenuBody
@@ -143,7 +143,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::ChristmasGreen, TFTPalette::Pine}, // SignalBars
             {TFTPalette::ChristmasGreen, TFTPalette::Pine}, // BatteryFill
             {TFTPalette::Gold, TFTPalette::Pine},           // ConnectionIcon
-            {TFTPalette::ChristmasGreen, TFTPalette::Pine}, // ChannelUtilization
+            {TFTPalette::ChristmasGreen, TFTPalette::Pine}, // UtilizationFill
             {TFTPalette::Gold, TFTPalette::Pine},           // FavoriteNode
             {TFTPalette::ChristmasRed, TFTPalette::Pine},   // ActionMenuBorder
             {TFTPalette::White, TFTPalette::Pine},          // ActionMenuBody
@@ -171,7 +171,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::DeepPink, TFTPalette::PalePink}, // SignalBars
             {TFTPalette::DeepPink, TFTPalette::PalePink}, // BatteryFill
             {TFTPalette::HotPink, TFTPalette::PalePink},  // ConnectionIcon
-            {TFTPalette::DeepPink, TFTPalette::PalePink}, // ChannelUtilization
+            {TFTPalette::DeepPink, TFTPalette::PalePink}, // UtilizationFill
             {TFTPalette::Black, TFTPalette::HotPink},     // FavoriteNode
             {TFTPalette::HotPink, TFTPalette::PalePink},  // ActionMenuBorder
             {TFTPalette::Black, TFTPalette::PalePink},    // ActionMenuBody
@@ -199,7 +199,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::SkyBlue, TFTPalette::Navy},     // SignalBars
             {TFTPalette::SkyBlue, TFTPalette::Navy},     // BatteryFill
             {TFTPalette::SkyBlue, TFTPalette::Navy},     // ConnectionIcon
-            {TFTPalette::SkyBlue, TFTPalette::Navy},     // ChannelUtilization
+            {TFTPalette::SkyBlue, TFTPalette::Navy},     // UtilizationFill
             {TFTPalette::SkyBlue, TFTPalette::Navy},     // FavoriteNode
             {TFTPalette::DeepBlue, TFTPalette::Navy},    // ActionMenuBorder
             {TFTPalette::White, TFTPalette::Navy},       // ActionMenuBody
@@ -240,7 +240,7 @@ static TFTRoleColorsBe roleColors[static_cast<size_t>(TFTColorRole::Count)] = {
     {toBe565(TFTPalette::Good), toBe565(TFTPalette::Black)},     // SignalBars
     {toBe565(TFTPalette::Good), toBe565(TFTPalette::Black)},     // BatteryFill
     {toBe565(TFTPalette::Blue), toBe565(TFTPalette::Black)},     // ConnectionIcon
-    {toBe565(TFTPalette::Good), toBe565(TFTPalette::Black)},     // ChannelUtilization
+    {toBe565(TFTPalette::Good), toBe565(TFTPalette::Black)},     // UtilizationFill
     {toBe565(TFTPalette::Yellow), toBe565(TFTPalette::Black)},   // FavoriteNode
     {toBe565(TFTPalette::DarkGray), toBe565(TFTPalette::Black)}, // ActionMenuBorder
     {toBe565(TFTPalette::White), toBe565(TFTPalette::Black)},    // ActionMenuBody
