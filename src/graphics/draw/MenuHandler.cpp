@@ -2545,25 +2545,40 @@ void menuHandler::messageBubblesMenu()
 
 void menuHandler::themeMenu()
 {
-    enum optionsNumbers { Back, Dark, Light };
-    static const char *optionsArray[] = {"Back", "Dark", "Light"};
+    // Build menu dynamically from the theme table.
+    // Slot 0 is always "Back"; slots 1..N map 1:1 to kThemes[0..N-1].
+    const size_t themeCount = getThemeCount();
+    static const char *optionsArray[8] = {"Back"};
+    static int optionsEnumArray[8] = {0};
+    const int options = static_cast<int>(themeCount) + 1; // +1 for Back
+
+    for (size_t i = 0; i < themeCount && i + 1 < 8; i++) {
+        optionsArray[i + 1] = getThemeByIndex(i).name;
+        optionsEnumArray[i + 1] = static_cast<int>(i + 1);
+    }
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Theme";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 3;
-    bannerOptions.InitialSelected = (uiconfig.theme == meshtastic_Theme_LIGHT) ? 2 : 1;
+    bannerOptions.optionsCount = options;
+
+    // Highlight the currently active theme (array index + 1 for the Back offset).
+    bannerOptions.InitialSelected = static_cast<int>(getActiveThemeIndex()) + 1;
+
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Dark) {
-            uiconfig.theme = meshtastic_Theme_DARK;
-            saveUIConfig();
-            screen->runNow();
-        } else if (selected == Light) {
-            uiconfig.theme = meshtastic_Theme_LIGHT;
-            saveUIConfig();
-            screen->runNow();
-        } else {
+        if (selected == 0) {
+            // Back
             menuHandler::menuQueue = menuHandler::ScreenOptionsMenu;
             screen->runNow();
+        } else {
+            // Theme selected — slot index is selected-1 into the theme table.
+            const size_t idx = static_cast<size_t>(selected - 1);
+            if (idx < getThemeCount()) {
+                uiconfig.screen_rgb_color = getThemeByIndex(idx).id;
+                loadThemeDefaults();
+                saveUIConfig();
+                screen->runNow();
+            }
         }
     };
     screen->showOverlayBanner(bannerOptions);

@@ -1158,11 +1158,10 @@ static inline uint16_t getThemeDefaultOnColor()
 static inline uint16_t getThemeDefaultOffColor()
 {
 #if GRAPHICS_TFT_COLORING_ENABLED
-    if (uiconfig.theme == meshtastic_Theme_LIGHT) {
-        return graphics::TFTPalette::White;
-    }
-#endif
+    return graphics::getThemeBodyBg();
+#else
     return TFT_BLACK;
+#endif
 }
 } // namespace
 
@@ -1264,7 +1263,7 @@ void TFTDisplay::display(bool fromBlank)
                     isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
                     if (hasColorRegions) {
                         chunkRow[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                      colorTftWhite, colorTftBlack);
+                                                                     colorTftWhite, colorTftBlack);
                     } else {
                         chunkRow[x] = isset ? colorTftWhite : colorTftBlack;
                     }

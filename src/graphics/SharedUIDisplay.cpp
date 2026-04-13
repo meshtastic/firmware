@@ -105,11 +105,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
     const int headerHeight = highlightHeight + 2;
-#ifdef TFT_HEADER_BG_COLOR_OVERRIDE
-    const uint16_t headerColorForRoles = TFT_HEADER_BG_COLOR_OVERRIDE;
-#else
-    const uint16_t headerColorForRoles = (uiconfig.theme == meshtastic_Theme_LIGHT) ? TFTPalette::LightGray : TFTPalette::DarkGray;
-#endif
+    const uint16_t headerColorForRoles = getThemeHeaderBg();
     // Color TFT headers use a fixed dark background + white glyphs.
     // Keep legacy inverted bitmap behavior only for monochrome displays.
     const bool useInvertedHeaderStyle = (isInverted && !force_no_invert && !isTFTColoringEnabled() && !transparent_background);
@@ -119,28 +115,14 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #endif
 
     {
-#ifdef TFT_HEADER_BG_COLOR_OVERRIDE
-        const uint16_t headerColor = TFT_HEADER_BG_COLOR_OVERRIDE;
-#else
-        const uint16_t headerColor =
-            (uiconfig.theme == meshtastic_Theme_LIGHT) ? TFTPalette::LightGray : TFTPalette::DarkGray;
-#endif
-#ifdef TFT_HEADER_TITLE_COLOR_OVERRIDE
-        const uint16_t headerTextColor = TFT_HEADER_TITLE_COLOR_OVERRIDE;
-#else
-        const uint16_t headerTextColor = (uiconfig.theme == meshtastic_Theme_LIGHT) ? TFTPalette::Black : TFTPalette::White;
-#endif
+        const uint16_t headerColor = getThemeHeaderBg();
+        const uint16_t headerTextColor = getThemeHeaderText();
         const uint16_t headerTitleColorForRole = use_title_color_override ? title_color_override : headerTextColor;
-#ifdef TFT_HEADER_STATUS_COLOR_OVERRIDE
-        const uint16_t headerStatusColor = TFT_HEADER_STATUS_COLOR_OVERRIDE;
-#else
-        const uint16_t headerStatusColor = (uiconfig.theme == meshtastic_Theme_LIGHT) ? TFTPalette::Black : TFTPalette::White;
-#endif
+        const uint16_t headerStatusColor = getThemeHeaderStatus();
 
 #if GRAPHICS_TFT_COLORING_ENABLED
         if (transparent_background) {
-            const uint16_t transparentBgColor =
-                (uiconfig.theme == meshtastic_Theme_LIGHT) ? TFTPalette::White : TFTPalette::Black;
+            const uint16_t transparentBgColor = getThemeBodyBg();
             setTFTColorRole(TFTColorRole::HeaderTitle, headerTitleColorForRole, transparentBgColor);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, transparentBgColor);
         } else if (useInvertedHeaderStyle) {

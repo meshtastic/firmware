@@ -1545,16 +1545,8 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int clearWidth = min(SCREEN_WIDTH - clearX, rectWidth + (sideClearPadding * 2));
 
     // Clear background and draw border
-#ifdef TFT_HEADER_BG_COLOR_OVERRIDE
-    const uint16_t navBgColor = TFT_HEADER_BG_COLOR_OVERRIDE;
-#else
-    const uint16_t navBgColor = (uiconfig.theme == meshtastic_Theme_LIGHT) ? TFTPalette::LightGray : TFTPalette::DarkGray;
-#endif
-#ifdef TFT_HEADER_STATUS_COLOR_OVERRIDE
-    const uint16_t navFgColor = TFT_HEADER_STATUS_COLOR_OVERRIDE;
-#else
-    const uint16_t navFgColor = (uiconfig.theme == meshtastic_Theme_LIGHT) ? TFTPalette::Black : TFTPalette::White;
-#endif
+    const uint16_t navBgColor = getThemeHeaderBg();
+    const uint16_t navFgColor = getThemeHeaderStatus();
 
     display->setColor(BLACK);
 #if GRAPHICS_TFT_COLORING_ENABLED

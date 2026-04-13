@@ -30,5 +30,21 @@ constexpr uint16_t Good = Green;
 constexpr uint16_t Medium = Yellow;
 constexpr uint16_t Bad = Red;
 
+// Christmas / seasonal accent colors
+constexpr uint16_t ChristmasRed = rgb565(178, 34, 34);
+constexpr uint16_t ChristmasGreen = rgb565(0, 128, 0);
+constexpr uint16_t Gold = rgb565(255, 215, 0);
+constexpr uint16_t Pine = rgb565(15, 35, 10);
+
+// Pink theme colors (light variant)
+constexpr uint16_t HotPink = rgb565(255, 105, 180);
+constexpr uint16_t PalePink = rgb565(255, 228, 235);
+constexpr uint16_t DeepPink = rgb565(200, 50, 120);
+
+// Blue theme colors (dark variant)
+constexpr uint16_t SkyBlue = rgb565(100, 180, 255);
+constexpr uint16_t Navy = rgb565(15, 15, 50);
+constexpr uint16_t DeepBlue = rgb565(30, 60, 120);
+
 } // namespace TFTPalette
 } // namespace graphics
