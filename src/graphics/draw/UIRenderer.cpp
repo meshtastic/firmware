@@ -29,6 +29,7 @@ namespace graphics
 {
 NodeNum UIRenderer::currentFavoriteNodeNum = 0;
 std::vector<meshtastic_NodeInfoLite *> graphics::UIRenderer::favoritedNodes;
+static bool gBootSplashBoldPass = false;
 
 static inline void drawSatelliteIcon(OLEDDisplay *display, int16_t x, int16_t y)
 {
@@ -1120,6 +1121,9 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     // draw centered icon left to right and centered above the one line of app text
 #if defined(M5STACK_UNITC6L)
     display->drawXbm(x + (SCREEN_WIDTH - 50) / 2, y + (SCREEN_HEIGHT - 28) / 2, icon_width, icon_height, icon_bits);
+    if (gBootSplashBoldPass) {
+        display->drawXbm(x + (SCREEN_WIDTH - 50) / 2 + 1, y + (SCREEN_HEIGHT - 28) / 2, icon_width, icon_height, icon_bits);
+    }
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -1129,6 +1133,9 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
         int msgX = x + (SCREEN_WIDTH - msgWidth) / 2;
         int msgY = y;
         display->drawString(msgX, msgY, upperMsg);
+        if (gBootSplashBoldPass) {
+            display->drawString(msgX + 1, msgY, upperMsg);
+        }
     }
     // Draw version and short name in bottom middle
     char footer[64];
@@ -1141,36 +1148,70 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     int footerX = x + ((SCREEN_WIDTH - footerW) / 2);
     UIRenderer::drawStringWithEmotes(display, footerX, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, footer, FONT_HEIGHT_SMALL, 1,
                                      false);
+    if (gBootSplashBoldPass) {
+        UIRenderer::drawStringWithEmotes(display, footerX + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, footer, FONT_HEIGHT_SMALL, 1,
+                                         false);
+    }
     screen->forceDisplay();
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 #else
     display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
                      icon_width, icon_height, icon_bits);
+    if (gBootSplashBoldPass) {
+        display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2 + 1, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
+                         icon_width, icon_height, icon_bits);
+    }
 
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = "meshtastic.org";
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+    if (gBootSplashBoldPass) {
+        display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+    }
     display->setFont(FONT_SMALL);
     // Draw region in upper left
-    if (upperMsg)
+    if (upperMsg) {
         display->drawString(x + 0, y + 0, upperMsg);
+        if (gBootSplashBoldPass) {
+            display->drawString(x + 1, y + 0, upperMsg);
+        }
+    }
 
     // Draw version and short name in upper right
     const char *version = xstr(APP_VERSION_SHORT);
     int versionX = x + SCREEN_WIDTH - display->getStringWidth(version);
     display->drawString(versionX, y + 0, version);
+    if (gBootSplashBoldPass) {
+        display->drawString(versionX + 1, y + 0, version);
+    }
     if (owner.short_name && owner.short_name[0]) {
         const char *shortName = owner.short_name;
         int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
         int shortNameX = x + SCREEN_WIDTH - shortNameW;
         UIRenderer::drawStringWithEmotes(display, shortNameX, y + FONT_HEIGHT_SMALL, shortName, FONT_HEIGHT_SMALL, 1, false);
+        if (gBootSplashBoldPass) {
+            UIRenderer::drawStringWithEmotes(display, shortNameX + 1, y + FONT_HEIGHT_SMALL, shortName, FONT_HEIGHT_SMALL, 1, false);
+        }
     }
     screen->forceDisplay();
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 #endif
+}
+
+void UIRenderer::drawBootIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // Meshtastic brand green background with black foreground text/icon on TFT startup screen.
+    static constexpr uint16_t kMeshtasticGreen = TFTPalette::rgb565(103, 234, 145);
+    setTFTColorRole(TFTColorRole::BootSplash, TFTPalette::Black, kMeshtasticGreen);
+    registerTFTColorRegion(TFTColorRole::BootSplash, x, y, SCREEN_WIDTH, SCREEN_HEIGHT);
+#endif
+    gBootSplashBoldPass = true;
+    drawIconScreen(upperMsg, display, state, x, y);
+    gBootSplashBoldPass = false;
 }
 
 // ****************************

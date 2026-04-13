@@ -31,6 +31,7 @@ enum class TFTColorRole : uint8_t {
     ActionMenuBorder,
     ActionMenuBody,
     ActionMenuTitle,
+    BootSplash,
     Count
 };
 

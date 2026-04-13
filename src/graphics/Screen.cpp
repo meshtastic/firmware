@@ -622,7 +622,7 @@ void Screen::setup()
 #endif
         {
             const char *region = myRegion ? myRegion->name : nullptr;
-            graphics::UIRenderer::drawIconScreen(region, display, state, x, y);
+            graphics::UIRenderer::drawBootIconScreen(region, display, state, x, y);
         }
     };
     ui->setFrames(alertFrames, 1);

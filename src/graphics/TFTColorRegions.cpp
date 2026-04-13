@@ -65,7 +65,8 @@ static TFTRoleColorsBe roleColors[static_cast<size_t>(TFTColorRole::Count)] = {
     {toBe565(TFTPalette::Yellow), toBe565(TFTPalette::Black)},   // FavoriteNode
     {toBe565(TFTPalette::DarkGray), toBe565(TFTPalette::Black)}, // ActionMenuBorder
     {toBe565(TFTPalette::White), toBe565(TFTPalette::Black)},    // ActionMenuBody
-    {toBe565(TFTPalette::DarkGray), toBe565(TFTPalette::White)}  // ActionMenuTitle
+    {toBe565(TFTPalette::DarkGray), toBe565(TFTPalette::White)}, // ActionMenuTitle
+    {toBe565(TFTPalette::White), toBe565(TFTPalette::Black)}     // BootSplash
 };
 
 } // namespace
