@@ -246,6 +246,24 @@ bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
     return txQueue.find(from, id);
 }
 
+bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
+{
+    if (!buffer || length == 0 || !iface) {
+        return false;
+    }
+
+    // Older RadioLib versions only expose random(min, max), so fill the buffer byte-by-byte.
+    for (size_t i = 0; i < length; ++i) {
+        int32_t value = iface->random(0, 255);
+        if (value < 0) {
+            return false;
+        }
+        buffer[i] = static_cast<uint8_t>(value & 0xFF);
+    }
+
+    return true;
+}
+
 /** radio helper thread callback.
 We never immediately transmit after any operation (either Rx or Tx). Instead we should wait a random multiple of
 'slotTimes' (see definition in RadioInterface.h) taken from a contention window (CW) to lower the chance of collision.
