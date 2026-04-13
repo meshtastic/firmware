@@ -38,6 +38,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/MessageRenderer.h"
 #include "draw/NodeListRenderer.h"
 #include "draw/NotificationRenderer.h"
+#include "draw/RadarRenderer.h"
 #include "draw/UIRenderer.h"
 #include "modules/CannedMessageModule.h"
 
@@ -1207,6 +1208,13 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.nodelist_bearings = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
         indicatorIcons.push_back(icon_list);
+    }
+#endif
+#ifndef USE_EINK
+    if (!hiddenFrames.nodelist_radar) {
+        fsi.positions.nodelist_radar = numframes;
+        normalFrames[numframes++] = graphics::RadarRenderer::drawRadarScreen;
+        indicatorIcons.push_back(icon_compass);
     }
 #endif
     if (!hiddenFrames.gps) {
