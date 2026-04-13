@@ -84,8 +84,8 @@ template <typename T> bool LR20x0Interface<T>::init()
 
 // ToDo :All subsequent template classes must include the `irqDioNum` member; otherwise, an error will occur. 
 //Alternatively, attempt to identify the template class (e.g., `LR2021`) before configuring `irqDioNum`.
-#ifdef IQR_DIO_NUM
-    lora.irqDioNum = IQR_DIO_NUM;
+#ifdef IRQ_DIO_NUM
+    lora.irqDioNum = IRQ_DIO_NUM;
     LOG_DEBUG("Set irqDioNum  %d", lora.irqDioNum);
 #else
     LOG_DEBUG("Use default irqDioNum  %d", lora.irqDioNum);
