@@ -152,8 +152,12 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     case meshtastic_XModem_Control_SOH:
     case meshtastic_XModem_Control_STX:
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
-            // NULL packet has the destination filename
-            memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+            // NULL packet has the destination filename (protobuf bytes are not NUL-terminated)
+            size_t n = xmodemPacket.buffer.size;
+            if (n >= sizeof(filename))
+                n = sizeof(filename) - 1;
+            memcpy(filename, xmodemPacket.buffer.bytes, n);
+            filename[n] = '\0';
             activeRoute_ = fsRoute(filename);
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
@@ -201,6 +205,16 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             }
         } else {
             if (isReceiving) {
+                if (xmodemPacket.seq == 0) {
+                    // Duplicate OPEN retry (client re-sent while already receiving) — re-ACK so Python proceeds.
+                    sendControl(meshtastic_XModem_Control_ACK);
+                    break;
+                }
+                if (xmodemPacket.seq + 1 == packetno) {
+                    // Already-delivered packet still in flight (stale serial buffer retry) — re-ACK.
+                    sendControl(meshtastic_XModem_Control_ACK);
+                    break;
+                }
                 // normal file data packet
                 if ((xmodemPacket.seq == packetno) &&
                     check(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size, xmodemPacket.crc16)) {
