@@ -88,7 +88,7 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 // * Common Header Drawing *
 // *************************
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert, bool show_date,
-                      bool transparent_background)
+                      bool transparent_background, bool use_title_color_override, uint16_t title_color_override)
 {
     constexpr int HEADER_OFFSET_Y = 1;
     y += HEADER_OFFSET_Y;
@@ -128,6 +128,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #else
         const uint16_t headerTextColor = TFTPalette::White;
 #endif
+        const uint16_t headerTitleColorForRole = use_title_color_override ? title_color_override : headerTextColor;
 #ifdef TFT_HEADER_STATUS_COLOR_OVERRIDE
         const uint16_t headerStatusColor = TFT_HEADER_STATUS_COLOR_OVERRIDE;
 #else
@@ -136,16 +137,16 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
 #if GRAPHICS_TFT_COLORING_ENABLED
         if (transparent_background) {
-            setTFTColorRole(TFTColorRole::HeaderTitle, headerTextColor, TFTPalette::Black);
+            setTFTColorRole(TFTColorRole::HeaderTitle, headerTitleColorForRole, TFTPalette::Black);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, TFTPalette::Black);
         } else if (useInvertedHeaderStyle) {
             setTFTColorRole(TFTColorRole::HeaderBackground, headerColor, TFTPalette::Black);
-            setTFTColorRole(TFTColorRole::HeaderTitle, headerColor, headerTextColor);
+            setTFTColorRole(TFTColorRole::HeaderTitle, headerColor, headerTitleColorForRole);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerColor, headerStatusColor);
             registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
         } else {
             setTFTColorRole(TFTColorRole::HeaderBackground, TFTPalette::Black, headerColor);
-            setTFTColorRole(TFTColorRole::HeaderTitle, headerTextColor, headerColor);
+            setTFTColorRole(TFTColorRole::HeaderTitle, headerTitleColorForRole, headerColor);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, headerColor);
             registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
         }

@@ -322,7 +322,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
     snprintf(titlestr, sizeof(titlestr), "*%s*", shortName);
 
     // === Draw battery/time/mail header (common across screens) ===
-    graphics::drawCommonHeader(display, x, y, titlestr);
+    graphics::drawCommonHeader(display, x, y, titlestr, false, false, false, true, TFTPalette::Yellow);
 
     // ===== DYNAMIC ROW STACKING WITH YOUR MACROS =====
     // 1. Each potential info row has a macro-defined Y position (not regular increments!).
