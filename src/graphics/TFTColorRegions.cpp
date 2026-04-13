@@ -209,6 +209,15 @@ uint32_t getTFTColorFrameSignature()
 #endif
 }
 
+uint8_t getTFTColorRegionCount()
+{
+#if !GRAPHICS_TFT_COLORING_ENABLED
+    return 0;
+#else
+    return colorRegionCount;
+#endif
+}
+
 void clearTFTColorRegions()
 {
     // Clear enabled flags so external drivers don't reuse stale regions.

@@ -1148,6 +1148,8 @@ GpioPin *TFTDisplay::backlightEnable = NULL;
 
 namespace
 {
+static constexpr uint8_t kFullRepaintChunkRows = 8;
+
 static inline uint16_t getThemeDefaultOnColor()
 {
     return graphics::TFTPalette::White;
@@ -1203,6 +1205,10 @@ TFTDisplay::~TFTDisplay()
         free(linePixelBuffer);
         linePixelBuffer = nullptr;
     }
+    if (repaintChunkBuffer != nullptr) {
+        free(repaintChunkBuffer);
+        repaintChunkBuffer = nullptr;
+    }
 }
 
 // Write the buffer to the display memory
@@ -1239,25 +1245,35 @@ void TFTDisplay::display(bool fromBlank)
 
 #if GRAPHICS_TFT_COLORING_ENABLED
     static uint32_t lastColorFrameSignature = 0;
+    const bool hasColorRegions = graphics::getTFTColorRegionCount() > 0;
     const uint32_t colorFrameSignature = graphics::getTFTColorFrameSignature();
     const bool forceFullColorRepaint = forceFullRepaint || (colorFrameSignature != lastColorFrameSignature);
 
     // When region roles/layout changed, color can differ even with identical monochrome glyph bits.
     // Repaint full frame only for those frames, then return to diff-based updates.
     if (forceFullColorRepaint) {
-        for (y = 0; y < displayHeight; y++) {
-            y_byteIndex = (y / 8) * displayWidth;
-            y_byteMask = (1 << (y & 7));
+        for (uint32_t yStart = 0; yStart < displayHeight; yStart += kFullRepaintChunkRows) {
+            const uint32_t rowsThisChunk = min<uint32_t>(kFullRepaintChunkRows, displayHeight - yStart);
+            for (uint32_t row = 0; row < rowsThisChunk; row++) {
+                y = yStart + row;
+                y_byteIndex = (y / 8) * displayWidth;
+                y_byteMask = (1 << (y & 7));
 
-            for (x = 0; x < displayWidth; x++) {
-                isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
-                linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                    colorTftWhite, colorTftBlack);
+                uint16_t *chunkRow = repaintChunkBuffer + (row * displayWidth);
+                for (x = 0; x < displayWidth; x++) {
+                    isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
+                    if (hasColorRegions) {
+                        chunkRow[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
+                                                                      colorTftWhite, colorTftBlack);
+                    } else {
+                        chunkRow[x] = isset ? colorTftWhite : colorTftBlack;
+                    }
+                }
             }
 #if defined(HACKADAY_COMMUNICATOR)
-            tft->draw16bitBeRGBBitmap(0, y, linePixelBuffer, displayWidth, 1);
+            tft->draw16bitBeRGBBitmap(0, yStart, repaintChunkBuffer, displayWidth, rowsThisChunk);
 #else
-            tft->pushRect(0, y, displayWidth, 1, linePixelBuffer);
+            tft->pushRect(0, yStart, displayWidth, rowsThisChunk, repaintChunkBuffer);
 #endif
         }
 
@@ -1296,13 +1312,14 @@ void TFTDisplay::display(bool fromBlank)
             }
         }
 
-        // Step 2: Scan each of the 8 rows individually. Find the first pixel in each row that needs updating
-        for (x_FirstPixelUpdate = 0; x_FirstPixelUpdate < displayWidth; x_FirstPixelUpdate++) {
-            isset = buffer[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
+        // Step 2: Scan this row for changed span (first and last changed pixel).
+        uint32_t x_FirstChanged = 0;
+        for (x_FirstChanged = 0; x_FirstChanged < displayWidth; x_FirstChanged++) {
+            isset = buffer[x_FirstChanged + y_byteIndex] & y_byteMask;
 
             if (!forceFullRepaint) {
                 // get src pixel in the page based ordering the OLED lib uses
-                dblbuf_isset = buffer_back[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
+                dblbuf_isset = buffer_back[x_FirstChanged + y_byteIndex] & y_byteMask;
                 if (isset != dblbuf_isset) {
                     break;
                 }
@@ -1312,35 +1329,42 @@ void TFTDisplay::display(bool fromBlank)
         }
 
         // Did we find a pixel that needs updating on this row?
-        if (x_FirstPixelUpdate < displayWidth) {
-            // Align the first pixel for update to an even number so the total alignment of
-            // the data will be at 32-bit boundary, which is required by GDMA SPI transfers.
-            x_FirstPixelUpdate &= ~1;
-
-            x_LastPixelUpdate = x_FirstPixelUpdate;
-            // Step 3a: copy rest of the pixels in this row into the pixel line buffer,
-            // while also recording the last pixel in the row that needs updating.
-            for (x = x_FirstPixelUpdate; x < displayWidth; x++) {
-                isset = buffer[x + y_byteIndex] & y_byteMask;
-                linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                    colorTftWhite, colorTftBlack);
-
+        if (x_FirstChanged < displayWidth) {
+            uint32_t x_LastChanged = displayWidth - 1;
+            while (x_LastChanged > x_FirstChanged) {
+                isset = buffer[x_LastChanged + y_byteIndex] & y_byteMask;
                 if (!forceFullRepaint) {
-                    dblbuf_isset = buffer_back[x + y_byteIndex] & y_byteMask;
+                    dblbuf_isset = buffer_back[x_LastChanged + y_byteIndex] & y_byteMask;
                     if (isset != dblbuf_isset) {
-                        x_LastPixelUpdate = x;
+                        break;
                     }
                 } else if (isset) {
-                    x_LastPixelUpdate = x;
+                    break;
                 }
+                x_LastChanged--;
             }
-            // Step 3b: Round up the last pixel to odd number to maintain 32-bit alignment for SPIs.
-            // Most displays will have even number of pixels in a row -- this will be in bounds
-            // of the displayWidth. (Hopefully odd displays will just ignore that extra pixel.)
-            x_LastPixelUpdate |= 1;
-            // Ensure the last pixel index does not exceed the display width.
+
+            // Align the first pixel for update to an even number so the total alignment of
+            // the data will be at 32-bit boundary, which is required by GDMA SPI transfers.
+            x_FirstPixelUpdate = x_FirstChanged & ~1U;
+            x_LastPixelUpdate = x_LastChanged | 1U;
             if (x_LastPixelUpdate >= displayWidth) {
                 x_LastPixelUpdate = displayWidth - 1;
+            }
+
+            // Step 3: Copy only the changed span into the pixel line buffer.
+            for (x = x_FirstPixelUpdate; x <= x_LastPixelUpdate; x++) {
+                isset = buffer[x + y_byteIndex] & y_byteMask;
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (hasColorRegions) {
+                    linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
+                                                                        colorTftWhite, colorTftBlack);
+                } else {
+                    linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+                }
+#else
+                linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+#endif
             }
 #if defined(HACKADAY_COMMUNICATOR)
             tft->draw16bitBeRGBBitmap(x_FirstPixelUpdate, y, &linePixelBuffer[x_FirstPixelUpdate],
@@ -1586,6 +1610,14 @@ bool TFTDisplay::connect()
 
         if (!this->linePixelBuffer) {
             LOG_ERROR("Not enough memory to create TFT line buffer\n");
+            return false;
+        }
+    }
+    if (this->repaintChunkBuffer == NULL) {
+        this->repaintChunkBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
+
+        if (!this->repaintChunkBuffer) {
+            LOG_ERROR("Not enough memory to create TFT repaint chunk buffer\n");
             return false;
         }
     }
