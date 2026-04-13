@@ -66,9 +66,7 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     virtual void setStandby() override;
 
-    // uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
-    
-    //LR2021  don't have getLoRaRxHeaderInfo function ，can't use computePacketTime to compute packet time, so just return 0 for now
+    // Use the shared RadioLib packet time calculation for LR20x0 devices.
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 };
 #endif
