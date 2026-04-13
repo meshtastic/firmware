@@ -340,8 +340,13 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
         username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
     }
 
+    // Print node's long name (e.g. "Backpack Node")
     if (username) {
-        // Print node's long name (e.g. "Backpack Node")
+#if GRAPHICS_TFT_COLORING_ENABLED
+        const int usernameWidth = UIRenderer::measureStringWithEmotes(display, username);
+        setTFTColorRole(TFTColorRole::BodyYellow, TFTPalette::Yellow, TFTPalette::Black);
+        registerTFTColorRegion(TFTColorRole::BodyYellow, x, getTextPositions(display)[line], usernameWidth, FONT_HEIGHT_SMALL);
+#endif
         UIRenderer::drawStringWithEmotes(display, x, getTextPositions(display)[line++], username, FONT_HEIGHT_SMALL, 1, false);
     }
 
