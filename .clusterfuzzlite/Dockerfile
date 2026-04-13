@@ -18,7 +18,7 @@ ENV PIP_ROOT_USER_ACTION=ignore
 # trunk-ignore(hadolint/DL3008): apt packages are not pinned.
 # trunk-ignore(terrascan/AC_DOCKER_0002): apt packages are not pinned.
 RUN apt-get update && apt-get install --no-install-recommends -y \
-        cmake git zip libgpiod-dev libbluetooth-dev libi2c-dev \
+        cmake git zip libgpiod-dev libjsoncpp-dev libbluetooth-dev libi2c-dev \
         libunistring-dev libmicrohttpd-dev libgnutls28-dev libgcrypt20-dev \
         libusb-1.0-0-dev libssl-dev pkg-config libsqlite3-dev libsdl2-dev && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
