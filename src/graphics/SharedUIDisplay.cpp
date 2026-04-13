@@ -135,7 +135,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #endif
 
 #if GRAPHICS_TFT_COLORING_ENABLED
-        clearTFTColorRegions();
         if (transparent_background) {
             setTFTColorRole(TFTColorRole::HeaderTitle, headerTextColor, TFTPalette::Black);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, TFTPalette::Black);

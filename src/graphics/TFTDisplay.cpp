@@ -1209,27 +1209,34 @@ void TFTDisplay::display(bool fromBlank)
     colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
 
 #if GRAPHICS_TFT_COLORING_ENABLED
-    // When TFT color regions are active, color can change even if monochrome glyph bits do not.
-    // Force a full repaint so header/background regions never retain stale colors across frame swaps.
-    for (y = 0; y < displayHeight; y++) {
-        y_byteIndex = (y / 8) * displayWidth;
-        y_byteMask = (1 << (y & 7));
+    static uint32_t lastColorFrameSignature = 0;
+    const uint32_t colorFrameSignature = graphics::getTFTColorFrameSignature();
+    const bool forceFullColorRepaint = fromBlank || (colorFrameSignature != lastColorFrameSignature);
 
-        for (x = 0; x < displayWidth; x++) {
-            isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
-            linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                colorTftWhite, colorTftBlack);
-        }
+    // When region roles/layout changed, color can differ even with identical monochrome glyph bits.
+    // Repaint full frame only for those frames, then return to diff-based updates.
+    if (forceFullColorRepaint) {
+        for (y = 0; y < displayHeight; y++) {
+            y_byteIndex = (y / 8) * displayWidth;
+            y_byteMask = (1 << (y & 7));
+
+            for (x = 0; x < displayWidth; x++) {
+                isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
+                linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
+                                                                    colorTftWhite, colorTftBlack);
+            }
 #if defined(HACKADAY_COMMUNICATOR)
-        tft->draw16bitBeRGBBitmap(0, y, linePixelBuffer, displayWidth, 1);
+            tft->draw16bitBeRGBBitmap(0, y, linePixelBuffer, displayWidth, 1);
 #else
-        tft->pushRect(0, y, displayWidth, 1, linePixelBuffer);
+            tft->pushRect(0, y, displayWidth, 1, linePixelBuffer);
 #endif
-    }
+        }
 
-    memcpy(buffer_back, buffer, displayBufferSize);
-    graphics::clearTFTColorRegions();
-    return;
+        memcpy(buffer_back, buffer, displayBufferSize);
+        lastColorFrameSignature = colorFrameSignature;
+        graphics::clearTFTColorRegions();
+        return;
+    }
 #endif
 
     y = 0;
@@ -1320,6 +1327,9 @@ void TFTDisplay::display(bool fromBlank)
     if (somethingChanged)
         memcpy(buffer_back, buffer, displayBufferSize);
 
+#if GRAPHICS_TFT_COLORING_ENABLED
+    lastColorFrameSignature = colorFrameSignature;
+#endif
     graphics::clearTFTColorRegions();
 }
 

@@ -16,10 +16,24 @@ struct TFTRoleColorsBe {
 };
 
 static uint8_t colorRegionCount = 0;
+static constexpr uint32_t kFnv1aOffsetBasis = 2166136261u;
+static constexpr uint32_t kFnv1aPrime = 16777619u;
 
 static constexpr uint16_t toBe565(uint16_t color)
 {
     return static_cast<uint16_t>((color >> 8) | (color << 8));
+}
+
+static inline uint32_t fnv1aAppendByte(uint32_t hash, uint8_t value)
+{
+    return (hash ^ value) * kFnv1aPrime;
+}
+
+static inline uint32_t fnv1aAppendU16(uint32_t hash, uint16_t value)
+{
+    hash = fnv1aAppendByte(hash, static_cast<uint8_t>(value & 0xFF));
+    hash = fnv1aAppendByte(hash, static_cast<uint8_t>((value >> 8) & 0xFF));
+    return hash;
 }
 
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
@@ -109,6 +123,54 @@ void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t wid
     if (colorRegionCount < MAX_TFT_COLOR_REGIONS) {
         colorRegions[colorRegionCount].enabled = false;
     }
+}
+
+void registerTFTActionMenuRegions(int16_t boxLeft, int16_t boxTop, int16_t boxWidth, int16_t boxHeight)
+{
+#if !GRAPHICS_TFT_COLORING_ENABLED
+    (void)boxLeft;
+    (void)boxTop;
+    (void)boxWidth;
+    (void)boxHeight;
+    return;
+#else
+    // Fill role includes a 1px shadow guard so stale frame edges are overwritten uniformly.
+    setTFTColorRole(TFTColorRole::ActionMenuBody, TFTPalette::White, TFTPalette::Black);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop - 2, boxWidth, 1);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 2, boxTop, 1, boxHeight);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
+
+    setTFTColorRole(TFTColorRole::ActionMenuBorder, TFTPalette::DarkGray, TFTPalette::Black);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, boxWidth, 1);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop + boxHeight - 1, boxWidth, 1);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, 1, boxHeight);
+    registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft + boxWidth - 1, boxTop, 1, boxHeight);
+#endif
+}
+
+uint32_t getTFTColorFrameSignature()
+{
+#if !GRAPHICS_TFT_COLORING_ENABLED
+    return 0;
+#else
+    uint32_t hash = kFnv1aOffsetBasis;
+    // Regions already store resolved on/off colors, so hashing the active region list
+    // is enough to detect visible color-state changes for this frame.
+    hash = fnv1aAppendByte(hash, colorRegionCount);
+    for (uint8_t i = 0; i < colorRegionCount; i++) {
+        const TFTColorRegion &r = colorRegions[i];
+        hash = fnv1aAppendU16(hash, static_cast<uint16_t>(r.x));
+        hash = fnv1aAppendU16(hash, static_cast<uint16_t>(r.y));
+        hash = fnv1aAppendU16(hash, static_cast<uint16_t>(r.width));
+        hash = fnv1aAppendU16(hash, static_cast<uint16_t>(r.height));
+        hash = fnv1aAppendU16(hash, r.onColorBe);
+        hash = fnv1aAppendU16(hash, r.offColorBe);
+    }
+
+    return hash;
+#endif
 }
 
 void clearTFTColorRegions()
