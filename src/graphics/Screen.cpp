@@ -108,13 +108,11 @@ static inline void prepareFrameColorRegions()
 {
 #if GRAPHICS_TFT_COLORING_ENABLED
     clearTFTColorRegions();
-#if defined(USE_ST7789)
     // Full-frame FrameMono inversion for themes that need it (e.g. light themes).
     if (isThemeFullFrameInvert()) {
         setTFTColorRole(TFTColorRole::FrameMono, getThemeBodyFg(), getThemeBodyBg());
-        registerTFTColorRegion(TFTColorRole::FrameMono, 0, 0, TFT_WIDTH, TFT_HEIGHT);
+        registerTFTColorRegion(TFTColorRole::FrameMono, 0, 0, screen->getWidth(), screen->getHeight());
     }
-#endif
 #endif
 }
 #endif
