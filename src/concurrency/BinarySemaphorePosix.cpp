@@ -12,8 +12,13 @@ namespace concurrency
 
 BinarySemaphorePosix::BinarySemaphorePosix()
 {
-    pthread_mutex_init(&mutex, NULL);
-    pthread_cond_init(&cond, NULL);
+    if (pthread_mutex_init(&mutex, NULL) != 0) {
+        throw std::runtime_error("pthread_mutex_init failed");
+    }
+    if (pthread_cond_init(&cond, NULL) != 0) {
+        pthread_mutex_destroy(&mutex);
+        throw std::runtime_error("pthread_cond_init failed");
+    }
     signaled = false;
 }
 
@@ -45,6 +50,11 @@ bool BinarySemaphorePosix::take(uint32_t msec)
             int rc = pthread_cond_timedwait(&cond, &mutex, &ts);
             if (rc == ETIMEDOUT)
                 break;
+            if (rc != 0) {
+                // Some other error occurred
+                pthread_mutex_unlock(&mutex);
+                throw std::runtime_error("pthread_cond_timedwait failed: " + std::to_string(rc));
+            }
         }
     }
 
