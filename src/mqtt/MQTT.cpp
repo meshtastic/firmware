@@ -24,10 +24,6 @@
 #define ETH ETH2
 #endif // HAS_ETHERNET
 #include "Default.h"
-#if !defined(ARCH_NRF52) || NRF52_USE_JSON
-#include "serialization/JSON.h"
-#include "serialization/MeshPacketSerializer.h"
-#endif
 #include <Throttle.h>
 #include <assert.h>
 #include <utility>
@@ -147,96 +143,6 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
                perhapsDecode(p.get()) == DecodeState::DECODE_SUCCESS) // ignore messages if we don't have the channel key
         router->enqueueReceivedMessage(p.release());
 }
-
-#if !defined(ARCH_NRF52) || NRF52_USE_JSON
-// returns true if this is a valid JSON envelope which we accept on downlink
-inline bool isValidJsonEnvelope(JSONObject &json)
-{
-    // Generate node ID from nodenum for comparison
-    std::string nodeId = nodeDB->getNodeId();
-    // if "sender" is provided, avoid processing packets we uplinked
-    return (json.find("sender") != json.end() ? (json["sender"]->AsString().compare(nodeId) != 0) : true) &&
-           (json.find("hopLimit") != json.end() ? json["hopLimit"]->IsNumber() : true) && // hop limit should be a number
-           (json.find("from") != json.end()) && json["from"]->IsNumber() &&
-           (json["from"]->AsNumber() == nodeDB->getNodeNum()) &&            // only accept message if the "from" is us
-           (json.find("type") != json.end()) && json["type"]->IsString() && // should specify a type
-           (json.find("payload") != json.end());                            // should have a payload
-}
-
-inline void onReceiveJson(byte *payload, size_t length)
-{
-    char payloadStr[length + 1];
-    memcpy(payloadStr, payload, length);
-    payloadStr[length] = 0; // null terminated string
-    std::unique_ptr<JSONValue> json_value(JSON::Parse(payloadStr));
-    if (json_value == nullptr) {
-        LOG_ERROR("JSON received payload on MQTT but not a valid JSON");
-        return;
-    }
-
-    JSONObject json;
-    json = json_value->AsObject();
-
-    if (!isValidJsonEnvelope(json)) {
-        LOG_ERROR("JSON received payload on MQTT but not a valid envelope");
-        return;
-    }
-
-    // this is a valid envelope
-    if (json["type"]->AsString().compare("sendtext") == 0 && json["payload"]->IsString()) {
-        std::string jsonPayloadStr = json["payload"]->AsString();
-        LOG_INFO("JSON payload %s, length %u", jsonPayloadStr.c_str(), jsonPayloadStr.length());
-
-        // construct protobuf data packet using TEXT_MESSAGE, send it to the mesh
-        meshtastic_MeshPacket *p = router->allocForSending();
-        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-        if (json.find("channel") != json.end() && json["channel"]->IsNumber() &&
-            (json["channel"]->AsNumber() < channels.getNumChannels()))
-            p->channel = json["channel"]->AsNumber();
-        if (json.find("to") != json.end() && json["to"]->IsNumber())
-            p->to = json["to"]->AsNumber();
-        if (json.find("hopLimit") != json.end() && json["hopLimit"]->IsNumber())
-            p->hop_limit = json["hopLimit"]->AsNumber();
-        if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
-            memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
-            p->decoded.payload.size = jsonPayloadStr.length();
-            service->sendToMesh(p, RX_SRC_LOCAL);
-        } else {
-            LOG_WARN("Received MQTT json payload too long, drop");
-        }
-    } else if (json["type"]->AsString().compare("sendposition") == 0 && json["payload"]->IsObject()) {
-        // invent the "sendposition" type for a valid envelope
-        JSONObject posit;
-        posit = json["payload"]->AsObject(); // get nested JSON Position
-        meshtastic_Position pos = meshtastic_Position_init_default;
-        if (posit.find("latitude_i") != posit.end() && posit["latitude_i"]->IsNumber())
-            pos.latitude_i = posit["latitude_i"]->AsNumber();
-        if (posit.find("longitude_i") != posit.end() && posit["longitude_i"]->IsNumber())
-            pos.longitude_i = posit["longitude_i"]->AsNumber();
-        if (posit.find("altitude") != posit.end() && posit["altitude"]->IsNumber())
-            pos.altitude = posit["altitude"]->AsNumber();
-        if (posit.find("time") != posit.end() && posit["time"]->IsNumber())
-            pos.time = posit["time"]->AsNumber();
-
-        // construct protobuf data packet using POSITION, send it to the mesh
-        meshtastic_MeshPacket *p = router->allocForSending();
-        p->decoded.portnum = meshtastic_PortNum_POSITION_APP;
-        if (json.find("channel") != json.end() && json["channel"]->IsNumber() &&
-            (json["channel"]->AsNumber() < channels.getNumChannels()))
-            p->channel = json["channel"]->AsNumber();
-        if (json.find("to") != json.end() && json["to"]->IsNumber())
-            p->to = json["to"]->AsNumber();
-        if (json.find("hopLimit") != json.end() && json["hopLimit"]->IsNumber())
-            p->hop_limit = json["hopLimit"]->AsNumber();
-        p->decoded.payload.size =
-            pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Position_msg,
-                               &pos); // make the Data protobuf from position
-        service->sendToMesh(p, RX_SRC_LOCAL);
-    } else {
-        LOG_DEBUG("JSON ignore downlink message with unsupported type");
-    }
-}
-#endif
 
 /// Determines if the given IPAddress is a private IPv4 address, i.e. not routable on the public internet.
 bool isPrivateIpAddress(const IPAddress &ip)
@@ -382,26 +288,6 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
         return;
     }
 
-    // check if this is a json payload message by comparing the topic start
-    if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
-#if !defined(ARCH_NRF52) || NRF52_USE_JSON
-        // parse the channel name from the topic string
-        // the topic has been checked above for having jsonTopic prefix, so just move past it
-        char *channelName = topic + jsonTopic.length();
-        // if another "/" was added, parse string up to that character
-        channelName = strtok(channelName, "/") ? strtok(channelName, "/") : channelName;
-        // We allow downlink JSON packets only on a channel named "mqtt"
-        const meshtastic_Channel &sendChannel = channels.getByName(channelName);
-        if (!(strncasecmp(channels.getGlobalId(sendChannel.index), Channels::mqttChannel, strlen(Channels::mqttChannel)) == 0 &&
-              sendChannel.settings.downlink_enabled)) {
-            LOG_WARN("JSON downlink received on channel not called 'mqtt' or without downlink enabled");
-            return;
-        }
-        onReceiveJson(payload, length);
-#endif
-        return;
-    }
-
     onReceiveProto(topic, payload, length);
 }
 
@@ -426,12 +312,10 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 
         if (*moduleConfig.mqtt.root) {
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
-            jsonTopic = moduleConfig.mqtt.root + jsonTopic;
             mapTopic = moduleConfig.mqtt.root + mapTopic;
             isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
         } else {
             cryptTopic = "msh" + cryptTopic;
-            jsonTopic = "msh" + jsonTopic;
             mapTopic = "msh" + mapTopic;
             isConfiguredForDefaultRootTopic = true;
         }
@@ -582,14 +466,6 @@ void MQTT::sendSubscriptions()
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/+";
             LOG_INFO("Subscribe to %s", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
-#if !defined(ARCH_NRF52) ||                                                                                                      \
-    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJSON ###
-            if (moduleConfig.mqtt.json_enabled == true) {
-                std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/+";
-                LOG_INFO("Subscribe to %s", topicDecoded.c_str());
-                pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
-            }
-#endif // ARCH_NRF52 NRF52_USE_JSON
         }
     }
 #if !MESHTASTIC_EXCLUDE_PKI
@@ -728,33 +604,6 @@ void MQTT::publishQueuedMessages()
     const std::unique_ptr<QueueEntry> entry(mqttQueue.dequeuePtr(0));
     LOG_INFO("publish %s, %u bytes from queue", entry->topic.c_str(), entry->envBytes.size());
     publish(entry->topic.c_str(), entry->envBytes.data(), entry->envBytes.size(), false);
-
-#if !defined(ARCH_NRF52) ||                                                                                                      \
-    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
-    if (!moduleConfig.mqtt.json_enabled)
-        return;
-
-    // handle json topic
-    const DecodedServiceEnvelope env(entry->envBytes.data(), entry->envBytes.size());
-    if (!env.validDecode || env.packet == NULL || env.channel_id == NULL)
-        return;
-
-    auto jsonString = MeshPacketSerializer::JsonSerialize(env.packet);
-    if (jsonString.length() == 0)
-        return;
-
-    // Generate node ID from nodenum for topic
-    std::string nodeId = nodeDB->getNodeId();
-
-    std::string topicJson;
-    if (env.packet->pki_encrypted) {
-        topicJson = jsonTopic + "PKI/" + nodeId;
-    } else {
-        topicJson = jsonTopic + env.channel_id + "/" + nodeId;
-    }
-    LOG_INFO("JSON publish message to %s, %u bytes: %s", topicJson.c_str(), jsonString.length(), jsonString.c_str());
-    publish(topicJson.c_str(), jsonString.c_str(), false);
-#endif // ARCH_NRF52 NRF52_USE_JSON
 }
 
 void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex)
@@ -818,21 +667,6 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
     if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
         LOG_DEBUG("MQTT Publish %s, %u bytes", topic.c_str(), numBytes);
         publish(topic.c_str(), bytes, numBytes, false);
-
-#if !defined(ARCH_NRF52) ||                                                                                                      \
-    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
-        if (!moduleConfig.mqtt.json_enabled)
-            return;
-        // handle json topic
-        auto jsonString = MeshPacketSerializer::JsonSerialize(&mp_decoded);
-        if (jsonString.length() == 0)
-            return;
-        // Generate node ID from nodenum for JSON topic
-        std::string nodeIdForJson = nodeDB->getNodeId();
-        std::string topicJson = jsonTopic + channelId + "/" + nodeIdForJson;
-        LOG_INFO("JSON publish message to %s, %u bytes: %s", topicJson.c_str(), jsonString.length(), jsonString.c_str());
-        publish(topicJson.c_str(), jsonString.c_str(), false);
-#endif // ARCH_NRF52 NRF52_USE_JSON
     } else {
         LOG_INFO("MQTT not connected, queue packet");
         QueueEntry *entry;

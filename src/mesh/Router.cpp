@@ -19,11 +19,7 @@
 #endif
 #include "Default.h"
 #if ARCH_PORTDUINO
-#include "Throttle.h"
 #include "platform/portduino/PortduinoGlue.h"
-#endif
-#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
-#include "serialization/MeshPacketSerializer.h"
 #endif
 
 #define MAX_RX_FROMRADIO                                                                                                         \
@@ -544,36 +540,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         } */
 
         printPacket("decoded message", p);
-#if ENABLE_JSON_LOGGING
-        LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
-#elif ARCH_PORTDUINO
-        if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
-            LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
-        } else if (portduino_config.JSONFilename != "") {
-            if (portduino_config.JSONFileRotate != 0) {
-                static uint32_t fileage = 0;
-
-                if (portduino_config.JSONFileRotate != 0 &&
-                    (fileage == 0 || !Throttle::isWithinTimespanMs(fileage, portduino_config.JSONFileRotate * 60 * 1000))) {
-                    time_t timestamp = time(NULL);
-                    struct tm *timeinfo;
-                    char buffer[80];
-                    timeinfo = localtime(&timestamp);
-                    strftime(buffer, 80, "%Y%m%d-%H%M%S", timeinfo);
-
-                    std::string datetime(buffer);
-                    if (JSONFile.is_open()) {
-                        JSONFile.close();
-                    }
-                    JSONFile.open(portduino_config.JSONFilename + "_" + datetime, std::ios::out | std::ios::app);
-                    fileage = millis();
-                }
-            }
-            if (portduino_config.JSONFilter == (_meshtastic_PortNum)0 || portduino_config.JSONFilter == p->decoded.portnum) {
-                JSONFile << MeshPacketSerializer::JsonSerialize(p, false) << std::endl;
-            }
-        }
-#endif
         return DecodeState::DECODE_SUCCESS;
     } else {
         LOG_WARN("No suitable channel found for decoding, hash was 0x%x!", p->channel);
@@ -838,17 +804,6 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
-#if ENABLE_JSON_LOGGING
-    // Even ignored packets get logged in the trace
-    p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
-    LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
-#elif ARCH_PORTDUINO
-    // Even ignored packets get logged in the trace
-    if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
-        p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
-        LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
-    }
-#endif
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
         LOG_DEBUG("Ignore msg, 0x%x is in our ignore list", p->from);

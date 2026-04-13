@@ -55,9 +55,6 @@ struct pinMapping {
     bool default_high = false;
 };
 
-extern std::ofstream traceFile;
-extern std::ofstream JSONFile;
-
 extern Ch341Hal *ch341Hal;
 int initGPIOPin(int pinNum, const std::string &gpioChipname, int line);
 bool loadConfig(const char *configPath);
@@ -160,13 +157,8 @@ extern struct portduino_config_struct {
 
     // Logging
     portduino_log_level logoutputlevel = level_debug;
-    std::string traceFilename;
     bool ascii_logs = !isatty(1);
     bool ascii_logs_explicit = false;
-
-    std::string JSONFilename;
-    int JSONFileRotate = 0;
-    meshtastic_PortNum JSONFilter = (_meshtastic_PortNum)0;
 
     // Webserver
     std::string webserver_root_path = "";
@@ -468,34 +460,6 @@ extern struct portduino_config_struct {
         case level_trace:
             out << "trace";
             break;
-        }
-        if (traceFilename != "")
-            out << YAML::Key << "TraceFile" << YAML::Value << traceFilename;
-        if (JSONFilename != "") {
-            out << YAML::Key << "JSONFile" << YAML::Value << JSONFilename;
-            if (JSONFileRotate != 0)
-                out << YAML::Key << "JSONFileRotate" << YAML::Value << JSONFileRotate;
-
-            if (JSONFilter == meshtastic_PortNum_TEXT_MESSAGE_APP)
-                out << YAML::Key << "JSONFilter" << YAML::Value << "textmessage";
-            else if (JSONFilter == meshtastic_PortNum_TELEMETRY_APP)
-                out << YAML::Key << "JSONFilter" << YAML::Value << "telemetry";
-            else if (JSONFilter == meshtastic_PortNum_NODEINFO_APP)
-                out << YAML::Key << "JSONFilter" << YAML::Value << "nodeinfo";
-            else if (JSONFilter == meshtastic_PortNum_POSITION_APP)
-                out << YAML::Key << "JSONFilter" << YAML::Value << "position";
-            else if (JSONFilter == meshtastic_PortNum_WAYPOINT_APP)
-                out << YAML::Key << "JSONFilter" << YAML::Value << "waypoint";
-            else if (JSONFilter == meshtastic_PortNum_NEIGHBORINFO_APP)
-                out << YAML::Key << "JSONFilter" << YAML::Value << "neighborinfo";
-            else if (JSONFilter == meshtastic_PortNum_TRACEROUTE_APP)
-                out << YAML::Key << "JSONFilter" << YAML::Value << "traceroute";
-            else if (JSONFilter == meshtastic_PortNum_DETECTION_SENSOR_APP)
-                out << YAML::Key << "JSONFilter" << YAML::Value << "detection";
-            else if (JSONFilter == meshtastic_PortNum_PAXCOUNTER_APP)
-                out << YAML::Key << "JSONFilter" << YAML::Value << "paxcounter";
-            else if (JSONFilter == meshtastic_PortNum_REMOTE_HARDWARE_APP)
-                out << YAML::Key << "JSONFilter" << YAML::Value << "remotehardware";
         }
         if (ascii_logs_explicit) {
             out << YAML::Key << "AsciiLogs" << YAML::Value << ascii_logs;
