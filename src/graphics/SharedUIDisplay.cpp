@@ -118,7 +118,21 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         const uint16_t headerColor = getThemeHeaderBg();
         const uint16_t headerTextColor = getThemeHeaderText();
         const uint16_t headerTitleColorForRole = use_title_color_override ? title_color_override : headerTextColor;
-        const uint16_t headerStatusColor = getThemeHeaderStatus();
+        uint16_t headerStatusColor = getThemeHeaderStatus();
+#if GRAPHICS_TFT_COLORING_ENABLED
+        // Clock frame uses transparent header + date + empty title.
+        // For Pink/Creamsicle themes, tint status items (battery outline, %, date, mail icon)
+        // to the theme accent color in the clock frame.
+        const bool isClockHeader = transparent_background && show_date && (!titleStr || titleStr[0] == '\0');
+        if (isClockHeader) {
+            const auto activeThemeId = getActiveTheme().id;
+            if (activeThemeId == ThemeID::Pink) {
+                headerStatusColor = TFTPalette::HotPink;
+            } else if (activeThemeId == ThemeID::Creamsicle) {
+                headerStatusColor = TFTPalette::CreamOrange;
+            }
+        }
+#endif
 
 #if GRAPHICS_TFT_COLORING_ENABLED
         if (transparent_background) {
