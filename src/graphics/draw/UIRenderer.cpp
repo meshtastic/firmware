@@ -1538,9 +1538,6 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int rectY = y - 2;
     const int rectWidth = totalWidth + 4 + (bigOffset * 2);
     const int rectHeight = iconSize + 6;
-    const int arrowOffset = (currentResolution == ScreenResolution::High) ? 3 : 1;
-    const int arrowMaxWidth = 4;
-    const int sideClearPadding = arrowOffset + arrowMaxWidth + 1;
 
     // Clear background and draw border
     const uint16_t navBgColor = getThemeHeaderBg();
@@ -1594,22 +1591,17 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         }
     }
 
-    // Compact arrow drawer
+    display->setColor(WHITE);
+
+    const int offset = (currentResolution == ScreenResolution::High) ? 3 : 1;
+    const int halfH = rectHeight / 2;
+    const int top = rectY + (rectHeight - halfH) / 2;
+    const int bottom = top + halfH - 1;
+    const int midY = top + (halfH / 2);
+    const int maxW = 4;
+
     auto drawArrow = [&](bool rightSide) {
-        display->setColor(WHITE);
-
-        const int offset = (currentResolution == ScreenResolution::High) ? 3 : 1;
-        const int halfH = rectHeight / 2;
-
-        const int top = rectY + (rectHeight - halfH) / 2;
-        const int bottom = top + halfH - 1;
-        const int midY = top + (halfH / 2);
-
-        const int maxW = 4;
-
-        // Determine left X coordinate
-        int baseX = rightSide ? (rectX + rectWidth + offset) : // right arrow
-                        (rectX - offset - 1);                  // left arrow
+        int baseX = rightSide ? (rectX + rectWidth + offset) : (rectX - offset - 1);
 
         for (int yy = top; yy <= bottom; yy++) {
             int dist = abs(yy - midY);
@@ -1624,13 +1616,30 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             }
         }
     };
+
     // Right arrow
     if (navBarVisible && pageEnd < totalIcons) {
+        int baseX = rectX + rectWidth + offset;
+        int regionX = baseX;
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+        setTFTColorRole(TFTColorRole::HeaderStatus, navBgColor, navFgColor);
+        registerTFTColorRegion(TFTColorRole::HeaderStatus, regionX, top, maxW, halfH);
+#endif
+
         drawArrow(true);
     }
 
     // Left arrow
     if (navBarVisible && pageStart > 0) {
+        int baseX = rectX - offset - 1;
+        int regionX = baseX - maxW + 1;
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+        setTFTColorRole(TFTColorRole::HeaderStatus, navBgColor, navFgColor);
+        registerTFTColorRegion(TFTColorRole::HeaderStatus, regionX, top, maxW, halfH);
+#endif
+
         drawArrow(false);
     }
 
