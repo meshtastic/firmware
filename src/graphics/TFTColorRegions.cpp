@@ -429,7 +429,7 @@ void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
         switch (themeId) {
         case ThemeID::DefaultLight:
             // Invert body colours for readability on white frames.
-            if (offColor == TFTPalette::Black) {
+            if (offColor == TFTPalette::Black && role != TFTColorRole::ActionMenuTitle) {
                 offColor = TFTPalette::White;
             }
             if (onColor == TFTPalette::White) {
