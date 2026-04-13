@@ -422,6 +422,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::vector<bool> isMine;   // track alignment
     std::vector<bool> isHeader; // track header lines
     std::vector<AckStatus> ackForLine;
+    const size_t estimatedLines = std::max<size_t>(filtered.size(), 1U) * 3U;
+    allLines.reserve(estimatedLines);
+    isMine.reserve(estimatedLines);
+    isHeader.reserve(estimatedLines);
+    ackForLine.reserve(estimatedLines);
 
     for (auto it = filtered.rbegin(); it != filtered.rend(); ++it) {
         const auto &m = *it;
@@ -566,7 +571,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         int wrapWidth = mine ? rightTextWidth : leftTextWidth;
         std::vector<std::string> wrapped = generateLines(display, "", msgText, wrapWidth);
         for (auto &ln : wrapped) {
-            allLines.push_back(ln);
+            allLines.emplace_back(std::move(ln));
             isMine.push_back(mine);
             isHeader.push_back(false);
             ackForLine.push_back(AckStatus::NONE);
@@ -574,7 +579,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     // Cache lines and heights
-    cachedLines = allLines;
+    cachedLines.swap(allLines);
     cachedHeights = calculateLineHeights(cachedLines, emotes, isHeader);
 
     std::vector<MessageBlock> blocks = buildMessageBlocks(isHeader, isMine);
