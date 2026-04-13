@@ -423,18 +423,16 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::vector<bool> isHeader; // track header lines
     std::vector<AckStatus> ackForLine;
     // Hard limit on total cached lines to prevent unbounded growth from a single long message.
-    // Reserve based on filtered count but cap at the configured message limit × a worst-case
-    // lines-per-message. For a display rendering only ~5-30 lines at a time, caching more than
-    // this limit wastes heap. Stop appending once we reach MAX_CACHED_LINES to prevent a single
-    // message from blowing out the heap.
-    constexpr size_t MAX_LINES_PER_MSG = 5U;
+    // Reserve to the actual cache cap up front, because a single message can expand to many more
+    // wrapped display lines than a small per-message estimate would predict. For a display
+    // rendering only ~5-30 lines at a time, caching more than this limit wastes heap. Stop
+    // appending once we reach MAX_CACHED_LINES to prevent a single message from blowing out the
+    // heap.
     constexpr size_t MAX_CACHED_LINES = 100U; // ~5-6KB for std::string overhead on 32-bit (if each ~50-60 bytes avg)
-    const size_t estimatedLines =
-        std::min(filtered.size() * MAX_LINES_PER_MSG, static_cast<size_t>(MAX_MESSAGES_SAVED) * MAX_LINES_PER_MSG);
-    allLines.reserve(std::min(estimatedLines, MAX_CACHED_LINES));
-    isMine.reserve(std::min(estimatedLines, MAX_CACHED_LINES));
-    isHeader.reserve(std::min(estimatedLines, MAX_CACHED_LINES));
-    ackForLine.reserve(std::min(estimatedLines, MAX_CACHED_LINES));
+    allLines.reserve(MAX_CACHED_LINES);
+    isMine.reserve(MAX_CACHED_LINES);
+    isHeader.reserve(MAX_CACHED_LINES);
+    ackForLine.reserve(MAX_CACHED_LINES);
 
     for (auto it = filtered.rbegin(); it != filtered.rend(); ++it) {
         const auto &m = *it;
