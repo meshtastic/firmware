@@ -422,7 +422,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::vector<bool> isMine;   // track alignment
     std::vector<bool> isHeader; // track header lines
     std::vector<AckStatus> ackForLine;
-    const size_t estimatedLines = std::max(filtered.size(), size_t{1}) * size_t{3};
+    // Reserve based on filtered count but cap at the configured message limit × a
+    // worst-case lines-per-message (1 header + up to 4 body lines). This prevents
+    // a large single allocation — and the persistent capacity that swap() transfers
+    // into cachedLines — from growing beyond what the store can ever hold.
+    constexpr size_t MAX_LINES_PER_MSG = 5U;
+    const size_t estimatedLines =
+        std::min(filtered.size() * MAX_LINES_PER_MSG, static_cast<size_t>(MAX_MESSAGES_SAVED) * MAX_LINES_PER_MSG);
     allLines.reserve(estimatedLines);
     isMine.reserve(estimatedLines);
     isHeader.reserve(estimatedLines);
