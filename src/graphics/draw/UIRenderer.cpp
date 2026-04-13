@@ -1586,7 +1586,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 #if GRAPHICS_TFT_COLORING_ENABLED
             // Active icon inverts on TFT: white chip with black glyph.
             // Keep the buffer visibly different too, so dirty-rect updates include this region.
-            setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, TFTPalette::Black);
+            setTFTColorRole(TFTColorRole::HeaderStatus, navFgColor, navBgColor);
             registerTFTColorRegion(TFTColorRole::HeaderStatus, x - 1, y - 1, iconSize + 2, iconSize + 2);
             display->setColor(WHITE);
             display->fillRect(x - 1, y - 1, iconSize + 2, iconSize + 2);
