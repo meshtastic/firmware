@@ -33,4 +33,4 @@
 #define ETH_CS_PIN 14
 #define ETH_INT_PIN 10
 #define ETH_RST_PIN 9
-//#define ETH_ADDR 1
+// #define ETH_ADDR 1

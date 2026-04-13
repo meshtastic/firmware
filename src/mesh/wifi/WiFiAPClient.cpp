@@ -62,11 +62,42 @@ unsigned long lastrun_ntp = 0;
 
 bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
 bool isReconnecting = false; // If we are currently reconnecting
+#if defined(USE_WS5500) || defined(USE_CH390D)
+static volatile bool ethNetworkConnectedPending = false;
+#endif
 
 WiFiUDP syslogClient;
 meshtastic::Syslog syslog(syslogClient);
 
 Periodic *wifiReconnect;
+
+#if defined(USE_WS5500) || defined(USE_CH390D)
+static void onNetworkConnected();
+static uint32_t lastEthIP = 0;
+static int32_t ethNetworkConnectedPoll()
+{
+    if (ethNetworkConnectedPending) {
+        ethNetworkConnectedPending = false;
+        uint32_t ip = (uint32_t)ETH.localIP();
+        bool ipChanged = APStartupComplete && ip != 0 && ip != lastEthIP;
+        onNetworkConnected();
+        if (ipChanged) {
+            LOG_INFO("Ethernet IP changed (%u.%u.%u.%u), restarting mDNS", ip & 0xff, (ip >> 8) & 0xff, (ip >> 16) & 0xff,
+                     (ip >> 24) & 0xff);
+            MDNS.end();
+            if (MDNS.begin("Meshtastic")) {
+                MDNS.addService("meshtastic", "tcp", SERVER_API_DEFAULT_PORT);
+                MDNS.addServiceTxt("meshtastic", "tcp", "shortname", String(owner.short_name));
+                MDNS.addServiceTxt("meshtastic", "tcp", "id", String(nodeDB->getNodeId().c_str()));
+                MDNS.addServiceTxt("meshtastic", "tcp", "pio_env", optstr(APP_ENV));
+            }
+        }
+        if (ip != 0)
+            lastEthIP = ip;
+    }
+    return 500;
+}
+#endif
 
 #ifdef USE_WS5500
 // Startup Ethernet
@@ -78,6 +109,7 @@ bool initEthernet()
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
 #endif
+        new concurrency::Periodic("EthConnect", ethNetworkConnectedPoll);
         return true;
     }
 
@@ -91,7 +123,7 @@ bool initEthernet()
 {
     // Configure CH390
     ch390_config_t ch390_conf = CH390_DEFAULT_CONFIG();
-    ch390_conf.spi_host = SPI3_HOST;  // SPI2_HOST or SPI3_HOST
+    ch390_conf.spi_host = SPI3_HOST;
     ch390_conf.spi_cs_gpio = ETH_CS_PIN;
     ch390_conf.spi_sck_gpio = ETH_SCLK_PIN;
     ch390_conf.spi_mosi_gpio = ETH_MOSI_PIN;
@@ -104,6 +136,7 @@ bool initEthernet()
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
 #endif
+        new concurrency::Periodic("EthConnect", ethNetworkConnectedPoll);
         return true;
     }
 
@@ -266,7 +299,7 @@ bool isWifiAvailable()
 
     if (config.network.wifi_enabled && (config.network.wifi_ssid[0])) {
         return true;
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_CH390D)
     } else if (config.network.eth_enabled) {
         return true;
 #endif
@@ -526,18 +559,18 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Ethernet disconnected");
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_CH390D)
         LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
                  ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
-        onNetworkConnected();
+        ethNetworkConnectedPending = true;
 #endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_CH390D)
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
         LOG_INFO("Obtained Local IP6 address: %s", ETH.linkLocalIPv6().toString().c_str());
         LOG_INFO("Obtained GlobalIP6 address: %s", ETH.globalIPv6().toString().c_str());
-#else
+#elif defined(USE_WS5500)
         LOG_INFO("Obtained IP6 address: %s", ETH.localIPv6().toString().c_str());
 #endif
 #endif
