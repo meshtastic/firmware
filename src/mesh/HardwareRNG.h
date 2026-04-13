@@ -12,9 +12,10 @@ namespace HardwareRNG
  *
  * @param buffer Destination buffer for random bytes
  * @param length Number of bytes to write
+ * @param useRadioEntropy If true, attempt to mix radio entropy into the output as well.
  * @return true if the buffer was fully populated with entropy, false on failure
  */
-bool fill(uint8_t *buffer, size_t length);
+bool fill(uint8_t *buffer, size_t length, bool useRadioEntropy = false);
 
 /**
  * Populate a 32-bit seed value with hardware-backed randomness where possible.

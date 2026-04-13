@@ -29,7 +29,7 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     CryptRNG.begin(optstr(APP_VERSION));
 
     uint8_t hardwareEntropy[64] = {0};
-    if (HardwareRNG::fill(hardwareEntropy, sizeof(hardwareEntropy))) {
+    if (HardwareRNG::fill(hardwareEntropy, sizeof(hardwareEntropy), true)) {
         CryptRNG.stir(hardwareEntropy, sizeof(hardwareEntropy));
     } else {
         LOG_WARN("Hardware entropy unavailable, falling back to software RNG");

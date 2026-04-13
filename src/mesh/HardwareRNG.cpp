@@ -48,6 +48,7 @@ bool mixWithLoRaEntropy(uint8_t *buffer, size_t length)
     // and return false so callers know no extra mixing occurred.
     RadioLibInterface *radio = RadioLibInterface::instance;
     if (!radio) {
+        LOG_ERROR("No radio instance available to provide entropy");
         return false;
     }
 
@@ -84,7 +85,7 @@ bool mixWithLoRaEntropy(uint8_t *buffer, size_t length)
 #endif
 } // namespace
 
-bool fill(uint8_t *buffer, size_t length)
+bool fill(uint8_t *buffer, size_t length, bool useRadioEntropy)
 {
     if (!buffer || length == 0) {
         return false;
@@ -133,11 +134,13 @@ bool fill(uint8_t *buffer, size_t length)
     }
 
 #if HAS_RADIO
-    // Best-effort: if the radio is active and can provide modem entropy, XOR it over the
-    // buffer to improve overall quality. We consider the filling a success if either a
-    // good platform RNG or the modem RNG provided data, so we return true as long as at
-    // least one of those steps succeeded.
-    filled = mixWithLoRaEntropy(buffer, length) || filled;
+    if (useRadioEntropy) {
+        // Best-effort: if the radio is active and can provide modem entropy, XOR it over the
+        // buffer to improve overall quality. We consider the filling a success if either a
+        // good platform RNG or the modem RNG provided data, so we return true as long as at
+        // least one of those steps succeeded.
+        filled = mixWithLoRaEntropy(buffer, length) || filled;
+    }
 #endif
 
     return filled;
@@ -146,7 +149,7 @@ bool fill(uint8_t *buffer, size_t length)
 bool seed(uint32_t &seedOut)
 {
     uint32_t candidate = 0;
-    if (!fill(reinterpret_cast<uint8_t *>(&candidate), sizeof(candidate))) {
+    if (!fill(reinterpret_cast<uint8_t *>(&candidate), sizeof(candidate), true)) {
         return false;
     }
     seedOut = candidate;
