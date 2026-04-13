@@ -50,8 +50,42 @@
 
 #include "xmodem.h"
 #include "SPILock.h"
+#include <cstring>
 
 #ifdef FSCom
+
+/** Create every parent directory for @p route.path (file path) on the routed FS. */
+static bool mkdirParentsForRoute(const FSRoute &route)
+{
+    char tmp[sizeof(route.path)];
+    strlcpy(tmp, route.path, sizeof(tmp));
+    if (tmp[0] != '/')
+        return false;
+
+    // Drop basename — only directories are created here.
+    char *slash = strrchr(tmp + 1, '/');
+    if (!slash)
+        return true; // "/file.bin" at FS root
+
+    *slash = '\0';
+    if (strlen(tmp) <= 1)
+        return true;
+
+    // Prefix mkdir at each internal '/', then the full dirname (best-effort; already-exists is OK).
+    for (char *s = tmp + 1; *s; s++) {
+        if (*s != '/')
+            continue;
+        *s = '\0';
+        FSRoute d = route;
+        strlcpy(d.path, tmp, sizeof(d.path));
+        *s = '/';
+        fsMkdir(d);
+    }
+    FSRoute d = route;
+    strlcpy(d.path, tmp, sizeof(d.path));
+    fsMkdir(d);
+    return true;
+}
 
 XModemAdapter xModem;
 
@@ -124,8 +158,9 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
                 spiLock->lock();
-                // Remove existing file first so we truncate rather than append
-                if (FSCom.exists(filename)) FSCom.remove(filename);
+                // Remove existing file first so we truncate rather than append (use routed path, not raw filename)
+                if (fsExists(activeRoute_)) fsRemove(activeRoute_);
+                mkdirParentsForRoute(activeRoute_);
                 file = fsOpenWrite(activeRoute_);
                 spiLock->unlock();
                 if (file) {
