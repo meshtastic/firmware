@@ -51,7 +51,7 @@ size_t RedirectablePrint::write(uint8_t c)
 size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
 {
     va_list copy;
-#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+#if ARCH_PORTDUINO
     static char printBuf[512];
 #else
     static char printBuf[160];
@@ -285,20 +285,8 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     newFormat[len + 1] = '\0';
 
 #if ARCH_PORTDUINO
-    // level trace is special, two possible ways to handle it.
-    if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
-        if (portduino_config.traceFilename != "") {
-            va_list arg;
-            va_start(arg, format);
-            try {
-                traceFile << va_arg(arg, char *) << std::endl;
-            } catch (const std::ios_base::failure &e) {
-            }
-            va_end(arg);
-        }
-        if (portduino_config.logoutputlevel < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
-            return;
-        }
+    if (portduino_config.logoutputlevel < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
+        return;
     }
     if (portduino_config.logoutputlevel < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         return;
