@@ -1149,8 +1149,8 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     UIRenderer::drawStringWithEmotes(display, footerX, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, footer, FONT_HEIGHT_SMALL, 1,
                                      false);
     if (gBootSplashBoldPass) {
-        UIRenderer::drawStringWithEmotes(display, footerX + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, footer, FONT_HEIGHT_SMALL, 1,
-                                         false);
+        UIRenderer::drawStringWithEmotes(display, footerX + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, footer, FONT_HEIGHT_SMALL,
+                                         1, false);
     }
     screen->forceDisplay();
 
@@ -1158,41 +1158,38 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
 #else
     display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
                      icon_width, icon_height, icon_bits);
-    if (gBootSplashBoldPass) {
-        display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2 + 1, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
-                         icon_width, icon_height, icon_bits);
-    }
 
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = "meshtastic.org";
-    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5, title);
     if (gBootSplashBoldPass) {
-        display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+        display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5, title);
     }
     display->setFont(FONT_SMALL);
     // Draw region in upper left
     if (upperMsg) {
-        display->drawString(x + 0, y + 0, upperMsg);
+        display->drawString(x + 5, y + 5, upperMsg);
         if (gBootSplashBoldPass) {
-            display->drawString(x + 1, y + 0, upperMsg);
+            display->drawString(x + 6, y + 5, upperMsg);
         }
     }
 
     // Draw version and short name in upper right
     const char *version = xstr(APP_VERSION_SHORT);
-    int versionX = x + SCREEN_WIDTH - display->getStringWidth(version);
-    display->drawString(versionX, y + 0, version);
+    int versionX = x + SCREEN_WIDTH - display->getStringWidth(version) - 5;
+    display->drawString(versionX, y + 5, version);
     if (gBootSplashBoldPass) {
-        display->drawString(versionX + 1, y + 0, version);
+        display->drawString(versionX + 1, y + 5, version);
     }
     if (owner.short_name && owner.short_name[0]) {
         const char *shortName = owner.short_name;
         int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
-        int shortNameX = x + SCREEN_WIDTH - shortNameW;
-        UIRenderer::drawStringWithEmotes(display, shortNameX, y + FONT_HEIGHT_SMALL, shortName, FONT_HEIGHT_SMALL, 1, false);
+        int shortNameX = x + SCREEN_WIDTH - shortNameW - 5;
+        UIRenderer::drawStringWithEmotes(display, shortNameX, y + 5 + FONT_HEIGHT_SMALL, shortName, FONT_HEIGHT_SMALL, 1, false);
         if (gBootSplashBoldPass) {
-            UIRenderer::drawStringWithEmotes(display, shortNameX + 1, y + FONT_HEIGHT_SMALL, shortName, FONT_HEIGHT_SMALL, 1, false);
+            UIRenderer::drawStringWithEmotes(display, shortNameX + 1, y + 5 + FONT_HEIGHT_SMALL, shortName, FONT_HEIGHT_SMALL, 1,
+                                             false);
         }
     }
     screen->forceDisplay();
