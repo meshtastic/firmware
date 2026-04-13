@@ -1,4 +1,5 @@
 #include "TFTColorRegions.h"
+#include "NodeDB.h"
 #include "TFTPalette.h"
 
 #include <string.h>
@@ -22,6 +23,24 @@ static constexpr uint32_t kFnv1aPrime = 16777619u;
 static constexpr uint16_t toBe565(uint16_t color)
 {
     return static_cast<uint16_t>((color >> 8) | (color << 8));
+}
+
+static inline bool isLightThemeEnabled()
+{
+    return uiconfig.theme == meshtastic_Theme_LIGHT;
+}
+
+static inline bool shouldApplyLightThemeBodyMapping(TFTColorRole role)
+{
+    switch (role) {
+    case TFTColorRole::HeaderBackground:
+    case TFTColorRole::HeaderTitle:
+    case TFTColorRole::HeaderStatus:
+    case TFTColorRole::BootSplash:
+        return false;
+    default:
+        return true;
+    }
 }
 
 static inline uint32_t fnv1aAppendByte(uint32_t hash, uint8_t value)
@@ -66,6 +85,7 @@ static TFTRoleColorsBe roleColors[static_cast<size_t>(TFTColorRole::Count)] = {
     {toBe565(TFTPalette::DarkGray), toBe565(TFTPalette::Black)}, // ActionMenuBorder
     {toBe565(TFTPalette::White), toBe565(TFTPalette::Black)},    // ActionMenuBody
     {toBe565(TFTPalette::DarkGray), toBe565(TFTPalette::White)}, // ActionMenuTitle
+    {toBe565(TFTPalette::Black), toBe565(TFTPalette::White)},    // FrameMono
     {toBe565(TFTPalette::White), toBe565(TFTPalette::Black)},    // BootSplash
     {toBe565(TFTPalette::Yellow), toBe565(TFTPalette::Black)}    // BodyYellow
 };
@@ -77,6 +97,20 @@ void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
 #if !GRAPHICS_TFT_COLORING_ENABLED
     return;
 #endif
+
+    if (isLightThemeEnabled() && (role == TFTColorRole::FavoriteNode || role == TFTColorRole::BodyYellow)) {
+        // High-contrast favorite highlight for light theme: black glyphs on yellow background.
+        onColor = TFTPalette::Black;
+        offColor = TFTPalette::Yellow;
+    } else if (isLightThemeEnabled() && shouldApplyLightThemeBodyMapping(role)) {
+        // In light theme, body/indicator regions should blend into white frames and keep readable glyph contrast.
+        if (offColor == TFTPalette::Black) {
+            offColor = TFTPalette::White;
+        }
+        if (onColor == TFTPalette::White) {
+            onColor = TFTPalette::Black;
+        }
+    }
 
     const uint8_t index = static_cast<uint8_t>(role);
     if (index >= static_cast<uint8_t>(TFTColorRole::Count)) {

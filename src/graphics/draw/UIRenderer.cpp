@@ -1548,12 +1548,17 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
     const uint16_t navBgColor = TFT_HEADER_BG_COLOR_OVERRIDE;
 #else
-    const uint16_t navBgColor = TFTPalette::DarkGray;
+    const uint16_t navBgColor = (uiconfig.theme == meshtastic_Theme_LIGHT) ? TFTPalette::LightGray : TFTPalette::DarkGray;
+#endif
+#ifdef TFT_HEADER_STATUS_COLOR_OVERRIDE
+    const uint16_t navFgColor = TFT_HEADER_STATUS_COLOR_OVERRIDE;
+#else
+    const uint16_t navFgColor = (uiconfig.theme == meshtastic_Theme_LIGHT) ? TFTPalette::Black : TFTPalette::White;
 #endif
 
     display->setColor(BLACK);
 #if GRAPHICS_TFT_COLORING_ENABLED
-    setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::White, navBgColor);
+    setTFTColorRole(TFTColorRole::HeaderStatus, navFgColor, navBgColor);
     registerTFTColorRegion(TFTColorRole::HeaderStatus, rectX, rectY, rectWidth, rectHeight);
     display->fillRect(rectX, rectY, rectWidth, rectHeight);
 #else
@@ -1566,7 +1571,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 #if GRAPHICS_TFT_COLORING_ENABLED
     // TFT: force edge refresh to clear nav artifacts.
     if (navBarVisible && clearWidth > 1) {
-        setTFTColorRole(TFTColorRole::HeaderStatus, TFTPalette::Black, TFTPalette::Black);
+        setTFTColorRole(TFTColorRole::HeaderStatus, navBgColor, navBgColor);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX, rectY, 1, rectHeight);
         registerTFTColorRegion(TFTColorRole::HeaderStatus, clearX + clearWidth - 1, rectY, 1, rectHeight);
         display->setColor(BLACK);

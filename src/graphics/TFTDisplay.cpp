@@ -1146,6 +1146,24 @@ extern unPhone unphone;
 
 GpioPin *TFTDisplay::backlightEnable = NULL;
 
+namespace
+{
+static inline uint16_t getThemeDefaultOnColor()
+{
+    return graphics::TFTPalette::White;
+}
+
+static inline uint16_t getThemeDefaultOffColor()
+{
+#if GRAPHICS_TFT_COLORING_ENABLED
+    if (uiconfig.theme == meshtastic_Theme_LIGHT) {
+        return graphics::TFTPalette::White;
+    }
+#endif
+    return TFT_BLACK;
+}
+} // namespace
+
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
     LOG_DEBUG("TFTDisplay!");
@@ -1190,9 +1208,6 @@ TFTDisplay::~TFTDisplay()
 // Write the buffer to the display memory
 void TFTDisplay::display(bool fromBlank)
 {
-    if (fromBlank)
-        tft->fillScreen(TFT_BLACK);
-
     concurrency::LockGuard g(spiLock);
 
     uint32_t x, y;
@@ -1204,14 +1219,28 @@ void TFTDisplay::display(bool fromBlank)
     uint16_t colorTftWhite, colorTftBlack;
     bool somethingChanged = false;
 
-    // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
-    colorTftWhite = (graphics::TFTPalette::White >> 8) | ((graphics::TFTPalette::White & 0xFF) << 8);
-    colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
+    // Theme defaults for non-role pixels.
+    const uint16_t defaultOnColor = getThemeDefaultOnColor();
+    const uint16_t defaultOffColor = getThemeDefaultOffColor();
+    static uint16_t lastDefaultOnColor = 0;
+    static uint16_t lastDefaultOffColor = 0;
+    static bool haveLastDefaults = false;
+    const bool themeDefaultsChanged =
+        !haveLastDefaults || (defaultOnColor != lastDefaultOnColor) || (defaultOffColor != lastDefaultOffColor);
+    const bool forceFullRepaint = fromBlank || themeDefaultsChanged;
+
+    // If theme defaults changed, reset panel background immediately so stale pixels don't linger.
+    if (forceFullRepaint) {
+        tft->fillScreen(defaultOffColor);
+    }
+
+    colorTftWhite = (defaultOnColor >> 8) | ((defaultOnColor & 0xFF) << 8);
+    colorTftBlack = (defaultOffColor >> 8) | ((defaultOffColor & 0xFF) << 8);
 
 #if GRAPHICS_TFT_COLORING_ENABLED
     static uint32_t lastColorFrameSignature = 0;
     const uint32_t colorFrameSignature = graphics::getTFTColorFrameSignature();
-    const bool forceFullColorRepaint = fromBlank || (colorFrameSignature != lastColorFrameSignature);
+    const bool forceFullColorRepaint = forceFullRepaint || (colorFrameSignature != lastColorFrameSignature);
 
     // When region roles/layout changed, color can differ even with identical monochrome glyph bits.
     // Repaint full frame only for those frames, then return to diff-based updates.
@@ -1234,6 +1263,9 @@ void TFTDisplay::display(bool fromBlank)
 
         memcpy(buffer_back, buffer, displayBufferSize);
         lastColorFrameSignature = colorFrameSignature;
+        haveLastDefaults = true;
+        lastDefaultOnColor = defaultOnColor;
+        lastDefaultOffColor = defaultOffColor;
         graphics::clearTFTColorRegions();
         return;
     }
@@ -1246,7 +1278,7 @@ void TFTDisplay::display(bool fromBlank)
 
         // Step 1: Do a quick scan of 8 rows together. This allows fast-forwarding over unchanged screen areas.
         if (y_byteMask == 1) {
-            if (!fromBlank) {
+            if (!forceFullRepaint) {
                 for (x = 0; x < displayWidth; x++) {
                     if (buffer[x + y_byteIndex] != buffer_back[x + y_byteIndex])
                         break;
@@ -1268,7 +1300,7 @@ void TFTDisplay::display(bool fromBlank)
         for (x_FirstPixelUpdate = 0; x_FirstPixelUpdate < displayWidth; x_FirstPixelUpdate++) {
             isset = buffer[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
 
-            if (!fromBlank) {
+            if (!forceFullRepaint) {
                 // get src pixel in the page based ordering the OLED lib uses
                 dblbuf_isset = buffer_back[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
                 if (isset != dblbuf_isset) {
@@ -1293,7 +1325,7 @@ void TFTDisplay::display(bool fromBlank)
                 linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
                                                                     colorTftWhite, colorTftBlack);
 
-                if (!fromBlank) {
+                if (!forceFullRepaint) {
                     dblbuf_isset = buffer_back[x + y_byteIndex] & y_byteMask;
                     if (isset != dblbuf_isset) {
                         x_LastPixelUpdate = x;
@@ -1330,6 +1362,9 @@ void TFTDisplay::display(bool fromBlank)
 #if GRAPHICS_TFT_COLORING_ENABLED
     lastColorFrameSignature = colorFrameSignature;
 #endif
+    haveLastDefaults = true;
+    lastDefaultOnColor = defaultOnColor;
+    lastDefaultOffColor = defaultOffColor;
     graphics::clearTFTColorRegions();
 }
 
@@ -1544,7 +1579,7 @@ bool TFTDisplay::connect()
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif
-    tft->fillScreen(TFT_BLACK);
+    tft->fillScreen(getThemeDefaultOffColor());
 
     if (this->linePixelBuffer == NULL) {
         this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth);

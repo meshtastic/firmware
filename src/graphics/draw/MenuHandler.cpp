@@ -11,6 +11,7 @@
 #include "buzz.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
@@ -2213,9 +2214,9 @@ void menuHandler::screenOptionsMenu()
     bool hasSupportBrightness = false;
 #endif
 
-    enum optionsNumbers { Back, Brightness, FrameToggles, DisplayUnits, MessageBubbles };
-    static const char *optionsArray[6] = {"Back"};
-    static int optionsEnumArray[6] = {Back};
+    enum optionsNumbers { Back, Brightness, FrameToggles, DisplayUnits, MessageBubbles, Theme };
+    static const char *optionsArray[7] = {"Back"};
+    static int optionsEnumArray[7] = {Back};
     int options = 1;
 
     // Only show brightness for B&W displays
@@ -2232,6 +2233,11 @@ void menuHandler::screenOptionsMenu()
 
     optionsArray[options] = "Message Bubbles";
     optionsEnumArray[options++] = MessageBubbles;
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+    optionsArray[options] = "Theme";
+    optionsEnumArray[options++] = Theme;
+#endif
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Display Options";
@@ -2250,6 +2256,9 @@ void menuHandler::screenOptionsMenu()
             screen->runNow();
         } else if (selected == MessageBubbles) {
             menuHandler::menuQueue = menuHandler::MessageBubblesMenu;
+            screen->runNow();
+        } else if (selected == Theme) {
+            menuHandler::menuQueue = menuHandler::ThemeMenu;
             screen->runNow();
         } else {
             menuQueue = SystemBaseMenu;
@@ -2534,6 +2543,32 @@ void menuHandler::messageBubblesMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::themeMenu()
+{
+    enum optionsNumbers { Back, Dark, Light };
+    static const char *optionsArray[] = {"Back", "Dark", "Light"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Theme";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.InitialSelected = (uiconfig.theme == meshtastic_Theme_LIGHT) ? 2 : 1;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Dark) {
+            uiconfig.theme = meshtastic_Theme_DARK;
+            saveUIConfig();
+            screen->runNow();
+        } else if (selected == Light) {
+            uiconfig.theme = meshtastic_Theme_LIGHT;
+            saveUIConfig();
+            screen->runNow();
+        } else {
+            menuHandler::menuQueue = menuHandler::ScreenOptionsMenu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != MenuNone)
@@ -2680,6 +2715,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case MessageBubblesMenu:
         messageBubblesMenu();
+        break;
+    case ThemeMenu:
+        themeMenu();
         break;
     }
     menuQueue = MenuNone;

@@ -108,6 +108,14 @@ static inline void prepareFrameColorRegions()
 {
 #if GRAPHICS_TFT_COLORING_ENABLED
     clearTFTColorRegions();
+#if defined(USE_ST7789)
+    // Firmware-level full-frame fallback for ST7789 light theme:
+    // remap monochrome bits to black glyphs on white background.
+    if (uiconfig.theme == meshtastic_Theme_LIGHT) {
+        setTFTColorRole(TFTColorRole::FrameMono, TFTPalette::Black, TFTPalette::White);
+        registerTFTColorRegion(TFTColorRole::FrameMono, 0, 0, TFT_WIDTH, TFT_HEIGHT);
+    }
+#endif
 #endif
 }
 #endif

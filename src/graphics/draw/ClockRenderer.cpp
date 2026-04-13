@@ -293,6 +293,8 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 // Draw an analog clock
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    // Clear previous frame pixels so moving hands don't leave stale artifacts on TFT light theme.
+    display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     // === Set Title, Blank for Clock
     const char *titleStr = "";
