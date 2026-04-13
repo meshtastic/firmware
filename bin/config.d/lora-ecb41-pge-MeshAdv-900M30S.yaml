@@ -1,0 +1,39 @@
+# MeshAdv-Pi E22-900M30S
+# https://github.com/chrismyers2000/MeshAdv-Pi-Hat
+Meta:
+  name: MeshAdv-Pi E22-900M30S
+  support: community
+  compatible:
+    - ebyte-ecb41-pge # Armbian
+
+Lora:
+  Module: sx1262
+  CS: # GPIO0_A1 (physical 40)
+    pin: 1
+    gpiochip: 0
+    line: 1
+  IRQ: # GPIO0_A3 (physical 36)
+    pin: 3
+    gpiochip: 0
+    line: 3
+  Busy: # GPIO0_A0 (physical 38)
+    pin: 0
+    gpiochip: 0
+    line: 0
+  Reset: # GPIO0_B4 (physical 12)
+    pin: 12
+    gpiochip: 0
+    line: 12
+  TXen: # GPIO1_D1 (physical 33)
+    pin: 57
+    gpiochip: 1
+    line: 25
+  RXen: # GPIO1_B3 (physical 32)
+    pin: 43
+    gpiochip: 1
+    line: 11
+  DIO3_TCXO_VOLTAGE: true
+  # Only for E22-900M33S:
+  # Limit the output power to 8 dBm
+  # SX126X_MAX_POWER: 8
+  spidev: spidev0.0

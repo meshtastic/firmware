@@ -1,0 +1,41 @@
+# !! WARNING: Hats on the OK3506 board are installed "backwards" (facing outwards)
+
+# MeshAdv-Pi E22-900M30S
+# https://github.com/chrismyers2000/MeshAdv-Pi-Hat
+Meta:
+  name: MeshAdv-Pi E22-900M30S
+  support: community
+  compatible:
+    - forlinx-ok3506-s12 # Armbian
+
+Lora:
+  Module: sx1262
+  CS: # GPIO0_B0 (physical 40)
+    pin: 8
+    gpiochip: 0
+    line: 8
+  IRQ: # GPIO3_B0 (physical 36)
+    pin: 104
+    gpiochip: 3
+    line: 8
+  Busy: # GPIO0_B1 (physical 38)
+    pin: 9
+    gpiochip: 0
+    line: 9
+  Reset: # GPIO0_B6 (physical 12)
+    pin: 14
+    gpiochip: 0
+    line: 14
+  TXen: # GPIO0_A3 (physical 33)
+    pin: 3
+    gpiochip: 0
+    line: 3
+  RXen: # GPIO0_A2 (physical 32)
+    pin: 2
+    gpiochip: 0
+    line: 2
+  DIO3_TCXO_VOLTAGE: true
+  # Only for E22-900M33S:
+  # Limit the output power to 8 dBm
+  # SX126X_MAX_POWER: 8
+  spidev: spidev0.0
