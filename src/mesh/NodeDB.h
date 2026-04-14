@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ArraySlotStore.h"
+#include "FlashSlotStore.h"
 #include "MeshTypes.h"
 #include "NodeStatus.h"
 #include "configuration.h"
@@ -401,6 +402,14 @@ class NodeDB
     void rebuildNodeMeta();
     void refreshNodeMeta(uint16_t storageIndex);
     void rebuildNodeMetaLookup();
+    bool prefersFlashSlotStore() const;
+    bool loadFromFlashSlotStore();
+    bool ensureFlashSlotLoaded(uint16_t storageIndex);
+    bool ensureAllLiveSlotsLoaded();
+    void moveStorageSlot(uint16_t destIndex, uint16_t sourceIndex);
+    void clearStorageSlots(size_t beginIndex, size_t endIndex);
+    void resetFlashSlotState();
+    static NodeMeta makeNodeMeta(const meshtastic_NodeInfoLite &node, uint16_t storageIndex);
     meshtastic_NodeInfoLite &slotAt(uint16_t storageIndex);
     const meshtastic_NodeInfoLite &slotAt(uint16_t storageIndex) const;
     meshtastic_NodeInfoLite *slotPtr(uint16_t storageIndex);
@@ -425,6 +434,10 @@ class NodeDB
     bool saveNodeDatabaseToDisk();
     void sortMeshDB();
 
+    FlashSlotStore flashSlotStore;
+    bool flashSlotStoreActive = false;
+    std::vector<uint16_t> flashSlotByStorageIndex;
+    std::vector<uint8_t> flashSlotCacheValid;
     ArraySlotStore arraySlotStore;
     NodeStore *nodeStore = nullptr;
 };
