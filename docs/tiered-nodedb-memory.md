@@ -368,3 +368,44 @@ Stop `saveNodeDatabaseToDisk()` from serializing the entire padded `nodeDatabase
 ### Follow-Up Notes
 
 - Phase 8 removes save-side over-serialization but does not change load-side vector growth yet. Phase 9 still needs to decode one node at a time and avoid leaving legacy load capacity pinned longer than necessary.
+
+## Phase 9: Stream The `nodes.proto` Load Path
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Stop `nodes.proto` load from growing a temporary callback-owned `std::vector` while keeping the on-disk protobuf schema unchanged.
+
+### What Changed
+
+- `src/mesh/NodeDB.cpp`
+  - Added a streamed `meshtastic_NodeDatabase` decoder that walks the top-level protobuf fields directly and decodes each `NodeInfoLite` submessage one at a time.
+  - Changed `loadProto()` to special-case `meshtastic_NodeDatabase_msg` so `nodes.proto` no longer goes through the generic callback-based `pb_decode()` path that appended into `nodeDatabase.nodes`.
+  - Replaced the load-time vector setup with a fresh fixed-size backing vector before decode, which explicitly drops any oversized capacity that a legacy callback-grown load could have left pinned.
+  - Validates each decoded node before admission:
+    - rejects reserved / broadcast node numbers
+    - rejects records without `has_user`
+    - rejects duplicate `NodeNum` entries after keeping the first occurrence
+  - Preserved the existing zero-public-key scrub during load by clearing all-zero stored public keys before the node is admitted.
+  - Forces `nodeDatabase.version = 0` on streamed decode failure so partially-decoded NodeDB contents do not survive as a seemingly valid load result.
+  - Leaves compatibility intact for both older padded saves and newer live-only saves: repeated node records are still read from the same `meshtastic_NodeDatabase` protobuf schema, but zeroed tail entries are filtered instead of being admitted into the live count.
+
+### Important Constraints For Later Phases
+
+- Phase 9 keeps the existing `nodes.proto` file format. Later backend work should preserve compatibility or make any format break explicit and deliberate.
+- The streamed load path now owns NodeDB admission rules for on-disk records. If a later phase broadens or narrows what counts as a valid persisted node, update this streamed decoder rather than reintroducing callback-vector decoding.
+- `nodeDatabase.nodes.size()` after the streamed decode is now the live node count until `loadFromDisk()` resizes the backing vector back to `MAX_NUM_NODES`. That is intentional; do not assume the decoded vector arrives pre-padded anymore.
+- Duplicate node numbers are now discarded at load time after the first admitted record. Future phases should treat duplicate persisted `NodeNum` entries as corruption, not as something the hot lookup layer should preserve.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e rak4631`
+- `pio run -e native` still fails before NodeDB-specific behavior is exercised in the existing Portduino/LovyanGFX macOS toolchain path. The local failure remains the same class seen in earlier phases: missing C runtime declarations in LovyanGFX C/C++ sources plus missing `malloc.h`.
+
+### Follow-Up Notes
+
+- Phase 9 removes the load-side callback growth path, but no dedicated runtime heap instrumentation was added in this phase. The current guarantee comes from the new fixed-size streamed decode path and the explicit reset of the backing vector before admission.
+- Phase 10 can treat this streamed decode as the load-side behavioral contract to preserve while swapping `meshNodes` behind a `NodeStore` shim.

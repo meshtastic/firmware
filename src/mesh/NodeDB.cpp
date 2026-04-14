@@ -466,6 +466,8 @@ NodeNum getFrom(const meshtastic_MeshPacket *p)
 
 namespace
 {
+constexpr NodeNum kNumReservedNodeNums = 4;
+
 uint32_t secondsSinceTimestamp(uint32_t timestamp)
 {
     uint32_t now = getTime();
@@ -518,6 +520,121 @@ bool encodeLiveNodeDatabase(pb_ostream_t *stream, const meshtastic_NodeDatabase 
 
     return true;
 }
+
+void resetLoadedNodeDatabaseStorage(meshtastic_NodeDatabase &database)
+{
+    database.version = 0;
+    // Replace the backing vector outright so any oversized capacity left by a
+    // legacy callback-based load is released before we admit new records.
+    database.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
+}
+
+bool isValidLoadedNode(meshtastic_NodeInfoLite &node, const std::vector<meshtastic_NodeInfoLite> &loadedNodes,
+                       pb_size_t liveNodeCount)
+{
+    if (node.num == NODENUM_BROADCAST || node.num < kNumReservedNodeNums || !node.has_user) {
+        return false;
+    }
+
+    for (pb_size_t i = 0; i < liveNodeCount; ++i) {
+        if (loadedNodes[i].num == node.num) {
+            return false;
+        }
+    }
+
+    if (node.user.public_key.size > 0 && memfll(node.user.public_key.bytes, 0, node.user.public_key.size)) {
+        node.user.public_key.size = 0;
+    }
+
+    return true;
+}
+
+bool decodeLiveNodeDatabase(pb_istream_t *stream, meshtastic_NodeDatabase &database, pb_size_t &liveNodeCount,
+                            pb_size_t &rejectedNodeCount, pb_size_t &truncatedNodeCount)
+{
+    liveNodeCount = 0;
+    rejectedNodeCount = 0;
+    truncatedNodeCount = 0;
+
+    pb_wire_type_t wireType;
+    uint32_t tag = 0;
+    bool eof = false;
+
+    while (pb_decode_tag(stream, &wireType, &tag, &eof)) {
+        if (tag == meshtastic_NodeDatabase_version_tag) {
+            if (wireType != PB_WT_VARINT || !pb_decode_varint32(stream, &database.version)) {
+                return false;
+            }
+            continue;
+        }
+
+        if (tag == meshtastic_NodeDatabase_nodes_tag) {
+            if (wireType != PB_WT_STRING) {
+                PB_RETURN_ERROR(stream, "NodeDB node field has wrong wire type");
+            }
+
+            pb_istream_t substream;
+            if (!pb_make_string_substream(stream, &substream)) {
+                return false;
+            }
+
+            meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_default;
+            const bool decoded = pb_decode(&substream, meshtastic_NodeInfoLite_fields, &node);
+            const bool closed = pb_close_string_substream(stream, &substream);
+            if (!decoded || !closed) {
+                return false;
+            }
+
+            if (!isValidLoadedNode(node, database.nodes, liveNodeCount)) {
+                ++rejectedNodeCount;
+                continue;
+            }
+
+            if (liveNodeCount >= MAX_NUM_NODES) {
+                ++truncatedNodeCount;
+                continue;
+            }
+
+            database.nodes[liveNodeCount++] = node;
+            continue;
+        }
+
+        if (!pb_skip_field(stream, wireType)) {
+            return false;
+        }
+    }
+
+    if (!eof) {
+        return false;
+    }
+
+    database.nodes.resize(liveNodeCount);
+    return true;
+}
+
+#ifdef FSCom
+LoadFileResult loadNodeDatabaseProto(const char *filename, File &file, meshtastic_NodeDatabase &database)
+{
+    resetLoadedNodeDatabaseStorage(database);
+
+    pb_size_t liveNodeCount = 0;
+    pb_size_t rejectedNodeCount = 0;
+    pb_size_t truncatedNodeCount = 0;
+    pb_istream_t stream = {&readcb, &file, static_cast<size_t>(file.size())};
+
+    if (!decodeLiveNodeDatabase(&stream, database, liveNodeCount, rejectedNodeCount, truncatedNodeCount)) {
+        LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+        database.version = 0;
+        database.nodes.clear();
+        return LoadFileResult::DECODE_FAILED;
+    }
+
+    LOG_INFO("Loaded %s successfully", filename);
+    LOG_INFO("Loaded NodeDB version %u with %u live nodes (%u rejected, %u truncated)", database.version, liveNodeCount,
+             rejectedNodeCount, truncatedNodeCount);
+    return LoadFileResult::LOAD_SUCCESS;
+}
+#endif
 } // namespace
 
 // Returns true if the packet originated from the local node
@@ -1415,8 +1532,6 @@ void NodeDB::installDefaultDeviceState()
 }
 
 // We reserve a few nodenums for future use
-#define NUM_RESERVED 4
-
 /**
  * get our starting (provisional) nodenum from flash.
  */
@@ -1431,8 +1546,8 @@ void NodeDB::pickNewNodeNum()
 
     meshtastic_NodeInfoLite *found;
     while (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
-           (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
-        NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
+           (nodeNum == NODENUM_BROADCAST || nodeNum < kNumReservedNodeNums)) {
+        NodeNum candidate = random(kNumReservedNodeNums, LONG_MAX); // try a new random choice
         if (found)
             LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%02x%02x vs our 0x%02x%02x, so "
                      "trying for 0x%x",
@@ -1456,15 +1571,18 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 
     if (f) {
         LOG_INFO("Load %s", filename);
-        pb_istream_t stream = {&readcb, &f, protoSize};
-        if (fields != &meshtastic_NodeDatabase_msg) // contains a vector object
-            memset(dest_struct, 0, objSize);
-        if (!pb_decode(&stream, fields, dest_struct)) {
-            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
-            state = LoadFileResult::DECODE_FAILED;
+        if (fields == &meshtastic_NodeDatabase_msg) {
+            state = loadNodeDatabaseProto(filename, f, *static_cast<meshtastic_NodeDatabase *>(dest_struct));
         } else {
-            LOG_INFO("Loaded %s successfully", filename);
-            state = LoadFileResult::LOAD_SUCCESS;
+            pb_istream_t stream = {&readcb, &f, protoSize};
+            memset(dest_struct, 0, objSize);
+            if (!pb_decode(&stream, fields, dest_struct)) {
+                LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+                state = LoadFileResult::DECODE_FAILED;
+            } else {
+                LOG_INFO("Loaded %s successfully", filename);
+                state = LoadFileResult::LOAD_SUCCESS;
+            }
         }
         f.close();
     } else {
