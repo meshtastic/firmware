@@ -641,3 +641,44 @@ Make flash slots the authoritative persisted NodeDB backend on flash-preferred t
 
 - Phase 14 still rewrites the full flash-backed NodeDB on each durable save. That is acceptable for the current cutover, but phase 16’s optional dirty-slot cache remains the next obvious optimization point if wear or latency becomes measurable.
 - The flash-store verification helper compares nanopb encodings, not raw struct bytes. Keep that distinction if later phases touch `NodeInfoLite` packing or compiler-specific layout concerns.
+
+## Phase 15: Capacity Enablement And Final Cap Updates
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Finalize the platform target caps only after the stable-slot storage model and flash-backed backend are in place.
+
+### What Changed
+
+- `src/mesh/mesh-pb-constants.h`
+  - Added `NODEDB_TARGET_CAP` as the explicit build upper bound for NodeDB capacity while keeping `MAX_NUM_NODES` as the compatibility macro used by the rest of the codebase and by Portduino overrides.
+  - Replaced the older board-flash-size heuristics with the phase-15 target caps:
+    - `ESP32-S3 + PSRAM`: `3000`
+    - no-PSRAM `ESP32` / `ESP32-S3`: `500`
+    - `nRF52`: `300`
+    - `STM32WL`: unchanged at `10`
+  - Kept the phase-11 PSRAM headroom constants in place so runtime slot allocation on PSRAM hardware still clamps below the build target when heap or PSRAM headroom is insufficient.
+- `src/mesh/ArraySlotStore.cpp`
+  - Changed the PSRAM-capable `ESP32-S3` fallback path so boards that were compiled for PSRAM but boot without usable PSRAM now clamp to the finalized no-PSRAM target cap of `500` instead of the older flash-size-derived values.
+
+### Important Constraints For Later Phases
+
+- After phase 15, `NODEDB_TARGET_CAP` is the intended name for the build-time upper bound. `MAX_NUM_NODES` still exists only as a compatibility alias; future NodeDB-cap work should prefer the newer term when touching cap-selection logic or documentation.
+- The phase-11 runtime-cap logic still matters on PSRAM builds. `ESP32-S3 + PSRAM` now targets `3000`, but actual live capacity is still `min(NODEDB_TARGET_CAP, heap budget, PSRAM budget)` at boot.
+- Flash-preferred targets still keep the fixed RAM overlay introduced in phases 13-14. Raising the no-PSRAM target cap to `500` therefore intentionally increases the overlay budget; later phases should not assume the flash backend is “free” in DRAM just because the durable store lives on flash.
+- Portduino continues to supply its own `MAX_NUM_NODES` override through variant config. The new `NODEDB_TARGET_CAP` macro intentionally inherits that override so native test configurations keep working without another variant migration in phase 15.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e heltec-v3`
+- `pio run -e tbeam`
+- `pio run -e rak4631`
+
+### Follow-Up Notes
+
+- Phase 15 finalizes the current target caps but does not add synthetic node-population tooling or automated memory telemetry assertions yet. Those remain manual validation tasks if future cap increases are proposed.
+- If future work changes the fixed flash-overlay behavior, revisit whether the no-PSRAM `500` target should stay uniform across all ESP32-family builds or become backend-/board-specific again.
