@@ -104,7 +104,11 @@ namespace graphics
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
 #define ASCII_BELL '\x07'
-// A text message frame + debug frame + all the node infos
+// Keep screen UI frames bounded independently from NodeDB capacity.
+static constexpr size_t SCREEN_FRAME_CAPACITY = 96;
+static_assert(SCREEN_FRAME_CAPACITY <= UINT8_MAX, "Screen frame cap must fit in UI frame indices");
+
+// A text message frame + debug frame + any visible module/favorite frames
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 // Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
@@ -307,7 +311,7 @@ SPIClass SPI1(HSPI);
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
-    graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+    graphics::normalFrames = new FrameCallback[SCREEN_FRAME_CAPACITY];
 
     int32_t rawRGB = uiconfig.screen_rgb_color;
 
@@ -1168,6 +1172,11 @@ void Screen::setFrames(FrameFocus focus)
     for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
         // Draw the module frame, using the hack described above
         if (*i != nullptr) {
+            if (numframes >= SCREEN_FRAME_CAPACITY) {
+                LOG_WARN("Screen frame cap reached at %u frames, skipping remaining module frames",
+                         static_cast<unsigned>(SCREEN_FRAME_CAPACITY));
+                break;
+            }
             normalFrames[numframes] = drawModuleFrame;
 
             // Check if the module being drawn has requested focus
@@ -1185,27 +1194,18 @@ void Screen::setFrames(FrameFocus focus)
 
     LOG_DEBUG("Added modules.  numframes: %d", numframes);
 
-    // We don't show the node info of our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    if (numMeshNodes > 0)
-        numMeshNodes--;
-
     if (!hiddenFrames.show_favorites) {
-        // Temporary array to hold favorite node frames
-        std::vector<FrameCallback> favoriteFrames;
-
-        for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-            const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-            if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
-                favoriteFrames.push_back(graphics::UIRenderer::drawFavoriteNode);
-            }
+        const size_t favoriteFrameBudget = (numframes < SCREEN_FRAME_CAPACITY) ? (SCREEN_FRAME_CAPACITY - numframes) : 0;
+        if (UIRenderer::favoritedNodes.size() > favoriteFrameBudget) {
+            LOG_WARN("Screen frame cap trims favorite frames from %u to %u",
+                     static_cast<unsigned>(UIRenderer::favoritedNodes.size()), static_cast<unsigned>(favoriteFrameBudget));
+            UIRenderer::favoritedNodes.resize(favoriteFrameBudget);
         }
 
-        // Insert favorite frames *after* collecting them all
-        if (!favoriteFrames.empty()) {
+        if (!UIRenderer::favoritedNodes.empty()) {
             fsi.positions.firstFavorite = numframes;
-            for (const auto &f : favoriteFrames) {
-                normalFrames[numframes++] = f;
+            for (size_t i = 0; i < UIRenderer::favoritedNodes.size(); ++i) {
+                normalFrames[numframes++] = graphics::UIRenderer::drawFavoriteNode;
                 indicatorIcons.push_back(icon_node);
             }
             fsi.positions.lastFavorite = numframes - 1;
