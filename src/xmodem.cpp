@@ -240,6 +240,23 @@ void XModemAdapter::clearListing()
     listingActive_ = false;
 }
 
+void XModemAdapter::abandonStaleTransfer()
+{
+    spiLock->lock();
+    if (file) {
+        file.flush();
+        file.close();
+    }
+    spiLock->unlock();
+    clearListing();
+    sessionKeyLen_ = 0;
+    isReceiving = false;
+    isTransmitting = false;
+    isEOT = false;
+    retrans = MAXRETRANS;
+    LOG_INFO("XModem: abandon stale transfer (new OPEN)");
+}
+
 void XModemAdapter::primeTransmitPacket()
 {
     xmodemStore = meshtastic_XModem_init_zero;
@@ -268,6 +285,11 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     switch (xmodemPacket.control) {
     case meshtastic_XModem_Control_SOH:
     case meshtastic_XModem_Control_STX:
+        // Host Ctrl+C leaves isReceiving/isTransmitting set; a fresh OPEN (seq 0) must reset
+        // or the OPEN is mis-handled as duplicate seq-0 data and the first STX is NAK'd.
+        if (xmodemPacket.seq == 0 && (isReceiving || isTransmitting)) {
+            abandonStaleTransfer();
+        }
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
             // NULL packet has the destination filename (protobuf bytes are not NUL-terminated)
             size_t n = xmodemPacket.buffer.size;

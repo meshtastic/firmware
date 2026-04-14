@@ -86,6 +86,8 @@ class XModemAdapter
     bool matchesSessionKey(const meshtastic_XModem &p) const;
     void clearListing();
     void primeTransmitPacket();
+    /** Host started a new OPEN while a prior session never got EOT/CAN (e.g. Ctrl+C on CLI). */
+    void abandonStaleTransfer();
 
   protected:
     meshtastic_XModem xmodemStore = meshtastic_XModem_init_zero;
