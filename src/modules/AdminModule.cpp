@@ -432,10 +432,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     case meshtastic_AdminMessage_set_fixed_position_tag: {
         LOG_INFO("Client received set_fixed_position command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
-        node->has_position = true;
-        node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
-        nodeDB->setLocalPosition(r->set_fixed_position);
+        nodeDB->updatePosition(nodeDB->getNodeNum(), r->set_fixed_position, RX_SRC_LOCAL);
         config.position.fixed_position = true;
         saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
 #if !MESHTASTIC_EXCLUDE_GPS

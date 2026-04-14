@@ -682,3 +682,52 @@ Finalize the platform target caps only after the stable-slot storage model and f
 
 - Phase 15 finalizes the current target caps but does not add synthetic node-population tooling or automated memory telemetry assertions yet. Those remain manual validation tasks if future cap increases are proposed.
 - If future work changes the fixed flash-overlay behavior, revisit whether the no-PSRAM `500` target should stay uniform across all ESP32-family builds or become backend-/board-specific again.
+
+## Phase 16: Flash Dirty-Slot Flush
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Stop the flash-backed NodeDB save path from rewriting the full dense store on every durable node change while keeping the existing full-rewrite path for layout changes, migration, and recovery.
+
+### What Changed
+
+- `src/mesh/NodeDB.h`
+  - Added flash-save tracking state:
+    - a per-storage-slot dirty bitmap
+    - a conservative `flashSlotFullRewriteRequired` flag
+  - Added private helpers for marking dirty slots, clearing dirty ranges, sizing the tracking bitmap, and forcing a full rewrite when storage layout changes.
+- `src/mesh/NodeDB.cpp`
+  - Marked flash-backed slots dirty whenever a live slot's metadata is refreshed outside a full metadata rebuild, which covers the existing NodeDB-owned mutation paths without changing their public API.
+  - Marked storage moves and slot clears as layout-dirty so compaction, reset, removal, and eviction still take the safe full-rewrite path instead of trying to incrementally preserve shifted dense ordering.
+  - Changed flash save behavior into two paths:
+    - full rewrite when booting from legacy `nodes.proto`, normalizing a non-dense flash scan, changing slot layout, or reinitializing the manifest
+    - incremental flush when only existing live slots are dirty
+  - Added per-slot verification helpers so incremental saves verify only the slots they rewrote, while full rewrites still verify the whole store including cleared tail slots.
+  - Changed `clearLocalPosition()` to refresh NodeDB metadata so later NodeDB saves still persist that local-record mutation through the dirty-slot path.
+  - When boot scanning flash-backed state, the next save is now forced to rewrite if:
+    - live records were admitted from non-identity flash slots
+    - any records were rejected
+    - any records were truncated
+- `src/modules/AdminModule.cpp`
+  - Replaced the fixed-position admin path's direct local-node writes with `nodeDB->updatePosition(..., RX_SRC_LOCAL)` so the existing NodeDB-owned mutation path marks the slot dirty before `saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG)`.
+
+### Important Constraints For Later Phases
+
+- Phase 16 only makes ordinary record updates incremental. Any operation that changes dense storage layout still forces a full rewrite on the next flash save.
+- The dirty bitmap is keyed by current dense storage index, not by `NodeNum` or raw flash slot number. If a later phase changes dense-slot identity again, it must update the dirty-tracking contract together with `flashSlotByStorageIndex`.
+- Incremental verification is intentionally scoped to rewritten slots. Full-store verification still exists, but it now only runs when phase 16 takes the full-rewrite path.
+- The low-level flash helper still rewrites an entire page file for each slot update. Phase 16 reduces how many slot writes happen per save; it does not add a page cache or batched page writer yet.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e heltec-v3`
+- `pio run -e rak4631`
+
+### Follow-Up Notes
+
+- The main remaining flash-write optimization is page-level batching: multiple dirty slots in the same page still cause multiple page rewrites during one save.
+- Phase 16 assumes NodeDB-owned mutators or metadata refreshes remain the way durable node record edits are recorded. If a future phase adds new direct writer paths, it must either route them through NodeDB helpers or explicitly mark the affected slots dirty.

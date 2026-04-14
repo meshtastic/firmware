@@ -406,6 +406,10 @@ class NodeDB
     bool loadFromFlashSlotStore();
     bool ensureFlashSlotLoaded(uint16_t storageIndex);
     bool ensureAllLiveSlotsLoaded();
+    void resizeFlashSlotTracking(size_t slotCount);
+    void markFlashSlotDirty(uint16_t storageIndex);
+    void clearFlashSlotDirty(size_t beginIndex, size_t endIndex);
+    void markFlashSlotLayoutDirty();
     void moveStorageSlot(uint16_t destIndex, uint16_t sourceIndex);
     void clearStorageSlots(size_t beginIndex, size_t endIndex);
     void resetFlashSlotState();
@@ -438,6 +442,8 @@ class NodeDB
     bool flashSlotStoreActive = false;
     std::vector<uint16_t> flashSlotByStorageIndex;
     std::vector<uint8_t> flashSlotCacheValid;
+    std::vector<uint8_t> flashSlotDirty;
+    bool flashSlotFullRewriteRequired = false;
     ArraySlotStore arraySlotStore;
     NodeStore *nodeStore = nullptr;
 };
