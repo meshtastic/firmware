@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import struct
 import os
 import queue
 import random
@@ -27,8 +26,6 @@ HEADER_LEN = 4
 DEFAULT_API_PORT = 4403
 DEFAULT_HOP_LIMIT = 0
 LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
-REPLAY_REQUEST_SIZE = 4
-HEARTBEAT_STATUS_SIZE = 8
 MISSING_SEQ_RETRY_INTERVAL_SEC = 1.0
 INPUT_BATCH_WINDOW_SEC = .5
 INPUT_BATCH_MAX_BYTES = 64
@@ -280,6 +277,8 @@ class SentShellFrame:
     cols: int = 0
     rows: int = 0
     flags: int = 0
+    last_tx_seq: int = 0
+    last_rx_seq: int = 0
 
 
 @dataclass
@@ -324,10 +323,6 @@ class SessionState:
     def highest_sent_seq(self) -> int:
         with self.tx_lock:
             return max(0, self.next_seq - 1)
-
-    def heartbeat_payload(self) -> bytes:
-        with self.tx_lock:
-            return encode_heartbeat_status(max(0, self.next_seq - 1), self.last_rx_seq)
 
     def note_outbound_packet(self, heartbeat: bool = False) -> None:
         with self.tx_lock:
@@ -475,26 +470,6 @@ class SessionState:
             return [frame for frame in self.tx_history if frame.seq >= start_seq]
 
 
-def encode_replay_request(start_seq: int) -> bytes:
-    return struct.pack(">I", start_seq)
-
-
-def decode_replay_request(payload: bytes) -> Optional[int]:
-    if len(payload) < REPLAY_REQUEST_SIZE:
-        return None
-    return struct.unpack(">I", payload[:REPLAY_REQUEST_SIZE])[0]
-
-
-def encode_heartbeat_status(last_tx_seq: int, last_rx_seq: int) -> bytes:
-    return struct.pack(">II", last_tx_seq, last_rx_seq)
-
-
-def decode_heartbeat_status(payload: bytes) -> Optional[tuple[int, int]]:
-    if len(payload) < HEARTBEAT_STATUS_SIZE:
-        return None
-    return struct.unpack(">II", payload[:HEARTBEAT_STATUS_SIZE])
-
-
 def send_toradio(transport, toradio) -> None:
     send_stream_frame(transport, toradio.SerializeToString())
 
@@ -530,6 +505,8 @@ def send_shell_frame(
     ack_seq: Optional[int] = None,
     seq: Optional[int] = None,
     flags: int = 0,
+    last_tx_seq: int = 0,
+    last_rx_seq: int = 0,
     remember: bool = True,
     heartbeat: bool = False,
 ) -> int:
@@ -548,21 +525,40 @@ def send_shell_frame(
     shell.cols = cols
     shell.rows = rows
     shell.flags = flags
+    shell.last_tx_seq = last_tx_seq
+    shell.last_rx_seq = last_rx_seq
     if payload:
         shell.payload = payload
     with state.socket_lock:
         send_toradio(transport, make_toradio_packet(state.pb2, state, shell))
     if remember:
         state.remember_sent_frame(
-            SentShellFrame(op=op, session_id=session_id, seq=seq, ack_seq=ack_seq, payload=payload, cols=cols, rows=rows, flags=flags)
+            SentShellFrame(
+                op=op,
+                session_id=session_id,
+                seq=seq,
+                ack_seq=ack_seq,
+                payload=payload,
+                cols=cols,
+                rows=rows,
+                flags=flags,
+                last_tx_seq=last_tx_seq,
+                last_rx_seq=last_rx_seq,
+            )
         )
     state.note_outbound_packet(heartbeat=heartbeat)
     return seq
 
 
 def send_ack_frame(transport, state: SessionState, replay_from: Optional[int] = None) -> None:
-    payload = b"" if replay_from is None else encode_replay_request(replay_from)
-    send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.ACK, payload=payload, seq=0, remember=False)
+    send_shell_frame(
+        transport,
+        state,
+        state.pb2.mesh.RemoteShell.ACK,
+        seq=0,
+        last_rx_seq=0 if replay_from is None else replay_from,
+        remember=False,
+    )
 
 
 def replay_frames_from(transport, state: SessionState, start_seq: int) -> None:
@@ -584,6 +580,8 @@ def replay_frames_from(transport, state: SessionState, start_seq: int) -> None:
         ack_seq=frame.ack_seq,
         seq=frame.seq,
         flags=frame.flags,
+        last_tx_seq=frame.last_tx_seq,
+        last_rx_seq=frame.last_rx_seq,
         remember=False,
     )
 
@@ -625,9 +623,8 @@ def reader_loop(transport, state: SessionState) -> None:
             state.set_receive_cursor(shell.seq)
             state.active = True
             state.opened_event.set()
-            pid = int.from_bytes(shell.payload, "big") if shell.payload else 0
             state.event_queue.put(
-                f"opened session=0x{shell.session_id:08x} cols={shell.cols} rows={shell.rows} pid={pid}"
+                f"opened session=0x{shell.session_id:08x} cols={shell.cols} rows={shell.rows}"
             )
             if state.replay_log_path is not None:
                 state.event_queue.put(f"replay log: {state.replay_log_path}")
@@ -645,18 +642,17 @@ def reader_loop(transport, state: SessionState) -> None:
             state.active = False
             return True
         elif shell.op == state.pb2.mesh.RemoteShell.PONG:
-            heartbeat_status = decode_heartbeat_status(shell.payload)
-            if heartbeat_status is not None:
-                remote_last_tx_seq, remote_last_rx_seq = heartbeat_status
-                local_latest_tx_seq = state.highest_sent_seq()
-                if remote_last_rx_seq < local_latest_tx_seq:
-                    replay_frames_from(transport, state, remote_last_rx_seq + 1)
-                if remote_last_tx_seq > state.current_ack_seq():
-                    state.note_peer_reported_tx_seq(remote_last_tx_seq)
-                    req = state.request_missing_seq_once()
-                    if req is not None:
-                        state.note_missing_seq_requested(req, "heartbeat_status")
-                        send_ack_frame(transport, state, replay_from=req)
+            remote_last_tx_seq = shell.last_tx_seq
+            remote_last_rx_seq = shell.last_rx_seq
+            local_latest_tx_seq = state.highest_sent_seq()
+            if remote_last_rx_seq < local_latest_tx_seq:
+                replay_frames_from(transport, state, remote_last_rx_seq + 1)
+            if remote_last_tx_seq > state.current_ack_seq():
+                state.note_peer_reported_tx_seq(remote_last_tx_seq)
+                req = state.request_missing_seq_once()
+                if req is not None:
+                    state.note_missing_seq_requested(req, "heartbeat_status")
+                    send_ack_frame(transport, state, replay_from=req)
             #state.event_queue.put("pong")
         return False
 
@@ -679,7 +675,7 @@ def reader_loop(transport, state: SessionState) -> None:
             #state.prune_sent_frames(shell.ack_seq)
             if shell.op == state.pb2.mesh.RemoteShell.ACK:
                 #state.event_queue.put("peer requested replay")
-                replay_from = decode_replay_request(shell.payload)
+                replay_from = shell.last_rx_seq if shell.last_rx_seq > 0 else None
                 if replay_from is not None:
                     #state.event_queue.put(f"peer requested replay from seq={replay_from}")
                     replay_frames_from(transport, state, replay_from)
@@ -742,7 +738,8 @@ def heartbeat_loop(transport, state: SessionState) -> None:
                     transport,
                     state,
                     state.pb2.mesh.RemoteShell.PING,
-                    payload=state.heartbeat_payload(),
+                    last_tx_seq=state.highest_sent_seq(),
+                    last_rx_seq=state.current_ack_seq(),
                     remember=True,
                     heartbeat=True,
                 )

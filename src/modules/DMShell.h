@@ -12,18 +12,6 @@
 
 #if defined(ARCH_PORTDUINO)
 
-struct DMShellFrame {
-    meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;
-    uint32_t sessionId = 0;
-    uint32_t seq = 0;
-    uint32_t ackSeq = 0;
-    uint32_t cols = 0;
-    uint32_t rows = 0;
-    uint32_t flags = 0;
-    uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN] = {0};
-    size_t payloadLen = 0;
-};
-
 struct DMShellSession {
     bool active = false;
     uint32_t sessionId = 0;
@@ -68,28 +56,20 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     DMShellSession session;
     pid_t pendingChildPid = -1;
 
-    bool parseFrame(const meshtastic_MeshPacket &mp, DMShellFrame &outFrame);
+    bool parseFrame(const meshtastic_MeshPacket &mp, meshtastic_RemoteShell &outFrame);
     bool isAuthorizedPacket(const meshtastic_MeshPacket &mp) const;
-    bool openSession(const meshtastic_MeshPacket &mp, const DMShellFrame &frame);
-    bool handleAckFrame(const DMShellFrame &frame);
-    bool shouldProcessIncomingFrame(const DMShellFrame &frame);
-    bool writeSessionInput(const DMShellFrame &frame);
+    bool openSession(const meshtastic_MeshPacket &mp, const meshtastic_RemoteShell &frame);
+    bool shouldProcessIncomingFrame(const meshtastic_RemoteShell &frame);
+    bool writeSessionInput(const meshtastic_RemoteShell &frame);
     void closeSession(const char *reason, bool notifyPeer);
     void reapChildIfExited();
     void processPendingChildReap();
 
-    void rememberSentFrame(meshtastic_RemoteShell_OpCode op, uint32_t sessionId, uint32_t seq, const uint8_t *payload,
-                           size_t payloadLen, uint32_t cols, uint32_t rows, uint32_t ackSeq, uint32_t flags);
-    void pruneSentFrames(uint32_t ackSeq);
+    void rememberSentFrame(meshtastic_RemoteShell frame);
     void resendFramesFrom(uint32_t startSeq);
     void sendAck(uint32_t replayFromSeq = 0);
-    void sendFrameToPeer(NodeNum peer, uint8_t channel, meshtastic_RemoteShell_OpCode op, uint32_t sessionId, uint32_t seq,
-                         const uint8_t *payload, size_t payloadLen, uint32_t cols = 0, uint32_t rows = 0, uint32_t ackSeq = 0,
-                         uint32_t flags = 0, bool remember = true);
-    void sendError(const char *message);
-    meshtastic_MeshPacket *buildFramePacket(meshtastic_RemoteShell_OpCode op, uint32_t sessionId, uint32_t seq,
-                                            const uint8_t *payload, size_t payloadLen, uint32_t cols, uint32_t rows,
-                                            uint32_t ackSeq, uint32_t flags);
+    void sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, bool remember = true);
+    void sendError(const char *message, NodeNum peer = 0);
 };
 
 extern DMShellModule *dmShellModule;
