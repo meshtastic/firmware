@@ -28,7 +28,7 @@ namespace
 {
 constexpr uint16_t PTY_COLS_DEFAULT = 120;
 constexpr uint16_t PTY_ROWS_DEFAULT = 40;
-constexpr size_t MAX_PTY_READ_SIZE = 200;
+constexpr size_t MAX_MESSAGE_SIZE = 200;
 constexpr size_t REPLAY_REQUEST_SIZE = sizeof(uint32_t);
 constexpr size_t HEARTBEAT_STATUS_SIZE = sizeof(uint32_t) * 2;
 
@@ -129,7 +129,7 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         if (!writeSessionInput(frame)) {
             sendError("input_write_failed");
         } else {
-            uint8_t outBuf[MAX_PTY_READ_SIZE];
+            uint8_t outBuf[MAX_MESSAGE_SIZE];
             const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
             if (bytesRead > 0) {
                 LOG_WARN("DMShell: read %d bytes from PTY", bytesRead);
@@ -194,7 +194,7 @@ int32_t DMShellModule::runOnce()
         return 50;
     }
 
-    uint8_t outBuf[MAX_PTY_READ_SIZE];
+    uint8_t outBuf[MAX_MESSAGE_SIZE];
     while (session.masterFd >= 0) {
         const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
         if (bytesRead > 0) {
@@ -528,7 +528,7 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, uint8_t channel, meshtastic_Re
 
 void DMShellModule::sendError(const char *message)
 {
-    const size_t len = strnlen(message, meshtastic_Constants_DATA_PAYLOAD_LEN);
+    const size_t len = strnlen(message, MAX_MESSAGE_SIZE);
     sendControl(meshtastic_RemoteShell_OpCode_ERROR, reinterpret_cast<const uint8_t *>(message), len);
 }
 
@@ -546,6 +546,7 @@ meshtastic_MeshPacket *DMShellModule::buildFramePacket(meshtastic_RemoteShell_Op
     frame.flags = flags;
 
     if (payload && payloadLen > 0) {
+        assert(payloadLen <= sizeof(frame.payload.bytes));
         memcpy(frame.payload.bytes, payload, payloadLen);
         frame.payload.size = payloadLen;
     }
