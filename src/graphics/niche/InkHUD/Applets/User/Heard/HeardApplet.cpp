@@ -108,16 +108,13 @@ void InkHUD::HeardApplet::populateFromNodeDB()
 // Handled by base class: ChronoListApplet
 std::string InkHUD::HeardApplet::getHeaderText()
 {
-    uint16_t nodeCount = nodeDB->getNumMeshNodes() - 1; // Don't count our own node
+    const uint16_t totalNodes = nodeDB->getNumMeshNodes();
+    const uint16_t nodeCount = (totalNodes > 0) ? (totalNodes - 1) : 0; // Don't count our own node
 
     std::string text = "Heard: ";
-
-    // Print node count, if nodeDB not yet nearing full
-    if (nodeCount < MAX_NUM_NODES) {
-        text += to_string(nodeCount); // Max nodes
-        text += " ";
-        text += (nodeCount == 1) ? "node" : "nodes";
-    }
+    text += to_string(nodeCount);
+    text += " ";
+    text += (nodeCount == 1) ? "node" : "nodes";
 
     return text;
 }

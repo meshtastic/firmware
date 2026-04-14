@@ -7,9 +7,11 @@
 #endif
 #include "Throttle.h"
 
-#define PACKETHISTORY_MAX                                                                                                        \
-    max((u_int32_t)(MAX_NUM_NODES * 2.0),                                                                                        \
-        (u_int32_t)100) // x2..3  Should suffice. Empirical setup. 16B per record malloc'ed, but no less than 100
+namespace
+{
+// Packet dedupe history should follow traffic expectations, not NodeDB capacity.
+static constexpr uint32_t PACKETHISTORY_DEFAULT_CAPACITY = 256;
+} // namespace
 
 #define RECENT_WARN_AGE (10 * 60 * 1000L) // Warn if the packet that gets removed was more recent than 10 min
 
@@ -18,9 +20,9 @@
 
 PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPackets(NULL) // Initialize members
 {
-    if (size < 4 || size > PACKETHISTORY_MAX) { // Copilot suggested - makes sense
-        LOG_WARN("Packet History - Invalid size %d, using default %d", size, PACKETHISTORY_MAX);
-        size = PACKETHISTORY_MAX; // Use default size if invalid
+    if (size < 4 || size > PACKETHISTORY_DEFAULT_CAPACITY) {
+        LOG_WARN("Packet History - Invalid size %d, using default %d", size, PACKETHISTORY_DEFAULT_CAPACITY);
+        size = PACKETHISTORY_DEFAULT_CAPACITY;
     }
 
     // Allocate memory for the recent packets array
