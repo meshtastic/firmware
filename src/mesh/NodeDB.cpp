@@ -680,6 +680,18 @@ bool nodesHaveEquivalentEncoding(const meshtastic_NodeInfoLite &lhs, const mesht
            memcmp(lhsBuffer, rhsBuffer, lhsLen) == 0;
 }
 
+bool verifyFlashNodeSlot(const FlashSlotStore &flashSlotStore, uint16_t slotIndex, const meshtastic_NodeInfoLite &expectedNode)
+{
+    meshtastic_NodeInfoLite decodedNode = meshtastic_NodeInfoLite_init_default;
+    return flashSlotStore.readSlot(slotIndex, decodedNode) && nodesHaveEquivalentEncoding(expectedNode, decodedNode);
+}
+
+bool verifyFlashNodeSlotCleared(const FlashSlotStore &flashSlotStore, uint16_t slotIndex)
+{
+    meshtastic_NodeInfoLite decodedNode = meshtastic_NodeInfoLite_init_default;
+    return !flashSlotStore.readSlot(slotIndex, decodedNode);
+}
+
 bool verifyFlashNodeDatabase(const FlashSlotStore &flashSlotStore, const NodeStore &nodeStore, pb_size_t liveNodeCount)
 {
     FlashSlotStore::Manifest manifest;
@@ -688,17 +700,15 @@ bool verifyFlashNodeDatabase(const FlashSlotStore &flashSlotStore, const NodeSto
         return false;
     }
 
-    meshtastic_NodeInfoLite decodedNode = meshtastic_NodeInfoLite_init_default;
     for (uint16_t storageIndex = 0; storageIndex < liveNodeCount; ++storageIndex) {
-        if (!flashSlotStore.readSlot(storageIndex, decodedNode) ||
-            !nodesHaveEquivalentEncoding(nodeStore.slot(storageIndex), decodedNode)) {
+        if (!verifyFlashNodeSlot(flashSlotStore, storageIndex, nodeStore.slot(storageIndex))) {
             LOG_ERROR("Flash NodeDB verification failed at slot %u", static_cast<unsigned>(storageIndex));
             return false;
         }
     }
 
     for (uint16_t storageIndex = liveNodeCount; storageIndex < nodeStore.slotCount(); ++storageIndex) {
-        if (flashSlotStore.readSlot(storageIndex, decodedNode)) {
+        if (!verifyFlashNodeSlotCleared(flashSlotStore, storageIndex)) {
             LOG_ERROR("Flash NodeDB verification found stale slot %u", static_cast<unsigned>(storageIndex));
             return false;
         }
@@ -1335,12 +1345,16 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
 void NodeDB::clearLocalPosition()
 {
     meshtastic_NodeInfoLite *node = getMeshNode(nodeDB->getNodeNum());
+    if (!node) {
+        return;
+    }
     node->position.latitude_i = 0;
     node->position.longitude_i = 0;
     node->position.altitude = 0;
     node->position.time = 0;
     setLocalPosition(meshtastic_Position_init_default);
     localPositionUpdatedSinceBoot = false;
+    refreshNodeMeta(getStorageIndex(node));
 }
 
 void NodeDB::cleanupMeshDB()
@@ -1421,6 +1435,7 @@ bool NodeDB::loadFromFlashSlotStore()
     flashSlotStoreActive = true;
     flashSlotByStorageIndex.assign(nodeStore->slotCount(), INVALID_FLASH_SLOT_INDEX);
     flashSlotCacheValid.assign(nodeStore->slotCount(), 0);
+    resizeFlashSlotTracking(nodeStore->slotCount());
 
     std::vector<NodeMeta> scannedMeta;
     std::vector<NodeNum> admittedNodeNums;
@@ -1429,6 +1444,7 @@ bool NodeDB::loadFromFlashSlotStore()
 
     pb_size_t rejectedNodeCount = 0;
     pb_size_t truncatedNodeCount = 0;
+    bool requiresFullRewrite = false;
     for (uint16_t flashSlotIndex = 0; flashSlotIndex < manifest.slot_count; ++flashSlotIndex) {
         meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_default;
         if (!flashSlotStore.readSlot(flashSlotIndex, node)) {
@@ -1457,6 +1473,7 @@ bool NodeDB::loadFromFlashSlotStore()
 
         const uint16_t storageIndex = static_cast<uint16_t>(scannedMeta.size());
         flashSlotByStorageIndex.at(storageIndex) = flashSlotIndex;
+        requiresFullRewrite = requiresFullRewrite || (flashSlotIndex != storageIndex);
         scannedMeta.push_back(makeNodeMeta(node, storageIndex));
         admittedNodeNums.push_back(node.num);
     }
@@ -1465,9 +1482,13 @@ bool NodeDB::loadFromFlashSlotStore()
     nodeMeta = std::move(scannedMeta);
     resetDisplayOrder();
     rebuildNodeMetaLookup();
+    flashSlotFullRewriteRequired = requiresFullRewrite || rejectedNodeCount > 0 || truncatedNodeCount > 0;
 
     LOG_INFO("Loaded flash-slot NodeDB with %u live nodes (%u rejected, %u truncated)", static_cast<unsigned>(numMeshNodes),
              static_cast<unsigned>(rejectedNodeCount), static_cast<unsigned>(truncatedNodeCount));
+    if (flashSlotFullRewriteRequired) {
+        LOG_WARN("Flash slot NodeDB will normalize on next save");
+    }
     return true;
 }
 
@@ -1514,11 +1535,53 @@ bool NodeDB::ensureAllLiveSlotsLoaded()
     return true;
 }
 
+void NodeDB::resizeFlashSlotTracking(size_t slotCount)
+{
+    flashSlotDirty.assign(slotCount, 0);
+}
+
+void NodeDB::markFlashSlotDirty(uint16_t storageIndex)
+{
+    if (!prefersFlashSlotStore() || storageIndex >= nodeStore->slotCount()) {
+        return;
+    }
+
+    if (flashSlotDirty.size() != nodeStore->slotCount()) {
+        resizeFlashSlotTracking(nodeStore->slotCount());
+    }
+
+    flashSlotDirty.at(storageIndex) = 1;
+}
+
+void NodeDB::clearFlashSlotDirty(size_t beginIndex, size_t endIndex)
+{
+    if (flashSlotDirty.empty() || beginIndex >= endIndex || beginIndex >= flashSlotDirty.size()) {
+        return;
+    }
+
+    const size_t clampedEndIndex = std::min(endIndex, flashSlotDirty.size());
+    std::fill(flashSlotDirty.begin() + beginIndex, flashSlotDirty.begin() + clampedEndIndex, 0);
+}
+
+void NodeDB::markFlashSlotLayoutDirty()
+{
+    if (!prefersFlashSlotStore()) {
+        return;
+    }
+
+    flashSlotFullRewriteRequired = true;
+    if (flashSlotDirty.size() != nodeStore->slotCount()) {
+        resizeFlashSlotTracking(nodeStore->slotCount());
+    }
+}
+
 void NodeDB::moveStorageSlot(uint16_t destIndex, uint16_t sourceIndex)
 {
     if (destIndex == sourceIndex) {
         return;
     }
+
+    markFlashSlotLayoutDirty();
 
     if (!flashSlotStoreActive) {
         nodeStore->slot(destIndex) = nodeStore->slot(sourceIndex);
@@ -1540,6 +1603,9 @@ void NodeDB::moveStorageSlot(uint16_t destIndex, uint16_t sourceIndex)
 void NodeDB::clearStorageSlots(size_t beginIndex, size_t endIndex)
 {
     const size_t clampedEndIndex = std::min(endIndex, nodeStore->slotCount());
+    if (beginIndex < clampedEndIndex) {
+        markFlashSlotLayoutDirty();
+    }
     nodeStore->clearSlots(beginIndex, clampedEndIndex);
 
     if (!flashSlotStoreActive) {
@@ -1557,6 +1623,8 @@ void NodeDB::resetFlashSlotState()
     flashSlotStoreActive = false;
     flashSlotByStorageIndex.clear();
     flashSlotCacheValid.clear();
+    flashSlotDirty.clear();
+    flashSlotFullRewriteRequired = false;
 }
 
 NodeDB::NodeMeta NodeDB::makeNodeMeta(const meshtastic_NodeInfoLite &node, uint16_t storageIndex)
@@ -1638,6 +1706,9 @@ void NodeDB::refreshNodeMeta(uint16_t storageIndex)
     }
 
     nodeMeta.at(storageIndex) = makeNodeMeta(slotAt(storageIndex), storageIndex);
+    if (!rebuildingNodeMeta) {
+        markFlashSlotDirty(storageIndex);
+    }
 
     if (!rebuildingNodeMeta && ((storageIndex >= previousMetaCount) || (previousNodeNum != nodeMeta.at(storageIndex).node_num))) {
         rebuildNodeMetaLookup();
@@ -1945,6 +2016,10 @@ void NodeDB::loadFromDisk()
         }
         resetDisplayOrder();
         rebuildNodeMeta();
+        if (prefersFlashSlotStore()) {
+            resizeFlashSlotTracking(nodeStore->slotCount());
+            flashSlotFullRewriteRequired = loadedLegacyNodeDatabase;
+        }
 
         if (loadedLegacyNodeDatabase && !saveNodeDatabaseToDisk()) {
             LOG_ERROR("Failed to migrate legacy NodeDB into flash slot store");
@@ -2229,11 +2304,6 @@ bool NodeDB::saveNodeDatabaseToDisk()
     FSCom.mkdir("/prefs");
     spiLock->unlock();
 
-    if (!ensureAllLiveSlotsLoaded()) {
-        LOG_ERROR("Can't save prefs because not all live flash-backed slots could be loaded");
-        return false;
-    }
-
     if (prefersFlashSlotStore()) {
         if (nodeStore->slotCount() > UINT16_MAX) {
             LOG_ERROR("Flash NodeDB slot count %u exceeds flash manifest capacity",
@@ -2241,42 +2311,96 @@ bool NodeDB::saveNodeDatabaseToDisk()
             return false;
         }
 
+        resizeFlashSlotTracking(nodeStore->slotCount());
         FlashSlotStore::Manifest manifest;
         const uint16_t slotCount = static_cast<uint16_t>(nodeStore->slotCount());
+        bool fullRewrite = flashSlotFullRewriteRequired;
         if (!flashSlotStore.readManifest(manifest) || manifest.slot_count != slotCount) {
             LOG_INFO("Initialize flash slot NodeDB with %u slots", static_cast<unsigned>(slotCount));
             if (!flashSlotStore.initialize(slotCount)) {
                 LOG_ERROR("Can't initialize flash slot NodeDB");
                 return false;
             }
+            fullRewrite = true;
         }
 
-        LOG_INFO("Save flash slot NodeDB (%u live nodes)", numMeshNodes);
-        logNodeDbMemorySnapshot("before flash nodedb save", numMeshNodes, nodeStore->slotCount());
-        for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
-            if (!flashSlotStore.writeSlot(storageIndex, nodeStore->slot(storageIndex))) {
-                LOG_ERROR("Failed to write flash slot %u", static_cast<unsigned>(storageIndex));
+        if (fullRewrite) {
+            if (!ensureAllLiveSlotsLoaded()) {
+                LOG_ERROR("Can't save prefs because not all live flash-backed slots could be loaded");
                 return false;
             }
-        }
 
-        for (uint16_t storageIndex = numMeshNodes; storageIndex < slotCount; ++storageIndex) {
-            if (!flashSlotStore.clearSlot(storageIndex)) {
-                LOG_ERROR("Failed to clear flash slot %u", static_cast<unsigned>(storageIndex));
+            LOG_INFO("Save flash slot NodeDB (%u live nodes, full rewrite)", numMeshNodes);
+            logNodeDbMemorySnapshot("before flash nodedb save", numMeshNodes, nodeStore->slotCount());
+            for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
+                if (!flashSlotStore.writeSlot(storageIndex, nodeStore->slot(storageIndex))) {
+                    LOG_ERROR("Failed to write flash slot %u", static_cast<unsigned>(storageIndex));
+                    return false;
+                }
+            }
+
+            for (uint16_t storageIndex = numMeshNodes; storageIndex < slotCount; ++storageIndex) {
+                if (!flashSlotStore.clearSlot(storageIndex)) {
+                    LOG_ERROR("Failed to clear flash slot %u", static_cast<unsigned>(storageIndex));
+                    return false;
+                }
+            }
+
+            if (!verifyFlashNodeDatabase(flashSlotStore, *nodeStore, numMeshNodes)) {
+                LOG_ERROR("Flash slot NodeDB verification failed");
                 return false;
             }
-        }
 
-        if (!verifyFlashNodeDatabase(flashSlotStore, *nodeStore, numMeshNodes)) {
-            LOG_ERROR("Flash slot NodeDB verification failed");
-            return false;
-        }
+            flashSlotFullRewriteRequired = false;
+            clearFlashSlotDirty(0, slotCount);
 
-        if (flashSlotStoreActive) {
-            for (uint16_t storageIndex = 0; storageIndex < slotCount; ++storageIndex) {
-                flashSlotByStorageIndex.at(storageIndex) =
-                    (storageIndex < numMeshNodes) ? storageIndex : INVALID_FLASH_SLOT_INDEX;
-                flashSlotCacheValid.at(storageIndex) = storageIndex < numMeshNodes;
+            if (flashSlotStoreActive) {
+                for (uint16_t storageIndex = 0; storageIndex < slotCount; ++storageIndex) {
+                    flashSlotByStorageIndex.at(storageIndex) =
+                        (storageIndex < numMeshNodes) ? storageIndex : INVALID_FLASH_SLOT_INDEX;
+                    flashSlotCacheValid.at(storageIndex) = storageIndex < numMeshNodes;
+                }
+            }
+        } else {
+            std::vector<uint16_t> dirtyStorageIndices;
+            dirtyStorageIndices.reserve(numMeshNodes);
+            for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
+                if (flashSlotDirty.at(storageIndex)) {
+                    dirtyStorageIndices.push_back(storageIndex);
+                }
+            }
+
+            if (dirtyStorageIndices.empty()) {
+                LOG_INFO("Flash slot NodeDB save skipped (%u live nodes, no dirty slots)", numMeshNodes);
+                return true;
+            }
+
+            LOG_INFO("Save flash slot NodeDB (%u live nodes, %u dirty slots)", numMeshNodes,
+                     static_cast<unsigned>(dirtyStorageIndices.size()));
+            logNodeDbMemorySnapshot("before flash nodedb save", numMeshNodes, nodeStore->slotCount());
+            for (const uint16_t storageIndex : dirtyStorageIndices) {
+                uint16_t flashSlotIndex = storageIndex;
+                if (flashSlotStoreActive && storageIndex < flashSlotByStorageIndex.size() &&
+                    flashSlotByStorageIndex.at(storageIndex) != INVALID_FLASH_SLOT_INDEX) {
+                    flashSlotIndex = flashSlotByStorageIndex.at(storageIndex);
+                }
+
+                if (!flashSlotStore.writeSlot(flashSlotIndex, nodeStore->slot(storageIndex))) {
+                    LOG_ERROR("Failed to write flash slot %u for storage index %u", static_cast<unsigned>(flashSlotIndex),
+                              static_cast<unsigned>(storageIndex));
+                    return false;
+                }
+
+                if (!verifyFlashNodeSlot(flashSlotStore, flashSlotIndex, nodeStore->slot(storageIndex))) {
+                    LOG_ERROR("Flash slot NodeDB verification failed at slot %u", static_cast<unsigned>(flashSlotIndex));
+                    return false;
+                }
+
+                if (flashSlotStoreActive) {
+                    flashSlotByStorageIndex.at(storageIndex) = flashSlotIndex;
+                    flashSlotCacheValid.at(storageIndex) = 1;
+                }
+                flashSlotDirty.at(storageIndex) = 0;
             }
         }
 
