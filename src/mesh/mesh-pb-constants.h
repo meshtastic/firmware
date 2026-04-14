@@ -49,7 +49,7 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increas
 #define MAX_NUM_NODES 80
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 #include "Esp.h"
-static inline int get_max_num_nodes()
+static inline int get_default_esp32s3_max_num_nodes()
 {
     uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Convert Bytes to MB
     if (flash_size >= 15) {
@@ -60,7 +60,28 @@ static inline int get_max_num_nodes()
         return 100;
     }
 }
-#define MAX_NUM_NODES get_max_num_nodes()
+
+#if defined(BOARD_HAS_PSRAM)
+static inline int get_psram_esp32s3_max_num_nodes()
+{
+    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Convert Bytes to MB
+    if (flash_size >= 15) {
+        return 3000;
+    } else if (flash_size >= 7) {
+        return 1000;
+    } else {
+        return 500;
+    }
+}
+
+static constexpr size_t NODEDB_PSRAM_HEADROOM_BYTES = 512 * 1024;
+static constexpr size_t NODEDB_HEAP_HEADROOM_BYTES = 96 * 1024;
+static constexpr size_t NODEDB_ESTIMATED_DRAM_BYTES_PER_NODE = 32;
+
+#define MAX_NUM_NODES get_psram_esp32s3_max_num_nodes()
+#else
+#define MAX_NUM_NODES get_default_esp32s3_max_num_nodes()
+#endif
 #else
 #define MAX_NUM_NODES 100
 #endif
