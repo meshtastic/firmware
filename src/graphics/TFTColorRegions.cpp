@@ -101,13 +101,16 @@ static const TFTThemeDef kThemes[] = {
             {kStatusColor, kHeaderBackground},         // NavigationBar  (icon fg, bar bg)
             {kTitleColor, TFTPalette::Black},          // NavigationArrow (arrow fg, body bg)
         },
-        kHeaderBackground, // headerBg
-        kTitleColor,       // headerText
-        kStatusColor,      // headerStatus
-        TFTPalette::Black, // bodyBg
-        TFTPalette::White, // bodyFg
-        false,             // fullFrameInvert
-        true,              // visible
+        TFTPalette::Good,   // batteryFillGood
+        TFTPalette::Medium, // batteryFillMedium
+        TFTPalette::Bad,    // batteryFillBad
+        kHeaderBackground,  // headerBg
+        kTitleColor,        // headerText
+        kStatusColor,       // headerStatus
+        TFTPalette::Black,  // bodyBg
+        TFTPalette::White,  // bodyFg
+        false,              // fullFrameInvert
+        true,               // visible
     },
 
     // ── Default Light (ThemeID::DefaultLight = 1) ────────────────────
@@ -133,6 +136,9 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Black, TFTPalette::LightGray}, // NavigationBar  (icon fg, bar bg)
             {TFTPalette::Black, TFTPalette::White},     // NavigationArrow (arrow fg, body bg)
         },
+        TFTPalette::Good,      // batteryFillGood
+        TFTPalette::Medium,    // batteryFillMedium
+        TFTPalette::Bad,       // batteryFillBad
         TFTPalette::LightGray, // headerBg
         TFTPalette::Black,     // headerText
         TFTPalette::Black,     // headerStatus
@@ -165,13 +171,16 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Gold, TFTPalette::ChristmasRed},   // NavigationBar  (icon fg, bar bg)
             {TFTPalette::Gold, TFTPalette::Pine},           // NavigationArrow (arrow fg, body bg)
         },
-        TFTPalette::ChristmasRed, // headerBg
-        TFTPalette::Gold,         // headerText
-        TFTPalette::Gold,         // headerStatus
-        TFTPalette::Pine,         // bodyBg
-        TFTPalette::White,        // bodyFg
-        true,                     // fullFrameInvert
-        false,                    // visible
+        TFTPalette::ChristmasGreen, // batteryFillGood
+        TFTPalette::Gold,           // batteryFillMedium
+        TFTPalette::ChristmasRed,   // batteryFillBad
+        TFTPalette::ChristmasRed,   // headerBg
+        TFTPalette::Gold,           // headerText
+        TFTPalette::Gold,           // headerStatus
+        TFTPalette::Pine,           // bodyBg
+        TFTPalette::White,          // bodyFg
+        true,                       // fullFrameInvert
+        false,                      // visible
     },
 
     // ── Pink (ThemeID::Pink = 3) — light variant ─────────────────────
@@ -197,6 +206,9 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::White, TFTPalette::HotPink},     // NavigationBar  (icon fg, bar bg)
             {TFTPalette::HotPink, TFTPalette::PalePink},  // NavigationArrow (arrow fg, body bg)
         },
+        TFTPalette::DeepPink, // batteryFillGood
+        TFTPalette::HotPink,  // batteryFillMedium
+        TFTPalette::Bad,      // batteryFillBad
         TFTPalette::HotPink,  // headerBg
         TFTPalette::White,    // headerText
         TFTPalette::White,    // headerStatus
@@ -229,6 +241,9 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::SkyBlue, TFTPalette::DeepBlue}, // NavigationBar  (icon fg, bar bg)
             {TFTPalette::SkyBlue, TFTPalette::Black},    // NavigationArrow (arrow fg, body bg)
         },
+        TFTPalette::SkyBlue,  // batteryFillGood
+        TFTPalette::Medium,   // batteryFillMedium
+        TFTPalette::Bad,      // batteryFillBad
         TFTPalette::DeepBlue, // headerBg
         TFTPalette::White,    // headerText
         TFTPalette::SkyBlue,  // headerStatus
@@ -261,6 +276,9 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::White, TFTPalette::CreamOrange}, // NavigationBar  (icon fg, bar bg)
             {TFTPalette::CreamOrange, TFTPalette::White}, // NavigationArrow (arrow fg, body bg)
         },
+        TFTPalette::DeepOrange,  // batteryFillGood
+        TFTPalette::Gold,        // batteryFillMedium
+        TFTPalette::Bad,         // batteryFillBad
         TFTPalette::CreamOrange, // headerBg
         TFTPalette::White,       // headerText
         TFTPalette::White,       // headerStatus
@@ -295,6 +313,9 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // NavigationBar
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // NavigationArrow
         },
+        TFTPalette::Black,           // batteryFillGood
+        TFTPalette::Black,           // batteryFillMedium
+        TFTPalette::Black,           // batteryFillBad
         TFTPalette::MeshtasticGreen, // headerBg (no separate bar — pure monochrome)
         TFTPalette::Black,           // headerText
         TFTPalette::Black,           // headerStatus
@@ -327,6 +348,9 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::ClassicRed, TFTPalette::Black}, // NavigationBar
             {TFTPalette::ClassicRed, TFTPalette::Black}, // NavigationArrow
         },
+        TFTPalette::Black,      // batteryFillGood
+        TFTPalette::Black,      // batteryFillMedium
+        TFTPalette::Black,      // batteryFillBad
         TFTPalette::ClassicRed, // headerBg
         TFTPalette::Black,      // headerText
         TFTPalette::Black,      // headerStatus
@@ -359,6 +383,9 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::White, TFTPalette::Black}, // NavigationBar
             {TFTPalette::White, TFTPalette::Black}, // NavigationArrow
         },
+        TFTPalette::Black, // batteryFillGood
+        TFTPalette::Black, // batteryFillMedium
+        TFTPalette::Black, // batteryFillBad
         TFTPalette::White, // headerBg
         TFTPalette::Black, // headerText
         TFTPalette::Black, // headerStatus
@@ -538,6 +565,18 @@ bool isThemeFullFrameInvert()
 #else
     return false;
 #endif
+}
+
+uint16_t getThemeBatteryFillColor(int batteryPercent)
+{
+    const TFTThemeDef &theme = kThemes[resolveThemeIndex()];
+    if (batteryPercent <= 20) {
+        return theme.batteryFillBad;
+    }
+    if (batteryPercent <= 50) {
+        return theme.batteryFillMedium;
+    }
+    return theme.batteryFillGood;
 }
 
 void loadThemeDefaults()

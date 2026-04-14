@@ -110,6 +110,9 @@ struct TFTThemeDef {
     uint32_t uniqueIdentifier; // Stable persisted value copied into uiconfig.screen_rgb_color.
                                // Never reuse or renumber — see file-level notes above.
     TFTThemeRoleColor roles[static_cast<size_t>(TFTColorRole::Count)];
+    uint16_t batteryFillGood;
+    uint16_t batteryFillMedium;
+    uint16_t batteryFillBad;
     uint16_t headerBg;     // Header bar background
     uint16_t headerText;   // Header title text
     uint16_t headerStatus; // Header status icons / text
@@ -151,6 +154,7 @@ uint16_t getThemeHeaderStatus();
 uint16_t getThemeBodyBg();
 uint16_t getThemeBodyFg();
 bool isThemeFullFrameInvert();
+uint16_t getThemeBatteryFillColor(int batteryPercent);
 
 // Reinitialise default roleColors from the active theme.  Call after a
 // theme change so that any role registered without a prior setTFTColorRole()

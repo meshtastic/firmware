@@ -112,6 +112,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #if GRAPHICS_TFT_COLORING_ENABLED
     int statusLeftEndX = 0;
     int statusRightStartX = screenW;
+    const bool isClockHeader = transparent_background && show_date && (!titleStr || titleStr[0] == '\0');
+    const auto activeThemeId = getActiveTheme().id;
 #endif
 
     {
@@ -123,14 +125,10 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         // Clock frame uses transparent header + date + empty title.
         // For Pink/Creamsicle themes, tint status items (battery outline, %, date, mail icon)
         // to the theme accent color in the clock frame.
-        const bool isClockHeader = transparent_background && show_date && (!titleStr || titleStr[0] == '\0');
-        if (isClockHeader) {
-            const auto activeThemeId = getActiveTheme().id;
-            if (activeThemeId == ThemeID::Pink || activeThemeId == ThemeID::Creamsicle ||
-                activeThemeId == ThemeID::MeshtasticGreen || activeThemeId == ThemeID::ClassicRed ||
-                activeThemeId == ThemeID::MonochromeWhite) {
-                headerStatusColor = getThemeHeaderBg();
-            }
+        if (isClockHeader && (activeThemeId == ThemeID::Pink || activeThemeId == ThemeID::Creamsicle ||
+                              activeThemeId == ThemeID::MeshtasticGreen || activeThemeId == ThemeID::ClassicRed ||
+                              activeThemeId == ThemeID::MonochromeWhite)) {
+            headerStatusColor = getThemeHeaderBg();
         }
 
         if (transparent_background) {
@@ -219,22 +217,20 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     bool useHorizontalBattery = (currentResolution == ScreenResolution::High && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 #if GRAPHICS_TFT_COLORING_ENABLED
-    auto batteryFillColorForPercent = [](int percent) {
-        if (percent <= 20) {
-            return TFTPalette::Bad;
-        }
-        if (percent <= 50) {
-            return TFTPalette::Medium;
-        }
-        return TFTPalette::Good;
-    };
 #endif
     bool hasBatteryFillRegion = false;
     int16_t batteryFillRegionX = 0;
     int16_t batteryFillRegionY = 0;
     int16_t batteryFillRegionW = 0;
     int16_t batteryFillRegionH = 0;
-    uint16_t batteryFillColor = TFTPalette::Good;
+#if GRAPHICS_TFT_COLORING_ENABLED
+    uint16_t batteryFillColor = getThemeBatteryFillColor(chargePercent);
+    if (isClockHeader &&
+        (activeThemeId == ThemeID::Pink || activeThemeId == ThemeID::Creamsicle || activeThemeId == ThemeID::MeshtasticGreen ||
+         activeThemeId == ThemeID::ClassicRed || activeThemeId == ThemeID::MonochromeWhite)) {
+        batteryFillColor = getThemeHeaderBg();
+    }
+#endif
 
     int batteryX = 1;
     int batteryY = HEADER_OFFSET_Y + 1;
@@ -270,7 +266,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                     batteryFillRegionY = batteryY + 1;
                     batteryFillRegionW = fillWidth;
                     batteryFillRegionH = 11;
-                    batteryFillColor = batteryFillColorForPercent(chargePercent);
                 }
 #endif
             }
@@ -294,7 +289,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                     batteryFillRegionY = fillY + 10;
                     batteryFillRegionW = 5;
                     batteryFillRegionH = fillHeight;
-                    batteryFillColor = batteryFillColorForPercent(chargePercent);
                 }
 #endif
             }
