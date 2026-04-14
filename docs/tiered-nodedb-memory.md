@@ -211,3 +211,40 @@ Introduce a separate presentation-order view while keeping `meshNodes` as the li
 
 - Phase 4 deliberately keeps storage order and presentation order aligned by identity. That keeps the diff small, but it also means phase 5 is the first point where `displayOrder` becomes semantically meaningful instead of just structurally present.
 - Because `readNextMeshNode()` now depends on `displayOrder`, future storage backends can switch sequential export/read callers over to new record stores without rewriting those enumeration sites again.
+
+## Phase 5: Stop Physically Sorting Storage
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Make sorting reorder only the presentation view so full `meshtastic_NodeInfoLite` records stay in storage order.
+
+### What Changed
+
+- `src/mesh/NodeDB.cpp`
+  - Changed `sortMeshDB()` to bubble-sort `displayOrder` entries instead of swapping full node records in `meshNodes`.
+  - Kept the existing presentation semantics: local node first, favorites before non-favorites, then `last_heard` descending.
+  - Added display-order maintenance helpers so storage compaction paths update `displayOrder` by removing/remapping shifted storage indices instead of rebuilding it as identity.
+  - Updated `cleanupMeshDB()` and `removeNodeByNum()` to preserve the existing presentation order of surviving nodes across compaction.
+  - Updated `getOrCreateMeshNode()` so append and eviction paths keep the current presentation order intact, then place a newly-created storage slot at the end until a later sort pass moves it.
+  - Tightened `resetNodes(keepFavorites)` to compact favorites into the live range before rebuilding and re-sorting the presentation view.
+
+### Important Constraints For Later Phases
+
+- Storage order is no longer the user-visible order. Any caller that needs presentation order must continue to use `getMeshNodeByIndex()` or `readNextMeshNode()` rather than iterating raw `meshNodes` storage.
+- After phase 5, `resetDisplayOrder()` is only safe when intentionally rebuilding the presentation view from scratch and then immediately re-sorting or otherwise re-establishing its contract. Using it casually after compaction will destroy the user-visible order.
+- `sortMeshDB()` now mutates only `displayOrder`. Future slot-store phases should preserve that rule rather than reintroducing full-record swaps.
+- Because storage order now mostly reflects append/compaction history, any later logic that wants stable identity should reason in terms of `NodeNum`, display index, or eventual slot/meta handles, not raw storage positions.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e rak4631`
+- `pio run -e native` still fails before NodeDB code is exercised in the existing Portduino/LovyanGFX macOS toolchain path, matching the earlier phases' local native blocker (`malloc.h` and missing C runtime declarations in LovyanGFX sources).
+
+### Follow-Up Notes
+
+- Phase 5 leaves `getMeshNode(NodeNum)` as a linear scan over storage order. That is fine for this phase, but phase 6+ should treat it as an implementation detail rather than evidence that storage order is meaningful.
+- The next phase can add `NodeMeta[]` without needing to untangle sort-induced record movement first, because presentation ordering is now isolated in `displayOrder`.

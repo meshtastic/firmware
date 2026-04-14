@@ -461,6 +461,41 @@ NodeNum getFrom(const meshtastic_MeshPacket *p)
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
 }
 
+namespace
+{
+void removeStorageIndexFromDisplayOrder(std::vector<uint16_t> &displayOrder, uint16_t removedStorageIndex)
+{
+    displayOrder.erase(std::remove(displayOrder.begin(), displayOrder.end(), removedStorageIndex), displayOrder.end());
+    for (uint16_t &storageIndex : displayOrder) {
+        if (storageIndex > removedStorageIndex) {
+            --storageIndex;
+        }
+    }
+}
+
+void removeStorageIndicesFromDisplayOrder(std::vector<uint16_t> &displayOrder, std::vector<uint16_t> removedStorageIndices)
+{
+    std::sort(removedStorageIndices.begin(), removedStorageIndices.end());
+    for (auto it = removedStorageIndices.rbegin(); it != removedStorageIndices.rend(); ++it) {
+        removeStorageIndexFromDisplayOrder(displayOrder, *it);
+    }
+}
+
+bool shouldDisplayNodeBefore(const meshtastic_NodeInfoLite &lhs, const meshtastic_NodeInfoLite &rhs, NodeNum localNodeNum)
+{
+    if (lhs.num == localNodeNum) {
+        return rhs.num != localNodeNum;
+    }
+    if (rhs.num == localNodeNum) {
+        return false;
+    }
+    if (lhs.is_favorite != rhs.is_favorite) {
+        return lhs.is_favorite;
+    }
+    return lhs.last_heard > rhs.last_heard;
+}
+} // namespace
+
 // Returns true if the packet originated from the local node
 bool isFromUs(const meshtastic_MeshPacket *p)
 {
@@ -1013,22 +1048,28 @@ void NodeDB::resetNodes(bool keepFavorites)
 {
     if (!config.position.fixed_position)
         clearLocalPosition();
-    numMeshNodes = 1;
     if (keepFavorites) {
         LOG_INFO("Clearing node database - preserving favorites");
-        for (size_t i = 0; i < meshNodes->size(); i++) {
+        size_t newPos = 1;
+        for (size_t i = 1; i < meshNodes->size(); i++) {
             meshtastic_NodeInfoLite &node = meshNodes->at(i);
-            if (i > 0 && !node.is_favorite) {
-                node = meshtastic_NodeInfoLite();
-            } else {
-                numMeshNodes += 1;
+            if (node.is_favorite) {
+                if (newPos != i) {
+                    meshNodes->at(newPos) = node;
+                }
+                newPos++;
             }
-        };
+        }
+        numMeshNodes = newPos;
+        std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     } else {
         LOG_INFO("Clearing node database - removing favorites");
+        numMeshNodes = 1;
         std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     }
     resetDisplayOrder();
+    lastSort = 0;
+    sortMeshDB();
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
@@ -1039,17 +1080,25 @@ void NodeDB::resetNodes(bool keepFavorites)
 
 void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
+    const size_t oldNumMeshNodes = numMeshNodes;
     int newPos = 0, removed = 0;
+    std::vector<uint16_t> removedStorageIndices;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).num != nodeNum)
+        if (meshNodes->at(i).num != nodeNum) {
             meshNodes->at(newPos++) = meshNodes->at(i);
-        else
+        } else {
             removed++;
+            removedStorageIndices.push_back(static_cast<uint16_t>(i));
+        }
     }
     numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
+    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
               meshtastic_NodeInfoLite());
-    resetDisplayOrder();
+    if (displayOrder.size() >= oldNumMeshNodes) {
+        removeStorageIndicesFromDisplayOrder(displayOrder, std::move(removedStorageIndices));
+    } else {
+        resetDisplayOrder();
+    }
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveNodeDatabaseToDisk();
 }
@@ -1067,7 +1116,9 @@ void NodeDB::clearLocalPosition()
 
 void NodeDB::cleanupMeshDB()
 {
+    const size_t oldNumMeshNodes = numMeshNodes;
     int newPos = 0, removed = 0;
+    std::vector<uint16_t> removedStorageIndices;
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).has_user) {
             if (meshNodes->at(i).user.public_key.size > 0) {
@@ -1081,12 +1132,17 @@ void NodeDB::cleanupMeshDB()
                 newPos++;
         } else {
             removed++;
+            removedStorageIndices.push_back(static_cast<uint16_t>(i));
         }
     }
     numMeshNodes -= removed;
     std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
               meshtastic_NodeInfoLite());
-    resetDisplayOrder();
+    if (displayOrder.size() >= oldNumMeshNodes) {
+        removeStorageIndicesFromDisplayOrder(displayOrder, std::move(removedStorageIndices));
+    } else {
+        resetDisplayOrder();
+    }
     LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
 }
 
@@ -2173,25 +2229,19 @@ void NodeDB::pause_sort(bool paused)
 void NodeDB::sortMeshDB()
 {
     if (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5))) {
+        if (numMeshNodes < 2) {
+            return;
+        }
         lastSort = millis();
         bool changed = true;
+        assert(displayOrder.size() >= numMeshNodes);
         while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
             changed = false;
             for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
-                if (meshNodes->at(i - 1).num == getNodeNum()) {
-                    // noop
-                } else if (meshNodes->at(i).num ==
-                           getNodeNum()) { // in the oddball case our own node num is not at location 0, put it there
-                    // TODO: Look for at(i-1) also matching own node num, and throw the DB in the trash
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
-                    changed = true;
-                } else if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
-                    changed = true;
-                } else if (!meshNodes->at(i).is_favorite && meshNodes->at(i - 1).is_favorite) {
-                    // noop
-                } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                const uint16_t lhsStorageIndex = displayOrder.at(i - 1);
+                const uint16_t rhsStorageIndex = displayOrder.at(i);
+                if (shouldDisplayNodeBefore(meshNodes->at(rhsStorageIndex), meshNodes->at(lhsStorageIndex), getNodeNum())) {
+                    std::swap(displayOrder.at(i), displayOrder.at(i - 1));
                     changed = true;
                 }
             }
@@ -2273,6 +2323,11 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                     meshNodes->at(i) = meshNodes->at(i + 1);
                 }
                 (numMeshNodes)--;
+                if (displayOrder.size() >= (static_cast<size_t>(numMeshNodes) + 1)) {
+                    removeStorageIndexFromDisplayOrder(displayOrder, static_cast<uint16_t>(oldestIndex));
+                } else {
+                    resetDisplayOrder();
+                }
             }
         }
         // add the node at the end
@@ -2281,7 +2336,11 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
-        resetDisplayOrder();
+        if (displayOrder.size() == (static_cast<size_t>(numMeshNodes) - 1)) {
+            displayOrder.push_back(static_cast<uint16_t>(numMeshNodes - 1));
+        } else {
+            resetDisplayOrder();
+        }
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
     }
 
