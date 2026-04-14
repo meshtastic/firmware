@@ -202,17 +202,18 @@ class Syslog
 inline uint8_t syslogLevelToMask(int configLevel)
 {
     switch (configLevel) {
-    case 5:  // meshtastic_Config_NetworkConfig_LogLevel_LOG_TRACE
-    case 10: // meshtastic_Config_NetworkConfig_LogLevel_LOG_DEBUG
+    case 5: // LOG_TRACE — syslog has no TRACE; map to DEBUG (most verbose syslog level)
         return LOG_UPTO(SYSLOG_DEBUG);
-    case 30: // meshtastic_Config_NetworkConfig_LogLevel_LOG_WARNING
+    case 10: // LOG_DEBUG
+        return LOG_UPTO(SYSLOG_DEBUG);
+    case 30: // LOG_WARNING
         return LOG_UPTO(SYSLOG_WARN);
-    case 40: // meshtastic_Config_NetworkConfig_LogLevel_LOG_ERROR
+    case 40: // LOG_ERROR
         return LOG_UPTO(SYSLOG_ERR);
-    case 50: // meshtastic_Config_NetworkConfig_LogLevel_LOG_CRITICAL
+    case 50: // LOG_CRITICAL
         return LOG_UPTO(SYSLOG_CRIT);
-    case 0:  // meshtastic_Config_NetworkConfig_LogLevel_LOG_UNSET (default to INFO)
-    case 20: // meshtastic_Config_NetworkConfig_LogLevel_LOG_INFO
+    case 0:  // LOG_UNSET — default to INFO
+    case 20: // LOG_INFO
     default:
         return LOG_UPTO(SYSLOG_INFO);
     }

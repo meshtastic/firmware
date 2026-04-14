@@ -123,7 +123,11 @@ static int32_t reconnectETH()
                 syslog.deviceHostname(getDeviceName());
                 syslog.appName("Meshtastic");
                 syslog.defaultPriority(LOGLEVEL_USER);
+#ifdef meshtastic_Config_NetworkConfig_rsyslog_level_tag
                 syslog.logMask(syslogLevelToMask(config.network.rsyslog_level));
+#else
+                syslog.logMask(syslogLevelToMask(0));
+#endif
                 syslog.enable();
             }
 
