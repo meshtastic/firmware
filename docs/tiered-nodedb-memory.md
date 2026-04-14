@@ -296,3 +296,41 @@ Introduce compact DRAM-side metadata while still treating the vector-backed `mes
 
 - Phase 6 stores `snr_q4`, `role`, and `hw_model` in metadata even though current hot paths do not consume them yet. That keeps phase 7+ hash and backend work from needing another metadata-shape expansion for those fields.
 - Because `getMeshNode(NodeNum)` now searches `nodeMeta` and then projects back to storage, future work should treat storage-index scans as legacy behavior to be removed rather than as the default access pattern.
+
+## Phase 7: Add `NodeNum -> meta index` Hash Lookup
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Replace linear metadata scans with a private open-addressing hash while keeping `nodeMeta` as the compact hot-record source and `meshNodes` as the full-record store.
+
+### What Changed
+
+- `src/mesh/NodeDB.h`
+  - Added a private `nodeMetaLookup` table that stores `NodeNum -> nodeMeta index` mappings with an open-addressing layout.
+  - Added lookup-sizing and hash helpers plus a dedicated `rebuildNodeMetaLookup()` path.
+- `src/mesh/NodeDB.cpp`
+  - Rebuilt the lookup table after `rebuildNodeMeta()` finishes refreshing the live metadata array.
+  - Updated `refreshNodeMeta()` to trigger a lookup rebuild when a slot's `node_num` identity changes, while leaving ordinary hot-field refreshes alone.
+  - Changed `getNodeMeta()` to probe the hash table first instead of linearly scanning `nodeMeta`.
+  - Collapsed `isFromOrToFavoritedNode()` onto two hashed metadata lookups instead of a whole-DB scan.
+
+### Important Constraints For Later Phases
+
+- `getMeshNode()` may be called from ISR-adjacent paths, so phase 7 intentionally keeps lookup reads allocation-free. Do not move hash rebuilds into `getNodeMeta()` or any other read path.
+- The hash table stores metadata indices, not storage indices directly. Future slot-store phases should keep `NodeMeta` as the hand-off layer from `NodeNum` lookup to whatever full-record backend owns the slot.
+- `refreshNodeMeta()` only rebuilds the hash when slot identity changes (`node_num` changes or a new slot appears). If a later phase introduces metadata relocation without a full `rebuildNodeMeta()`, it must also explicitly rebuild or incrementally maintain `nodeMetaLookup`.
+- Duplicate `NodeNum` entries still resolve to the first metadata slot encountered during rebuild, matching the earlier linear-scan behavior. Later phases should treat duplicate live node numbers as a data-integrity bug, not as a lookup feature.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e rak4631`
+- `pio run -e native` is still expected to fail before NodeDB code is exercised in the existing Portduino/LovyanGFX macOS toolchain path (`malloc.h` and missing C runtime declarations in LovyanGFX sources).
+
+### Follow-Up Notes
+
+- Phase 8 can keep using `getNodeMeta()` as the stable hot lookup API while changing save/load internals, because the lookup no longer depends on scanning `meshNodes`.
+- If phase 10 replaces the vector-backed store with a `NodeStore` shim, `nodeMetaLookup` should survive largely unchanged; only `meta.storage_index` projection needs to swap over to the new backend contract.
