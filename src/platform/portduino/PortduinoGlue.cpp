@@ -182,6 +182,10 @@ void portduinoSetup()
     // Force stdout to be line buffered
     setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
 
+    // We do this super early so that we can log from the rest of the init code
+    concurrency::hasBeenSetup = true;
+    consoleInit();
+
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
     } else if (configPath != nullptr) {

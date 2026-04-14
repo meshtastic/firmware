@@ -30,6 +30,9 @@ SerialConsole *console;
 
 void consoleInit()
 {
+    if (console) {
+        return;
+    }
     auto sc = new SerialConsole(); // Must be dynamically allocated because we are now inheriting from thread
 
 #if defined(SERIAL_HAS_ON_RECEIVE)
