@@ -597,3 +597,47 @@ Make the flash-slot read path real without pulling phase-14 migration and flash-
 
 - Phase 14 should flip flash-backed boots from "read fallback with legacy save handoff" to "authoritative backend with migration and write-through".
 - If a later phase wants to reduce the fixed RAM overlay size, it must first finish the remaining pointer-lifetime cleanup for callers that still rely on stable `meshtastic_NodeInfoLite *` addresses.
+
+## Phase 14: Integrate `FlashSlotStore` Writes And Migration
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Make flash slots the authoritative persisted NodeDB backend on flash-preferred targets while safely migrating legacy `nodes.proto` data forward.
+
+### What Changed
+
+- `src/mesh/FlashSlotStore.h`
+  - Added `clearSlot()` so NodeDB can explicitly remove stale slot records after compaction, reset, or migration writes.
+- `src/mesh/FlashSlotStore.cpp`
+  - Added page-existence checks plus a shared record-write helper so slot writes and slot clears reuse the same page rewrite path.
+  - Implemented `clearSlot()` by zeroing an existing record in-place while skipping nonexistent pages, which avoids creating empty page files just to represent absence.
+- `src/mesh/NodeDB.cpp`
+  - Changed flash-preferred `saveNodeDatabaseToDisk()` behavior to write the live dense NodeDB view directly into flash slots instead of streaming `/prefs/nodes.proto`.
+  - Added full-store verification after flash writes:
+    - manifest slot count must match the runtime slot count
+    - every live slot must read back and re-encode identically
+    - every tail slot beyond `numMeshNodes` must read back as absent
+  - Deleted legacy `/prefs/nodes.proto` only after the flash write passes verification.
+  - Added phase-14 boot migration: when a flash-preferred build successfully loads a legacy `nodes.proto`, NodeDB now immediately writes and verifies the flash-slot store, then removes the legacy file.
+  - Changed the constructor’s “first save” check to look for a flash manifest on flash-preferred builds instead of treating missing `/prefs/nodes.proto` as “never persisted”.
+  - When running from a flash-backed boot, post-save flash slot mappings are normalized back to `storage_index == flash slot index` so later compaction and read paths stay aligned with the rewritten on-disk layout.
+
+### Important Constraints For Later Phases
+
+- Phase 14 keeps the phase-13 runtime split during migration boots: if the device booted from legacy `nodes.proto`, that boot still runs from the array-backed in-memory state, but every durable save now targets flash slots. The next reboot is what switches read bootstrapping over to flash.
+- On flash-preferred targets, `/prefs/nodes.proto` is now migration input only. Later phases should not restore it as the primary persisted NodeDB source.
+- Flash-slot verification is intentionally strict before deleting legacy state. If later phases change slot geometry or record encoding, they must preserve an equivalent “verify destination before removing source” rule.
+- Tail-slot clearing now matters for correctness, not just hygiene. Deleted or compacted nodes must stay absent on reboot, so later flash-write changes must preserve the explicit clear path for slots beyond `numMeshNodes`.
+
+### Verification
+
+- `pio run -e rak4631`
+- `pio run -e tbeam-s3-core`
+
+### Follow-Up Notes
+
+- Phase 14 still rewrites the full flash-backed NodeDB on each durable save. That is acceptable for the current cutover, but phase 16’s optional dirty-slot cache remains the next obvious optimization point if wear or latency becomes measurable.
+- The flash-store verification helper compares nanopb encodings, not raw struct bytes. Keep that distinction if later phases touch `NodeInfoLite` packing or compiler-specific layout concerns.

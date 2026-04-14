@@ -304,7 +304,16 @@ NodeDB::NodeDB() : meshNodes(&nodeDatabase.nodes), arraySlotStore(nodeDatabase.n
 
     // If node database has not been saved for the first time, save it now
 #ifdef FSCom
-    if (!FSCom.exists(nodeDatabaseFileName)) {
+    bool hasPersistedNodeDatabase = false;
+    if (prefersFlashSlotStore()) {
+        FlashSlotStore::Manifest manifest;
+        hasPersistedNodeDatabase = flashSlotStore.readManifest(manifest);
+    } else {
+        concurrency::LockGuard g(spiLock);
+        hasPersistedNodeDatabase = FSCom.exists(nodeDatabaseFileName);
+    }
+
+    if (!hasPersistedNodeDatabase) {
         saveNodeDatabaseToDisk();
     }
 #endif
@@ -650,6 +659,65 @@ LoadFileResult loadNodeDatabaseProto(const char *filename, File &file, meshtasti
     LOG_INFO("Loaded NodeDB version %u with %u live nodes (%u rejected, %u truncated)", database.version, liveNodeCount,
              rejectedNodeCount, truncatedNodeCount);
     return LoadFileResult::LOAD_SUCCESS;
+}
+#endif
+
+bool encodeNodeForComparison(const meshtastic_NodeInfoLite &node, uint8_t *buffer, size_t bufferSize, size_t &encodedLen)
+{
+    encodedLen = pb_encode_to_bytes(buffer, bufferSize, meshtastic_NodeInfoLite_fields, &node);
+    return encodedLen > 0 && encodedLen <= bufferSize;
+}
+
+bool nodesHaveEquivalentEncoding(const meshtastic_NodeInfoLite &lhs, const meshtastic_NodeInfoLite &rhs)
+{
+    uint8_t lhsBuffer[meshtastic_NodeInfoLite_size] = {};
+    uint8_t rhsBuffer[meshtastic_NodeInfoLite_size] = {};
+    size_t lhsLen = 0;
+    size_t rhsLen = 0;
+
+    return encodeNodeForComparison(lhs, lhsBuffer, sizeof(lhsBuffer), lhsLen) &&
+           encodeNodeForComparison(rhs, rhsBuffer, sizeof(rhsBuffer), rhsLen) && lhsLen == rhsLen &&
+           memcmp(lhsBuffer, rhsBuffer, lhsLen) == 0;
+}
+
+bool verifyFlashNodeDatabase(const FlashSlotStore &flashSlotStore, const NodeStore &nodeStore, pb_size_t liveNodeCount)
+{
+    FlashSlotStore::Manifest manifest;
+    if (!flashSlotStore.readManifest(manifest) || manifest.slot_count != nodeStore.slotCount()) {
+        LOG_ERROR("Flash NodeDB verification failed: manifest mismatch");
+        return false;
+    }
+
+    meshtastic_NodeInfoLite decodedNode = meshtastic_NodeInfoLite_init_default;
+    for (uint16_t storageIndex = 0; storageIndex < liveNodeCount; ++storageIndex) {
+        if (!flashSlotStore.readSlot(storageIndex, decodedNode) ||
+            !nodesHaveEquivalentEncoding(nodeStore.slot(storageIndex), decodedNode)) {
+            LOG_ERROR("Flash NodeDB verification failed at slot %u", static_cast<unsigned>(storageIndex));
+            return false;
+        }
+    }
+
+    for (uint16_t storageIndex = liveNodeCount; storageIndex < nodeStore.slotCount(); ++storageIndex) {
+        if (flashSlotStore.readSlot(storageIndex, decodedNode)) {
+            LOG_ERROR("Flash NodeDB verification found stale slot %u", static_cast<unsigned>(storageIndex));
+            return false;
+        }
+    }
+
+    return true;
+}
+
+#ifdef FSCom
+bool fileExists(const char *path)
+{
+    concurrency::LockGuard g(spiLock);
+    return FSCom.exists(path);
+}
+
+bool removeFile(const char *path)
+{
+    concurrency::LockGuard g(spiLock);
+    return !FSCom.exists(path) || FSCom.remove(path);
 }
 #endif
 } // namespace
@@ -1852,12 +1920,14 @@ void NodeDB::loadFromDisk()
     auto state = loadProto(nodeDatabaseFileName, getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
     bool loadedNodeDatabase = false;
+    bool loadedLegacyNodeDatabase = false;
     if (nodeDatabase.version >= DEVICESTATE_MIN_VER) {
         resetFlashSlotState();
         meshNodes = &nodeDatabase.nodes;
         numMeshNodes = nodeDatabase.nodes.size();
         LOG_INFO("Loaded saved nodedatabase version %d, with nodes count: %d", nodeDatabase.version, nodeDatabase.nodes.size());
         loadedNodeDatabase = true;
+        loadedLegacyNodeDatabase = prefersFlashSlotStore();
     } else if (prefersFlashSlotStore() && loadFromFlashSlotStore()) {
         LOG_INFO("Loaded NodeDB from flash slot store because %s was unavailable or invalid", nodeDatabaseFileName);
         loadedNodeDatabase = true;
@@ -1875,6 +1945,10 @@ void NodeDB::loadFromDisk()
         }
         resetDisplayOrder();
         rebuildNodeMeta();
+
+        if (loadedLegacyNodeDatabase && !saveNodeDatabaseToDisk()) {
+            LOG_ERROR("Failed to migrate legacy NodeDB into flash slot store");
+        }
     } else if (!loadedNodeDatabase) {
         installDefaultNodeDatabase();
     }
@@ -2158,6 +2232,61 @@ bool NodeDB::saveNodeDatabaseToDisk()
     if (!ensureAllLiveSlotsLoaded()) {
         LOG_ERROR("Can't save prefs because not all live flash-backed slots could be loaded");
         return false;
+    }
+
+    if (prefersFlashSlotStore()) {
+        if (nodeStore->slotCount() > UINT16_MAX) {
+            LOG_ERROR("Flash NodeDB slot count %u exceeds flash manifest capacity",
+                      static_cast<unsigned>(nodeStore->slotCount()));
+            return false;
+        }
+
+        FlashSlotStore::Manifest manifest;
+        const uint16_t slotCount = static_cast<uint16_t>(nodeStore->slotCount());
+        if (!flashSlotStore.readManifest(manifest) || manifest.slot_count != slotCount) {
+            LOG_INFO("Initialize flash slot NodeDB with %u slots", static_cast<unsigned>(slotCount));
+            if (!flashSlotStore.initialize(slotCount)) {
+                LOG_ERROR("Can't initialize flash slot NodeDB");
+                return false;
+            }
+        }
+
+        LOG_INFO("Save flash slot NodeDB (%u live nodes)", numMeshNodes);
+        logNodeDbMemorySnapshot("before flash nodedb save", numMeshNodes, nodeStore->slotCount());
+        for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
+            if (!flashSlotStore.writeSlot(storageIndex, nodeStore->slot(storageIndex))) {
+                LOG_ERROR("Failed to write flash slot %u", static_cast<unsigned>(storageIndex));
+                return false;
+            }
+        }
+
+        for (uint16_t storageIndex = numMeshNodes; storageIndex < slotCount; ++storageIndex) {
+            if (!flashSlotStore.clearSlot(storageIndex)) {
+                LOG_ERROR("Failed to clear flash slot %u", static_cast<unsigned>(storageIndex));
+                return false;
+            }
+        }
+
+        if (!verifyFlashNodeDatabase(flashSlotStore, *nodeStore, numMeshNodes)) {
+            LOG_ERROR("Flash slot NodeDB verification failed");
+            return false;
+        }
+
+        if (flashSlotStoreActive) {
+            for (uint16_t storageIndex = 0; storageIndex < slotCount; ++storageIndex) {
+                flashSlotByStorageIndex.at(storageIndex) =
+                    (storageIndex < numMeshNodes) ? storageIndex : INVALID_FLASH_SLOT_INDEX;
+                flashSlotCacheValid.at(storageIndex) = storageIndex < numMeshNodes;
+            }
+        }
+
+        if (fileExists(nodeDatabaseFileName) && !removeFile(nodeDatabaseFileName)) {
+            LOG_ERROR("Flash slot NodeDB verified but failed to remove legacy %s", nodeDatabaseFileName);
+            return false;
+        }
+
+        logNodeDbMemorySnapshot("after flash nodedb save", numMeshNodes, nodeStore->slotCount());
+        return true;
     }
 
     auto f = SafeFile(nodeDatabaseFileName, false);

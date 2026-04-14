@@ -29,6 +29,24 @@ bool buildPagePath(const char *directory, uint16_t pageIndex, char *path, size_t
     return written > 0 && static_cast<size_t>(written) < pathSize;
 }
 
+bool pageExists(const char *directory, uint16_t pageIndex)
+{
+#ifdef FSCom
+    char path[MAX_PATH_LEN] = {};
+    if (!buildPagePath(directory, pageIndex, path, sizeof(path))) {
+        LOG_ERROR("FlashSlotStore page path overflow");
+        return false;
+    }
+
+    concurrency::LockGuard g(spiLock);
+    return FSCom.exists(path);
+#else
+    (void)directory;
+    (void)pageIndex;
+    return false;
+#endif
+}
+
 bool isValidManifest(const FlashSlotStore::Manifest &manifest)
 {
     return manifest.magic == FlashSlotStore::MANIFEST_MAGIC && manifest.version == FlashSlotStore::FORMAT_VERSION &&
@@ -147,6 +165,25 @@ bool storePage(const char *directory, const FlashSlotStore::Manifest &manifest, 
     (void)page;
     return false;
 #endif
+}
+
+bool writeRecord(const char *directory, const FlashSlotStore::Manifest &manifest, uint16_t slotIndex,
+                 const FlashSlotStore::Record &record)
+{
+    std::vector<uint8_t> page;
+    const uint16_t pageIndex = pageIndexForSlot(manifest, slotIndex);
+    if (!loadPage(directory, manifest, pageIndex, page)) {
+        return false;
+    }
+
+    const size_t recordOffset = slotOffsetInPage(manifest, slotIndex);
+    if ((recordOffset + sizeof(record)) > page.size()) {
+        LOG_ERROR("FlashSlotStore slot offset overflow");
+        return false;
+    }
+
+    memcpy(page.data() + recordOffset, &record, sizeof(record));
+    return storePage(directory, manifest, pageIndex, page);
 }
 
 } // namespace
@@ -292,12 +329,6 @@ bool FlashSlotStore::writeSlot(uint16_t slotIndex, const meshtastic_NodeInfoLite
         return false;
     }
 
-    std::vector<uint8_t> page;
-    const uint16_t pageIndex = pageIndexForSlot(manifest, slotIndex);
-    if (!loadPage(directory, manifest, pageIndex, page)) {
-        return false;
-    }
-
     Record record = {};
     const size_t encodedLen = pb_encode_to_bytes(record.payload, sizeof(record.payload), meshtastic_NodeInfoLite_fields, &node);
     if (encodedLen == 0 || encodedLen > sizeof(record.payload)) {
@@ -309,12 +340,21 @@ bool FlashSlotStore::writeSlot(uint16_t slotIndex, const meshtastic_NodeInfoLite
     record.header.encoded_len = encodedLen;
     record.header.crc32 = crc32Buffer(record.payload, encodedLen);
 
-    const size_t recordOffset = slotOffsetInPage(manifest, slotIndex);
-    if ((recordOffset + sizeof(record)) > page.size()) {
-        LOG_ERROR("FlashSlotStore slot offset overflow");
+    return writeRecord(directory, manifest, slotIndex, record);
+}
+
+bool FlashSlotStore::clearSlot(uint16_t slotIndex) const
+{
+    Manifest manifest;
+    if (!readManifest(manifest) || slotIndex >= manifest.slot_count) {
         return false;
     }
 
-    memcpy(page.data() + recordOffset, &record, sizeof(record));
-    return storePage(directory, manifest, pageIndex, page);
+    const uint16_t pageIndex = pageIndexForSlot(manifest, slotIndex);
+    if (!pageExists(directory, pageIndex)) {
+        return true;
+    }
+
+    const Record clearedRecord = {};
+    return writeRecord(directory, manifest, slotIndex, clearedRecord);
 }
