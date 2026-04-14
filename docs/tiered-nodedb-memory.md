@@ -551,3 +551,49 @@ Land the flash-slot on-disk contract and low-level record I/O without changing N
 
 - The page-file naming and manifest geometry are now concrete enough for phase 13 boot-scan work: `slotIndex -> pageIndex + page offset` no longer needs to be designed.
 - Because `FlashSlotStore` is still standalone in phase 12, later phases are free to evolve the `NodeStore` abstraction separately if the current pointer-oriented interface is still too array-centric for flash-backed reads.
+
+## Phase 13: Integrate `FlashSlotStore` For Boot Scan And Reads
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Make the flash-slot read path real without pulling phase-14 migration and flash-write ownership into the same diff.
+
+### What Changed
+
+- `src/mesh/NodeDB.h`
+  - Added the phase-13 flash-read state:
+    - a `FlashSlotStore` member
+    - a `flashSlotStoreActive` flag
+    - a dense `storage_index -> flash slot index` map
+    - per-slot cache-valid bits for the existing RAM-side compatibility overlay
+  - Added private helpers for flash-backed boot scan, lazy slot hydration, dense-slot moves, and cache clearing.
+- `src/mesh/NodeDB.cpp`
+  - Added `loadFromFlashSlotStore()` to scan the flash manifest and rebuild `NodeMeta[]`, `displayOrder`, and the phase-7 hash directly from flash records without first bulk-loading them into `nodeDatabase.nodes`.
+  - Added `slotAt()` / `slotPtr()` lazy hydration for flash-backed boots:
+    - dense storage indices remain the NodeDB-facing identity
+    - the first full-record read for a live node pulls that node's flash slot into the matching RAM overlay slot
+    - later reads and in-boot mutations reuse the RAM copy
+  - Added dense-slot move / clear helpers so compaction and eviction keep the flash-slot mapping aligned with storage-order changes.
+  - Changed `saveNodeDatabaseToDisk()` to force-load all live flash-backed slots before streaming `nodes.proto`, so the old persistence path still writes a complete legacy file.
+  - Changed boot selection to try legacy `/prefs/nodes.proto` first and only fall back to flash-slot boot scan on targets that prefer flash-backed reads when the legacy protobuf load is unavailable or invalid.
+  - Skipped the constructor-time `cleanupMeshDB()` compaction pass after a flash boot scan because phase-13 flash admission already rejects no-user / duplicate / reserved nodes and scrubs all-zero public keys.
+
+### Important Constraints For Later Phases
+
+- Phase 13 does **not** make flash slots the authoritative persisted source when a valid legacy `nodes.proto` still exists. That is intentional: phase 14 still owns migration and write-path cutover.
+- Once phase 13 boots from flash, full-record reads go through the flash-backed lazy overlay, but durable saves still write `nodes.proto`. Future work must not assume flash records stay current after an in-boot mutation until phase 14 lands.
+- `NodeMeta.storage_index`, `displayOrder`, and the open-addressed hash still operate on dense NodeDB storage indices, not raw flash slot numbers. The `flashSlotByStorageIndex` map is now the translation layer future phases must preserve.
+- The RAM overlay remains fixed-size in phase 13 for pointer compatibility with existing callers. This phase improves boot/read plumbing, not the final RAM-footprint story.
+
+### Verification
+
+- `pio run -e rak4631`
+- `pio run -e tbeam-s3-core`
+
+### Follow-Up Notes
+
+- Phase 14 should flip flash-backed boots from "read fallback with legacy save handoff" to "authoritative backend with migration and write-through".
+- If a later phase wants to reduce the fixed RAM overlay size, it must first finish the remaining pointer-lifetime cleanup for callers that still rely on stable `meshtastic_NodeInfoLite *` addresses.
