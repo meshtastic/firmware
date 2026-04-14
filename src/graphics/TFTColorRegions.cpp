@@ -73,7 +73,7 @@ static constexpr uint16_t kStatusColor = TFTPalette::White;
 
 // ── Theme definitions ─────────────────────────────────────────────────
 // Stored in kThemes[] and looked up by matching uiconfig.screen_rgb_color
-// against each entry's .id field.  Theme IDs live in ThemeID:: (header).
+// against each entry's .uniqueIdentifier field.
 
 static const TFTThemeDef kThemes[] = {
 
@@ -81,6 +81,7 @@ static const TFTThemeDef kThemes[] = {
     {
         ThemeID::DefaultDark, // id
         "Default Dark",       // name
+        0,                    // uniqueIdentifier
         // roles[TFTColorRole::Count]
         {
             {kHeaderBackground, TFTPalette::Black},    // HeaderBackground
@@ -106,12 +107,14 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::Black, // bodyBg
         TFTPalette::White, // bodyFg
         false,             // fullFrameInvert
+        true,              // visible
     },
 
     // ── Default Light (ThemeID::DefaultLight = 1) ────────────────────
     {
         ThemeID::DefaultLight, // id
         "Default Light",       // name
+        1,                     // uniqueIdentifier
         {
             {TFTPalette::LightGray, TFTPalette::Black}, // HeaderBackground
             {TFTPalette::LightGray, TFTPalette::Black}, // HeaderTitle
@@ -136,12 +139,14 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::White,     // bodyBg
         TFTPalette::Black,     // bodyFg
         true,                  // fullFrameInvert
+        true,                  // visible
     },
 
     // ── Christmas (ThemeID::Christmas = 2) ───────────────────────────
     {
         ThemeID::Christmas, // id
         "Christmas",        // name
+        2,                  // uniqueIdentifier
         {
             {TFTPalette::ChristmasRed, TFTPalette::Black},  // HeaderBackground
             {TFTPalette::ChristmasRed, TFTPalette::Gold},   // HeaderTitle
@@ -166,12 +171,14 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::Pine,         // bodyBg
         TFTPalette::White,        // bodyFg
         true,                     // fullFrameInvert
+        false,                    // visible
     },
 
     // ── Pink (ThemeID::Pink = 3) — light variant ─────────────────────
     {
         ThemeID::Pink, // id
         "Pink",        // name
+        3,             // uniqueIdentifier
         {
             {TFTPalette::HotPink, TFTPalette::Black},     // HeaderBackground
             {TFTPalette::HotPink, TFTPalette::White},     // HeaderTitle
@@ -196,12 +203,14 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::PalePink, // bodyBg
         TFTPalette::Black,    // bodyFg
         true,                 // fullFrameInvert
+        true,                 // visible
     },
 
     // ── Blue (ThemeID::Blue = 4) — dark variant ──────────────────────
     {
         ThemeID::Blue, // id
         "Blue",        // name
+        4,             // uniqueIdentifier
         {
             {TFTPalette::DeepBlue, TFTPalette::Black},   // HeaderBackground
             {TFTPalette::DeepBlue, TFTPalette::White},   // HeaderTitle
@@ -226,12 +235,14 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::Navy,     // bodyBg
         TFTPalette::White,    // bodyFg
         true,                 // fullFrameInvert
+        true,                 // visible
     },
 
     // ── Creamsicle (ThemeID::Creamsicle = 5) — light variant ─────────
     {
         ThemeID::Creamsicle, // id
         "Creamsicle",        // name
+        5,                   // uniqueIdentifier
         {
             {TFTPalette::CreamOrange, TFTPalette::Black}, // HeaderBackground
             {TFTPalette::CreamOrange, TFTPalette::White}, // HeaderTitle
@@ -256,18 +267,23 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::Cream,       // bodyBg
         TFTPalette::Black,       // bodyFg
         true,                    // fullFrameInvert
+        true,                    // visible
     },
 };
 
 static constexpr size_t kInternalThemeCount = sizeof(kThemes) / sizeof(kThemes[0]);
 
-// Resolve the kThemes[] index for the current screen_rgb_color value.
-// Falls back to 0 (DefaultDark) if no match is found.
+// Resolve the kThemes[] index for the currently persisted theme.  Called at
+// boot (indirectly via getActiveTheme()) and whenever the active theme is
+// queried, so uiconfig.screen_rgb_color remains the single source of truth.
+// Matches against .uniqueIdentifier — that's the field whose value is stored
+// in the user's config.  Falls back to 0 (DefaultDark) if no match is found,
+// which gracefully handles removed or retired themes.
 static inline size_t resolveThemeIndex()
 {
-    const uint32_t id = uiconfig.screen_rgb_color;
+    const uint32_t savedIdentifier = uiconfig.screen_rgb_color;
     for (size_t i = 0; i < kInternalThemeCount; i++) {
-        if (kThemes[i].id == id)
+        if (kThemes[i].uniqueIdentifier == savedIdentifier)
             return i;
     }
     return 0; // Default Dark fallback
@@ -316,6 +332,48 @@ const TFTThemeDef &getActiveTheme()
 size_t getActiveThemeIndex()
 {
     return resolveThemeIndex();
+}
+
+// ── Visible-theme accessors ───────────────────────────────────────────
+// These iterate only themes flagged .visible = true, preserving kThemes[]
+// order.  Menu code should use these so hidden themes don't appear in the
+// picker while still applying correctly if their ID is persisted.
+
+size_t getVisibleThemeCount()
+{
+    size_t count = 0;
+    for (size_t i = 0; i < kInternalThemeCount; i++) {
+        if (kThemes[i].visible)
+            count++;
+    }
+    return count;
+}
+
+const TFTThemeDef &getVisibleThemeByIndex(size_t visibleIndex)
+{
+    size_t seen = 0;
+    for (size_t i = 0; i < kInternalThemeCount; i++) {
+        if (!kThemes[i].visible)
+            continue;
+        if (seen == visibleIndex)
+            return kThemes[i];
+        seen++;
+    }
+    // Fallback: return first theme (never trust a bad index).
+    return kThemes[0];
+}
+
+size_t getActiveVisibleThemeIndex()
+{
+    const size_t active = resolveThemeIndex();
+    if (!kThemes[active].visible)
+        return SIZE_MAX;
+    size_t visibleIdx = 0;
+    for (size_t i = 0; i < active; i++) {
+        if (kThemes[i].visible)
+            visibleIdx++;
+    }
+    return visibleIdx;
 }
 
 uint16_t getThemeHeaderBg()

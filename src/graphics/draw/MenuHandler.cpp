@@ -2546,15 +2546,13 @@ void menuHandler::messageBubblesMenu()
 void menuHandler::themeMenu()
 {
     // Build menu dynamically from the theme table.
-    // Slot 0 is always "Back"; slots 1..N map 1:1 to kThemes[0..N-1].
-    const size_t themeCount = getThemeCount();
+    // Only visible themes appear!
+    const size_t visibleCount = getVisibleThemeCount();
     static const char *optionsArray[8] = {"Back"};
-    static int optionsEnumArray[8] = {0};
-    const int options = static_cast<int>(themeCount) + 1; // +1 for Back
+    const int options = static_cast<int>(visibleCount) + 1; // +1 for Back
 
-    for (size_t i = 0; i < themeCount && i + 1 < 8; i++) {
-        optionsArray[i + 1] = getThemeByIndex(i).name;
-        optionsEnumArray[i + 1] = static_cast<int>(i + 1);
+    for (size_t i = 0; i < visibleCount && i + 1 < 8; i++) {
+        optionsArray[i + 1] = getVisibleThemeByIndex(i).name;
     }
 
     BannerOverlayOptions bannerOptions;
@@ -2562,8 +2560,10 @@ void menuHandler::themeMenu()
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
 
-    // Highlight the currently active theme (array index + 1 for the Back offset).
-    bannerOptions.InitialSelected = static_cast<int>(getActiveThemeIndex()) + 1;
+    // Highlight the currently active theme (visible index + 1 for the Back
+    // offset).  If the active theme is hidden, leave selection on "Back".
+    const size_t activeVisible = getActiveVisibleThemeIndex();
+    bannerOptions.InitialSelected = (activeVisible == SIZE_MAX) ? 0 : static_cast<int>(activeVisible) + 1;
 
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
@@ -2571,10 +2571,12 @@ void menuHandler::themeMenu()
             menuHandler::menuQueue = menuHandler::ScreenOptionsMenu;
             screen->runNow();
         } else {
-            // Theme selected — slot index is selected-1 into the theme table.
-            const size_t idx = static_cast<size_t>(selected - 1);
-            if (idx < getThemeCount()) {
-                uiconfig.screen_rgb_color = getThemeByIndex(idx).id;
+            // Selection is an index into the VISIBLE themes (1-based, slot 0 is Back).
+            const size_t visibleIdx = static_cast<size_t>(selected - 1);
+            if (visibleIdx < getVisibleThemeCount()) {
+                // Persist the theme's uniqueIdentifier so boot-time
+                // resolveThemeIndex() can restore this theme on next startup.
+                uiconfig.screen_rgb_color = getVisibleThemeByIndex(visibleIdx).uniqueIdentifier;
                 loadThemeDefaults();
                 saveUIConfig();
                 screen->runNow();
