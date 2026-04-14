@@ -213,6 +213,14 @@ class NodeDB
     void setFavorite(NodeNum nodeId, bool isFavorite);
     void setIgnored(NodeNum nodeId, bool isIgnored);
     void setMuted(NodeNum nodeId, bool isMuted);
+    void setKeyVerified(NodeNum nodeId, bool isVerified);
+
+    /*
+     * Local-node helper for transient time refreshes. This keeps the
+     * in-place last-heard / position-time update inside NodeDB while
+     * callers still use pointer reads in the current storage model.
+     */
+    meshtastic_NodeInfoLite *touchLocalNodeTime();
 
     // Temporary compatibility wrapper for older callers that have not
     // migrated to the stable camelCase API yet.
