@@ -31,8 +31,6 @@ constexpr uint16_t PTY_ROWS_DEFAULT = 40;
 constexpr size_t MAX_MESSAGE_SIZE = 200;
 constexpr size_t REPLAY_REQUEST_SIZE = sizeof(uint32_t);
 constexpr size_t HEARTBEAT_STATUS_SIZE = sizeof(uint32_t) * 2;
-constexpr uint32_t CHILD_EXIT_WAIT_TIMEOUT_MS = 1500;
-constexpr uint32_t CHILD_EXIT_POLL_INTERVAL_MS = 50;
 
 void encodeUint32BE(uint8_t *dest, uint32_t value)
 {
@@ -177,6 +175,8 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
 
 int32_t DMShellModule::runOnce()
 {
+    processPendingChildReap();
+
     if (!session.active) {
         return 100;
     }
@@ -364,9 +364,14 @@ void DMShellModule::closeSession(const char *reason, bool notifyPeer)
     }
 
     if (session.childPid > 0) {
-        kill(session.childPid, SIGTERM);
-        int status = 0;
-        waitpid(session.childPid, &status, WNOHANG);
+        // Run this to avoid forgetting a child
+        processPendingChildReap();
+
+        if (kill(session.childPid, SIGTERM) < 0 && errno != ESRCH) {
+            LOG_WARN("DMShell: failed to send SIGTERM to pid=%d errno=%d", session.childPid, errno);
+        }
+
+        pendingChildPid = session.childPid;
         session.childPid = -1;
     }
 
@@ -384,6 +389,34 @@ void DMShellModule::reapChildIfExited()
     const pid_t result = waitpid(session.childPid, &status, WNOHANG);
     if (result == session.childPid) {
         closeSession("shell_exited", true);
+    }
+}
+
+void DMShellModule::processPendingChildReap()
+{
+    if (pendingChildPid <= 0) {
+        return;
+    }
+
+    int status = 0;
+    const pid_t result = waitpid(pendingChildPid, &status, WNOHANG);
+
+    if (result == pendingChildPid || (result < 0 && errno == ECHILD)) {
+        pendingChildPid = -1;
+        return;
+    }
+
+    if (result < 0) {
+        LOG_WARN("DMShell: waitpid failed for pid=%d errno=%d", pendingChildPid, errno);
+        pendingChildPid = -1;
+        return;
+    }
+
+    if (pendingChildPid > 0) {
+        if (kill(pendingChildPid, SIGKILL) < 0 && errno != ESRCH) {
+            LOG_WARN("DMShell: failed to send SIGKILL to pid=%d errno=%d", pendingChildPid, errno);
+        }
+        pendingChildPid = -1;
     }
 }
 
