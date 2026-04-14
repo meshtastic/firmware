@@ -440,8 +440,11 @@ class NodeDB
 
     FlashSlotStore flashSlotStore;
     bool flashSlotStoreActive = false;
+    // Dense storage indices stay in NodeDB order; this map remembers which flash slot currently backs each live slot
+    // so phase 16 can rewrite only dirty entries without losing the on-flash layout.
     std::vector<uint16_t> flashSlotByStorageIndex;
     std::vector<uint8_t> flashSlotCacheValid;
+    // Phase 16 dirty tracking: only live storage slots that changed since the last save need another flash write.
     std::vector<uint8_t> flashSlotDirty;
     bool flashSlotFullRewriteRequired = false;
     ArraySlotStore arraySlotStore;
