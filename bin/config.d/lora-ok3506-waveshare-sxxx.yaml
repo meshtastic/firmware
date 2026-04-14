@@ -1,0 +1,32 @@
+# !! WARNING: Hats on the OK3506 board are installed "backwards" (facing outwards)
+
+Meta:
+  name: Waveshare SX1262
+  support: deprecated
+  compatible:
+    - forlinx-ok3506-s12 # Armbian
+
+Lora:
+  Module: sx1262  # Waveshare SX126X XXXM
+  DIO2_AS_RF_SWITCH: true
+  CS: # GPIO0_B0 (physical 40)
+    pin: 8
+    gpiochip: 0
+    line: 8
+  IRQ: # GPIO3_B0 (physical 36)
+    pin: 104
+    gpiochip: 3
+    line: 8
+  Busy: # GPIO0_B1 (physical 38)
+    pin: 9
+    gpiochip: 0
+    line: 9
+  Reset: # GPIO0_B6 (physical 12)
+    pin: 14
+    gpiochip: 0
+    line: 14
+  SX126X_ANT_SW: # GPIO3_B3 (physical 31)
+    pin: 107
+    gpiochip: 3
+    line: 11
+  spidev: spidev0.0

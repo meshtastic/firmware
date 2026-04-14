@@ -1,4 +1,5 @@
 #include "CryptoEngine.h"
+#include "HardwareRNG.h"
 #include "PortduinoGPIO.h"
 #include "SPIChip.h"
 #include "mesh/RF95Interface.h"
@@ -181,6 +182,10 @@ void portduinoSetup()
     // Force stdout to be line buffered
     setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
 
+    // We do this super early so that we can log from the rest of the init code
+    concurrency::hasBeenSetup = true;
+    consoleInit();
+
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
     } else if (configPath != nullptr) {
@@ -233,7 +238,9 @@ void portduinoSetup()
         std::cout << "Running in simulated mode." << std::endl;
         portduino_config.MaxNodes = 200; // Default to 200 nodes
         // Set the random seed equal to TCPPort to have a different seed per instance
-        randomSeed(TCPPort);
+        uint32_t seed = TCPPort;
+        HardwareRNG::seed(seed);
+        randomSeed(seed);
         return;
     }
 
@@ -512,7 +519,9 @@ void portduinoSetup()
 #endif
     printf("MAC ADDRESS: %02X:%02X:%02X:%02X:%02X:%02X\n", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
     // Rather important to set this, if not running simulated.
-    randomSeed(time(NULL));
+    uint32_t seed = static_cast<uint32_t>(time(NULL));
+    HardwareRNG::seed(seed);
+    randomSeed(seed);
 
     std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
 
