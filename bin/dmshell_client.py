@@ -556,7 +556,7 @@ def send_ack_frame(transport, state: SessionState, replay_from: Optional[int] = 
         state,
         state.pb2.mesh.RemoteShell.ACK,
         seq=0,
-        last_rx_seq=0 if replay_from is None else replay_from,
+        last_rx_seq=0 if replay_from is None else replay_from - 1,
         remember=False,
     )
 
@@ -675,7 +675,7 @@ def reader_loop(transport, state: SessionState) -> None:
             #state.prune_sent_frames(shell.ack_seq)
             if shell.op == state.pb2.mesh.RemoteShell.ACK:
                 #state.event_queue.put("peer requested replay")
-                replay_from = shell.last_rx_seq if shell.last_rx_seq > 0 else None
+                replay_from = shell.last_rx_seq + 1 if shell.last_rx_seq > 0 else None
                 if replay_from is not None:
                     #state.event_queue.put(f"peer requested replay from seq={replay_from}")
                     replay_frames_from(transport, state, replay_from)
