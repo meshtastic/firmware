@@ -52,7 +52,7 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     if (frame.op == meshtastic_RemoteShell_OpCode_ACK) {
         if (session.active && frame.session_id == session.sessionId && getFrom(&mp) == session.peer && frame.last_rx_seq > 0) {
-            resendFramesFrom(frame.last_rx_seq);
+            resendFramesFrom(frame.last_rx_seq + 1);
         }
         return ProcessMessage::CONTINUE;
     }
@@ -77,6 +77,13 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
     }
 
     if (!session.active || frame.session_id != session.sessionId || getFrom(&mp) != session.peer) {
+        if (!session.active) {
+            LOG_WARN("DMShell: no active session, rejecting op %d from 0x%x", frame.op, mp.from);
+        } else {
+            LOG_WARN("DMShell: session ID mismatch (got 0x%x expected 0x%x) or peer mismatch (got 0x%x expected 0x%x), rejecting "
+                     "op %d",
+                     frame.session_id, session.sessionId, mp.from, session.peer, frame.op);
+        }
         sendError("invalid_session", getFrom(&mp));
         return ProcessMessage::STOP;
     }
@@ -501,7 +508,7 @@ void DMShellModule::sendAck(uint32_t replayFromSeq)
         .cols = 0,
         .rows = 0,
         .flags = 0,
-        .last_rx_seq = replayFromSeq,
+        .last_rx_seq = replayFromSeq - 1,
     };
     frame.payload.size = 0;
     sendFrameToPeer(session.peer, frame, false);
