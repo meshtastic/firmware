@@ -225,7 +225,7 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::SkyBlue,  // headerStatus
         TFTPalette::Navy,     // bodyBg
         TFTPalette::White,    // bodyFg
-        false,                // fullFrameInvert
+        true,                 // fullFrameInvert
     },
 
     // ── Creamsicle (ThemeID::Creamsicle = 5) — light variant ─────────
