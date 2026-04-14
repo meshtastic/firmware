@@ -366,12 +366,15 @@ class NodeDB
         NODEMETA_IS_LICENSED = 1 << 10,
     };
 
-    // Presentation order currently mirrors live storage order. Later phases
-    // will sort this view independently without moving full records.
+    // Presentation order is maintained separately from storage order.
     std::vector<uint16_t> displayOrder;
     // Phase 6 shadow cache: compact hot metadata stays aligned to storage slots
     // while the full record vector remains the source of truth.
     std::vector<NodeMeta> nodeMeta;
+    // Phase 7 lookup table: open-addressed NodeNum -> nodeMeta index map.
+    std::vector<uint16_t> nodeMetaLookup;
+    size_t nodeMetaLookupMask = 0;
+    bool rebuildingNodeMeta = false;
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
@@ -396,10 +399,13 @@ class NodeDB
     void resetDisplayOrder();
     void rebuildNodeMeta();
     void refreshNodeMeta(uint16_t storageIndex);
+    void rebuildNodeMetaLookup();
     uint16_t getStorageIndex(const meshtastic_NodeInfoLite *node) const;
     const NodeMeta *getNodeMeta(NodeNum n) const;
     static uint16_t buildNodeMetaFlags(const meshtastic_NodeInfoLite &node);
     static int8_t quantizeSnrQ4(float snr);
+    static size_t chooseNodeMetaLookupCapacity(size_t liveNodes);
+    static size_t hashNodeMetaKey(NodeNum n);
     static bool shouldDisplayNodeBefore(const NodeMeta &lhs, const NodeMeta &rhs, NodeNum localNodeNum);
 
     /// Reinit device state from scratch (not loading from disk)

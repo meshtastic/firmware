@@ -1159,9 +1159,43 @@ void NodeDB::resetDisplayOrder()
 
 void NodeDB::rebuildNodeMeta()
 {
+    rebuildingNodeMeta = true;
     nodeMeta.resize(numMeshNodes);
     for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
         refreshNodeMeta(storageIndex);
+    }
+    rebuildingNodeMeta = false;
+    rebuildNodeMetaLookup();
+}
+
+void NodeDB::rebuildNodeMetaLookup()
+{
+    if (numMeshNodes == 0) {
+        nodeMetaLookup.clear();
+        nodeMetaLookupMask = 0;
+        return;
+    }
+
+    assert(nodeMeta.size() >= numMeshNodes);
+    nodeMetaLookup.assign(chooseNodeMetaLookupCapacity(numMeshNodes), UINT16_MAX);
+    nodeMetaLookupMask = nodeMetaLookup.size() - 1;
+
+    for (uint16_t metaIndex = 0; metaIndex < numMeshNodes; ++metaIndex) {
+        const NodeMeta &meta = nodeMeta.at(metaIndex);
+        size_t probeIndex = hashNodeMetaKey(meta.node_num) & nodeMetaLookupMask;
+        while (true) {
+            uint16_t &entry = nodeMetaLookup.at(probeIndex);
+            if (entry == UINT16_MAX) {
+                entry = metaIndex;
+                break;
+            }
+
+            if (nodeMeta.at(entry).node_num == meta.node_num) {
+                break;
+            }
+
+            probeIndex = (probeIndex + 1) & nodeMetaLookupMask;
+        }
     }
 }
 
@@ -1171,7 +1205,9 @@ void NodeDB::refreshNodeMeta(uint16_t storageIndex)
         return;
     }
 
-    if (nodeMeta.size() < numMeshNodes) {
+    const size_t previousMetaCount = nodeMeta.size();
+    const NodeNum previousNodeNum = (storageIndex < previousMetaCount) ? nodeMeta.at(storageIndex).node_num : 0;
+    if (previousMetaCount < numMeshNodes) {
         nodeMeta.resize(numMeshNodes);
     }
 
@@ -1187,6 +1223,10 @@ void NodeDB::refreshNodeMeta(uint16_t storageIndex)
     meta.flags = buildNodeMetaFlags(node);
     meta.role = node.has_user ? static_cast<uint8_t>(node.user.role) : 0;
     meta.hw_model = node.has_user ? static_cast<uint8_t>(node.user.hw_model) : 0;
+
+    if (!rebuildingNodeMeta && ((storageIndex >= previousMetaCount) || (previousNodeNum != meta.node_num))) {
+        rebuildNodeMetaLookup();
+    }
 }
 
 uint16_t NodeDB::getStorageIndex(const meshtastic_NodeInfoLite *node) const
@@ -1201,12 +1241,30 @@ uint16_t NodeDB::getStorageIndex(const meshtastic_NodeInfoLite *node) const
 
 const NodeDB::NodeMeta *NodeDB::getNodeMeta(NodeNum n) const
 {
-    assert(nodeMeta.size() >= numMeshNodes);
-    for (size_t i = 0; i < numMeshNodes; ++i) {
-        if (nodeMeta[i].node_num == n) {
-            return &nodeMeta[i];
-        }
+    if (n == NODENUM_BROADCAST || numMeshNodes == 0) {
+        return nullptr;
     }
+
+    assert(nodeMeta.size() >= numMeshNodes);
+    assert(!nodeMetaLookup.empty());
+    assert((nodeMetaLookup.size() & (nodeMetaLookup.size() - 1)) == 0);
+
+    size_t probeIndex = hashNodeMetaKey(n) & nodeMetaLookupMask;
+    for (size_t probes = 0; probes < nodeMetaLookup.size(); ++probes) {
+        const uint16_t metaIndex = nodeMetaLookup.at(probeIndex);
+        if (metaIndex == UINT16_MAX) {
+            return nullptr;
+        }
+
+        assert(metaIndex < numMeshNodes);
+        const NodeMeta &meta = nodeMeta.at(metaIndex);
+        if (meta.node_num == n) {
+            return &meta;
+        }
+
+        probeIndex = (probeIndex + 1) & nodeMetaLookupMask;
+    }
+
     return nullptr;
 }
 
@@ -1259,6 +1317,27 @@ int8_t NodeDB::quantizeSnrQ4(float snr)
         return INT8_MAX;
     }
     return static_cast<int8_t>(scaled);
+}
+
+size_t NodeDB::chooseNodeMetaLookupCapacity(size_t liveNodes)
+{
+    size_t capacity = 8;
+    const size_t requiredCapacity = std::max<size_t>(liveNodes * 2, 1);
+    while (capacity < requiredCapacity) {
+        capacity <<= 1;
+    }
+    return capacity;
+}
+
+size_t NodeDB::hashNodeMetaKey(NodeNum n)
+{
+    uint32_t hash = n;
+    hash ^= hash >> 16;
+    hash *= 0x7feb352dU;
+    hash ^= hash >> 15;
+    hash *= 0x846ca68bU;
+    hash ^= hash >> 16;
+    return hash;
 }
 
 bool NodeDB::shouldDisplayNodeBefore(const NodeMeta &lhs, const NodeMeta &rhs, NodeNum localNodeNum)
@@ -2308,44 +2387,17 @@ bool NodeDB::isFavorite(uint32_t nodeId)
 
 bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
 {
-    // This method is logically equivalent to:
-    //   return isFavorite(p.from) || isFavorite(p.to);
-    // but is more efficient by:
-    //   1. doing only one pass through the database, instead of two
-    //   2. exiting early when a favorite is found, or if both from and to have been seen
-
-    if (p.to == NODENUM_BROADCAST)
-        return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
-
-    bool seenFrom = false;
-    bool seenTo = false;
-
-    assert(nodeMeta.size() >= numMeshNodes);
-    for (size_t i = 0; i < numMeshNodes; i++) {
-        const NodeMeta &meta = nodeMeta[i];
-
-        if (meta.node_num == p.from) {
-            if (meta.flags & NODEMETA_IS_FAVORITE)
-                return true;
-
-            seenFrom = true;
-        }
-
-        if (meta.node_num == p.to) {
-            if (meta.flags & NODEMETA_IS_FAVORITE)
-                return true;
-
-            seenTo = true;
-        }
-
-        if (seenFrom && seenTo)
-            return false; // we've seen both, and neither is a favorite, so we can stop searching early
-
-        // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after searching
-        // all favorited nodes first.
+    const NodeMeta *fromMeta = getNodeMeta(p.from);
+    if (fromMeta && (fromMeta->flags & NODEMETA_IS_FAVORITE)) {
+        return true;
     }
 
-    return false;
+    if (p.to == NODENUM_BROADCAST) {
+        return false;
+    }
+
+    const NodeMeta *toMeta = getNodeMeta(p.to);
+    return toMeta && ((toMeta->flags & NODEMETA_IS_FAVORITE) != 0);
 }
 
 void NodeDB::pause_sort(bool paused)
