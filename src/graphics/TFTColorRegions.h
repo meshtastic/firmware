@@ -24,7 +24,6 @@ enum class TFTColorRole : uint8_t {
     HeaderTitle,
     HeaderStatus,
     SignalBars,
-    BatteryFill,
     ConnectionIcon,
     UtilizationFill,
     FavoriteNode,
@@ -55,6 +54,9 @@ constexpr bool isTFTColoringEnabled()
 
 void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor);
 void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t width, int16_t height);
+// Register a region using explicit colors (no role lookup). Use when the
+// color comes from a theme field rather than a role (e.g. battery fill).
+void registerTFTColorRegionDirect(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t onColor, uint16_t offColor);
 void registerTFTActionMenuRegions(int16_t boxLeft, int16_t boxTop, int16_t boxWidth, int16_t boxHeight);
 uint32_t getTFTColorFrameSignature();
 uint8_t getTFTColorRegionCount();

@@ -88,7 +88,6 @@ static const TFTThemeDef kThemes[] = {
             {kHeaderBackground, kTitleColor},          // HeaderTitle
             {kHeaderBackground, kStatusColor},         // HeaderStatus
             {TFTPalette::Good, TFTPalette::Black},     // SignalBars
-            {TFTPalette::Good, TFTPalette::Black},     // BatteryFill
             {TFTPalette::Blue, TFTPalette::Black},     // ConnectionIcon
             {TFTPalette::Good, TFTPalette::Black},     // UtilizationFill
             {TFTPalette::Yellow, TFTPalette::Black},   // FavoriteNode
@@ -123,7 +122,6 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::LightGray, TFTPalette::Black}, // HeaderTitle
             {TFTPalette::LightGray, TFTPalette::Black}, // HeaderStatus
             {TFTPalette::Good, TFTPalette::White},      // SignalBars
-            {TFTPalette::Good, TFTPalette::White},      // BatteryFill
             {TFTPalette::Blue, TFTPalette::White},      // ConnectionIcon
             {TFTPalette::Good, TFTPalette::White},      // UtilizationFill
             {TFTPalette::Black, TFTPalette::Yellow},    // FavoriteNode
@@ -158,7 +156,6 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::ChristmasRed, TFTPalette::Gold},   // HeaderTitle
             {TFTPalette::ChristmasRed, TFTPalette::Gold},   // HeaderStatus
             {TFTPalette::ChristmasGreen, TFTPalette::Pine}, // SignalBars
-            {TFTPalette::ChristmasGreen, TFTPalette::Pine}, // BatteryFill
             {TFTPalette::Gold, TFTPalette::Pine},           // ConnectionIcon
             {TFTPalette::ChristmasGreen, TFTPalette::Pine}, // UtilizationFill
             {TFTPalette::Gold, TFTPalette::Pine},           // FavoriteNode
@@ -193,7 +190,6 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::HotPink, TFTPalette::White},     // HeaderTitle
             {TFTPalette::HotPink, TFTPalette::White},     // HeaderStatus
             {TFTPalette::DeepPink, TFTPalette::PalePink}, // SignalBars
-            {TFTPalette::DeepPink, TFTPalette::PalePink}, // BatteryFill
             {TFTPalette::HotPink, TFTPalette::PalePink},  // ConnectionIcon
             {TFTPalette::DeepPink, TFTPalette::PalePink}, // UtilizationFill
             {TFTPalette::Black, TFTPalette::HotPink},     // FavoriteNode
@@ -228,7 +224,6 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::DeepBlue, TFTPalette::White},   // HeaderTitle
             {TFTPalette::DeepBlue, TFTPalette::SkyBlue}, // HeaderStatus
             {TFTPalette::SkyBlue, TFTPalette::Navy},     // SignalBars
-            {TFTPalette::SkyBlue, TFTPalette::Navy},     // BatteryFill
             {TFTPalette::SkyBlue, TFTPalette::Navy},     // ConnectionIcon
             {TFTPalette::SkyBlue, TFTPalette::Navy},     // UtilizationFill
             {TFTPalette::SkyBlue, TFTPalette::Navy},     // FavoriteNode
@@ -263,7 +258,6 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::CreamOrange, TFTPalette::White}, // HeaderTitle
             {TFTPalette::CreamOrange, TFTPalette::White}, // HeaderStatus
             {TFTPalette::DeepOrange, TFTPalette::Cream},  // SignalBars
-            {TFTPalette::DeepOrange, TFTPalette::Cream},  // BatteryFill
             {TFTPalette::CreamOrange, TFTPalette::Cream}, // ConnectionIcon
             {TFTPalette::DeepOrange, TFTPalette::Cream},  // UtilizationFill
             {TFTPalette::Black, TFTPalette::CreamOrange}, // FavoriteNode
@@ -300,7 +294,6 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // HeaderTitle
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // HeaderStatus
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // SignalBars
-            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // BatteryFill
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // ConnectionIcon
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // UtilizationFill
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // FavoriteNode
@@ -335,7 +328,6 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::ClassicRed, TFTPalette::Black}, // HeaderTitle
             {TFTPalette::ClassicRed, TFTPalette::Black}, // HeaderStatus
             {TFTPalette::ClassicRed, TFTPalette::Black}, // SignalBars
-            {TFTPalette::ClassicRed, TFTPalette::Black}, // BatteryFill
             {TFTPalette::ClassicRed, TFTPalette::Black}, // ConnectionIcon
             {TFTPalette::ClassicRed, TFTPalette::Black}, // UtilizationFill
             {TFTPalette::ClassicRed, TFTPalette::Black}, // FavoriteNode
@@ -370,7 +362,6 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::White, TFTPalette::Black}, // HeaderTitle
             {TFTPalette::White, TFTPalette::Black}, // HeaderStatus
             {TFTPalette::White, TFTPalette::Black}, // SignalBars
-            {TFTPalette::White, TFTPalette::Black}, // BatteryFill
             {TFTPalette::White, TFTPalette::Black}, // ConnectionIcon
             {TFTPalette::White, TFTPalette::Black}, // UtilizationFill
             {TFTPalette::White, TFTPalette::Black}, // FavoriteNode
@@ -421,7 +412,6 @@ static TFTRoleColorsBe roleColors[static_cast<size_t>(TFTColorRole::Count)] = {
     {toBe565(kHeaderBackground), toBe565(kTitleColor)},          // HeaderTitle
     {toBe565(kHeaderBackground), toBe565(kStatusColor)},         // HeaderStatus
     {toBe565(TFTPalette::Good), toBe565(TFTPalette::Black)},     // SignalBars
-    {toBe565(TFTPalette::Good), toBe565(TFTPalette::Black)},     // BatteryFill
     {toBe565(TFTPalette::Blue), toBe565(TFTPalette::Black)},     // ConnectionIcon
     {toBe565(TFTPalette::Good), toBe565(TFTPalette::Black)},     // UtilizationFill
     {toBe565(TFTPalette::Yellow), toBe565(TFTPalette::Black)},   // FavoriteNode
@@ -760,6 +750,33 @@ void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t wid
     if (colorRegionCount < MAX_TFT_COLOR_REGIONS) {
         colorRegions[colorRegionCount].enabled = false;
     }
+}
+
+void registerTFTColorRegionDirect(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t onColor, uint16_t offColor)
+{
+#if !GRAPHICS_TFT_COLORING_ENABLED
+    return;
+#endif
+    if (width <= 0 || height <= 0)
+        return;
+    if (x < 0) {
+        width += x;
+        x = 0;
+    }
+    if (y < 0) {
+        height += y;
+        y = 0;
+    }
+    if (width <= 0 || height <= 0)
+        return;
+
+    if (colorRegionCount >= MAX_TFT_COLOR_REGIONS) {
+        memmove(&colorRegions[0], &colorRegions[1], sizeof(TFTColorRegion) * (MAX_TFT_COLOR_REGIONS - 1));
+        colorRegionCount = MAX_TFT_COLOR_REGIONS - 1;
+    }
+    colorRegions[colorRegionCount++] = {x, y, width, height, toBe565(onColor), toBe565(offColor), true};
+    if (colorRegionCount < MAX_TFT_COLOR_REGIONS)
+        colorRegions[colorRegionCount].enabled = false;
 }
 
 void registerTFTActionMenuRegions(int16_t boxLeft, int16_t boxTop, int16_t boxWidth, int16_t boxHeight)

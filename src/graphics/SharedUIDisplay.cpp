@@ -513,9 +513,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         registerTFTColorRegion(TFTColorRole::HeaderStatus, statusRightStartX, 0, screenW - statusRightStartX, headerHeight);
     }
     if (hasBatteryFillRegion) {
-        setTFTColorRole(TFTColorRole::BatteryFill, batteryFillColor, headerColorForRoles);
-        registerTFTColorRegion(TFTColorRole::BatteryFill, batteryFillRegionX, batteryFillRegionY, batteryFillRegionW,
-                               batteryFillRegionH);
+        registerTFTColorRegionDirect(batteryFillRegionX, batteryFillRegionY, batteryFillRegionW, batteryFillRegionH,
+                                     batteryFillColor, headerColorForRoles);
     }
 #endif
     display->setColor(WHITE); // Reset for other UI
