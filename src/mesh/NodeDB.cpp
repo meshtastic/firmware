@@ -154,10 +154,11 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
 {
     if (ostream) {
         std::vector<meshtastic_NodeInfoLite> const *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
-        for (auto item : *vec) {
+        for (const auto &item : *vec) {
             if (!pb_encode_tag_for_field(ostream, field))
                 return false;
-            pb_encode_submessage(ostream, meshtastic_NodeInfoLite_fields, &item);
+            if (!pb_encode_submessage(ostream, meshtastic_NodeInfoLite_fields, &item))
+                return false;
         }
     }
     if (istream) {
@@ -492,6 +493,30 @@ void removeStorageIndicesFromDisplayOrder(std::vector<uint16_t> &displayOrder, s
     for (auto it = removedStorageIndices.rbegin(); it != removedStorageIndices.rend(); ++it) {
         removeStorageIndexFromDisplayOrder(displayOrder, *it);
     }
+}
+
+bool encodeLiveNodeDatabase(pb_ostream_t *stream, const meshtastic_NodeDatabase &database, pb_size_t liveNodeCount)
+{
+    if (liveNodeCount > database.nodes.size()) {
+        PB_RETURN_ERROR(stream, "NodeDB live count exceeds backing store");
+    }
+
+    if (database.version != 0) {
+        if (!pb_encode_tag(stream, PB_WT_VARINT, meshtastic_NodeDatabase_version_tag) ||
+            !pb_encode_varint(stream, database.version)) {
+            return false;
+        }
+    }
+
+    for (pb_size_t i = 0; i < liveNodeCount; ++i) {
+        const meshtastic_NodeInfoLite &node = database.nodes[i];
+        if (!pb_encode_tag(stream, PB_WT_STRING, meshtastic_NodeDatabase_nodes_tag) ||
+            !pb_encode_submessage(stream, meshtastic_NodeInfoLite_fields, &node)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 } // namespace
 
@@ -1792,10 +1817,31 @@ bool NodeDB::saveNodeDatabaseToDisk()
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
+
+    auto f = SafeFile(nodeDatabaseFileName, false);
+
+    LOG_INFO("Save %s (%u live nodes)", nodeDatabaseFileName, numMeshNodes);
+    pb_ostream_t stream = {};
+    stream.callback = &writecb;
+    stream.state = static_cast<Print *>(&f);
+    stream.max_size = (size_t)-1;
+
+    bool okay = encodeLiveNodeDatabase(&stream, nodeDatabase, numMeshNodes);
+    if (!okay) {
+        LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+    }
+
+    bool writeSucceeded = f.close();
+
+    if (!okay || !writeSucceeded) {
+        LOG_ERROR("Can't write prefs!");
+    }
+
+    return okay && writeSucceeded;
+#else
+    LOG_ERROR("ERROR: Filesystem not implemented");
+    return false;
 #endif
-    size_t nodeDatabaseSize;
-    pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
-    return saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
 }
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)

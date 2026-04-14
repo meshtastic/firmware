@@ -334,3 +334,37 @@ Replace linear metadata scans with a private open-addressing hash while keeping 
 
 - Phase 8 can keep using `getNodeMeta()` as the stable hot lookup API while changing save/load internals, because the lookup no longer depends on scanning `meshNodes`.
 - If phase 10 replaces the vector-backed store with a `NodeStore` shim, `nodeMetaLookup` should survive largely unchanged; only `meta.storage_index` projection needs to swap over to the new backend contract.
+
+## Phase 8: Stream The `nodes.proto` Save Path
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Stop `saveNodeDatabaseToDisk()` from serializing the entire padded `nodeDatabase.nodes` backing vector while keeping the existing `nodes.proto` schema intact.
+
+### What Changed
+
+- `src/mesh/NodeDB.cpp`
+  - Added a small `encodeLiveNodeDatabase()` helper that writes the top-level `meshtastic_NodeDatabase` protobuf directly to an output stream.
+  - Changed the NodeDB save path to emit the `version` field plus only the live `[0, numMeshNodes)` storage slots instead of encoding every element in the padded `nodeDatabase.nodes` vector.
+  - Kept the on-disk protobuf format unchanged: the file still contains a `meshtastic_NodeDatabase` with repeated `NodeInfoLite` entries, but phase 8 no longer writes zeroed tail slots just to preserve capacity.
+  - Left the decode callback path in place for phase 9, so load behavior is unchanged in this phase.
+
+### Important Constraints For Later Phases
+
+- The saved node count is now `numMeshNodes`, not `nodeDatabase.nodes.size()`. Do not reintroduce tail-slot serialization in later save-path or backend work.
+- Phase 9 should continue to accept both older padded saves and newer live-only saves, since both use the same `nodes.proto` schema.
+- `saveNodeDatabaseToDisk()` is now a special-case streamed writer instead of a `saveProto()` call. If a later phase introduces a `NodeStore` abstraction, preserve this streamed-write pattern or replace it with an equivalent backend-aware encoder.
+- Save still walks live storage order, not `displayOrder`. Later phases should keep that distinction explicit.
+
+### Verification
+
+- `pio run -e tbeam-s3-core` succeeded locally.
+- `pio run -e rak4631` succeeded locally.
+- `pio run -e native` is still expected to fail before NodeDB changes are exercised in the existing Portduino/LovyanGFX macOS toolchain path (`malloc.h` and missing C runtime declarations in LovyanGFX sources).
+
+### Follow-Up Notes
+
+- Phase 8 removes save-side over-serialization but does not change load-side vector growth yet. Phase 9 still needs to decode one node at a time and avoid leaving legacy load capacity pinned longer than necessary.
