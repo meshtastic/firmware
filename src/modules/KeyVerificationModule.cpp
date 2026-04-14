@@ -36,8 +36,7 @@ AdminMessageHandleResult KeyVerificationModule::handleAdminMessageForModule(cons
 
         } else if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_VERIFY &&
                    request->key_verification.nonce == currentNonce) {
-            auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
-            remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+            nodeDB->setKeyVerified(currentRemoteNode, true);
             resetToIdle();
         } else if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_NOT_VERIFY) {
             resetToIdle();
@@ -86,6 +85,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             sprintf(message, "Verification: \n");
             generateVerificationCode(message + 15);
             LOG_INFO("Hash1 matches!");
+            const NodeNum verifiedNode = currentRemoteNode;
             static const char *optionsArray[] = {"Reject", "Accept"};
             // Don't try to put the array definition in the macro. Does not work with curly braces.
             IF_SCREEN(graphics::BannerOverlayOptions options; options.message = message; options.durationMs = 30000;
@@ -94,8 +94,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                       options.bannerCallback =
                           [=](int selected) {
                               if (selected == 1) {
-                                  auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
-                                  remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                                  nodeDB->setKeyVerified(verifiedNode, true);
                               }
                           };
                       screen->showOverlayBanner(options);)

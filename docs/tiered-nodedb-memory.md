@@ -84,3 +84,48 @@ Stop external callers from writing durable node flags directly through `meshtast
 
 - `CannedMessageModule` still uses the old `set_favorite()` wrapper and should move to `setFavorite()` in a later API-hardening phase.
 - Key-verification and local-node time writes still mutate durable state through raw node pointers; those are the next mutator candidates called out in phase 2.
+
+## Phase 2: Add Key-Verification And Local-Node Mutators
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Remove the remaining direct durable writes that would break once full node records stop living in one mutable RAM vector.
+
+### What Changed
+
+- `src/mesh/NodeDB.h`
+  - Added `setKeyVerified(NodeNum, bool)` for durable manual-key verification writes.
+  - Added `touchLocalNodeTime()` so local `last_heard` / `position.time` refreshes happen inside NodeDB instead of open-coded pointer mutation in callers.
+- `src/mesh/NodeDB.cpp`
+  - Implemented `setKeyVerified()` as the NodeDB-owned path for toggling `NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK`, with persistence handled in the mutator.
+  - Implemented `touchLocalNodeTime()` to ensure the local node has a position struct, then refresh `last_heard` and `position.time` from the current valid network time.
+- `src/modules/KeyVerificationModule.cpp`
+  - Replaced direct `bitfield` writes in the admin verify path and the incoming-verification accept path with `nodeDB->setKeyVerified(...)`.
+  - Captured the target `NodeNum` in the screen callback so delayed acceptance keeps referring to the intended node instead of whatever `currentRemoteNode` becomes later.
+- `src/graphics/draw/MenuHandler.cpp`
+  - Replaced the key-verification accept banner's direct `bitfield` write with `nodeDB->setKeyVerified(...)`.
+  - Captured the selected `NodeNum` before building the callback for the same reason as the module-side banner path.
+- `src/mesh/MeshService.cpp`
+  - Replaced the local `last_heard` / `position.time` pointer writes in `refreshLocalMeshNode()` with `nodeDB->touchLocalNodeTime()`.
+  - Kept battery refresh behavior in `MeshService`, since that remains outside NodeDB ownership.
+
+### Important Constraints For Later Phases
+
+- Manual key-verification writes should continue to enter through `NodeDB::setKeyVerified()` so persistence and future backend-specific record updates stay centralized.
+- `touchLocalNodeTime()` is intentionally transient. It refreshes the in-memory local record for current time-sensitive behavior, but it does not save the NodeDB to disk.
+- Key-verification accept flows now capture `NodeNum` by value before asynchronous UI callbacks fire. Keep that pattern if later phases replace pointer reads with scratch-buffer reads or `NodeNum` handles.
+- Phase 2 does not change pointer-returning lookup APIs generally, display/storage order, or persistence format beyond ensuring manual key verification now persists through a mutator.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e rak4631`
+- `pio run -e native` still fails in the existing Portduino/LovyanGFX toolchain path before NodeDB changes are linked. The current local failure is still the same class of issue seen in phase 1: LovyanGFX native sources hit missing C runtime declarations (`size_t`, `memcpy`, `memmove`, `strlen`) and `malloc.h` include failures on macOS/Portduino.
+
+### Follow-Up Notes
+
+- `MeshService::refreshLocalMeshNode()` still returns a raw pointer for read-side compatibility; phase 3+ can tighten that once long-lived pointer caches start moving to `NodeNum`.
+- Other direct raw-pointer reads remain throughout the codebase, but phase 2 removes the last key-verification and local-time write sites outside NodeDB.

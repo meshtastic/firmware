@@ -2432,6 +2432,7 @@ void menuHandler::keyVerificationFinalPrompt()
     keyVerificationModule->generateVerificationCode(message + 15); // send the toPhone packet
 
     if (screen) {
+        const NodeNum verifiedNode = keyVerificationModule->getCurrentRemoteNode();
         static const char *optionsArray[] = {"Reject", "Accept"};
         graphics::BannerOverlayOptions options;
         options.message = message;
@@ -2441,8 +2442,7 @@ void menuHandler::keyVerificationFinalPrompt()
         options.notificationType = graphics::notificationTypeEnum::selection_picker;
         options.bannerCallback = [=](int selected) {
             if (selected == 1) {
-                auto remoteNodePtr = nodeDB->getMeshNode(keyVerificationModule->getCurrentRemoteNode());
-                remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                nodeDB->setKeyVerified(verifiedNode, true);
             }
         };
         screen->showOverlayBanner(options);

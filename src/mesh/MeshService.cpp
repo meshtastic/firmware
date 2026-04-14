@@ -389,22 +389,8 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 
 meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
 {
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeInfoLite *node = nodeDB->touchLocalNodeTime();
     assert(node);
-
-    // We might not have a position yet for our local node, in that case, at least try to send the time
-    if (!node->has_position) {
-        memset(&node->position, 0, sizeof(node->position));
-        node->has_position = true;
-    }
-
-    meshtastic_PositionLite &position = node->position;
-
-    // Update our local node info with our time (even if we don't decide to update anyone else)
-    node->last_heard =
-        getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
-
-    position.time = getValidTime(RTCQualityFromNet);
 
     if (powerStatus->getHasBattery() == 1) {
         updateBatteryLevel(powerStatus->getBatteryChargePercent());

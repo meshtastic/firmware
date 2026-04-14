@@ -2043,6 +2043,46 @@ void NodeDB::setMuted(NodeNum nodeId, bool isMuted)
     saveNodeDatabaseToDisk();
 }
 
+void NodeDB::setKeyVerified(NodeNum nodeId, bool isVerified)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    if (!lite) {
+        return;
+    }
+
+    const bool currentlyVerified = (lite->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) != 0;
+    if (currentlyVerified == isVerified) {
+        return;
+    }
+
+    if (isVerified) {
+        lite->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+    } else {
+        lite->bitfield &= ~NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+    }
+
+    saveNodeDatabaseToDisk();
+}
+
+meshtastic_NodeInfoLite *NodeDB::touchLocalNodeTime()
+{
+    meshtastic_NodeInfoLite *node = getOrCreateMeshNode(getNodeNum());
+    if (!node) {
+        return nullptr;
+    }
+
+    if (!node->has_position) {
+        memset(&node->position, 0, sizeof(node->position));
+        node->has_position = true;
+    }
+
+    const uint32_t now = getValidTime(RTCQualityFromNet);
+    node->last_heard = now;
+    node->position.time = now;
+
+    return node;
+}
+
 bool NodeDB::isFavorite(uint32_t nodeId)
 {
     // returns true if nodeId is_favorite; false if not or not found
