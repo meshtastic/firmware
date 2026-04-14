@@ -2547,11 +2547,15 @@ void menuHandler::themeMenu()
 {
     // Build menu dynamically from the theme table.
     // Only visible themes appear!
+    // Slot budget: 1 for "Back" + up to kMaxThemesInMenu visible themes.
+    // Bump kMaxThemesInMenu if you add more themes than will fit here.
+    constexpr size_t kMaxThemesInMenu = 15;
     const size_t visibleCount = getVisibleThemeCount();
-    static const char *optionsArray[8] = {"Back"};
-    const int options = static_cast<int>(visibleCount) + 1; // +1 for Back
+    static const char *optionsArray[kMaxThemesInMenu + 1] = {"Back"};
+    const size_t shownCount = (visibleCount < kMaxThemesInMenu) ? visibleCount : kMaxThemesInMenu;
+    const int options = static_cast<int>(shownCount) + 1; // +1 for Back
 
-    for (size_t i = 0; i < visibleCount && i + 1 < 8; i++) {
+    for (size_t i = 0; i < shownCount; i++) {
         optionsArray[i + 1] = getVisibleThemeByIndex(i).name;
     }
 

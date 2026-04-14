@@ -51,5 +51,10 @@ constexpr uint16_t CreamOrange = rgb565(255, 140, 50);
 constexpr uint16_t DeepOrange = rgb565(220, 100, 20);
 constexpr uint16_t Cream = rgb565(255, 248, 235);
 
+// Classic monochrome theme accent colors (single-color-on-black themes)
+constexpr uint16_t MeshtasticGreen = rgb565(0x67, 0xEA, 0x94);
+constexpr uint16_t ClassicRed = rgb565(255, 64, 64);
+// Monochrome White reuses TFTPalette::White above.
+
 } // namespace TFTPalette
 } // namespace graphics

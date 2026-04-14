@@ -269,6 +269,104 @@ static const TFTThemeDef kThemes[] = {
         true,                    // fullFrameInvert
         true,                    // visible
     },
+
+    // ── Meshtastic Green (ThemeID::MeshtasticGreen = 6) — classic monochrome ─
+    // Pure single-color-on-black look.  Every role maps foreground pixels to
+    // the theme color and background pixels to Black.
+    {
+        ThemeID::MeshtasticGreen, // id
+        "Meshtastic Green",       // name
+        6,                        // uniqueIdentifier
+        {
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // HeaderBackground
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // HeaderTitle
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // HeaderStatus
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // SignalBars
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // BatteryFill
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // ConnectionIcon
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // UtilizationFill
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // FavoriteNode
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // ActionMenuBorder
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // ActionMenuBody
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // ActionMenuTitle
+            {TFTPalette::Black, TFTPalette::MeshtasticGreen}, // FrameMono (bodyBg, bodyFg)
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // BootSplash
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // BodyYellow
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // NavigationBar
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // NavigationArrow
+        },
+        TFTPalette::MeshtasticGreen, // headerBg (no separate bar — pure monochrome)
+        TFTPalette::Black,           // headerText
+        TFTPalette::Black,           // headerStatus
+        TFTPalette::Black,           // bodyBg
+        TFTPalette::MeshtasticGreen, // bodyFg
+        true,                        // fullFrameInvert
+        true,                        // visible
+    },
+
+    // ── Classic Red (ThemeID::ClassicRed = 7) — classic monochrome ──────────
+    {
+        ThemeID::ClassicRed, // id
+        "Classic Red",       // name
+        7,                   // uniqueIdentifier
+        {
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // HeaderBackground
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // HeaderTitle
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // HeaderStatus
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // SignalBars
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // BatteryFill
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // ConnectionIcon
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // UtilizationFill
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // FavoriteNode
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // ActionMenuBorder
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // ActionMenuBody
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // ActionMenuTitle
+            {TFTPalette::Black, TFTPalette::ClassicRed}, // FrameMono (bodyBg, bodyFg)
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // BootSplash
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // BodyYellow
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // NavigationBar
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // NavigationArrow
+        },
+        TFTPalette::ClassicRed, // headerBg
+        TFTPalette::Black,      // headerText
+        TFTPalette::Black,      // headerStatus
+        TFTPalette::Black,      // bodyBg
+        TFTPalette::ClassicRed, // bodyFg
+        true,                   // fullFrameInvert
+        true,                   // visible
+    },
+
+    // ── Monochrome White (ThemeID::MonochromeWhite = 8) — classic monochrome ─
+    {
+        ThemeID::MonochromeWhite, // id
+        "Monochrome White",       // name
+        8,                        // uniqueIdentifier
+        {
+            {TFTPalette::White, TFTPalette::Black}, // HeaderBackground
+            {TFTPalette::White, TFTPalette::Black}, // HeaderTitle
+            {TFTPalette::White, TFTPalette::Black}, // HeaderStatus
+            {TFTPalette::White, TFTPalette::Black}, // SignalBars
+            {TFTPalette::White, TFTPalette::Black}, // BatteryFill
+            {TFTPalette::White, TFTPalette::Black}, // ConnectionIcon
+            {TFTPalette::White, TFTPalette::Black}, // UtilizationFill
+            {TFTPalette::White, TFTPalette::Black}, // FavoriteNode
+            {TFTPalette::White, TFTPalette::Black}, // ActionMenuBorder
+            {TFTPalette::White, TFTPalette::Black}, // ActionMenuBody
+            {TFTPalette::White, TFTPalette::Black}, // ActionMenuTitle
+            {TFTPalette::Black, TFTPalette::White}, // FrameMono (bodyBg, bodyFg)
+            {TFTPalette::White, TFTPalette::Black}, // BootSplash
+            {TFTPalette::White, TFTPalette::Black}, // BodyYellow
+            {TFTPalette::White, TFTPalette::Black}, // NavigationBar
+            {TFTPalette::White, TFTPalette::Black}, // NavigationArrow
+        },
+        TFTPalette::White, // headerBg
+        TFTPalette::Black, // headerText
+        TFTPalette::Black, // headerStatus
+        TFTPalette::Black, // bodyBg
+        TFTPalette::White, // bodyFg
+        true,              // fullFrameInvert
+        true,              // visible
+    },
 };
 
 static constexpr size_t kInternalThemeCount = sizeof(kThemes) / sizeof(kThemes[0]);
@@ -462,6 +560,27 @@ void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
 #endif
 
     const uint32_t themeId = uiconfig.screen_rgb_color;
+
+    // Classic monochrome themes: callers pass generic accents (Yellow, Blue,
+    // Good/Medium/Bad, White) expecting theme adaptation.  For these themes,
+    // every non-black accent collapses to the single theme color so the whole
+    // UI reads as one-color-on-black like a classic phosphor display.
+    // offColor is passed through — current callers always supply Black (or
+    // the theme's headerBg, which is also Black for monochrome themes).
+    if (themeId == ThemeID::MeshtasticGreen || themeId == ThemeID::ClassicRed || themeId == ThemeID::MonochromeWhite) {
+        const uint16_t monoAccent = (themeId == ThemeID::MeshtasticGreen) ? TFTPalette::MeshtasticGreen
+                                    : (themeId == ThemeID::ClassicRed)    ? TFTPalette::ClassicRed
+                                                                          : TFTPalette::White;
+        if (onColor != TFTPalette::Black) {
+            onColor = monoAccent;
+        }
+        const uint8_t monoIndex = static_cast<uint8_t>(role);
+        if (monoIndex < static_cast<uint8_t>(TFTColorRole::Count)) {
+            roleColors[monoIndex].onColorBe = toBe565(onColor);
+            roleColors[monoIndex].offColorBe = toBe565(offColor);
+        }
+        return;
+    }
 
     // Highlight roles (FavoriteNode / BodyYellow) get per-theme accent treatment.
     if (role == TFTColorRole::FavoriteNode || role == TFTColorRole::BodyYellow) {

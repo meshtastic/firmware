@@ -92,7 +92,9 @@ constexpr uint32_t Christmas = 2;
 constexpr uint32_t Pink = 3;
 constexpr uint32_t Blue = 4;
 constexpr uint32_t Creamsicle = 5;
-// Next free ID: 6.
+constexpr uint32_t MeshtasticGreen = 6;
+constexpr uint32_t ClassicRed = 7;
+constexpr uint32_t MonochromeWhite = 8;
 } // namespace ThemeID
 
 // Per-role color pair stored in native (little-endian) RGB565 format.
