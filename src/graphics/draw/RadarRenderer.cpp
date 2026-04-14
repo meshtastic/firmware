@@ -10,7 +10,7 @@
 #include <cmath>
 #include <vector>
 
-// Screen instance — owns hasHeading()/getHeading()/estimatedHeading()
+// Owns hasHeading() / getHeading() / estimatedHeading()
 extern graphics::Screen *screen;
 
 namespace graphics
@@ -22,60 +22,45 @@ namespace RadarRenderer
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Round maxDistM (metres) up to the nearest "nice" radar range.
- * Returns the chosen scale in metres.
- */
 static float niceScaleMeters(float maxDistM)
 {
-    static const float scales[] = {50,    100,   250,    500,    1000,  2000,
+    static const float scales[] = {50,    100,   250,    500,    1000,   2000,
                                     5000,  10000, 25000,  50000,  100000, 250000,
                                     500000};
-    for (float s : scales) {
+    for (float s : scales)
         if (maxDistM <= s)
             return s;
-    }
     return 1000000.0f;
 }
 
-/** Format a distance (metres) as a compact human-readable string. */
 static void formatDistM(char *buf, size_t len, float metres)
 {
-    bool imperial = (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL);
+    const bool imperial = (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL);
     if (imperial) {
-        float miles = metres / 1609.34f;
-        if (miles < 0.1f) {
+        const float miles = metres / 1609.34f;
+        if (miles < 0.1f)
             snprintf(buf, len, "%dft", (int)(metres * 3.28084f));
-        } else if (miles < 10.0f) {
+        else if (miles < 10.0f)
             snprintf(buf, len, "%.1fmi", miles);
-        } else {
+        else
             snprintf(buf, len, "%dmi", (int)(miles + 0.5f));
-        }
     } else {
-        if (metres < 1000.0f) {
+        if (metres < 1000.0f)
             snprintf(buf, len, "%dm", (int)metres);
-        } else if (metres < 10000.0f) {
+        else if (metres < 10000.0f)
             snprintf(buf, len, "%.1fkm", metres / 1000.0f);
-        } else {
+        else
             snprintf(buf, len, "%dkm", (int)(metres / 1000.0f + 0.5f));
-        }
     }
 }
 
-/**
- * Plot a point on the radar circle.
- *
- * @param bearingRad   Absolute bearing to the point (radians, 0 = north).
- * @param headingRad   Device heading (radians).  In heading-up mode we subtract
- *                     this from bearingRad so the device's facing direction is
- *                     always rendered at the top of the circle.
- * @param norm         Normalised distance [0..1] from centre to outer ring.
- */
-static void plotPoint(OLEDDisplay *display, int cx, int cy, int radius, float bearingRad, float headingRad, float norm)
+// Plot a 3×3 node marker at the given absolute bearing and normalised distance.
+// headingRad rotates the radar so the device's facing direction is always up.
+static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bearingRad, float headingRad, float norm)
 {
-    const float relBrg = bearingRad - headingRad;
-    const int px = cx + (int)(radius * norm * sinf(relBrg));
-    const int py = cy - (int)(radius * norm * cosf(relBrg));
+    const float rel = bearingRad - headingRad;
+    const int px = cx + (int)(radius * norm * sinf(rel));
+    const int py = cy - (int)(radius * norm * cosf(rel));
     display->fillRect(px - 1, py - 1, 3, 3);
 }
 
@@ -94,17 +79,24 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     const int contentH = sh - headerH;
 
     // -----------------------------------------------------------------------
-    // Radar circle geometry.
-    // Limit diameter to 2/3 of screen width so the info panel always fits.
+    // Radar geometry: circle is centred horizontally, fills the content height.
+    // On 128×64 this gives radius=27, leaving ~37 px on each side for labels.
+    // On larger displays the circle grows proportionally.
     // -----------------------------------------------------------------------
-    const int radarDiam = std::min(contentH - 2, (sw * 2) / 3);
+    const int radarDiam = contentH - 2;          // 1 px margin top + bottom
     const int radarRadius = radarDiam / 2;
-    const int radarCX = x + radarRadius + 1;
+    const int radarCX = x + sw / 2;              // horizontally centred
     const int radarCY = y + headerH + 1 + radarRadius;
-    const int infoPanelX = radarCX + radarRadius + 4;
+
+    // The ring legend sits to the right of the circle.
+    const int legendX = radarCX + radarRadius + 3;
+    // Three labels, each FONT_HEIGHT_SMALL tall, centred around radarCY.
+    const int legendY3 = radarCY - FONT_HEIGHT_SMALL - 3; // outer ring label
+    const int legendY2 = radarCY - 3;                     // middle ring label
+    const int legendY1 = radarCY + FONT_HEIGHT_SMALL - 3; // inner ring label
 
     // -----------------------------------------------------------------------
-    // Own position — bail out gracefully if GPS is unavailable.
+    // Own position — bail gracefully if GPS is unavailable.
     // -----------------------------------------------------------------------
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (!ourNode || !nodeDB->hasValidPosition(ourNode)) {
@@ -118,30 +110,24 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     const double myLon = ourNode->position.longitude_i * 1e-7;
 
     // -----------------------------------------------------------------------
-    // Heading — IMU (BMX160 / RAK12034) is preferred; GPS-estimated movement
-    // heading is used as fallback.  When neither is available the radar falls
-    // back to north-up (headingRad = 0).
-    //
-    // Screen::setHeading() is called by BMX160Sensor::runOnce() after tilt-
-    // compensated compass fusion, so screen->hasHeading() is true whenever the
-    // RAK12034 is connected and initialised.
+    // Heading — BMX160 via screen->setHeading() (tilt-compensated compass
+    // fusion).  Falls back to GPS movement track, then north-up (0).
     // -----------------------------------------------------------------------
-    const float headingRad = screen->hasHeading()
-                                 ? screen->getHeading() * DEG_TO_RAD
-                                 : screen->estimatedHeading(myLat, myLon);
+    const float headingRad = screen->hasHeading() ? screen->getHeading() * DEG_TO_RAD
+                                                   : screen->estimatedHeading(myLat, myLon);
     const bool usingIMU = screen->hasHeading();
 
     // -----------------------------------------------------------------------
-    // Collect remote nodes that have valid positions.
+    // Collect remote nodes with valid GPS positions.
     // -----------------------------------------------------------------------
     struct Entry {
         meshtastic_NodeInfoLite *node;
         float distM;
-        float bearingRad; // absolute bearing, radians, 0 = north
+        float bearingRad;
     };
 
     std::vector<Entry> entries;
-    float maxDistM = 1.0f; // 1 m floor prevents degenerate scale
+    float maxDistM = 1.0f;
 
     const int numNodes = nodeDB->getNumMeshNodes();
     for (int i = 0; i < numNodes; i++) {
@@ -161,24 +147,21 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
             maxDistM = dist;
     }
 
-    // -----------------------------------------------------------------------
-    // Scale and radar chrome.
-    // -----------------------------------------------------------------------
     const float scale = niceScaleMeters(maxDistM);
 
-    // Three concentric range rings.
-    for (int ring = 1; ring <= 3; ring++) {
+    // -----------------------------------------------------------------------
+    // Draw radar chrome: three concentric range rings.
+    // -----------------------------------------------------------------------
+    for (int ring = 1; ring <= 3; ring++)
         display->drawCircle(radarCX, radarCY, (radarRadius * ring) / 3);
-    }
 
-    // North ("N") indicator.
-    // In heading-up mode it rotates to show the true north direction.
-    // In north-up mode it sits at the top of the outer ring.
+    // -----------------------------------------------------------------------
+    // North indicator — rotates with IMU heading so it always points true north.
+    // Placed just inside the outer ring to avoid clipping the header.
+    // -----------------------------------------------------------------------
     {
-        // North is at absolute bearing 0; relative bearing = 0 - headingRad
-        const float northBrg = -headingRad;
-        // Place label just inside the outer ring.
         const int inset = FONT_HEIGHT_SMALL / 2 + 1;
+        const float northBrg = -headingRad; // bearing of north relative to "up"
         const int nx = radarCX + (int)((radarRadius - inset) * sinf(northBrg));
         const int ny = radarCY - (int)((radarRadius - inset) * cosf(northBrg));
         display->setFont(FONT_SMALL);
@@ -186,7 +169,7 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         display->drawString(nx, ny - FONT_HEIGHT_SMALL / 2, "N");
     }
 
-    // Own-node marker: filled 4×4 square at centre.
+    // Own-node marker: filled 4×4 square at the centre.
     display->fillRect(radarCX - 2, radarCY - 2, 4, 4);
 
     // -----------------------------------------------------------------------
@@ -194,45 +177,35 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // -----------------------------------------------------------------------
     for (const Entry &e : entries) {
         const float norm = std::min(e.distM / scale, 1.0f);
-        plotPoint(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad, norm);
+        plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad, norm);
     }
 
     // -----------------------------------------------------------------------
-    // Info panel.
+    // Ring scale legend (right of radar circle).
+    // Three rows aligned with the centre of the radar, showing the distance
+    // each ring represents so the user can read off approximate distances.
     // -----------------------------------------------------------------------
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    int infoY = y + headerH;
+    char buf[10];
 
-    // Line 1: scale of the outermost ring.
-    char scaleStr[12];
-    formatDistM(scaleStr, sizeof(scaleStr), scale);
-    display->drawString(infoPanelX, infoY, scaleStr);
-    infoY += FONT_HEIGHT_SMALL;
+    // Outer ring (full scale)
+    formatDistM(buf, sizeof(buf), scale);
+    display->drawString(legendX, legendY3, buf);
 
-    // Line 2: orientation mode.
-    display->drawString(infoPanelX, infoY, usingIMU ? "HDG-UP" : "N-UP");
-    infoY += FONT_HEIGHT_SMALL;
+    // Middle ring (2/3 scale)
+    formatDistM(buf, sizeof(buf), scale * 2.0f / 3.0f);
+    display->drawString(legendX, legendY2, buf);
 
-    // Lines 3–4: closest node name and distance.
-    if (!entries.empty()) {
-        const Entry &closest = *std::min_element(entries.begin(), entries.end(),
-                                                  [](const Entry &a, const Entry &b) { return a.distM < b.distM; });
+    // Inner ring (1/3 scale)
+    formatDistM(buf, sizeof(buf), scale / 3.0f);
+    display->drawString(legendX, legendY1, buf);
 
-        char name[16] = "";
-        if (closest.node->has_user && closest.node->user.short_name[0]) {
-            strncpy(name, closest.node->user.short_name, sizeof(name) - 1);
-        } else {
-            snprintf(name, sizeof(name), "%04X", (uint16_t)(closest.node->num & 0xFFFF));
-        }
-
-        char distStr[12];
-        formatDistM(distStr, sizeof(distStr), closest.distM);
-
-        display->drawString(infoPanelX, infoY, name);
-        infoY += FONT_HEIGHT_SMALL;
-        display->drawString(infoPanelX, infoY, distStr);
+    // IMU active indicator below the legend — helps confirm the RAK12034
+    // is working during first-time setup.
+    if (usingIMU) {
+        display->drawString(legendX, legendY1 + FONT_HEIGHT_SMALL, "IMU");
     }
 }
 
