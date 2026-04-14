@@ -650,7 +650,9 @@ void portduinoSetup()
     if (verboseEnabled && portduino_config.logoutputlevel != level_trace) {
         portduino_config.logoutputlevel = level_debug;
     }
-
+    if (portduino_config.lora_spi_dev != "") {
+        portduinoSetOptions({.realHardware = true});
+    }
     return;
 }
 
