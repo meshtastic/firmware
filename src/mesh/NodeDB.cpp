@@ -1569,6 +1569,7 @@ void NodeDB::markFlashSlotLayoutDirty()
         return;
     }
 
+    // Any storage move or clear changes the dense layout, so our next save has to repack flash in slot order.
     flashSlotFullRewriteRequired = true;
     if (flashSlotDirty.size() != nodeStore->slotCount()) {
         resizeFlashSlotTracking(nodeStore->slotCount());
@@ -2314,6 +2315,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
         resizeFlashSlotTracking(nodeStore->slotCount());
         FlashSlotStore::Manifest manifest;
         const uint16_t slotCount = static_cast<uint16_t>(nodeStore->slotCount());
+        // Phase 16 can skip unchanged slots, but layout changes or manifest mismatches send us back to the dense rewrite path.
         bool fullRewrite = flashSlotFullRewriteRequired;
         if (!flashSlotStore.readManifest(manifest) || manifest.slot_count != slotCount) {
             LOG_INFO("Initialize flash slot NodeDB with %u slots", static_cast<unsigned>(slotCount));
@@ -2379,6 +2381,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
                      static_cast<unsigned>(dirtyStorageIndices.size()));
             logNodeDbMemorySnapshot("before flash nodedb save", numMeshNodes, nodeStore->slotCount());
             for (const uint16_t storageIndex : dirtyStorageIndices) {
+                // Dense storage order stays authoritative; if we already know a flash home for this slot, reuse it.
                 uint16_t flashSlotIndex = storageIndex;
                 if (flashSlotStoreActive && storageIndex < flashSlotByStorageIndex.size() &&
                     flashSlotByStorageIndex.at(storageIndex) != INVALID_FLASH_SLOT_INDEX) {
