@@ -10,17 +10,10 @@
 static const uint8_t SDA = 17;
 static const uint8_t SCL = 18;
 
-// Default SPI will be mapped to Radio
-static const uint8_t SS = 39;
-static const uint8_t MOSI = 40;
-static const uint8_t MISO = 41;
-static const uint8_t SCK = 42;
-
-// #define SPI_MOSI (11)
-// #define SPI_SCK (10)
-// #define SPI_MISO (9)
-// #define SPI_CS (12)
-
-// #define SDCARD_CS SPI_CS
+// Default SPI is the LR1110 radio bus
+static const uint8_t SS = 12;
+static const uint8_t MOSI = 10;
+static const uint8_t MISO = 9;
+static const uint8_t SCK = 11;
 
 #endif /* Pins_Arduino_h */
