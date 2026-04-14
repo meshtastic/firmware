@@ -129,3 +129,47 @@ Remove the remaining direct durable writes that would break once full node recor
 
 - `MeshService::refreshLocalMeshNode()` still returns a raw pointer for read-side compatibility; phase 3+ can tighten that once long-lived pointer caches start moving to `NodeNum`.
 - Other direct raw-pointer reads remain throughout the codebase, but phase 2 removes the last key-verification and local-time write sites outside NodeDB.
+
+## Phase 3: Replace Long-Lived Pointer Caches With `NodeNum`
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Stop UI and module code from retaining `meshtastic_NodeInfoLite *` across frame rebuilds or delayed selection flows.
+
+### What Changed
+
+- `src/graphics/draw/UIRenderer.h`
+  - Changed `UIRenderer::favoritedNodes` from `std::vector<meshtastic_NodeInfoLite *>` to `std::vector<NodeNum>`.
+- `src/graphics/draw/UIRenderer.cpp`
+  - Rebuilt the favorite-node cache as `NodeNum` values instead of raw node pointers.
+  - Updated `drawNodeInfo()` to resolve the current favorite node via `nodeDB->getMeshNode()` at draw time before reading user, signal, or hops fields.
+  - Kept `currentFavoriteNodeNum` as the durable hand-off for favorite-node menu actions, so menu paths no longer depend on frame-stable node pointers.
+- `src/modules/CannedMessageModule.h`
+  - Changed destination-selection cache entries from raw `NodeInfoLite *` to `NodeNum`.
+- `src/modules/CannedMessageModule.cpp`
+  - Rebuilt the filtered destination list as `NodeNum` values.
+  - Updated destination selection to refresh the node's channel from `NodeDB` at selection time instead of reusing a cached pointer.
+  - Updated destination-list drawing to re-read the current node record from `NodeDB` for names and favorite state, with `getNodeName()` fallback if the node disappeared after the list was built.
+- `src/graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.cpp`
+  - Replaced the stale prefill path's temporary pointer list with `NodeNum + last_heard` entries collected via `getMeshNodeByIndex()`.
+  - Re-resolved each node by `NodeNum` before reading hops or position data to populate Heard cards.
+
+### Important Constraints For Later Phases
+
+- Favorite-node carousel state is now identity-based. If later phases replace `getMeshNode()` reads with scratch-buffer readers, keep `currentFavoriteNodeNum` and `favoritedNodes` as `NodeNum`-based state rather than reintroducing retained full-record pointers.
+- Canned-message destination selection is now also identity-based. Later read-side migrations can swap the fresh `getMeshNode()` calls for `readNode()`-style helpers without changing the UI state shape.
+- This phase does not change NodeDB lookup APIs, display/storage order, or persistence format. It only tightens caller-side cache lifetime assumptions ahead of the later `displayOrder[]` and storage-backend phases.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e rak4631`
+- `pio run -e native` still fails before NodeDB code is exercised in the existing Portduino/LovyanGFX macOS toolchain path. The current local failure remains the same class seen in phases 1 and 2: missing C runtime declarations in LovyanGFX C sources (`size_t`, `memcpy`, `memmove`, `strlen`) plus missing `malloc.h`.
+
+### Follow-Up Notes
+
+- `UIRenderer::drawNodeInfo()` and destination-list rendering still perform fresh pointer reads through `getMeshNode()` on use. That is intentional for phase 3, but phase 4+ should treat these sites as candidates for scratch-buffer read helpers once `displayOrder[]` and backend-backed full records land.
+- `InkHUD::NodeListApplet` still re-reads live nodes through `getMeshNode(nodeNum)` while rendering cards. Phase 3 keeps that behavior because it is an on-use read rather than a retained pointer cache.
