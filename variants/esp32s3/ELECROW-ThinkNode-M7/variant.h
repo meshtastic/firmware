@@ -1,6 +1,10 @@
 #define HAS_GPS 0
 #define HAS_WIRE 0
+#define HAS_SCREEN 0
 #define I2C_NO_RESCAN
+
+#define UART_TX 43
+#define UART_RX 44
 
 #define WIFI_LED 3
 #define WIFI_STATE_ON 0
@@ -8,6 +12,8 @@
 #define LED_PIN 46
 #define LED_STATE_ON 0
 #define BUTTON_PIN 4
+#define BUTTON_ACTIVE_LOW true
+#define BUTTON_ACTIVE_PULLUP true
 
 #define LORA_SCK 11
 #define LORA_MISO 9

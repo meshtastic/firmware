@@ -129,7 +129,11 @@ bool initEthernet()
     ch390_conf.spi_mosi_gpio = ETH_MOSI_PIN;
     ch390_conf.spi_miso_gpio = ETH_MISO_PIN;
     ch390_conf.int_gpio = ETH_INT_PIN;
+#ifdef ETH_RST_PIN
     ch390_conf.reset_gpio = ETH_RST_PIN;
+#else
+    ch390_conf.reset_gpio = -1;
+#endif
     ch390_conf.spi_clock_mhz = 20;
     if ((config.network.eth_enabled) && (ETH.begin(ch390_conf))) {
         WiFi.onEvent(WiFiEvent);
