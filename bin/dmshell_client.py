@@ -459,7 +459,7 @@ class SessionState:
             self.replay_log_file = None
 
     def remember_sent_frame(self, frame: SentShellFrame) -> None:
-        if frame.seq == 0 or frame.op == self.pb2.mesh.DMShell.ACK:
+        if frame.seq == 0 or frame.op == self.pb2.mesh.RemoteShell.ACK:
             return
         with self.tx_lock:
             self.tx_history.append(frame)
@@ -508,7 +508,7 @@ def make_toradio_packet(pb2, state: SessionState, shell_msg) -> object:
     packet.channel = state.channel
     packet.hop_limit = DEFAULT_HOP_LIMIT
     packet.want_ack = False
-    packet.decoded.portnum = pb2.portnums.DM_SHELL_APP
+    packet.decoded.portnum = pb2.portnums.REMOTE_SHELL_APP
     packet.decoded.payload = shell_msg.SerializeToString()
     packet.decoded.want_response = False
     packet.decoded.dest = state.target
@@ -534,13 +534,13 @@ def send_shell_frame(
     heartbeat: bool = False,
 ) -> int:
     if seq is None:
-        seq = 0 if op == state.pb2.mesh.DMShell.ACK else state.alloc_seq()
+        seq = 0 if op == state.pb2.mesh.RemoteShell.ACK else state.alloc_seq()
     if ack_seq is None:
         ack_seq = state.current_ack_seq()
     if session_id is None:
         session_id = state.session_id
 
-    shell = state.pb2.mesh.DMShell()
+    shell = state.pb2.mesh.RemoteShell()
     shell.op = op
     shell.session_id = session_id
     shell.seq = seq
@@ -562,7 +562,7 @@ def send_shell_frame(
 
 def send_ack_frame(transport, state: SessionState, replay_from: Optional[int] = None) -> None:
     payload = b"" if replay_from is None else encode_replay_request(replay_from)
-    send_shell_frame(transport, state, state.pb2.mesh.DMShell.ACK, payload=payload, seq=0, remember=False)
+    send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.ACK, payload=payload, seq=0, remember=False)
 
 
 def replay_frames_from(transport, state: SessionState, start_seq: int) -> None:
@@ -609,9 +609,9 @@ def wait_for_config_complete(transport, pb2, timeout: float, verbose: bool) -> N
 def decode_shell_packet(state: SessionState, packet) -> Optional[object]:
     if packet.WhichOneof("payload_variant") != "decoded":
         return None
-    if packet.decoded.portnum != state.pb2.portnums.DM_SHELL_APP:
+    if packet.decoded.portnum != state.pb2.portnums.REMOTE_SHELL_APP:
         return None
-    shell = state.pb2.mesh.DMShell()
+    shell = state.pb2.mesh.RemoteShell()
     shell.ParseFromString(packet.decoded.payload)
     return shell
 
@@ -619,7 +619,7 @@ def decode_shell_packet(state: SessionState, packet) -> Optional[object]:
 def reader_loop(transport, state: SessionState) -> None:
     def handle_in_order_shell(shell) -> bool:
         state.note_replayed_seq_received(shell.seq)
-        if shell.op == state.pb2.mesh.DMShell.OPEN_OK:
+        if shell.op == state.pb2.mesh.RemoteShell.OPEN_OK:
             state.session_id = shell.session_id
             state.open_replay_log(state.session_id)
             state.set_receive_cursor(shell.seq)
@@ -631,20 +631,20 @@ def reader_loop(transport, state: SessionState) -> None:
             )
             if state.replay_log_path is not None:
                 state.event_queue.put(f"replay log: {state.replay_log_path}")
-        elif shell.op == state.pb2.mesh.DMShell.OUTPUT:
+        elif shell.op == state.pb2.mesh.RemoteShell.OUTPUT:
             if shell.payload:
                 sys.stdout.buffer.write(shell.payload)
                 sys.stdout.buffer.flush()
-        elif shell.op == state.pb2.mesh.DMShell.ERROR:
+        elif shell.op == state.pb2.mesh.RemoteShell.ERROR:
             message = shell.payload.decode("utf-8", errors="replace")
             state.event_queue.put(f"remote error: {message}")
-        elif shell.op == state.pb2.mesh.DMShell.CLOSED:
+        elif shell.op == state.pb2.mesh.RemoteShell.CLOSED:
             message = shell.payload.decode("utf-8", errors="replace")
             state.event_queue.put(f"session closed: {message}")
             state.closed_event.set()
             state.active = False
             return True
-        elif shell.op == state.pb2.mesh.DMShell.PONG:
+        elif shell.op == state.pb2.mesh.RemoteShell.PONG:
             heartbeat_status = decode_heartbeat_status(shell.payload)
             if heartbeat_status is not None:
                 remote_last_tx_seq, remote_last_rx_seq = heartbeat_status
@@ -677,7 +677,7 @@ def reader_loop(transport, state: SessionState) -> None:
                 continue
             state.note_inbound_packet()
             #state.prune_sent_frames(shell.ack_seq)
-            if shell.op == state.pb2.mesh.DMShell.ACK:
+            if shell.op == state.pb2.mesh.RemoteShell.ACK:
                 #state.event_queue.put("peer requested replay")
                 replay_from = decode_replay_request(shell.payload)
                 if replay_from is not None:
@@ -741,7 +741,7 @@ def heartbeat_loop(transport, state: SessionState) -> None:
                 send_shell_frame(
                     transport,
                     state,
-                    state.pb2.mesh.DMShell.PING,
+                    state.pb2.mesh.RemoteShell.PING,
                     payload=state.heartbeat_payload(),
                     remember=True,
                     heartbeat=True,
@@ -756,9 +756,9 @@ def heartbeat_loop(transport, state: SessionState) -> None:
 
 def run_command_mode(transport, state: SessionState, commands: list[str], close_after: float) -> None:
     for command in commands:
-        send_shell_frame(transport, state, state.pb2.mesh.DMShell.INPUT, (command + "\n").encode("utf-8"))
+        send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.INPUT, (command + "\n").encode("utf-8"))
     time.sleep(close_after)
-    send_shell_frame(transport, state, state.pb2.mesh.DMShell.CLOSE)
+    send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.CLOSE)
     state.closed_event.wait(timeout=close_after + 5.0)
 
 
@@ -800,10 +800,10 @@ def run_interactive_mode(transport, state: SessionState) -> None:
         if cmd in ("", "resume"):
             return True
         if cmd == "close":
-            send_shell_frame(transport, state, state.pb2.mesh.DMShell.CLOSE)
+            send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.CLOSE)
             return False
         if cmd == "ping":
-            send_shell_frame(transport, state, state.pb2.mesh.DMShell.PING)
+            send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.PING)
             return True
         if cmd.startswith("resize "):
             parts = cmd.split()
@@ -816,7 +816,7 @@ def run_interactive_mode(transport, state: SessionState) -> None:
             except ValueError:
                 state.event_queue.put("usage: resize COLS ROWS")
                 return True
-            send_shell_frame(transport, state, state.pb2.mesh.DMShell.RESIZE, cols=cols, rows=rows)
+            send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.RESIZE, cols=cols, rows=rows)
             return True
 
         state.event_queue.put(f"unknown local command: {cmd}")
@@ -833,9 +833,9 @@ def run_interactive_mode(transport, state: SessionState) -> None:
             drain_events(state)
             data = sys.stdin.buffer.read(INPUT_BATCH_MAX_BYTES)
             if not data:
-                send_shell_frame(transport, state, state.pb2.mesh.DMShell.CLOSE)
+                send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.CLOSE)
                 break
-            send_shell_frame(transport, state, state.pb2.mesh.DMShell.INPUT, data)
+            send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.INPUT, data)
         return
 
     fd = sys.stdin.fileno()
@@ -850,7 +850,7 @@ def run_interactive_mode(transport, state: SessionState) -> None:
 
             data = os.read(fd, 1)
             if not data:
-                send_shell_frame(transport, state, state.pb2.mesh.DMShell.CLOSE)
+                send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.CLOSE)
                 break
 
             if data == LOCAL_ESCAPE_BYTE:
@@ -882,7 +882,7 @@ def run_interactive_mode(transport, state: SessionState) -> None:
                 deadline = time.monotonic() + INPUT_BATCH_WINDOW_SEC
 
             if batched:
-                send_shell_frame(transport, state, state.pb2.mesh.DMShell.INPUT, bytes(batched))
+                send_shell_frame(transport, state, state.pb2.mesh.RemoteShell.INPUT, bytes(batched))
 
             if enter_local_command:
                 keep_running = handle_local_command(read_local_command())
@@ -912,7 +912,7 @@ def main() -> int:
         reader = threading.Thread(target=reader_loop, args=(transport, state), daemon=True)
         reader.start()
 
-        send_shell_frame(transport, state, pb2.mesh.DMShell.OPEN, cols=cols, rows=rows)
+        send_shell_frame(transport, state, pb2.mesh.RemoteShell.OPEN, cols=cols, rows=rows)
         if not state.opened_event.wait(timeout=args.timeout):
             raise SystemExit("timed out waiting for OPEN_OK from remote DMShell")
 

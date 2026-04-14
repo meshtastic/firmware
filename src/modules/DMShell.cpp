@@ -64,7 +64,7 @@ bool decodeHeartbeatStatus(const uint8_t *src, size_t len, uint32_t &lastTxSeq, 
 } // namespace
 
 DMShellModule::DMShellModule()
-    : SinglePortModule("DMShellModule", meshtastic_PortNum_DM_SHELL_APP), concurrency::OSThread("DMShell", 100)
+    : SinglePortModule("DMShellModule", meshtastic_PortNum_REMOTE_SHELL_APP), concurrency::OSThread("DMShell", 100)
 {
     LOG_WARN("DMShell enabled on Portduino: remote shell access is dangerous and intended for trusted debugging only");
 }
@@ -83,7 +83,7 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
     }
 
     // TODO: double-check the sender is the same as the one we have an active session with before processing ACKs
-    if (frame.op == meshtastic_DMShell_OpCode_ACK) {
+    if (frame.op == meshtastic_RemoteShell_OpCode_ACK) {
         if (session.active && frame.sessionId == session.sessionId && getFrom(&mp) == session.peer) {
             handleAckFrame(frame);
         }
@@ -101,11 +101,11 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::STOP;
     }
 
-    if (frame.op == meshtastic_DMShell_OpCode_OPEN) {
+    if (frame.op == meshtastic_RemoteShell_OpCode_OPEN) {
         LOG_WARN("DMShell: received OPEN from 0x%x sessionId=0x%x", mp.from, frame.sessionId);
         if (!openSession(mp, frame)) {
             const char *msg = "open_failed";
-            sendFrameToPeer(getFrom(&mp), mp.channel, meshtastic_DMShell_OpCode_ERROR, frame.sessionId, 0,
+            sendFrameToPeer(getFrom(&mp), mp.channel, meshtastic_RemoteShell_OpCode_ERROR, frame.sessionId, 0,
                             reinterpret_cast<const uint8_t *>(msg), strlen(msg), 0, 0, frame.seq);
         }
         return ProcessMessage::STOP;
@@ -113,7 +113,7 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     if (!session.active || frame.sessionId != session.sessionId || getFrom(&mp) != session.peer) {
         const char *msg = "invalid_session";
-        sendFrameToPeer(getFrom(&mp), mp.channel, meshtastic_DMShell_OpCode_ERROR, frame.sessionId, 0,
+        sendFrameToPeer(getFrom(&mp), mp.channel, meshtastic_RemoteShell_OpCode_ERROR, frame.sessionId, 0,
                         reinterpret_cast<const uint8_t *>(msg), strlen(msg), 0, 0, frame.seq);
         return ProcessMessage::STOP;
     }
@@ -125,7 +125,7 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
     session.lastActivityMs = millis();
 
     switch (frame.op) {
-    case meshtastic_DMShell_OpCode_INPUT:
+    case meshtastic_RemoteShell_OpCode_INPUT:
         if (!writeSessionInput(frame)) {
             sendError("input_write_failed");
         } else {
@@ -133,12 +133,12 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
             const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
             if (bytesRead > 0) {
                 LOG_WARN("DMShell: read %d bytes from PTY", bytesRead);
-                sendControl(meshtastic_DMShell_OpCode_OUTPUT, outBuf, static_cast<size_t>(bytesRead));
+                sendControl(meshtastic_RemoteShell_OpCode_OUTPUT, outBuf, static_cast<size_t>(bytesRead));
                 session.lastActivityMs = millis();
             }
         }
         break;
-    case meshtastic_DMShell_OpCode_RESIZE:
+    case meshtastic_RemoteShell_OpCode_RESIZE:
         if (frame.rows > 0 && frame.cols > 0) {
             struct winsize ws = {};
             ws.ws_row = frame.rows;
@@ -148,7 +148,7 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
             }
         }
         break;
-    case meshtastic_DMShell_OpCode_PING: {
+    case meshtastic_RemoteShell_OpCode_PING: {
         uint32_t peerLastTxSeq = 0;
         uint32_t peerLastRxSeq = frame.ackSeq;
         if (decodeHeartbeatStatus(frame.payload, frame.payloadLen, peerLastTxSeq, peerLastRxSeq)) {
@@ -160,10 +160,10 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
 
         uint8_t heartbeatPayload[HEARTBEAT_STATUS_SIZE] = {0};
         encodeHeartbeatStatus(heartbeatPayload, session.nextTxSeq > 0 ? session.nextTxSeq - 1 : 0, session.lastAckedRxSeq);
-        sendControl(meshtastic_DMShell_OpCode_PONG, heartbeatPayload, sizeof(heartbeatPayload));
+        sendControl(meshtastic_RemoteShell_OpCode_PONG, heartbeatPayload, sizeof(heartbeatPayload));
         break;
     }
-    case meshtastic_DMShell_OpCode_CLOSE:
+    case meshtastic_RemoteShell_OpCode_CLOSE:
         closeSession("peer_close", true);
         break;
     default:
@@ -199,7 +199,7 @@ int32_t DMShellModule::runOnce()
         const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
         if (bytesRead > 0) {
             LOG_WARN("DMShell: read %d bytes from PTY", bytesRead);
-            sendControl(meshtastic_DMShell_OpCode_OUTPUT, outBuf, static_cast<size_t>(bytesRead));
+            sendControl(meshtastic_RemoteShell_OpCode_OUTPUT, outBuf, static_cast<size_t>(bytesRead));
             session.lastActivityMs = millis();
             // continue;
             // do we want to ack every data message, and only send the next on ack?
@@ -230,8 +230,8 @@ bool DMShellModule::parseFrame(const meshtastic_MeshPacket &mp, DMShellFrame &ou
         return false;
     }
 
-    meshtastic_DMShell decodedMsg = meshtastic_DMShell_init_zero;
-    if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_DMShell_fields, &decodedMsg)) {
+    meshtastic_RemoteShell decodedMsg = meshtastic_RemoteShell_init_zero;
+    if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_RemoteShell_fields, &decodedMsg)) {
         LOG_INFO("Received a DMShell message");
     } else {
         LOG_ERROR("Error decoding DMShell message!");
@@ -329,7 +329,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const DMShellFr
                      ((static_cast<uint32_t>(session.childPid) << 8) & 0xff0000) |
                      (static_cast<uint32_t>(session.childPid) >> 24);
     memcpy(payload, &pidBE, sizeof(payload));
-    sendFrameToPeer(session.peer, session.channel, meshtastic_DMShell_OpCode_OPEN_OK, session.sessionId, session.nextTxSeq++,
+    sendFrameToPeer(session.peer, session.channel, meshtastic_RemoteShell_OpCode_OPEN_OK, session.sessionId, session.nextTxSeq++,
                     payload, sizeof(payload), ws.ws_col, ws.ws_row, frame.seq);
 
     LOG_INFO("DMShell: opened session=0x%x peer=0x%x pid=%d", session.sessionId, session.peer, session.childPid);
@@ -357,7 +357,7 @@ void DMShellModule::closeSession(const char *reason, bool notifyPeer)
 
     if (notifyPeer) {
         const size_t reasonLen = strnlen(reason, 256);
-        sendControl(meshtastic_DMShell_OpCode_CLOSED, reinterpret_cast<const uint8_t *>(reason), reasonLen);
+        sendControl(meshtastic_RemoteShell_OpCode_CLOSED, reinterpret_cast<const uint8_t *>(reason), reasonLen);
     }
 
     if (session.masterFd >= 0) {
@@ -389,10 +389,10 @@ void DMShellModule::reapChildIfExited()
     }
 }
 
-void DMShellModule::rememberSentFrame(meshtastic_DMShell_OpCode op, uint32_t sessionId, uint32_t seq, const uint8_t *payload,
+void DMShellModule::rememberSentFrame(meshtastic_RemoteShell_OpCode op, uint32_t sessionId, uint32_t seq, const uint8_t *payload,
                                       size_t payloadLen, uint32_t cols, uint32_t rows, uint32_t ackSeq, uint32_t flags)
 {
-    if (seq == 0 || op == meshtastic_DMShell_OpCode_ACK) {
+    if (seq == 0 || op == meshtastic_RemoteShell_OpCode_ACK) {
         return;
     }
 
@@ -450,11 +450,11 @@ void DMShellModule::sendAck(uint32_t replayFromSeq)
         LOG_WARN("DMShell: requesting replay from seq=%u", replayFromSeq);
     }
 
-    sendFrameToPeer(session.peer, session.channel, meshtastic_DMShell_OpCode_ACK, session.sessionId, 0, payloadPtr, payloadLen, 0,
-                    0, session.lastAckedRxSeq, 0, false);
+    sendFrameToPeer(session.peer, session.channel, meshtastic_RemoteShell_OpCode_ACK, session.sessionId, 0, payloadPtr,
+                    payloadLen, 0, 0, session.lastAckedRxSeq, 0, false);
 }
 
-void DMShellModule::sendControl(meshtastic_DMShell_OpCode op, const uint8_t *payload, size_t payloadLen)
+void DMShellModule::sendControl(meshtastic_RemoteShell_OpCode op, const uint8_t *payload, size_t payloadLen)
 {
     sendFrameToPeer(session.peer, session.channel, op, session.sessionId, session.nextTxSeq++, payload, payloadLen, 0, 0,
                     session.lastAckedRxSeq);
@@ -505,9 +505,9 @@ bool DMShellModule::shouldProcessIncomingFrame(const DMShellFrame &frame)
     return true;
 }
 
-void DMShellModule::sendFrameToPeer(NodeNum peer, uint8_t channel, meshtastic_DMShell_OpCode op, uint32_t sessionId, uint32_t seq,
-                                    const uint8_t *payload, size_t payloadLen, uint32_t cols, uint32_t rows, uint32_t ackSeq,
-                                    uint32_t flags, bool remember)
+void DMShellModule::sendFrameToPeer(NodeNum peer, uint8_t channel, meshtastic_RemoteShell_OpCode op, uint32_t sessionId,
+                                    uint32_t seq, const uint8_t *payload, size_t payloadLen, uint32_t cols, uint32_t rows,
+                                    uint32_t ackSeq, uint32_t flags, bool remember)
 {
     meshtastic_MeshPacket *packet = buildFramePacket(op, sessionId, seq, payload, payloadLen, cols, rows, ackSeq, flags);
     if (!packet) {
@@ -529,14 +529,14 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, uint8_t channel, meshtastic_DM
 void DMShellModule::sendError(const char *message)
 {
     const size_t len = strnlen(message, meshtastic_Constants_DATA_PAYLOAD_LEN);
-    sendControl(meshtastic_DMShell_OpCode_ERROR, reinterpret_cast<const uint8_t *>(message), len);
+    sendControl(meshtastic_RemoteShell_OpCode_ERROR, reinterpret_cast<const uint8_t *>(message), len);
 }
 
-meshtastic_MeshPacket *DMShellModule::buildFramePacket(meshtastic_DMShell_OpCode op, uint32_t sessionId, uint32_t seq,
+meshtastic_MeshPacket *DMShellModule::buildFramePacket(meshtastic_RemoteShell_OpCode op, uint32_t sessionId, uint32_t seq,
                                                        const uint8_t *payload, size_t payloadLen, uint32_t cols, uint32_t rows,
                                                        uint32_t ackSeq, uint32_t flags)
 {
-    meshtastic_DMShell frame = meshtastic_DMShell_init_zero;
+    meshtastic_RemoteShell frame = meshtastic_RemoteShell_init_zero;
     frame.op = op;
     frame.session_id = sessionId;
     frame.seq = seq;
@@ -556,7 +556,7 @@ meshtastic_MeshPacket *DMShellModule::buildFramePacket(meshtastic_DMShell_OpCode
     }
     LOG_WARN("DMShell: building packet op=%d session=0x%x seq=%d payloadLen=%d", op, sessionId, seq, payloadLen);
     const size_t encoded = pb_encode_to_bytes(packet->decoded.payload.bytes, sizeof(packet->decoded.payload.bytes),
-                                              meshtastic_DMShell_fields, &frame);
+                                              meshtastic_RemoteShell_fields, &frame);
     if (encoded == 0) {
         return nullptr;
     }
