@@ -191,7 +191,7 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
 
     initRegion();
 
-    if (myRegion && getEffectiveDutyCycle < 100) {
+    if (myRegion && getEffectiveDutyCycle() < 100) {
         config.lora.ignore_mqtt = true;
     }
 

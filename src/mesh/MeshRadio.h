@@ -10,9 +10,11 @@
 static constexpr meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
     static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(0xFF);
 
+#define PRESET(name) meshtastic_Config_LoRaConfig_ModemPreset_##name
+
 // Region profile: bundles the preset list with regulatory parameters shared across regions
 struct RegionProfile {
-    const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated; first entry is the default
+    const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated
     float spacing;                                           // gaps between radio channels
     float padding;                                           // padding at each side of the "operating channel"
     bool audioPermitted;
@@ -47,10 +49,11 @@ struct RegionInfo {
     bool freqSwitching;
     bool wideLora;
     const RegionProfile *profile;
+    meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
     const char *name; // EU433 etc
 
     // Preset accessors (delegate through profile)
-    meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return profile->presets[0]; }
+    meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return defaultPreset; }
     const meshtastic_Config_LoRaConfig_ModemPreset *getAvailablePresets() const { return profile->presets; }
     size_t getNumPresets() const
     {

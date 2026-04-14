@@ -34,26 +34,19 @@
 #endif
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
-    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,    MODEM_PRESET_END};
+    PRESET(LONG_FAST),  PRESET(LONG_SLOW),     PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST), PRESET(SHORT_SLOW),
+    PRESET(SHORT_FAST), PRESET(LONG_MODERATE), PRESET(SHORT_TURBO), PRESET(LONG_TURBO),  MODEM_PRESET_END};
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
-    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, MODEM_PRESET_END};
+    PRESET(LONG_FAST),  PRESET(LONG_SLOW),  PRESET(MEDIUM_SLOW),   PRESET(MEDIUM_FAST),
+    PRESET(SHORT_SLOW), PRESET(SHORT_FAST), PRESET(LONG_MODERATE), MODEM_PRESET_END};
 
-static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
-                                                                         MODEM_PRESET_END};
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {PRESET(LONG_FAST), MODEM_PRESET_END};
 
-static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST, meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW, MODEM_PRESET_END};
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {PRESET(LITE_FAST), PRESET(LITE_SLOW), MODEM_PRESET_END};
 
-static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST, MODEM_PRESET_END};
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {PRESET(NARROW_FAST), PRESET(NARROW_SLOW),
+                                                                          MODEM_PRESET_END};
 
 // Region profiles: bundle preset list + regulatory parameters shared across regions
 // presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle, override slot
@@ -63,10 +56,10 @@ const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1, 
 const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.375F, false, false, 0, 10, 10, 0};
 const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1, 1};
 
-#define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr)                   \
+#define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset)   \
     {                                                                                                                            \
         meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching,      \
-            wide_lora, &profile_ptr, #name                                                                                       \
+            wide_lora, &profile_ptr, default_preset, #name                                                                       \
     }
 
 const RegionInfo regions[] = {
@@ -74,7 +67,7 @@ const RegionInfo regions[] = {
         https://link.springer.com/content/pdf/bbm%3A978-1-4842-4357-2%2F1.pdf
         https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
     */
-    RDEF(US, 902.0f, 928.0f, 100, 30, false, false, PROFILE_STD),
+    RDEF(US, 902.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         EN300220 ETSI V3.2.1 [Table B.1, Item H, p. 21]
@@ -82,7 +75,7 @@ const RegionInfo regions[] = {
         https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.02.01_60/en_30022002v030201p.pdf
         FIXME: https://github.com/meshtastic/firmware/issues/3371
      */
-    RDEF(EU_433, 433.0f, 434.0f, 10, 10, false, false, PROFILE_STD),
+    RDEF(EU_433, 433.0f, 434.0f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST)),
     /*
        https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
        https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
@@ -97,33 +90,33 @@ const RegionInfo regions[] = {
        AFA) to avoid a duty cycle. (Please refer to line P page 22 of this document.)
        https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.01.01_60/en_30022002v030101p.pdf
      */
-    RDEF(EU_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_EU868),
+    RDEF(EU_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_EU868, PRESET(LONG_FAST)),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(CN, 470.0f, 510.0f, 100, 19, false, false, PROFILE_STD),
+    RDEF(CN, 470.0f, 510.0f, 100, 19, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
         https://www.arib.or.jp/english/html/overview/doc/5-STD-T108v1_5-E1.pdf
         https://qiita.com/ammo0613/items/d952154f1195b64dc29f
      */
-    RDEF(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_STD),
+    RDEF(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
         https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
         Also used in Brazil.
      */
-    RDEF(ANZ, 915.0f, 928.0f, 100, 30, false, false, PROFILE_STD),
+    RDEF(ANZ, 915.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         433.05 - 434.79 MHz, 25mW EIRP max, No duty cycle restrictions
         AU Low Interference Potential https://www.acma.gov.au/licences/low-interference-potential-devices-lipd-class-licence
         NZ General User Radio Licence for Short Range Devices https://gazette.govt.nz/notice/id/2022-go3100
      */
-    RDEF(ANZ_433, 433.05f, 434.79f, 100, 14, false, false, PROFILE_STD),
+    RDEF(ANZ_433, 433.05f, 434.79f, 100, 14, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
@@ -131,13 +124,13 @@ const RegionInfo regions[] = {
         Note:
             - We do LBT, so 100% is allowed.
      */
-    RDEF(RU, 868.7f, 869.2f, 100, 20, false, false, PROFILE_STD),
+    RDEF(RU, 868.7f, 869.2f, 100, 20, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulId=53943&efYd=0
         https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
      */
-    RDEF(KR, 920.0f, 923.0f, 100, 23, false, false, PROFILE_STD),
+    RDEF(KR, 920.0f, 923.0f, 100, 23, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         Taiwan, 920-925Mhz, limited to 0.5W indoor or coastal, 1.0W outdoor.
@@ -145,40 +138,40 @@ const RegionInfo regions[] = {
         https://www.ncc.gov.tw/english/files/23070/102_5190_230703_1_doc_C.PDF
         https://gazette.nat.gov.tw/egFront/e_detail.do?metaid=147283
      */
-    RDEF(TW, 920.0f, 925.0f, 100, 27, false, false, PROFILE_STD),
+    RDEF(TW, 920.0f, 925.0f, 100, 27, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(IN, 865.0f, 867.0f, 100, 30, false, false, PROFILE_STD),
+    RDEF(IN, 865.0f, 867.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
          https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
          https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
       */
-    RDEF(NZ_865, 864.0f, 868.0f, 100, 36, false, false, PROFILE_STD),
+    RDEF(NZ_865, 864.0f, 868.0f, 100, 36, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
        https://standard.nbtc.go.th/getattachment/Standards/%E0%B8%A1%E0%B8%B2%E0%B8%95%E0%B8%A3%E0%B8%90%E0%B8%B2%E0%B8%99%E0%B8%97%E0%B8%B2%E0%B8%87%E0%B9%80%E0%B8%97%E0%B8%84%E0%B8%99%E0%B8%B4%E0%B8%84%E0%B8%82%E0%B8%AD%E0%B8%87%E0%B9%80%E0%B8%84%E0%B8%A3%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B9%82%E0%B8%97%E0%B8%A3%E0%B8%84%E0%B8%A1%E0%B8%99%E0%B8%B2%E0%B8%84%E0%B8%A1/1033-2565.pdf.aspx?lang=th-TH
        Thailand 920–925 MHz set max TX power to 27 dBm and enforce 10% duty cycle, aligned with NBTC regulations.
     */
-    RDEF(TH, 920.0f, 925.0f, 10, 27, false, false, PROFILE_STD),
+    RDEF(TH, 920.0f, 925.0f, 10, 27, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         433,05-434,7 Mhz 10 mW
         868,0-868,6 Mhz 25 mW
         https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
     */
-    RDEF(UA_433, 433.0f, 434.7f, 10, 10, false, false, PROFILE_STD),
-    RDEF(UA_868, 868.0f, 868.6f, 1, 14, false, false, PROFILE_STD),
+    RDEF(UA_433, 433.0f, 434.7f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(UA_868, 868.0f, 868.6f, 1, 14, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         Malaysia
         433 - 435 MHz at 100mW, no restrictions.
         https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
     */
-    RDEF(MY_433, 433.0f, 435.0f, 100, 20, false, false, PROFILE_STD),
+    RDEF(MY_433, 433.0f, 435.0f, 100, 20, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         Malaysia
@@ -187,14 +180,14 @@ const RegionInfo regions[] = {
         Frequency hopping is used for 919 - 923 MHz.
         https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
     */
-    RDEF(MY_919, 919.0f, 924.0f, 100, 27, true, false, PROFILE_STD),
+    RDEF(MY_919, 919.0f, 924.0f, 100, 27, true, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         Singapore
         SG_923 Band 30d: 917 - 925 MHz at 100mW, no restrictions.
         https://www.imda.gov.sg/-/media/imda/files/regulation-licensing-and-consultations/ict-standards/telecommunication-standards/radio-comms/imdatssrd.pdf
     */
-    RDEF(SG_923, 917.0f, 925.0f, 100, 20, false, false, PROFILE_STD),
+    RDEF(SG_923, 917.0f, 925.0f, 100, 20, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         Philippines
@@ -204,9 +197,9 @@ const RegionInfo regions[] = {
                 https://github.com/meshtastic/firmware/issues/4948#issuecomment-2394926135
     */
 
-    RDEF(PH_433, 433.0f, 434.7f, 100, 10, false, false, PROFILE_STD),
-    RDEF(PH_868, 868.0f, 869.4f, 100, 14, false, false, PROFILE_STD),
-    RDEF(PH_915, 915.0f, 918.0f, 100, 24, false, false, PROFILE_STD),
+    RDEF(PH_433, 433.0f, 434.7f, 100, 10, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(PH_868, 868.0f, 869.4f, 100, 14, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(PH_915, 915.0f, 918.0f, 100, 24, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         Kazakhstan
@@ -214,46 +207,46 @@ const RegionInfo regions[] = {
                 863 - 868 MHz <25 mW EIRP, 500kHz channels allowed, must not be used at airfields
                                 https://github.com/meshtastic/firmware/issues/7204
     */
-    RDEF(KZ_433, 433.075f, 434.775f, 100, 10, false, false, PROFILE_STD),
-    RDEF(KZ_863, 863.0f, 868.0f, 100, 30, false, false, PROFILE_STD),
+    RDEF(KZ_433, 433.075f, 434.775f, 100, 10, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(KZ_863, 863.0f, 868.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         Nepal
         865 MHz to 868 MHz frequency band for IoT (Internet of Things), M2M (Machine-to-Machine), and smart metering use,
        specifically in non-cellular mode. https://www.nta.gov.np/uploads/contents/Radio-Frequency-Policy-2080-English.pdf
     */
-    RDEF(NP_865, 865.0f, 868.0f, 100, 30, false, false, PROFILE_STD),
+    RDEF(NP_865, 865.0f, 868.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         Brazil
         902 - 907.5 MHz , 1W power limit, no duty cycle restrictions
         https://github.com/meshtastic/firmware/issues/3741
     */
-    RDEF(BR_902, 902.0f, 907.5f, 100, 30, false, false, PROFILE_STD),
+    RDEF(BR_902, 902.0f, 907.5f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
-    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_STD),
+    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_STD, PRESET(LONG_FAST)),
 
     /*
         EU 866MHz band (Band no. 46b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD)
         Gives 4 channels at 865.7/866.3/866.9/867.5 MHz, 400 kHz gap plus 37.5 kHz padding between channels, 27 dBm,
         duty cycle 2.5% (mobile) or 10% (fixed) https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006D0771(01)-20250123
     */
-    RDEF(EU_866, 865.6f, 867.6f, 2.5, 27, false, false, PROFILE_LITE),
+    RDEF(EU_866, 865.6f, 867.6f, 2.5, 27, false, false, PROFILE_LITE, PRESET(LITE_FAST)),
 
     /*
         EU 868MHz band: 3 channels at 869.410/869.4625/869.577 MHz
         Channel centres at 869.442/869.525/869.608 MHz,
         10.4 kHz padding on channels, 27 dBm, duty cycle 10%
     */
-    RDEF(NARROW_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_NARROW),
+    RDEF(NARROW_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_NARROW, PRESET(NARROW_SLOW)),
 
     /*
         This needs to be last. Same as US.
     */
-    RDEF(UNSET, 902.0f, 928.0f, 100, 30, false, false, PROFILE_UNDEF),
+    RDEF(UNSET, 902.0f, 928.0f, 100, 30, false, false, PROFILE_UNDEF, PRESET(LONG_FAST)),
 
 };
 
