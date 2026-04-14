@@ -202,7 +202,7 @@ void EInkParallelDisplay::display(void)
 
     // Get pointers to internal buffers
     uint8_t *cur = epaper->currentBuffer();
-    uint8_t *prev = epaper->previousBuffer(); // may be NULL on first init
+    const uint8_t *prev = epaper->previousBuffer(); // may be NULL on first init
 
     // Track changed row range while converting
     int newTop = h;     // min changed row (initialized to out-of-range)
