@@ -299,6 +299,7 @@ NodeDB::NodeDB()
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = TypeConversions::ConvertToUserLite(owner);
     info->has_user = true;
+    refreshNodeMeta(getStorageIndex(info));
 
     // If node database has not been saved for the first time, save it now
 #ifdef FSCom
@@ -448,6 +449,7 @@ NodeDB::NodeDB()
 #endif
     }
 #endif
+    refreshNodeMeta(getStorageIndex(info));
     sortMeshDB();
     saveToDisk(saveWhat);
 }
@@ -463,6 +465,17 @@ NodeNum getFrom(const meshtastic_MeshPacket *p)
 
 namespace
 {
+uint32_t secondsSinceTimestamp(uint32_t timestamp)
+{
+    uint32_t now = getTime();
+
+    int delta = (int)(now - timestamp);
+    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
+        delta = 0;
+
+    return delta;
+}
+
 void removeStorageIndexFromDisplayOrder(std::vector<uint16_t> &displayOrder, uint16_t removedStorageIndex)
 {
     displayOrder.erase(std::remove(displayOrder.begin(), displayOrder.end(), removedStorageIndex), displayOrder.end());
@@ -479,20 +492,6 @@ void removeStorageIndicesFromDisplayOrder(std::vector<uint16_t> &displayOrder, s
     for (auto it = removedStorageIndices.rbegin(); it != removedStorageIndices.rend(); ++it) {
         removeStorageIndexFromDisplayOrder(displayOrder, *it);
     }
-}
-
-bool shouldDisplayNodeBefore(const meshtastic_NodeInfoLite &lhs, const meshtastic_NodeInfoLite &rhs, NodeNum localNodeNum)
-{
-    if (lhs.num == localNodeNum) {
-        return rhs.num != localNodeNum;
-    }
-    if (rhs.num == localNodeNum) {
-        return false;
-    }
-    if (lhs.is_favorite != rhs.is_favorite) {
-        return lhs.is_favorite;
-    }
-    return lhs.last_heard > rhs.last_heard;
 }
 } // namespace
 
@@ -577,6 +576,7 @@ void NodeDB::installDefaultNodeDatabase()
     numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
     resetDisplayOrder();
+    rebuildNodeMeta();
 }
 
 void NodeDB::installDefaultConfig(bool preserveKey = false)
@@ -1068,6 +1068,7 @@ void NodeDB::resetNodes(bool keepFavorites)
         std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     }
     resetDisplayOrder();
+    rebuildNodeMeta();
     lastSort = 0;
     sortMeshDB();
     devicestate.has_rx_text_message = false;
@@ -1099,6 +1100,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
     } else {
         resetDisplayOrder();
     }
+    rebuildNodeMeta();
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveNodeDatabaseToDisk();
 }
@@ -1143,6 +1145,7 @@ void NodeDB::cleanupMeshDB()
     } else {
         resetDisplayOrder();
     }
+    rebuildNodeMeta();
     LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
 }
 
@@ -1152,6 +1155,126 @@ void NodeDB::resetDisplayOrder()
     for (size_t i = 0; i < numMeshNodes; ++i) {
         displayOrder[i] = static_cast<uint16_t>(i);
     }
+}
+
+void NodeDB::rebuildNodeMeta()
+{
+    nodeMeta.resize(numMeshNodes);
+    for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
+        refreshNodeMeta(storageIndex);
+    }
+}
+
+void NodeDB::refreshNodeMeta(uint16_t storageIndex)
+{
+    if (storageIndex >= numMeshNodes) {
+        return;
+    }
+
+    if (nodeMeta.size() < numMeshNodes) {
+        nodeMeta.resize(numMeshNodes);
+    }
+
+    const meshtastic_NodeInfoLite &node = meshNodes->at(storageIndex);
+    NodeMeta &meta = nodeMeta.at(storageIndex);
+    meta.node_num = node.num;
+    meta.last_heard = node.last_heard;
+    meta.storage_index = storageIndex;
+    meta.snr_q4 = quantizeSnrQ4(node.snr);
+    meta.channel = node.channel;
+    meta.hops_away = node.has_hops_away ? node.hops_away : UINT8_MAX;
+    meta.next_hop = node.next_hop;
+    meta.flags = buildNodeMetaFlags(node);
+    meta.role = node.has_user ? static_cast<uint8_t>(node.user.role) : 0;
+    meta.hw_model = node.has_user ? static_cast<uint8_t>(node.user.hw_model) : 0;
+}
+
+uint16_t NodeDB::getStorageIndex(const meshtastic_NodeInfoLite *node) const
+{
+    assert(node != nullptr);
+    const meshtastic_NodeInfoLite *base = meshNodes->data();
+    const ptrdiff_t storageIndex = node - base;
+    assert(storageIndex >= 0);
+    assert(static_cast<size_t>(storageIndex) < numMeshNodes);
+    return static_cast<uint16_t>(storageIndex);
+}
+
+const NodeDB::NodeMeta *NodeDB::getNodeMeta(NodeNum n) const
+{
+    assert(nodeMeta.size() >= numMeshNodes);
+    for (size_t i = 0; i < numMeshNodes; ++i) {
+        if (nodeMeta[i].node_num == n) {
+            return &nodeMeta[i];
+        }
+    }
+    return nullptr;
+}
+
+uint16_t NodeDB::buildNodeMetaFlags(const meshtastic_NodeInfoLite &node)
+{
+    uint16_t flags = 0;
+    if (node.has_user) {
+        flags |= NODEMETA_HAS_USER;
+        if (node.user.is_licensed) {
+            flags |= NODEMETA_IS_LICENSED;
+        }
+    }
+    if (node.has_position) {
+        flags |= NODEMETA_HAS_POSITION;
+    }
+    if (node.has_device_metrics) {
+        flags |= NODEMETA_HAS_DEVICE_METRICS;
+    }
+    if (node.via_mqtt) {
+        flags |= NODEMETA_VIA_MQTT;
+    }
+    if (node.has_hops_away) {
+        flags |= NODEMETA_HAS_HOPS_AWAY;
+    }
+    if (node.is_favorite) {
+        flags |= NODEMETA_IS_FAVORITE;
+    }
+    if (node.is_ignored) {
+        flags |= NODEMETA_IS_IGNORED;
+    }
+    if (node.user.public_key.size > 0) {
+        flags |= NODEMETA_HAS_PUBLIC_KEY;
+    }
+    if (node.bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) {
+        flags |= NODEMETA_IS_KEY_VERIFIED;
+    }
+    if (node.bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) {
+        flags |= NODEMETA_IS_MUTED;
+    }
+    return flags;
+}
+
+int8_t NodeDB::quantizeSnrQ4(float snr)
+{
+    const float scaled = snr * 4.0f;
+    if (scaled <= static_cast<float>(INT8_MIN)) {
+        return INT8_MIN;
+    }
+    if (scaled >= static_cast<float>(INT8_MAX)) {
+        return INT8_MAX;
+    }
+    return static_cast<int8_t>(scaled);
+}
+
+bool NodeDB::shouldDisplayNodeBefore(const NodeMeta &lhs, const NodeMeta &rhs, NodeNum localNodeNum)
+{
+    if (lhs.node_num == localNodeNum) {
+        return rhs.node_num != localNodeNum;
+    }
+    if (rhs.node_num == localNodeNum) {
+        return false;
+    }
+    const bool lhsFavorite = (lhs.flags & NODEMETA_IS_FAVORITE) != 0;
+    const bool rhsFavorite = (rhs.flags & NODEMETA_IS_FAVORITE) != 0;
+    if (lhsFavorite != rhsFavorite) {
+        return lhsFavorite;
+    }
+    return lhs.last_heard > rhs.last_heard;
 }
 
 void NodeDB::installDefaultDeviceState()
@@ -1315,6 +1438,7 @@ void NodeDB::loadFromDisk()
     }
     meshNodes->resize(MAX_NUM_NODES);
     resetDisplayOrder();
+    rebuildNodeMeta();
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1709,13 +1833,7 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNodeByIndex(size_t x)
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
 {
-    uint32_t now = getTime();
-
-    int delta = (int)(now - n->last_heard);
-    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
-        delta = 0;
-
-    return delta;
+    return secondsSinceTimestamp(n->last_heard);
 }
 
 uint32_t sinceReceived(const meshtastic_MeshPacket *p)
@@ -1771,11 +1889,12 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 {
     size_t numseen = 0;
 
-    // FIXME this implementation is kinda expensive
-    for (int i = 0; i < numMeshNodes; i++) {
-        if (localOnly && meshNodes->at(i).via_mqtt)
+    assert(nodeMeta.size() >= numMeshNodes);
+    for (size_t i = 0; i < numMeshNodes; i++) {
+        const NodeMeta &meta = nodeMeta[i];
+        if (localOnly && (meta.flags & NODEMETA_VIA_MQTT))
             continue;
-        if (sinceLastSeen(&meshNodes->at(i)) < NUM_ONLINE_SECS)
+        if (secondsSinceTimestamp(meta.last_heard) < NUM_ONLINE_SECS)
             numseen++;
     }
 
@@ -1841,6 +1960,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
             info->position.time = tmp_time;
     }
     info->has_position = true;
+    refreshNodeMeta(getStorageIndex(info));
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
@@ -1864,6 +1984,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     }
     info->device_metrics = t.variant.device_metrics;
     info->has_device_metrics = true;
+    refreshNodeMeta(getStorageIndex(info));
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
@@ -1925,8 +2046,12 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         }
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
+        refreshNodeMeta(getStorageIndex(info));
         sortMeshDB();
         notifyObservers(true); // Force an update whether or not our node counts have changed
+    }
+    if (contact.should_ignore) {
+        refreshNodeMeta(getStorageIndex(info));
     }
     saveNodeDatabaseToDisk();
 }
@@ -1989,6 +2114,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     LOG_DEBUG("Update changed=%d user %s/%s, id=0x%08x, channel=%d", changed, info->user.long_name, info->user.short_name, nodeId,
               info->channel);
     info->has_user = true;
+    refreshNodeMeta(getStorageIndex(info));
 
     if (changed) {
         updateGUIforNode = info;
@@ -2038,6 +2164,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->has_hops_away = true;
             info->hops_away = hopsAway;
         }
+        refreshNodeMeta(getStorageIndex(info));
         sortMeshDB();
     }
 }
@@ -2077,6 +2204,7 @@ void NodeDB::setFavorite(NodeNum nodeId, bool isFavorite)
     meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
     if (lite && lite->is_favorite != isFavorite) {
         lite->is_favorite = isFavorite;
+        refreshNodeMeta(getStorageIndex(lite));
         sortMeshDB();
         saveNodeDatabaseToDisk();
     }
@@ -2097,6 +2225,7 @@ void NodeDB::setIgnored(NodeNum nodeId, bool isIgnored)
     }
 
     if (changed) {
+        refreshNodeMeta(getStorageIndex(lite));
         saveNodeDatabaseToDisk();
     }
 }
@@ -2119,6 +2248,7 @@ void NodeDB::setMuted(NodeNum nodeId, bool isMuted)
         lite->bitfield &= ~NODEINFO_BITFIELD_IS_MUTED_MASK;
     }
 
+    refreshNodeMeta(getStorageIndex(lite));
     saveNodeDatabaseToDisk();
 }
 
@@ -2140,6 +2270,7 @@ void NodeDB::setKeyVerified(NodeNum nodeId, bool isVerified)
         lite->bitfield &= ~NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
     }
 
+    refreshNodeMeta(getStorageIndex(lite));
     saveNodeDatabaseToDisk();
 }
 
@@ -2158,6 +2289,7 @@ meshtastic_NodeInfoLite *NodeDB::touchLocalNodeTime()
     const uint32_t now = getValidTime(RTCQualityFromNet);
     node->last_heard = now;
     node->position.time = now;
+    refreshNodeMeta(getStorageIndex(node));
 
     return node;
 }
@@ -2170,12 +2302,8 @@ bool NodeDB::isFavorite(uint32_t nodeId)
     if (nodeId == NODENUM_BROADCAST)
         return false;
 
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
-
-    if (lite) {
-        return lite->is_favorite;
-    }
-    return false;
+    const NodeMeta *meta = getNodeMeta(nodeId);
+    return meta ? ((meta->flags & NODEMETA_IS_FAVORITE) != 0) : false;
 }
 
 bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
@@ -2189,23 +2317,22 @@ bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
     if (p.to == NODENUM_BROADCAST)
         return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
 
-    meshtastic_NodeInfoLite *lite = NULL;
-
     bool seenFrom = false;
     bool seenTo = false;
 
-    for (int i = 0; i < numMeshNodes; i++) {
-        lite = &meshNodes->at(i);
+    assert(nodeMeta.size() >= numMeshNodes);
+    for (size_t i = 0; i < numMeshNodes; i++) {
+        const NodeMeta &meta = nodeMeta[i];
 
-        if (lite->num == p.from) {
-            if (lite->is_favorite)
+        if (meta.node_num == p.from) {
+            if (meta.flags & NODEMETA_IS_FAVORITE)
                 return true;
 
             seenFrom = true;
         }
 
-        if (lite->num == p.to) {
-            if (lite->is_favorite)
+        if (meta.node_num == p.to) {
+            if (meta.flags & NODEMETA_IS_FAVORITE)
                 return true;
 
             seenTo = true;
@@ -2235,12 +2362,13 @@ void NodeDB::sortMeshDB()
         lastSort = millis();
         bool changed = true;
         assert(displayOrder.size() >= numMeshNodes);
+        assert(nodeMeta.size() >= numMeshNodes);
         while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
             changed = false;
             for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
                 const uint16_t lhsStorageIndex = displayOrder.at(i - 1);
                 const uint16_t rhsStorageIndex = displayOrder.at(i);
-                if (shouldDisplayNodeBefore(meshNodes->at(rhsStorageIndex), meshNodes->at(lhsStorageIndex), getNodeNum())) {
+                if (shouldDisplayNodeBefore(nodeMeta.at(rhsStorageIndex), nodeMeta.at(lhsStorageIndex), getNodeNum())) {
                     std::swap(displayOrder.at(i), displayOrder.at(i - 1));
                     changed = true;
                 }
@@ -2252,11 +2380,11 @@ void NodeDB::sortMeshDB()
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    const meshtastic_NodeInfoLite *info = getMeshNode(n);
-    if (!info) {
+    const NodeMeta *meta = getNodeMeta(n);
+    if (!meta) {
         return 0; // defaults to PRIMARY
     }
-    return info->channel;
+    return meta->channel;
 }
 
 std::string NodeDB::getNodeId() const
@@ -2270,9 +2398,11 @@ std::string NodeDB::getNodeId() const
 /// NOTE: This function might be called from an ISR
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
-    for (int i = 0; i < numMeshNodes; i++)
-        if (meshNodes->at(i).num == n)
-            return &meshNodes->at(i);
+    const NodeMeta *meta = getNodeMeta(n);
+    if (meta) {
+        assert(meta->storage_index < numMeshNodes);
+        return &meshNodes->at(meta->storage_index);
+    }
 
     return NULL;
 }
@@ -2297,18 +2427,19 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             uint32_t oldestBoring = UINT32_MAX;
             int oldestIndex = -1;
             int oldestBoringIndex = -1;
+            assert(nodeMeta.size() >= numMeshNodes);
             for (int i = 1; i < numMeshNodes; i++) {
+                const NodeMeta &meta = nodeMeta.at(i);
                 // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored &&
-                    !(meshNodes->at(i).bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) &&
-                    meshNodes->at(i).last_heard < oldest) {
-                    oldest = meshNodes->at(i).last_heard;
+                if (!(meta.flags & NODEMETA_IS_FAVORITE) && !(meta.flags & NODEMETA_IS_IGNORED) &&
+                    !(meta.flags & NODEMETA_IS_KEY_VERIFIED) && meta.last_heard < oldest) {
+                    oldest = meta.last_heard;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored && meshNodes->at(i).user.public_key.size == 0 &&
-                    meshNodes->at(i).last_heard < oldestBoring) {
-                    oldestBoring = meshNodes->at(i).last_heard;
+                if (!(meta.flags & NODEMETA_IS_FAVORITE) && !(meta.flags & NODEMETA_IS_IGNORED) &&
+                    !(meta.flags & NODEMETA_HAS_PUBLIC_KEY) && meta.last_heard < oldestBoring) {
+                    oldestBoring = meta.last_heard;
                     oldestBoringIndex = i;
                 }
             }
@@ -2328,6 +2459,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 } else {
                     resetDisplayOrder();
                 }
+                rebuildNodeMeta();
             }
         }
         // add the node at the end
@@ -2341,6 +2473,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         } else {
             resetDisplayOrder();
         }
+        refreshNodeMeta(static_cast<uint16_t>(numMeshNodes - 1));
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
     }
 
@@ -2358,11 +2491,11 @@ bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
 /// we consider them licensed
 UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(nodeNum);
-    if (!info || !info->has_user) {
+    const NodeMeta *meta = getNodeMeta(nodeNum);
+    if (!meta || !(meta->flags & NODEMETA_HAS_USER)) {
         return UserLicenseStatus::NotKnown;
     }
-    return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
+    return (meta->flags & NODEMETA_IS_LICENSED) ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
