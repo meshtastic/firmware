@@ -207,9 +207,16 @@ class NodeDB
     bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
 
     /*
-     * Sets a node either favorite or unfavorite
+     * Durable node-flag mutators. These are the write path that later
+     * storage phases can preserve while the backing store changes.
      */
-    void set_favorite(bool is_favorite, uint32_t nodeId);
+    void setFavorite(NodeNum nodeId, bool isFavorite);
+    void setIgnored(NodeNum nodeId, bool isIgnored);
+    void setMuted(NodeNum nodeId, bool isMuted);
+
+    // Temporary compatibility wrapper for older callers that have not
+    // migrated to the stable camelCase API yet.
+    void set_favorite(bool is_favorite, uint32_t nodeId) { setFavorite(nodeId, is_favorite); }
 
     /*
      * Returns true if the node is in the NodeDB and marked as favorite

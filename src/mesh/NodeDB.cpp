@@ -1963,14 +1963,84 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     }
 }
 
-void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
+namespace
+{
+bool clearIgnoredNodeData(meshtastic_NodeInfoLite &node)
+{
+    bool changed = false;
+
+    if (node.has_device_metrics) {
+        node.has_device_metrics = false;
+        changed = true;
+    }
+    if (node.has_position) {
+        node.has_position = false;
+        changed = true;
+    }
+    if (node.user.public_key.size != 0) {
+        node.user.public_key.size = 0;
+        changed = true;
+    }
+    for (size_t i = 0; i < sizeof(node.user.public_key.bytes); ++i) {
+        if (node.user.public_key.bytes[i] != 0) {
+            memset(node.user.public_key.bytes, 0, sizeof(node.user.public_key.bytes));
+            changed = true;
+            break;
+        }
+    }
+
+    return changed;
+}
+} // namespace
+
+void NodeDB::setFavorite(NodeNum nodeId, bool isFavorite)
 {
     meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
-    if (lite && lite->is_favorite != is_favorite) {
-        lite->is_favorite = is_favorite;
+    if (lite && lite->is_favorite != isFavorite) {
+        lite->is_favorite = isFavorite;
         sortMeshDB();
         saveNodeDatabaseToDisk();
     }
+}
+
+void NodeDB::setIgnored(NodeNum nodeId, bool isIgnored)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    if (!lite) {
+        return;
+    }
+
+    bool changed = lite->is_ignored != isIgnored;
+    lite->is_ignored = isIgnored;
+
+    if (isIgnored) {
+        changed = clearIgnoredNodeData(*lite) || changed;
+    }
+
+    if (changed) {
+        saveNodeDatabaseToDisk();
+    }
+}
+
+void NodeDB::setMuted(NodeNum nodeId, bool isMuted)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    if (!lite) {
+        return;
+    }
+
+    const bool currentlyMuted = (lite->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    if (currentlyMuted == isMuted) {
+        return;
+    }
+
+    if (isMuted) {
+        lite->bitfield |= NODEINFO_BITFIELD_IS_MUTED_MASK;
+    } else {
+        lite->bitfield &= ~NODEINFO_BITFIELD_IS_MUTED_MASK;
+    }
+
+    saveNodeDatabaseToDisk();
 }
 
 bool NodeDB::isFavorite(uint32_t nodeId)
