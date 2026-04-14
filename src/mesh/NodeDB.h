@@ -282,12 +282,7 @@ class NodeDB
     void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
 
     const meshtastic_NodeInfoLite *readNextMeshNode(uint32_t &readIndex);
-
-    meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
-    {
-        assert(x < numMeshNodes);
-        return &meshNodes->at(x);
-    }
+    meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x);
 
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
@@ -344,6 +339,9 @@ class NodeDB
     }
 
   private:
+    // Presentation order currently mirrors live storage order. Later phases
+    // will sort this view independently without moving full records.
+    std::vector<uint16_t> displayOrder;
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
@@ -365,6 +363,7 @@ class NodeDB
 
     /// purge db entries without user info
     void cleanupMeshDB();
+    void resetDisplayOrder();
 
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultNodeDatabase(), installDefaultChannels(),
