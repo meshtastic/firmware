@@ -86,7 +86,7 @@ size_t ArraySlotStore::constrainSlotCount(size_t requestedSlotCount) const
 
     size_t actualSlotCount = requestedSlotCount;
     if (totalPsram == 0) {
-        actualSlotCount = std::min(requestedSlotCount, static_cast<size_t>(get_default_esp32s3_max_num_nodes()));
+        actualSlotCount = std::min(requestedSlotCount, NODEDB_ESP32_NO_PSRAM_TARGET_CAP);
     } else {
         const size_t psramLimitedSlots =
             std::max<size_t>(1, slotsFromBudget(freePsram, NODEDB_PSRAM_HEADROOM_BYTES, sizeof(meshtastic_NodeInfoLite)));
