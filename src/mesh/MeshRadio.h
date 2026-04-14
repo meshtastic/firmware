@@ -4,6 +4,7 @@
 #include "MeshTypes.h"
 #include "PointerQueue.h"
 #include "configuration.h"
+#include "detect/LoRaRadioType.h"
 
 // Sentinel marking the end of a modem preset array
 static constexpr meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
@@ -59,7 +60,7 @@ extern const RegionInfo *myRegion;
 extern void initRegion();
 
 // Valid LoRa spread factor range and defaults
-constexpr uint8_t LORA_SF_MIN = 7;
+constexpr uint8_t LORA_SF_MIN = 5;
 constexpr uint8_t LORA_SF_MAX = 12;
 constexpr uint8_t LORA_SF_DEFAULT = 11; // LONG_FAST default
 
@@ -71,10 +72,14 @@ constexpr uint8_t LORA_CR_DEFAULT = 5; // LONG_FAST default
 // Default bandwidth in kHz (LONG_FAST)
 constexpr float LORA_BW_DEFAULT_KHZ = 250.0f;
 
-/// Clamp spread factor to the valid LoRa range [7, 12].
+/// Clamp spread factor to the valid LoRa range [5, 12].
 /// Out-of-range values (including 0 from unset preset mode) return LORA_SF_DEFAULT.
 static inline uint8_t clampSpreadFactor(uint8_t sf)
 {
+    // We check for RF95 radios that are incompatible with Spreading Factors 5 and 6.
+    if (radioType == RF95_RADIO && (sf == 5 || sf == 6))
+        return LORA_SF_DEFAULT;
+
     if (sf < LORA_SF_MIN || sf > LORA_SF_MAX)
         return LORA_SF_DEFAULT;
     return sf;
