@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "ArraySlotStore.h"
 #include "MeshTypes.h"
 #include "NodeStatus.h"
 #include "configuration.h"
@@ -400,6 +401,9 @@ class NodeDB
     void rebuildNodeMeta();
     void refreshNodeMeta(uint16_t storageIndex);
     void rebuildNodeMetaLookup();
+    meshtastic_NodeInfoLite &slotAt(uint16_t storageIndex);
+    const meshtastic_NodeInfoLite &slotAt(uint16_t storageIndex) const;
+    meshtastic_NodeInfoLite *slotPtr(uint16_t storageIndex);
     uint16_t getStorageIndex(const meshtastic_NodeInfoLite *node) const;
     const NodeMeta *getNodeMeta(NodeNum n) const;
     static uint16_t buildNodeMetaFlags(const meshtastic_NodeInfoLite &node);
@@ -420,6 +424,9 @@ class NodeDB
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
     void sortMeshDB();
+
+    ArraySlotStore arraySlotStore;
+    NodeStore *nodeStore = nullptr;
 };
 
 extern NodeDB *nodeDB;

@@ -193,7 +193,7 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
-NodeDB::NodeDB()
+NodeDB::NodeDB() : meshNodes(&nodeDatabase.nodes), arraySlotStore(nodeDatabase.nodes), nodeStore(&arraySlotStore)
 {
     LOG_INFO("Init NodeDB");
     loadFromDisk();
@@ -714,7 +714,7 @@ void NodeDB::installDefaultNodeDatabase()
 {
     LOG_DEBUG("Install default NodeDatabase");
     nodeDatabase.version = DEVICESTATE_CUR_VER;
-    nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
+    nodeStore->reset(MAX_NUM_NODES);
     numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
     resetDisplayOrder();
@@ -1193,21 +1193,21 @@ void NodeDB::resetNodes(bool keepFavorites)
     if (keepFavorites) {
         LOG_INFO("Clearing node database - preserving favorites");
         size_t newPos = 1;
-        for (size_t i = 1; i < meshNodes->size(); i++) {
-            meshtastic_NodeInfoLite &node = meshNodes->at(i);
+        for (size_t i = 1; i < nodeStore->slotCount(); i++) {
+            meshtastic_NodeInfoLite &node = slotAt(static_cast<uint16_t>(i));
             if (node.is_favorite) {
                 if (newPos != i) {
-                    meshNodes->at(newPos) = node;
+                    slotAt(static_cast<uint16_t>(newPos)) = node;
                 }
                 newPos++;
             }
         }
         numMeshNodes = newPos;
-        std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+        nodeStore->clearSlots(numMeshNodes, nodeStore->slotCount());
     } else {
         LOG_INFO("Clearing node database - removing favorites");
         numMeshNodes = 1;
-        std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+        nodeStore->clearSlots(1, nodeStore->slotCount());
     }
     resetDisplayOrder();
     rebuildNodeMeta();
@@ -1227,16 +1227,15 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
     int newPos = 0, removed = 0;
     std::vector<uint16_t> removedStorageIndices;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).num != nodeNum) {
-            meshNodes->at(newPos++) = meshNodes->at(i);
+        if (slotAt(static_cast<uint16_t>(i)).num != nodeNum) {
+            slotAt(static_cast<uint16_t>(newPos++)) = slotAt(static_cast<uint16_t>(i));
         } else {
             removed++;
             removedStorageIndices.push_back(static_cast<uint16_t>(i));
         }
     }
     numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
-              meshtastic_NodeInfoLite());
+    nodeStore->clearSlots(numMeshNodes, numMeshNodes + removed);
     if (displayOrder.size() >= oldNumMeshNodes) {
         removeStorageIndicesFromDisplayOrder(displayOrder, std::move(removedStorageIndices));
     } else {
@@ -1264,14 +1263,15 @@ void NodeDB::cleanupMeshDB()
     int newPos = 0, removed = 0;
     std::vector<uint16_t> removedStorageIndices;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).has_user) {
-            if (meshNodes->at(i).user.public_key.size > 0) {
-                if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
-                    meshNodes->at(i).user.public_key.size = 0;
+        meshtastic_NodeInfoLite &node = slotAt(static_cast<uint16_t>(i));
+        if (node.has_user) {
+            if (node.user.public_key.size > 0) {
+                if (memfll(node.user.public_key.bytes, 0, node.user.public_key.size)) {
+                    node.user.public_key.size = 0;
                 }
             }
             if (newPos != i)
-                meshNodes->at(newPos++) = meshNodes->at(i);
+                slotAt(static_cast<uint16_t>(newPos++)) = node;
             else
                 newPos++;
         } else {
@@ -1280,8 +1280,7 @@ void NodeDB::cleanupMeshDB()
         }
     }
     numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
-              meshtastic_NodeInfoLite());
+    nodeStore->clearSlots(numMeshNodes, numMeshNodes + removed);
     if (displayOrder.size() >= oldNumMeshNodes) {
         removeStorageIndicesFromDisplayOrder(displayOrder, std::move(removedStorageIndices));
     } else {
@@ -1308,6 +1307,21 @@ void NodeDB::rebuildNodeMeta()
     }
     rebuildingNodeMeta = false;
     rebuildNodeMetaLookup();
+}
+
+meshtastic_NodeInfoLite &NodeDB::slotAt(uint16_t storageIndex)
+{
+    return nodeStore->slot(storageIndex);
+}
+
+const meshtastic_NodeInfoLite &NodeDB::slotAt(uint16_t storageIndex) const
+{
+    return static_cast<const NodeStore *>(nodeStore)->slot(storageIndex);
+}
+
+meshtastic_NodeInfoLite *NodeDB::slotPtr(uint16_t storageIndex)
+{
+    return &nodeStore->slot(storageIndex);
 }
 
 void NodeDB::rebuildNodeMetaLookup()
@@ -1353,7 +1367,7 @@ void NodeDB::refreshNodeMeta(uint16_t storageIndex)
         nodeMeta.resize(numMeshNodes);
     }
 
-    const meshtastic_NodeInfoLite &node = meshNodes->at(storageIndex);
+    const meshtastic_NodeInfoLite &node = slotAt(storageIndex);
     NodeMeta &meta = nodeMeta.at(storageIndex);
     meta.node_num = node.num;
     meta.last_heard = node.last_heard;
@@ -1374,7 +1388,7 @@ void NodeDB::refreshNodeMeta(uint16_t storageIndex)
 uint16_t NodeDB::getStorageIndex(const meshtastic_NodeInfoLite *node) const
 {
     assert(node != nullptr);
-    const meshtastic_NodeInfoLite *base = meshNodes->data();
+    const meshtastic_NodeInfoLite *base = static_cast<const NodeStore *>(nodeStore)->data();
     const ptrdiff_t storageIndex = node - base;
     assert(storageIndex >= 0);
     assert(static_cast<size_t>(storageIndex) < numMeshNodes);
@@ -1658,7 +1672,7 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
-    meshNodes->resize(MAX_NUM_NODES);
+    nodeStore->resize(MAX_NUM_NODES);
     resetDisplayOrder();
     rebuildNodeMeta();
 
@@ -2070,7 +2084,7 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNodeByIndex(size_t x)
 
     const size_t storageIndex = displayOrder.at(x);
     assert(storageIndex < numMeshNodes);
-    return &meshNodes->at(storageIndex);
+    return slotPtr(static_cast<uint16_t>(storageIndex));
 }
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -2617,7 +2631,7 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
     const NodeMeta *meta = getNodeMeta(n);
     if (meta) {
         assert(meta->storage_index < numMeshNodes);
-        return &meshNodes->at(meta->storage_index);
+        return slotPtr(meta->storage_index);
     }
 
     return NULL;
@@ -2667,7 +2681,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             if (oldestIndex != -1) {
                 // Shove the remaining nodes down the chain
                 for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
-                    meshNodes->at(i) = meshNodes->at(i + 1);
+                    slotAt(static_cast<uint16_t>(i)) = slotAt(static_cast<uint16_t>(i + 1));
                 }
                 (numMeshNodes)--;
                 if (displayOrder.size() >= (static_cast<size_t>(numMeshNodes) + 1)) {
@@ -2679,7 +2693,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             }
         }
         // add the node at the end
-        lite = &meshNodes->at((numMeshNodes)++);
+        const uint16_t storageIndex = static_cast<uint16_t>(numMeshNodes++);
+        lite = slotPtr(storageIndex);
 
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));

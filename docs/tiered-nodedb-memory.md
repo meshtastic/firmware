@@ -409,3 +409,53 @@ Stop `nodes.proto` load from growing a temporary callback-owned `std::vector` wh
 
 - Phase 9 removes the load-side callback growth path, but no dedicated runtime heap instrumentation was added in this phase. The current guarantee comes from the new fixed-size streamed decode path and the explicit reset of the backing vector before admission.
 - Phase 10 can treat this streamed decode as the load-side behavioral contract to preserve while swapping `meshNodes` behind a `NodeStore` shim.
+
+## Phase 10: Introduce `NodeStore` With A Shim Backed By Current Storage
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Add the storage-backend seam without changing runtime behavior, persistence format, or the current vector-backed full-record model.
+
+### What Changed
+
+- `src/mesh/NodeStore.h`
+  - Added a small `NodeStore` interface for slot-oriented full-record access, storage reset/resize, raw slot-data projection, and tail-slot clearing.
+- `src/mesh/ArraySlotStore.h`
+- `src/mesh/ArraySlotStore.cpp`
+  - Added `ArraySlotStore` as the phase-10 shim implementation backed directly by `nodeDatabase.nodes`.
+  - Kept the shim intentionally thin: it still uses the existing in-memory vector layout, but NodeDB now reaches that storage through a backend-shaped contract instead of assuming `std::vector` at every call site.
+- `src/mesh/NodeDB.h`
+  - Added private `slotAt()` / `slotPtr()` helpers plus `ArraySlotStore` / `NodeStore` members.
+- `src/mesh/NodeDB.cpp`
+  - Constructed NodeDB with an `ArraySlotStore` bound to the current `nodeDatabase.nodes` backing vector and made the store the internal slot-access seam.
+  - Switched storage-touching lifecycle and access paths to use the store abstraction:
+    - default NodeDB install
+    - load-time resize back to `MAX_NUM_NODES`
+    - reset / remove / cleanup compaction
+    - metadata refresh and storage-index recovery
+    - display-index reads and hashed `NodeNum -> full record` reads
+    - full-DB eviction compaction and append-at-end node creation
+  - Kept the public `meshNodes` pointer alive as a compatibility alias to the same vector-backed storage so untouched callers continue to build in this phase.
+  - Left the phase-8/9 streamed `nodes.proto` save/load logic intact, so phase 10 is a pure storage-seam refactor rather than a persistence behavior change.
+
+### Important Constraints For Later Phases
+
+- `NodeMeta.storage_index` now means "slot index in the active `NodeStore`", not "index into a known `std::vector` implementation detail". Future backends should preserve that meaning.
+- `ArraySlotStore` is only a shim in phase 10. Phase 11 should expand its allocation/backing behavior for PSRAM-capable targets without pushing vector assumptions back into NodeDB.
+- The compatibility `meshNodes` pointer still exists for external callers, but phase 10 does not bless it as the long-term backend API. Later phases should continue migrating callers toward NodeDB-owned read helpers instead of adding new direct `meshNodes` dependencies.
+- The streamed `nodes.proto` save/load contract from phases 8 and 9 remains authoritative. Do not regress to callback-grown load vectors or padded tail-slot saves while swapping backends underneath.
+- Tail-slot clearing is now explicitly a store operation. If a later backend cannot cheaply zero unused slots in place, it still needs an equivalent way to make post-compaction unused capacity non-live and non-observable.
+
+### Verification
+
+- `pio run -e tbeam-s3-core` succeeded locally.
+- `pio run -e rak4631` succeeded locally.
+- `pio run -e native` still fails before NodeDB-specific behavior is exercised in the existing Portduino/LovyanGFX macOS toolchain path. The local failure remains in LovyanGFX native C sources (`lgfx_miniz.c`, `lgfx_pngle.c`, `lgfx_qrcode.c`, `lgfx_tjpgd.c`) due to missing C runtime declarations such as `memcpy`, `memset`, `memmove`, `memcmp`, `strlen`, and `size_t`.
+
+### Follow-Up Notes
+
+- Phase 10 intentionally keeps save/load helper code working directly against `nodeDatabase.nodes` because the protobuf object is still the persistence interchange format in this phase. Later backend phases can move more of that logic behind `NodeStore` only when the backend-specific persistence story is ready.
+- Because `NodeDB::slotAt()` now centralizes internal full-record slot access, later phases can move reads and writes to PSRAM or flash by changing the store implementation instead of touching every NodeDB call site again.
