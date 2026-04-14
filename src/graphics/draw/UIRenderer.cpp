@@ -1650,10 +1650,8 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     // Knock the corners off the square
 #if GRAPHICS_TFT_COLORING_ENABLED
     // TFT corner mask
-    display->setColor(BLACK);
-    display->fillRect(rectX, rectY, 1, 1);
-    display->fillRect(rectX + rectWidth - 1, rectY, 1, 1);
-    display->setColor(WHITE);
+    registerTFTColorRegion(TFTColorRole::NavigationArrow, rectX, rectY, 1, 1);
+    registerTFTColorRegion(TFTColorRole::NavigationArrow, rectX + rectWidth - 1, rectY, 1, 1);
 #else
     // monochrome styling only
     display->setColor(BLACK);
