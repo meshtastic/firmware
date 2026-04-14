@@ -459,3 +459,54 @@ Add the storage-backend seam without changing runtime behavior, persistence form
 
 - Phase 10 intentionally keeps save/load helper code working directly against `nodeDatabase.nodes` because the protobuf object is still the persistence interchange format in this phase. Later backend phases can move more of that logic behind `NodeStore` only when the backend-specific persistence story is ready.
 - Because `NodeDB::slotAt()` now centralizes internal full-record slot access, later phases can move reads and writes to PSRAM or flash by changing the store implementation instead of touching every NodeDB call site again.
+
+## Phase 11: Enable PSRAM-Backed `ArraySlotStore`
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Let PSRAM-capable `ESP32-S3` targets allocate a materially larger in-memory slot store while keeping non-PSRAM behavior unchanged.
+
+### What Changed
+
+- `src/mesh/mesh-pb-constants.h`
+  - Split the old `ESP32-S3` flash-size heuristic into two paths:
+    - a legacy no-PSRAM default cap (`100` / `200` / `250`)
+    - a PSRAM-capable upper bound (`500` / `1000` / `3000`)
+  - Added shared headroom constants for the phase-11 runtime-cap calculation:
+    - reserved PSRAM headroom
+    - reserved heap headroom
+    - estimated DRAM overhead per live node
+- `src/mesh/ArraySlotStore.h`
+  - Added a private slot-cap helper so the array backend can clamp requested capacity before allocating.
+- `src/mesh/ArraySlotStore.cpp`
+  - Added the PSRAM-aware runtime cap calculation for `ESP32-S3 + BOARD_HAS_PSRAM`.
+  - The runtime cap now takes the minimum of:
+    - the compile-time upper bound from `MAX_NUM_NODES`
+    - available PSRAM after a fixed reserve
+    - available heap after a fixed reserve and per-node DRAM estimate
+  - If PSRAM is unexpectedly unavailable at runtime on a PSRAM-configured `ESP32-S3`, the store falls back to the old no-PSRAM `ESP32-S3` cap instead of trying to keep the higher PSRAM target.
+  - Added capacity logging so boots show the requested slot count, actual slot count, and current heap / PSRAM headroom.
+- `src/mesh/NodeDB.cpp`
+  - Changed the streamed save path to encode directly from the active `NodeStore` instead of assuming `nodeDatabase.nodes` is the authoritative full-record backing.
+  - Changed load-time truncation and `isFull()` to use `nodeStore->slotCount()` rather than the compile-time `MAX_NUM_NODES` macro, so the runtime cap is now the real admission limit.
+  - Added before/after NodeDB save/load memory snapshots on ESP32 builds to support phase-11 verification.
+
+### Important Constraints For Later Phases
+
+- After phase 11, `MAX_NUM_NODES` is a platform-specific upper bound, not the guaranteed live runtime capacity on PSRAM builds. New admission, truncation, or eviction code should use `nodeStore->slotCount()` when it needs the actual current cap.
+- The phase-11 runtime cap is intentionally conservative and heuristic-driven. If later phases change `NodeMeta[]`, display-order storage, or heap-heavy subsystems, revisit the heap-overhead estimate instead of silently assuming the current numbers are still safe.
+- Streamed NodeDB save now reads from `NodeStore`, not from `nodeDatabase.nodes`. Preserve that backend-oriented contract when flash-backed stores land; do not reintroduce save paths that depend on one particular in-memory container.
+- Phase 11 still keeps the load-time protobuf shape unchanged. Phase 12+ flash work should preserve `nodes.proto` import behavior until an explicit migration path exists.
+
+### Verification
+
+- `pio run -e tbeam-s3-core` succeeded locally.
+- `pio run -e rak4631` succeeded locally as a non-PSRAM regression check.
+
+### Follow-Up Notes
+
+- Phase 11 adds logging for heap / PSRAM snapshots around NodeDB save/load, but it does not yet persist or summarize those measurements anywhere outside the boot/runtime logs.
+- Phase 12 can treat the new runtime-cap split as established: `ArraySlotStore` now owns "how many slots can this target really support right now?", while `NodeDB` consumes the resulting capacity through the generic `NodeStore` interface.

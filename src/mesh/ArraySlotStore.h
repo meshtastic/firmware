@@ -22,5 +22,7 @@ class ArraySlotStore : public NodeStore
     void clearSlots(size_t beginIndex, size_t endIndex) override;
 
   private:
+    size_t constrainSlotCount(size_t requestedSlotCount) const;
+
     std::vector<meshtastic_NodeInfoLite> &slots;
 };

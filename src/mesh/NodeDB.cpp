@@ -497,21 +497,20 @@ void removeStorageIndicesFromDisplayOrder(std::vector<uint16_t> &displayOrder, s
     }
 }
 
-bool encodeLiveNodeDatabase(pb_ostream_t *stream, const meshtastic_NodeDatabase &database, pb_size_t liveNodeCount)
+bool encodeLiveNodeDatabase(pb_ostream_t *stream, uint32_t version, const NodeStore &store, pb_size_t liveNodeCount)
 {
-    if (liveNodeCount > database.nodes.size()) {
+    if (liveNodeCount > store.slotCount()) {
         PB_RETURN_ERROR(stream, "NodeDB live count exceeds backing store");
     }
 
-    if (database.version != 0) {
-        if (!pb_encode_tag(stream, PB_WT_VARINT, meshtastic_NodeDatabase_version_tag) ||
-            !pb_encode_varint(stream, database.version)) {
+    if (version != 0) {
+        if (!pb_encode_tag(stream, PB_WT_VARINT, meshtastic_NodeDatabase_version_tag) || !pb_encode_varint(stream, version)) {
             return false;
         }
     }
 
     for (pb_size_t i = 0; i < liveNodeCount; ++i) {
-        const meshtastic_NodeInfoLite &node = database.nodes[i];
+        const meshtastic_NodeInfoLite &node = store.slot(i);
         if (!pb_encode_tag(stream, PB_WT_STRING, meshtastic_NodeDatabase_nodes_tag) ||
             !pb_encode_submessage(stream, meshtastic_NodeInfoLite_fields, &node)) {
             return false;
@@ -610,6 +609,18 @@ bool decodeLiveNodeDatabase(pb_istream_t *stream, meshtastic_NodeDatabase &datab
 
     database.nodes.resize(liveNodeCount);
     return true;
+}
+
+void logNodeDbMemorySnapshot(const char *label, pb_size_t liveNodeCount, size_t slotCount)
+{
+#if defined(ARCH_ESP32)
+    LOG_INFO("NodeDB memory %s: live=%u slots=%u heap=%u/%u psram=%u/%u", label, liveNodeCount, static_cast<unsigned>(slotCount),
+             memGet.getFreeHeap(), memGet.getHeapSize(), memGet.getFreePsram(), memGet.getPsramSize());
+#else
+    (void)label;
+    (void)liveNodeCount;
+    (void)slotCount;
+#endif
 }
 
 #ifdef FSCom
@@ -1657,6 +1668,7 @@ void NodeDB::loadFromDisk()
     }
 
 #endif
+    logNodeDbMemorySnapshot("before nodedb load", 0, nodeStore->slotCount());
     auto state = loadProto(nodeDatabaseFileName, getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
     if (nodeDatabase.version < DEVICESTATE_MIN_VER) {
@@ -1668,13 +1680,15 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded saved nodedatabase version %d, with nodes count: %d", nodeDatabase.version, nodeDatabase.nodes.size());
     }
 
-    if (numMeshNodes > MAX_NUM_NODES) {
-        LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
-        numMeshNodes = MAX_NUM_NODES;
-    }
     nodeStore->resize(MAX_NUM_NODES);
+    if (numMeshNodes > nodeStore->slotCount()) {
+        LOG_WARN("Node count %u exceeds runtime node cap %u, truncating", static_cast<unsigned>(numMeshNodes),
+                 static_cast<unsigned>(nodeStore->slotCount()));
+        numMeshNodes = static_cast<pb_size_t>(nodeStore->slotCount());
+    }
     resetDisplayOrder();
     rebuildNodeMeta();
+    logNodeDbMemorySnapshot("after nodedb load", numMeshNodes, nodeStore->slotCount());
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1953,12 +1967,13 @@ bool NodeDB::saveNodeDatabaseToDisk()
     auto f = SafeFile(nodeDatabaseFileName, false);
 
     LOG_INFO("Save %s (%u live nodes)", nodeDatabaseFileName, numMeshNodes);
+    logNodeDbMemorySnapshot("before nodedb save", numMeshNodes, nodeStore->slotCount());
     pb_ostream_t stream = {};
     stream.callback = &writecb;
     stream.state = static_cast<Print *>(&f);
     stream.max_size = (size_t)-1;
 
-    bool okay = encodeLiveNodeDatabase(&stream, nodeDatabase, numMeshNodes);
+    bool okay = encodeLiveNodeDatabase(&stream, nodeDatabase.version, *nodeStore, numMeshNodes);
     if (!okay) {
         LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
     }
@@ -1969,6 +1984,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
         LOG_ERROR("Can't write prefs!");
     }
 
+    logNodeDbMemorySnapshot("after nodedb save", numMeshNodes, nodeStore->slotCount());
     return okay && writeSucceeded;
 #else
     LOG_ERROR("ERROR: Filesystem not implemented");
@@ -2640,7 +2656,7 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 // returns true if the maximum number of nodes is reached or we are running low on memory
 bool NodeDB::isFull()
 {
-    return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+    return (numMeshNodes >= nodeStore->slotCount()) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
 }
 
 /// Find a node in our DB, create an empty NodeInfo if missing
