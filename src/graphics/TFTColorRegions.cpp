@@ -32,6 +32,8 @@ static inline bool isBodyColorRole(TFTColorRole role)
     case TFTColorRole::HeaderTitle:
     case TFTColorRole::HeaderStatus:
     case TFTColorRole::BootSplash:
+    case TFTColorRole::NavigationBar:
+    case TFTColorRole::NavigationArrow:
         return false;
     default:
         return true;
@@ -95,6 +97,8 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Black, TFTPalette::White},    // FrameMono
             {TFTPalette::White, TFTPalette::Black},    // BootSplash
             {TFTPalette::Yellow, TFTPalette::Black},   // BodyYellow
+            {kStatusColor, kHeaderBackground},         // NavigationBar  (icon fg, bar bg)
+            {kTitleColor, TFTPalette::Black},          // NavigationArrow (arrow fg, body bg)
         },
         kHeaderBackground, // headerBg
         kTitleColor,       // headerText
@@ -123,6 +127,8 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Black, TFTPalette::White},     // FrameMono
             {TFTPalette::White, TFTPalette::Black},     // BootSplash
             {TFTPalette::Black, TFTPalette::Yellow},    // BodyYellow
+            {TFTPalette::Black, TFTPalette::LightGray}, // NavigationBar  (icon fg, bar bg)
+            {TFTPalette::Black, TFTPalette::White},     // NavigationArrow (arrow fg, body bg)
         },
         TFTPalette::LightGray, // headerBg
         TFTPalette::Black,     // headerText
@@ -151,6 +157,8 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Pine, TFTPalette::White},          // FrameMono
             {TFTPalette::White, TFTPalette::ChristmasRed},  // BootSplash
             {TFTPalette::Gold, TFTPalette::Pine},           // BodyYellow
+            {TFTPalette::Gold, TFTPalette::ChristmasRed},   // NavigationBar  (icon fg, bar bg)
+            {TFTPalette::Gold, TFTPalette::Pine},           // NavigationArrow (arrow fg, body bg)
         },
         TFTPalette::ChristmasRed, // headerBg
         TFTPalette::Gold,         // headerText
@@ -179,6 +187,8 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Black, TFTPalette::White},       // FrameMono
             {TFTPalette::White, TFTPalette::HotPink},     // BootSplash
             {TFTPalette::Black, TFTPalette::HotPink},     // BodyYellow
+            {TFTPalette::White, TFTPalette::HotPink},     // NavigationBar  (icon fg, bar bg)
+            {TFTPalette::HotPink, TFTPalette::PalePink},  // NavigationArrow (arrow fg, body bg)
         },
         TFTPalette::HotPink,  // headerBg
         TFTPalette::White,    // headerText
@@ -207,6 +217,8 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Navy, TFTPalette::White},       // FrameMono
             {TFTPalette::White, TFTPalette::DeepBlue},   // BootSplash
             {TFTPalette::SkyBlue, TFTPalette::Navy},     // BodyYellow
+            {TFTPalette::SkyBlue, TFTPalette::DeepBlue}, // NavigationBar  (icon fg, bar bg)
+            {TFTPalette::SkyBlue, TFTPalette::Black},    // NavigationArrow (arrow fg, body bg)
         },
         TFTPalette::DeepBlue, // headerBg
         TFTPalette::White,    // headerText
@@ -235,6 +247,8 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Black, TFTPalette::White},       // FrameMono
             {TFTPalette::White, TFTPalette::CreamOrange}, // BootSplash
             {TFTPalette::Black, TFTPalette::CreamOrange}, // BodyYellow
+            {TFTPalette::White, TFTPalette::CreamOrange}, // NavigationBar  (icon fg, bar bg)
+            {TFTPalette::CreamOrange, TFTPalette::White}, // NavigationArrow (arrow fg, body bg)
         },
         TFTPalette::CreamOrange, // headerBg
         TFTPalette::White,       // headerText
@@ -275,7 +289,9 @@ static TFTRoleColorsBe roleColors[static_cast<size_t>(TFTColorRole::Count)] = {
     {toBe565(TFTPalette::DarkGray), toBe565(TFTPalette::White)}, // ActionMenuTitle
     {toBe565(TFTPalette::Black), toBe565(TFTPalette::White)},    // FrameMono
     {toBe565(TFTPalette::White), toBe565(TFTPalette::Black)},    // BootSplash
-    {toBe565(TFTPalette::Yellow), toBe565(TFTPalette::Black)}    // BodyYellow
+    {toBe565(TFTPalette::Yellow), toBe565(TFTPalette::Black)},   // BodyYellow
+    {toBe565(kStatusColor), toBe565(kHeaderBackground)},         // NavigationBar
+    {toBe565(kTitleColor), toBe565(TFTPalette::Black)}           // NavigationArrow
 };
 
 } // namespace

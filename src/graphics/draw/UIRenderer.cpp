@@ -1540,37 +1540,20 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int rectHeight = iconSize + 6;
 
     // Clear background and draw border
-    const auto activeThemeId = getActiveTheme().id;
-
-    const uint16_t navBgColor = getThemeHeaderBg();
-    const uint16_t navFgColor = getThemeHeaderStatus();
-
-    uint16_t arrowBgColor = getThemeBodyBg();
-    uint16_t arrowFgColor = getThemeHeaderText();
-    // Arrow colors depend on theme to ensure visibility against nav bar and consistency with icon colors.
-    // These are all the expections, if it matches the primary arrowBg / arrowFg colors above, it will just work without needing
-    // to be listed here.
-    switch (activeThemeId) {
-    case ThemeID::Pink:
-        arrowBgColor = getThemeBodyBg();
-        arrowFgColor = getThemeHeaderBg();
-        break;
-
-    case ThemeID::Blue:
-        arrowBgColor = TFTPalette::Black;
-        arrowFgColor = getThemeHeaderStatus();
-        break;
-
-    case ThemeID::Creamsicle:
-        arrowBgColor = getThemeHeaderText();
-        arrowFgColor = getThemeHeaderBg();
-        break;
-    }
-
     display->setColor(BLACK);
 #if GRAPHICS_TFT_COLORING_ENABLED
-    setTFTColorRole(TFTColorRole::HeaderStatus, navFgColor, navBgColor);
-    registerTFTColorRegion(TFTColorRole::HeaderStatus, rectX, rectY, rectWidth, rectHeight);
+    // NavigationBar and NavigationArrow roles are fully defined in the theme table.
+    // We must call setTFTColorRole() before registerTFTColorRegion() because
+    // registerTFTColorRegion() snapshots colors from the roleColors[] working array,
+    // and loadThemeDefaults() isn't guaranteed to have run since boot.
+    const TFTThemeDef &theme = getActiveTheme();
+    const auto &navBarRole = theme.roles[static_cast<size_t>(TFTColorRole::NavigationBar)];
+    const auto &navArrowRole = theme.roles[static_cast<size_t>(TFTColorRole::NavigationArrow)];
+
+    setTFTColorRole(TFTColorRole::NavigationBar, navBarRole.onColor, navBarRole.offColor);
+    setTFTColorRole(TFTColorRole::NavigationArrow, navArrowRole.onColor, navArrowRole.offColor);
+
+    registerTFTColorRegion(TFTColorRole::NavigationBar, rectX, rectY, rectWidth, rectHeight);
     display->fillRect(rectX, rectY, rectWidth, rectHeight);
 #else
     // Keep legacy OLED behavior untouched.
@@ -1592,8 +1575,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 #if GRAPHICS_TFT_COLORING_ENABLED
             // Active icon inverts on TFT: white chip with black glyph.
             // Keep the buffer visibly different too, so dirty-rect updates include this region.
-            setTFTColorRole(TFTColorRole::HeaderStatus, navFgColor, navBgColor);
-            registerTFTColorRegion(TFTColorRole::HeaderStatus, x - 1, y - 1, iconSize + 2, iconSize + 2);
+            registerTFTColorRegion(TFTColorRole::NavigationBar, x - 1, y - 1, iconSize + 2, iconSize + 2);
             display->setColor(WHITE);
             display->fillRect(x - 1, y - 1, iconSize + 2, iconSize + 2);
             display->setColor(BLACK);
@@ -1647,8 +1629,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         int regionX = baseX;
 
 #if GRAPHICS_TFT_COLORING_ENABLED
-        setTFTColorRole(TFTColorRole::HeaderStatus, arrowFgColor, arrowBgColor);
-        registerTFTColorRegion(TFTColorRole::HeaderStatus, regionX, top, maxW, halfH);
+        registerTFTColorRegion(TFTColorRole::NavigationArrow, regionX, top, maxW, halfH);
 #endif
 
         drawArrow(true);
@@ -1660,8 +1641,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         int regionX = baseX - maxW + 1;
 
 #if GRAPHICS_TFT_COLORING_ENABLED
-        setTFTColorRole(TFTColorRole::HeaderStatus, arrowFgColor, arrowBgColor);
-        registerTFTColorRegion(TFTColorRole::HeaderStatus, regionX, top, maxW, halfH);
+        registerTFTColorRegion(TFTColorRole::NavigationArrow, regionX, top, maxW, halfH);
 #endif
 
         drawArrow(false);

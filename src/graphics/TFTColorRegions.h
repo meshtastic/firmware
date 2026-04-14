@@ -34,6 +34,8 @@ enum class TFTColorRole : uint8_t {
     FrameMono,
     BootSplash,
     BodyYellow,
+    NavigationBar,
+    NavigationArrow,
     Count
 };
 
