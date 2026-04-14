@@ -1,0 +1,39 @@
+# MeshAdv-Pi E22-900M30S
+# https://github.com/chrismyers2000/MeshAdv-Pi-Hat
+Meta:
+  name: MeshAdv-Pi E22-900M30S
+  support: community
+  compatible:
+    - luckfox-lyra-zero-w # Armbian
+
+Lora:
+  Module: sx1262
+  CS: # GPIO0_C2 (physical 40)
+    pin: 18
+    gpiochip: 0
+    line: 18
+  IRQ: # GPIO1_D1 (physical 36)
+    pin: 57
+    gpiochip: 1
+    line: 25
+  Busy: # GPIO0_C1 (physical 38)
+    pin: 17
+    gpiochip: 0
+    line: 17
+  Reset: # GPIO0_B6 (physical 12)
+    pin: 14
+    gpiochip: 0
+    line: 14
+  TXen: # GPIO1_C2 (physical 33)
+    pin: 50
+    gpiochip: 1
+    line: 18
+  RXen: # GPIO1_D2 (physical 32)
+    pin: 58
+    gpiochip: 1
+    line: 26
+  DIO3_TCXO_VOLTAGE: true
+  # Only for E22-900M33S:
+  # Limit the output power to 8 dBm
+  # SX126X_MAX_POWER: 8
+  spidev: spidev0.0
