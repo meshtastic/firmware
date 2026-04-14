@@ -339,9 +339,39 @@ class NodeDB
     }
 
   private:
+    struct NodeMeta {
+        uint32_t node_num = 0;
+        uint32_t last_heard = 0;
+        uint16_t storage_index = 0;
+        int8_t snr_q4 = 0;
+        uint8_t channel = 0;
+        uint8_t hops_away = UINT8_MAX;
+        uint8_t next_hop = 0;
+        uint16_t flags = 0;
+        uint8_t role = 0;
+        uint8_t hw_model = 0;
+    };
+
+    enum NodeMetaFlags : uint16_t {
+        NODEMETA_HAS_USER = 1 << 0,
+        NODEMETA_HAS_POSITION = 1 << 1,
+        NODEMETA_HAS_DEVICE_METRICS = 1 << 2,
+        NODEMETA_VIA_MQTT = 1 << 3,
+        NODEMETA_HAS_HOPS_AWAY = 1 << 4,
+        NODEMETA_IS_FAVORITE = 1 << 5,
+        NODEMETA_IS_IGNORED = 1 << 6,
+        NODEMETA_HAS_PUBLIC_KEY = 1 << 7,
+        NODEMETA_IS_KEY_VERIFIED = 1 << 8,
+        NODEMETA_IS_MUTED = 1 << 9,
+        NODEMETA_IS_LICENSED = 1 << 10,
+    };
+
     // Presentation order currently mirrors live storage order. Later phases
     // will sort this view independently without moving full records.
     std::vector<uint16_t> displayOrder;
+    // Phase 6 shadow cache: compact hot metadata stays aligned to storage slots
+    // while the full record vector remains the source of truth.
+    std::vector<NodeMeta> nodeMeta;
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
@@ -364,6 +394,13 @@ class NodeDB
     /// purge db entries without user info
     void cleanupMeshDB();
     void resetDisplayOrder();
+    void rebuildNodeMeta();
+    void refreshNodeMeta(uint16_t storageIndex);
+    uint16_t getStorageIndex(const meshtastic_NodeInfoLite *node) const;
+    const NodeMeta *getNodeMeta(NodeNum n) const;
+    static uint16_t buildNodeMetaFlags(const meshtastic_NodeInfoLite &node);
+    static int8_t quantizeSnrQ4(float snr);
+    static bool shouldDisplayNodeBefore(const NodeMeta &lhs, const NodeMeta &rhs, NodeNum localNodeNum);
 
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultNodeDatabase(), installDefaultChannels(),

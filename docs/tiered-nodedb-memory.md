@@ -248,3 +248,51 @@ Make sorting reorder only the presentation view so full `meshtastic_NodeInfoLite
 
 - Phase 5 leaves `getMeshNode(NodeNum)` as a linear scan over storage order. That is fine for this phase, but phase 6+ should treat it as an implementation detail rather than evidence that storage order is meaningful.
 - The next phase can add `NodeMeta[]` without needing to untangle sort-induced record movement first, because presentation ordering is now isolated in `displayOrder`.
+
+## Phase 6: Add `NodeMeta[]` Shadow Cache
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Introduce compact DRAM-side metadata while still treating the vector-backed `meshNodes` store as the source of truth.
+
+### What Changed
+
+- `src/mesh/NodeDB.h`
+  - Added a private `NodeMeta` struct and `nodeMeta` vector aligned to the live storage slots.
+  - Added metadata helpers for rebuild, per-slot refresh, storage-index recovery, linear metadata lookup, and metadata-side sort comparison.
+  - Added metadata flags for favorite / ignored / key-verified / muted / MQTT / public-key / user / licensed / position / device-metrics state.
+- `src/mesh/NodeDB.cpp`
+  - Added `rebuildNodeMeta()` and `refreshNodeMeta()` so lifecycle paths and point mutations can keep the shadow cache synchronized from the live `meshNodes` records.
+  - Rebuilds metadata after NodeDB shape changes: default install, load, reset, cleanup, removal, and eviction compaction.
+  - Refreshes metadata after hot-field mutations such as user updates, position/telemetry presence changes, packet-heard updates, favorite/ignore/mute/key-verify writes, and local-node time refreshes.
+  - Changed `sortMeshDB()` to compare `NodeMeta` entries instead of full `meshtastic_NodeInfoLite` records.
+  - Changed hot read paths to consult metadata first while still returning full records from storage:
+    - `getMeshNode(NodeNum)`
+    - `getMeshNodeChannel(NodeNum)`
+    - `isFavorite()`
+    - `isFromOrToFavoritedNode()`
+    - `getNumOnlineMeshNodes()`
+    - `getLicenseStatus()`
+  - Changed full-DB eviction scoring in `getOrCreateMeshNode()` to use metadata flags and `last_heard` instead of repeatedly inspecting the larger full records for those hot criteria.
+
+### Important Constraints For Later Phases
+
+- `meshNodes` is still the source of truth in phase 6. `NodeMeta` is a synchronized shadow cache, not an independent store.
+- `nodeMeta` is currently storage-slot aligned. `displayOrder` still contains storage indices, which also happen to be metadata indices in this phase. If a later phase decouples those identities, do it deliberately and update both contracts together.
+- Any NodeDB mutation that changes metadata-backed fields must refresh the corresponding `NodeMeta` entry before a later sort or metadata lookup relies on it.
+- Phase 7 should build the `NodeNum -> meta index` hash over `nodeMeta`, not by reintroducing full-record scans over `meshNodes`.
+- The metadata cache now carries `storage_index` as the hand-off back to the full record. Later slot-store phases should preserve that role even if the backing store stops being a plain vector.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e rak4631`
+- `pio run -e native` still fails before NodeDB changes are exercised in the existing Portduino/LovyanGFX macOS toolchain path. The current local failure remains the same class seen in earlier phases: LovyanGFX native sources hit missing C runtime declarations (`size_t`, `memcpy`, `memmove`, `strlen`) plus missing `malloc.h`.
+
+### Follow-Up Notes
+
+- Phase 6 stores `snr_q4`, `role`, and `hw_model` in metadata even though current hot paths do not consume them yet. That keeps phase 7+ hash and backend work from needing another metadata-shape expansion for those fields.
+- Because `getMeshNode(NodeNum)` now searches `nodeMeta` and then projects back to storage, future work should treat storage-index scans as legacy behavior to be removed rather than as the default access pattern.
