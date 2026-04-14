@@ -517,22 +517,22 @@ typedef enum _meshtastic_StoreForwardPlusPlus_SFPP_message_type {
 
  Values 1-63 are client->server requests.
  Values 64-127 are server->client responses/events. */
-typedef enum _meshtastic_DMShell_OpCode {
-    meshtastic_DMShell_OpCode_OP_UNSET = 0,
+typedef enum _meshtastic_RemoteShell_OpCode {
+    meshtastic_RemoteShell_OpCode_OP_UNSET = 0,
     /* Client -> server */
-    meshtastic_DMShell_OpCode_OPEN = 1,
-    meshtastic_DMShell_OpCode_INPUT = 2,
-    meshtastic_DMShell_OpCode_RESIZE = 3,
-    meshtastic_DMShell_OpCode_CLOSE = 4,
-    meshtastic_DMShell_OpCode_PING = 5,
-    meshtastic_DMShell_OpCode_ACK = 6,
+    meshtastic_RemoteShell_OpCode_OPEN = 1,
+    meshtastic_RemoteShell_OpCode_INPUT = 2,
+    meshtastic_RemoteShell_OpCode_RESIZE = 3,
+    meshtastic_RemoteShell_OpCode_CLOSE = 4,
+    meshtastic_RemoteShell_OpCode_PING = 5,
+    meshtastic_RemoteShell_OpCode_ACK = 6,
     /* Server -> client */
-    meshtastic_DMShell_OpCode_OPEN_OK = 64,
-    meshtastic_DMShell_OpCode_OUTPUT = 65,
-    meshtastic_DMShell_OpCode_CLOSED = 66,
-    meshtastic_DMShell_OpCode_ERROR = 67,
-    meshtastic_DMShell_OpCode_PONG = 68
-} meshtastic_DMShell_OpCode;
+    meshtastic_RemoteShell_OpCode_OPEN_OK = 64,
+    meshtastic_RemoteShell_OpCode_OUTPUT = 65,
+    meshtastic_RemoteShell_OpCode_CLOSED = 66,
+    meshtastic_RemoteShell_OpCode_ERROR = 67,
+    meshtastic_RemoteShell_OpCode_PONG = 68
+} meshtastic_RemoteShell_OpCode;
 
 /* The priority of this message for sending.
  Higher priorities are sent first (when managing the transmit queue).
@@ -866,11 +866,11 @@ typedef struct _meshtastic_StoreForwardPlusPlus {
     uint32_t chain_count;
 } meshtastic_StoreForwardPlusPlus;
 
-typedef PB_BYTES_ARRAY_T(200) meshtastic_DMShell_payload_t;
-/* The actual over-the-mesh message doing DMShell */
-typedef struct _meshtastic_DMShell {
+typedef PB_BYTES_ARRAY_T(200) meshtastic_RemoteShell_payload_t;
+/* The actual over-the-mesh message doing RemoteShell */
+typedef struct _meshtastic_RemoteShell {
     /* Structured frame operation. */
-    meshtastic_DMShell_OpCode op;
+    meshtastic_RemoteShell_OpCode op;
     /* Logical PTY session identifier. */
     uint32_t session_id;
     /* Monotonic sequence number for this frame. */
@@ -878,14 +878,14 @@ typedef struct _meshtastic_DMShell {
     /* Cumulative ack sequence number. */
     uint32_t ack_seq;
     /* Opaque bytes payload for INPUT/OUTPUT/ERROR and other frame bodies. */
-    meshtastic_DMShell_payload_t payload;
+    meshtastic_RemoteShell_payload_t payload;
     /* Terminal size columns used for OPEN/RESIZE signaling. */
     uint32_t cols;
     /* Terminal size rows used for OPEN/RESIZE signaling. */
     uint32_t rows;
     /* Bit flags for protocol extensions. */
     uint32_t flags;
-} meshtastic_DMShell;
+} meshtastic_RemoteShell;
 
 /* Waypoint message, used to share arbitrary locations across the mesh */
 typedef struct _meshtastic_Waypoint {
@@ -1427,9 +1427,9 @@ extern "C" {
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_ARRAYSIZE ((meshtastic_StoreForwardPlusPlus_SFPP_message_type)(meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF+1))
 
-#define _meshtastic_DMShell_OpCode_MIN meshtastic_DMShell_OpCode_OP_UNSET
-#define _meshtastic_DMShell_OpCode_MAX meshtastic_DMShell_OpCode_PONG
-#define _meshtastic_DMShell_OpCode_ARRAYSIZE ((meshtastic_DMShell_OpCode)(meshtastic_DMShell_OpCode_PONG+1))
+#define _meshtastic_RemoteShell_OpCode_MIN meshtastic_RemoteShell_OpCode_OP_UNSET
+#define _meshtastic_RemoteShell_OpCode_MAX meshtastic_RemoteShell_OpCode_PONG
+#define _meshtastic_RemoteShell_OpCode_ARRAYSIZE ((meshtastic_RemoteShell_OpCode)(meshtastic_RemoteShell_OpCode_PONG+1))
 
 #define _meshtastic_MeshPacket_Priority_MIN meshtastic_MeshPacket_Priority_UNSET
 #define _meshtastic_MeshPacket_Priority_MAX meshtastic_MeshPacket_Priority_MAX
@@ -1461,7 +1461,7 @@ extern "C" {
 
 #define meshtastic_StoreForwardPlusPlus_sfpp_message_type_ENUMTYPE meshtastic_StoreForwardPlusPlus_SFPP_message_type
 
-#define meshtastic_DMShell_op_ENUMTYPE meshtastic_DMShell_OpCode
+#define meshtastic_RemoteShell_op_ENUMTYPE meshtastic_RemoteShell_OpCode
 
 
 
@@ -1507,7 +1507,7 @@ extern "C" {
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
-#define meshtastic_DMShell_init_default          {_meshtastic_DMShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0}
+#define meshtastic_RemoteShell_init_default      {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
@@ -1541,7 +1541,7 @@ extern "C" {
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
-#define meshtastic_DMShell_init_zero             {_meshtastic_DMShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0}
+#define meshtastic_RemoteShell_init_zero         {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
@@ -1631,14 +1631,14 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_encapsulated_from_tag 8
 #define meshtastic_StoreForwardPlusPlus_encapsulated_rxtime_tag 9
 #define meshtastic_StoreForwardPlusPlus_chain_count_tag 10
-#define meshtastic_DMShell_op_tag                1
-#define meshtastic_DMShell_session_id_tag        2
-#define meshtastic_DMShell_seq_tag               3
-#define meshtastic_DMShell_ack_seq_tag           4
-#define meshtastic_DMShell_payload_tag           5
-#define meshtastic_DMShell_cols_tag              6
-#define meshtastic_DMShell_rows_tag              7
-#define meshtastic_DMShell_flags_tag             8
+#define meshtastic_RemoteShell_op_tag            1
+#define meshtastic_RemoteShell_session_id_tag    2
+#define meshtastic_RemoteShell_seq_tag           3
+#define meshtastic_RemoteShell_ack_seq_tag       4
+#define meshtastic_RemoteShell_payload_tag       5
+#define meshtastic_RemoteShell_cols_tag          6
+#define meshtastic_RemoteShell_rows_tag          7
+#define meshtastic_RemoteShell_flags_tag         8
 #define meshtastic_Waypoint_id_tag               1
 #define meshtastic_Waypoint_latitude_i_tag       2
 #define meshtastic_Waypoint_longitude_i_tag      3
@@ -1871,7 +1871,7 @@ X(a, STATIC,   SINGULAR, UINT32,   chain_count,      10)
 #define meshtastic_StoreForwardPlusPlus_CALLBACK NULL
 #define meshtastic_StoreForwardPlusPlus_DEFAULT NULL
 
-#define meshtastic_DMShell_FIELDLIST(X, a) \
+#define meshtastic_RemoteShell_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    op,                1) \
 X(a, STATIC,   SINGULAR, UINT32,   session_id,        2) \
 X(a, STATIC,   SINGULAR, UINT32,   seq,               3) \
@@ -1880,8 +1880,8 @@ X(a, STATIC,   SINGULAR, BYTES,    payload,           5) \
 X(a, STATIC,   SINGULAR, UINT32,   cols,              6) \
 X(a, STATIC,   SINGULAR, UINT32,   rows,              7) \
 X(a, STATIC,   SINGULAR, UINT32,   flags,             8)
-#define meshtastic_DMShell_CALLBACK NULL
-#define meshtastic_DMShell_DEFAULT NULL
+#define meshtastic_RemoteShell_CALLBACK NULL
+#define meshtastic_RemoteShell_DEFAULT NULL
 
 #define meshtastic_Waypoint_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
@@ -2165,7 +2165,7 @@ extern const pb_msgdesc_t meshtastic_Routing_msg;
 extern const pb_msgdesc_t meshtastic_Data_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerification_msg;
 extern const pb_msgdesc_t meshtastic_StoreForwardPlusPlus_msg;
-extern const pb_msgdesc_t meshtastic_DMShell_msg;
+extern const pb_msgdesc_t meshtastic_RemoteShell_msg;
 extern const pb_msgdesc_t meshtastic_Waypoint_msg;
 extern const pb_msgdesc_t meshtastic_StatusMessage_msg;
 extern const pb_msgdesc_t meshtastic_MqttClientProxyMessage_msg;
@@ -2201,7 +2201,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_Data_fields &meshtastic_Data_msg
 #define meshtastic_KeyVerification_fields &meshtastic_KeyVerification_msg
 #define meshtastic_StoreForwardPlusPlus_fields &meshtastic_StoreForwardPlusPlus_msg
-#define meshtastic_DMShell_fields &meshtastic_DMShell_msg
+#define meshtastic_RemoteShell_fields &meshtastic_RemoteShell_msg
 #define meshtastic_Waypoint_fields &meshtastic_Waypoint_msg
 #define meshtastic_StatusMessage_fields &meshtastic_StatusMessage_msg
 #define meshtastic_MqttClientProxyMessage_fields &meshtastic_MqttClientProxyMessage_msg
@@ -2236,7 +2236,6 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ChunkedPayload_size           245
 #define meshtastic_ClientNotification_size       482
 #define meshtastic_Compressed_size               239
-#define meshtastic_DMShell_size                  241
 #define meshtastic_Data_size                     269
 #define meshtastic_DeviceMetadata_size           54
 #define meshtastic_DuplicatedPublicKey_size      0
@@ -2258,6 +2257,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
+#define meshtastic_RemoteShell_size              241
 #define meshtastic_RouteDiscovery_size           256
 #define meshtastic_Routing_size                  259
 #define meshtastic_StatusMessage_size            81

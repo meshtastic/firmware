@@ -13,7 +13,7 @@
 #if defined(ARCH_PORTDUINO)
 
 struct DMShellFrame {
-    meshtastic_DMShell_OpCode op = meshtastic_DMShell_OpCode_ERROR;
+    meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;
     uint32_t sessionId = 0;
     uint32_t seq = 0;
     uint32_t ackSeq = 0;
@@ -38,7 +38,7 @@ struct DMShellSession {
     uint32_t lastActivityMs = 0;
     struct SentFrame {
         bool valid = false;
-        meshtastic_DMShell_OpCode op = meshtastic_DMShell_OpCode_ERROR;
+        meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;
         uint32_t sessionId = 0;
         uint32_t seq = 0;
         uint32_t ackSeq = 0;
@@ -76,17 +76,17 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     void closeSession(const char *reason, bool notifyPeer);
     void reapChildIfExited();
 
-    void rememberSentFrame(meshtastic_DMShell_OpCode op, uint32_t sessionId, uint32_t seq, const uint8_t *payload,
+    void rememberSentFrame(meshtastic_RemoteShell_OpCode op, uint32_t sessionId, uint32_t seq, const uint8_t *payload,
                            size_t payloadLen, uint32_t cols, uint32_t rows, uint32_t ackSeq, uint32_t flags);
     void pruneSentFrames(uint32_t ackSeq);
     void resendFramesFrom(uint32_t startSeq);
     void sendAck(uint32_t replayFromSeq = 0);
-    void sendControl(meshtastic_DMShell_OpCode op, const uint8_t *payload, size_t payloadLen);
-    void sendFrameToPeer(NodeNum peer, uint8_t channel, meshtastic_DMShell_OpCode op, uint32_t sessionId, uint32_t seq,
+    void sendControl(meshtastic_RemoteShell_OpCode op, const uint8_t *payload, size_t payloadLen);
+    void sendFrameToPeer(NodeNum peer, uint8_t channel, meshtastic_RemoteShell_OpCode op, uint32_t sessionId, uint32_t seq,
                          const uint8_t *payload, size_t payloadLen, uint32_t cols = 0, uint32_t rows = 0, uint32_t ackSeq = 0,
                          uint32_t flags = 0, bool remember = true);
     void sendError(const char *message);
-    meshtastic_MeshPacket *buildFramePacket(meshtastic_DMShell_OpCode op, uint32_t sessionId, uint32_t seq,
+    meshtastic_MeshPacket *buildFramePacket(meshtastic_RemoteShell_OpCode op, uint32_t sessionId, uint32_t seq,
                                             const uint8_t *payload, size_t payloadLen, uint32_t cols, uint32_t rows,
                                             uint32_t ackSeq, uint32_t flags);
 };
