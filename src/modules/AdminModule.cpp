@@ -114,7 +114,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                     LOG_INFO("PKC admin valid, but not auto-favoriting node %x because role==CLIENT_BASE", mp.from);
                 } else {
                     LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
-                    remoteNode->is_favorite = true;
+                    nodeDB->setFavorite(mp.from, true);
                 }
             }
         } else {
@@ -391,10 +391,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
         LOG_INFO("Client received set_favorite_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
-        if (node != NULL) {
-            node->is_favorite = true;
-            saveChanges(SEGMENT_NODEDATABASE, false);
+        if (nodeDB->getMeshNode(r->set_favorite_node) != NULL) {
+            nodeDB->setFavorite(r->set_favorite_node, true);
             if (screen)
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
         }
@@ -402,10 +400,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_remove_favorite_node_tag: {
         LOG_INFO("Client received remove_favorite_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
-        if (node != NULL) {
-            node->is_favorite = false;
-            saveChanges(SEGMENT_NODEDATABASE, false);
+        if (nodeDB->getMeshNode(r->remove_favorite_node) != NULL) {
+            nodeDB->setFavorite(r->remove_favorite_node, false);
             if (screen)
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
         }
@@ -413,23 +409,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_set_ignored_node_tag: {
         LOG_INFO("Client received set_ignored_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_ignored_node);
-        if (node != NULL) {
-            node->is_ignored = true;
-            node->has_device_metrics = false;
-            node->has_position = false;
-            node->user.public_key.size = 0;
-            memset(node->user.public_key.bytes, 0, sizeof(node->user.public_key.bytes));
-            saveChanges(SEGMENT_NODEDATABASE, false);
+        if (nodeDB->getMeshNode(r->set_ignored_node) != NULL) {
+            nodeDB->setIgnored(r->set_ignored_node, true);
         }
         break;
     }
     case meshtastic_AdminMessage_remove_ignored_node_tag: {
         LOG_INFO("Client received remove_ignored_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_ignored_node);
-        if (node != NULL) {
-            node->is_ignored = false;
-            saveChanges(SEGMENT_NODEDATABASE, false);
+        if (nodeDB->getMeshNode(r->remove_ignored_node) != NULL) {
+            nodeDB->setIgnored(r->remove_ignored_node, false);
         }
         break;
     }
@@ -437,8 +425,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client received toggle_muted_node command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->toggle_muted_node);
         if (node != NULL) {
-            node->bitfield ^= (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT);
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            nodeDB->setMuted(r->toggle_muted_node, (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) == 0);
         }
         break;
     }

@@ -1412,10 +1412,10 @@ void menuHandler::manageNodeMenu()
             }
             if (n->is_favorite) {
                 LOG_INFO("Removing node %08X from favorites", menuHandler::pickedNodeNum);
-                nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
+                nodeDB->setFavorite(menuHandler::pickedNodeNum, false);
             } else {
                 LOG_INFO("Adding node %08X to favorites", menuHandler::pickedNodeNum);
-                nodeDB->set_favorite(true, menuHandler::pickedNodeNum);
+                nodeDB->setFavorite(menuHandler::pickedNodeNum, true);
             }
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
@@ -1427,15 +1427,15 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
-            if (n->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) {
-                n->bitfield &= ~NODEINFO_BITFIELD_IS_MUTED_MASK;
+            const bool isMuted = (n->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+            nodeDB->setMuted(menuHandler::pickedNodeNum, !isMuted);
+
+            if (isMuted) {
                 LOG_INFO("Unmuted node %08X", menuHandler::pickedNodeNum);
             } else {
-                n->bitfield |= NODEINFO_BITFIELD_IS_MUTED_MASK;
                 LOG_INFO("Muted node %08X", menuHandler::pickedNodeNum);
             }
             nodeDB->notifyObservers(true);
-            nodeDB->saveToDisk();
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
         }
@@ -1463,14 +1463,13 @@ void menuHandler::manageNodeMenu()
             }
 
             if (n->is_ignored) {
-                n->is_ignored = false;
+                nodeDB->setIgnored(menuHandler::pickedNodeNum, false);
                 LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
             } else {
-                n->is_ignored = true;
+                nodeDB->setIgnored(menuHandler::pickedNodeNum, true);
                 LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
             }
             nodeDB->notifyObservers(true);
-            nodeDB->saveToDisk();
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
         }
@@ -2193,7 +2192,7 @@ void menuHandler::removeFavoriteMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             LOG_INFO("Removing %x as favorite node", graphics::UIRenderer::currentFavoriteNodeNum);
-            nodeDB->set_favorite(false, graphics::UIRenderer::currentFavoriteNodeNum);
+            nodeDB->setFavorite(graphics::UIRenderer::currentFavoriteNodeNum, false);
             screen->setFrames(graphics::Screen::FOCUS_DEFAULT);
         }
     };
