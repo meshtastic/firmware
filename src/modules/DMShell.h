@@ -66,6 +66,7 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     static constexpr uint32_t SESSION_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
     DMShellSession session;
+    pid_t pendingChildPid = -1;
 
     bool parseFrame(const meshtastic_MeshPacket &mp, DMShellFrame &outFrame);
     bool isAuthorizedPacket(const meshtastic_MeshPacket &mp) const;
@@ -75,6 +76,7 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     bool writeSessionInput(const DMShellFrame &frame);
     void closeSession(const char *reason, bool notifyPeer);
     void reapChildIfExited();
+    void processPendingChildReap();
 
     void rememberSentFrame(meshtastic_RemoteShell_OpCode op, uint32_t sessionId, uint32_t seq, const uint8_t *payload,
                            size_t payloadLen, uint32_t cols, uint32_t rows, uint32_t ackSeq, uint32_t flags);
