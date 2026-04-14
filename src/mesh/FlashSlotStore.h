@@ -45,6 +45,7 @@ class FlashSlotStore
     bool writeManifest(const Manifest &manifest) const;
     bool readSlot(uint16_t slotIndex, meshtastic_NodeInfoLite &node) const;
     bool writeSlot(uint16_t slotIndex, const meshtastic_NodeInfoLite &node) const;
+    bool clearSlot(uint16_t slotIndex) const;
 
   private:
     const char *directory;
