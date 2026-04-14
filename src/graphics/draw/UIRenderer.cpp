@@ -26,7 +26,7 @@ static uint32_t lastSwitchTime = 0;
 namespace graphics
 {
 NodeNum UIRenderer::currentFavoriteNodeNum = 0;
-std::vector<meshtastic_NodeInfoLite *> graphics::UIRenderer::favoritedNodes;
+std::vector<NodeNum> graphics::UIRenderer::favoritedNodes;
 
 static inline void drawSatelliteIcon(OLEDDisplay *display, int16_t x, int16_t y)
 {
@@ -47,11 +47,10 @@ void graphics::UIRenderer::rebuildFavoritedNodes()
         if (!n || n->num == nodeDB->getNodeNum())
             continue;
         if (n->is_favorite)
-            favoritedNodes.push_back(n);
+            favoritedNodes.push_back(n->num);
     }
 
-    std::sort(favoritedNodes.begin(), favoritedNodes.end(),
-              [](const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b) { return a->num < b->num; });
+    std::sort(favoritedNodes.begin(), favoritedNodes.end());
 }
 
 #if !MESHTASTIC_EXCLUDE_GPS
@@ -300,7 +299,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
     if (nodeIndex < 0 || nodeIndex >= (int)favoritedNodes.size())
         return;
 
-    meshtastic_NodeInfoLite *node = favoritedNodes[nodeIndex];
+    const NodeNum favoriteNodeNum = favoritedNodes[nodeIndex];
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(favoriteNodeNum);
     if (!node || node->num == nodeDB->getNodeNum() || !node->is_favorite)
         return;
     display->clear();
@@ -312,7 +312,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
         lastSwitchTime = now;
     }
 #endif
-    currentFavoriteNodeNum = node->num;
+    currentFavoriteNodeNum = favoriteNodeNum;
     // === Create the shortName and title string ===
     const char *shortName = (node->has_user && node->user.short_name[0]) ? node->user.short_name : "Node";
     char titlestr[40];

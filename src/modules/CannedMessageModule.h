@@ -41,8 +41,7 @@ struct Letter {
 };
 
 struct NodeEntry {
-    meshtastic_NodeInfoLite *node;
-    uint32_t lastHeard;
+    NodeNum nodeNum;
 };
 
 // ============================
