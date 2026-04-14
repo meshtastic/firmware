@@ -510,3 +510,44 @@ Let PSRAM-capable `ESP32-S3` targets allocate a materially larger in-memory slot
 
 - Phase 11 adds logging for heap / PSRAM snapshots around NodeDB save/load, but it does not yet persist or summarize those measurements anywhere outside the boot/runtime logs.
 - Phase 12 can treat the new runtime-cap split as established: `ArraySlotStore` now owns "how many slots can this target really support right now?", while `NodeDB` consumes the resulting capacity through the generic `NodeStore` interface.
+
+## Phase 12: Add `FlashSlotStore` Raw Record I/O
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Land the flash-slot on-disk contract and low-level record I/O without changing NodeDB's active backend selection yet.
+
+### What Changed
+
+- `src/mesh/FlashSlotStore.h`
+  - Added a standalone `FlashSlotStore` helper with the phase-12 on-disk structs:
+    - a fixed-width manifest containing store magic/version, slot capacity, record size, and `slots_per_page`
+    - a fixed-width slot-record header containing magic/version, presence flags, protobuf `encoded_len`, and CRC32
+  - Declared `initialize()`, `readManifest()`, `writeManifest()`, `readSlot()`, and `writeSlot()` as the raw helper API for later flash-backend phases.
+- `src/mesh/FlashSlotStore.cpp`
+  - Implemented manifest read/write at `/prefs/nodedb/manifest.bin`.
+  - Implemented page-file storage at `/prefs/nodedb/page-XXX.bin`, with page geometry derived from `slots_per_page * sizeof(Record)`.
+  - Implemented `writeSlot()` by nanopb-encoding a single `meshtastic_NodeInfoLite` into the fixed-size payload buffer, storing the encoded length, and computing CRC32 over only the valid encoded bytes.
+  - Implemented `readSlot()` to validate manifest shape, page bounds, record header, encoded length, and CRC before decoding the protobuf payload back into a scratch `meshtastic_NodeInfoLite`.
+  - Chose whole-page rewrites for phase 12 so the helper works with the current cross-platform filesystem open modes without needing NodeDB integration or in-place read/write file handles yet.
+
+### Important Constraints For Later Phases
+
+- Phase 12 does not wire `FlashSlotStore` into `NodeDB`, backend selection, boot scan, or mutation paths yet. Phase 13 is the first phase that should make these raw helpers observable at runtime.
+- The manifest is now the source of truth for flash-slot geometry. Later phases should validate against `record_size` and `slots_per_page` from the manifest instead of hard-coding those assumptions in boot/import paths.
+- Slot payloads are protobuf-encoded `NodeInfoLite`, not raw struct bytes. Future migration/import code must preserve that contract so flash records stay compiler-layout independent.
+- CRC32 is computed only across the first `encoded_len` payload bytes. Future corruption handling should keep rejecting records whose CRC or encoded length fails validation instead of trying to decode them anyway.
+- Phase 12 currently rewrites an entire page file for each slot write. Later phases may optimize that if measurements justify it, but they should preserve the same on-disk manifest/record format unless an explicit migration step is added.
+
+### Verification
+
+- `pio run -e rak4631` succeeded locally.
+- `pio run -e tbeam-s3-core` succeeded locally.
+
+### Follow-Up Notes
+
+- The page-file naming and manifest geometry are now concrete enough for phase 13 boot-scan work: `slotIndex -> pageIndex + page offset` no longer needs to be designed.
+- Because `FlashSlotStore` is still standalone in phase 12, later phases are free to evolve the `NodeStore` abstraction separately if the current pointer-oriented interface is still too array-centric for flash-backed reads.
