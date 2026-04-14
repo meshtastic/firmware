@@ -83,7 +83,6 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     void pruneSentFrames(uint32_t ackSeq);
     void resendFramesFrom(uint32_t startSeq);
     void sendAck(uint32_t replayFromSeq = 0);
-    void sendControl(meshtastic_RemoteShell_OpCode op, const uint8_t *payload, size_t payloadLen);
     void sendFrameToPeer(NodeNum peer, uint8_t channel, meshtastic_RemoteShell_OpCode op, uint32_t sessionId, uint32_t seq,
                          const uint8_t *payload, size_t payloadLen, uint32_t cols = 0, uint32_t rows = 0, uint32_t ackSeq = 0,
                          uint32_t flags = 0, bool remember = true);
