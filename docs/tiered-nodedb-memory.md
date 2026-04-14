@@ -173,3 +173,41 @@ Stop UI and module code from retaining `meshtastic_NodeInfoLite *` across frame 
 
 - `UIRenderer::drawNodeInfo()` and destination-list rendering still perform fresh pointer reads through `getMeshNode()` on use. That is intentional for phase 3, but phase 4+ should treat these sites as candidates for scratch-buffer read helpers once `displayOrder[]` and backend-backed full records land.
 - `InkHUD::NodeListApplet` still re-reads live nodes through `getMeshNode(nodeNum)` while rendering cards. Phase 3 keeps that behavior because it is an on-use read rather than a retained pointer cache.
+
+## Phase 4: Add `displayOrder[]` Without Changing Storage
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Introduce a separate presentation-order view while keeping `meshNodes` as the live backing store and preserving current user-visible order.
+
+### What Changed
+
+- `src/mesh/NodeDB.h`
+  - Moved `getMeshNodeByIndex()` out of line so index resolution can flow through an internal presentation-order map.
+  - Added a private `displayOrder` vector plus a `resetDisplayOrder()` helper for maintaining the current identity mapping.
+- `src/mesh/NodeDB.cpp`
+  - Added `resetDisplayOrder()` to rebuild `displayOrder[i] = i` for the live node range.
+  - Rebuilt `displayOrder` after NodeDB lifecycle paths that change the live set shape: default install, load, cleanup, reset, explicit removal, and node creation/eviction.
+  - Changed `getMeshNodeByIndex()` to read through `displayOrder` instead of indexing `meshNodes` directly.
+  - Changed `readNextMeshNode()` to iterate through `displayOrder`, so phone/export-style sequential enumeration now follows the presentation view instead of assuming storage order.
+  - Kept `sortMeshDB()` physically sorting `meshNodes` in this phase, so behavior remains unchanged while the presentation path is now routed through a separable layer.
+
+### Important Constraints For Later Phases
+
+- In phase 4, `displayOrder` is still an identity view over the current storage layout. Any phase-4-era storage compaction or append path must continue to rebuild that identity mapping so callers never see stale storage indices.
+- Phase 5 should change `sortMeshDB()` to reorder `displayOrder` instead of swapping full `meshtastic_NodeInfoLite` records. Once that lands, storage-mutating paths like reset/remove/evict/cleanup will need to preserve or deliberately rebuild presentation order with that new contract in mind.
+- `getMeshNode(NodeNum)` still linearly scans `meshNodes`. Phase 4 does not add `NodeMeta[]`, slot identity, or hash lookup yet; it only decouples presentation reads from direct raw-storage indexing.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e rak4631`
+- `pio run -e native` still fails before NodeDB code is exercised in the existing Portduino/LovyanGFX macOS toolchain path. The local failure remains the same class seen in phases 1-3: LovyanGFX C/C++ sources hit missing C runtime declarations (`size_t`, `memcpy`, `memmove`, `strlen`) and missing `malloc.h`.
+
+### Follow-Up Notes
+
+- Phase 4 deliberately keeps storage order and presentation order aligned by identity. That keeps the diff small, but it also means phase 5 is the first point where `displayOrder` becomes semantically meaningful instead of just structurally present.
+- Because `readNextMeshNode()` now depends on `displayOrder`, future storage backends can switch sequential export/read callers over to new record stores without rewriting those enumeration sites again.

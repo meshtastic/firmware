@@ -541,6 +541,7 @@ void NodeDB::installDefaultNodeDatabase()
     nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
     numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
+    resetDisplayOrder();
 }
 
 void NodeDB::installDefaultConfig(bool preserveKey = false)
@@ -1027,6 +1028,7 @@ void NodeDB::resetNodes(bool keepFavorites)
         LOG_INFO("Clearing node database - removing favorites");
         std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     }
+    resetDisplayOrder();
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
@@ -1047,6 +1049,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
     numMeshNodes -= removed;
     std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
               meshtastic_NodeInfoLite());
+    resetDisplayOrder();
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveNodeDatabaseToDisk();
 }
@@ -1083,7 +1086,16 @@ void NodeDB::cleanupMeshDB()
     numMeshNodes -= removed;
     std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
               meshtastic_NodeInfoLite());
+    resetDisplayOrder();
     LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
+}
+
+void NodeDB::resetDisplayOrder()
+{
+    displayOrder.resize(numMeshNodes);
+    for (size_t i = 0; i < numMeshNodes; ++i) {
+        displayOrder[i] = static_cast<uint16_t>(i);
+    }
 }
 
 void NodeDB::installDefaultDeviceState()
@@ -1246,6 +1258,7 @@ void NodeDB::loadFromDisk()
         numMeshNodes = MAX_NUM_NODES;
     }
     meshNodes->resize(MAX_NUM_NODES);
+    resetDisplayOrder();
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1622,9 +1635,19 @@ bool NodeDB::saveToDisk(int saveWhat)
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
     if (readIndex < numMeshNodes)
-        return &meshNodes->at(readIndex++);
+        return getMeshNodeByIndex(readIndex++);
     else
         return NULL;
+}
+
+meshtastic_NodeInfoLite *NodeDB::getMeshNodeByIndex(size_t x)
+{
+    assert(x < numMeshNodes);
+    assert(displayOrder.size() >= numMeshNodes);
+
+    const size_t storageIndex = displayOrder.at(x);
+    assert(storageIndex < numMeshNodes);
+    return &meshNodes->at(storageIndex);
 }
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -2258,6 +2281,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
+        resetDisplayOrder();
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
     }
 
