@@ -415,7 +415,6 @@ class NodeDB
     void resetFlashSlotState();
     static NodeMeta makeNodeMeta(const meshtastic_NodeInfoLite &node, uint16_t storageIndex);
     meshtastic_NodeInfoLite &slotAt(uint16_t storageIndex);
-    const meshtastic_NodeInfoLite &slotAt(uint16_t storageIndex) const;
     meshtastic_NodeInfoLite *slotPtr(uint16_t storageIndex);
     uint16_t getStorageIndex(const meshtastic_NodeInfoLite *node) const;
     const NodeMeta *getNodeMeta(NodeNum n) const;
