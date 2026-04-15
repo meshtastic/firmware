@@ -288,31 +288,20 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
                  std::min(e.distM / scale, 1.0f), nodeMarkerIndex(e.node->num));
 
     // -----------------------------------------------------------------------
-    // Info panel (right of radar).  Four rows on a 128×64 OLED.
+    // Info panel (right of radar).  All 4 rows used for the node list.
     //
-    // Row 0: outer ring scale
-    // Row 1: closest node    — [symbol] name (left)  distance (right)
-    // Row 2: 2nd closest     — [symbol] name (left)  distance (right)
-    // Row 3: node count (left)  +  orientation badge (right)
+    // Rows 0–3: up to 4 closest nodes — [symbol] name (left)  dist (right)
     //
-    // Each node carries a stable symbol (nodeNum % 5) so the marker on the
-    // radar always matches the corresponding row in this panel.
+    // Each node carries a stable symbol (nodeNum % 5) that matches its dot
+    // on the radar, so the user can identify any dot by reading the list.
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    char buf[16];
-
-    // Row 0 — outer ring scale.
-    formatDistM(buf, sizeof(buf), scale);
-    display->drawString(infoPanelX, y + headerH, buf);
-
-    // Draw one node row: symbol pixel-art (left) | name | distance (right).
-    // Symbol is centred vertically in the text row, 5×5 px, then name follows.
+    // Draw one node row: symbol (left) | name | distance (right-aligned).
     auto drawNodeRow = [&](const Entry &e, int row) {
         const int rowY  = y + headerH + FONT_HEIGHT_SMALL * row;
-        const int symCX = infoPanelX + 3;                     // symbol horizontal centre
-        const int symCY = rowY + FONT_HEIGHT_SMALL / 2 - 1;   // symbol vertical centre
+        const int symCX = infoPanelX + 3;
+        const int symCY = rowY + FONT_HEIGHT_SMALL / 2 - 1;
 
         drawMarker(display, symCX, symCY, nodeMarkerIndex(e.node->num));
 
@@ -326,26 +315,16 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         formatDistM(dist, sizeof(dist), e.distM);
 
         display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->drawString(infoPanelX + 7, rowY, name); // 7 = 5px symbol + 2px gap
+        display->drawString(infoPanelX + 7, rowY, name);
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
         display->drawString(x + sw - 1, rowY, dist);
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
     };
 
-    if (entries.size() >= 1)
-        drawNodeRow(entries[0], 1);
-    if (entries.size() >= 2)
-        drawNodeRow(entries[1], 2);
-
-    // Row 3 — node count + orientation badge.
-    {
-        const int rowY = y + headerH + FONT_HEIGHT_SMALL * 3;
-        snprintf(buf, sizeof(buf), "%d", (int)entries.size());
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->drawString(infoPanelX, rowY, buf);
-        display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(x + sw - 1, rowY, headingUp ? "HDG" : "N^");
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-    }
+    const int maxRows = 4;
+    const int count   = (int)entries.size();
+    for (int i = 0; i < count && i < maxRows; i++)
+        drawNodeRow(entries[i], i);
 }
 
 } // namespace RadarRenderer
