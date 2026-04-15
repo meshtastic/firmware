@@ -18,6 +18,7 @@
 #include "main.h"
 #include "mesh/Default.h"
 #include "mesh/MeshTypes.h"
+#include "mesh/RadioLibInterface.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
@@ -160,6 +161,16 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
+            // Guard: without a reboot, reconfigure() applies the region directly.
+            // Reject LORA_24 on sub-GHz-only hardware — getRadio() used to catch this post-reboot.
+            // TODO: change this to either use the validateLoraConfig() logic or at least check the region for wideLora
+            // rather than a hardcoded check for LORA_24.
+            if (selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_LORA_24 &&
+                !(RadioLibInterface::instance && RadioLibInterface::instance->wideLora())) {
+                LOG_WARN("Radio hardware does not support 2.4 GHz; ignoring region selection");
+                return;
+            }
+
             config.lora.region = selectedRegion;
             auto changes = SEGMENT_CONFIG;
 
@@ -181,7 +192,6 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             }
 
             service->reloadConfig(changes);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         });
 
     bannerOptions.durationMs = duration;
@@ -300,7 +310,6 @@ void menuHandler::FrequencySlotPicker()
 
         config.lora.channel_num = selected;
         service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
     };
 
     screen->showOverlayBanner(bannerOptions);
@@ -339,7 +348,6 @@ void menuHandler::radioPresetPicker()
             config.lora.channel_num = 0;        // Reset to default channel for the preset
             config.lora.override_frequency = 0; // Clear any custom frequency
             service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         });
 
     screen->showOverlayBanner(bannerOptions);
@@ -1215,9 +1223,11 @@ void menuHandler::positionBaseMenu()
     };
 
     constexpr size_t baseCount = sizeof(baseOptions) / sizeof(baseOptions[0]);
-    constexpr size_t calibrateCount = sizeof(calibrateOptions) / sizeof(calibrateOptions[0]);
     static std::array<const char *, baseCount> baseLabels{};
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    constexpr size_t calibrateCount = sizeof(calibrateOptions) / sizeof(calibrateOptions[0]);
     static std::array<const char *, calibrateCount> calibrateLabels{};
+#endif
 
     auto onSelection = [](const PositionMenuOption &option, int) -> void {
         if (option.action == OptionsAction::Back) {
@@ -1243,9 +1253,11 @@ void menuHandler::positionBaseMenu()
             screen->runNow();
             break;
         case PositionAction::CompassCalibrate:
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
             if (accelerometerThread) {
                 accelerometerThread->calibrate(30);
             }
+#endif
             break;
         case PositionAction::GPSSmartPosition:
             menuQueue = GpsSmartPositionMenu;
@@ -1263,11 +1275,15 @@ void menuHandler::positionBaseMenu()
     };
 
     BannerOverlayOptions bannerOptions;
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (accelerometerThread) {
         bannerOptions = createStaticBannerOptions("GPS Action", calibrateOptions, calibrateLabels, onSelection);
     } else {
         bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
     }
+#else
+    bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
+#endif
 
     screen->showOverlayBanner(bannerOptions);
 }
@@ -2197,9 +2213,9 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    enum optionsNumbers { Back, NumberPicker, ShowChirpy };
-    static const char *optionsArray[4] = {"Back"};
-    static int optionsEnumArray[4] = {Back};
+    enum optionsNumbers { Back, NumberPicker, ShowChirpy, TestAnnounce };
+    static const char *optionsArray[5] = {"Back"};
+    static int optionsEnumArray[5] = {Back};
     int options = 1;
 
     optionsArray[options] = "Number Picker";
@@ -2207,6 +2223,10 @@ void menuHandler::testMenu()
 
     optionsArray[options] = screen->isFrameHidden("chirpy") ? "Show Chirpy" : "Hide Chirpy";
     optionsEnumArray[options++] = ShowChirpy;
+#ifdef HAS_I2S
+    optionsArray[options] = "Test Announce";
+    optionsEnumArray[options++] = TestAnnounce;
+#endif
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Hidden Test Menu";
@@ -2221,6 +2241,10 @@ void menuHandler::testMenu()
             screen->toggleFrameVisibility("chirpy");
             screen->setFrames(Screen::FOCUS_SYSTEM);
 
+        } else if (selected == TestAnnounce) {
+#ifdef HAS_I2S
+            audioThread->readAloud("This is a test of the emergency broadcast system. This is only a test.");
+#endif
         } else {
             menuQueue = SystemBaseMenu;
             screen->runNow();

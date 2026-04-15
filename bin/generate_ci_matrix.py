@@ -43,7 +43,7 @@ for pio_env in pio_envs:
   env = {
     "ci": {"board": pio_env, "platform": env_platform},
     "board_level": cfg.get(f"env:{pio_env}", "board_level", default=None),
-    "board_check": bool(cfg.get(f"env:{pio_env}", "board_check", default=False)),
+    "board_check": cfg.get(f"env:{pio_env}", "board_check", default="false").strip().lower() == "true",
   }
   all_envs.append(env)
 

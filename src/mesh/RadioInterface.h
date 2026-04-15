@@ -92,15 +92,20 @@ class RadioInterface
     uint8_t sf = 9;
     uint8_t cr = 5;
 
-    const uint8_t NUM_SYM_CAD = 2;       // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
-    const uint8_t NUM_SYM_CAD_24GHZ = 4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
+    static constexpr uint8_t NUM_SYM_CAD =
+        2; // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
+    static constexpr uint8_t NUM_SYM_CAD_24GHZ =
+        4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
     uint32_t slotTimeMsec = computeSlotTimeMsec();
-    uint16_t preambleLength = 16;    // 8 is default, but we use longer to increase the amount of sleep time when receiving
-    uint32_t preambleTimeMsec = 165; // calculated on startup, this is the default for LongFast
-    const uint32_t PROCESSING_TIME_MSEC =
-        4500;                // time to construct, process and construct a packet again (empirically determined)
-    const uint8_t CWmin = 3; // minimum CWsize
-    const uint8_t CWmax = 8; // maximum CWsize
+    uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    static constexpr uint16_t preambleLengthDefault =
+        16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    static constexpr uint16_t wideLoraPreambleLengthDefault = 12; // 12 is default for wide Lora
+    uint32_t preambleTimeMsec = 165;                              // calculated on startup, this is the default for LongFast
+    static constexpr uint32_t PROCESSING_TIME_MSEC =
+        4500;                           // time to construct, process and construct a packet again (empirically determined)
+    static constexpr uint8_t CWmin = 3; // minimum CWsize
+    static constexpr uint8_t CWmax = 8; // maximum CWsize
 
     meshtastic_MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
