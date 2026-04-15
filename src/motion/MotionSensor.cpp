@@ -97,7 +97,7 @@ bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &high
     spiLock->unlock();
 
     const bool headerValid = (bytesRead == sizeof(record)) && (record.magic == COMPASS_CALIBRATION_MAGIC) &&
-                             (record.version == COMPASS_CALIBRATION_VERSION);
+                             (record.version == COMPASS_CALIBRATION_VERSION) && (record.reserved == 0U);
     const bool rangeValid = isRangeValid(record.highestX, record.lowestX) && isRangeValid(record.highestY, record.lowestY) &&
                             isRangeValid(record.highestZ, record.lowestZ);
     if (!headerValid || !rangeValid) {
