@@ -52,8 +52,8 @@ extern "C" {
 // #define TFT_BL (32+6)
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
-#define TFT_HEIGHT 135
-#define TFT_WIDTH 240
+#define TFT_HEIGHT 240
+#define TFT_WIDTH 320
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
 
