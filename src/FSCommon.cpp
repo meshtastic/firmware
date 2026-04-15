@@ -102,6 +102,35 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #include <vector>
 
 /**
+ * @brief Platform-agnostic filesystem format / wipe.
+ *
+ * On embedded targets (ESP32, NRF52, STM32WL, RP2040) this calls the
+ * native FSCom.format() which erases and reinitialises the LittleFS
+ * partition.
+ *
+ * On Portduino the fs::FS backend has no format() method. We instead
+ * delete /prefs (the only meshtastic data directory written at runtime)
+ * and return. rmDir("/prefs") is already called unconditionally by
+ * factoryReset() so this is a proven primitive on Portduino.
+ * FSBegin() is a no-op (#define FSBegin() true) on Portduino.
+ *
+ * @return true on success, false on failure or if no filesystem is configured.
+ */
+bool fsFormat()
+{
+#ifdef FSCom
+#if defined(ARCH_PORTDUINO)
+    rmDir("/prefs");
+    return FSBegin();
+#else
+    return FSCom.format();
+#endif
+#else
+    return false;
+#endif
+}
+
+/**
  * @brief Get the list of files in a directory.
  *
  * This function returns a list of files in a directory. The list includes the full path of each file.
