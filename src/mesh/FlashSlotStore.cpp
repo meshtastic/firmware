@@ -279,11 +279,16 @@ bool FlashSlotStore::writeManifest(const Manifest &manifest) const
 
 bool FlashSlotStore::readSlot(uint16_t slotIndex, meshtastic_NodeInfoLite &node) const
 {
+    Manifest manifest;
+    return readManifest(manifest) && readSlot(manifest, slotIndex, node);
+}
+
+bool FlashSlotStore::readSlot(const Manifest &manifest, uint16_t slotIndex, meshtastic_NodeInfoLite &node) const
+{
     const meshtastic_NodeInfoLite emptyNode = meshtastic_NodeInfoLite_init_default;
     node = emptyNode;
 
-    Manifest manifest;
-    if (!readManifest(manifest) || slotIndex >= manifest.slot_count) {
+    if (!isValidManifest(manifest) || slotIndex >= manifest.slot_count) {
         return false;
     }
 
@@ -320,7 +325,12 @@ bool FlashSlotStore::readSlot(uint16_t slotIndex, meshtastic_NodeInfoLite &node)
 bool FlashSlotStore::writeSlot(uint16_t slotIndex, const meshtastic_NodeInfoLite &node) const
 {
     Manifest manifest;
-    if (!readManifest(manifest) || slotIndex >= manifest.slot_count) {
+    return readManifest(manifest) && writeSlot(manifest, slotIndex, node);
+}
+
+bool FlashSlotStore::writeSlot(const Manifest &manifest, uint16_t slotIndex, const meshtastic_NodeInfoLite &node) const
+{
+    if (!isValidManifest(manifest) || slotIndex >= manifest.slot_count) {
         return false;
     }
 
@@ -346,7 +356,12 @@ bool FlashSlotStore::writeSlot(uint16_t slotIndex, const meshtastic_NodeInfoLite
 bool FlashSlotStore::clearSlot(uint16_t slotIndex) const
 {
     Manifest manifest;
-    if (!readManifest(manifest) || slotIndex >= manifest.slot_count) {
+    return readManifest(manifest) && clearSlot(manifest, slotIndex);
+}
+
+bool FlashSlotStore::clearSlot(const Manifest &manifest, uint16_t slotIndex) const
+{
+    if (!isValidManifest(manifest) || slotIndex >= manifest.slot_count) {
         return false;
     }
 
