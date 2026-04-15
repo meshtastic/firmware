@@ -122,7 +122,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         const int yBelowContent = textPos[4] + FONT_HEIGHT_SMALL + 2;
         const int margin = 4;
 #if defined(USE_EINK)
-        const int iconSize = (currentResolution == ScreenResolution::High) ? 16 : 8;
+        const int iconSize = (graphics::currentResolution == graphics::ScreenResolution::High) ? 16 : 8;
         const int navBarHeight = iconSize + 6;
 #else
         const int navBarHeight = 0;
