@@ -97,13 +97,27 @@ static void formatDistM(char *buf, size_t len, float metres)
     }
 }
 
-/** Plot a 3×3 node marker.  headingRad rotates the view (heading-up). */
-static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bearingRad, float headingRad, float norm)
+/**
+ * Plot a node marker.
+ *
+ * highlight=true  → cross/plus shape  (used for the closest node — matches
+ *                   the top entry in the info panel so the user can identify it)
+ * highlight=false → 3×3 filled square (all other nodes)
+ *
+ * headingRad rotates the view (heading-up mode).
+ */
+static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bearingRad, float headingRad, float norm,
+                     bool highlight)
 {
     const float rel = bearingRad - headingRad;
     const int px = cx + (int)(radius * norm * sinf(rel));
     const int py = cy - (int)(radius * norm * cosf(rel));
-    display->fillRect(px - 1, py - 1, 3, 3);
+    if (highlight) {
+        display->drawLine(px - 3, py, px + 3, py); // horizontal arm
+        display->drawLine(px, py - 3, px, py + 3); // vertical arm
+    } else {
+        display->fillRect(px - 1, py - 1, 3, 3);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -222,64 +236,70 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->fillRect(radarCX - 2, radarCY - 2, 4, 4);
 
     // -----------------------------------------------------------------------
-    // Plot remote nodes.
+    // Sort by distance so entries[0] is always the closest node.
     // -----------------------------------------------------------------------
-    for (const Entry &e : entries)
-        plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad,
-                 std::min(e.distM / scale, 1.0f));
+    std::sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) { return a.distM < b.distM; });
 
     // -----------------------------------------------------------------------
-    // Info panel (right of radar).
+    // Plot remote nodes.
+    // The closest node (entries[0]) gets a cross (+) marker so the user can
+    // match it to the top row of the info panel.  All others get filled squares.
+    // -----------------------------------------------------------------------
+    for (size_t i = 0; i < entries.size(); i++)
+        plotNode(display, radarCX, radarCY, radarRadius, entries[i].bearingRad, headingRad,
+                 std::min(entries[i].distM / scale, 1.0f), /*highlight=*/i == 0);
+
+    // -----------------------------------------------------------------------
+    // Info panel (right of radar).  Four rows fit on a 128×64 OLED.
     //
-    // Line 1: outermost ring scale
-    // Line 2: middle ring scale
-    // Line 3: inner ring scale
-    // Line 4: closest node name
-    // Line 5: closest node distance + cardinal direction
-    // Line 6: node count  +  orientation badge (HDG/N↑)
+    // Row 0: outer ring scale  (gives the user the overall distance reference)
+    // Row 1: closest node — short name (left) + distance (right)
+    // Row 2: 2nd closest node — short name (left) + distance (right)
+    // Row 3: node count (left) + orientation badge "HDG"/"N^" (right)
+    //
+    // The closest node is also rendered as a + cross on the radar so the
+    // user can visually match the top row here to the correct dot.
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    // Ring scale labels — scale is always divisible by 3, so these are ints.
-    char buf[12];
+    char buf[16];
+
+    // Row 0 — outer ring scale.
     formatDistM(buf, sizeof(buf), scale);
     display->drawString(infoPanelX, y + headerH, buf);
 
-    formatDistM(buf, sizeof(buf), scale * 2.0f / 3.0f);
-    display->drawString(infoPanelX, y + headerH + FONT_HEIGHT_SMALL, buf);
-
-    formatDistM(buf, sizeof(buf), scale / 3.0f);
-    display->drawString(infoPanelX, y + headerH + FONT_HEIGHT_SMALL * 2, buf);
-
-    // Closest node info.
-    if (!entries.empty()) {
-        const Entry &closest = *std::min_element(entries.begin(), entries.end(),
-                                                  [](const Entry &a, const Entry &b) { return a.distM < b.distM; });
-
-        // Short name or last-4 of node ID.
-        char name[16] = "";
-        if (closest.node->has_user && closest.node->user.short_name[0])
-            strncpy(name, closest.node->user.short_name, sizeof(name) - 1);
+    // Rows 1–2 — up to two closest nodes.
+    auto drawNodeRow = [&](const Entry &e, int row) {
+        char name[10] = "";
+        if (e.node->has_user && e.node->user.short_name[0])
+            strncpy(name, e.node->user.short_name, sizeof(name) - 1);
         else
-            snprintf(name, sizeof(name), "%04X", (uint16_t)(closest.node->num & 0xFFFF));
+            snprintf(name, sizeof(name), "%04X", (uint16_t)(e.node->num & 0xFFFF));
 
-        display->drawString(infoPanelX, y + headerH + FONT_HEIGHT_SMALL * 3, name);
+        char dist[10] = "";
+        formatDistM(dist, sizeof(dist), e.distM);
 
-        // Distance string.
-        formatDistM(buf, sizeof(buf), closest.distM);
-        display->drawString(infoPanelX, y + headerH + FONT_HEIGHT_SMALL * 4, buf);
-    }
-
-    // Bottom row: node count + orientation badge.
-    {
-        const int bottomY = y + headerH + FONT_HEIGHT_SMALL * 5;
-        snprintf(buf, sizeof(buf), "%d", (int)entries.size());
-        display->drawString(infoPanelX, bottomY, buf);
-
-        // Orientation badge: "HDG" when heading-up, "N^" when north-up.
+        const int rowY = y + headerH + FONT_HEIGHT_SMALL * row;
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->drawString(infoPanelX, rowY, name);
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(x + sw - 1, bottomY, headingUp ? "HDG" : "N^");
+        display->drawString(x + sw - 1, rowY, dist);
+    };
+
+    if (entries.size() >= 1)
+        drawNodeRow(entries[0], 1); // entries already sorted by distance
+    if (entries.size() >= 2)
+        drawNodeRow(entries[1], 2);
+
+    // Row 3 — node count + orientation badge.
+    {
+        const int rowY = y + headerH + FONT_HEIGHT_SMALL * 3;
+        snprintf(buf, sizeof(buf), "%d", (int)entries.size());
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->drawString(infoPanelX, rowY, buf);
+        display->setTextAlignment(TEXT_ALIGN_RIGHT);
+        display->drawString(x + sw - 1, rowY, headingUp ? "HDG" : "N^");
         display->setTextAlignment(TEXT_ALIGN_LEFT);
     }
 }
