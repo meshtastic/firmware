@@ -64,6 +64,11 @@ size_t pageSizeBytes(const FlashSlotStore::Manifest &manifest)
     return static_cast<size_t>(manifest.record_size) * manifest.slots_per_page;
 }
 
+uint16_t pageCount(const FlashSlotStore::Manifest &manifest)
+{
+    return static_cast<uint16_t>((manifest.slot_count + manifest.slots_per_page - 1) / manifest.slots_per_page);
+}
+
 uint16_t pageIndexForSlot(const FlashSlotStore::Manifest &manifest, uint16_t slotIndex)
 {
     return slotIndex / manifest.slots_per_page;
@@ -131,6 +136,24 @@ bool loadPage(const char *directory, const FlashSlotStore::Manifest &manifest, u
 #endif
 }
 
+bool deletePage(const char *directory, uint16_t pageIndex)
+{
+#ifdef FSCom
+    char path[MAX_PATH_LEN] = {};
+    if (!buildPagePath(directory, pageIndex, path, sizeof(path))) {
+        LOG_ERROR("FlashSlotStore page path overflow");
+        return false;
+    }
+
+    concurrency::LockGuard g(spiLock);
+    return !FSCom.exists(path) || FSCom.remove(path);
+#else
+    (void)directory;
+    (void)pageIndex;
+    return false;
+#endif
+}
+
 bool storePage(const char *directory, const FlashSlotStore::Manifest &manifest, uint16_t pageIndex,
                const std::vector<uint8_t> &page)
 {
@@ -167,12 +190,16 @@ bool storePage(const char *directory, const FlashSlotStore::Manifest &manifest, 
 #endif
 }
 
-bool writeRecord(const char *directory, const FlashSlotStore::Manifest &manifest, uint16_t slotIndex,
-                 const FlashSlotStore::Record &record)
+bool patchRecordInPage(const FlashSlotStore::Manifest &manifest, uint16_t slotIndex, const FlashSlotStore::Record &record,
+                       std::vector<uint8_t> &page)
 {
-    std::vector<uint8_t> page;
-    const uint16_t pageIndex = pageIndexForSlot(manifest, slotIndex);
-    if (!loadPage(directory, manifest, pageIndex, page)) {
+    if (slotIndex >= manifest.slot_count) {
+        LOG_ERROR("FlashSlotStore slot index %u out of range", static_cast<unsigned>(slotIndex));
+        return false;
+    }
+
+    if (page.size() != pageSizeBytes(manifest)) {
+        LOG_ERROR("FlashSlotStore page buffer size mismatch");
         return false;
     }
 
@@ -183,7 +210,22 @@ bool writeRecord(const char *directory, const FlashSlotStore::Manifest &manifest
     }
 
     memcpy(page.data() + recordOffset, &record, sizeof(record));
-    return storePage(directory, manifest, pageIndex, page);
+    return true;
+}
+
+bool encodeNodeRecord(uint16_t slotIndex, const meshtastic_NodeInfoLite &node, FlashSlotStore::Record &record)
+{
+    record = {};
+    const size_t encodedLen = pb_encode_to_bytes(record.payload, sizeof(record.payload), meshtastic_NodeInfoLite_fields, &node);
+    if (encodedLen == 0 || encodedLen > sizeof(record.payload)) {
+        LOG_ERROR("FlashSlotStore failed to encode slot %u", static_cast<unsigned>(slotIndex));
+        return false;
+    }
+
+    record.header.flags = FlashSlotStore::RECORD_FLAG_PRESENT;
+    record.header.encoded_len = encodedLen;
+    record.header.crc32 = crc32Buffer(record.payload, encodedLen);
+    return true;
 }
 
 } // namespace
@@ -293,7 +335,7 @@ bool FlashSlotStore::readSlot(const Manifest &manifest, uint16_t slotIndex, mesh
     }
 
     std::vector<uint8_t> page;
-    if (!loadPage(directory, manifest, pageIndexForSlot(manifest, slotIndex), page)) {
+    if (!loadPage(manifest, pageIndexForSlot(manifest, slotIndex), page)) {
         return false;
     }
 
@@ -334,23 +376,17 @@ bool FlashSlotStore::writeSlot(const Manifest &manifest, uint16_t slotIndex, con
         return false;
     }
 
-    if (!ensureDirectoryExists(directory)) {
-        LOG_ERROR("FlashSlotStore failed to ensure directory");
+    std::vector<uint8_t> page;
+    const uint16_t pageIndex = pageIndexForSlot(manifest, slotIndex);
+    if (!loadPage(manifest, pageIndex, page)) {
         return false;
     }
 
-    Record record = {};
-    const size_t encodedLen = pb_encode_to_bytes(record.payload, sizeof(record.payload), meshtastic_NodeInfoLite_fields, &node);
-    if (encodedLen == 0 || encodedLen > sizeof(record.payload)) {
-        LOG_ERROR("FlashSlotStore failed to encode slot %u", static_cast<unsigned>(slotIndex));
+    if (!writeSlotToPage(manifest, slotIndex, node, page)) {
         return false;
     }
 
-    record.header.flags = RECORD_FLAG_PRESENT;
-    record.header.encoded_len = encodedLen;
-    record.header.crc32 = crc32Buffer(record.payload, encodedLen);
-
-    return writeRecord(directory, manifest, slotIndex, record);
+    return storePage(manifest, pageIndex, page);
 }
 
 bool FlashSlotStore::clearSlot(uint16_t slotIndex) const
@@ -370,6 +406,67 @@ bool FlashSlotStore::clearSlot(const Manifest &manifest, uint16_t slotIndex) con
         return true;
     }
 
+    std::vector<uint8_t> page;
+    if (!loadPage(manifest, pageIndex, page)) {
+        return false;
+    }
+
+    if (!clearSlotInPage(manifest, slotIndex, page)) {
+        return false;
+    }
+
+    return storePage(manifest, pageIndex, page);
+}
+
+bool FlashSlotStore::loadPage(const Manifest &manifest, uint16_t pageIndex, std::vector<uint8_t> &page) const
+{
+    if (!isValidManifest(manifest) || pageIndex >= pageCount(manifest)) {
+        return false;
+    }
+
+    return ::loadPage(directory, manifest, pageIndex, page);
+}
+
+bool FlashSlotStore::storePage(const Manifest &manifest, uint16_t pageIndex, const std::vector<uint8_t> &page) const
+{
+    if (!isValidManifest(manifest) || pageIndex >= pageCount(manifest)) {
+        return false;
+    }
+
+    if (!ensureDirectoryExists(directory)) {
+        LOG_ERROR("FlashSlotStore failed to ensure directory");
+        return false;
+    }
+
+    return ::storePage(directory, manifest, pageIndex, page);
+}
+
+bool FlashSlotStore::deletePage(const Manifest &manifest, uint16_t pageIndex) const
+{
+    if (!isValidManifest(manifest) || pageIndex >= pageCount(manifest)) {
+        return false;
+    }
+
+    return ::deletePage(directory, pageIndex);
+}
+
+bool FlashSlotStore::writeSlotToPage(const Manifest &manifest, uint16_t slotIndex, const meshtastic_NodeInfoLite &node,
+                                     std::vector<uint8_t> &page) const
+{
+    if (!isValidManifest(manifest) || slotIndex >= manifest.slot_count) {
+        return false;
+    }
+
+    Record record = {};
+    return encodeNodeRecord(slotIndex, node, record) && patchRecordInPage(manifest, slotIndex, record, page);
+}
+
+bool FlashSlotStore::clearSlotInPage(const Manifest &manifest, uint16_t slotIndex, std::vector<uint8_t> &page) const
+{
+    if (!isValidManifest(manifest) || slotIndex >= manifest.slot_count) {
+        return false;
+    }
+
     const Record clearedRecord = {};
-    return writeRecord(directory, manifest, slotIndex, clearedRecord);
+    return patchRecordInPage(manifest, slotIndex, clearedRecord, page);
 }

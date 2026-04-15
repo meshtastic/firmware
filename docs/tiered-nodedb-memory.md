@@ -731,3 +731,96 @@ Stop the flash-backed NodeDB save path from rewriting the full dense store on ev
 
 - The main remaining flash-write optimization is page-level batching: multiple dirty slots in the same page still cause multiple page rewrites during one save.
 - Phase 16 assumes NodeDB-owned mutators or metadata refreshes remain the way durable node record edits are recorded. If a future phase adds new direct writer paths, it must either route them through NodeDB helpers or explicitly mark the affected slots dirty.
+
+## Phase 17: Bugs And Cleanup
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Address the review-driven correctness issue in flash-backed slot hydration and land low-risk cleanup that reduces avoidable flash manifest churn in the current batch paths.
+
+### What Changed
+
+- `src/mesh/NodeDB.h`
+  - Removed the unused private `const slotAt()` overload now that internal slot access stays on the non-const helper.
+- `src/mesh/NodeDB.cpp`
+  - Fixed `slotAt()` so `ensureFlashSlotLoaded()` always runs before the debug assertion, which keeps release builds from skipping lazy flash hydration entirely.
+  - Extracted shared loaded-node admission logic so both protobuf load and flash boot scan now use one helper for:
+    - broadcast / reserved-node rejection
+    - `has_user` requirement
+    - all-zero public-key scrubbing
+  - Reused one validated flash manifest for flash boot scan, full flash rewrite, and flash verification loops instead of reopening and revalidating the manifest on every slot operation in those batch paths.
+- `src/mesh/FlashSlotStore.h`
+  - Added manifest-aware `readSlot()`, `writeSlot()`, and `clearSlot()` overloads so batch callers can reuse a validated manifest.
+- `src/mesh/FlashSlotStore.cpp`
+  - Kept the existing one-off slot API as simple wrappers that read the manifest once and delegate to the manifest-aware overloads.
+  - Left the whole-page record rewrite strategy unchanged.
+
+### Important Constraints For Later Phases
+
+- Phase 17 fixes the release-build hydration bug, but it does not change the current `slotAt()` contract beyond making the existing lazy load happen unconditionally.
+- Manifest reuse now removes repeated manifest opens inside current batch paths, but it does not add persistent manifest caching to the store object itself.
+- Phase 17 is intentionally not the page-batching phase. Multiple dirty slots that share one flash page still cause multiple page rewrites during a save.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e heltec-v3`
+- `pio run -e rak4631`
+
+### Follow-Up Notes
+
+- The next meaningful flash-write optimization is still page-level batching; phase 17 only removes redundant manifest reads from batch operations.
+- Legacy `nodes.proto` import and flash-backed runtime read behavior were preserved by construction, but they were not separately hardware-exercised in this phase beyond the build matrix.
+
+## Phase 18: Flash Page Batching
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Stop flash-backed NodeDB saves from rewriting the same page once per dirty slot, and delete fully empty tail pages during dense rewrites instead of writing zero-filled page files.
+
+### What Changed
+
+- `src/mesh/FlashSlotStore.h`
+  - Added minimal page-image helpers so `NodeDB` can batch writes by page without adding a persistent cache:
+    - load one page
+    - patch or clear one slot inside an in-memory page
+    - store one page
+    - delete one page file
+- `src/mesh/FlashSlotStore.cpp`
+  - Reused the existing record encoding and page layout rules behind the new page-image helpers.
+  - Preserved the existing one-off slot APIs for lazy reads and non-batched callers.
+  - Kept missing page files equivalent to all-cleared slots.
+- `src/mesh/NodeDB.cpp`
+  - Changed full flash rewrites to build one zeroed page image per live page, patch every live slot for that page, and write that page once.
+  - Changed fully empty trailing pages to be removed instead of rewritten as all-zero page files.
+  - Changed incremental dirty-slot saves to:
+    - hydrate dirty storage slots before batching
+    - group dirty flash writes by page index
+    - load each touched page once
+    - patch all dirty slots for that page in memory
+    - write the page once
+    - re-read the page once for page-local verification before clearing dirty bits
+  - Added save logs that report dirty-slot and touched-page counts so flash-write reduction is visible in normal debugging.
+
+### Important Constraints For Later Phases
+
+- Phase 18 keeps batching scoped to a single `saveNodeDatabaseToDisk()` call. It does not add a persistent page cache, deferred write-back, or background flushing.
+- The on-disk manifest, record format, and lazy runtime hydration behavior are unchanged.
+- One-off slot writes still use the simpler per-slot path. Phase 18 only batches the flash save flows owned by `NodeDB`.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e heltec-v3`
+- `pio run -e rak4631`
+
+### Follow-Up Notes
+
+- Phase 18 removes repeated page rewrites during one NodeDB save, but it does not yet add any broader store-level batching API for other callers.
+- Legacy `nodes.proto` import and flash normalization should continue to behave the same, with phase 18 only changing how many page files get touched during the resulting save.
