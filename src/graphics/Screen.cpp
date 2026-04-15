@@ -60,6 +60,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
+#include "mesh/Default.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
@@ -328,10 +329,27 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
-    static float b;
+    static float b = -1.0f;
+    static uint32_t lastHeadingAtMs = 0;
+    const uint32_t now = millis();
+    const uint32_t gpsUpdateIntervalSecs =
+        Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
+    uint32_t effectiveUpdateIntervalSecs = gpsUpdateIntervalSecs;
+    if (config.position.position_broadcast_smart_enabled) {
+        const uint32_t smartMinIntervalSecs = Default::getConfiguredOrDefault(config.position.broadcast_smart_minimum_interval_secs,
+                                                                              default_broadcast_smart_minimum_interval_secs);
+        if (smartMinIntervalSecs > effectiveUpdateIntervalSecs) {
+            effectiveUpdateIntervalSecs = smartMinIntervalSecs;
+        }
+    }
+    uint64_t headingStaleMs64 = static_cast<uint64_t>(effectiveUpdateIntervalSecs) * 2000ULL; // two expected update windows
+    if (headingStaleMs64 > UINT32_MAX) {
+        headingStaleMs64 = UINT32_MAX;
+    }
+    const uint32_t headingStaleMs = static_cast<uint32_t>(headingStaleMs64);
 
     if (oldLat == 0) {
-        // just prepare for next time
+        // Need at least two position points before we can infer heading.
         oldLat = lat;
         oldLon = lon;
 
@@ -339,12 +357,20 @@ float Screen::estimatedHeading(double lat, double lon)
     }
 
     float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
-    if (d < 10) // haven't moved enough, just keep current bearing
+    if (d < 10) { // haven't moved enough, keep previous heading (invalid until first real movement)
+        if (lastHeadingAtMs != 0 && (now - lastHeadingAtMs) >= headingStaleMs) {
+            // Heading is stale after prolonged no-movement; force reacquire.
+            b = -1.0f;
+            oldLat = lat;
+            oldLon = lon;
+        }
         return b;
+    }
 
     b = GeoCoord::bearing(oldLat, oldLon, lat, lon) * RAD_TO_DEG;
     oldLat = lat;
     oldLon = lon;
+    lastHeadingAtMs = now;
 
     return b;
 }
