@@ -121,7 +121,6 @@ void CardputerKeyboard::pressed(uint8_t key)
         modifierFlag = 0;
     }
 
-    uint8_t next_key = 0;
     int row = (key - 1) / 10;
     int col = (key - 1) % 10;
 
