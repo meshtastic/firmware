@@ -15,7 +15,8 @@
 /// Initialize the Ethernet OTA server (call after Ethernet is connected)
 void initEthOTA();
 
-/// Poll for incoming OTA connections (call periodically from ethClient reconnect loop)
+/// Poll for incoming OTA connections (call periodically from ethClient
+/// reconnect loop)
 void ethOTALoop();
 
 #endif // HAS_ETHERNET && HAS_ETHERNET_OTA
