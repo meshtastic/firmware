@@ -146,9 +146,21 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     const char *statusLine1 = nullptr;
     const char *statusLine2 = nullptr;
 
-    // Only show compass/bearing once we have a valid own position fix (GPS or phone location) and valid heading.
+    // Distance only needs our own position fix; compass/bearing additionally needs heading.
     if (hasOwnPositionFix) {
         const meshtastic_PositionLite &op = ourNode->position;
+        const float d =
+            GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+
+        // Always show distance once we have an own-position fix, even without heading.
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            float feet = d * METERS_TO_FEET;
+            snprintf(distStr, sizeof(distStr), feet < (2 * MILES_TO_FEET) ? "%.0fft" : "%.1fmi",
+                     feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET);
+        } else {
+            snprintf(distStr, sizeof(distStr), d < 2000 ? "%.0fm" : "%.1fkm", d < 2000 ? d : d / 1000);
+        }
+
         float myHeading = 0.0f;
         const bool hasHeading =
             graphics::CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
@@ -165,9 +177,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
             const float bearingToOtherDegrees = graphics::CompassRenderer::radiansToDegrees360(bearingToOther);
 
-            // Distance to Waypoint
-            float d =
-                GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            // Distance to waypoint with relative bearing when heading is available.
             if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
                 float feet = d * METERS_TO_FEET;
                 snprintf(distStr, sizeof(distStr), feet < (2 * MILES_TO_FEET) ? "%.0fft   %.0f°" : "%.1fmi   %.0f°",
