@@ -1193,15 +1193,20 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
+    const bool hasLiveGpsFix =
+        (gpsStatus && gpsStatus->getHasLock() && (gpsStatus->getLatitude() != 0 || gpsStatus->getLongitude() != 0));
     const bool hasSensorHeading = screen->hasHeading();
     float heading = 0.0f;
     bool validHeading = false;
     const char *statusLine1 = nullptr;
     const char *statusLine2 = nullptr;
-    if (hasSensorHeading || hasOwnPositionFix) {
+    if (hasSensorHeading || hasLiveGpsFix || hasOwnPositionFix) {
         double headingLat = 0.0;
         double headingLon = 0.0;
-        if (hasOwnPositionFix) {
+        if (hasLiveGpsFix) {
+            headingLat = DegD(gpsStatus->getLatitude());
+            headingLon = DegD(gpsStatus->getLongitude());
+        } else if (hasOwnPositionFix) {
             const auto &op = ourNode->position;
             headingLat = DegD(op.latitude_i);
             headingLon = DegD(op.longitude_i);
@@ -1210,7 +1215,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     }
 
     if (!validHeading) {
-        if (hasSensorHeading || hasOwnPositionFix) {
+        if (hasSensorHeading || hasLiveGpsFix || hasOwnPositionFix) {
             statusLine1 = "No";
             statusLine2 = "Heading";
         } else {

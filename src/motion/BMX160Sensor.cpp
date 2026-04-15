@@ -72,7 +72,7 @@ void BMX160Sensor::calibrate(uint16_t forSeconds)
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     sBmx160SensorData_t magAccel;
     sBmx160SensorData_t gAccel;
-    LOG_DEBUG("BMX160 cal %is", forSeconds);
+    LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
     sensor.getAllData(&magAccel, NULL, &gAccel);
     seedCalibrationExtrema(magAccel.x, magAccel.y, magAccel.z, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
     startCalibrationWindow(forSeconds);

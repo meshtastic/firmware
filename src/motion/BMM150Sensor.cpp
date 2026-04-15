@@ -55,10 +55,10 @@ bool BMM150Singleton::init(ScanI2C::FoundDevice device)
 {
 
     // startup
-    LOG_DEBUG("BMM150 begin 0x%02X p=%d", device.address.address, device.address.port);
+    LOG_DEBUG("BMM150 begin on addr 0x%02X (port=%d)", device.address.address, device.address.port);
     uint8_t status = begin();
     if (status != 0) {
-        LOG_DEBUG("BMM150 init err %u", status);
+        LOG_DEBUG("BMM150 init error %u", status);
         return false;
     }
 
