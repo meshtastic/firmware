@@ -68,7 +68,9 @@ void extFSInit();
 
 void fsInit();
 void fsListFiles();
+/** Resolve paths with fsRoute() then fsCopy (may cross mounts). */
 bool copyFile(const char *from, const char *to);
+/** Resolve paths with fsRoute() then fsRename (nRF52: same mount only). */
 bool renameFile(const char *pathFrom, const char *pathTo);
 std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
 void listDir(const char *dirname, uint8_t levels, bool del = false);
@@ -119,4 +121,10 @@ bool fsIsDirectory(const FSRoute &r);
 
 /** Like getFiles(), but opens @p dirRoute on the correct FS (internal / external / SD on nRF52). */
 std::vector<meshtastic_FileInfo> getFilesForRoute(const FSRoute &dirRoute, uint8_t levels);
+
+/** Rename within one mounted FS (stripped paths). Fails if mounts differ on nRF52 (different physical FS). */
+bool fsRename(const FSRoute &from, const FSRoute &to);
+
+/** Byte copy; may cross mounts (opens each side on the correct FS). */
+bool fsCopy(const FSRoute &from, const FSRoute &to);
 #endif // FSCom

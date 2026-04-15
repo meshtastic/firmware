@@ -30,75 +30,6 @@ SPIClass SPI_HSPI(HSPI);
 
 #endif // HAS_SDCARD
 
-/**
- * @brief Copies a file from one location to another.
- *
- * @param from The path of the source file.
- * @param to The path of the destination file.
- * @return true if the file was successfully copied, false otherwise.
- */
-bool copyFile(const char *from, const char *to)
-{
-#ifdef FSCom
-    // take SPI Lock
-    concurrency::LockGuard g(spiLock);
-    unsigned char cbuffer[16];
-
-    File f1 = FSCom.open(from, FILE_O_READ);
-    if (!f1) {
-        LOG_ERROR("Failed to open source file %s", from);
-        return false;
-    }
-
-    File f2 = FSCom.open(to, FILE_O_WRITE);
-    if (!f2) {
-        LOG_ERROR("Failed to open destination file %s", to);
-        return false;
-    }
-
-    while (f1.available() > 0) {
-        byte i = f1.read(cbuffer, 16);
-        f2.write(cbuffer, i);
-    }
-
-    f2.flush();
-    f2.close();
-    f1.close();
-    return true;
-#endif
-}
-
-/**
- * Renames a file from pathFrom to pathTo.
- *
- * @param pathFrom The original path of the file.
- * @param pathTo The new path of the file.
- *
- * @return True if the file was successfully renamed, false otherwise.
- */
-bool renameFile(const char *pathFrom, const char *pathTo)
-{
-#ifdef FSCom
-
-#ifdef ARCH_ESP32
-    // take SPI Lock
-    spiLock->lock();
-    // rename was fixed for ESP32 IDF LittleFS in April
-    bool result = FSCom.rename(pathFrom, pathTo);
-    spiLock->unlock();
-    return result;
-#else
-    // copyFile does its own locking.
-    if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom)) {
-        return true;
-    } else {
-        return false;
-    }
-#endif
-
-#endif
-}
-
 #include <vector>
 
 /**
@@ -510,6 +441,81 @@ std::vector<meshtastic_FileInfo> getFilesForRoute(const FSRoute &r, uint8_t leve
     }
     root.close();
     return filenames;
+}
+
+/** Caller must hold spiLock (avoids deadlock if fsRename falls back to copy). */
+static bool fsStreamFileCopyUnlocked(const FSRoute &from, const FSRoute &to)
+{
+    File f1 = fsOpenRead(from);
+    if (!f1) {
+        LOG_ERROR("fsCopy: failed to open source %s", from.path);
+        return false;
+    }
+    File f2 = fsOpenWrite(to);
+    if (!f2) {
+        LOG_ERROR("fsCopy: failed to open dest %s", to.path);
+        f1.close();
+        return false;
+    }
+    uint8_t buf[128];
+    while (f1.available() > 0) {
+        size_t n = f1.read(buf, sizeof(buf));
+        if (n == 0) {
+            if (f1.available() > 0) {
+                f1.close();
+                f2.close();
+                return false;
+            }
+            break;
+        }
+        if (f2.write(buf, n) != n) {
+            f1.close();
+            f2.close();
+            return false;
+        }
+    }
+    f2.flush();
+    f2.close();
+    f1.close();
+    return true;
+}
+
+bool fsCopy(const FSRoute &from, const FSRoute &to)
+{
+    concurrency::LockGuard g(spiLock);
+    return fsStreamFileCopyUnlocked(from, to);
+}
+
+bool fsRename(const FSRoute &from, const FSRoute &to)
+{
+#if defined(ARCH_NRF52)
+    if (from.mount != to.mount) {
+        LOG_WARN("fsRename: mount mismatch (use fsCopy then fsRemove)");
+        return false;
+    }
+#endif
+    concurrency::LockGuard g(spiLock);
+#if defined(ARCH_NRF52)
+    return _fsForMount(from.mount).rename(from.path, to.path);
+#elif defined(ARCH_ESP32)
+    return FSCom.rename(from.path, to.path);
+#else
+    if (FSCom.rename(from.path, to.path))
+        return true;
+    if (!fsStreamFileCopyUnlocked(from, to))
+        return false;
+    return fsRemove(from);
+#endif
+}
+
+bool copyFile(const char *from, const char *to)
+{
+    return fsCopy(fsRoute(from), fsRoute(to));
+}
+
+bool renameFile(const char *pathFrom, const char *pathTo)
+{
+    return fsRename(fsRoute(pathFrom), fsRoute(pathTo));
 }
 
 #endif // FSCom
