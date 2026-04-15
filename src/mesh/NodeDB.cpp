@@ -1452,7 +1452,7 @@ void NodeDB::rebuildNodeMeta()
 
 bool NodeDB::prefersFlashSlotStore() const
 {
-#if defined(ARCH_NRF52) || (defined(ARCH_ESP32) && !defined(BOARD_HAS_PSRAM))
+#if defined(ARCH_ESP32) && !defined(BOARD_HAS_PSRAM)
     return true;
 #else
     return false;
@@ -2036,6 +2036,7 @@ void NodeDB::loadFromDisk()
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
     bool loadedNodeDatabase = false;
     bool loadedLegacyNodeDatabase = false;
+    bool loadedFlashSlotFallbackNodeDatabase = false;
     // Boot order is: legacy streamed protobuf if present, otherwise flash slot
     // store on flash-preferred targets, otherwise start from defaults.
     if (nodeDatabase.version >= DEVICESTATE_MIN_VER) {
@@ -2045,9 +2046,23 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded saved nodedatabase version %d, with nodes count: %d", nodeDatabase.version, nodeDatabase.nodes.size());
         loadedNodeDatabase = true;
         loadedLegacyNodeDatabase = prefersFlashSlotStore();
-    } else if (prefersFlashSlotStore() && loadFromFlashSlotStore()) {
+    } else if (loadFromFlashSlotStore()) {
         LOG_INFO("Loaded NodeDB from flash slot store because %s was unavailable or invalid", nodeDatabaseFileName);
         loadedNodeDatabase = true;
+        if (!prefersFlashSlotStore()) {
+            // nRF52 boards only have a 28 KB InternalFS budget, so the fixed-width
+            // flash-slot layout is too space-hungry there. If we boot from an older
+            // flash-slot install, hydrate the full records into RAM and switch back
+            // to streamed nodes.proto saves for subsequent boots.
+            if (!ensureAllLiveSlotsLoaded()) {
+                LOG_ERROR("Failed to hydrate flash-slot NodeDB for streamed fallback");
+                installDefaultNodeDatabase();
+                loadedNodeDatabase = false;
+            } else {
+                loadedFlashSlotFallbackNodeDatabase = true;
+                resetFlashSlotState();
+            }
+        }
     } else {
         LOG_WARN("NodeDatabase %d is old, discard", nodeDatabase.version);
         installDefaultNodeDatabase();
@@ -2069,6 +2084,18 @@ void NodeDB::loadFromDisk()
 
         if (loadedLegacyNodeDatabase && !saveNodeDatabaseToDisk()) {
             LOG_ERROR("Failed to migrate legacy NodeDB into flash slot store");
+        }
+
+        if (loadedFlashSlotFallbackNodeDatabase) {
+            if (!saveNodeDatabaseToDisk()) {
+                LOG_WARN("Retrying streamed NodeDB save after removing stale flash slot store");
+                rmDir(FlashSlotStore::DEFAULT_DIRECTORY);
+                if (!saveNodeDatabaseToDisk()) {
+                    LOG_ERROR("Failed to migrate flash slot NodeDB back into streamed %s", nodeDatabaseFileName);
+                }
+            } else {
+                rmDir(FlashSlotStore::DEFAULT_DIRECTORY);
+            }
         }
     } else if (!loadedNodeDatabase) {
         installDefaultNodeDatabase();

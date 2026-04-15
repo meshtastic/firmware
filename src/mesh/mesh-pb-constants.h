@@ -42,7 +42,7 @@
 static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increased. Reconsider NodeDB target caps.");
 
 static constexpr size_t NODEDB_STM32WL_TARGET_CAP = 10;
-static constexpr size_t NODEDB_NRF52_TARGET_CAP = 300;
+static constexpr size_t NODEDB_NRF52_TARGET_CAP = 100;
 static constexpr size_t NODEDB_ESP32_NO_PSRAM_TARGET_CAP = 500;
 static constexpr size_t NODEDB_ESP32S3_PSRAM_TARGET_CAP = 3000;
 
