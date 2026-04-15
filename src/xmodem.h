@@ -55,6 +55,7 @@ class XModemAdapter
 
   private:
     bool isReceiving = false;
+    bool recvCommitPending = false;
     bool isTransmitting = false;
     bool isEOT = false;
 
@@ -69,8 +70,10 @@ class XModemAdapter
     File file;
 #endif
 
-    char     filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
-    FSRoute  activeRoute_; // resolved once at SOH, reused for DATA/EOT/CAN
+    char filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
+    FSRoute activeRoute_; // final path; resolved at SOH seq 0, reused for transmit + EOT commit
+    /** Logical receive scratch path (`filename` + `.tmp`); commit via fsRename on EOT. */
+    char recvTmpPath[sizeof(filename) + 5] = {0};
 
   protected:
     meshtastic_XModem xmodemStore = meshtastic_XModem_init_zero;
