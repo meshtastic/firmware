@@ -1,4 +1,5 @@
 #include "DisplayFormatters.h"
+#include "MeshRadio.h"
 
 const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset preset, bool useShortName,
                                                          bool usePreset)
@@ -11,43 +12,43 @@ const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaC
     }
 
     switch (preset) {
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+    case PRESET(SHORT_TURBO):
         return useShortName ? "ShortT" : "ShortTurbo";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+    case PRESET(SHORT_SLOW):
         return useShortName ? "ShortS" : "ShortSlow";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+    case PRESET(SHORT_FAST):
         return useShortName ? "ShortF" : "ShortFast";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+    case PRESET(MEDIUM_SLOW):
         return useShortName ? "MedS" : "MediumSlow";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+    case PRESET(MEDIUM_FAST):
         return useShortName ? "MedF" : "MediumFast";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+    case PRESET(LONG_SLOW):
         return useShortName ? "LongS" : "LongSlow";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+    case PRESET(LONG_FAST):
         return useShortName ? "LongF" : "LongFast";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
+    case PRESET(LONG_TURBO):
         return useShortName ? "LongT" : "LongTurbo";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+    case PRESET(LONG_MODERATE):
         return useShortName ? "LongM" : "LongMod";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST:
+    case PRESET(LITE_FAST):
         return useShortName ? "LiteF" : "LiteFast";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW:
+    case PRESET(LITE_SLOW):
         return useShortName ? "LiteS" : "LiteSlow";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST:
+    case PRESET(NARROW_FAST):
         return useShortName ? "NarF" : "NarrowFast";
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW:
+    case PRESET(NARROW_SLOW):
         return useShortName ? "NarS" : "NarrowSlow";
         break;
     default:

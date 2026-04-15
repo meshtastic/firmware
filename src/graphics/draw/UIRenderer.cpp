@@ -2,6 +2,7 @@
 #if HAS_SCREEN
 #include "CompassRenderer.h"
 #include "GPSStatus.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
@@ -350,16 +351,16 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // Helper to get SNR limit based on modem preset
     auto getSnrLimit = [](meshtastic_Config_LoRaConfig_ModemPreset preset) -> float {
         switch (preset) {
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+        case PRESET(LONG_SLOW):
+        case PRESET(LONG_MODERATE):
+        case PRESET(LONG_FAST):
             return -6.0f;
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+        case PRESET(MEDIUM_SLOW):
+        case PRESET(MEDIUM_FAST):
             return -5.5f;
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+        case PRESET(SHORT_SLOW):
+        case PRESET(SHORT_FAST):
+        case PRESET(SHORT_TURBO):
             return -4.5f;
         default:
             return -6.0f;

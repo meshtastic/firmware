@@ -150,62 +150,62 @@ static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset 
                                        uint8_t &cr)
 {
     switch (preset) {
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+    case PRESET(SHORT_TURBO):
         bwKHz = wideLora ? 1625.0f : 500.0f;
         cr = 5;
         sf = 7;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+    case PRESET(SHORT_FAST):
         bwKHz = wideLora ? 812.5f : 250.0f;
         cr = 5;
         sf = 7;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+    case PRESET(SHORT_SLOW):
         bwKHz = wideLora ? 812.5f : 250.0f;
         cr = 5;
         sf = 8;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+    case PRESET(MEDIUM_FAST):
         bwKHz = wideLora ? 812.5f : 250.0f;
         cr = 5;
         sf = 9;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+    case PRESET(MEDIUM_SLOW):
         bwKHz = wideLora ? 812.5f : 250.0f;
         cr = 5;
         sf = 10;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
+    case PRESET(LONG_TURBO):
         bwKHz = wideLora ? 1625.0f : 500.0f;
         cr = 8;
         sf = 11;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+    case PRESET(LONG_MODERATE):
         bwKHz = wideLora ? 406.25f : 125.0f;
         cr = 8;
         sf = 11;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+    case PRESET(LONG_SLOW):
         bwKHz = wideLora ? 406.25f : 125.0f;
         cr = 8;
         sf = 12;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST:
+    case PRESET(LITE_FAST):
         bwKHz = 125;
         cr = 5;
         sf = 9;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW:
+    case PRESET(LITE_SLOW):
         bwKHz = 125;
         cr = 5;
         sf = 10;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST:
+    case PRESET(NARROW_FAST):
         bwKHz = 62.5f;
         cr = 6;
         sf = 7;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW:
+    case PRESET(NARROW_SLOW):
         bwKHz = 62.5f;
         cr = 6;
         sf = 8;

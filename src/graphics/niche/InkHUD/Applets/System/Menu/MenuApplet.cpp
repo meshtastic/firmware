@@ -4,6 +4,7 @@
 
 #include "DisplayFormatters.h"
 #include "GPS.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "RTC.h"
 #include "Router.h"
@@ -691,35 +692,35 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     // Presets
     case SET_PRESET_LONG_SLOW:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW);
+        applyLoRaPreset(PRESET(LONG_SLOW));
         break;
 
     case SET_PRESET_LONG_MODERATE:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE);
+        applyLoRaPreset(PRESET(LONG_MODERATE));
         break;
 
     case SET_PRESET_LONG_FAST:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+        applyLoRaPreset(PRESET(LONG_FAST));
         break;
 
     case SET_PRESET_MEDIUM_SLOW:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW);
+        applyLoRaPreset(PRESET(MEDIUM_SLOW));
         break;
 
     case SET_PRESET_MEDIUM_FAST:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+        applyLoRaPreset(PRESET(MEDIUM_FAST));
         break;
 
     case SET_PRESET_SHORT_SLOW:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW);
+        applyLoRaPreset(PRESET(SHORT_SLOW));
         break;
 
     case SET_PRESET_SHORT_FAST:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST);
+        applyLoRaPreset(PRESET(SHORT_FAST));
         break;
 
     case SET_PRESET_SHORT_TURBO:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO);
+        applyLoRaPreset(PRESET(SHORT_TURBO));
         break;
 
     case SET_PRESET_FROM_REGION: {
