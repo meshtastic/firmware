@@ -113,6 +113,18 @@ const unsigned char icon_compass[] PROGMEM = {
     0x3C  // Row 7: ..####..
 };
 
+// 📡 Radar Screen — concentric rings with centre dot
+const uint8_t icon_radar[] PROGMEM = {
+    0x18, // Row 0: ...##...
+    0x24, // Row 1: ..#..#..
+    0x5A, // Row 2: .#.##.#.
+    0xA5, // Row 3: #.#..#.#
+    0xA5, // Row 4: #.#..#.#
+    0x5A, // Row 5: .#.##.#.
+    0x24, // Row 6: ..#..#..
+    0x18  // Row 7: ...##...
+};
+
 const uint8_t icon_radio[] PROGMEM = {
     0x0F, // Row 0: ####....
     0x10, // Row 1: ....#...

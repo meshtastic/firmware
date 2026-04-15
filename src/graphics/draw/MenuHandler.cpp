@@ -12,6 +12,7 @@
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/MessageRenderer.h"
+#include "graphics/draw/RadarRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -2460,6 +2461,7 @@ void menuHandler::frameTogglesMenu()
         nodelist_hopsignal,
         nodelist_distance,
         nodelist_bearings,
+        nodelist_radar,
         gps_position,
         lora,
         clock,
@@ -2495,6 +2497,11 @@ void menuHandler::frameTogglesMenu()
     optionsEnumArray[options++] = nodelist_distance;
     optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? "Show NL - Bearings" : "Hide NL - Bearings";
     optionsEnumArray[options++] = nodelist_bearings;
+#endif
+
+#ifndef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist_radar") ? "Show Radar" : "Hide Radar";
+    optionsEnumArray[options++] = nodelist_radar;
 #endif
 
     optionsArray[options] = screen->isFrameHidden("gps") ? "Show Position" : "Hide Position";
@@ -2559,6 +2566,10 @@ void menuHandler::frameTogglesMenu()
             screen->runNow();
         } else if (selected == nodelist_bearings) {
             screen->toggleFrameVisibility("nodelist_bearings");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_radar) {
+            screen->toggleFrameVisibility("nodelist_radar");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == gps_position) {
@@ -2806,6 +2817,45 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 void menuHandler::saveUIConfig()
 {
     nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
+}
+
+void menuHandler::radarMenu()
+{
+    enum optionsNumbers { Back, ToggleHeading, ZoomIn, ZoomOut };
+    static const char *optionsArray[] = {
+        "Back",
+        nullptr, // filled dynamically based on current mode
+        "Zoom In",
+        "Zoom Out",
+    };
+    static int optionsEnumArray[] = {Back, ToggleHeading, ZoomIn, ZoomOut};
+
+    optionsArray[ToggleHeading] = graphics::RadarRenderer::isNorthUp() ? "Switch to HDG-UP" : "Switch to N-UP";
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Radar Options";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+        } else if (selected == ToggleHeading) {
+            graphics::RadarRenderer::toggleNorthUp();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ZoomIn) {
+            graphics::RadarRenderer::zoomIn();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ZoomOut) {
+            graphics::RadarRenderer::zoomOut();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 } // namespace graphics
