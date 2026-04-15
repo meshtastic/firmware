@@ -1452,7 +1452,7 @@ void NodeDB::rebuildNodeMeta()
 
 bool NodeDB::prefersFlashSlotStore() const
 {
-#if defined(ARCH_ESP32) && !defined(BOARD_HAS_PSRAM)
+#if (defined(ARCH_ESP32) && !defined(BOARD_HAS_PSRAM)) || defined(ARCH_NRF52)
     return true;
 #else
     return false;
@@ -2050,10 +2050,9 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded NodeDB from flash slot store because %s was unavailable or invalid", nodeDatabaseFileName);
         loadedNodeDatabase = true;
         if (!prefersFlashSlotStore()) {
-            // nRF52 boards only have a 28 KB InternalFS budget, so the fixed-width
-            // flash-slot layout is too space-hungry there. If we boot from an older
-            // flash-slot install, hydrate the full records into RAM and switch back
-            // to streamed nodes.proto saves for subsequent boots.
+            // If a non-flash-preferred build boots from an older flash-slot install,
+            // hydrate the full records into RAM and switch back to streamed
+            // nodes.proto saves for subsequent boots.
             if (!ensureAllLiveSlotsLoaded()) {
                 LOG_ERROR("Failed to hydrate flash-slot NodeDB for streamed fallback");
                 installDefaultNodeDatabase();
