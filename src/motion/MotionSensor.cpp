@@ -209,11 +209,11 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
 {
     if (screen == nullptr)
         return;
-    // int x_offset = display->width() / 2;
-    // int y_offset = display->height() <= 80 ? 0 : 32;
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x, y, "Calibrating\nCompass");
+
+    const int16_t width = display->getWidth();
+    const int16_t height = display->getHeight();
+    const bool compactLayout = (height <= 80);
+    const int16_t margin = 4;
 
     const uint32_t now = millis();
     const uint32_t endCalibrationAt = screen->getEndCalibration();
@@ -221,21 +221,75 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     if (endCalibrationAt > now) {
         timeRemaining = (endCalibrationAt - now + 999) / 1000;
     }
-    snprintf(timeRemainingBuffer, sizeof(timeRemainingBuffer), "( %02lu )", (unsigned long)timeRemaining);
-    display->setFont(FONT_SMALL);
-    display->drawString(x, y + 40, timeRemainingBuffer);
 
     int16_t compassX = 0, compassY = 0;
-    uint16_t compassDiam = graphics::CompassRenderer::getCompassDiam(display->getWidth(), display->getHeight());
+    uint16_t compassDiam = graphics::CompassRenderer::getCompassDiam(width, height);
+    const int16_t compassRadius = compassDiam / 2;
 
     // coordinates for the center of the compass/circle
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        compassX = x + display->getWidth() - compassDiam / 2 - 5;
-        compassY = y + display->getHeight() / 2;
+        compassX = x + width - compassRadius - margin;
+        compassY = y + height / 2;
     } else {
-        compassX = x + display->getWidth() - compassDiam / 2 - 5;
-        compassY = y + FONT_HEIGHT_SMALL + (display->getHeight() - FONT_HEIGHT_SMALL) / 2;
+        compassX = x + width - compassRadius - margin;
+        compassY = y + FONT_HEIGHT_SMALL + (height - FONT_HEIGHT_SMALL) / 2;
     }
+
+    const int16_t textLeft = x + 1;
+    const int16_t textRight = compassX - compassRadius - margin;
+    const int16_t textWidth = textRight - textLeft;
+    int16_t lineY = y;
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    if (textWidth > 12) {
+        const char *title = "Cal";
+        const char *line1 = "Figure-8";
+        const char *line2 = "Rotate axes";
+        const char *line3 = "Away from metal";
+
+        display->setFont(FONT_SMALL);
+        if (!compactLayout && display->getStringWidth("Compass Calibration") <= textWidth) {
+            display->setFont(FONT_MEDIUM);
+            title = "Compass Calibration";
+            line1 = "Move in figure-8";
+            line2 = "Rotate all axes";
+            line3 = "Keep from metal";
+            display->drawString(textLeft, lineY, title);
+            lineY += FONT_HEIGHT_MEDIUM;
+            display->setFont(FONT_SMALL);
+        } else if (display->getStringWidth("Compass Cal") <= textWidth) {
+            title = "Compass Cal";
+            if (textWidth >= display->getStringWidth("Move in figure-8")) {
+                line1 = "Move in figure-8";
+                line2 = "Rotate all axes";
+                line3 = "Keep from metal";
+            }
+            display->drawString(textLeft, lineY, title);
+            lineY += FONT_HEIGHT_SMALL;
+        } else {
+            display->drawString(textLeft, lineY, title);
+            lineY += FONT_HEIGHT_SMALL;
+        }
+
+        display->drawString(textLeft, lineY, line1);
+        lineY += FONT_HEIGHT_SMALL;
+        display->drawString(textLeft, lineY, line2);
+        lineY += FONT_HEIGHT_SMALL;
+        if (!compactLayout || textWidth >= display->getStringWidth(line3)) {
+            display->drawString(textLeft, lineY, line3);
+        }
+    }
+
+    if (textWidth >= display->getStringWidth("000s left")) {
+        snprintf(timeRemainingBuffer, sizeof(timeRemainingBuffer), "%lus left", (unsigned long)timeRemaining);
+    } else {
+        snprintf(timeRemainingBuffer, sizeof(timeRemainingBuffer), "%lus", (unsigned long)timeRemaining);
+    }
+    display->setFont(FONT_SMALL);
+    if (textWidth > 12) {
+        display->drawString(textLeft, y + height - FONT_HEIGHT_SMALL - 1, timeRemainingBuffer);
+    }
+
     display->drawCircle(compassX, compassY, compassDiam / 2);
     graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, screen->getHeading() * PI / 180, (compassDiam / 2));
 }
