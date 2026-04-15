@@ -28,7 +28,7 @@ ds248x_variant_t DS248XSensor::detectVariant()
     return _variant;
 }
 
-void DS248XSensor::printROM(uint8_t *rom)
+void DS248XSensor::printROM(const uint8_t *rom)
 {
     LOG_INFO("%s: ROM found - %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X", sensorName, rom[0], rom[1], rom[2], rom[3], rom[4],
              rom[5], rom[6], rom[7]);
@@ -156,13 +156,13 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     return status;
 }
 
-bool DS248XSensor::isValidROM(uint8_t *rom)
+bool DS248XSensor::isValidROM(const uint8_t *rom)
 {
     return (rom[0] || rom[1] || rom[2] || rom[3] || rom[4] || rom[5] || rom[6] || rom[7]);
 }
 
 // Read a one-wire temperature sensor by matching it's ROM
-float DS248XSensor::readTemperatureROM(uint8_t *rom)
+float DS248XSensor::readTemperatureROM(const uint8_t *rom)
 {
 #ifdef DS248X_I2C_CLOCK_SPEED
 #ifdef CAN_RECLOCK_I2C

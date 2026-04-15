@@ -62,9 +62,9 @@ class DS248XSensor : public TelemetrySensor
     ds248x_variant_t _variant = DS248X_UNKNOWN;
     _DS248XData ds248xData{};
     _DS2482800Data ds2482800Data{};
-    void printROM(uint8_t *rom);
-    bool isValidROM(uint8_t *rom);
-    float readTemperatureROM(uint8_t *rom);
+    void printROM(const uint8_t *rom);
+    bool isValidROM(const uint8_t *rom);
+    float readTemperatureROM(const uint8_t *rom);
     bool readTemperatureChannel(uint8_t channel);
 
   public:
