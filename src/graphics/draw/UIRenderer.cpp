@@ -259,12 +259,19 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 {
     char usersString[20];
     int nodes_online = (nodeStatus->getNumOnline() > 0) ? nodeStatus->getNumOnline() + node_offset : 0;
-
-    snprintf(usersString, sizeof(usersString), "%d %s", nodes_online, additional_words);
+    const bool hasAdditionalWords = additional_words && additional_words[0] != '\0';
 
     if (show_total) {
         int nodes_total = (nodeStatus->getNumTotal() > 0) ? nodeStatus->getNumTotal() + node_offset : 0;
-        snprintf(usersString, sizeof(usersString), "%d/%d %s", nodes_online, nodes_total, additional_words);
+        if (hasAdditionalWords)
+            snprintf(usersString, sizeof(usersString), "%d/%d %s", nodes_online, nodes_total, additional_words);
+        else
+            snprintf(usersString, sizeof(usersString), "%d/%d", nodes_online, nodes_total);
+    } else {
+        if (hasAdditionalWords)
+            snprintf(usersString, sizeof(usersString), "%d %s", nodes_online, additional_words);
+        else
+            snprintf(usersString, sizeof(usersString), "%d", nodes_online);
     }
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
@@ -820,9 +827,9 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     // Display Region and Channel Utilization
     if (currentResolution == ScreenResolution::UltraLow) {
-        drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1);
     } else {
-        drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1);
     }
     char uptimeStr[32] = "";
     if (currentResolution != ScreenResolution::UltraLow) {

@@ -776,6 +776,39 @@ Only after the above is stable:
 - hash-table tuning
 - unrelated PSRAM work in other subsystems
 
+Note: phases 17 and 18 were later split out as flash-write follow-ups and are tracked in `docs/tiered-nodedb-memory.md`. Phase numbering below preserves that history.
+
+### Phase 19: Telemetry / Display Node Counts
+
+**Target diff size:** `80-140` lines
+
+**Goal:** Make the total NodeDB size visible from the device display and align active-node displays with the same online/total model already exposed in telemetry.
+
+**Files:**
+
+- `src/graphics/draw/UIRenderer.cpp`
+- `src/graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.cpp`
+- any other display surface discovered during the audit that currently shows only an active-node count
+
+**Work:**
+
+- audit node-count displays and identify which ones are showing an active subset rather than the full NodeDB size
+- treat `<active>/<total>` as the required format for active-node displays
+- source the denominator from live NodeDB totals, not from `MAX_NUM_NODES`, runtime caps, or storage capacity
+- keep the denominator consistent with the numerator's scope; if the active count excludes the local node, exclude the local node from the total too
+- leave total-only views clearly labeled as totals instead of presenting them as active counts
+- keep telemetry field semantics unchanged; this phase aligns display wording with the existing `num_online_nodes` / `num_total_nodes` model
+
+**Standalone review value:** Makes high-capacity NodeDB behavior visible from the device itself, which reduces ambiguity during cap and backend validation.
+
+**Verification:**
+
+- build `tbeam-s3-core`
+- build `heltec-v3`
+- build `rak4631`
+- manually populate a DB where active nodes are a strict subset of total nodes and confirm active-node displays render `<active>/<total>`
+- verify remote-only displays use a matching denominator
+
 ## Test Plan
 
 - [ ] Build `native`
@@ -791,6 +824,7 @@ Only after the above is stable:
 - [ ] Verify favorites-first and `last_heard` display ordering
 - [ ] Verify router hot paths use metadata only
 - [ ] Verify phone app node export still completes correctly
+- [ ] Verify active-node displays show `<active>/<total>` with correct local-node inclusion
 - [ ] Verify node deletion and eviction do not compact unrelated slots
 - [ ] Verify corrupted flash slot records are skipped cleanly
 - [ ] Verify power-loss recovery behavior on flash-backed builds
@@ -805,4 +839,5 @@ After this plan lands:
 - `ESP32-S3` without PSRAM remains supported through the same flash-backed model
 - routing and sorting use compact metadata in DRAM
 - persistence no longer depends on materializing the full DB in internal heap
+- active-node displays make the current active/total DB size visible without inferring it from screen fullness
 - the design is simple enough to debug before adding any optional caching layer
