@@ -139,10 +139,9 @@ extern bool hasUnreadMessage;
 
 static inline float wrapHeading360(float heading)
 {
-    while (heading < 0.0f) {
+    if (heading < 0.0f) {
         heading += 360.0f;
-    }
-    while (heading >= 360.0f) {
+    } else if (heading >= 360.0f) {
         heading -= 360.0f;
     }
     return heading;
@@ -342,11 +341,9 @@ float Screen::estimatedHeading(double lat, double lon)
             effectiveUpdateIntervalSecs = smartMinIntervalSecs;
         }
     }
-    uint64_t headingStaleMs64 = static_cast<uint64_t>(effectiveUpdateIntervalSecs) * 2000ULL; // two expected update windows
-    if (headingStaleMs64 > UINT32_MAX) {
-        headingStaleMs64 = UINT32_MAX;
-    }
-    const uint32_t headingStaleMs = static_cast<uint32_t>(headingStaleMs64);
+    // Two expected update windows; keep arithmetic 32-bit to avoid pulling in larger 64-bit helpers.
+    const uint32_t headingStaleMs =
+        (effectiveUpdateIntervalSecs > (UINT32_MAX / 2000U)) ? UINT32_MAX : (effectiveUpdateIntervalSecs * 2000U);
 
     if (oldLat == 0) {
         // Need at least two position points before we can infer heading.

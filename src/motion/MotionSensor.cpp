@@ -64,7 +64,6 @@ bool MotionSensor::saveMagnetometerCalibration(const char *filePath, float highe
 {
 #ifdef FSCom
     if (!isRangeValid(highestX, lowestX) || !isRangeValid(highestY, lowestY) || !isRangeValid(highestZ, lowestZ)) {
-        LOG_WARN("Cal save skip: bad range");
         return false;
     }
 
@@ -74,15 +73,8 @@ bool MotionSensor::saveMagnetometerCalibration(const char *filePath, float highe
 
     auto file = SafeFile(filePath);
     const size_t written = file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
-    bool okay = (written == sizeof(record)) && file.close();
-    if (okay) {
-        LOG_INFO("Cal saved %s", filePath);
-    } else {
-        LOG_WARN("Cal save fail %s", filePath);
-    }
-    return okay;
+    return (written == sizeof(record)) && file.close();
 #else
-    LOG_WARN("Cal save skip: no fs");
     return false;
 #endif
 }
@@ -98,7 +90,6 @@ bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &high
     auto file = FSCom.open(filePath, FILE_O_READ);
     if (!file) {
         spiLock->unlock();
-        LOG_INFO("Cal file missing %s", filePath);
         return false;
     }
     bytesRead = file.read(reinterpret_cast<uint8_t *>(&record), sizeof(record));
@@ -110,7 +101,6 @@ bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &high
     const bool rangeValid = isRangeValid(record.highestX, record.lowestX) && isRangeValid(record.highestY, record.lowestY) &&
                             isRangeValid(record.highestZ, record.lowestZ);
     if (!headerValid || !rangeValid) {
-        LOG_WARN("Cal file invalid %s", filePath);
         return false;
     }
 
@@ -121,10 +111,8 @@ bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &high
     highestZ = record.highestZ;
     lowestZ = record.lowestZ;
 
-    LOG_INFO("Cal loaded %s", filePath);
     return true;
 #else
-    LOG_INFO("Cal load skip: no fs");
     return false;
 #endif
 }
