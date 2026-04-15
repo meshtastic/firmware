@@ -22,6 +22,7 @@
  * THE SOFTWARE.
  */
 
+#include "LittleFS.h"
 #include "STM32_LittleFS.h"
 #include <Arduino.h>
 
@@ -391,3 +392,8 @@ void File::rewindDirectory(void)
     }
     _fs->_unlockFS();
 }
+
+// Default constructor — binds to the global InternalFS instance.
+// Allows File to be declared without an explicit filesystem argument,
+// matching the API of ESP32/RP2040/Portduino File objects.
+File::File() : File(InternalFS) {}
