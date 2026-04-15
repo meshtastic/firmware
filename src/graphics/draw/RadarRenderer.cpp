@@ -97,27 +97,67 @@ static void formatDistM(char *buf, size_t len, float metres)
     }
 }
 
+// ---------------------------------------------------------------------------
+// Node marker shapes
+// ---------------------------------------------------------------------------
+
 /**
- * Plot a node marker.
+ * Draw one of five distinct markers centred at (px, py).
  *
- * highlight=true  → cross/plus shape  (used for the closest node — matches
- *                   the top entry in the info panel so the user can identify it)
- * highlight=false → 3×3 filled square (all other nodes)
+ *   0  ■  filled 3×3 square
+ *   1  +  axis-aligned cross
+ *   2  ×  diagonal cross (X)
+ *   3  □  hollow 5×5 square
+ *   4  ◆  diamond (rotated square)
  *
- * headingRad rotates the view (heading-up mode).
+ * All shapes fit within a 5×5 pixel bounding box.
  */
+static void drawMarker(OLEDDisplay *display, int px, int py, uint8_t sym)
+{
+    switch (sym) {
+    case 0: // ■
+        display->fillRect(px - 1, py - 1, 3, 3);
+        break;
+    case 1: // +
+        display->drawLine(px - 2, py, px + 2, py);
+        display->drawLine(px, py - 2, px, py + 2);
+        break;
+    case 2: // ×
+        display->drawLine(px - 2, py - 2, px + 2, py + 2);
+        display->drawLine(px + 2, py - 2, px - 2, py + 2);
+        break;
+    case 3: // □
+        display->drawLine(px - 2, py - 2, px + 2, py - 2);
+        display->drawLine(px + 2, py - 2, px + 2, py + 2);
+        display->drawLine(px + 2, py + 2, px - 2, py + 2);
+        display->drawLine(px - 2, py + 2, px - 2, py - 2);
+        break;
+    default: // ◆
+        display->drawLine(px, py - 2, px + 2, py);
+        display->drawLine(px + 2, py, px, py + 2);
+        display->drawLine(px, py + 2, px - 2, py);
+        display->drawLine(px - 2, py, px, py - 2);
+        break;
+    }
+}
+
+/**
+ * Stable marker index for a node.  The same node number always maps to the
+ * same symbol regardless of distance ranking or screen refresh order.
+ */
+static uint8_t nodeMarkerIndex(uint32_t nodeNum)
+{
+    return (uint8_t)(nodeNum % 5);
+}
+
+/** Plot a node on the radar at the correct bearing/distance position. */
 static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bearingRad, float headingRad, float norm,
-                     bool highlight)
+                     uint8_t markerIdx)
 {
     const float rel = bearingRad - headingRad;
     const int px = cx + (int)(radius * norm * sinf(rel));
     const int py = cy - (int)(radius * norm * cosf(rel));
-    if (highlight) {
-        display->drawLine(px - 3, py, px + 3, py); // horizontal arm
-        display->drawLine(px, py - 3, px, py + 3); // vertical arm
-    } else {
-        display->fillRect(px - 1, py - 1, 3, 3);
-    }
+    drawMarker(display, px, py, markerIdx);
 }
 
 // ---------------------------------------------------------------------------
@@ -241,24 +281,22 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     std::sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) { return a.distM < b.distM; });
 
     // -----------------------------------------------------------------------
-    // Plot remote nodes.
-    // The closest node (entries[0]) gets a cross (+) marker so the user can
-    // match it to the top row of the info panel.  All others get filled squares.
+    // Plot remote nodes — each with its stable symbol.
     // -----------------------------------------------------------------------
-    for (size_t i = 0; i < entries.size(); i++)
-        plotNode(display, radarCX, radarCY, radarRadius, entries[i].bearingRad, headingRad,
-                 std::min(entries[i].distM / scale, 1.0f), /*highlight=*/i == 0);
+    for (const Entry &e : entries)
+        plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad,
+                 std::min(e.distM / scale, 1.0f), nodeMarkerIndex(e.node->num));
 
     // -----------------------------------------------------------------------
-    // Info panel (right of radar).  Four rows fit on a 128×64 OLED.
+    // Info panel (right of radar).  Four rows on a 128×64 OLED.
     //
-    // Row 0: outer ring scale  (gives the user the overall distance reference)
-    // Row 1: closest node — short name (left) + distance (right)
-    // Row 2: 2nd closest node — short name (left) + distance (right)
-    // Row 3: node count (left) + orientation badge "HDG"/"N^" (right)
+    // Row 0: outer ring scale
+    // Row 1: closest node    — [symbol] name (left)  distance (right)
+    // Row 2: 2nd closest     — [symbol] name (left)  distance (right)
+    // Row 3: node count (left)  +  orientation badge (right)
     //
-    // The closest node is also rendered as a + cross on the radar so the
-    // user can visually match the top row here to the correct dot.
+    // Each node carries a stable symbol (nodeNum % 5) so the marker on the
+    // radar always matches the corresponding row in this panel.
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -269,8 +307,15 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     formatDistM(buf, sizeof(buf), scale);
     display->drawString(infoPanelX, y + headerH, buf);
 
-    // Rows 1–2 — up to two closest nodes.
+    // Draw one node row: symbol pixel-art (left) | name | distance (right).
+    // Symbol is centred vertically in the text row, 5×5 px, then name follows.
     auto drawNodeRow = [&](const Entry &e, int row) {
+        const int rowY  = y + headerH + FONT_HEIGHT_SMALL * row;
+        const int symCX = infoPanelX + 3;                     // symbol horizontal centre
+        const int symCY = rowY + FONT_HEIGHT_SMALL / 2 - 1;   // symbol vertical centre
+
+        drawMarker(display, symCX, symCY, nodeMarkerIndex(e.node->num));
+
         char name[10] = "";
         if (e.node->has_user && e.node->user.short_name[0])
             strncpy(name, e.node->user.short_name, sizeof(name) - 1);
@@ -280,15 +325,14 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         char dist[10] = "";
         formatDistM(dist, sizeof(dist), e.distM);
 
-        const int rowY = y + headerH + FONT_HEIGHT_SMALL * row;
         display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->drawString(infoPanelX, rowY, name);
+        display->drawString(infoPanelX + 7, rowY, name); // 7 = 5px symbol + 2px gap
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
         display->drawString(x + sw - 1, rowY, dist);
     };
 
     if (entries.size() >= 1)
-        drawNodeRow(entries[0], 1); // entries already sorted by distance
+        drawNodeRow(entries[0], 1);
     if (entries.size() >= 2)
         drawNodeRow(entries[1], 2);
 
