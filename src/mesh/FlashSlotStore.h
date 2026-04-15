@@ -5,6 +5,9 @@
 
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 
+// Filesystem-backed slot store used by flash-preferred builds.
+// NodeDB owns the dense live-slot model; this helper only knows how to read
+// and write fixed-size page files plus the manifest that describes them.
 class FlashSlotStore
 {
   public:
@@ -15,6 +18,8 @@ class FlashSlotStore
     static constexpr uint16_t DEFAULT_SLOTS_PER_PAGE = 8;
     static constexpr const char *DEFAULT_DIRECTORY = "/prefs/nodedb";
 
+    // Header for one logical slot record on disk. The payload stays protobuf
+    // encoded so the on-flash format does not depend on compiler struct layout.
     struct __attribute__((packed)) RecordHeader {
         uint16_t magic = RECORD_MAGIC;
         uint8_t version = FORMAT_VERSION;
@@ -29,6 +34,7 @@ class FlashSlotStore
         uint8_t payload[meshtastic_NodeInfoLite_size] = {};
     };
 
+    // Small manifest that pins down slot geometry for the whole store.
     struct __attribute__((packed)) Manifest {
         uint16_t magic = MANIFEST_MAGIC;
         uint8_t version = FORMAT_VERSION;
@@ -50,6 +56,8 @@ class FlashSlotStore
     bool writeSlot(const Manifest &manifest, uint16_t slotIndex, const meshtastic_NodeInfoLite &node) const;
     bool clearSlot(uint16_t slotIndex) const;
     bool clearSlot(const Manifest &manifest, uint16_t slotIndex) const;
+    // Page helpers are used by NodeDB's batched save path so one save can patch
+    // all dirty slots in a page and write that page once.
     bool loadPage(const Manifest &manifest, uint16_t pageIndex, std::vector<uint8_t> &page) const;
     bool storePage(const Manifest &manifest, uint16_t pageIndex, const std::vector<uint8_t> &page) const;
     bool deletePage(const Manifest &manifest, uint16_t pageIndex) const;

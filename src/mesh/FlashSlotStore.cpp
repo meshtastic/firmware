@@ -94,6 +94,8 @@ bool ensureDirectoryExists(const char *directory)
 
 bool loadPage(const char *directory, const FlashSlotStore::Manifest &manifest, uint16_t pageIndex, std::vector<uint8_t> &page)
 {
+    // Missing pages are treated as all-zero pages so empty tail pages do not
+    // need to exist on disk and clearSlot() can stay cheap.
     page.assign(pageSizeBytes(manifest), 0);
 
 #ifdef FSCom
@@ -216,6 +218,8 @@ bool patchRecordInPage(const FlashSlotStore::Manifest &manifest, uint16_t slotIn
 bool encodeNodeRecord(uint16_t slotIndex, const meshtastic_NodeInfoLite &node, FlashSlotStore::Record &record)
 {
     record = {};
+    // Encode protobuf bytes into a fixed-width record so page geometry stays
+    // stable even though NodeInfoLite has variable-length wire output.
     const size_t encodedLen = pb_encode_to_bytes(record.payload, sizeof(record.payload), meshtastic_NodeInfoLite_fields, &node);
     if (encodedLen == 0 || encodedLen > sizeof(record.payload)) {
         LOG_ERROR("FlashSlotStore failed to encode slot %u", static_cast<unsigned>(slotIndex));
@@ -348,6 +352,7 @@ bool FlashSlotStore::readSlot(const Manifest &manifest, uint16_t slotIndex, mesh
     Record record = {};
     memcpy(&record, page.data() + recordOffset, sizeof(record));
     if (!isPresentRecord(record.header)) {
+        // Absent slots and zeroed tail pages are both represented by a cleared record.
         return false;
     }
 
