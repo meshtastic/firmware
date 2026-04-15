@@ -288,20 +288,25 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
                  std::min(e.distM / scale, 1.0f), nodeMarkerIndex(e.node->num));
 
     // -----------------------------------------------------------------------
-    // Info panel (right of radar).  All 4 rows used for the node list.
+    // Info panel (right of radar).  All available height used for node list.
     //
-    // Rows 0–3: up to 4 closest nodes — [symbol] name (left)  dist (right)
+    // Up to 5 closest nodes — [symbol] name (left)  dist (right-aligned).
+    // Row pitch is tightened to contentH/5 so 5 rows fit without clipping
+    // (glyph height ≈10px < FONT_HEIGHT_SMALL ≈13px, so rows stay readable).
     //
     // Each node carries a stable symbol (nodeNum % 5) that matches its dot
     // on the radar, so the user can identify any dot by reading the list.
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
 
+    const int maxRows  = 5;
+    const int rowPitch = contentH / maxRows; // ≈10px on a 128×64 OLED
+
     // Draw one node row: symbol (left) | name | distance (right-aligned).
     auto drawNodeRow = [&](const Entry &e, int row) {
-        const int rowY  = y + headerH + FONT_HEIGHT_SMALL * row;
+        const int rowY  = y + headerH + rowPitch * row;
         const int symCX = infoPanelX + 3;
-        const int symCY = rowY + FONT_HEIGHT_SMALL / 2 - 1;
+        const int symCY = rowY + rowPitch / 2;
 
         drawMarker(display, symCX, symCY, nodeMarkerIndex(e.node->num));
 
@@ -321,8 +326,7 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         display->setTextAlignment(TEXT_ALIGN_LEFT);
     };
 
-    const int maxRows = 4;
-    const int count   = (int)entries.size();
+    const int count = (int)entries.size();
     for (int i = 0; i < count && i < maxRows; i++)
         drawNodeRow(entries[i], i);
 }
