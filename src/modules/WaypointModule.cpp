@@ -150,7 +150,8 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     if (hasOwnPositionFix) {
         const meshtastic_PositionLite &op = ourNode->position;
         float myHeading = 0.0f;
-        const bool hasHeading = graphics::CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
+        const bool hasHeading =
+            graphics::CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
         if (hasHeading) {
             // Draw compass circle
             display->drawCircle(compassX, compassY, compassRadius);

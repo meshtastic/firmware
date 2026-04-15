@@ -335,8 +335,8 @@ float Screen::estimatedHeading(double lat, double lon)
         Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
     uint32_t effectiveUpdateIntervalSecs = gpsUpdateIntervalSecs;
     if (config.position.position_broadcast_smart_enabled) {
-        const uint32_t smartMinIntervalSecs = Default::getConfiguredOrDefault(config.position.broadcast_smart_minimum_interval_secs,
-                                                                              default_broadcast_smart_minimum_interval_secs);
+        const uint32_t smartMinIntervalSecs = Default::getConfiguredOrDefault(
+            config.position.broadcast_smart_minimum_interval_secs, default_broadcast_smart_minimum_interval_secs);
         if (smartMinIntervalSecs > effectiveUpdateIntervalSecs) {
             effectiveUpdateIntervalSecs = smartMinIntervalSecs;
         }

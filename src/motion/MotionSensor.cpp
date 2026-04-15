@@ -68,8 +68,8 @@ bool MotionSensor::saveMagnetometerCalibration(const char *filePath, float highe
     }
 
     FSCom.mkdir("/prefs");
-    CompassCalibrationRecord record = {COMPASS_CALIBRATION_MAGIC, COMPASS_CALIBRATION_VERSION, 0, highestX, lowestX,
-                                       highestY,                 lowestY,                    highestZ, lowestZ};
+    CompassCalibrationRecord record = {
+        COMPASS_CALIBRATION_MAGIC, COMPASS_CALIBRATION_VERSION, 0, highestX, lowestX, highestY, lowestY, highestZ, lowestZ};
 
     auto file = SafeFile(filePath);
     const size_t written = file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
@@ -79,8 +79,8 @@ bool MotionSensor::saveMagnetometerCalibration(const char *filePath, float highe
 #endif
 }
 
-bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &highestX, float &lowestX, float &highestY, float &lowestY,
-                                               float &highestZ, float &lowestZ)
+bool MotionSensor::loadMagnetometerCalibration(const char *filePath, float &highestX, float &lowestX, float &highestY,
+                                               float &lowestY, float &highestZ, float &lowestZ)
 {
 #ifdef FSCom
     CompassCalibrationRecord record = {};
