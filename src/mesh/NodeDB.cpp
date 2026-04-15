@@ -1475,6 +1475,8 @@ bool NodeDB::loadFromFlashSlotStore()
     flashSlotCacheValid.assign(nodeStore->slotCount(), 0);
     resizeFlashSlotTracking(nodeStore->slotCount());
 
+    // Boot scan compacts the persisted flash layout into dense live storage
+    // order without decoding every node into the RAM overlay up front.
     std::vector<NodeMeta> scannedMeta;
     std::vector<NodeNum> admittedNodeNums;
     scannedMeta.reserve(std::min<size_t>(manifest.slot_count, nodeStore->slotCount()));
@@ -1542,6 +1544,8 @@ bool NodeDB::ensureFlashSlotLoaded(uint16_t storageIndex)
         return true;
     }
 
+    // The flash-backed mode keeps NodeMeta hot in RAM and only pulls the full
+    // record into the compatibility overlay when a caller actually needs it.
     const uint16_t flashSlotIndex = flashSlotByStorageIndex.at(storageIndex);
     if (flashSlotIndex == INVALID_FLASH_SLOT_INDEX) {
         return false;
@@ -1618,6 +1622,9 @@ void NodeDB::moveStorageSlot(uint16_t destIndex, uint16_t sourceIndex)
         return;
     }
 
+    // Dense storage order is still authoritative inside NodeDB even when the
+    // durable representation lives in flash. Compaction updates that dense view
+    // first and lets the next save normalize the on-flash layout if needed.
     markFlashSlotLayoutDirty();
 
     if (!flashSlotStoreActive) {
@@ -1708,6 +1715,8 @@ void NodeDB::rebuildNodeMetaLookup()
     nodeMetaLookup.assign(chooseNodeMetaLookupCapacity(numMeshNodes), UINT16_MAX);
     nodeMetaLookupMask = nodeMetaLookup.size() - 1;
 
+    // Simple linear probing is enough here: the table is private to NodeDB,
+    // rebuilt in one pass, and sized to stay comfortably below full.
     for (uint16_t metaIndex = 0; metaIndex < numMeshNodes; ++metaIndex) {
         const NodeMeta &meta = nodeMeta.at(metaIndex);
         size_t probeIndex = hashNodeMetaKey(meta.node_num) & nodeMetaLookupMask;
@@ -1739,6 +1748,7 @@ void NodeDB::refreshNodeMeta(uint16_t storageIndex)
         nodeMeta.resize(numMeshNodes);
     }
 
+    // This is the central "record changed, resync the hot cache" path.
     nodeMeta.at(storageIndex) = makeNodeMeta(slotAt(storageIndex), storageIndex);
     if (!rebuildingNodeMeta) {
         markFlashSlotDirty(storageIndex);
@@ -2026,6 +2036,8 @@ void NodeDB::loadFromDisk()
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
     bool loadedNodeDatabase = false;
     bool loadedLegacyNodeDatabase = false;
+    // Boot order is: legacy streamed protobuf if present, otherwise flash slot
+    // store on flash-preferred targets, otherwise start from defaults.
     if (nodeDatabase.version >= DEVICESTATE_MIN_VER) {
         resetFlashSlotState();
         meshNodes = &nodeDatabase.nodes;
@@ -2364,6 +2376,9 @@ bool NodeDB::saveNodeDatabaseToDisk()
         }
 
         if (fullRewrite) {
+            // Layout changes, migration, and flash-boot normalization all land
+            // here. We rewrite dense storage order straight through to pages so
+            // the next boot sees the same slot numbering NodeDB uses in RAM.
             if (!ensureAllLiveSlotsLoaded()) {
                 LOG_ERROR("Can't save prefs because not all live flash-backed slots could be loaded");
                 return false;
@@ -2424,6 +2439,9 @@ bool NodeDB::saveNodeDatabaseToDisk()
                 }
             }
         } else {
+            // Incremental saves reuse the current flash home for each dirty
+            // dense slot, then batch by page so one save rewrites each touched
+            // page once instead of once per slot.
             std::vector<uint16_t> dirtyStorageIndices;
             dirtyStorageIndices.reserve(numMeshNodes);
             for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
