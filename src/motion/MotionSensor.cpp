@@ -71,7 +71,7 @@ bool MotionSensor::saveMagnetometerCalibration(const char *filePath, float highe
     CompassCalibrationRecord record = {
         COMPASS_CALIBRATION_MAGIC, COMPASS_CALIBRATION_VERSION, 0, highestX, lowestX, highestY, lowestY, highestZ, lowestZ};
 
-    auto file = SafeFile(filePath);
+    auto file = SafeFile(filePath, true);
     const size_t written = file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
     return (written == sizeof(record)) && file.close();
 #else
