@@ -50,6 +50,7 @@
 
 #include "xmodem.h"
 #include "SPILock.h"
+#include <cstdio>
 
 #ifdef FSCom
 
@@ -127,9 +128,26 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
                 spiLock->lock();
-                // Remove existing file first so we truncate rather than append
-                if (FSCom.exists(filename)) FSCom.remove(filename);
-                file = FSCom.open(filename, FILE_O_WRITE);
+                if (recvCommitPending) {
+                    FSCom.remove(recvTmpPath);
+                    recvCommitPending = false;
+                }
+                int plen = snprintf(recvTmpPath, sizeof(recvTmpPath), "%s.tmp", filename);
+                if (plen < 0 || (size_t)plen >= sizeof(recvTmpPath)) {
+                    spiLock->unlock();
+                    LOG_WARN("XModem: Receive path too long for .tmp suffix");
+                    sendControl(meshtastic_XModem_Control_NAK);
+                    isReceiving = false;
+                    break;
+                }
+                if (FSCom.exists(recvTmpPath) && !FSCom.remove(recvTmpPath)) {
+                    spiLock->unlock();
+                    LOG_WARN("XModem: Failed to remove existing temp before receive: %s", recvTmpPath);
+                    sendControl(meshtastic_XModem_Control_NAK);
+                    isReceiving = false;
+                    break;
+                }
+                file = FSCom.open(recvTmpPath, FILE_O_WRITE);
                 spiLock->unlock();
                 if (file) {
                     sendControl(meshtastic_XModem_Control_ACK);
@@ -137,6 +155,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                     packetno = 1;
                     break;
                 }
+                LOG_WARN("XModem: Failed to open temp for receive: %s", recvTmpPath);
                 sendControl(meshtastic_XModem_Control_NAK);
                 isReceiving = false;
                 break;
@@ -192,24 +211,49 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         }
         break;
     case meshtastic_XModem_Control_EOT:
-        // End of transmission
-        sendControl(meshtastic_XModem_Control_ACK);
+        // End of transmission (receive): flush temp, rename to final, ACK only after commit
+        if (!isReceiving && !recvCommitPending)
+            break;
+        if (recvCommitPending) {
+            if (!renameFile(recvTmpPath, filename)) {
+                LOG_WARN("XModem: rename temp to final failed (retry): %s -> %s", recvTmpPath, filename);
+                sendControl(meshtastic_XModem_Control_NAK);
+                break;
+            }
+            sendControl(meshtastic_XModem_Control_ACK);
+            recvCommitPending = false;
+            memset(recvTmpPath, 0, sizeof(recvTmpPath));
+            break;
+        }
         spiLock->lock();
         file.flush();
         file.close();
         spiLock->unlock();
         isReceiving = false;
+        if (!renameFile(recvTmpPath, filename)) {
+            LOG_WARN("XModem: rename temp to final failed: %s -> %s", recvTmpPath, filename);
+            sendControl(meshtastic_XModem_Control_NAK);
+            recvCommitPending = true;
+            break;
+        }
+        sendControl(meshtastic_XModem_Control_ACK);
+        memset(recvTmpPath, 0, sizeof(recvTmpPath));
         break;
     case meshtastic_XModem_Control_CAN:
-        // Cancel transmission and remove file
+        // Cancel receive: drop partial temp only (final path unchanged)
+        if (!isReceiving && !recvCommitPending)
+            break;
         sendControl(meshtastic_XModem_Control_ACK);
         spiLock->lock();
-        file.flush();
-        file.close();
-
-        FSCom.remove(filename);
+        if (isReceiving) {
+            file.flush();
+            file.close();
+        }
+        FSCom.remove(recvTmpPath);
         spiLock->unlock();
         isReceiving = false;
+        recvCommitPending = false;
+        memset(recvTmpPath, 0, sizeof(recvTmpPath));
         break;
     case meshtastic_XModem_Control_ACK:
         // Acknowledge Send the next packet
