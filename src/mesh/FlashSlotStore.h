@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <vector>
 
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 
@@ -49,6 +50,12 @@ class FlashSlotStore
     bool writeSlot(const Manifest &manifest, uint16_t slotIndex, const meshtastic_NodeInfoLite &node) const;
     bool clearSlot(uint16_t slotIndex) const;
     bool clearSlot(const Manifest &manifest, uint16_t slotIndex) const;
+    bool loadPage(const Manifest &manifest, uint16_t pageIndex, std::vector<uint8_t> &page) const;
+    bool storePage(const Manifest &manifest, uint16_t pageIndex, const std::vector<uint8_t> &page) const;
+    bool deletePage(const Manifest &manifest, uint16_t pageIndex) const;
+    bool writeSlotToPage(const Manifest &manifest, uint16_t slotIndex, const meshtastic_NodeInfoLite &node,
+                         std::vector<uint8_t> &page) const;
+    bool clearSlotInPage(const Manifest &manifest, uint16_t slotIndex, std::vector<uint8_t> &page) const;
 
   private:
     const char *directory;

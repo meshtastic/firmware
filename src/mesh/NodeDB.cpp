@@ -720,6 +720,41 @@ bool verifyFlashNodeDatabase(const FlashSlotStore &flashSlotStore, const FlashSl
     return true;
 }
 
+struct FlashPageUpdate {
+    uint16_t storageIndex;
+    uint16_t flashSlotIndex;
+    uint16_t pageIndex;
+};
+
+size_t flashPageSizeBytes(const FlashSlotStore::Manifest &manifest)
+{
+    return static_cast<size_t>(manifest.record_size) * manifest.slots_per_page;
+}
+
+uint16_t flashPageCount(const FlashSlotStore::Manifest &manifest)
+{
+    return static_cast<uint16_t>((manifest.slot_count + manifest.slots_per_page - 1) / manifest.slots_per_page);
+}
+
+uint16_t flashPageIndexForSlot(const FlashSlotStore::Manifest &manifest, uint16_t slotIndex)
+{
+    return slotIndex / manifest.slots_per_page;
+}
+
+uint16_t flashLivePageCount(const FlashSlotStore::Manifest &manifest, pb_size_t liveNodeCount)
+{
+    return liveNodeCount == 0 ? 0
+                              : static_cast<uint16_t>((static_cast<uint32_t>(liveNodeCount) + manifest.slots_per_page - 1) /
+                                                      manifest.slots_per_page);
+}
+
+bool verifyFlashPageImage(const FlashSlotStore &flashSlotStore, const FlashSlotStore::Manifest &manifest, uint16_t pageIndex,
+                          const std::vector<uint8_t> &expectedPage)
+{
+    std::vector<uint8_t> storedPage;
+    return flashSlotStore.loadPage(manifest, pageIndex, storedPage) && storedPage == expectedPage;
+}
+
 #ifdef FSCom
 bool fileExists(const char *path)
 {
@@ -2334,18 +2369,41 @@ bool NodeDB::saveNodeDatabaseToDisk()
                 return false;
             }
 
-            LOG_INFO("Save flash slot NodeDB (%u live nodes, full rewrite)", numMeshNodes);
+            const uint16_t livePageCount = flashLivePageCount(manifest, numMeshNodes);
+            const uint16_t totalPageCount = flashPageCount(manifest);
+            const uint16_t deletedTailPages = totalPageCount - livePageCount;
+
+            LOG_INFO("Save flash slot NodeDB (%u live nodes, full rewrite across %u live pages, %u deleted tail pages)",
+                     numMeshNodes, static_cast<unsigned>(livePageCount), static_cast<unsigned>(deletedTailPages));
             logNodeDbMemorySnapshot("before flash nodedb save", numMeshNodes, nodeStore->slotCount());
-            for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
-                if (!flashSlotStore.writeSlot(manifest, storageIndex, nodeStore->slot(storageIndex))) {
-                    LOG_ERROR("Failed to write flash slot %u", static_cast<unsigned>(storageIndex));
+
+            std::vector<uint8_t> page;
+            page.assign(flashPageSizeBytes(manifest), 0);
+
+            for (uint16_t pageIndex = 0; pageIndex < livePageCount; ++pageIndex) {
+                std::fill(page.begin(), page.end(), 0);
+
+                const uint16_t firstStorageIndex = static_cast<uint16_t>(pageIndex * manifest.slots_per_page);
+                const uint16_t endStorageIndex = std::min<uint16_t>(
+                    static_cast<uint16_t>(firstStorageIndex + manifest.slots_per_page), static_cast<uint16_t>(numMeshNodes));
+
+                for (uint16_t storageIndex = firstStorageIndex; storageIndex < endStorageIndex; ++storageIndex) {
+                    if (!flashSlotStore.writeSlotToPage(manifest, storageIndex, nodeStore->slot(storageIndex), page)) {
+                        LOG_ERROR("Failed to stage flash slot %u into page %u", static_cast<unsigned>(storageIndex),
+                                  static_cast<unsigned>(pageIndex));
+                        return false;
+                    }
+                }
+
+                if (!flashSlotStore.storePage(manifest, pageIndex, page)) {
+                    LOG_ERROR("Failed to store flash page %u during full rewrite", static_cast<unsigned>(pageIndex));
                     return false;
                 }
             }
 
-            for (uint16_t storageIndex = numMeshNodes; storageIndex < slotCount; ++storageIndex) {
-                if (!flashSlotStore.clearSlot(manifest, storageIndex)) {
-                    LOG_ERROR("Failed to clear flash slot %u", static_cast<unsigned>(storageIndex));
+            for (uint16_t pageIndex = livePageCount; pageIndex < totalPageCount; ++pageIndex) {
+                if (!flashSlotStore.deletePage(manifest, pageIndex)) {
+                    LOG_ERROR("Failed to delete empty flash page %u", static_cast<unsigned>(pageIndex));
                     return false;
                 }
             }
@@ -2379,10 +2437,14 @@ bool NodeDB::saveNodeDatabaseToDisk()
                 return true;
             }
 
-            LOG_INFO("Save flash slot NodeDB (%u live nodes, %u dirty slots)", numMeshNodes,
-                     static_cast<unsigned>(dirtyStorageIndices.size()));
-            logNodeDbMemorySnapshot("before flash nodedb save", numMeshNodes, nodeStore->slotCount());
+            std::vector<FlashPageUpdate> pendingUpdates;
+            pendingUpdates.reserve(dirtyStorageIndices.size());
             for (const uint16_t storageIndex : dirtyStorageIndices) {
+                if (!ensureFlashSlotLoaded(storageIndex)) {
+                    LOG_ERROR("Failed to hydrate dirty storage index %u before flash save", static_cast<unsigned>(storageIndex));
+                    return false;
+                }
+
                 // Dense storage order stays authoritative; if we already know a flash home for this slot, reuse it.
                 uint16_t flashSlotIndex = storageIndex;
                 if (flashSlotStoreActive && storageIndex < flashSlotByStorageIndex.size() &&
@@ -2390,22 +2452,81 @@ bool NodeDB::saveNodeDatabaseToDisk()
                     flashSlotIndex = flashSlotByStorageIndex.at(storageIndex);
                 }
 
-                if (!flashSlotStore.writeSlot(manifest, flashSlotIndex, nodeStore->slot(storageIndex))) {
-                    LOG_ERROR("Failed to write flash slot %u for storage index %u", static_cast<unsigned>(flashSlotIndex),
-                              static_cast<unsigned>(storageIndex));
+                if (flashSlotIndex >= slotCount) {
+                    LOG_ERROR("Dirty storage index %u resolved to out-of-range flash slot %u",
+                              static_cast<unsigned>(storageIndex), static_cast<unsigned>(flashSlotIndex));
                     return false;
                 }
 
-                if (!verifyFlashNodeSlot(flashSlotStore, manifest, flashSlotIndex, nodeStore->slot(storageIndex))) {
-                    LOG_ERROR("Flash slot NodeDB verification failed at slot %u", static_cast<unsigned>(flashSlotIndex));
+                pendingUpdates.push_back(
+                    FlashPageUpdate{storageIndex, flashSlotIndex, flashPageIndexForSlot(manifest, flashSlotIndex)});
+            }
+
+            std::sort(pendingUpdates.begin(), pendingUpdates.end(), [](const FlashPageUpdate &lhs, const FlashPageUpdate &rhs) {
+                if (lhs.pageIndex != rhs.pageIndex) {
+                    return lhs.pageIndex < rhs.pageIndex;
+                }
+                return lhs.flashSlotIndex < rhs.flashSlotIndex;
+            });
+
+            size_t touchedPageCount = 0;
+            for (size_t i = 0; i < pendingUpdates.size(); ++i) {
+                if (i == 0 || pendingUpdates[i].pageIndex != pendingUpdates[i - 1].pageIndex) {
+                    ++touchedPageCount;
+                }
+
+                if (i > 0 && pendingUpdates[i].flashSlotIndex == pendingUpdates[i - 1].flashSlotIndex) {
+                    LOG_ERROR("Dirty flash save resolved duplicate flash slot %u",
+                              static_cast<unsigned>(pendingUpdates[i].flashSlotIndex));
+                    return false;
+                }
+            }
+
+            LOG_INFO("Save flash slot NodeDB (%u live nodes, %u dirty slots across %u pages)", numMeshNodes,
+                     static_cast<unsigned>(dirtyStorageIndices.size()), static_cast<unsigned>(touchedPageCount));
+            logNodeDbMemorySnapshot("before flash nodedb save", numMeshNodes, nodeStore->slotCount());
+
+            std::vector<uint8_t> page;
+            for (size_t groupBegin = 0; groupBegin < pendingUpdates.size();) {
+                const uint16_t pageIndex = pendingUpdates[groupBegin].pageIndex;
+                if (!flashSlotStore.loadPage(manifest, pageIndex, page)) {
+                    LOG_ERROR("Failed to load flash page %u for batched dirty save", static_cast<unsigned>(pageIndex));
                     return false;
                 }
 
-                if (flashSlotStoreActive) {
-                    flashSlotByStorageIndex.at(storageIndex) = flashSlotIndex;
-                    flashSlotCacheValid.at(storageIndex) = 1;
+                size_t groupEnd = groupBegin;
+                while (groupEnd < pendingUpdates.size() && pendingUpdates[groupEnd].pageIndex == pageIndex) {
+                    const FlashPageUpdate &update = pendingUpdates[groupEnd];
+                    if (!flashSlotStore.writeSlotToPage(manifest, update.flashSlotIndex, nodeStore->slot(update.storageIndex),
+                                                        page)) {
+                        LOG_ERROR("Failed to stage flash slot %u for storage index %u into page %u",
+                                  static_cast<unsigned>(update.flashSlotIndex), static_cast<unsigned>(update.storageIndex),
+                                  static_cast<unsigned>(pageIndex));
+                        return false;
+                    }
+                    ++groupEnd;
                 }
-                flashSlotDirty.at(storageIndex) = 0;
+
+                if (!flashSlotStore.storePage(manifest, pageIndex, page)) {
+                    LOG_ERROR("Failed to write flash page %u for dirty save", static_cast<unsigned>(pageIndex));
+                    return false;
+                }
+
+                if (!verifyFlashPageImage(flashSlotStore, manifest, pageIndex, page)) {
+                    LOG_ERROR("Flash slot NodeDB page verification failed at page %u", static_cast<unsigned>(pageIndex));
+                    return false;
+                }
+
+                for (size_t i = groupBegin; i < groupEnd; ++i) {
+                    const FlashPageUpdate &update = pendingUpdates[i];
+                    if (flashSlotStoreActive) {
+                        flashSlotByStorageIndex.at(update.storageIndex) = update.flashSlotIndex;
+                        flashSlotCacheValid.at(update.storageIndex) = 1;
+                    }
+                    flashSlotDirty.at(update.storageIndex) = 0;
+                }
+
+                groupBegin = groupEnd;
             }
         }
 
