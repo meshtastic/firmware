@@ -140,12 +140,19 @@ std::string InkHUD::RecentsListApplet::getHeaderText()
     text += to_string(settings->recentlyActiveSeconds / 60);
     text += " mins";
 
-    // Print the node count
-    const uint16_t nodeCount = ages.size();
+    // Show the active window as active/total remote nodes so the current
+    // DB size is visible without counting cards or inferring capacity.
+    const uint16_t totalNodes = nodeDB->getNumMeshNodes();
+    const bool hasLocalNode = nodeDB->getMeshNode(nodeDB->getNodeNum()) != nullptr;
+    const uint16_t totalRemoteNodes = (hasLocalNode && totalNodes > 0) ? (totalNodes - 1) : totalNodes;
+    const uint16_t activeNodeCount = (ages.size() < totalRemoteNodes) ? static_cast<uint16_t>(ages.size()) : totalRemoteNodes;
+
     text += ": ";
-    text += to_string(nodeCount);
+    text += to_string(activeNodeCount);
+    text += "/";
+    text += to_string(totalRemoteNodes);
     text += " ";
-    text += (nodeCount == 1) ? "node" : "nodes";
+    text += (totalRemoteNodes == 1) ? "node" : "nodes";
 
     return text;
 }

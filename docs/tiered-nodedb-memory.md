@@ -824,3 +824,42 @@ Stop flash-backed NodeDB saves from rewriting the same page once per dirty slot,
 
 - Phase 18 removes repeated page rewrites during one NodeDB save, but it does not yet add any broader store-level batching API for other callers.
 - Legacy `nodes.proto` import and flash normalization should continue to behave the same, with phase 18 only changing how many page files get touched during the resulting save.
+
+## Phase 19: Telemetry / Display Node Counts
+
+Date: 2026-04-14
+Status: Implemented
+
+### Goal
+
+Make the total NodeDB size visible from the device display, and standardize active-node displays on the same active/total model already used by local telemetry.
+
+### What Changed
+
+- `src/graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.cpp`
+  - Changed the recents header from an active-only count to `<active>/<total>`, while preserving the existing recency-window text.
+  - Kept the numerator based on the applet's own recent-activity tracking, but clamped it against the current remote-node total so the display cannot exceed the live DB size after churn.
+- `src/graphics/draw/UIRenderer.cpp`
+  - Changed `drawNodes()` to format counts without a trailing placeholder word when no suffix is requested, which keeps ratio displays compact on narrow screens.
+  - Changed the device-focused home screen to show the remote-node count as `<online>/<total>` instead of only `<online>`.
+- Telemetry semantics
+  - Kept `num_online_nodes` and `num_total_nodes` unchanged. This phase aligns device displays with those existing fields without changing the wire format.
+
+### Important Constraints For Later Phases
+
+- If a display's active count excludes the local node, its total denominator must exclude the local node too.
+- The total count must come from live NodeDB APIs, not from `MAX_NUM_NODES`, runtime caps, page counts, or any other capacity proxy.
+- Total-only views such as heard/history screens should stay explicitly labeled as totals instead of being presented as active counts.
+- This phase should not change NodeDB storage, flash format, or telemetry protobuf fields.
+
+### Verification
+
+- `pio run -e tbeam-s3-core`
+- `pio run -e heltec-v3`
+- `pio run -e rak4631`
+- Manual smoke test: populate a database where active nodes are a strict subset of total nodes and confirm active-node displays render `<active>/<total>`
+
+### Follow-Up Notes
+
+- Any later applet that shows an active-window count should adopt the same `<active>/<total>` rule rather than inventing a third count format.
+- If a future UI wants to show "including self" versus "remote only", label that explicitly instead of overloading the denominator.
