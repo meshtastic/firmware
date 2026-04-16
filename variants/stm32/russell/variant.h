@@ -13,6 +13,16 @@
 // #define EXT_CHRG_DETECT PA5
 // #define EXT_PWR_DETECT PA4
 
+#define BATTERY_PIN AVBAT
+// ADC_MULTIPLIER: 3.0 = internal 1:3 bridge divider (DS13105§3.18.3)
+// Margin: 1.10 = AVBAT divider tolerance ±10% (Table 82)
+#define ADC_MULTIPLIER (1.01f * 3)
+/*
+Sample OCV curve for Li-SOCl2 primary lithium cells (e.g. Saft cells have fresh OCV of 3.67V)
+#define NUM_OCV_POINTS 11
+#define OCV_ARRAY 3670, 3650, 3630, 3610, 3590, 3560, 3530, 3480, 3400, 3200, 2500
+*/
+
 // Bosch Sensortec BME280
 #define HAS_SENSOR 1
 
