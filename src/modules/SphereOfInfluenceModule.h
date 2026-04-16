@@ -30,12 +30,14 @@ class SphereOfInfluenceModule : private concurrency::OSThread
 
   private:
     // Modulo sampling: track 1-in-N unique node IDs from the packet stream
-    static constexpr uint8_t SAMPLING_DENOMINATOR = 5;
+    // TODO make this scale the sample rate dynamically based on observed mesh size and turnover, to keep the estimator accurate
+    // without excessive memory use
+    static constexpr uint8_t SAMPLING_DENOMINATOR = 10;
     static constexpr uint16_t SAMPLE_TRACKER_SLOTS = 128; // power of 2 for fast modulo
 
     /// Open-addressing hash set for deduplicating sampled node IDs within one hour.
     /// Capacity is SAMPLE_TRACKER_SLOTS; collisions are resolved by linear probing.
-    /// At 1-in-5 sampling, supports ~100 unique nodes before probe chains degrade.
+    /// At 75% load factor cap (96 slots), supports meshes of ~960 nodes at 1-in-10 sampling.
     struct SampleTracker {
         uint32_t slots[SAMPLE_TRACKER_SLOTS];
         uint16_t uniqueCount;
