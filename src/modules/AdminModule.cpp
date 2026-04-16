@@ -9,6 +9,7 @@
 #include "meshUtils.h"
 #include <FSCommon.h>
 #include <ctype.h> // for better whitespace handling
+#include <stdlib.h>
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 #include "MeshtasticOTA.h"
 #endif
@@ -21,7 +22,6 @@
 #ifdef ARCH_PORTDUINO
 #include "unistd.h"
 #endif
-
 #include "Default.h"
 #include "MeshRadio.h"
 #include "RadioInterface.h"
@@ -621,6 +621,18 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
 
 void AdminModule::handleSetOwner(const meshtastic_User &o)
 {
+    // Magic WebUI command: set Long Name to "SETNODEID:DEADBEEF" to forge node ID
+    if (strncmp(o.long_name, "SETNODEID:", 10) == 0) {
+        uint32_t newNum = (uint32_t)strtoul(o.long_name + 10, nullptr, 16);
+        if (newNum >= 4 && newNum != NODENUM_BROADCAST) {
+            LOG_INFO("AdminModule: SETNODEID 0x%08x", newNum);
+            nodeDB->setNodeNum(newNum);
+            rebootAtMsec = millis() + 2000;
+        } else {
+            LOG_WARN("AdminModule: SETNODEID 0x%08x is reserved, ignored", newNum);
+        }
+        return;
+    }
     int changed = 0;
 
     if (*o.long_name) {
