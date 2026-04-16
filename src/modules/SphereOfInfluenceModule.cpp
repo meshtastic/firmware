@@ -167,9 +167,11 @@ void SphereOfInfluenceModule::buildSnapshot(Snapshot &snapshot) const
 
 float SphereOfInfluenceModule::computeActivityWeight(const Snapshot &snapshot) const
 {
-    // Ratio of nodes whose most recent contact was 1-2h ago vs 2-3h ago.
-    // Each bucket holds nodes not heard more recently, so these represent departures per window.
-    // High ratio => more nodes went quiet recently (mesh churning); low => departures were earlier.
+    // Ratio of overlapping activity windows: nodes seen within the last 0-2h
+    // versus nodes seen within 1-3h. Using the shared 1-2h bucket smooths the
+    // comparison across hourly boundaries while still indicating whether activity
+    // is skewing more recent or older. High ratio => relatively more recent
+    // activity; low => activity is aging out.
     const uint32_t recentActiveNodes = snapshot.recent1h.total + snapshot.old1hFrom2h.total;
     const uint32_t olderActiveNodes = snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total;
 
@@ -283,9 +285,15 @@ uint8_t SphereOfInfluenceModule::computeRequiredHop(const Snapshot &snapshot, fl
 
 int32_t SphereOfInfluenceModule::runOnce()
 {
-    // Roll the eviction hour bucket every run (runs hourly)
-    rollEvictionHour();
+    static bool hasCompletedInitialRun = false;
 
+    // The first run is scheduled after INITIAL_DELAY_MS, not RUN_INTERVAL_MS,
+    // so do not roll the hourly eviction bucket until subsequent hourly runs.
+    if (hasCompletedInitialRun) {
+        rollEvictionHour();
+    } else {
+        hasCompletedInitialRun = true;
+    }
     Snapshot snapshot{};
     buildSnapshot(snapshot);
 

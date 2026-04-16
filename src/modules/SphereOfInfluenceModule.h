@@ -1,8 +1,8 @@
 #pragma once
 
+#include "configuration.h"
 #include "MeshTypes.h"
 #include "concurrency/OSThread.h"
-#include "configuration.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 
 #if HAS_VARIABLE_HOPS
