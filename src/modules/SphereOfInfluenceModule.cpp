@@ -35,6 +35,12 @@ constexpr float ACTIVITY_WEIGHT_STRICT_MIN = 1.2f;   // Above this: STRICT
 // NodeDB capacity thresholds for scale factor estimation
 constexpr float NODEDB_NEAR_CAPACITY_RATIO = 0.9f;    // 90% of MAX_NUM_NODES triggers scaling
 constexpr float TURNOVER_CAPACITY_LIMIT_RATIO = 0.2f; // Evictions below 20% of MAX = limit of turnover scaling
+
+// Modulo sampling: track 1-in-N unique node IDs from the packet stream
+// Dynamically adjusted to keep sample tracker load between 1/8 and 5/8 capacity
+uint8_t SAMPLING_DENOMINATOR = 10; // mutable (was: constexpr)
+constexpr uint8_t SAMPLING_DENOMINATOR_MIN = 1;
+constexpr uint8_t SAMPLING_DENOMINATOR_MAX = 200;
 } // namespace
 
 SphereOfInfluenceModule *sphereOfInfluenceModule;
@@ -65,7 +71,7 @@ SphereOfInfluenceModule::SphereOfInfluenceModule() : concurrency::OSThread("Sphe
 }
 
 /// Called by NodeDB each time a node is evicted to make room for a new one.
-/// The count is rolled into a 12h EMA once per hour by rollEvictionHour().
+/// The count is rolled into a 12h EMA once per hour by rollHour().
 void SphereOfInfluenceModule::recordEviction()
 {
     evictionsCurrentHour++;
@@ -114,20 +120,44 @@ void SphereOfInfluenceModule::recordPacketSender(uint32_t nodeId)
 uint16_t SphereOfInfluenceModule::estimateSampledMeshSize() const
 {
     if (rollingSampledAvg12h < 2.0f)
-        return 0; // fewer than ~2 sampled nodes/hour: unreliable
-    const float estimated = rollingSampledAvg12h * SAMPLING_DENOMINATOR;
-    return static_cast<uint16_t>(std::min(estimated, 65535.0f));
+        return 0; // EMA of estimated mesh size too low to be reliable
+    return static_cast<uint16_t>(std::min(rollingSampledAvg12h, 65535.0f));
 }
 
-void SphereOfInfluenceModule::rollEvictionHour()
+void SphereOfInfluenceModule::rollHour()
 {
     // EMA with alpha = 1/12: approximates a 12h rolling average
     // newAvg = oldAvg * (11/12) + currentHour * (1/12)
     rollingEvictionAvg12h = rollingEvictionAvg12h * (11.0f / 12.0f) + evictionsCurrentHour * (1.0f / 12.0f);
     evictionsCurrentHour = 0;
 
-    // Roll sampled unique node count into 12h EMA, then reset for next hour
-    rollingSampledAvg12h = rollingSampledAvg12h * (11.0f / 12.0f) + sampledNodesCurrentHour.uniqueCount * (1.0f / 12.0f);
+    // Roll estimated mesh size into 12h EMA using the denominator active this hour, before any adjustment.
+    // Storing the mesh estimate (rather than the raw sample count) ensures the EMA remains meaningful
+    // across denominator changes — each hour's contribution is already in absolute node counts.
+    const float estimatedMeshThisHour = sampledNodesCurrentHour.uniqueCount * SAMPLING_DENOMINATOR;
+    rollingSampledAvg12h = rollingSampledAvg12h * (11.0f / 12.0f) + estimatedMeshThisHour * (1.0f / 12.0f);
+
+    // Adaptive sampling: adjust denominator based on sample tracker load factor.
+    // Target: keep tracker between 1/8 and 5/8 of the 75% load factor cap to avoid hash collisions
+    // while maintaining enough samples for a reliable estimate.
+    const float samplesThisHour = static_cast<float>(sampledNodesCurrentHour.uniqueCount);
+    const float maxUseful = static_cast<float>(SAMPLE_TRACKER_SLOTS) * (3.0f / 4.0f); // 75% load factor cap
+    const float loadRatio = samplesThisHour / maxUseful;
+
+    if (loadRatio > 5.0f / 8.0f && SAMPLING_DENOMINATOR < SAMPLING_DENOMINATOR_MAX) {
+        // Tracker getting too full; reduce sample rate (increase denominator)
+        SAMPLING_DENOMINATOR = static_cast<uint8_t>(
+            std::min(static_cast<uint16_t>(SAMPLING_DENOMINATOR) * 2, static_cast<uint16_t>(SAMPLING_DENOMINATOR_MAX)));
+        LOG_INFO("[SOI] Adaptive sampling: denominator increased to %u (load ratio=%.2f)", SAMPLING_DENOMINATOR,
+                 static_cast<double>(loadRatio));
+    } else if (loadRatio < 1.0f / 8.0f && SAMPLING_DENOMINATOR > SAMPLING_DENOMINATOR_MIN) {
+        // Tracker underutilized; increase sample rate (decrease denominator)
+        SAMPLING_DENOMINATOR = static_cast<uint8_t>(
+            std::max(static_cast<uint16_t>(SAMPLING_DENOMINATOR / 2), static_cast<uint16_t>(SAMPLING_DENOMINATOR_MIN)));
+        LOG_INFO("[SOI] Adaptive sampling: denominator decreased to %u (load ratio=%.2f)", SAMPLING_DENOMINATOR,
+                 static_cast<double>(loadRatio));
+    }
+
     sampledNodesCurrentHour.clear();
 }
 
@@ -290,7 +320,7 @@ int32_t SphereOfInfluenceModule::runOnce()
     // The first run is scheduled after INITIAL_DELAY_MS, not RUN_INTERVAL_MS,
     // so do not roll the hourly eviction bucket until subsequent hourly runs.
     if (hasCompletedInitialRun) {
-        rollEvictionHour();
+        rollHour();
     } else {
         hasCompletedInitialRun = true;
     }

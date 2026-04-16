@@ -1,11 +1,17 @@
 #pragma once
 
-#include "configuration.h"
 #include "MeshTypes.h"
 #include "concurrency/OSThread.h"
+#include "configuration.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 
 #if HAS_VARIABLE_HOPS
+
+// Thread-safety: all access is single-threaded. recordEviction() and
+// recordPacketSender() are called from NodeDB::updateFrom() on the main loop;
+// getLastRequiredHop() is called from Router::send() on the same loop; and
+// runOnce() is invoked cooperatively by mainController. No preemption occurs
+// between these paths, so no locking is required.
 
 class SphereOfInfluenceModule : private concurrency::OSThread
 {
@@ -29,15 +35,11 @@ class SphereOfInfluenceModule : private concurrency::OSThread
     int32_t runOnce() override;
 
   private:
-    // Modulo sampling: track 1-in-N unique node IDs from the packet stream
-    // TODO make this scale the sample rate dynamically based on observed mesh size and turnover, to keep the estimator accurate
-    // without excessive memory use
-    static constexpr uint8_t SAMPLING_DENOMINATOR = 10;
     static constexpr uint16_t SAMPLE_TRACKER_SLOTS = 128; // power of 2 for fast modulo
 
     /// Open-addressing hash set for deduplicating sampled node IDs within one hour.
     /// Capacity is SAMPLE_TRACKER_SLOTS; collisions are resolved by linear probing.
-    /// At 75% load factor cap (96 slots), supports meshes of ~960 nodes at 1-in-10 sampling.
+    /// At 75% load factor cap (96 slots) with an adaptive denominator targeting 1/8-5/8 load.
     struct SampleTracker {
         uint32_t slots[SAMPLE_TRACKER_SLOTS];
         uint16_t uniqueCount;
@@ -68,7 +70,7 @@ class SphereOfInfluenceModule : private concurrency::OSThread
     float estimateScaleFactor(const Snapshot &snapshot) const;
     uint16_t estimateSampledMeshSize() const;
     uint8_t computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const;
-    void rollEvictionHour();
+    void rollHour();
 
     // Hop recommendation state
     uint8_t lastRequiredHop = HOP_MAX;
@@ -81,7 +83,7 @@ class SphereOfInfluenceModule : private concurrency::OSThread
 
     // Sampling-based mesh size estimation for high-turnover scenarios
     SampleTracker sampledNodesCurrentHour = {};
-    float rollingSampledAvg12h = 0.0f; // EMA of unique sampled nodes per hour
+    float rollingSampledAvg12h = 0.0f; // EMA of estimated mesh size per hour (denominator-normalised)
 };
 
 extern SphereOfInfluenceModule *sphereOfInfluenceModule;
