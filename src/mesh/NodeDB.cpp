@@ -1149,6 +1149,28 @@ void NodeDB::pickNewNodeNum()
     myNodeInfo.my_node_num = nodeNum;
 }
 
+void NodeDB::setNodeNum(uint32_t newNum)
+{
+    if (newNum < NUM_RESERVED || newNum == NODENUM_BROADCAST) {
+        LOG_WARN("setNodeNum: value 0x%08x is reserved/broadcast, ignoring", newNum);
+        return;
+    }
+    LOG_INFO("setNodeNum: overriding node number to 0x%08x", newNum);
+    // Remove old entry so it doesn't ghost in the mesh DB after reboot
+    NodeNum oldNum = myNodeInfo.my_node_num;
+    if (oldNum != 0 && oldNum != newNum)
+        removeNodeByNum(oldNum);
+    // Remove any conflicting entry that already has newNum with a different MAC —
+    // if left in the DB, pickNewNodeNum() will see the collision on reboot and
+    // silently randomize our chosen ID instead of using it.
+    removeNodeByNum(newNum);
+    myNodeInfo.my_node_num = newNum;
+    snprintf(owner.id,         sizeof(owner.id),         "!%08x",      newNum);
+    snprintf(owner.long_name,  sizeof(owner.long_name),  "Meshtastic %04x", newNum & 0x0ffff);
+    snprintf(owner.short_name, sizeof(owner.short_name), "%04x",       newNum & 0x0ffff);
+    saveToDisk(SEGMENT_DEVICESTATE);
+}
+
 /** Load a protobuf from a file, return LoadFileResult */
 LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
                                  void *dest_struct)

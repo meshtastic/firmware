@@ -229,6 +229,13 @@ class NodeDB
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
+    /**
+     * Override the persisted node number and save to flash.
+     * pickNewNodeNum() skips MAC derivation when my_node_num != 0,
+     * so this takes effect permanently after the next reboot.
+     */
+    void setNodeNum(uint32_t newNum);
+
     /// @return our node ID as a string in the format "!xxxxxxxx"
     std::string getNodeId() const;
 
