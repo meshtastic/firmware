@@ -4,6 +4,7 @@
 
 #include "DisplayFormatters.h"
 #include "GPS.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "RTC.h"
 #include "Router.h"
@@ -167,6 +168,11 @@ int32_t InkHUD::MenuApplet::runOnce()
     return OSThread::disable();
 }
 
+// Storage for the dynamically-built region preset list — populated in showPage(NODE_CONFIG_PRESET)
+static constexpr uint8_t MAX_REGION_PRESETS = 16;
+static meshtastic_Config_LoRaConfig_ModemPreset regionPresets[MAX_REGION_PRESETS];
+static uint8_t regionPresetCount = 0;
+
 static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
 {
     if (config.lora.region == region)
@@ -186,7 +192,7 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
 
     initRegion();
 
-    if (myRegion && myRegion->dutyCycle < 100) {
+    if (myRegion && getEffectiveDutyCycle() < 100) {
         config.lora.ignore_mqtt = true;
     }
 
@@ -659,6 +665,14 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_BR_902);
         break;
 
+    case SET_REGION_EU_866:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_866);
+        break;
+
+    case SET_REGION_NARROW_868:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_NARROW_868);
+        break;
+
     // Roles
     case SET_ROLE_CLIENT:
         applyDeviceRole(meshtastic_Config_DeviceConfig_Role_CLIENT);
@@ -678,36 +692,45 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     // Presets
     case SET_PRESET_LONG_SLOW:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW);
+        applyLoRaPreset(PRESET(LONG_SLOW));
         break;
 
     case SET_PRESET_LONG_MODERATE:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE);
+        applyLoRaPreset(PRESET(LONG_MODERATE));
         break;
 
     case SET_PRESET_LONG_FAST:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+        applyLoRaPreset(PRESET(LONG_FAST));
         break;
 
     case SET_PRESET_MEDIUM_SLOW:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW);
+        applyLoRaPreset(PRESET(MEDIUM_SLOW));
         break;
 
     case SET_PRESET_MEDIUM_FAST:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+        applyLoRaPreset(PRESET(MEDIUM_FAST));
         break;
 
     case SET_PRESET_SHORT_SLOW:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW);
+        applyLoRaPreset(PRESET(SHORT_SLOW));
         break;
 
     case SET_PRESET_SHORT_FAST:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST);
+        applyLoRaPreset(PRESET(SHORT_FAST));
         break;
 
     case SET_PRESET_SHORT_TURBO:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO);
+        applyLoRaPreset(PRESET(SHORT_TURBO));
         break;
+
+    case SET_PRESET_FROM_REGION: {
+        // cursor - 1 because index 0 is "Back"
+        const uint8_t index = cursor - 1;
+        if (index < regionPresetCount) {
+            applyLoRaPreset(regionPresets[index]);
+        }
+        break;
+    }
 
     // Timezones
     case SET_TZ_US_HAWAII:
@@ -1295,6 +1318,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("US", MenuAction::SET_REGION_US, MenuPage::EXIT));
         items.push_back(MenuItem("EU 868", MenuAction::SET_REGION_EU_868, MenuPage::EXIT));
         items.push_back(MenuItem("EU 433", MenuAction::SET_REGION_EU_433, MenuPage::EXIT));
+        items.push_back(MenuItem("EU 866", MenuAction::SET_REGION_EU_866, MenuPage::EXIT));
+        items.push_back(MenuItem("EU 868 Narrow", MenuAction::SET_REGION_NARROW_868, MenuPage::EXIT));
         items.push_back(MenuItem("CN", MenuAction::SET_REGION_CN, MenuPage::EXIT));
         items.push_back(MenuItem("JP", MenuAction::SET_REGION_JP, MenuPage::EXIT));
         items.push_back(MenuItem("ANZ", MenuAction::SET_REGION_ANZ, MenuPage::EXIT));
@@ -1324,13 +1349,17 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case NODE_CONFIG_PRESET: {
         previousPage = MenuPage::NODE_CONFIG_LORA;
         items.push_back(MenuItem("Back", previousPage));
-        items.push_back(MenuItem("Long Moderate", MenuAction::SET_PRESET_LONG_MODERATE, MenuPage::EXIT));
-        items.push_back(MenuItem("Long Fast", MenuAction::SET_PRESET_LONG_FAST, MenuPage::EXIT));
-        items.push_back(MenuItem("Medium Slow", MenuAction::SET_PRESET_MEDIUM_SLOW, MenuPage::EXIT));
-        items.push_back(MenuItem("Medium Fast", MenuAction::SET_PRESET_MEDIUM_FAST, MenuPage::EXIT));
-        items.push_back(MenuItem("Short Slow", MenuAction::SET_PRESET_SHORT_SLOW, MenuPage::EXIT));
-        items.push_back(MenuItem("Short Fast", MenuAction::SET_PRESET_SHORT_FAST, MenuPage::EXIT));
-        items.push_back(MenuItem("Short Turbo", MenuAction::SET_PRESET_SHORT_TURBO, MenuPage::EXIT));
+        regionPresetCount = 0;
+        if (myRegion && myRegion->profile) {
+            const meshtastic_Config_LoRaConfig_ModemPreset *presets = myRegion->getAvailablePresets();
+            size_t numPresets = myRegion->getNumPresets();
+            for (size_t i = 0; i < numPresets && regionPresetCount < MAX_REGION_PRESETS; ++i) {
+                regionPresets[regionPresetCount++] = presets[i];
+                const char *name = DisplayFormatters::getModemPresetDisplayName(presets[i], false, true);
+                nodeConfigLabels.emplace_back(name);
+                items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_PRESET_FROM_REGION, MenuPage::EXIT));
+            }
+        }
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }

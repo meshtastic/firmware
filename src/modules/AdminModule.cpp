@@ -818,7 +818,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 // Ensure initRegion() uses the newly validated region
                 config.lora.region = validatedLora.region;
                 initRegion();
-                if (myRegion->dutyCycle < 100) {
+                if (getEffectiveDutyCycle() < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
                 }
                 if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {

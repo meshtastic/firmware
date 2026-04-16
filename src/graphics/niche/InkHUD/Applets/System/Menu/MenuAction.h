@@ -64,6 +64,8 @@ enum MenuAction {
     SET_REGION_KZ_863,
     SET_REGION_NP_865,
     SET_REGION_BR_902,
+    SET_REGION_EU_866,
+    SET_REGION_NARROW_868,
     // Device Roles
     SET_ROLE_CLIENT,
     SET_ROLE_CLIENT_MUTE,
@@ -78,6 +80,11 @@ enum MenuAction {
     SET_PRESET_SHORT_SLOW,
     SET_PRESET_SHORT_FAST,
     SET_PRESET_SHORT_TURBO,
+    SET_PRESET_LITE_SLOW,
+    SET_PRESET_LITE_FAST,
+    SET_PRESET_NARROW_SLOW,
+    SET_PRESET_NARROW_FAST,
+    SET_PRESET_FROM_REGION, // Dynamic: preset chosen from region-available list
     // Timezones
     SET_TZ_US_HAWAII,
     SET_TZ_US_ALASKA,

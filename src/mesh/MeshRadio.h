@@ -10,9 +10,11 @@
 static constexpr meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
     static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(0xFF);
 
+#define PRESET(name) meshtastic_Config_LoRaConfig_ModemPreset_##name
+
 // Region profile: bundles the preset list with regulatory parameters shared across regions
 struct RegionProfile {
-    const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated; first entry is the default
+    const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated
     float spacing;                                           // gaps between radio channels
     float padding;                                           // padding at each side of the "operating channel"
     bool audioPermitted;
@@ -23,11 +25,18 @@ struct RegionProfile {
     uint8_t overrideSlot;     // a per-region override slot for if we need to fix it in place
 };
 
+/**
+ * Get the effective duty cycle for the current region based on device role.
+ * For EU_866, returns 10% for fixed devices (ROUTER, ROUTER_LATE) and 2.5% for mobile devices.
+ * For other regions, returns the standard duty cycle.
+ */
+extern float getEffectiveDutyCycle();
+
 extern const RegionProfile PROFILE_STD;
 extern const RegionProfile PROFILE_EU868;
 extern const RegionProfile PROFILE_UNDEF;
-// extern const RegionProfile  PROFILE_LITE;
-// extern const RegionProfile  PROFILE_NARROW;
+extern const RegionProfile PROFILE_LITE;
+extern const RegionProfile PROFILE_NARROW;
 // extern const RegionProfile  PROFILE_HAM;
 
 // Map from old region names to new region enums
@@ -40,10 +49,11 @@ struct RegionInfo {
     bool freqSwitching;
     bool wideLora;
     const RegionProfile *profile;
+    meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
     const char *name; // EU433 etc
 
     // Preset accessors (delegate through profile)
-    meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return profile->presets[0]; }
+    meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return defaultPreset; }
     const meshtastic_Config_LoRaConfig_ModemPreset *getAvailablePresets() const { return profile->presets; }
     size_t getNumPresets() const
     {
@@ -140,45 +150,65 @@ static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset 
                                        uint8_t &cr)
 {
     switch (preset) {
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+    case PRESET(SHORT_TURBO):
         bwKHz = wideLora ? 1625.0f : 500.0f;
         cr = 5;
         sf = 7;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+    case PRESET(SHORT_FAST):
         bwKHz = wideLora ? 812.5f : 250.0f;
         cr = 5;
         sf = 7;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+    case PRESET(SHORT_SLOW):
         bwKHz = wideLora ? 812.5f : 250.0f;
         cr = 5;
         sf = 8;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+    case PRESET(MEDIUM_FAST):
         bwKHz = wideLora ? 812.5f : 250.0f;
         cr = 5;
         sf = 9;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+    case PRESET(MEDIUM_SLOW):
         bwKHz = wideLora ? 812.5f : 250.0f;
         cr = 5;
         sf = 10;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO:
+    case PRESET(LONG_TURBO):
         bwKHz = wideLora ? 1625.0f : 500.0f;
         cr = 8;
         sf = 11;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+    case PRESET(LONG_MODERATE):
         bwKHz = wideLora ? 406.25f : 125.0f;
         cr = 8;
         sf = 11;
         break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+    case PRESET(LONG_SLOW):
         bwKHz = wideLora ? 406.25f : 125.0f;
         cr = 8;
         sf = 12;
+        break;
+    case PRESET(LITE_FAST):
+        bwKHz = 125;
+        cr = 5;
+        sf = 9;
+        break;
+    case PRESET(LITE_SLOW):
+        bwKHz = 125;
+        cr = 5;
+        sf = 10;
+        break;
+    case PRESET(NARROW_FAST):
+        bwKHz = 62.5f;
+        cr = 6;
+        sf = 7;
+        break;
+    case PRESET(NARROW_SLOW):
+        bwKHz = 62.5f;
+        cr = 6;
+        sf = 8;
         break;
     default: // LONG_FAST (or illegal)
         bwKHz = wideLora ? 812.5f : 250.0f;

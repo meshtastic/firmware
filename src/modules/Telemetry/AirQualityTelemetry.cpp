@@ -116,11 +116,11 @@ int32_t AirQualityTelemetryModule::runOnce()
         for (TelemetrySensor *sensor : sensors) {
             if (!sensor->canSleep()) {
                 LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
-            } else if (((lastTelemetry == 0) ||
-                        !Throttle::isWithinTimespanMs(lastTelemetry - sensor->wakeUpTimeMs(),
-                                                      Default::getConfiguredOrDefaultMsScaled(
-                                                          moduleConfig.telemetry.air_quality_interval,
-                                                          default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+            } else if (((lastTelemetry == 0) || !Throttle::isWithinTimespanMs(lastTelemetry - sensor->wakeUpTimeMs(),
+                                                                              Default::getConfiguredOrDefaultMsScaled(
+                                                                                  moduleConfig.telemetry.air_quality_interval,
+                                                                                  default_telemetry_broadcast_interval_secs,
+                                                                                  numOnlineNodes, TrafficType::TELEMETRY))) &&
                        airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
                        airTime->isTxAllowedAirUtil()) {
                 if (!sensor->isActive()) {
@@ -136,10 +136,10 @@ int32_t AirQualityTelemetryModule::runOnce()
             }
         }
 
-        if (((lastTelemetry == 0) ||
-             !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
-                                                              moduleConfig.telemetry.air_quality_interval,
-                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+        if (((lastTelemetry == 0) || !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
+                                                                                      moduleConfig.telemetry.air_quality_interval,
+                                                                                      default_telemetry_broadcast_interval_secs,
+                                                                                      numOnlineNodes, TrafficType::TELEMETRY))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
@@ -159,7 +159,8 @@ int32_t AirQualityTelemetryModule::runOnce()
             if (sensor->isActive() && sensor->canSleep()) {
                 if (sensor->wakeUpTimeMs() <
                     (int32_t)Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
-                                                                     default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
+                                                                     default_telemetry_broadcast_interval_secs, numOnlineNodes,
+                                                                     TrafficType::TELEMETRY)) {
                     LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
                     sensor->sleep();
                 } else {
