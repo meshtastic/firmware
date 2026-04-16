@@ -8,20 +8,16 @@ class NimbleBluetooth : public BluetoothApi
     void shutdown() override;
     void deinit() override;
     void clearBonds() override;
-    bool isActive();
+    bool isActive() override;
     bool isConnected() override;
     int getRssi() override;
     void sendLog(const uint8_t *logMessage, size_t length) override;
-#if defined(NIMBLE_TWO)
     void startAdvertising();
-#endif
     bool isDeInit = false;
+    virtual ~NimbleBluetooth() {}
 
   private:
     void setupService();
-#if !defined(NIMBLE_TWO)
-    void startAdvertising();
-#endif
 };
 
 void setBluetoothEnable(bool enable);
