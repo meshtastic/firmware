@@ -14,7 +14,7 @@ static const uint8_t RX = 38;
 static const uint8_t SDA = 45;
 static const uint8_t SCL = 46;
 #else
-static const uint8_t SDA = 46;
+static const uint8_t SDA = 45;
 static const uint8_t SCL = 46;
 #endif
 
