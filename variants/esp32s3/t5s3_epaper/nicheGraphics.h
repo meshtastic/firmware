@@ -67,12 +67,20 @@ void setupNicheGraphics()
     InkHUD::Applet::fontMedium = FREESANS_18PT_WIN1253;
     InkHUD::Applet::fontSmall = FREESANS_12PT_WIN1253;
 
-    // Init settings, and customize defaults
-    inkhud->persistence->settings.userTiles.maxCount = 2;
-    inkhud->persistence->settings.rotation = 3;
-    inkhud->persistence->settings.userTiles.count = 1;                 // One tile by default, keep it simple
-    inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
-    inkhud->persistence->settings.optionalMenuItems.backlight = true;  // Backlight toggle in settings menu
+    // Load persisted settings. begin() calls loadSettings() internally, so we save after
+    // applying defaults to ensure begin() picks up our values from flash.
+    inkhud->persistence->loadSettings();
+    if (inkhud->persistence->settings.tips.firstBoot) {
+        inkhud->persistence->settings.rotation = 3;
+        inkhud->persistence->settings.userTiles.maxCount = 2;
+        inkhud->persistence->settings.userTiles.count = 1;
+        inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
+        inkhud->persistence->settings.optionalMenuItems.backlight = true;
+    }
+    // Alignment must cancel rotation for visual-frame touch input: (rotation + alignment) % 4 == 0.
+    // Recomputed on every boot so it tracks persisted rotation. The bridge also updates it at runtime.
+    inkhud->persistence->settings.joystick.alignment = (4 - inkhud->persistence->settings.rotation) % 4;
+    inkhud->persistence->saveSettings();
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature

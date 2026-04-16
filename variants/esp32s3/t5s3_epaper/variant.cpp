@@ -25,6 +25,10 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
     {
         auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
 
+        // Keep alignment in sync with the current rotation so that visual-frame gestures
+        // always pass through nav functions without remapping: (rotation + alignment) % 4 == 0.
+        inkhud->persistence->settings.joystick.alignment = (4 - inkhud->persistence->settings.rotation) % 4;
+
         // Check whether a system applet (e.g. menu) is currently handling input
         bool systemHandlingInput = false;
         for (NicheGraphics::InkHUD::SystemApplet *sa : inkhud->systemApplets) {
@@ -77,9 +81,32 @@ bool readTouch(int16_t *x, int16_t *y)
         int16_t raw_x;
         int16_t raw_y;
         if (touch.getPoint(&raw_x, &raw_y)) {
-            // rotate 90° for landscape
-            *x = raw_y;
-            *y = EPD_WIDTH - 1 - raw_x;
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+            // Transform raw GT911 axes to visual-frame coordinates for the current display rotation.
+            // rotation=3 is the physical identity (device's default orientation).
+            switch (NicheGraphics::InkHUD::InkHUD::getInstance()->persistence->settings.rotation) {
+            default:
+            case 3:
+                *x = raw_x;
+                *y = raw_y;
+                break; // identity
+            case 2:
+                *x = (EPD_WIDTH - 1) - raw_y;
+                *y = raw_x;
+                break; // 90° CW tilt
+            case 1:
+                *x = (EPD_HEIGHT - 1) - raw_x;
+                *y = (EPD_WIDTH - 1) - raw_y;
+                break; // 180° flip
+            case 0:
+                *x = raw_y;
+                *y = (EPD_HEIGHT - 1) - raw_x;
+                break; // 90° CCW tilt
+            }
+#else
+            *x = raw_x;
+            *y = raw_y;
+#endif
             LOG_DEBUG("touched(%d/%d)", *x, *y);
             return true;
         }
