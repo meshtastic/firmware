@@ -10,8 +10,20 @@
 #include "memGet.h"
 #include "configuration.h"
 
-#ifdef ARCH_STM32WL
+#if defined(MESHTASTIC_DYNAMIC_SBRK_HEAP)
 #include <malloc.h>
+#include <unistd.h> // sbrk
+
+// Returns the uncommitted sbrk headroom: addressable space between the current heap
+// break and the stack pointer that has not yet been committed to the arena.
+// Currently used on: ARCH_STM32WL
+static uint32_t sbrkHeadroom()
+{
+    uint32_t sp;
+    __asm volatile("mov %0, sp" : "=r"(sp));
+    uint32_t heap_end = (uint32_t)sbrk(0);
+    return (sp > heap_end) ? (sp - heap_end) : 0;
+}
 #endif
 
 MemGet memGet;
@@ -28,9 +40,9 @@ uint32_t MemGet::getFreeHeap()
     return dbgHeapFree();
 #elif defined(ARCH_RP2040)
     return rp2040.getFreeHeap();
-#elif defined(ARCH_STM32WL)
+#elif defined(MESHTASTIC_DYNAMIC_SBRK_HEAP) // Currently: ARCH_STM32WL
     struct mallinfo m = mallinfo();
-    return m.fordblks; // Total free space (bytes)
+    return m.fordblks + sbrkHeadroom(); // Free space within arena + uncommitted sbrk headroom
 #else
     // this platform does not have heap management function implemented
     return UINT32_MAX;
@@ -49,9 +61,9 @@ uint32_t MemGet::getHeapSize()
     return dbgHeapTotal();
 #elif defined(ARCH_RP2040)
     return rp2040.getTotalHeap();
-#elif defined(ARCH_STM32WL)
+#elif defined(MESHTASTIC_DYNAMIC_SBRK_HEAP) // Currently: ARCH_STM32WL
     struct mallinfo m = mallinfo();
-    return m.arena; // Non-mmapped space allocated (bytes)
+    return m.arena + sbrkHeadroom(); // Non-mmapped space allocated + uncommitted sbrk headroom
 #else
     // this platform does not have heap management function implemented
     return UINT32_MAX;
