@@ -2,8 +2,8 @@ name: alphasigma — Sync & Build
 
 on:
   schedule:
-    - cron: '0 6 * * *'      # runs daily at 06:00 UTC
-  workflow_dispatch:          # also lets you trigger manually
+    - cron: '0 6 * * *'
+  workflow_dispatch:
     inputs:
       targets:
         description: 'Space-separated PlatformIO targets'
@@ -34,19 +34,19 @@ jobs:
         id: sync
         run: |
           git remote add upstream https://github.com/meshtastic/firmware.git || true
-          git fetch upstream main --recurse-submodules
+          git fetch upstream develop --recurse-submodules
           LOCAL=$(git rev-parse HEAD)
-          UPSTREAM=$(git rev-parse upstream/main)
+          UPSTREAM=$(git rev-parse upstream/develop)
           if [ "$LOCAL" = "$UPSTREAM" ]; then
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "### ⏭ No upstream changes today" >> $GITHUB_STEP_SUMMARY
           else
-            git merge upstream/main --no-edit || {
+            git merge upstream/develop --no-edit || {
               echo "### ❌ Merge conflict — resolve manually" >> $GITHUB_STEP_SUMMARY
               git merge --abort
               exit 1
             }
-            git push origin main
+            git push origin develop
             echo "changed=true" >> $GITHUB_OUTPUT
             echo "### ✅ Merged upstream into alphasigma fork" >> $GITHUB_STEP_SUMMARY
           fi
