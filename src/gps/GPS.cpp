@@ -52,7 +52,7 @@ SerialUART *GPS::_serial_gps = &GPS_SERIAL_PORT;
 HardwareSerial *GPS::_serial_gps = nullptr;
 #endif
 
-GPS *gps = nullptr;
+std::unique_ptr<GPS> gps = nullptr;
 
 static GPSUpdateScheduling scheduling;
 
@@ -93,7 +93,7 @@ static const char *getGPSPowerStateString(GPSPowerState state)
 
 #ifdef PIN_GPS_SWITCH
 // If we have a hardware switch, define a periodic watcher outside of the GPS runOnce thread, since this can be sleeping
-// idefinitely
+// indefinitely
 
 int lastState = LOW;
 bool firstrun = true;
@@ -127,7 +127,7 @@ static int32_t gpsSwitch()
     return 1000;
 }
 
-static concurrency::Periodic *gpsPeriodic;
+static std::unique_ptr<concurrency::Periodic> gpsPeriodic;
 #endif
 
 static void UBXChecksum(uint8_t *message, size_t length)
@@ -586,14 +586,14 @@ bool GPS::setup()
             _serial_gps->write("$PMTK301,2*2E\r\n");
             delay(250);
         } else if (gnssModel == GNSS_MODEL_ATGM336H) {
-            // Set the intial configuration of the device - these _should_ work for most AT6558 devices
+            // Set the initial configuration of the device - these _should_ work for most AT6558 devices
             msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x07, 250) != GNSS_RESPONSE_OK) {
                 LOG_WARN("ATGM336H: Could not set Config");
             }
 
-            // Set the update frequence to 1Hz
+            // Set the update frequency to 1Hz
             msglen = makeCASPacket(0x06, 0x04, sizeof(_message_CAS_CFG_RATE_1HZ), _message_CAS_CFG_RATE_1HZ);
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x04, 250) != GNSS_RESPONSE_OK) {
@@ -700,7 +700,7 @@ bool GPS::setup()
                 } else { // 8,9
                     LOG_INFO("GPS+SBAS+GLONASS+Galileo configured");
                 }
-                // Documentation say, we need wait atleast 0.5s after reconfiguration of GNSS module, before sending next
+                // Documentation say, we need wait at least 0.5s after reconfiguration of GNSS module, before sending next
                 // commands for the M8 it tends to be more... 1 sec should be enough ;>)
                 delay(1000);
             }
@@ -733,7 +733,7 @@ bool GPS::setup()
                 SEND_UBX_PACKET(0x06, 0x86, _message_PMS, "enable powersave for GPS", 500);
                 SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "enable powersave details for GPS", 500);
 
-                // For M8 we want to enable NMEA vserion 4.10 so we can see the additional sats.
+                // For M8 we want to enable NMEA version 4.10 so we can see the additional sats.
                 if (gnssModel == GNSS_MODEL_UBLOX8) {
                     clearBuffer();
                     SEND_UBX_PACKET(0x06, 0x17, _message_NMEA, "enable NMEA 4.10", 500);
@@ -905,6 +905,12 @@ void GPS::writePinStandby(bool standby)
     // Write and log
     pinMode(PIN_GPS_STANDBY, OUTPUT);
     digitalWrite(PIN_GPS_STANDBY, val);
+
+    // Enter backup mode on PA1010D; TODO: may be applicable to other MTK GPS too
+    if (IS_ONE_OF(gnssModel, GNSS_MODEL_MTK_PA1010D)) {
+        _serial_gps->write("$PMTK225,4*2F\r\n");
+    }
+
 #ifdef GPS_DEBUG
     LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
 #endif
@@ -1205,7 +1211,7 @@ int32_t GPS::runOnce()
         return disable(); // This should trigger when we have a fixed position, and get that first position
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
-    // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
+    // if not awake we can run super infrequently (once every 5 secs?) to see if we need to wake.
     return (powerState == GPS_ACTIVE) ? GPS_THREAD_INTERVAL : 5000;
 }
 
@@ -1479,7 +1485,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
     if (bufferSize > 2048)
         bufferSize = 2048;
 
-    char *response = new char[bufferSize](); // Dynamically allocate based on baud rate
+    auto response = std::unique_ptr<char[]>(new char[bufferSize]); // Dynamically allocate based on baud rate
     uint16_t responseLen = 0;
     unsigned long start = millis();
     while (millis() - start < timeout) {
@@ -1495,19 +1501,18 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
             if (c == ',' || (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n')) {
                 // check if we can see our chips
                 for (const auto &chipInfo : responseMap) {
-                    if (strstr(response, chipInfo.detectionString.c_str()) != nullptr) {
+                    if (strstr(response.get(), chipInfo.detectionString.c_str()) != nullptr) {
 #ifdef GPS_DEBUG
-                        LOG_DEBUG(response);
+                        LOG_DEBUG(response.get());
 #endif
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
-                        delete[] response; // Cleanup before return
                         return chipInfo.driver;
                     }
                 }
             }
             if (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n') {
 #ifdef GPS_DEBUG
-                LOG_DEBUG(response);
+                LOG_DEBUG(response.get());
 #endif
                 // Reset the response buffer for the next potential message
                 responseLen = 0;
@@ -1516,13 +1521,12 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
         }
     }
 #ifdef GPS_DEBUG
-    LOG_DEBUG(response);
+    LOG_DEBUG(response.get());
 #endif
-    delete[] response;         // Cleanup before return
     return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
 }
 
-GPS *GPS::createGps()
+std::unique_ptr<GPS> GPS::createGps()
 {
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
@@ -1547,7 +1551,7 @@ GPS *GPS::createGps()
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
 
-    GPS *new_gps = new GPS;
+    auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
 
@@ -1575,7 +1579,7 @@ GPS *GPS::createGps()
 #ifdef PIN_GPS_SWITCH
     // toggle GPS via external GPIO switch
     pinMode(PIN_GPS_SWITCH, INPUT);
-    gpsPeriodic = new concurrency::Periodic("GPSSwitch", gpsSwitch);
+    gpsPeriodic = std::unique_ptr<concurrency::Periodic>(new concurrency::Periodic("GPSSwitch", gpsSwitch));
 #endif
 
 // Currently disabled per issue #525 (TinyGPS++ crash bug)

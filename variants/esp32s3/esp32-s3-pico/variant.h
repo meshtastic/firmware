@@ -8,7 +8,6 @@
 #define EXT_NOTIFY_OUT 22
 #define BUTTON_PIN 0 // 17
 
-// #define LED_PIN PIN_LED
 // Board has RGB LED 21
 #define HAS_NEOPIXEL                         // Enable the use of neopixels
 #define NEOPIXEL_COUNT 1                     // How many neopixels are connected

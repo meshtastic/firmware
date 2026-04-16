@@ -26,8 +26,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Build ${{ inputs.platform }}
         id: build
@@ -111,7 +109,7 @@ jobs:
           echo "</details>" >> $GITHUB_STEP_SUMMARY
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         id: upload-firmware
         with:
           name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}
@@ -127,7 +125,7 @@ jobs:
             release/device-*.bat
 
       - name: Store manifests as an artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         id: upload-manifest
         with:
           name: manifest-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}

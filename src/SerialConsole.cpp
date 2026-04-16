@@ -35,6 +35,8 @@ void consoleInit()
 #if defined(SERIAL_HAS_ON_RECEIVE)
     // onReceive does only exist for HardwareSerial not for USB CDC serial
     Port.onReceive([sc]() { sc->rxInt(); });
+#else
+    (void)sc;
 #endif
     DEBUG_PORT.rpInit(); // Simply sets up semaphore
 }

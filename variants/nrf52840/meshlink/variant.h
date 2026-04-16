@@ -31,10 +31,8 @@ extern "C" {
 // LEDs
 #define PIN_LED1 (24) // Built in white led for status
 #define LED_BLUE PIN_LED1
-#define LED_BUILTIN PIN_LED1
 
-#define LED_STATE_ON 0 // State when LED is litted
-#define LED_INVERTED 1
+#define LED_STATE_ON 0 // State when LED is lit
 
 // Testing USB detection
 // #define NRF_APM
@@ -54,6 +52,7 @@ extern "C" {
  */
 #define PIN_SERIAL1_RX (32 + 8)
 #define PIN_SERIAL1_TX (7)
+#define SERIAL_PRINT_PORT 0
 
 /*
  * SPI Interfaces

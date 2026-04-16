@@ -20,10 +20,11 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
         if ((nodeDB->getMeshNode(mp.from) == NULL || !nodeDB->getMeshNode(mp.from)->has_user) &&
             (nodeDB->getMeshNode(mp.to) == NULL || !nodeDB->getMeshNode(mp.to)->has_user))
             return false;
-    } else if (owner.is_licensed && nodeDB->getLicenseStatus(mp.from) == UserLicenseStatus::NotLicensed) {
-        // Don't let licensed users to rebroadcast packets from unlicensed users
+    } else if (owner.is_licensed && ((nodeDB->getLicenseStatus(mp.from) == UserLicenseStatus::NotLicensed) ||
+                                     (nodeDB->getLicenseStatus(mp.to) == UserLicenseStatus::NotLicensed))) {
+        // Don't let licensed users to rebroadcast packets to or from unlicensed users
         // If we know they are in-fact unlicensed
-        LOG_DEBUG("Packet from unlicensed user, ignoring packet");
+        LOG_DEBUG("Packet to or from unlicensed user, ignoring packet");
         return false;
     }
 
@@ -67,6 +68,8 @@ uint8_t RoutingModule::getHopLimitForResponse(const meshtastic_MeshPacket &mp)
 #if !(EVENTMODE)             // This falls through to the default.
             return hopsUsed; // If the request used more hops than the limit, use the same amount of hops
 #endif
+        } else if (mp.hop_start == 0) {
+            return 0; // The requesting node wanted 0 hops, so the response also uses a direct/local path.
         } else if ((uint8_t)(hopsUsed + 2) < config.lora.hop_limit) {
             return hopsUsed + 2; // Use only the amount of hops needed with some margin as the way back may be different
         }

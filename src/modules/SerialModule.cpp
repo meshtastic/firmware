@@ -63,28 +63,25 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#if defined(TTGO_T_ECHO) || defined(TTGO_T_ECHO_PLUS) || defined(CANARYONE) || defined(MESHLINK) ||                              \
-    defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M4) || defined(ELECROW_ThinkNode_M5) ||                           \
-    defined(HELTEC_MESH_SOLAR) || defined(T_ECHO_LITE) || defined(ELECROW_ThinkNode_M3) || defined(MUZI_BASE)
-
-SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial")
-{
-    api_type = TYPE_SERIAL;
-}
-static Print *serialPrint = &Serial;
-#elif defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172) || defined(EBYTE_E77_MBL)
-SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial")
-{
-    api_type = TYPE_SERIAL;
-}
-static Print *serialPrint = &Serial1;
-#else
-SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Serial")
-{
-    api_type = TYPE_SERIAL;
-}
-static Print *serialPrint = &Serial2;
+#ifndef SERIAL_PRINT_PORT
+#define SERIAL_PRINT_PORT 2
 #endif
+
+#if SERIAL_PRINT_PORT == 0
+#define SERIAL_PRINT_OBJECT Serial
+#elif SERIAL_PRINT_PORT == 1
+#define SERIAL_PRINT_OBJECT Serial1
+#elif SERIAL_PRINT_PORT == 2
+#define SERIAL_PRINT_OBJECT Serial2
+#else
+#error "Unsupported SERIAL_PRINT_PORT value. Allowed values are 0, 1, or 2."
+#endif
+
+SerialModule::SerialModule() : StreamAPI(&SERIAL_PRINT_OBJECT), concurrency::OSThread("Serial")
+{
+    api_type = TYPE_SERIAL;
+}
+static Print *serialPrint = &SERIAL_PRINT_OBJECT;
 
 char serialBytes[512];
 size_t serialPayloadSize;
@@ -205,9 +202,7 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO) && !defined(TTGO_T_ECHO_PLUS) && !defined(T_ECHO_LITE) && !defined(CANARYONE) &&                     \
-    !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M3) && !defined(ELECROW_ThinkNode_M4) &&  \
-    !defined(ELECROW_ThinkNode_M5) && !defined(MUZI_BASE)
+#elif SERIAL_PRINT_PORT != 0
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
@@ -264,9 +259,7 @@ int32_t SerialModule::runOnce()
                 }
             }
 
-#if !defined(TTGO_T_ECHO) && !defined(TTGO_T_ECHO_PLUS) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(MESHLINK) && \
-    !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M3) && !defined(ELECROW_ThinkNode_M4) &&                        \
-    !defined(ELECROW_ThinkNode_M5) && !defined(MUZI_BASE)
+#if SERIAL_PRINT_PORT != 0
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -540,11 +533,7 @@ ParsedLine parseLine(const char *line)
  */
 void SerialModule::processWXSerial()
 {
-#if !defined(TTGO_T_ECHO) && !defined(TTGO_T_ECHO_PLUS) && !defined(T_ECHO_LITE) && !defined(CANARYONE) &&                       \
-    !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) &&                               \
-    !defined(ELECROW_ThinkNode_M3) && \ 
-    !defined(ELECROW_ThinkNode_M4) &&                                                                                            \
-    !defined(ELECROW_ThinkNode_M5) && !defined(ARCH_STM32WL) && !defined(MUZI_BASE)
+#if SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.

@@ -47,8 +47,7 @@ extern "C" {
 #define PIN_3V3_ACC_EN (32 + 7) // P1.7, Power to Acc
 
 #define PIN_LED1 (0 + 24) // P0.24
-#define LED_PIN PIN_LED1
-#define LED_BUILTIN -1
+#define LED_POWER PIN_LED1
 #define LED_BLUE -1    // Actually green
 #define LED_STATE_ON 1 // State when LED is lit
 
@@ -127,7 +126,7 @@ extern "C" {
 #define BATTERY_PIN 2 // P0.02/AIN0, BAT_ADC
 #define BATTERY_IMMUTABLE
 #define ADC_MULTIPLIER (2.0F)
-// P0.04/AIN2 is VCC_ADC, P0.05/AIN3 is CHARGER_DET, P1.03 is CHARGE_STA, P1.04 is CHARGE_DONE
+// P0.04 is sensor power enable, P0.05/AIN3 is CHARGER_DET, P1.03 is CHARGE_STA, P1.04 is CHARGE_DONE
 
 #define EXT_CHRG_DETECT (32 + 3) // P1.03
 #define EXT_CHRG_DETECT_VALUE LOW
@@ -149,9 +148,9 @@ extern "C" {
 #define PIN_BUZZER (0 + 25)    // P0.25, pwm output
 
 #define T1000X_SENSOR_EN
-#define T1000X_VCC_PIN (0 + 4)  // P0.4
-#define T1000X_NTC_PIN (0 + 31) // P0.31/AIN7
-#define T1000X_LUX_PIN (0 + 29) // P0.29/AIN5
+#define T1000X_SENSOR_EN_PIN (0 + 4) // P0.4, Power to Sensor (GPIO, not ADC)
+#define T1000X_NTC_PIN (0 + 31)      // P0.31/AIN7
+#define T1000X_LUX_PIN (0 + 29)      // P0.29/AIN5
 
 #define HAS_SCREEN 0
 

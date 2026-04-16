@@ -4,7 +4,7 @@
 
 using namespace NicheGraphics;
 
-void InkHUD::MapApplet::onRender()
+void InkHUD::MapApplet::onRender(bool full)
 {
     // Abort if no markers to render
     if (!enoughMarkers()) {
@@ -525,7 +525,7 @@ void InkHUD::MapApplet::calculateAllMarkers()
 }
 
 // Determine the conversion factor between metres, and pixels on screen
-// May be overriden by derived applet, if custom scale required (fixed map size?)
+// May be overridden by derived applet, if custom scale required (fixed map size?)
 void InkHUD::MapApplet::calculateMapScale()
 {
     // Aspect ratio of map and screen

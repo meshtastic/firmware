@@ -8,6 +8,7 @@
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
+#include <memory>
 
 /**
  * A mesh aware router that supports multiple interfaces.
@@ -20,7 +21,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     PointerQueue<meshtastic_MeshPacket> fromRadioQueue;
 
   protected:
-    RadioInterface *iface = NULL;
+    std::unique_ptr<RadioInterface> iface = nullptr;
 
   public:
     /**
@@ -32,7 +33,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /**
      * Currently we only allow one interface, that may change in the future
      */
-    void addInterface(RadioInterface *_iface) { iface = _iface; }
+    void addInterface(std::unique_ptr<RadioInterface> _iface) { iface = std::move(_iface); }
 
     /**
      * do idle processing
@@ -57,14 +58,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
      * The returned packet is guaranteed to have a unique packet ID already assigned
      */
-    meshtastic_MeshPacket *allocForSending();
+    [[nodiscard]] meshtastic_MeshPacket *allocForSending();
 
     /** Return Underlying interface's TX queue status */
-    meshtastic_QueueStatus getQueueStatus();
+    [[nodiscard]] meshtastic_QueueStatus getQueueStatus();
 
     /**
      * @return our local nodenum */
-    NodeNum getNodeNum();
+    [[nodiscard]] NodeNum getNodeNum();
 
     /** Wake up the router thread ASAP, because we just queued a message for it.
      * FIXME, this is kinda a hack because we don't have a nice way yet to say 'wake us because we are 'blocked on this queue'

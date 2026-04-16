@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "configuration.h"
 #include "meshUtils.h"
 #if HAS_SCREEN
+#include "EInkParallelDisplay.h"
 #include <OLEDDisplay.h>
 
 #include "DisplayFormatters.h"
@@ -364,12 +365,14 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
+#elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY) && !defined(USE_EINK_PARALLELDISPLAY)
     dispdev = new EInkDisplay(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
     dispdev = new EInkDynamicDisplay(address.address, -1, -1, geometry,
                                      (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_EINK_PARALLELDISPLAY)
+    dispdev = new EInkParallelDisplay(EPD_WIDTH, EPD_HEIGHT, EInkParallelDisplay::EPD_ROT_PORTRAIT);
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -433,12 +436,15 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
 
-#if defined(MUZI_BASE)
+// some screens seem to need a kick in the pants to turn back on
+#if defined(MUZI_BASE) || defined(M5STACK_CARDPUTER_ADV)
             dispdev->init();
             dispdev->setBrightness(brightness);
             dispdev->flipScreenVertically();
             dispdev->resetDisplay();
+#ifdef SCREEN_12V_ENABLE
             digitalWrite(SCREEN_12V_ENABLE, HIGH);
+#endif
             delay(100);
 #endif
 #if !ARCH_PORTDUINO
@@ -462,9 +468,11 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #if defined(HELTEC_TRACKER_V1_X) || defined(HELTEC_WIRELESS_TRACKER_V2)
             ui->init();
 #endif
-#ifdef USE_ST7789
+#if defined(USE_ST7789) && defined(VTFT_LEDA)
+#ifdef VTFT_CTRL
             pinMode(VTFT_CTRL, OUTPUT);
             digitalWrite(VTFT_CTRL, LOW);
+#endif
             ui->init();
 #ifdef ESP_PLATFORM
             analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
@@ -506,8 +514,12 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #ifdef USE_ST7789
             SPI1.end();
 #if defined(ARCH_ESP32)
+#ifdef VTFT_LEDA
             pinMode(VTFT_LEDA, ANALOG);
+#endif
+#ifdef VTFT_CTRL
             pinMode(VTFT_CTRL, ANALOG);
+#endif
             pinMode(ST7789_RESET, ANALOG);
             pinMode(ST7789_RS, ANALOG);
             pinMode(ST7789_NSS, ANALOG);
@@ -750,7 +762,11 @@ void Screen::forceDisplay(bool forceUiUpdate)
     }
 
     // Tell EInk class to update the display
+#if defined(USE_EINK_PARALLELDISPLAY)
+    static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay();
+#elif defined(USE_EINK)
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#endif
 #else
     // No delay between UI frame rendering
     if (forceUiUpdate) {
@@ -875,6 +891,10 @@ int32_t Screen::runOnce()
             break;
         case Cmd::STOP_ALERT_FRAME:
             NotificationRenderer::pauseBanner = false;
+            // Return from one-off alert mode back to regular frames.
+            if (!showingNormalScreen && NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
+                setFrames();
+            }
             break;
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
@@ -985,8 +1005,10 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
         ui->update();
     } while (ui->getUiState()->lastUpdate < startUpdate);
 
+#if defined(USE_EINK_PARALLELDISPLAY)
+    static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay(0);
+#elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
     // Old EInkDisplay class
-#if !defined(USE_EINK_DYNAMICDISPLAY)
     static_cast<EInkDisplay *>(dispdev)->forceDisplay(0); // Screen::forceDisplay(), but override rate-limit
 #endif
 
@@ -998,7 +1020,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 #ifdef EINK_HASQUIRK_GHOSTING
     EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // Really ugly to see ghosting from "screen paused"
 #else
-    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE); // Really nice to wake screen with a fast-refresh
+    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE);              // Really nice to wake screen with a fast-refresh
 #endif
 }
 #endif
@@ -1731,6 +1753,26 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showFrame(FrameDirection::PREVIOUS);
             } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
                 showFrame(FrameDirection::NEXT);
+            } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
+                this->ui->switchToFrame(0);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F2) {
+                this->ui->switchToFrame(1);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F3) {
+                this->ui->switchToFrame(2);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F4) {
+                this->ui->switchToFrame(3);
+                lastScreenTransition = millis();
+                setFastFramerate();
+            } else if (event->inputEvent == INPUT_BROKER_FN_F5) {
+                this->ui->switchToFrame(4);
+                lastScreenTransition = millis();
+                setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_UP_LONG) {
                 // Long press up button for fast frame switching
                 showPrevFrame();

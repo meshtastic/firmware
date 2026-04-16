@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check for PR labels
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const labels = context.payload.pull_request.labels.map(label => label.name);

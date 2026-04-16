@@ -1,7 +1,7 @@
 #define I2C_SCL SCL
 #define I2C_SDA SDA
 
-#define LED_PIN LED
+#define LED_POWER LED
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define VEXT_ON_VALUE LOW
