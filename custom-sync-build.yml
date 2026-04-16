@@ -1,0 +1,109 @@
+name: alphasigma — Sync & Build
+
+on:
+  schedule:
+    - cron: '0 6 * * *'      # runs daily at 06:00 UTC
+  workflow_dispatch:          # also lets you trigger manually
+    inputs:
+      targets:
+        description: 'Space-separated PlatformIO targets'
+        required: false
+        default: 'tbeam heltec-v3 rak4631 tlora-v2-1-1_6'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.sync.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+      - name: Fetch and merge upstream
+        id: sync
+        run: |
+          git remote add upstream https://github.com/meshtastic/firmware.git || true
+          git fetch upstream main --recurse-submodules
+          LOCAL=$(git rev-parse HEAD)
+          UPSTREAM=$(git rev-parse upstream/main)
+          if [ "$LOCAL" = "$UPSTREAM" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "### ⏭ No upstream changes today" >> $GITHUB_STEP_SUMMARY
+          else
+            git merge upstream/main --no-edit || {
+              echo "### ❌ Merge conflict — resolve manually" >> $GITHUB_STEP_SUMMARY
+              git merge --abort
+              exit 1
+            }
+            git push origin main
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "### ✅ Merged upstream into alphasigma fork" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        run: |
+          INPUT="${{ inputs.targets || 'tbeam heltec-v3 rak4631 tlora-v2-1-1_6' }}"
+          echo "matrix=$(echo "$INPUT" | tr ' ' '\n' | jq -R . | jq -sc .)" >> $GITHUB_OUTPUT
+
+  build:
+    needs: [sync, setup-matrix]
+    if: needs.sync.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: pip
+
+      - name: Install PlatformIO
+        run: pip install -U platformio
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ matrix.target }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ matrix.target }}-
+
+      - name: Get version
+        id: ver
+        run: echo "long=$(python3 bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        env:
+          BUILD_LOCATION: local
+
+      - name: Build ${{ matrix.target }}
+        run: pio run -e ${{ matrix.target }}
+
+      - name: Upload alphasigma firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphasigma-${{ matrix.target }}-${{ steps.ver.outputs.long }}
+          path: |
+            .pio/build/${{ matrix.target }}/firmware*.bin
+            .pio/build/${{ matrix.target }}/firmware*.uf2
+            .pio/build/${{ matrix.target }}/firmware*.hex
+          retention-days: 30
