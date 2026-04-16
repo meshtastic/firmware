@@ -18,7 +18,7 @@
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
 
-// GNNS
+// GNSS
 #define HAS_GPS 1
 #define GPS_BAUDRATE 38400
 #define PIN_GPS_EN 39
