@@ -2,7 +2,10 @@
 
 #if HAS_VARIABLE_HOPS
 
+#include "FSCommon.h"
 #include "NodeDB.h"
+#include "SPILock.h"
+#include "concurrency/LockGuard.h"
 #include "mesh-pb-constants.h"
 #include <algorithm>
 #include <cmath>
@@ -41,6 +44,11 @@ constexpr float TURNOVER_CAPACITY_LIMIT_RATIO = 0.2f; // Evictions below 20% of 
 uint8_t SAMPLING_DENOMINATOR = 10; // mutable (was: constexpr)
 constexpr uint8_t SAMPLING_DENOMINATOR_MIN = 1;
 constexpr uint8_t SAMPLING_DENOMINATOR_MAX = 200;
+
+// Persistence
+constexpr const char *SOI_STATE_FILE = "/prefs/soi.bin";
+constexpr uint32_t SOI_STATE_MAGIC = 0x534F4931; // 'SOI1'
+constexpr uint8_t SOI_STATE_VERSION = 1;
 } // namespace
 
 SphereOfInfluenceModule *sphereOfInfluenceModule;
@@ -67,6 +75,7 @@ void SphereOfInfluenceModule::HopBucket::add(const meshtastic_NodeInfoLite &node
 
 SphereOfInfluenceModule::SphereOfInfluenceModule() : concurrency::OSThread("SphereOfInfluence")
 {
+    loadState();
     setIntervalFromNow(INITIAL_DELAY_MS);
 }
 
@@ -147,7 +156,7 @@ void SphereOfInfluenceModule::rollHour()
     if (loadRatio > 5.0f / 8.0f && SAMPLING_DENOMINATOR < SAMPLING_DENOMINATOR_MAX) {
         // Tracker getting too full; reduce sample rate (increase denominator)
         SAMPLING_DENOMINATOR = static_cast<uint8_t>(
-            std::min(static_cast<uint16_t>(SAMPLING_DENOMINATOR) * 2, static_cast<uint16_t>(SAMPLING_DENOMINATOR_MAX)));
+            std::min(static_cast<uint16_t>(SAMPLING_DENOMINATOR * 2), static_cast<uint16_t>(SAMPLING_DENOMINATOR_MAX)));
         LOG_INFO("[SOI] Adaptive sampling: denominator increased to %u (load ratio=%.2f)", SAMPLING_DENOMINATOR,
                  static_cast<double>(loadRatio));
     } else if (loadRatio < 1.0f / 8.0f && SAMPLING_DENOMINATOR > SAMPLING_DENOMINATOR_MIN) {
@@ -159,6 +168,71 @@ void SphereOfInfluenceModule::rollHour()
     }
 
     sampledNodesCurrentHour.clear();
+    saveState();
+}
+
+void SphereOfInfluenceModule::loadState()
+{
+#ifdef FSCom
+    concurrency::LockGuard g(spiLock);
+    auto file = FSCom.open(SOI_STATE_FILE, FILE_O_READ);
+    if (file) {
+        struct PersistedState {
+            uint32_t magic;
+            uint8_t version;
+            uint8_t samplingDenominator;
+            float rollingEvictionAvg12h;
+            float rollingSampledAvg12h;
+        };
+        PersistedState state{};
+        if (file.read((uint8_t *)&state, sizeof(state)) == sizeof(state) && state.magic == SOI_STATE_MAGIC &&
+            state.version == SOI_STATE_VERSION && state.samplingDenominator >= SAMPLING_DENOMINATOR_MIN &&
+            state.samplingDenominator <= SAMPLING_DENOMINATOR_MAX) {
+            rollingEvictionAvg12h = state.rollingEvictionAvg12h;
+            rollingSampledAvg12h = state.rollingSampledAvg12h;
+            SAMPLING_DENOMINATOR = state.samplingDenominator;
+            LOG_INFO("[SOI] Restored state: evict/h=%.1f sampledAvg=%.1f denom=%u", static_cast<double>(rollingEvictionAvg12h),
+                     static_cast<double>(rollingSampledAvg12h), SAMPLING_DENOMINATOR);
+        } else {
+            LOG_DEBUG("[SOI] No valid persisted state, starting fresh");
+        }
+        file.close();
+    }
+#endif
+}
+
+void SphereOfInfluenceModule::saveState() const
+{
+#ifdef FSCom
+    FSCom.mkdir("/prefs");
+    if (FSCom.exists(SOI_STATE_FILE)) {
+        FSCom.remove(SOI_STATE_FILE);
+    }
+    concurrency::LockGuard g(spiLock);
+    auto file = FSCom.open(SOI_STATE_FILE, FILE_O_WRITE);
+    if (file) {
+        struct PersistedState {
+            uint32_t magic;
+            uint8_t version;
+            uint8_t samplingDenominator;
+            float rollingEvictionAvg12h;
+            float rollingSampledAvg12h;
+        };
+        PersistedState state{};
+        state.magic = SOI_STATE_MAGIC;
+        state.version = SOI_STATE_VERSION;
+        state.samplingDenominator = SAMPLING_DENOMINATOR;
+        state.rollingEvictionAvg12h = rollingEvictionAvg12h;
+        state.rollingSampledAvg12h = rollingSampledAvg12h;
+        file.write((uint8_t *)&state, sizeof(state));
+        file.flush();
+        file.close();
+        LOG_DEBUG("[SOI] Saved state: evict/h=%.1f sampledAvg=%.1f denom=%u", static_cast<double>(rollingEvictionAvg12h),
+                  static_cast<double>(rollingSampledAvg12h), SAMPLING_DENOMINATOR);
+    } else {
+        LOG_WARN("[SOI] Failed to open %s for write", SOI_STATE_FILE);
+    }
+#endif
 }
 
 void SphereOfInfluenceModule::buildSnapshot(Snapshot &snapshot) const

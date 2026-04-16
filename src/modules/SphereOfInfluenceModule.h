@@ -71,6 +71,8 @@ class SphereOfInfluenceModule : private concurrency::OSThread
     uint16_t estimateSampledMeshSize() const;
     uint8_t computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const;
     void rollHour();
+    void loadState();
+    void saveState() const;
 
     // Hop recommendation state
     uint8_t lastRequiredHop = HOP_MAX;
