@@ -1,0 +1,32 @@
+{
+  "build": {
+    "core": "esp32",
+    "extra_flags": ["-DBOARD_HAS_PSRAM"],
+    "f_cpu": "360000000L",
+    "f_flash": "80000000L",
+    "f_psram": "200000000L",
+    "flash_mode": "qio",
+    "hwids": [["0x1A86", "0x7522"]],
+    "mcu": "esp32p4",
+    "chip_variant": "esp32p4_es",
+    "variant": "esp32p4"
+  },
+  "arduino": {
+    "partitions": "default_16MB.csv"
+  },
+  "connectivity": ["bluetooth", "openthread"],
+  "debug": {
+    "openocd_target": "esp32p4.cfg"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "name": "CrowPanel Advanced ESP32-P4 HMI AI Display",
+  "upload": {
+    "flash_size": "16MB",
+    "maximum_ram_size": 512000,
+    "maximum_size": 16777216,
+    "require_upload_port": true,
+    "speed": 1500000
+  },
+  "url": "https://www.elecrow.com/crowpanel-advanced-5inch-esp32-p4-hmi-ai-display-800x480-ips-touch-screen-with-wifi-6.html",
+  "vendor": "Elecrow"
+}
