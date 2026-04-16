@@ -11,7 +11,7 @@ def readProps(prefsLoc):
     config.read(prefsLoc)
     version = dict(config.items("VERSION"))
     verObj = dict(
-        short="{}.{}.{}".format(version["major"], version["minor"], version["build"]),
+        short="{}.{}.{}-alphasigma".format(version["major"], version["minor"], version["build"]),
         long="unset",
         deb="unset",
     )
@@ -28,14 +28,12 @@ def readProps(prefsLoc):
             subprocess.check_output(["git", "diff", "HEAD"]).decode("utf-8").strip()
         )
         suffix = sha
-        # if isDirty:
-        #     # short for 'dirty', we want to keep our verstrings source for protobuf reasons
-        #     suffix = sha + "-d"
-        verObj["long"] = "{}.{}".format(verObj["short"], suffix)
+        # long version uses the base numeric version (no custom suffix) so it fits
+        # in the 18-byte firmware_version protobuf field: "2.7.23.0cab43f" = 14 chars ✓
+        base_short = "{}.{}.{}".format(version["major"], version["minor"], version["build"])
+        verObj["long"] = "{}.{}".format(base_short, suffix)
         verObj["deb"] = "{}.{}~{}{}".format(verObj["short"], run_number, build_location, sha)
     except:
-        # print("Unexpected error:", sys.exc_info()[0])
-        # traceback.print_exc()
         verObj["long"] = verObj["short"]
         verObj["deb"] = "{}.{}~{}".format(verObj["short"], run_number, build_location)
 
