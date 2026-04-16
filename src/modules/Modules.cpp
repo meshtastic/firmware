@@ -39,8 +39,10 @@
 #endif
 #include "modules/RoutingModule.h"
 #if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
-#include "modules/SphereOfInfluenceModule.h"
 #include "modules/TrafficManagementModule.h"
+#endif
+#if HAS_VARIABLE_HOPS
+#include "modules/SphereOfInfluenceModule.h"
 #endif
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
@@ -129,8 +131,11 @@ void setupModules()
     // Instantiate only when enabled to avoid extra memory use and background work.
     if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled) {
         trafficManagementModule = new TrafficManagementModule();
-        sphereOfInfluenceModule = new SphereOfInfluenceModule();
     }
+#endif
+
+#if HAS_VARIABLE_HOPS
+    sphereOfInfluenceModule = new SphereOfInfluenceModule();
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ADMIN

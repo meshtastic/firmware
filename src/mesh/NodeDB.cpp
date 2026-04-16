@@ -23,7 +23,7 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
-#if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
+#if HAS_VARIABLE_HOPS
 #include "modules/SphereOfInfluenceModule.h"
 #endif
 #include <ErriezCRC32.h>
@@ -1956,6 +1956,13 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
 
+#if HAS_VARIABLE_HOPS
+        // Feed sampling-based mesh size estimator (skip MQTT-forwarded packets)
+        if (!mp.via_mqtt && sphereOfInfluenceModule) {
+            sphereOfInfluenceModule->recordPacketSender(mp.from);
+        }
+#endif
+
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
         const int8_t hopsAway = getHopsAway(mp);
         if (hopsAway >= 0) {
@@ -2139,7 +2146,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 
             if (oldestIndex != -1) {
                 // Notify SphereOfInfluence module about the eviction for tracking
-#if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
+#if HAS_VARIABLE_HOPS
                 if (sphereOfInfluenceModule) {
                     sphereOfInfluenceModule->recordEviction();
                 }

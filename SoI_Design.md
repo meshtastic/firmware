@@ -217,8 +217,49 @@ The affected nodes are determined by counting the running total of nodes at each
 4. **Select politeness** — primary ratio determines base factor (generous/default/strict); slope refines; 6h tail may relax STRICT → DEFAULT
 5. **Find base hop** — scan histogram cumulatively to reach ~40 nodes
 6. **Apply politeness** — check if hop+1 is polite; extend if acceptable
-7. **Apply role bonus** — TRACKER adds +2, SENSOR adds +1, etc.
-8. **Cap at user config** — never exceed `hop_limit + 2`
+7. **Apply role floor** — guarded by `VARIABLE_HOP_ROLE_FLOOR`: TRACKER/TAK_TRACKER get floor of 2, SENSOR get floor of 1
+8. **Cap at user config** — never exceed `config.lora.hop_limit`
+9. **Apply to outgoing broadcasts** — `Router::send()` clamps `hop_limit` to `lastRequiredHop` for routine portnums
+
+---
+
+## Router Integration
+
+The SoI hop recommendation is applied in `Router::send()`, just before `hop_start` is set. This is the last centralized point before transmission.
+
+### Affected portnums (routine broadcasts)
+
+| Portnum            | Why                                                                            |
+| ------------------ | ------------------------------------------------------------------------------ |
+| `POSITION_APP`     | Periodic position broadcasts — highest volume, most benefit from hop reduction |
+| `TELEMETRY_APP`    | Periodic telemetry broadcasts                                                  |
+| `NODEINFO_APP`     | Periodic node info broadcasts                                                  |
+| `NEIGHBORINFO_APP` | Periodic neighbor info broadcasts                                              |
+
+### Unaffected (keep user-configured hop_limit)
+
+- `TEXT_MESSAGE_APP` — user-initiated, don't suppress reach
+- `TRACEROUTE_APP`, `ROUTING_APP`, `ADMIN_APP` — infrastructure
+- All unicast / reply packets
+- All relayed packets (not from us)
+
+### Constraints
+
+- SoI hop is always clamped: `min(config.lora.hop_limit, lastRequiredHop)` — never exceeds user config
+- If SoI has not yet run (first 30s), `lastRequiredHop` defaults to `HOP_MAX` (7) — no reduction
+- Only applies when `HAS_VARIABLE_HOPS` is enabled and `sphereOfInfluenceModule` is non-null
+
+### Role-based hop floor (`VARIABLE_HOP_ROLE_FLOOR`)
+
+When enabled, certain device roles get a minimum hop floor applied _before_ the user-config cap. This ensures mobile/remote roles maintain minimum reach even in dense meshes, without exceeding the user's configured limit.
+
+| Role                      | Floor | Rationale                                                    |
+| ------------------------- | ----- | ------------------------------------------------------------ |
+| `TRACKER` / `TAK_TRACKER` | 2     | Mobile; position data is time-critical and needs wider reach |
+| `SENSOR`                  | 1     | Remote; may be placed at network edges                       |
+| All others                | 0     | No floor; SoI recommendation used directly                   |
+
+The floor is a `max(variableHopLimit, roleFloor)` — it raises the variable hop limit if it's too low, but the final value is still clamped by `config.lora.hop_limit`. Disabled by default (`VARIABLE_HOP_ROLE_FLOOR=0`); enable per-variant in `variant.h`.
 
 ---
 
