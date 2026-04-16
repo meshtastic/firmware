@@ -14,16 +14,22 @@
 #include <malloc.h>
 #include <unistd.h> // sbrk
 
+#ifdef ARCH_STM32WL
 // Returns the uncommitted sbrk headroom: addressable space between the current heap
 // break and the stack pointer that has not yet been committed to the arena.
-// Currently used on: ARCH_STM32WL
 static uint32_t sbrkHeadroom()
 {
-    uint32_t sp;
-    __asm volatile("mov %0, sp" : "=r"(sp));
+    // defined in STM32 linker script
+    extern char _estack;
+    extern char _Min_Stack_Size;
+
+    uint32_t max_sp = (uint32_t)(&_estack - &_Min_Stack_Size);
     uint32_t heap_end = (uint32_t)sbrk(0);
-    return (sp > heap_end) ? (sp - heap_end) : 0;
+    return (max_sp > heap_end) ? (max_sp - heap_end) : 0;
 }
+#else
+#error Unsupported architecture!
+#endif
 #endif
 
 MemGet memGet;
