@@ -194,6 +194,7 @@ float SphereOfInfluenceModule::estimateScaleFactor(const Snapshot &snapshot) con
     // Not-full NodeDB with headroom: direct counts are accurate, no scaling needed.
     const float nearCapacity = NODEDB_NEAR_CAPACITY_RATIO * MAX_NUM_NODES;
     if (!nodeDB || (!nodeDB->isFull() && snapshot.cumulative12h.total < nearCapacity)) {
+        LOG_DEBUG("[SOI] scaleFactor=1.0 (DB has headroom: %u/%d nodes)", snapshot.cumulative12h.total, MAX_NUM_NODES);
         return 1.0f;
     }
 
@@ -202,7 +203,10 @@ float SphereOfInfluenceModule::estimateScaleFactor(const Snapshot &snapshot) con
         // Low turnover: NodeDB is full but few evictions; modest scale-up.
         // Scale proportionally: at 0 evictions => 1.0, approaching threshold => 1.2^12
         const float t = (1.0f + (rollingEvictionAvg12h / (MAX_NUM_NODES)));
-        return powf(t, 12.0f); // range [1.0, ~8.9]
+        const float scale = powf(t, 12.0f);
+        LOG_DEBUG("[SOI] scaleFactor=%.2f (low turnover: evict/h=%.1f, t=%.3f)", static_cast<double>(scale),
+                  static_cast<double>(rollingEvictionAvg12h), static_cast<double>(t));
+        return scale;
     }
 
     // High turnover: many evictions per hour, NodeDB is cycling rapidly.
@@ -210,11 +214,17 @@ float SphereOfInfluenceModule::estimateScaleFactor(const Snapshot &snapshot) con
     const uint16_t sampledEstimate = estimateSampledMeshSize();
     if (sampledEstimate > 8.8f * MAX_NUM_NODES) {
         // Scale = estimated true mesh size / maximum NodeDB count
-        return std::max(static_cast<float>(sampledEstimate) / MAX_NUM_NODES, 1.0f);
+        const float scale = std::max(static_cast<float>(sampledEstimate) / MAX_NUM_NODES, 1.0f);
+        LOG_DEBUG("[SOI] scaleFactor=%.2f (sampled: est=%u nodes, DB=%d)", static_cast<double>(scale), sampledEstimate,
+                  MAX_NUM_NODES);
+        return scale;
     } else {
         // Fallback to eviction rate but scale more aggressively, over the full capacity turnover
         const float t = 1.1f + (rollingEvictionAvg12h / (MAX_NUM_NODES));
-        return powf(t, 12.0f);
+        const float scale = powf(t, 12.0f);
+        LOG_DEBUG("[SOI] scaleFactor=%.2f (high turnover fallback: evict/h=%.1f, sampled=%u, t=%.3f)", static_cast<double>(scale),
+                  static_cast<double>(rollingEvictionAvg12h), sampledEstimate, static_cast<double>(t));
+        return scale;
     }
 }
 
@@ -238,6 +248,13 @@ uint8_t SphereOfInfluenceModule::computeRequiredHop(const Snapshot &snapshot, fl
 
         affectedNodesPerHop[hop] = std::max(avg1hFrom3h, scaled12hInt);
     }
+
+    LOG_INFO("[SOI] perHop raw:    [%u %u %u %u %u %u %u %u]", snapshot.cumulative12h.perHop[0], snapshot.cumulative12h.perHop[1],
+             snapshot.cumulative12h.perHop[2], snapshot.cumulative12h.perHop[3], snapshot.cumulative12h.perHop[4],
+             snapshot.cumulative12h.perHop[5], snapshot.cumulative12h.perHop[6], snapshot.cumulative12h.perHop[7]);
+    LOG_INFO("[SOI] perHop scaled: [%u %u %u %u %u %u %u %u]", affectedNodesPerHop[0], affectedNodesPerHop[1],
+             affectedNodesPerHop[2], affectedNodesPerHop[3], affectedNodesPerHop[4], affectedNodesPerHop[5],
+             affectedNodesPerHop[6], affectedNodesPerHop[7]);
 
     uint8_t baseHop = HOP_MAX;
     uint16_t affectedNodes = 0;
