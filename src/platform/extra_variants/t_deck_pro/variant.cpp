@@ -145,7 +145,7 @@ bool readTouch(int16_t *x, int16_t *y)
 }
 
 
-static void touchInterruptHandler(){
+static void IRAM_ATTR touchInterruptHandler(){
     touch_isr = true;
 }
 
