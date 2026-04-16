@@ -80,14 +80,18 @@ static const uint8_t T13 = 15;
 
 #if defined(CROWPANEL_ADV_P4_50)
 #define BOARD_SDMMC_SLOT 1
+// Workaround for Arduino-ESP32 P4 SPI LDO auto-config on SDMMC slot0 pins (47/48).
+// Use a valid GPIO (aligned to variant LoRa CS) and pre-tag it in initVariant()
+// so setLDOPower() short-circuits.
+#define BOARD_SDMMC_POWER_PIN 30
 #else
+#define BOARD_SDMMC_POWER_PIN 10
 #define BOARD_SDMMC_SLOT 0
 #endif
 #define BOARD_SDMMC_POWER_CHANNEL 4
-#define BOARD_SDMMC_POWER_PIN -1
-#define BOARD_SDMMC_POWER_ON_LEVEL LOW
+#define BOARD_SDMMC_POWER_ON_LEVEL HIGH
 
-// WIFI - ESP32C6 (CrowPanel Advanced P4)
+// BT/WIFI - ESP32C6
 #define BOARD_HAS_SDIO_ESP_HOSTED
 #ifdef CROWPANEL_ADV_P4_50
 // CrowPanel Advanced P4 50": 4-bit SDIO on Slot 1 with GPIO 53/54/52/51/50/49
