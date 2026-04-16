@@ -446,6 +446,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     case CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER:
         return handleEmotePickerInput(event);
 
+    case CANNED_MESSAGE_RUN_STATE_NODENUM_EDIT:
+        return handleNodeNumEditorInput(event);
+
     case CANNED_MESSAGE_RUN_STATE_INACTIVE:
         if (event->inputEvent == INPUT_BROKER_ALT_LONG) {
             LaunchWithDestination(NODENUM_BROADCAST);
@@ -495,14 +498,16 @@ bool CannedMessageModule::isUpEvent(const InputEvent *event)
 {
     return event->inputEvent == INPUT_BROKER_UP ||
            ((runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
-             runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) &&
+             runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION ||
+             runState == CANNED_MESSAGE_RUN_STATE_NODENUM_EDIT) &&
             (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS));
 }
 bool CannedMessageModule::isDownEvent(const InputEvent *event)
 {
     return event->inputEvent == INPUT_BROKER_DOWN ||
            ((runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
-             runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) &&
+             runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION ||
+             runState == CANNED_MESSAGE_RUN_STATE_NODENUM_EDIT) &&
             (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS));
 }
 bool CannedMessageModule::isSelectEvent(const InputEvent *event)
@@ -713,6 +718,17 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
             currentMessageIndex = -1;
 
             // Notify UI to regenerate frame set and redraw
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            notifyObservers(&e);
+            screen->forceDisplay();
+            return true;
+        }
+
+        // [!SETNODEID] launches the on-device hex node-ID editor
+        if (strcmp(current, "!SETNODEID") == 0) {
+            initNodeNumEditor();
+            updateState(CANNED_MESSAGE_RUN_STATE_NODENUM_EDIT, true);
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             notifyObservers(&e);
@@ -1025,6 +1041,101 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     }
 
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Node-ID hex editor – UpDown 2-key interface
+// UP/DOWN  : cycle the active nibble (0-f)
+// SELECT   : advance to next nibble; on last nibble commit + schedule reboot
+// BACK/CANCEL : step back one nibble; on first nibble cancel back to list
+// ---------------------------------------------------------------------------
+int CannedMessageModule::handleNodeNumEditorInput(const InputEvent *event)
+{
+    bool isUp     = isUpEvent(event);
+    bool isDown   = isDownEvent(event);
+    bool isSelect = isSelectEvent(event);
+    bool isBack   = (event->inputEvent == INPUT_BROKER_BACK ||
+                     event->inputEvent == INPUT_BROKER_CANCEL);
+
+    if (isUp) {
+        lastTouchMillis = millis();
+        nodeNumNibbles[nodeNumCursor] = (nodeNumNibbles[nodeNumCursor] + 1) & 0x0F;
+        screen->forceDisplay();
+        return 1;
+    }
+
+    if (isDown) {
+        lastTouchMillis = millis();
+        nodeNumNibbles[nodeNumCursor] = (nodeNumNibbles[nodeNumCursor] + 15) & 0x0F;
+        screen->forceDisplay();
+        return 1;
+    }
+
+    if (isSelect) {
+        lastTouchMillis = millis();
+        if (nodeNumCursor < 7) {
+            nodeNumCursor++;
+            screen->forceDisplay();
+        } else {
+            // Last nibble confirmed — validate before writing
+            uint32_t newNum = assembleNodeNum();
+            if (newNum < 4 || newNum == NODENUM_BROADCAST) {
+                // Invalid: 0-3 are reserved, UINT32_MAX is broadcast address
+                // Do NOT commit, do NOT reboot — stay in editor silently
+                LOG_WARN("NodeID editor: 0x%08x is reserved/invalid, not committing", newNum);
+                screen->forceDisplay();
+            } else {
+                LOG_INFO("NodeID editor: committing 0x%08x", newNum);
+                nodeDB->setNodeNum(newNum);
+                updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+                currentMessageIndex = -1;
+                UIFrameEvent e;
+                e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                notifyObservers(&e);
+                screen->forceDisplay();
+                rebootAtMsec = millis() + 2000;
+            }
+        }
+        return 1;
+    }
+
+    if (isBack) {
+        lastTouchMillis = millis();
+        if (nodeNumCursor > 0) {
+            nodeNumCursor--;
+            screen->forceDisplay();
+        } else {
+            // Cancel — return to canned message list
+            updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+            currentMessageIndex = -1;
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            notifyObservers(&e);
+            screen->forceDisplay();
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+void CannedMessageModule::initNodeNumEditor()
+{
+    uint32_t cur = nodeDB->getNodeNum();
+    for (int i = 0; i < 8; i++) {
+        // nibble 0 = most-significant (bits 28-31)
+        nodeNumNibbles[i] = (cur >> ((7 - i) * 4)) & 0x0F;
+    }
+    nodeNumCursor = 0;
+}
+
+uint32_t CannedMessageModule::assembleNodeNum() const
+{
+    uint32_t result = 0;
+    for (int i = 0; i < 8; i++) {
+        result = (result << 4) | (nodeNumNibbles[i] & 0x0F);
+    }
+    return result;
 }
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
@@ -1429,7 +1540,8 @@ bool CannedMessageModule::shouldDraw()
     // Only allow drawing when we're in an interactive UI state.
     return (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
             this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION ||
-            this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
+            this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
+            this->runState == CANNED_MESSAGE_RUN_STATE_NODENUM_EDIT);
 }
 
 // Has the user defined any canned messages?
@@ -1888,7 +2000,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
     // Never draw if state is outside our UI modes
     if (!(runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
-          runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER)) {
+          runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
+          runState == CANNED_MESSAGE_RUN_STATE_NODENUM_EDIT)) {
         return; // bail if not in a UI state that should render
     }
 
@@ -1909,6 +2022,50 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
+        return;
+    }
+
+    // Node-ID Hex Editor Screen
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_NODENUM_EDIT) {
+        static const char *HEX = "0123456789abcdef";
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->setFont(FONT_SMALL);
+
+        // Row 0: title
+        display->drawString(x, y, "Set Node ID");
+
+        // Row 1: hint — kept short to fit 128px OLED (~20 chars max at FONT_SMALL)
+        display->drawString(x, y + FONT_HEIGHT_SMALL, "UP/DN:digit SEL:next");
+
+        // Row 2: the 8 nibbles, cursor nibble drawn inverted
+        int16_t cx = x;
+        int16_t cy = y + FONT_HEIGHT_SMALL * 2;
+        char bang[2] = "!";
+        display->drawString(cx, cy, bang);
+        cx += display->getStringWidth(bang);
+
+        for (int i = 0; i < 8; i++) {
+            char ch[2] = { HEX[nodeNumNibbles[i]], '\0' };
+            int16_t cw = display->getStringWidth(ch);
+            if (i == (int)nodeNumCursor) {
+                display->fillRect(cx - 1, cy, cw + 2, FONT_HEIGHT_SMALL);
+                display->setColor(BLACK);
+                display->drawString(cx, cy, ch);
+                display->setColor(WHITE);
+            } else {
+                display->drawString(cx, cy, ch);
+            }
+            cx += cw + 1;
+        }
+
+        // Row 3: assembled value always visible; commit hint when on last nibble
+        char hint[32];
+        uint32_t preview = assembleNodeNum();
+        if (nodeNumCursor == 7)
+            snprintf(hint, sizeof(hint), "!%08x  SEL=commit", preview);
+        else
+            snprintf(hint, sizeof(hint), "= !%08x", preview);
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 3, hint);
         return;
     }
 

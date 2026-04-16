@@ -19,7 +19,8 @@ enum cannedMessageModuleRunState {
     CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION,
     CANNED_MESSAGE_RUN_STATE_FREETEXT,
     CANNED_MESSAGE_RUN_STATE_MESSAGE_SELECTION,
-    CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER
+    CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER,
+    CANNED_MESSAGE_RUN_STATE_NODENUM_EDIT  // hex node-ID editor via UpDown keyboard
 };
 
 enum CannedMessageModuleIconType { shift, backspace, space, enter };
@@ -79,6 +80,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
     // === Emote Picker ===
     int handleEmotePickerInput(const InputEvent *event);
+    int handleNodeNumEditorInput(const InputEvent *event);
     void drawEmotePickerScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
     // === Admin Handlers ===
@@ -169,6 +171,12 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
     // === State Tracking ===
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+
+    // ---- Node-ID hex editor ----
+    uint8_t  nodeNumNibbles[8] = {};  // 8 nibbles, high-to-low, each 0-15
+    uint8_t  nodeNumCursor     = 0;   // which nibble is being edited (0=MSN)
+    void     initNodeNumEditor();
+    uint32_t assembleNodeNum() const;
     char highlight = 0x00;
     char payload = 0x00;
     unsigned int cursor = 0;
