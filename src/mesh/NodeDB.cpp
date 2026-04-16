@@ -23,6 +23,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
+#include "modules/SphereOfInfluenceModule.h"
+#endif
 #include <ErriezCRC32.h>
 #include <algorithm>
 #include <pb_decode.h>
@@ -2135,6 +2138,12 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             }
 
             if (oldestIndex != -1) {
+                // Notify SphereOfInfluence module about the eviction for tracking
+#if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
+                if (sphereOfInfluenceModule) {
+                    sphereOfInfluenceModule->recordEviction();
+                }
+#endif
                 // Shove the remaining nodes down the chain
                 for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
                     meshNodes->at(i) = meshNodes->at(i + 1);
