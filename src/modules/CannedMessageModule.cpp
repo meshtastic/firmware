@@ -2027,7 +2027,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
     // Node-ID Hex Editor Screen
     if (this->runState == CANNED_MESSAGE_RUN_STATE_NODENUM_EDIT) {
-        static const char *HEX = "0123456789abcdef";
+        static const char *hexChars = "0123456789abcdef";
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
 
@@ -2045,7 +2045,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         cx += display->getStringWidth(bang);
 
         for (int i = 0; i < 8; i++) {
-            char ch[2] = { HEX[nodeNumNibbles[i]], '\0' };
+            char ch[2] = { hexChars[nodeNumNibbles[i]], '\0' };
             int16_t cw = display->getStringWidth(ch);
             if (i == (int)nodeNumCursor) {
                 display->fillRect(cx - 1, cy, cw + 2, FONT_HEIGHT_SMALL);
