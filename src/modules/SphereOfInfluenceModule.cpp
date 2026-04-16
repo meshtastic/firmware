@@ -115,7 +115,7 @@ uint16_t SphereOfInfluenceModule::estimateSampledMeshSize() const
 {
     if (rollingSampledAvg12h < 2.0f)
         return 0; // fewer than ~2 sampled nodes/hour: unreliable
-    const float estimated = rollingSampledAvg12h * static_cast<float>(SAMPLING_DENOMINATOR);
+    const float estimated = rollingSampledAvg12h * SAMPLING_DENOMINATOR;
     return static_cast<uint16_t>(std::min(estimated, 65535.0f));
 }
 
@@ -123,12 +123,11 @@ void SphereOfInfluenceModule::rollEvictionHour()
 {
     // EMA with alpha = 1/12: approximates a 12h rolling average
     // newAvg = oldAvg * (11/12) + currentHour * (1/12)
-    rollingEvictionAvg12h = rollingEvictionAvg12h * (11.0f / 12.0f) + static_cast<float>(evictionsCurrentHour) * (1.0f / 12.0f);
+    rollingEvictionAvg12h = rollingEvictionAvg12h * (11.0f / 12.0f) + evictionsCurrentHour * (1.0f / 12.0f);
     evictionsCurrentHour = 0;
 
     // Roll sampled unique node count into 12h EMA, then reset for next hour
-    rollingSampledAvg12h =
-        rollingSampledAvg12h * (11.0f / 12.0f) + static_cast<float>(sampledNodesCurrentHour.uniqueCount) * (1.0f / 12.0f);
+    rollingSampledAvg12h = rollingSampledAvg12h * (11.0f / 12.0f) + sampledNodesCurrentHour.uniqueCount * (1.0f / 12.0f);
     sampledNodesCurrentHour.clear();
 }
 
@@ -171,10 +170,16 @@ float SphereOfInfluenceModule::computeActivityWeight(const Snapshot &snapshot) c
     // Ratio of nodes whose most recent contact was 1-2h ago vs 2-3h ago.
     // Each bucket holds nodes not heard more recently, so these represent departures per window.
     // High ratio => more nodes went quiet recently (mesh churning); low => departures were earlier.
-    const float recentActiveNodes = static_cast<float>(snapshot.recent1h.total) - static_cast<float>(snapshot.old1hFrom2h.total);
-    const float olderActiveNodes =
-        static_cast<float>(snapshot.old1hFrom2h.total) - std::max(1.0f, static_cast<float>(snapshot.old1hFrom3h.total));
-    const float activityWeight = recentActiveNodes / olderActiveNodes;
+    const uint32_t recentActiveNodes = snapshot.recent1h.total + snapshot.old1hFrom2h.total;
+    const uint32_t olderActiveNodes = snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total;
+
+    // Not enough historical data to compute a meaningful ratio. Use a neutral
+    // fallback so hop selection remains stable instead of dividing by zero or
+    // treating a non-positive denominator as valid.
+    if (olderActiveNodes <= 1 || recentActiveNodes <= 1) {
+        return 1.0f;
+    }
+    const float activityWeight = static_cast<float>(recentActiveNodes) / static_cast<float>(olderActiveNodes);
     return activityWeight;
 }
 
@@ -233,19 +238,18 @@ uint8_t SphereOfInfluenceModule::computeRequiredHop(const Snapshot &snapshot, fl
     uint16_t affectedNodesPerHop[HOP_MAX + 1];
     memset(affectedNodesPerHop, 0, sizeof(affectedNodesPerHop));
 
-    // Convert scaleFactor to fixed-point (×100) so the per-hop loop is integer-only.
-    // scaleFactor compensates for eviction undercount in the 12h window (1.0 when DB has headroom).
-    const uint16_t scaleFactorX100 = static_cast<uint16_t>(scaleFactor * 100.0f + 0.5f);
-
     for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
         // Average the three 1h buckets down to a single-hour node count at this hop.
         const uint16_t avg1hFrom3h = static_cast<uint16_t>(
             (snapshot.recent1h.perHop[hop] + snapshot.old1hFrom2h.perHop[hop] + snapshot.old1hFrom3h.perHop[hop]) / 3);
 
         // 12h cumulative is the best population estimate; scaleFactor compensates for eviction undercount.
-        const uint32_t scaled12h = static_cast<uint32_t>(snapshot.cumulative12h.perHop[hop]) * scaleFactorX100 / 100;
-        const uint16_t scaled12hInt = static_cast<uint16_t>(std::min(scaled12h, static_cast<uint32_t>(UINT16_MAX)));
+        const float scaled12h = snapshot.cumulative12h.perHop[hop] * scaleFactor;
+        const uint16_t scaled12hInt = static_cast<uint16_t>(std::min(scaled12h, static_cast<float>(UINT16_MAX)));
 
+        // If there isn't much action in the 12 hour window, or there is a flurry of activity in the recent 1-3h average, use the
+        // recent average to avoid underestimation. Otherwise, use the scaled 12h count for a more stable estimate of the affected
+        // nodes.
         affectedNodesPerHop[hop] = std::max(avg1hFrom3h, scaled12hInt);
     }
 
@@ -257,9 +261,9 @@ uint8_t SphereOfInfluenceModule::computeRequiredHop(const Snapshot &snapshot, fl
              affectedNodesPerHop[6], affectedNodesPerHop[7]);
 
     uint8_t baseHop = HOP_MAX;
-    uint16_t affectedNodes = 0;
+    uint32_t affectedNodes = 0;
     for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
-        affectedNodes = static_cast<uint16_t>(affectedNodes + affectedNodesPerHop[hop]);
+        affectedNodes += affectedNodesPerHop[hop];
         if (affectedNodes >= TARGET_AFFECTED_NODES) {
             baseHop = hop;
             break;
@@ -267,9 +271,9 @@ uint8_t SphereOfInfluenceModule::computeRequiredHop(const Snapshot &snapshot, fl
     }
 
     if (baseHop < HOP_MAX) {
-        const uint16_t affectedIfExtend = static_cast<uint16_t>(affectedNodes + affectedNodesPerHop[baseHop + 1]);
-        const float politeLimit = static_cast<float>(affectedNodes) * politenessFactor;
-        if (static_cast<float>(affectedIfExtend) <= politeLimit) {
+        const uint32_t affectedIfExtend = affectedNodes + affectedNodesPerHop[baseHop + 1];
+        const float politeLimit = affectedNodes * politenessFactor;
+        if (affectedIfExtend <= politeLimit) {
             baseHop++;
         }
     }
