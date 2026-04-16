@@ -23,11 +23,14 @@ class HostedBluetooth : public BluetoothApi
     bool isConnected() override;
     int getRssi() override;
     void sendLog(const uint8_t *logMessage, size_t length) override;
+    void startAdvertising();
 
     void setConnected(bool value);
     void setRssi(int value);
 
   private:
+    bool setupGatt();
+    void shutdownGatt();
     void maybeLogFirstRssi(int value);
     bool registerCallbacks();
     void unregisterCallbacks();

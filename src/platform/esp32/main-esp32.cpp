@@ -43,6 +43,16 @@ void setBluetoothEnable(bool enable)
     if (config.bluetooth.enabled == true)
 #endif
     {
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+        if (!enable) {
+            if (bluetoothApi && bluetoothApi->isActive()) {
+                bluetoothApi->shutdown();
+                powerMon->clearState(meshtastic_PowerMon_State_BT_On);
+            }
+            return;
+        }
+#endif
+
         if (!bluetoothApi) {
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
             bluetoothApi = new HostedBluetooth();
