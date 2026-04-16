@@ -2,6 +2,7 @@
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "main.h"
+#include "modules/NodeInfoModule.h"
 #include <Throttle.h>
 #include <sys/time.h>
 #include <time.h>
@@ -11,6 +12,14 @@ uint32_t lastSetFromPhoneNtpOrGps = 0;
 
 static uint32_t lastTimeValidationWarning = 0;
 static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
+
+static void triggerNodeInfoCheckOnTimeSource(RTCQuality oldQuality, RTCQuality newQuality)
+{
+    if (oldQuality == RTCQualityNone && newQuality > RTCQualityNone && nodeInfoModule) {
+        LOG_DEBUG("Time source acquired (%s -> %s), triggering NodeInfo recheck", RtcName(oldQuality), RtcName(newQuality));
+        nodeInfoModule->triggerImmediateNodeInfoCheck();
+    }
+}
 
 RTCQuality getRTCQuality()
 {
@@ -61,9 +70,11 @@ RTCSetResult readFromRTC()
         LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
+            RTCQuality oldQuality = currentQuality;
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
+            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     } else {
@@ -105,9 +116,11 @@ RTCSetResult readFromRTC()
         LOG_DEBUG("Read RTC time from %s getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t.tm_year + 1900,
                   t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
+            RTCQuality oldQuality = currentQuality;
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
+            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     } else {
@@ -139,9 +152,11 @@ RTCSetResult readFromRTC()
             }
 #endif
             if (currentQuality == RTCQualityNone) {
+                RTCQuality oldQuality = currentQuality;
                 timeStartMsec = now;
                 zeroOffsetSecs = tv.tv_sec;
                 currentQuality = RTCQualityDevice;
+                triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
             }
             return RTCSetResultSuccess;
         }
@@ -214,6 +229,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
     }
 
     if (shouldSet) {
+        RTCQuality oldQuality = currentQuality;
         currentQuality = q;
         lastSetMsec = now;
         if (currentQuality >= RTCQualityNTP) {
@@ -281,6 +297,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #endif
 
         readFromRTC();
+        triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
         return RTCSetResultSuccess;
     } else {
         return RTCSetResultNotSet; // RTC was already set with a higher quality time
@@ -396,6 +413,17 @@ uint32_t getValidTime(RTCQuality minQuality, bool local)
 {
     return (currentQuality >= minQuality) ? getTime(local) : 0;
 }
+
+#ifdef PIO_UNIT_TESTING
+void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot)
+{
+    currentQuality = RTCQualityNone;
+    zeroOffsetSecs = 0;
+    timeStartMsec = millis() - (secondsSinceBoot * 1000);
+    lastSetFromPhoneNtpOrGps = 0;
+    lastTimeValidationWarning = 0;
+}
+#endif
 
 time_t gm_mktime(const struct tm *tm)
 {
