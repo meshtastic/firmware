@@ -374,8 +374,10 @@ void setup()
     digitalWrite(SDCARD_CS, HIGH);
     pinMode(PIN_EINK_CS, OUTPUT);
     digitalWrite(PIN_EINK_CS, HIGH);
+#if PIN_EINK_RES >= 0
     pinMode(PIN_EINK_RES, OUTPUT);
     digitalWrite(PIN_EINK_RES, HIGH);
+#endif
     pinMode(CST328_PIN_RST, OUTPUT);
     digitalWrite(CST328_PIN_RST, HIGH);
 #elif defined(T_LORA_PAGER)
