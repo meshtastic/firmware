@@ -8,7 +8,7 @@ on:
       targets:
         description: 'Space-separated PlatformIO targets'
         required: false
-        default: 'tbeam heltec-v3 rak4631 tlora-v2-1-1_6'
+        default: 'seeed_wio_tracker_L1'
 
 permissions:
   contents: write
