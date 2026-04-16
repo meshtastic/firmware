@@ -7,6 +7,7 @@
 #include "Wire.h"
 #include "input/InputBroker.h"
 #include "input/TouchScreenImpl1.h"
+#include "sleep.h"
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 #include "graphics/niche/InkHUD/InkHUD.h"
@@ -74,6 +75,17 @@ static TouchInkHUDBridge touchBridge;
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
 TouchDrvGT911 touch;
+
+// Commands the GT911 into standby before the Wire bus is torn down.
+// notifyDeepSleep fires before Wire.end() in doDeepSleep(), so I2C is still available here.
+struct TouchDeepSleepObserver {
+    int onDeepSleep(void *)
+    {
+        touch.sleep();
+        return 0;
+    }
+    CallbackObserver<TouchDeepSleepObserver, void *> observer{this, &TouchDeepSleepObserver::onDeepSleep};
+} static touchDeepSleepObserver;
 
 bool readTouch(int16_t *x, int16_t *y)
 {
@@ -146,9 +158,6 @@ void earlyInitVariant()
 
 void variant_shutdown()
 {
-    // Put touch controller into low-power standby before deep sleep
-    touch.sleep();
-
     // Ensure frontlight is off during deep sleep
     digitalWrite(BOARD_BL_EN, LOW);
 }
@@ -158,6 +167,7 @@ void lateInitVariant(void)
 {
     touch.setPins(GT911_PIN_RST, GT911_PIN_INT);
     if (touch.begin(Wire, GT911_SLAVE_ADDRESS_H, GT911_PIN_SDA, GT911_PIN_SCL)) {
+        touchDeepSleepObserver.observer.observe(&notifyDeepSleep);
         touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
         touchScreenImpl1->init();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
