@@ -447,6 +447,26 @@ def set_channel_url(url: str, port: str | None = None) -> dict[str, Any]:
 
 
 @app.tool()
+def set_debug_log_api(enabled: bool, port: str | None = None) -> dict[str, Any]:
+    """Toggle security.debug_log_api_enabled on the local node.
+
+    When true, firmware streams log lines as protobuf `LogRecord` messages
+    over the StreamAPI (topic `meshtastic.log.line` in meshtastic-python)
+    instead of raw text. Lets diagnostic clients capture firmware-side logs
+    through the SAME SerialInterface used for admin/info calls — no
+    separate `pio device monitor` session needed, no exclusive-port-lock
+    conflict. Persists across reboot via NVS; wiped by factory_reset
+    unless re-applied.
+
+    The earlier emitLogRecord race (shared tx buffer) is fixed at the
+    firmware level — the log path has a dedicated scratch + txBuf and
+    both emission paths serialize via a mutex. Safe to leave on under
+    traffic.
+    """
+    return admin.set_debug_log_api(enabled=enabled, port=port)
+
+
+@app.tool()
 def send_text(
     text: str,
     to: str | int | None = None,

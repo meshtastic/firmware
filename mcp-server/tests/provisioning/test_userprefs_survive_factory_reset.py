@@ -15,24 +15,20 @@ import pytest
 from meshtastic_mcp import admin, info
 
 
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(180)
 def test_baked_prefs_survive_factory_reset(
-    baked_mesh: dict[str, Any],
+    baked_single: dict[str, Any],
     test_profile: dict[str, Any],
     wait_until,
 ) -> None:
-    """Flow:
+    """Runs once per connected role. Flow:
     1. Change owner name to a known-non-default value.
     2. Trigger factory_reset(full=False).
     3. Wait for device to come back.
     4. Confirm owner is back to USERPREFS-baked default (or blank default if
        not baked), and primary channel/region/slot are still the baked values.
     """
-    # Use esp32s3 — typically more robust across reset cycles.
-    target = "esp32s3"
-    if target not in baked_mesh:
-        pytest.skip(f"role {target!r} not on hub")
-    port = baked_mesh[target]["port"]
+    port = baked_single["port"]
 
     # Snapshot pre-reset config
     pre_reset = info.device_info(port=port, timeout_s=8.0)

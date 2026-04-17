@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import re
 import subprocess
-import time
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -34,26 +33,27 @@ def _run(
     timeout: float = _TIMEOUT_LONG,
     cwd: Path | None = None,
 ) -> dict[str, Any]:
-    t0 = time.monotonic()
+    # Shared with pio.run(): if `MESHTASTIC_MCP_FLASH_LOG` is set, each line
+    # of output is tee'd to that file as it arrives so the TUI can show live
+    # esptool/nrfutil/picotool progress instead of 3 minutes of silence.
+    full = [str(binary), *args]
     try:
-        proc = subprocess.run(
-            [str(binary), *args],
-            cwd=str(cwd) if cwd else None,
-            capture_output=True,
-            text=True,
+        rc, stdout, stderr, duration = pio._run_capturing(
+            full,
+            cwd=cwd,
             timeout=timeout,
+            tee_header=f"{binary.name} {' '.join(args)}",
         )
     except subprocess.TimeoutExpired as exc:
         raise ToolError(
             f"{binary.name} {' '.join(args)} timed out after {timeout}s"
         ) from exc
-    duration = time.monotonic() - t0
     return {
-        "exit_code": proc.returncode,
-        "stdout": proc.stdout or "",
-        "stderr": proc.stderr or "",
-        "stdout_tail": pio.tail_lines(proc.stdout or "", 200),
-        "stderr_tail": pio.tail_lines(proc.stderr or "", 200),
+        "exit_code": rc,
+        "stdout": stdout,
+        "stderr": stderr,
+        "stdout_tail": pio.tail_lines(stdout, 200),
+        "stderr_tail": pio.tail_lines(stderr, 200),
         "duration_s": round(duration, 2),
     }
 

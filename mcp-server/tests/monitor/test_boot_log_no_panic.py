@@ -33,20 +33,19 @@ _PANIC_MARKERS = [
 
 @pytest.mark.timeout(180)
 def test_boot_log_no_panic(
-    baked_mesh: dict[str, Any],
+    baked_single: dict[str, Any],
     serial_capture,
+    role_env,
     wait_until,
 ) -> None:
-    """Reboot the device, then watch ~60s of boot log for panic markers."""
-    target = "esp32s3"
-    if target not in baked_mesh:
-        pytest.skip(f"role {target!r} not on hub")
-    port = baked_mesh[target]["port"]
-
-    env = os.environ.get("MESHTASTIC_MCP_ENV_ESP32S3", "t-beam-1w")
+    """Runs once per connected role — each device must boot cleanly,
+    independently. A panic on one role shouldn't mask another."""
+    role = baked_single["role"]
+    port = baked_single["port"]
+    env = role_env(role)
 
     # Start monitor BEFORE reboot so we catch the reset banner + early boot
-    cap = serial_capture(target, env=env)
+    cap = serial_capture(role, env=env)
     time.sleep(1.0)
 
     # Trigger reboot

@@ -18,7 +18,19 @@ import serial
 
 from . import boards, config, devices, pio, userprefs
 
-ESP32_ARCHES = {"esp32", "esp32s2", "esp32s3", "esp32c3", "esp32c6"}
+# Meshtastic variants use both `esp32s3` and `esp32-s3` style names across
+# variants/*/platformio.ini (no consistency enforced). Accept both spellings.
+ESP32_ARCHES = {
+    "esp32",
+    "esp32s2",
+    "esp32-s2",
+    "esp32s3",
+    "esp32-s3",
+    "esp32c3",
+    "esp32-c3",
+    "esp32c6",
+    "esp32-c6",
+}
 
 
 class FlashError(RuntimeError):
@@ -286,53 +298,142 @@ def update_flash(
     return result
 
 
-def touch_1200bps(port: str, settle_ms: int = 250) -> dict[str, Any]:
+def _do_1200bps_touch(port: str, settle_ms: int, touch_timeout_s: float = 3.0) -> None:
+    """Open port at 1200 baud and close, bounded by a worker thread.
+
+    Both the open and the close can block on a busy CDC device — we wrap the
+    whole thing in a worker so the caller returns in at most `touch_timeout_s`
+    regardless. The touch is signal-only: the USB configuration change to
+    1200 baud alone is enough to trip the Adafruit bootloader's reset, so a
+    worker that's still blocked in the background after timeout has already
+    delivered the signal.
+    """
+    import concurrent.futures
+
+    def _inner() -> None:
+        try:
+            s = serial.Serial(port, 1200)
+        except serial.SerialException as exc:
+            if "No such file" in str(exc) or "could not open" in str(exc).lower():
+                raise
+            return  # other serial errors mid-open are expected during DFU entry
+        try:
+            time.sleep(settle_ms / 1000.0)
+        finally:
+            try:
+                s.close()
+            except Exception:
+                pass
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_inner)
+        try:
+            future.result(timeout=touch_timeout_s)
+        except concurrent.futures.TimeoutError:
+            pass  # signal already delivered; worker thread leaks harmlessly
+
+
+# Adafruit nRF52 bootloader VID/PID (BOTH RAK4631 and most Feather nRF52 boards).
+# See https://github.com/adafruit/Adafruit_nRF52_Bootloader
+_NRF52_BOOTLOADER_VID = 0x239A
+_NRF52_BOOTLOADER_PIDS = {
+    0x0029,  # Adafruit nRF52 bootloader (generic, used by RAK4631)
+    0x002A,  # Adafruit Feather Express bootloader variant
+    0x4029,  # alt seen on some boards
+}
+
+
+def _find_nrf52_bootloader_port() -> dict[str, Any] | None:
+    """Return a dict for any currently-enumerated nRF52 bootloader port, or None."""
+    for d in devices.list_devices(include_unknown=True):
+        vid_str = d.get("vid")
+        pid_str = d.get("pid")
+        if vid_str is None or pid_str is None:
+            continue
+        try:
+            vid = int(vid_str, 16) if isinstance(vid_str, str) else int(vid_str)
+            pid = int(pid_str, 16) if isinstance(pid_str, str) else int(pid_str)
+        except ValueError:
+            continue
+        if vid == _NRF52_BOOTLOADER_VID and pid in _NRF52_BOOTLOADER_PIDS:
+            return d
+    return None
+
+
+def touch_1200bps(
+    port: str,
+    settle_ms: int = 250,
+    poll_timeout_s: float = 8.0,
+    retries: int = 2,
+) -> dict[str, Any]:
     """Open port at 1200 baud, close immediately — triggers USB CDC bootloader.
 
     Works for: nRF52840 (Adafruit bootloader), ESP32-S3 (native USB download
     mode), RP2040 (when built with 1200bps-reset stdio), Arduino Leonardo/Micro.
 
-    Afterward, polls `list_devices()` for up to 3 seconds to detect a new
-    bootloader port that replaced the original application port.
+    For nRF52 specifically: after the touch, polls for the Adafruit bootloader
+    VID/PID (0x239A / 0x0029) for up to `poll_timeout_s` seconds. Adafruit's
+    bootloader docs note a touch sometimes needs to be repeated, so this
+    retries up to `retries` times. The returned `new_port` is the bootloader
+    port (distinct from the app port) — exactly what's needed for `pio run
+    -t upload` to drive nrfutil.
+
+    For non-nRF52 devices (ESP32-S3, RP2040, Arduino), falls back to
+    "any-new-port appeared" detection.
+
+    Returns `{ok, former_port, new_port, new_port_vid_pid, attempts}`.
     """
-    before_ports = {d["port"] for d in devices.list_devices(include_unknown=True)}
+    before_list = devices.list_devices(include_unknown=True)
+    before_ports = {d["port"] for d in before_list}
 
-    try:
-        s = serial.Serial(port, 1200)
-        # Some drivers need a brief settle before close; others disconnect
-        # immediately when we set 1200 baud. Either is fine.
-        time.sleep(settle_ms / 1000.0)
-        try:
-            s.close()
-        except Exception:
-            pass
-    except serial.SerialException as exc:
-        # Many boards drop the port mid-open when 1200 is set; that's expected.
-        # Only treat "port doesn't exist" as a real error.
-        if "No such file" in str(exc) or "could not open" in str(exc).lower():
-            raise FlashError(f"Cannot open {port}: {exc}") from exc
+    attempts = 0
+    new_port_info: dict[str, Any] | None = None
 
-    # Poll for a new port appearing (bootloader) or the old one disappearing
-    deadline = time.monotonic() + 3.0
-    new_port: str | None = None
-    while time.monotonic() < deadline:
-        time.sleep(0.2)
-        current = {d["port"] for d in devices.list_devices(include_unknown=True)}
-        added = current - before_ports
-        if added:
-            # Prefer a likely-meshtastic port among the newly appeared ones.
-            current_list = devices.list_devices(include_unknown=True)
-            added_records = [d for d in current_list if d["port"] in added]
-            likely = next((d for d in added_records if d["likely_meshtastic"]), None)
-            new_port = (likely or added_records[0])["port"]
+    for attempt in range(1, retries + 1):
+        attempts = attempt
+        _do_1200bps_touch(port, settle_ms=settle_ms, touch_timeout_s=3.0)
+
+        # Poll for either (a) the nRF52 bootloader VID/PID appearing, or
+        # (b) a brand-new port appearing that wasn't there before.
+        deadline = time.monotonic() + poll_timeout_s
+        while time.monotonic() < deadline:
+            time.sleep(0.2)
+
+            bootloader = _find_nrf52_bootloader_port()
+            if bootloader is not None:
+                new_port_info = bootloader
+                break
+
+            current = devices.list_devices(include_unknown=True)
+            current_paths = {d["port"] for d in current}
+            added = current_paths - before_ports
+            if added:
+                added_record = next((d for d in current if d["port"] in added), None)
+                if added_record:
+                    new_port_info = added_record
+                    break
+
+        if new_port_info is not None:
             break
-        if port not in current:
-            # Old port went away entirely; bootloader may have shown up with a
-            # different name. Give it a moment more.
-            continue
+        # No bootloader appeared; try touching again (Adafruit recommends
+        # sometimes requiring two touches for reliability).
+
+    if new_port_info is not None:
+        return {
+            "ok": True,
+            "former_port": port,
+            "new_port": new_port_info["port"],
+            "new_port_vid_pid": (
+                new_port_info.get("vid"),
+                new_port_info.get("pid"),
+            ),
+            "attempts": attempts,
+        }
 
     return {
-        "ok": True,
+        "ok": False,
         "former_port": port,
-        "new_port": new_port,
+        "new_port": None,
+        "new_port_vid_pid": (None, None),
+        "attempts": attempts,
     }

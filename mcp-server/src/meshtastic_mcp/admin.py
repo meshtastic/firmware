@@ -36,11 +36,18 @@ def _require_confirm(confirm: bool, operation: str) -> None:
 
 
 def _message_to_dict(msg: Any) -> dict[str, Any]:
-    return json_format.MessageToDict(
-        msg,
-        preserving_proto_field_name=True,
-        including_default_value_fields=False,
-    )
+    # `including_default_value_fields` was renamed to
+    # `always_print_fields_with_no_presence` in protobuf 5.26+. Pick whichever
+    # kwarg the installed version accepts so we work against both.
+    kwargs: dict[str, Any] = {"preserving_proto_field_name": True}
+    import inspect
+
+    sig = inspect.signature(json_format.MessageToDict)
+    if "always_print_fields_with_no_presence" in sig.parameters:
+        kwargs["always_print_fields_with_no_presence"] = False
+    elif "including_default_value_fields" in sig.parameters:
+        kwargs["including_default_value_fields"] = False
+    return json_format.MessageToDict(msg, **kwargs)
 
 
 # ---------- owner ----------------------------------------------------------
@@ -291,6 +298,37 @@ def send_text(
     return {"ok": True, "packet_id": packet_id, "destination": destination}
 
 
+# ---------- diagnostics ----------------------------------------------------
+
+
+def set_debug_log_api(enabled: bool, port: str | None = None) -> dict[str, Any]:
+    """Toggle `config.security.debug_log_api_enabled` on the local node.
+
+    When enabled, firmware emits log lines as protobuf `LogRecord` messages
+    over the StreamAPI instead of raw text. meshtastic-python surfaces them
+    on pubsub topic `meshtastic.log.line`, which flows through the SAME
+    SerialInterface our tests already hold open — no `pio device monitor`
+    needed, no port-contention with admin/info calls.
+
+    Firmware gate: `src/SerialConsole.cpp` (`usingProtobufs &&
+    config.security.debug_log_api_enabled`). Setting persists in NVS; it
+    survives reboot. `factory_reset(full=False)` clears it unless it's
+    re-applied after reset.
+
+    Previously-documented concurrency hazard (emitLogRecord sharing the
+    main packet-emission buffers) has been fixed — see `StreamAPI.h`
+    where the log path now owns dedicated `fromRadioScratchLog` /
+    `txBufLog` buffers, and `StreamAPI::emitTxBuffer` +
+    `StreamAPI::emitLogRecord` both serialize their `stream->write`
+    calls via `streamLock`. Leaving the flag on under traffic is safe.
+    """
+    with connect(port=port) as iface:
+        sec = iface.localNode.localConfig.security
+        sec.debug_log_api_enabled = bool(enabled)
+        iface.localNode.writeConfig("security")
+    return {"ok": True, "debug_log_api_enabled": bool(enabled)}
+
+
 # ---------- admin actions --------------------------------------------------
 
 
@@ -315,7 +353,19 @@ def shutdown(
 def factory_reset(
     port: str | None = None, confirm: bool = False, full: bool = False
 ) -> dict[str, Any]:
+    """Tell the node to factory-reset its config.
+
+    Works around a meshtastic-python 2.7.8 bug: `Node.factoryReset(full=True)`
+    internally does `p.factory_reset_config = True` where the field is
+    int32. protobuf 5.x rejects bool→int assignment as a TypeError. We build
+    the AdminMessage directly with int values (1=non-full, 2=full) and call
+    `_sendAdmin` to sidestep the SDK bug entirely.
+    """
     _require_confirm(confirm, "factory_reset")
+    from meshtastic.protobuf import admin_pb2  # type: ignore[import-untyped]
+
     with connect(port=port) as iface:
-        iface.localNode.factoryReset(full=full)
+        msg = admin_pb2.AdminMessage()
+        msg.factory_reset_config = 2 if full else 1
+        iface.localNode._sendAdmin(msg)
     return {"ok": True, "full": full}

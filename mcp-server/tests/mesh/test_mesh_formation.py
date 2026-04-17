@@ -16,20 +16,25 @@ from meshtastic_mcp.connection import connect
 
 
 @pytest.mark.timeout(180)
-def test_mesh_formation_within_60s(baked_mesh: dict[str, Any], wait_until) -> None:
-    """Connect to A, poll its node DB until B's node_num appears. If both
-    devices were freshly baked, NodeInfo broadcast should happen within
-    ~30-60s on LONG_FAST."""
-    if "nrf52" not in baked_mesh or "esp32s3" not in baked_mesh:
-        pytest.skip("both roles required")
+def test_mesh_formation_within_60s(mesh_pair: dict[str, Any], wait_until) -> None:
+    """Runs for every directed role pair — so we prove `A sees B in its node
+    DB` AND `B sees A in its node DB` independently. A one-sided pass can
+    mask a real problem (e.g. device A's RX works but its TX is dead).
+    """
+    observer_port = mesh_pair["tx"]["port"]
+    target_node_num = mesh_pair["rx"]["my_node_num"]
+    assert (
+        target_node_num is not None
+    ), f"{mesh_pair['rx']['role']} my_node_num not populated"
 
-    a_port = baked_mesh["nrf52"]["port"]
-    b_node_num = baked_mesh["esp32s3"]["my_node_num"]
-    assert b_node_num is not None, "esp32s3 my_node_num not populated"
-
-    def b_visible_from_a() -> bool:
-        with connect(port=a_port) as iface:
+    def target_visible_from_observer() -> bool:
+        with connect(port=observer_port) as iface:
             nodes = iface.nodesByNum or {}
-            return b_node_num in nodes
+            return target_node_num in nodes
 
-    wait_until(b_visible_from_a, timeout=120, backoff_start=2.0, backoff_max=10.0)
+    wait_until(
+        target_visible_from_observer,
+        timeout=120,
+        backoff_start=2.0,
+        backoff_max=10.0,
+    )

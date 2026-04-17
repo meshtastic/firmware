@@ -16,13 +16,13 @@ from meshtastic_mcp import admin, info
 
 @pytest.mark.timeout(120)
 def test_owner_survives_reboot(
-    baked_mesh: dict[str, Any],
+    baked_single: dict[str, Any],
     wait_until,
 ) -> None:
-    target = "esp32s3"
-    if target not in baked_mesh:
-        pytest.skip(f"role {target!r} not on hub")
-    port = baked_mesh[target]["port"]
+    """Runs once per connected role — proves the reboot-persistence
+    round-trip works on each device independently, not just one."""
+    role = baked_single["role"]
+    port = baked_single["port"]
 
     pre = info.device_info(port=port, timeout_s=8.0)
     original = pre.get("long_name") or ""

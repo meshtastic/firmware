@@ -17,10 +17,19 @@ test = [
   "pytest-timeout>=2.3",
   "coverage[toml]>=7",
   "pyyaml>=6",
+  # textual is required by the `meshtastic-mcp-test-tui` script (see
+  # `src/meshtastic_mcp/cli/test_tui.py`). Bundled into `test` rather than a
+  # separate `[tui]` extra because v1 expects test operators are the only
+  # consumers; revisit if install cost pushes back.
+  "textual>=0.50",
 ]
 
 [project.scripts]
 meshtastic-mcp = "meshtastic_mcp.__main__:main"
+# Live TUI wrapping run-tests.sh — shells out to the same script the plain
+# CLI uses, tails pytest-reportlog for per-test state, and polls the device
+# list at startup + post-run (port lock forces it to stay idle during the run).
+meshtastic-mcp-test-tui = "meshtastic_mcp.cli.test_tui:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -37,10 +37,22 @@ def test_bake_sets_region_preset_and_slot(
         assert (
             live["region"] == expected_region
         ), f"{role}: region={live['region']!r}, expected {expected_region!r}"
-        assert lora.get("modem_preset") in (
-            expected_preset_str,
-            expected_preset_str.upper(),
-        ), f"{role}: modem_preset={lora.get('modem_preset')!r}, expected {expected_preset_str!r}"
+
+        # `modem_preset` is omitted from the protobuf→JSON dump when the
+        # device is using the default enum value (LONG_FAST). If the key is
+        # missing AND we expected LONG_FAST, that's a match. Otherwise compare.
+        live_preset = lora.get("modem_preset")
+        if live_preset is None:
+            assert expected_preset_str == "LONG_FAST", (
+                f"{role}: modem_preset omitted (means default LONG_FAST), "
+                f"but expected {expected_preset_str!r}"
+            )
+        else:
+            assert live_preset in (
+                expected_preset_str,
+                expected_preset_str.upper(),
+            ), f"{role}: modem_preset={live_preset!r}, expected {expected_preset_str!r}"
+
         assert (
             int(lora.get("channel_num", 0))
             == test_profile["USERPREFS_LORACONFIG_CHANNEL_NUM"]
