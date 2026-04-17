@@ -745,7 +745,15 @@ void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t wid
     }
 
     const TFTRoleColorsBe &colors = roleColors[roleIndex];
-    colorRegions[colorRegionCount++] = {x, y, width, height, colors.onColorBe, colors.offColorBe, true};
+    TFTColorRegion region;
+    region.x = x;
+    region.y = y;
+    region.width = width;
+    region.height = height;
+    region.onColorBe = colors.onColorBe;
+    region.offColorBe = colors.offColorBe;
+    region.enabled = true;
+    colorRegions[colorRegionCount++] = region;
     // Keep a disabled terminator after active regions.
     if (colorRegionCount < MAX_TFT_COLOR_REGIONS) {
         colorRegions[colorRegionCount].enabled = false;
@@ -774,7 +782,15 @@ void registerTFTColorRegionDirect(int16_t x, int16_t y, int16_t width, int16_t h
         memmove(&colorRegions[0], &colorRegions[1], sizeof(TFTColorRegion) * (MAX_TFT_COLOR_REGIONS - 1));
         colorRegionCount = MAX_TFT_COLOR_REGIONS - 1;
     }
-    colorRegions[colorRegionCount++] = {x, y, width, height, toBe565(onColor), toBe565(offColor), true};
+    TFTColorRegion region;
+    region.x = x;
+    region.y = y;
+    region.width = width;
+    region.height = height;
+    region.onColorBe = toBe565(onColor);
+    region.offColorBe = toBe565(offColor);
+    region.enabled = true;
+    colorRegions[colorRegionCount++] = region;
     if (colorRegionCount < MAX_TFT_COLOR_REGIONS)
         colorRegions[colorRegionCount].enabled = false;
 }
