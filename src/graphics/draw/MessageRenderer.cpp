@@ -268,27 +268,29 @@ static void registerRoundedBubbleFillRegion(int x, int y, int w, int h, int radi
         return;
     }
 
-    const int rows = std::min(radius, h / 2);
-    if (rows <= 0) {
+    // Keep region count low so we don't churn MAX_TFT_COLOR_REGIONS while
+    // scrolling long message lists (which can flatten older bubble corners).
+    int capRows = 0;
+    if (radius >= 4 && h >= 5) {
+        capRows = 2; // 5 regions total (2 top caps + middle + 2 bottom caps)
+    } else if (radius >= 2 && h >= 3) {
+        capRows = 1; // 3 regions total
+    }
+    if (capRows <= 0) {
         registerTFTColorRegion(TFTColorRole::ActionMenuBody, x, y, w, h);
         return;
     }
 
-    // Lightweight corner profile tuned for BaseUI's radius=4 bubbles.
-    auto insetForRow = [radius](int row) -> int {
+    auto insetForCap = [radius](int capIndex) -> int {
         if (radius >= 4) {
-            static constexpr int kR4Insets[4] = {2, 1, 0, 0};
-            return (row < 4) ? kR4Insets[row] : 0;
+            static constexpr int kR4CapInsets[2] = {2, 1};
+            return kR4CapInsets[(capIndex < 2) ? capIndex : 1];
         }
-        if (radius == 3)
-            return (row == 0) ? 1 : 0;
-        if (radius == 2)
-            return (row == 0) ? 1 : 0;
-        return 0;
+        return (radius >= 2) ? 1 : 0;
     };
 
-    for (int row = 0; row < rows; ++row) {
-        const int inset = insetForRow(row);
+    for (int row = 0; row < capRows; ++row) {
+        const int inset = insetForCap(row);
         const int stripW = w - (inset * 2);
         if (stripW <= 0) {
             continue;
@@ -303,8 +305,8 @@ static void registerRoundedBubbleFillRegion(int x, int y, int w, int h, int radi
         }
     }
 
-    const int middleY = y + rows;
-    const int middleH = h - (rows * 2);
+    const int middleY = y + capRows;
+    const int middleH = h - (capRows * 2);
     if (middleH > 0) {
         registerTFTColorRegion(TFTColorRole::ActionMenuBody, x, middleY, w, middleH);
     }
@@ -706,7 +708,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
     const int bubbleGapY = std::max(1, MESSAGE_BLOCK_GAP / 2);
 #if GRAPHICS_TFT_COLORING_ENABLED
-    const bool useDarkModeBubbleFill = showBubbles && !isThemeFullFrameInvert();
+    const uint32_t themeId = getActiveTheme().id;
+    // Blue is a dark variant but uses full frame inversion, Keep it on the same filled bubble style as Default Dark.
+    const bool useDarkModeBubbleFill = showBubbles && (!isThemeFullFrameInvert() || themeId == ThemeID::Blue);
 #endif
 
     std::vector<int> lineTop;
@@ -745,6 +749,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
             int visualBottom = getDrawnLinePixelBottom(lineTop[b.end], cachedLines[b.end], isHeader[b.end]);
             int bottomY = visualBottom + BUBBLE_PAD_Y;
+
+            // On high-res screens, keep a 1px gap under the header
+            if (currentResolution == ScreenResolution::High) {
+                const int minTopY = contentTop + 1;
+                if (topY < minTopY) {
+                    // Preserve bubble height when we push it down from the header.
+                    const int shift = minTopY - topY;
+                    topY = minTopY;
+                    bottomY += shift;
+                }
+            }
 
             if (bi + 1 < blocks.size()) {
                 int nextHeaderIndex = (int)blocks[bi + 1].start;
@@ -802,10 +817,15 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
 #if GRAPHICS_TFT_COLORING_ENABLED
                 if (useDarkModeBubbleFill) {
-                    // In dark mode: incoming bubbles stay dark gray with light text,
-                    // outgoing/right bubbles become light gray with dark text.
-                    const uint16_t bubbleOnColor = b.mine ? TFTPalette::Black : getThemeBodyFg();
-                    const uint16_t bubbleOffColor = b.mine ? TFTPalette::LightGray : TFTPalette::DarkGray;
+                    uint16_t bubbleOnColor;
+                    uint16_t bubbleOffColor;
+                    if (themeId == ThemeID::Blue) {
+                        bubbleOnColor = b.mine ? TFTPalette::Navy : TFTPalette::White;
+                        bubbleOffColor = b.mine ? TFTPalette::SkyBlue : TFTPalette::DeepBlue;
+                    } else {
+                        bubbleOnColor = b.mine ? TFTPalette::Black : getThemeBodyFg();
+                        bubbleOffColor = b.mine ? TFTPalette::LightGray : TFTPalette::DarkGray;
+                    }
                     setTFTColorRole(TFTColorRole::ActionMenuBody, bubbleOnColor, bubbleOffColor);
                     registerRoundedBubbleFillRegion(bx, by, bw, bh, r);
                 }
@@ -833,8 +853,15 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
 #if GRAPHICS_TFT_COLORING_ENABLED
                 if (useDarkModeBubbleFill) {
-                    const uint16_t bubbleOnColor = b.mine ? TFTPalette::Black : getThemeBodyFg();
-                    const uint16_t bubbleOffColor = b.mine ? TFTPalette::LightGray : TFTPalette::DarkGray;
+                    uint16_t bubbleOnColor;
+                    uint16_t bubbleOffColor;
+                    if (themeId == ThemeID::Blue) {
+                        bubbleOnColor = b.mine ? TFTPalette::Navy : TFTPalette::White;
+                        bubbleOffColor = b.mine ? TFTPalette::SkyBlue : TFTPalette::DeepBlue;
+                    } else {
+                        bubbleOnColor = b.mine ? TFTPalette::Black : getThemeBodyFg();
+                        bubbleOffColor = b.mine ? TFTPalette::LightGray : TFTPalette::DarkGray;
+                    }
                     setTFTColorRole(TFTColorRole::ActionMenuBody, bubbleOnColor, bubbleOffColor);
                     registerTFTColorRegion(TFTColorRole::ActionMenuBody, bubbleX, topY, bubbleW, bubbleH);
                 }
