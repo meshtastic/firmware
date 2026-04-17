@@ -138,7 +138,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         }
 
         if (transparent_background) {
-            const uint16_t transparentBgColor = getThemeBodyBg();
+            // Transparent clock headers should inherit whatever body off-color is
+            // already active under the header (important for light/inverted themes).
+            const uint16_t transparentBgColor = resolveTFTOffColorAt(0, headerHeight + 1, getThemeBodyBg());
+            setAndRegisterTFTColorRole(TFTColorRole::HeaderBackground, transparentBgColor, transparentBgColor, 0, 0, screenW,
+                                       headerHeight);
             setTFTColorRole(TFTColorRole::HeaderTitle, headerTitleColorForRole, transparentBgColor);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, transparentBgColor);
         } else if (useInvertedHeaderStyle) {
