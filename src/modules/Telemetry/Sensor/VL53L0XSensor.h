@@ -26,5 +26,7 @@ class VL53L0XSensor : public TelemetrySensor
     VL53L0XSensor();
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
+    AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                meshtastic_AdminMessage *response) override;
 };
 #endif

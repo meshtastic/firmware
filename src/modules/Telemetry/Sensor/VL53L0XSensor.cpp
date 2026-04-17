@@ -118,4 +118,47 @@ bool VL53L0XSensor::getMetrics(meshtastic_Telemetry *measurement)
 
     return true;
 }
+
+AdminMessageHandleResult VL53L0XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                         meshtastic_AdminMessage *response)
+{
+    AdminMessageHandleResult result;
+    result = AdminMessageHandleResult::NOT_HANDLED;
+
+    switch (request->which_payload_variant) {
+        case meshtastic_AdminMessage_sensor_config_tag:
+            if (!request->sensor_config.has_vl53l0x_config) {
+                result = AdminMessageHandleResult::NOT_HANDLED;
+                break;
+            }
+
+            // Check for sensor accuracy setting
+            if (request->sensor_config.vl53l0x_config.has_ranging_mode) {
+                Adafruit_VL53L0X::VL53L0X_Sense_config_t newMode;
+                if (request->sensor_config.vl53l0x_config.ranging_mode == 0) {
+                    newMode = Adafruit_VL53L0X::VL53L0X_SENSE_DEFAULT;
+                } else if (request->sensor_config.vl53l0x_config.ranging_mode == 1) {
+                    newMode = Adafruit_VL53L0X::VL53L0X_SENSE_LONG_RANGE;
+                } else if (request->sensor_config.vl53l0x_config.ranging_mode == 2) {
+                    newMode = Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_SPEED;
+                } else if (request->sensor_config.vl53l0x_config.ranging_mode == 3) {
+                    newMode = Adafruit_VL53L0X::VL53L0X_SENSE_HIGH_ACCURACY;
+                } else {
+                    LOG_ERROR("%s: incorrect mode setting", sensorName);
+                    result = AdminMessageHandleResult::HANDLED;
+                    break;
+                }
+                this->setMode(newMode);
+            }
+
+            result = AdminMessageHandleResult::HANDLED;
+            break;
+
+        default:
+            result = AdminMessageHandleResult::NOT_HANDLED;
+    }
+
+    return result;
+}
+
 #endif
