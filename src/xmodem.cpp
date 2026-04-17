@@ -125,6 +125,12 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             if (filenameLen >= sizeof(filename)) filenameLen = sizeof(filename) - 1;
             memcpy(filename, xmodemPacket.buffer.bytes, filenameLen);
             filename[filenameLen] = '\0';
+            if (filename[0] == '\0') {
+                LOG_WARN("XModem: Rejecting empty filename");
+                sendControl(meshtastic_XModem_Control_NAK);
+                isReceiving = false;
+                break;
+            }
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
                 spiLock->lock();
