@@ -152,7 +152,7 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...);
 // Default Bluetooth PIN
 #define defaultBLEPin 123456
 
-#if HAS_ETHERNET && defined(WIZNET_5500_EVB_PICO2)
+#if HAS_ETHERNET && defined(PICO2_W5500_E22)
 #include <Ethernet.h> // arduino-libraries/Ethernet — supports W5500 auto-detect
 #elif HAS_ETHERNET && defined(USE_CH390D)
 #include <ESP32_CH390.h>
