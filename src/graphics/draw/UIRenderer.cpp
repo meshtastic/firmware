@@ -111,15 +111,13 @@ static inline StandardCompassNeedlePoints computeStandardCompassNeedlePoints(int
 static inline void drawCompassNorthOnlyLabel(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius,
                                              float heading)
 {
-    const float northAngle = getCompassRingAngleOffset(heading);
-    const float radius = compassRadius - 1.0f;
-    const int16_t nX = compassX + static_cast<int16_t>(radius * sin(northAngle));
-    const int16_t nY = compassY - static_cast<int16_t>(radius * cos(northAngle));
-
-    display->setColor(WHITE);
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+    int16_t labelRadius = compassRadius;
+    // CompassRenderer::drawCompassNorth() expands radius on high-res by +4.
+    // Compensate so label placement stays aligned with the current UI layout.
+    if (currentResolution == ScreenResolution::High && labelRadius > 4) {
+        labelRadius -= 4;
+    }
+    graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, heading, labelRadius);
 }
 
 static inline void drawMonoCompass(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius, float heading)
@@ -171,7 +169,12 @@ static inline void emitNeedleSpan(OLEDDisplay *display, NeedleColorBand (&bands)
         b = t;
     }
     display->drawHorizontalLine(a, y, b - a + 1);
-    const int band = (static_cast<int32_t>(y - bandTop) * kNeedleBandCount) / bandHeight;
+    int band = (static_cast<int32_t>(y - bandTop) * kNeedleBandCount) / bandHeight;
+    if (band < 0) {
+        band = 0;
+    } else if (band >= kNeedleBandCount) {
+        band = kNeedleBandCount - 1;
+    }
 
     NeedleColorBand &region = bands[band];
     if (!region.used) {
@@ -195,6 +198,14 @@ static inline void emitNeedleSpan(OLEDDisplay *display, NeedleColorBand (&bands)
 static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2,
                                            int16_t y2, uint16_t onColor, uint16_t offColor)
 {
+    // Important for maintainers:
+    // The compass needle rotates continuously, so color-region registration must
+    // track the triangle shape (or close approximation), not just its AABB.
+    // Using one bounding box per half looks smaller in code, but it leaks south
+    // color into north at diagonal headings (notably ~45 degrees), because the
+    // region matcher is rectangle-based and ignores triangle geometry.
+    // Keep this banded shape-aware approach unless the replacement preserves
+    // per-angle triangle coverage.
     if (y0 > y1)
         swapPoint(x0, y0, x1, y1);
     if (y1 > y2)
@@ -247,10 +258,9 @@ static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int
     }
 }
 
-static inline void drawCompassCardinalLabel(OLEDDisplay *display, int16_t x, int16_t y, const char *label)
+static inline void drawCompassCardinalLabel(OLEDDisplay *display, int16_t x, int16_t y, const char *label, int16_t textWidth)
 {
     const int16_t labelTop = y - (FONT_HEIGHT_SMALL / 2);
-    const int16_t textWidth = static_cast<int16_t>(display->getStringWidth(label));
     const int16_t padX = 1;
     const int16_t padY = 1;
 
@@ -281,10 +291,11 @@ static inline void drawCompassCardinalLabels(OLEDDisplay *display, int16_t compa
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    drawCompassCardinalLabel(display, nX, nY, "N");
-    drawCompassCardinalLabel(display, eX, eY, "E");
-    drawCompassCardinalLabel(display, sX, sY, "S");
-    drawCompassCardinalLabel(display, wX, wY, "W");
+    const int16_t labelWidth = static_cast<int16_t>(display->getStringWidth("N"));
+    drawCompassCardinalLabel(display, nX, nY, "N", labelWidth);
+    drawCompassCardinalLabel(display, eX, eY, "E", labelWidth);
+    drawCompassCardinalLabel(display, sX, sY, "S", labelWidth);
+    drawCompassCardinalLabel(display, wX, wY, "W", labelWidth);
 }
 
 static inline void drawCompassDegreeMarkers(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius,
@@ -326,12 +337,13 @@ static inline void drawStandardCompassNeedle(OLEDDisplay *display, int16_t compa
     display->drawTriangle(points.southTipX, points.southTipY, points.southLeftX, points.southLeftY, points.southRightX,
                           points.southRightY);
 #else
+    // NOTE: do not collapse these to one region per half during "flash
+    // optimization". The needle spins, and coarse rectangles will bleed color
+    // across halves at diagonal angles.
     drawNeedleHalfAndRegisterBands(display, points.northTipX, points.northTipY, points.northLeftX, points.northLeftY,
-                                   points.northRightX, points.northRightY,
-                                   TFTPalette::Red, needleOffColor);
+                                   points.northRightX, points.northRightY, TFTPalette::Red, needleOffColor);
     drawNeedleHalfAndRegisterBands(display, points.southTipX, points.southTipY, points.southLeftX, points.southLeftY,
-                                   points.southRightX, points.southRightY,
-                                   TFTPalette::Blue, needleOffColor);
+                                   points.southRightX, points.southRightY, TFTPalette::Blue, needleOffColor);
 #endif
 }
 

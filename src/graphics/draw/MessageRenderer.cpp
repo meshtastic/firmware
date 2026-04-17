@@ -297,16 +297,13 @@ static void registerRoundedBubbleFillRegion(int x, int y, int w, int h, int radi
         return;
     }
 
-    auto insetForCap = [radius](int capIndex) -> int {
-        if (radius >= 4) {
-            static constexpr int kR4CapInsets[2] = {2, 1};
-            return kR4CapInsets[(capIndex < 2) ? capIndex : 1];
-        }
-        return (radius >= 2) ? 1 : 0;
-    };
-
     for (int row = 0; row < capRows; ++row) {
-        const int inset = insetForCap(row);
+        int inset = 0;
+        if (radius >= 4) {
+            inset = (row == 0) ? 2 : 1;
+        } else if (radius >= 2) {
+            inset = 1;
+        }
         const int stripW = w - (inset * 2);
         if (stripW <= 0) {
             continue;
