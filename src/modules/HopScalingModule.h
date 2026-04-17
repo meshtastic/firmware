@@ -44,6 +44,7 @@ class HopScalingModule : private concurrency::OSThread
 
   private:
     static constexpr uint16_t SAMPLE_TRACKER_SLOTS = 128; // power of 2 for fast modulo
+    static constexpr uint16_t SAMPLE_TRACKER_LOAD_CAP = SAMPLE_TRACKER_SLOTS * 3 / 4;
 
     /// Open-addressing hash set for deduplicating sampled node IDs within one hour.
     /// Capacity is SAMPLE_TRACKER_SLOTS; collisions are resolved by linear probing.
@@ -53,7 +54,7 @@ class HopScalingModule : private concurrency::OSThread
         uint16_t uniqueCount;
 
         void clear();
-        bool record(uint32_t nodeId); // returns true if newly added
+        bool record(uint32_t nodeId);
     };
 
     struct HopBucket {
@@ -80,6 +81,8 @@ class HopScalingModule : private concurrency::OSThread
     uint8_t computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const;
     bool checkStableStatus(const Snapshot &snapshot) const;
     void logStatusReport(const Snapshot &snapshot, bool didHourlyUpdate) const;
+    void rollSampleWindow(bool earlyTrigger);
+    void adjustSamplingDenominatorForLoad(float loadRatio);
     void rollHour();
     void loadState();
     void saveState() const;
@@ -92,13 +95,14 @@ class HopScalingModule : private concurrency::OSThread
     uint8_t lastStatusMode = STATUS_STARTUP_NOT_ENOUGH_DATA;
     uint16_t lastSampledEstimate = 0;
 
-    // Eviction tracking: EMA of hourly eviction counts (12h half-life)
+    // Eviction tracking: smoothed average of hourly eviction counts
     uint16_t evictionsCurrentHour = 0;  // accumulates between rollovers
-    float rollingEvictionAvg12h = 0.0f; // EMA updated each hour
+    float rollingEvictionAvg12h = 0.0f; // updated once per hour
 
     // Sampling-based mesh size estimation for high-turnover scenarios
     SampleTracker sampledNodesCurrentHour = {};
-    float rollingSampledAvg12h = 0.0f; // EMA of estimated mesh size per hour (denominator-normalised)
+    float rollingSampledAvg12h = 0.0f; // Rolling average estimate of mesh size per hour (denominator-normalised)
+    uint32_t sampleWindowStartMs = 0;
 };
 
 extern HopScalingModule *hopScalingModule;

@@ -42,15 +42,16 @@ constexpr float TURNOVER_CAPACITY_LIMIT_RATIO = 0.2f; // Evictions below 20% of 
 
 // Modulo sampling: track 1-in-N unique node IDs from the packet stream
 // Dynamically adjusted to keep sample tracker load between 1/8 and 5/8 capacity
-uint8_t SAMPLING_DENOMINATOR = 10; // mutable (was: constexpr)
+uint8_t SAMPLING_DENOMINATOR = 8; // mutable
 constexpr uint8_t SAMPLING_DENOMINATOR_MIN = 1;
-constexpr uint8_t SAMPLING_DENOMINATOR_MAX = 200;
+constexpr uint8_t SAMPLING_DENOMINATOR_MAX = 128;
+constexpr uint32_t ONE_HOUR_MS = ONE_HOUR_SECS * 1000UL;
 
 // Persistence
 constexpr const char *HOP_SCALING_STATE_FILE = "/prefs/hop_scaling.bin";
-// TODO: REMOVE BEFORE PR SUBMISSION - temporary one-time migration source file.
 constexpr const char *LEGACY_SOI_STATE_FILE = "/prefs/soi.bin";
-constexpr uint32_t HOP_SCALING_STATE_MAGIC = 0x534F4931; // 'SOI1' (kept for on-disk compatibility)
+constexpr uint32_t HOP_SCALING_STATE_MAGIC = 0x48534331;        // 'HSC1' (Hop SCaling state)
+constexpr uint32_t LEGACY_HOP_SCALING_STATE_MAGIC = 0x534F4931; // 'SOI1' (legacy)
 constexpr uint8_t HOP_SCALING_STATE_VERSION = 1;
 
 struct PersistedState {
@@ -87,6 +88,7 @@ void HopScalingModule::HopBucket::add(const meshtastic_NodeInfoLite &node)
 HopScalingModule::HopScalingModule() : concurrency::OSThread("HopScaling")
 {
     loadState();
+    sampleWindowStartMs = millis();
     setIntervalFromNow(INITIAL_DELAY_MS);
 }
 
@@ -103,13 +105,13 @@ void HopScalingModule::SampleTracker::clear()
     uniqueCount = 0;
 }
 
-/// Insert a node ID into the hash set. Returns true if the ID was newly added.
+/// Insert a node ID into the hash set.
 /// Uses open-addressing with linear probing; slot 0 value 0 is reserved as "empty".
 bool HopScalingModule::SampleTracker::record(uint32_t nodeId)
 {
     if (nodeId == 0)
         return false; // 0 is the empty sentinel
-    if (uniqueCount >= SAMPLE_TRACKER_SLOTS * 3 / 4)
+    if (uniqueCount >= SAMPLE_TRACKER_LOAD_CAP)
         return false; // load factor > 75%, stop inserting to avoid long probe chains
 
     uint16_t idx = static_cast<uint16_t>(nodeId) & (SAMPLE_TRACKER_SLOTS - 1);
@@ -130,8 +132,15 @@ bool HopScalingModule::SampleTracker::record(uint32_t nodeId)
 /// Only 1-in-SAMPLING_DENOMINATOR nodes are tracked (deterministic by node ID).
 void HopScalingModule::recordPacketSender(uint32_t nodeId)
 {
-    if (nodeId % SAMPLING_DENOMINATOR == 0) {
-        sampledNodesCurrentHour.record(nodeId);
+    if (nodeId % SAMPLING_DENOMINATOR != 0)
+        return;
+
+    sampledNodesCurrentHour.record(nodeId);
+
+    // Trigger an early sample-window roll exactly at the 75% load cap to avoid
+    // dropping new IDs and retune sampling while traffic is active.
+    if (sampledNodesCurrentHour.uniqueCount >= SAMPLE_TRACKER_LOAD_CAP) {
+        rollSampleWindow(true);
     }
 }
 
@@ -140,47 +149,67 @@ void HopScalingModule::recordPacketSender(uint32_t nodeId)
 uint16_t HopScalingModule::estimateSampledMeshSize() const
 {
     if (rollingSampledAvg12h < 2.0f)
-        return 0; // EMA of estimated mesh size too low to be reliable
+        return 0; // Smoothed estimate too low to be reliable
     return static_cast<uint16_t>(std::min(rollingSampledAvg12h, 65535.0f));
 }
 
-// Roll the hourly eviction count and sampled node count into their respective 12h moving averages, then reset the hourly
-// counters. Also performs adaptive adjustment of the sampling denominator to keep the sample tracker load within optimal bounds.
-void HopScalingModule::rollHour()
+void HopScalingModule::adjustSamplingDenominatorForLoad(float loadRatio)
 {
-    // EMA with alpha = 1/12: approximates a 12h rolling average
-    // newAvg = oldAvg * (11/12) + currentHour * (1/12)
-    rollingEvictionAvg12h = rollingEvictionAvg12h * (11.0f / 12.0f) + evictionsCurrentHour * (1.0f / 12.0f);
-    evictionsCurrentHour = 0;
-
-    // Roll estimated mesh size into 12h EMA using the denominator active this hour, before any adjustment.
-    // Storing the mesh estimate (rather than the raw sample count) ensures the EMA remains meaningful
-    // across denominator changes — each hour's contribution is already in absolute node counts.
-    const float estimatedMeshThisHour = sampledNodesCurrentHour.uniqueCount * SAMPLING_DENOMINATOR;
-    rollingSampledAvg12h = rollingSampledAvg12h * (11.0f / 12.0f) + estimatedMeshThisHour * (1.0f / 12.0f);
-
-    // Adaptive sampling: adjust denominator based on sample tracker load factor.
-    // Target: keep tracker between 1/8 and 5/8 of the 75% load factor cap to avoid hash collisions
-    // while maintaining enough samples for a reliable estimate.
-    const float samplesThisHour = static_cast<float>(sampledNodesCurrentHour.uniqueCount);
-    const float maxUseful = static_cast<float>(SAMPLE_TRACKER_SLOTS) * (3.0f / 4.0f); // 75% load factor cap
-    const float loadRatio = samplesThisHour / maxUseful;
-
+    const char *direction = nullptr;
     if (loadRatio > 5.0f / 8.0f && SAMPLING_DENOMINATOR < SAMPLING_DENOMINATOR_MAX) {
-        // Tracker getting too full; reduce sample rate (increase denominator)
         SAMPLING_DENOMINATOR = static_cast<uint8_t>(
             std::min(static_cast<uint16_t>(SAMPLING_DENOMINATOR * 2), static_cast<uint16_t>(SAMPLING_DENOMINATOR_MAX)));
-        LOG_INFO("[HOPSCALE] Adaptive sampling: denominator increased to %u (load ratio=%.2f)", SAMPLING_DENOMINATOR,
-                 static_cast<double>(loadRatio));
+        direction = "increased";
     } else if (loadRatio < 1.0f / 8.0f && SAMPLING_DENOMINATOR > SAMPLING_DENOMINATOR_MIN) {
-        // Tracker underutilized; increase sample rate (decrease denominator)
         SAMPLING_DENOMINATOR = static_cast<uint8_t>(
             std::max(static_cast<uint16_t>(SAMPLING_DENOMINATOR / 2), static_cast<uint16_t>(SAMPLING_DENOMINATOR_MIN)));
-        LOG_INFO("[HOPSCALE] Adaptive sampling: denominator decreased to %u (load ratio=%.2f)", SAMPLING_DENOMINATOR,
+        direction = "decreased";
+    }
+    if (direction) {
+        LOG_INFO("[HOPSCALE] Adaptive sampling: denominator %s to %u (load ratio=%.2f)", direction, SAMPLING_DENOMINATOR,
                  static_cast<double>(loadRatio));
+    }
+}
+
+void HopScalingModule::rollSampleWindow(bool earlyTrigger)
+{
+    const uint32_t nowMs = millis();
+    const uint32_t windowMs = sampleWindowStartMs ? (nowMs - sampleWindowStartMs) : ONE_HOUR_MS;
+
+    const float samplesThisWindow = static_cast<float>(sampledNodesCurrentHour.uniqueCount);
+    const float estimatedMeshThisWindow = samplesThisWindow * SAMPLING_DENOMINATOR;
+
+    // Integrate by the fraction of an hour represented by this window,
+    // without exponent-based weighting.
+    const float windowFraction = std::max(0.0f, std::min(1.0f, static_cast<float>(windowMs) / static_cast<float>(ONE_HOUR_MS)));
+    const float alpha = windowFraction * (1.0f / 12.0f);
+    rollingSampledAvg12h = rollingSampledAvg12h * (1.0f - alpha) + estimatedMeshThisWindow * alpha;
+
+    const float maxUseful = static_cast<float>(SAMPLE_TRACKER_SLOTS) * (3.0f / 4.0f); // 75% load factor cap
+    const float loadRatio = samplesThisWindow / maxUseful;
+    adjustSamplingDenominatorForLoad(loadRatio);
+
+    if (earlyTrigger) {
+        const bool isOneHourWindow = (windowMs >= ONE_HOUR_MS);
+        const char *rollLabel = isOneHourWindow ? "Hourly sample roll" : "Early sample roll";
+        LOG_INFO("[HOPSCALE] %s: windowMs=%u unique=%u est=%.1f load=%.2f sampling 1 in %u", rollLabel,
+                 static_cast<unsigned int>(windowMs), sampledNodesCurrentHour.uniqueCount,
+                 static_cast<double>(estimatedMeshThisWindow), static_cast<double>(loadRatio), SAMPLING_DENOMINATOR);
     }
 
     sampledNodesCurrentHour.clear();
+    sampleWindowStartMs = nowMs;
+}
+
+// Roll the hourly eviction count and sampled node count into their respective rolling averages, then reset the hourly
+// counters. Also performs adaptive adjustment of the sampling denominator to keep the sample tracker load within optimal bounds.
+void HopScalingModule::rollHour()
+{
+    // Rolling-average update using a fixed 1/12 hourly contribution.
+    rollingEvictionAvg12h = rollingEvictionAvg12h * (11.0f / 12.0f) + evictionsCurrentHour * (1.0f / 12.0f);
+    evictionsCurrentHour = 0;
+
+    rollSampleWindow(false);
     saveState();
 }
 
@@ -215,9 +244,10 @@ void HopScalingModule::loadState()
     auto file = FSCom.open(HOP_SCALING_STATE_FILE, FILE_O_READ);
     if (file) {
         PersistedState state{};
-        if (file.read((uint8_t *)&state, sizeof(state)) == sizeof(state) && state.magic == HOP_SCALING_STATE_MAGIC &&
-            state.version == HOP_SCALING_STATE_VERSION && state.samplingDenominator >= SAMPLING_DENOMINATOR_MIN &&
-            state.samplingDenominator <= SAMPLING_DENOMINATOR_MAX) {
+        const bool readOk = (file.read((uint8_t *)&state, sizeof(state)) == sizeof(state));
+        const bool magicOk = (state.magic == HOP_SCALING_STATE_MAGIC || state.magic == LEGACY_HOP_SCALING_STATE_MAGIC);
+        if (readOk && magicOk && state.version == HOP_SCALING_STATE_VERSION &&
+            state.samplingDenominator >= SAMPLING_DENOMINATOR_MIN && state.samplingDenominator <= SAMPLING_DENOMINATOR_MAX) {
             rollingEvictionAvg12h = state.rollingEvictionAvg12h;
             rollingSampledAvg12h = state.rollingSampledAvg12h;
             SAMPLING_DENOMINATOR = state.samplingDenominator;
@@ -361,23 +391,24 @@ float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &s
     }
 
     // High turnover: many evictions per hour, NodeDB is cycling rapidly.
-    // Use sampling-based estimate if available; otherwise fall back to eviction-pressure scaling.
+    // Compute both sampling and eviction estimates, prefer whichever is larger.
     sampledEstimate = estimateSampledMeshSize();
-    if (sampledEstimate > 8.8f * MAX_NUM_NODES) {
+    const float evictionScale = 1.1f + (rollingEvictionAvg12h / knownNodeCount);
+    const float samplingScale =
+        (sampledEstimate > 0) ? std::max(static_cast<float>(sampledEstimate) / knownNodeCount, 1.0f) : 0.0f;
+
+    if (samplingScale > evictionScale) {
         statusMode = STATUS_SCALED_FROM_MESH_ESTIMATE;
-        // Scale = estimated true mesh size / maximum NodeDB count
-        scale = std::max(static_cast<float>(sampledEstimate) / knownNodeCount, 1.0f);
-        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (sampled: est=%u nodes, DB=%d)", static_cast<double>(scale), sampledEstimate,
-                  MAX_NUM_NODES);
-        return scale;
+        scale = samplingScale;
+        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (sampled: est=%u > eviction=%.2f)", static_cast<double>(scale), sampledEstimate,
+                  static_cast<double>(evictionScale));
     } else {
         statusMode = STATUS_FALLBACK_EVICTION_SCALE;
-        // Fallback to eviction rate but scale more aggressively, over the full capacity turnover
-        scale = 1.1f + (rollingEvictionAvg12h / knownNodeCount);
-        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (high turnover fallback: evict/h=%.1f, sampled=%u)", static_cast<double>(scale),
-                  static_cast<double>(rollingEvictionAvg12h), sampledEstimate);
-        return scale;
+        scale = evictionScale;
+        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (eviction: evict/h=%.1f, sampled=%u scale=%.2f)", static_cast<double>(scale),
+                  static_cast<double>(rollingEvictionAvg12h), sampledEstimate, static_cast<double>(samplingScale));
     }
+    return scale;
 }
 
 bool HopScalingModule::checkStableStatus(const Snapshot &snapshot) const
@@ -405,30 +436,21 @@ void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyU
 uint8_t HopScalingModule::computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const
 {
     uint16_t affectedNodesPerHop[HOP_MAX + 1];
-    uint16_t avg1hFrom3hPerHop[HOP_MAX + 1];
     memset(affectedNodesPerHop, 0, sizeof(affectedNodesPerHop));
-    memset(avg1hFrom3hPerHop, 0, sizeof(avg1hFrom3hPerHop));
+
+    // Linear extrapolation: scaleFactor is a per-hour additive turnover fraction,
+    // so over 12 hours the total scale is 1 + 12*(scaleFactor - 1), not scaleFactor^12.
+    const float scale12h = std::max(1.0f + 12.0f * (scaleFactor - 1.0f), 1.0f);
 
     for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
-        // Average the three 1h buckets down to a single-hour node count at this hop.
-        avg1hFrom3hPerHop[hop] = static_cast<uint16_t>(
-            (snapshot.recent1h.perHop[hop] + snapshot.old1hFrom2h.perHop[hop] + snapshot.old1hFrom3h.perHop[hop]) / 3);
-        const uint16_t scaledFrom3hAverage =
-            static_cast<uint16_t>(std::min(avg1hFrom3hPerHop[hop] * scaleFactor, static_cast<float>(UINT16_MAX)));
-
-        // 12h cumulative is the best population estimate; scaleFactor compensates for eviction undercount or megamesh that
-        // exceeds NodeDB capacity.
-        const float scaled12h = snapshot.cumulative12h.perHop[hop] * powf(scaleFactor, 12);
-        const uint16_t scaled12hInt = static_cast<uint16_t>(std::min(scaled12h, static_cast<float>(UINT16_MAX)));
-
-        // If there isn't much action in the 12 hour window, or there is a flurry of activity in the recent 1-3h average, use the
-        // recent average to avoid underestimation. Otherwise, use the scaled 12h count for a more stable estimate of the affected
-        // nodes.
-        affectedNodesPerHop[hop] = std::max(scaledFrom3hAverage, scaled12hInt);
+        // 12h cumulative is the best population estimate; scale12h compensates for eviction undercount or megamesh that
+        // exceeds NodeDB capacity using linear extrapolation over the 12h window.
+        const float scaled12h = snapshot.cumulative12h.perHop[hop] * scale12h;
+        affectedNodesPerHop[hop] = static_cast<uint16_t>(std::min(scaled12h, static_cast<float>(UINT16_MAX)));
     }
-    LOG_INFO("[HOPSCALE] perHop 3h ave: [%u %u %u %u %u %u %u %u]", avg1hFrom3hPerHop[0], avg1hFrom3hPerHop[1],
-             avg1hFrom3hPerHop[2], avg1hFrom3hPerHop[3], avg1hFrom3hPerHop[4], avg1hFrom3hPerHop[5], avg1hFrom3hPerHop[6],
-             avg1hFrom3hPerHop[7]);
+    LOG_INFO("[HOPSCALE] perHop 1h:     [%u %u %u %u %u %u %u %u]", snapshot.recent1h.perHop[0], snapshot.recent1h.perHop[1],
+             snapshot.recent1h.perHop[2], snapshot.recent1h.perHop[3], snapshot.recent1h.perHop[4], snapshot.recent1h.perHop[5],
+             snapshot.recent1h.perHop[6], snapshot.recent1h.perHop[7]);
     LOG_INFO("[HOPSCALE] perHop 12h:    [%u %u %u %u %u %u %u %u]", snapshot.cumulative12h.perHop[0],
              snapshot.cumulative12h.perHop[1], snapshot.cumulative12h.perHop[2], snapshot.cumulative12h.perHop[3],
              snapshot.cumulative12h.perHop[4], snapshot.cumulative12h.perHop[5], snapshot.cumulative12h.perHop[6],
