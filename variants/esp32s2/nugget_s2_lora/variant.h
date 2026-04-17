@@ -1,7 +1,7 @@
 #define I2C_SDA 34 // I2C pins for this board
 #define I2C_SCL 36
 
-#define LED_PIN 15 // If defined we will blink this LED
+#define LED_POWER 15 // If defined we will blink this LED
 
 #define HAS_NEOPIXEL                         // Enable the use of neopixels
 #define NEOPIXEL_COUNT 3                     // How many neopixels are connected

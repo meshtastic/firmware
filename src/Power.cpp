@@ -35,6 +35,27 @@
 #include "nrfx_power.h"
 #endif
 
+#if defined(ARCH_NRF52)
+#include "Nrf52SaadcLock.h"
+#include "concurrency/LockGuard.h"
+#endif
+
+#if defined(ARCH_STM32WL) && defined(BATTERY_PIN)
+#include "stm32yyxx_ll_adc.h"
+
+/* Analog read resolution */
+#if defined(LL_ADC_RESOLUTION_12B)
+#define LL_ADC_RESOLUTION LL_ADC_RESOLUTION_12B
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+#elif defined(LL_ADC_DS_DATA_WIDTH_12_BIT)
+#define LL_ADC_RESOLUTION LL_ADC_DS_DATA_WIDTH_12_BIT
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+#else
+#error "ADC resolution could not be defined!"
+#endif
+#define ADC_RANGE (1 << BATTERY_SENSE_RESOLUTION_BITS)
+#endif
+
 #if defined(DEBUG_HEAP_MQTT) && !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
@@ -323,11 +344,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
             float scaled = 0;
 
             battery_adcEnable();
-#ifdef ARCH_ESP32 // ADC block for espressif platforms
+#ifdef ARCH_STM32WL
+            // STM32 ADC with VREFINT runtime calibration
+            Vref = __LL_ADC_CALC_VREFANALOG_VOLTAGE(analogRead(AVREF), LL_ADC_RESOLUTION);
+            raw = analogRead(BATTERY_PIN);
+            scaled = __LL_ADC_CALC_DATA_TO_VOLTAGE(Vref, raw, LL_ADC_RESOLUTION);
+            scaled *= operativeAdcMultiplier;
+#elif defined(ARCH_ESP32) // ADC block for espressif platforms
             raw = espAdcRead();
             scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
             scaled *= operativeAdcMultiplier;
-#else // block for all other platforms
+#else                     // block for all other platforms
+#ifdef ARCH_NRF52
+            concurrency::LockGuard saadcGuard(concurrency::nrf52SaadcLock);
+#endif
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += analogRead(BATTERY_PIN);
             }
@@ -459,6 +489,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
         // if it's not HIGH - check the battery
 #endif
+        // If we have an EXT_PWR_DETECT pin and it indicates no external power, believe it.
+        return false;
 
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
@@ -520,6 +552,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
     bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
+#ifdef ARCH_STM32WL
+    // 3300mV placeholder for STM32 errata where VREFINT factory calibration may be missing
+    // (e.g. STM32U0, see DS14756 Rev 3 §2.4.1 "VREFINT offset")
+    uint32_t Vref = 3300;
+#endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
 
@@ -629,7 +666,9 @@ bool Power::analogInit()
 #define BATTERY_SENSE_RESOLUTION_BITS 10
 #endif
 
-#ifdef ARCH_ESP32 // ESP32 needs special analog stuff
+#ifdef ARCH_STM32WL
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+#elif defined(ARCH_ESP32) // ESP32 needs special analog stuff
 
 #ifndef ADC_WIDTH // max resolution by default
     static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
@@ -639,7 +678,7 @@ bool Power::analogInit()
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
     adc1_config_width(width);
     adc1_config_channel_atten(adc_channel, atten);
-#else // ADC2
+#else                        // ADC2
     adc2_config_channel_atten(adc_channel, atten);
 #ifndef CONFIG_IDF_TARGET_ESP32S3
     // ADC2 wifi bug workaround
@@ -669,7 +708,7 @@ bool Power::analogInit()
 
     // NRF52 ADC init moved to powerHAL_init in nrf52 platform
 
-#ifndef ARCH_ESP32
+#if !defined(ARCH_ESP32) && !defined(ARCH_STM32WL)
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 #endif
 
@@ -690,7 +729,9 @@ bool Power::setup()
     bool found = false;
     if (axpChipInit()) {
         found = true;
-    } else if (lipoInit()) {
+    } else if (cw2015Init()) {
+        found = true;
+    } else if (max17048Init()) {
         found = true;
     } else if (lipoChargerInit()) {
         found = true;
@@ -700,11 +741,11 @@ bool Power::setup()
         found = true;
     } else if (analogInit()) {
         found = true;
-    }
-
+    } else {
 #ifdef NRF_APM
-    found = true;
+        found = true;
 #endif
+    }
 #ifdef EXT_PWR_DETECT
     attachInterrupt(
         EXT_PWR_DETECT,
@@ -817,6 +858,9 @@ void Power::shutdown()
 #ifdef PIN_LED3
     ledOff(PIN_LED3);
 #endif
+#ifdef LED_NOTIFICATION
+    ledOff(LED_NOTIFICATION);
+#endif
     doDeepSleep(DELAY_FOREVER, true, true);
 #elif defined(ARCH_PORTDUINO)
     exit(EXIT_SUCCESS);
@@ -839,8 +883,10 @@ void Power::readPowerStatus()
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
+#ifndef NRF_APM
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
         isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
+#endif
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it
@@ -1358,7 +1404,7 @@ bool Power::axpChipInit()
 /**
  * Wrapper class for an I2C MAX17048 Lipo battery sensor.
  */
-class LipoBatteryLevel : public HasBatteryLevel
+class MAX17048BatteryLevel : public HasBatteryLevel
 {
   private:
     MAX17048Singleton *max17048 = nullptr;
@@ -1406,18 +1452,18 @@ class LipoBatteryLevel : public HasBatteryLevel
     virtual bool isCharging() override { return max17048->isBatteryCharging(); }
 };
 
-LipoBatteryLevel lipoLevel;
+MAX17048BatteryLevel max17048Level;
 
 /**
  * Init the Lipo battery level sensor
  */
-bool Power::lipoInit()
+bool Power::max17048Init()
 {
-    bool result = lipoLevel.runOnce();
-    LOG_DEBUG("Power::lipoInit lipo sensor is %s", result ? "ready" : "not ready yet");
+    bool result = max17048Level.runOnce();
+    LOG_DEBUG("Power::max17048Init lipo sensor is %s", result ? "ready" : "not ready yet");
     if (!result)
         return false;
-    batteryLevel = &lipoLevel;
+    batteryLevel = &max17048Level;
     return true;
 }
 
@@ -1425,7 +1471,88 @@ bool Power::lipoInit()
 /**
  * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
  */
-bool Power::lipoInit()
+bool Power::max17048Init()
+{
+    return false;
+}
+#endif
+
+#if !MESHTASTIC_EXCLUDE_I2C && HAS_CW2015
+
+class CW2015BatteryLevel : public AnalogBatteryLevel
+{
+  public:
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override
+    {
+        int data = -1;
+        Wire.beginTransmission(CW2015_ADDR);
+        Wire.write(0x04);
+        if (Wire.endTransmission() == 0) {
+            if (Wire.requestFrom(CW2015_ADDR, (uint8_t)1)) {
+                data = Wire.read();
+            }
+        }
+        return data;
+    }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override
+    {
+        uint16_t mv = 0;
+        Wire.beginTransmission(CW2015_ADDR);
+        Wire.write(0x02);
+        if (Wire.endTransmission() == 0) {
+            if (Wire.requestFrom(CW2015_ADDR, (uint8_t)2)) {
+                mv = Wire.read();
+                mv <<= 8;
+                mv |= Wire.read();
+                // Voltage is read in  305uV units, convert to mV
+                mv = mv * 305 / 1000;
+            }
+        }
+        return mv;
+    }
+};
+
+CW2015BatteryLevel cw2015Level;
+
+/**
+ * Init the CW2015 battery level sensor
+ */
+bool Power::cw2015Init()
+{
+
+    Wire.beginTransmission(CW2015_ADDR);
+    uint8_t getInfo[] = {0x0a, 0x00};
+    Wire.write(getInfo, 2);
+    Wire.endTransmission();
+    delay(10);
+    Wire.beginTransmission(CW2015_ADDR);
+    Wire.write(0x00);
+    bool result = false;
+    if (Wire.endTransmission() == 0) {
+        if (Wire.requestFrom(CW2015_ADDR, (uint8_t)1)) {
+            uint8_t data = Wire.read();
+            LOG_DEBUG("CW2015 init read data: 0x%x", data);
+            if (data == 0x73) {
+                result = true;
+                batteryLevel = &cw2015Level;
+            }
+        }
+    }
+    return result;
+}
+
+#else
+/**
+ * The CW2015 battery level sensor is unavailable - default to AnalogBatteryLevel
+ */
+bool Power::cw2015Init()
 {
     return false;
 }

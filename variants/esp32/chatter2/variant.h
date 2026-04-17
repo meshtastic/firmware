@@ -23,8 +23,6 @@
 #define SX126X_TXEN RADIOLIB_NC
 #define SX126X_RXEN RADIOLIB_NC
 
-// Status
-// #define LED_PIN 1
 // External notification
 // FIXME: Check if EXT_NOTIFY_OUT actualy has any effect and removes the need for setting the external notication pin in the
 // app/preferences
@@ -98,7 +96,6 @@
 #define KB_LOAD 21 // load values from the switch and store in shift register
 #define KB_CLK 22  // clock pin for serial data out
 #define KB_DATA 23 // data pin
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 /////////////////////////////////////////////////////////////////////////////////
 //                                                                             //

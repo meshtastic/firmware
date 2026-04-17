@@ -23,12 +23,8 @@
 #define PIN_LED1 (12) // LED        P1.15
 #define PIN_LED2 (11) //
 
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
-
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
-// #define LED_PIN PIN_LED2
 #define LED_STATE_ON 1 // State when LED is litted
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration

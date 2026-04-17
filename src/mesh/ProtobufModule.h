@@ -82,7 +82,6 @@ template <class T> class ProtobufModule : protected SinglePortModule
         // it would be better to update even if the message was destined to others.
 
         auto &p = mp.decoded;
-        LOG_INFO("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d", name, mp.from, mp.id, p.portnum, p.payload.size);
 
         T scratch;
         T *decoded = NULL;
@@ -90,6 +89,8 @@ template <class T> class ProtobufModule : protected SinglePortModule
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
+                LOG_INFO("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d", name, mp.from, mp.id, p.portnum,
+                         p.payload.size);
             } else {
                 LOG_ERROR("Error decoding proto module!");
                 // if we can't decode it, nobody can process it!

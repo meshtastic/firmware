@@ -3,6 +3,9 @@
 #include "CompassRenderer.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
+#if !MESHTASTIC_EXCLUDE_STATUS
+#include "modules/StatusMessageModule.h"
+#endif
 #include "UIRenderer.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h" // for getTime() function
@@ -79,57 +82,60 @@ void scrollDown()
 // Utility Functions
 // =============================
 
-const char *getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int columnWidth)
+std::string getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int columnWidth)
 {
-    static char nodeName[25]; // single static buffer we return
-    nodeName[0] = '\0';
+    (void)display;
+    (void)columnWidth;
 
-    auto writeFallbackId = [&] {
-        std::snprintf(nodeName, sizeof(nodeName), "(%04X)", static_cast<uint16_t>(node ? (node->num & 0xFFFF) : 0));
+    auto fallbackId = [&] {
+        char id[12];
+        std::snprintf(id, sizeof(id), "(%04X)", static_cast<uint16_t>(node ? (node->num & 0xFFFF) : 0));
+        return std::string(id);
     };
 
     // 1) Choose target candidate (long vs short) only if present
     const char *raw = nullptr;
-    if (node && node->has_user) {
-        raw = config.display.use_long_node_name ? node->user.long_name : node->user.short_name;
-    }
 
-    // 2) Sanitize (empty if raw is null/empty)
-    std::string s = (raw && *raw) ? sanitizeString(raw) : std::string{};
-
-    // 3) Fallback if sanitize yields empty; otherwise copy safely (truncate if needed)
-    if (s.empty() || s == "¿" || s.find_first_not_of("¿") == std::string::npos) {
-        writeFallbackId();
-    } else {
-        // %.*s ensures null-termination and safe truncation to buffer size - 1
-        std::snprintf(nodeName, sizeof(nodeName), "%.*s", static_cast<int>(sizeof(nodeName) - 1), s.c_str());
-    }
-
-    // 4) Width-based truncation + ellipsis (long-name mode only)
-    if (config.display.use_long_node_name && display) {
-        int availWidth = columnWidth - ((currentResolution == ScreenResolution::High) ? 65 : 38);
-        if (availWidth < 0)
-            availWidth = 0;
-
-        const size_t beforeLen = std::strlen(nodeName);
-
-        // Trim from the end until it fits or is empty
-        size_t len = beforeLen;
-        while (len && display->getStringWidth(nodeName) > availWidth) {
-            nodeName[--len] = '\0';
-        }
-
-        // If truncated, append "..." (respect buffer size)
-        if (len < beforeLen) {
-            // Make sure there's room for "..." and '\0'
-            const size_t capForText = sizeof(nodeName) - 1; // leaving space for '\0'
-            const size_t needed = 3;                        // "..."
-            if (len > capForText - needed) {
-                len = capForText - needed;
-                nodeName[len] = '\0';
+#if !MESHTASTIC_EXCLUDE_STATUS
+    // If long-name mode is enabled, and we have a recent status for this node,
+    // prefer "(short_name) statusText" as the raw candidate.
+    std::string composedFromStatus;
+    if (config.display.use_long_node_name && node && node->has_user && statusMessageModule) {
+        const auto &recent = statusMessageModule->getRecentReceived();
+        const StatusMessageModule::RecentStatus *found = nullptr;
+        for (auto it = recent.rbegin(); it != recent.rend(); ++it) {
+            if (it->fromNodeId == node->num && !it->statusText.empty()) {
+                found = &(*it);
+                break;
             }
-            std::strcat(nodeName, "...");
         }
+
+        if (found) {
+            const char *shortName = node->user.short_name;
+            composedFromStatus.reserve(4 + (shortName ? std::strlen(shortName) : 0) + 1 + found->statusText.size());
+            composedFromStatus += "(";
+            if (shortName && *shortName) {
+                composedFromStatus += shortName;
+            }
+            composedFromStatus += ") ";
+            composedFromStatus += found->statusText;
+
+            raw = composedFromStatus.c_str(); // safe for now; we'll sanitize immediately into std::string
+        }
+    }
+#endif
+
+    // If we didn't compose from status, use normal long/short selection
+    if (!raw) {
+        if (node && node->has_user) {
+            raw = config.display.use_long_node_name ? node->user.long_name : node->user.short_name;
+        }
+    }
+
+    // 2) Preserve UTF-8 names so emotes can be detected and rendered.
+    std::string nodeName = (raw && *raw) ? std::string(raw) : std::string{};
+    if (nodeName.empty()) {
+        nodeName = fallbackId();
     }
 
     return nodeName;
@@ -163,6 +169,15 @@ const char *getCurrentModeTitle_Location(int screenWidth)
     }
 }
 
+static int getNodeNameMaxWidth(int columnWidth, int baseWidth)
+{
+    if (!config.display.use_long_node_name)
+        return baseWidth;
+
+    const int legacyLongNameWidth = columnWidth - ((currentResolution == ScreenResolution::High) ? 65 : 38);
+    return std::max(0, std::min(baseWidth, legacyLongNameWidth));
+}
+
 // Use dynamic timing based on mode
 unsigned long getModeCycleIntervalMs()
 {
@@ -171,7 +186,7 @@ unsigned long getModeCycleIntervalMs()
 
 int calculateMaxScroll(int totalEntries, int visibleRows)
 {
-    return std::max(0, (totalEntries - 1) / (visibleRows * 2));
+    return max(0, (totalEntries - 1) / (visibleRows * 2));
 }
 
 void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_t yEnd)
@@ -187,13 +202,12 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
     if (totalEntries <= visibleNodeRows * columns)
         return;
 
-    int scrollbarX = display->getWidth() - 2;
     int scrollbarHeight = display->getHeight() - scrollStartY - 10;
-    int thumbHeight = std::max(4, (scrollbarHeight * visibleNodeRows * columns) / totalEntries);
-    int perPage = visibleNodeRows * columns;
-    int maxScroll = std::max(0, (totalEntries - 1) / perPage);
-    int thumbY = scrollStartY + (scrollIndex * (scrollbarHeight - thumbHeight)) / std::max(1, maxScroll);
+    int thumbHeight = max(4, (scrollbarHeight * visibleNodeRows * columns) / totalEntries);
+    int thumbY = scrollStartY + (scrollIndex * (scrollbarHeight - thumbHeight)) /
+                                    max(1, max(0, (totalEntries - 1) / (visibleNodeRows * columns)));
 
+    int scrollbarX = display->getWidth() - 2;
     for (int i = 0; i < thumbHeight; i++) {
         display->setPixel(scrollbarX, thumbY + i);
     }
@@ -206,10 +220,13 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
 void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
-    int nameMaxWidth = columnWidth - 25;
+    int nameMaxWidth = getNodeNameMaxWidth(columnWidth, columnWidth - 25);
     int timeOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 7 : 10) : (isLeftCol ? 3 : 7);
 
-    const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
+    char nodeName[96];
+    UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
+                                         nameMaxWidth);
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     char timeStr[10];
@@ -229,7 +246,7 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawString(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nodeName);
+    UIRenderer::drawStringWithEmotes(display, nameX, y, nodeName, FONT_HEIGHT_SMALL, 1, false);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -256,19 +273,22 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
 
-    int nameMaxWidth = columnWidth - 25;
+    int nameMaxWidth = getNodeNameMaxWidth(columnWidth, columnWidth - 25);
     int barsOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 20 : 24) : (isLeftCol ? 15 : 19);
     int hopOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 21 : 29) : (isLeftCol ? 13 : 17);
 
     int barsXOffset = columnWidth - barsOffset;
 
-    const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
+    char nodeName[96];
+    UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
+                                         nameMaxWidth);
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    display->drawStringMaxWidth(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nameMaxWidth, nodeName);
+    UIRenderer::drawStringWithEmotes(display, nameX, y, nodeName, FONT_HEIGHT_SMALL, 1, false);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -313,9 +333,13 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
     int nameMaxWidth =
-        columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
+        getNodeNameMaxWidth(columnWidth, columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28)
+                                                                                                      : (isLeftCol ? 20 : 22)));
 
-    const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
+    char nodeName[96];
+    UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
+                                         nameMaxWidth);
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
     char distStr[10] = "";
 
@@ -369,7 +393,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nameMaxWidth, nodeName);
+    UIRenderer::drawStringWithEmotes(display, nameX, y, nodeName, FONT_HEIGHT_SMALL, 1, false);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -415,14 +439,18 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     // Adjust max text width depending on column and screen width
     int nameMaxWidth =
-        columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
+        getNodeNameMaxWidth(columnWidth, columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28)
+                                                                                                      : (isLeftCol ? 20 : 22)));
 
-    const char *nodeName = getSafeNodeName(display, node, columnWidth);
+    const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
+    char nodeName[96];
+    UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
+                                         nameMaxWidth);
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x + ((currentResolution == ScreenResolution::High) ? 6 : 3), y, nameMaxWidth, nodeName);
+    UIRenderer::drawStringWithEmotes(display, nameX, y, nodeName, FONT_HEIGHT_SMALL, 1, false);
     if (node->is_favorite) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -556,13 +584,13 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     int maxScroll = 0;
     if (perPage > 0) {
-        maxScroll = std::max(0, (totalEntries - 1) / perPage);
+        maxScroll = max(0, (totalEntries - 1) / perPage);
     }
 
     if (scrollIndex > maxScroll)
         scrollIndex = maxScroll;
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
-    int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
+    int endIndex = min(startIndex + visibleNodeRows * totalColumns, totalEntries);
     int yOffset = 0;
     int col = 0;
     int lastNodeY = y;
@@ -580,7 +608,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         if (extras)
             extras(display, node, xPos, yPos, columnWidth, heading, lat, lon);
 
-        lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
+        lastNodeY = max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;
         shownCount++;
         rowCount++;
@@ -613,13 +641,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     if (millis() - popupTime < POPUP_DURATION_MS) {
         popupTotal = totalEntries;
 
-        int perPage = visibleNodeRows * totalColumns;
-
         popupStart = startIndex + 1;
-        popupEnd = std::min(startIndex + perPage, totalEntries);
+        popupEnd = min(startIndex + perPage, totalEntries);
 
         popupPage = (scrollIndex + 1);
-        popupMaxPage = std::max(1, (totalEntries + perPage - 1) / perPage);
+        popupMaxPage = max(1, (totalEntries + perPage - 1) / perPage);
 
         char buf[32];
         snprintf(buf, sizeof(buf), "%d-%d/%d  Pg %d/%d", popupStart, popupEnd, popupTotal, popupPage, popupMaxPage);

@@ -1312,8 +1312,8 @@ void TFTDisplay::display(bool fromBlank)
     bool somethingChanged = false;
 
     // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
-    colorTftMesh = (TFT_MESH >> 8) | ((TFT_MESH & 0xFF) << 8);
-    colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
+    colorTftMesh = __builtin_bswap16(TFT_MESH);
+    colorTftBlack = __builtin_bswap16(TFT_BLACK);
 
     y = 0;
     while (y < displayHeight) {
@@ -1357,14 +1357,14 @@ void TFTDisplay::display(bool fromBlank)
 
         // Did we find a pixel that needs updating on this row?
         if (x_FirstPixelUpdate < displayWidth) {
+            // Align the first pixel for update to an even number so the total alignment of
+            // the data will be at 32-bit boundary, which is required by GDMA SPI transfers.
+            x_FirstPixelUpdate &= ~1;
 
-            // Quickly write out the first changed pixel (saves another array lookup)
-            linePixelBuffer[x_FirstPixelUpdate] = isset ? colorTftMesh : colorTftBlack;
-            x_LastPixelUpdate = x_FirstPixelUpdate;
-
-            // Step 3: copy all remaining pixels in this row into the pixel line buffer,
-            // while also recording the last pixel in the row that needs updating
-            for (x = x_FirstPixelUpdate + 1; x < displayWidth; x++) {
+            // Step 3a: copy rest of the pixels in this row into the pixel line buffer,
+            // while also recording the last pixel in the row that needs updating.
+            // Since the first changed pixel will be looked up, the x_LastPixelUpdate will be set.
+            for (x = x_FirstPixelUpdate; x < displayWidth; x++) {
                 isset = buffer[x + y_byteIndex] & y_byteMask;
                 linePixelBuffer[x] = isset ? colorTftMesh : colorTftBlack;
 
@@ -1376,6 +1376,14 @@ void TFTDisplay::display(bool fromBlank)
                 } else if (isset) {
                     x_LastPixelUpdate = x;
                 }
+            }
+            // Step 3b: Round up the last pixel to odd number to maintain 32-bit alignment for SPIs.
+            // Most displays will have even number of pixels in a row -- this will be in bounds
+            // of the displayWidth. (Hopefully odd displays will just ignore that extra pixel.)
+            x_LastPixelUpdate |= 1;
+            // Ensure the last pixel index does not exceed the display width.
+            if (x_LastPixelUpdate >= displayWidth) {
+                x_LastPixelUpdate = displayWidth - 1;
             }
 #if defined(HACKADAY_COMMUNICATOR)
             tft->draw16bitBeRGBBitmap(x_FirstPixelUpdate, y, &linePixelBuffer[x_FirstPixelUpdate],
@@ -1451,7 +1459,7 @@ void TFTDisplay::sendCommand(uint8_t com)
             digitalWrite(portduino_config.displayBacklight.pin, TFT_BACKLIGHT_ON);
 #elif defined(HACKADAY_COMMUNICATOR)
         tft->displayOn();
-#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
+#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096)
         tft->wakeup();
         tft->powerSaveOff();
 #endif
@@ -1462,8 +1470,9 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef UNPHONE
         unphone.backlight(true); // using unPhone library
 #endif
-#ifdef RAK14014
-#elif !defined(M5STACK) && !defined(ST7789_CS) && !defined(HACKADAY_COMMUNICATOR)
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096)
+#elif !defined(M5STACK) && !defined(ST7789_CS) &&                                                                                \
+    !defined(HACKADAY_COMMUNICATOR) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
         tft->setBrightness(172);
 #endif
         break;
@@ -1477,7 +1486,7 @@ void TFTDisplay::sendCommand(uint8_t com)
             digitalWrite(portduino_config.displayBacklight.pin, !TFT_BACKLIGHT_ON);
 #elif defined(HACKADAY_COMMUNICATOR)
         tft->displayOff();
-#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
+#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096)
         tft->sleep();
         tft->powerSaveOn();
 #endif
@@ -1488,7 +1497,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef UNPHONE
         unphone.backlight(false); // using unPhone library
 #endif
-#ifdef RAK14014
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096)
 #elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR)
         tft->setBrightness(0);
 #endif
@@ -1503,7 +1512,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 
 void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
 {
-#ifdef RAK14014
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096)
     // todo
 #elif !defined(HACKADAY_COMMUNICATOR)
     tft->setBrightness(_brightness);
@@ -1523,7 +1532,7 @@ bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
     return true;
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096)
     return tft->touch() != nullptr;
 #else
     return false;
@@ -1542,7 +1551,7 @@ bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
     } else {
         return false;
     }
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096)
     return tft->getTouch(x, y);
 #else
     return false;
@@ -1559,7 +1568,7 @@ bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
     LOG_INFO("Do TFT init");
-#ifdef RAK14014
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096)
     tft = new TFT_eSPI;
 #elif defined(HACKADAY_COMMUNICATOR)
     bus = new Arduino_ESP32SPI(TFT_DC, TFT_CS, 38 /* SCK */, 21 /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* spi_num */);
@@ -1596,7 +1605,7 @@ bool TFTDisplay::connect()
     ft6336u.begin();
     pinMode(SCREEN_TOUCH_INT, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
-#elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
+#elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2) || defined(HELTEC_MESH_NODE_T096)
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation

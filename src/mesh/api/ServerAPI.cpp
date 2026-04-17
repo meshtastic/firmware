@@ -1,6 +1,9 @@
 #include "ServerAPI.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include <Arduino.h>
+
+static constexpr uint32_t TCP_IDLE_TIMEOUT_MS = 15 * 60 * 1000UL;
 
 template <typename T>
 ServerAPI<T>::ServerAPI(T &_client) : StreamAPI(&client), concurrency::OSThread("ServerAPI"), client(_client)
@@ -28,9 +31,16 @@ template <typename T> bool ServerAPI<T>::checkIsConnected()
 template <class T> int32_t ServerAPI<T>::runOnce()
 {
     if (client.connected()) {
+        if (lastContactMsec > 0 && !Throttle::isWithinTimespanMs(lastContactMsec, TCP_IDLE_TIMEOUT_MS)) {
+            LOG_WARN("TCP connection timeout, no data for %lu ms", (unsigned long)(millis() - lastContactMsec));
+            close();
+            enabled = false;
+            return 0;
+        }
         return StreamAPI::runOncePart();
     } else {
         LOG_INFO("Client dropped connection, suspend API service");
+        close();
         enabled = false; // we no longer need to run
         return 0;
     }
@@ -45,13 +55,18 @@ template <class T, class U> void APIServerPort<T, U>::init()
 
 template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
 {
+    // Clean up previous connection if its client already disconnected
+    if (openAPI && !openAPI->checkIsConnected()) {
+        openAPI.reset();
+    }
+
 #ifdef ARCH_ESP32
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
     auto client = U::accept();
 #else
     auto client = U::available();
 #endif
-#elif defined(ARCH_RP2040)
+#elif defined(ARCH_RP2040) || defined(ARCH_NRF52)
     auto client = U::accept();
 #else
     auto client = U::available();
@@ -70,10 +85,10 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
             }
 #endif
             LOG_INFO("Force close previous TCP connection");
-            delete openAPI;
+            openAPI.reset();
         }
 
-        openAPI = new T(client);
+        openAPI.reset(new T(client));
     }
 
 #if RAK_4631

@@ -18,6 +18,7 @@ class RAK9154Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
 
   public:
     RAK9154Sensor();
+    bool hasSensor() { return true; } // Not an I2C sensor; always available when HAS_RAKPROT is defined
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual uint16_t getBusVoltageMv() override;

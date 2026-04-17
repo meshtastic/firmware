@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Observer.h"
+#include "concurrency/OSThread.h"
 #include "freertosinc.h"
 
 #ifdef InputBrokerDebug
@@ -69,6 +70,7 @@ class InputBroker : public Observable<const InputEvent *>
 
   public:
     InputBroker();
+    bool menuMode = true;
     void registerSource(Observable<const InputEvent *> *source);
     void injectInputEvent(const InputEvent *event) { handleInputEvent(event); }
 #if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
@@ -76,6 +78,7 @@ class InputBroker : public Observable<const InputEvent *>
     void queueInputEvent(const InputEvent *event);
     void processInputEventQueue();
 #endif
+    void Init();
 
   protected:
     int handleInputEvent(const InputEvent *event);
@@ -90,3 +93,4 @@ class InputBroker : public Observable<const InputEvent *>
 };
 
 extern InputBroker *inputBroker;
+extern bool runASAP;

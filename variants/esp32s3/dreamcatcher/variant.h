@@ -6,7 +6,7 @@
 #define I2C_SDA1 45
 #define I2C_SCL1 46
 
-#define LED_PIN 6
+#define LED_POWER 6
 #define LED_STATE_ON 1
 #define BUTTON_PIN 0
 

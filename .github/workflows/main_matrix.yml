@@ -15,8 +15,7 @@ on:
       - "**.md"
       - version.properties
 
-  # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
-  pull_request_target:
+  pull_request:
     branches:
       - master
       - develop
@@ -28,6 +27,8 @@ on:
       #- "**.yml"
 
   workflow_dispatch:
+
+permissions: read-all
 
 jobs:
   setup:
@@ -88,8 +89,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
       - name: Check ${{ matrix.check.board }}
         uses: meshtastic/gh-action-firmware@main
         with:
@@ -126,9 +125,16 @@ jobs:
 
   test-native:
     if: ${{ !contains(github.ref_name, 'event/') && github.repository == 'meshtastic/firmware' }}
+    permissions: # Needed for dorny/test-reporter.
+      contents: read
+      actions: read
+      checks: write
     uses: ./.github/workflows/test_native.yml
 
   docker:
+    permissions: # Needed for pushing to GHCR.
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -153,9 +159,6 @@ jobs:
   gather-artifacts:
     # trunk-ignore(checkov/CKV2_GHA_1)
     if: github.repository == 'meshtastic/firmware'
-    permissions:
-      contents: write
-      pull-requests: write
     strategy:
       fail-fast: false
       matrix:
@@ -173,11 +176,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-        with:
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           path: ./
           pattern: firmware-${{matrix.arch}}-*
@@ -187,7 +187,7 @@ jobs:
         run: ls -R
 
       - name: Repackage in single firmware zip
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
           overwrite: true
@@ -205,7 +205,7 @@ jobs:
             ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 30
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -224,19 +224,12 @@ jobs:
         run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./output
 
       - name: Repackage in single elfs zip
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}
           overwrite: true
           path: ./*.elf
           retention-days: 30
-
-      - uses: scruplelesswizard/comment-artifact@main
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
-          description: "Download firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip. This artifact will be available for 90 days from creation"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   shame:
     if: github.repository == 'meshtastic/firmware'
@@ -245,42 +238,44 @@ jobs:
     needs: [build]
     steps:
       - uses: actions/checkout@v6
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         with:
           filter: blob:none # means we download all the git history but none of the commit (except ones with checkout like the head)
           fetch-depth: 0
       - name: Download the current manifests
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: ./manifests-new/
           pattern: manifest-*
           merge-multiple: true
       - name: Upload combined manifests for later commit and global stats crunching.
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         id: upload-manifest
         with:
           name: manifests-${{ github.sha }}
           overwrite: true
           path: manifests-new/*.mt.json
       - name: Find the merge base
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
         env:
           base: ${{ github.base_ref }}
           head: ${{ github.sha }}
       # Currently broken (for-loop through EVERY artifact -- rate limiting)
       # - name: Download the old manifests
-      #   if: github.event_name == 'pull_request_target'
+      #   if: github.event_name == 'pull_request'
       #   run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
       #   env:
       #     GH_TOKEN: ${{ github.token }}
       #     merge_base: ${{ env.MERGE_BASE }}
       #     repo: ${{ github.repository }}
       # - name: Do scan and post comment
-      #   if: github.event_name == 'pull_request_target'
+      #   if: github.event_name == 'pull_request'
       #   run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
 
   release-artifacts:
+    permissions: # Needed for 'gh release upload'.
+      contents: write
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     outputs:
@@ -306,15 +301,17 @@ jobs:
         id: release_notes
         run: |
           chmod +x ./bin/generate_release_notes.py
-          NOTES=$(./bin/generate_release_notes.py ${{ needs.version.outputs.long }})
+          NOTES=$(./bin/generate_release_notes.py ${{ needs.version.outputs.long }} --compare-ref HEAD 2>release_notes.log)
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          echo "### Release note range" >> $GITHUB_STEP_SUMMARY
+          cat release_notes.log >> $GITHUB_STEP_SUMMARY
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         id: create_release
         with:
           draft: true
@@ -324,14 +321,14 @@ jobs:
           body: ${{ steps.release_notes.outputs.notes }}
 
       - name: Download source deb
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: firmware-debian-${{ needs.version.outputs.deb }}~UNRELEASED-src
           merge-multiple: true
           path: ./output/debian-src
 
       - name: Download `native-tft` pio deps
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: platformio-deps-native-tft-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -355,7 +352,7 @@ jobs:
           }' > firmware-${{ needs.version.outputs.long }}.json
 
       - name: Save Release manifest artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: manifest-${{ needs.version.outputs.long }}
           overwrite: true
@@ -372,6 +369,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-firmware:
+    permissions: # Needed for 'gh release upload'.
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -396,7 +395,7 @@ jobs:
         with:
           python-version: 3.x
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -413,7 +412,7 @@ jobs:
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip ./output
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -454,14 +453,14 @@ jobs:
           python-version: 3.x
 
       - name: Get firmware artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: firmware-{${{ env.targets }}}-${{ needs.version.outputs.long }}
           merge-multiple: true
           path: ./publish
 
       - name: Get manifest artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: manifest-${{ needs.version.outputs.long }}
           path: ./publish
@@ -469,7 +468,7 @@ jobs:
       - name: Generate release notes
         run: |
           chmod +x ./bin/generate_release_notes.py
-          ./bin/generate_release_notes.py ${{ needs.version.outputs.long }} > ./publish/release_notes.md
+          ./bin/generate_release_notes.py ${{ needs.version.outputs.long }} --compare-ref HEAD > ./publish/release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

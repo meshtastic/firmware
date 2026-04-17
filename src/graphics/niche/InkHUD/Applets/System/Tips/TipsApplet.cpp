@@ -45,7 +45,7 @@ InkHUD::TipsApplet::TipsApplet()
         bringToForeground();
 }
 
-void InkHUD::TipsApplet::onRender()
+void InkHUD::TipsApplet::onRender(bool full)
 {
     switch (tipQueue.front()) {
     case Tip::WELCOME:
@@ -152,6 +152,11 @@ void InkHUD::TipsApplet::onRender()
             drawBullet("User Button");
             drawBullet("- short press: next");
             drawBullet("- long press: select or open menu");
+        } else if (inkhud->twoWayRocker) {
+            drawBullet("Rocker + Button");
+            drawBullet("- center press: open menu or select");
+            drawBullet("- left/right: applet nav");
+            drawBullet("- in menu: up/down");
         } else {
             drawBullet("Joystick");
             drawBullet("- press: open menu or select");
@@ -261,7 +266,7 @@ void InkHUD::TipsApplet::onBackground()
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
 }
 
 // While our SystemApplet::handleInput flag is true
@@ -292,9 +297,8 @@ void InkHUD::TipsApplet::onButtonShortPress()
             inkhud->persistence->saveSettings();
         }
 
-        // Close applet and clean the screen
+        // Close applet
         sendToBackground();
-        inkhud->forceUpdate(EInk::UpdateTypes::FULL);
     } else {
         requestUpdate();
     }

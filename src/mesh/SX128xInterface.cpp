@@ -126,7 +126,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    err = lora.setCodingRate(cr);
+    err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
@@ -144,8 +144,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > SX128X_MAX_POWER) // This chip has lower power limits than some
-        power = SX128X_MAX_POWER;
+    limitPower(SX128X_MAX_POWER);
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE)
@@ -271,6 +270,7 @@ template <typename T> void SX128xInterface<T>::startReceive()
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag();
 #endif
 }
 

@@ -15,7 +15,12 @@
 
 // Device specific curves go in variant.h
 #ifndef OCV_ARRAY
+#if defined(ARCH_STM32WL) && BATTERY_PIN == AVBAT
+// STM32 VDD/VBAT absolute maximum is 4V so use an LFP curve
+#define OCV_ARRAY 3650, 3400, 3340, 3320, 3300, 3280, 3270, 3260, 3240, 3200, 2500
+#else
 #define OCV_ARRAY 4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
+#endif
 #endif
 
 /*Note: 12V lead acid is 6 cells, most board accept only 1 cell LiIon/LiPo*/
@@ -103,8 +108,10 @@ class Power : private concurrency::OSThread
     bool axpChipInit();
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
-    /// Setup a Lipo battery level sensor
-    bool lipoInit();
+    /// Setup cw2015 battery level sensor
+    bool cw2015Init();
+    /// Setup a 17048 battery level sensor
+    bool max17048Init();
     /// Setup a Lipo charger
     bool lipoChargerInit();
     /// Setup a meshSolar battery sensor

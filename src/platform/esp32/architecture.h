@@ -33,9 +33,6 @@
 #ifndef HAS_RADIO
 #define HAS_RADIO 1
 #endif
-#ifndef HAS_RTC
-#define HAS_RTC 1
-#endif
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 1
 #endif
@@ -207,6 +204,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
 #elif defined(T_WATCH_ULTRA)
 #define HW_VENDOR meshtastic_HardwareModel_T_WATCH_ULTRA
+#elif defined(M5STACK_CARDPUTER_ADV)
+#define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif

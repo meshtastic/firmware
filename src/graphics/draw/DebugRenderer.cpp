@@ -408,7 +408,16 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->drawString(nameX, getTextPositions(display)[line++], device_role);
 
     // === Third Row: Radio Preset ===
-    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+    // For custom modem settings show the actual parameters; for presets use the preset name.
+    char modeStr[16];
+    if (!config.lora.use_preset) {
+        snprintf(modeStr, sizeof(modeStr), "BW%u-SF%u-CR%u", static_cast<unsigned>(config.lora.bandwidth),
+                 static_cast<unsigned>(config.lora.spread_factor), static_cast<unsigned>(config.lora.coding_rate));
+    } else {
+        strncpy(modeStr, DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true),
+                sizeof(modeStr) - 1);
+        modeStr[sizeof(modeStr) - 1] = '\0';
+    }
 
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
@@ -416,7 +425,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         if (currentResolution == ScreenResolution::UltraLow) {
             snprintf(regionradiopreset, sizeof(regionradiopreset), "%s", region);
         } else {
-            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, modeStr);
         }
     }
     textWidth = display->getStringWidth(regionradiopreset);
@@ -535,6 +544,9 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 #ifndef T_DECK_PRO
     barsOffset -= 12;
 #endif
+#if defined(T5_S3_EPAPER_PRO)
+    barsOffset += 60;
+#endif
 #endif
     int barX = x + barsOffset;
     if (currentResolution == ScreenResolution::UltraLow) {
@@ -584,11 +596,12 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     uint32_t heapUsed = memGet.getHeapSize() - memGet.getFreeHeap();
     uint32_t heapTotal = memGet.getHeapSize();
 
-    uint32_t psramUsed = memGet.getPsramSize() - memGet.getFreePsram();
-    uint32_t psramTotal = memGet.getPsramSize();
-
     uint32_t flashUsed = 0, flashTotal = 0;
 #ifdef ESP32
+#ifndef T5_S3_EPAPER_PRO
+    uint32_t psramUsed = memGet.getPsramSize() - memGet.getFreePsram();
+    uint32_t psramTotal = memGet.getPsramSize();
+#endif
     flashUsed = FSCom.usedBytes();
     flashTotal = FSCom.totalBytes();
 #endif
@@ -607,10 +620,12 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     // === Draw memory rows
     drawUsageRow("Heap:", heapUsed, heapTotal, true);
 #ifdef ESP32
+#ifndef T5_S3_EPAPER_PRO
     if (psramUsed > 0) {
         line += 1;
         drawUsageRow("PSRAM:", psramUsed, psramTotal);
     }
+#endif
     if (flashTotal > 0) {
         line += 1;
         drawUsageRow("Flash:", flashUsed, flashTotal);
@@ -663,7 +678,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
-        getUptimeStr(millis(), "Up", uptimeStr, sizeof(uptimeStr));
+        getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
         textWidth = display->getStringWidth(uptimeStr);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);

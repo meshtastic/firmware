@@ -90,6 +90,8 @@ void InkHUD::MenuApplet::onForeground()
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
     OSThread::enabled = true;
 
+    freeTextMode = false;
+
     // Upgrade the refresh to FAST, for guaranteed responsiveness
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
@@ -115,6 +117,8 @@ void InkHUD::MenuApplet::onBackground()
     // Resume normal rendering and button behavior of user applets
     SystemApplet::lockRequests = false;
     SystemApplet::handleInput = false;
+
+    handleFreeText = false;
 
     // Restore the user applet whose tile we borrowed
     if (borrowedTileOwner)
@@ -173,24 +177,8 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     auto changes = SEGMENT_CONFIG;
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    if (!owner.is_licensed) {
-        bool keygenSuccess = false;
-
-        if (config.security.private_key.size == 32) {
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                keygenSuccess = true;
-            }
-        } else {
-            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-            keygenSuccess = true;
-        }
-
-        if (keygenSuccess) {
-            config.security.public_key.size = 32;
-            config.security.private_key.size = 32;
-            owner.public_key.size = 32;
-            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-        }
+    if (crypto) {
+        crypto->ensurePkiKeys(config.security, owner);
     }
 #endif
 
@@ -325,10 +313,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         }
         break;
 
-    case BACK:
-        showPage(item.nextPage);
-        return;
-
     case NEXT_TILE:
         inkhud->nextTile();
         // Unselect menu item after tile change
@@ -344,12 +328,26 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
         break;
 
+    case FREE_TEXT:
+        OSThread::enabled = false;
+        handleFreeText = true;
+        cm.freeTextItem.rawText.erase(); // clear the previous freetext message
+        freeTextMode = true;             // render input field instead of normal menu
+        // Open the on-screen keyboard only for full joystick devices
+        if (settings->joystick.enabled && !inkhud->twoWayRocker)
+            inkhud->openKeyboard();
+        break;
+
     case STORE_CANNEDMESSAGE_SELECTION:
-        cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
+        if (!settings->joystick.enabled || inkhud->twoWayRocker)
+            cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
+        else
+            cm.selectedMessageItem = &cm.messageItems.at(cursor - 2); // Minus two: offset for the "Send Ping" and free text entry
         break;
 
     case SEND_CANNEDMESSAGE:
         cm.selectedRecipientItem = &cm.recipientItems.at(cursor);
+        // send selected message
         sendText(cm.selectedRecipientItem->dest, cm.selectedRecipientItem->channelIndex, cm.selectedMessageItem->rawText.c_str());
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL); // Next refresh should be FULL. Lots of button pressing to get here
         break;
@@ -868,6 +866,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     switch (page) {
     case ROOT:
+        previousPage = MenuPage::EXIT;
         // Optional: next applet
         if (settings->optionalMenuItems.nextTile && settings->userTiles.count > 1)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
@@ -878,7 +877,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Node Config", MenuPage::NODE_CONFIG));
         items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
-        previousPage = MenuPage::EXIT;
         break;
 
     case SEND:
@@ -888,11 +886,12 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case CANNEDMESSAGE_RECIPIENT:
         populateRecipientPage();
-        previousPage = MenuPage::OPTIONS;
+        previousPage = MenuPage::SEND;
         break;
 
     case OPTIONS:
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::ROOT));
+        previousPage = MenuPage::ROOT;
+        items.push_back(MenuItem("Back", previousPage));
         // Optional: backlight
         if (settings->optionalMenuItems.backlight)
             items.push_back(MenuItem(backlight->isLatched() ? "Backlight Off" : "Keep Backlight On", // Label
@@ -907,7 +906,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (settings->userTiles.maxCount > 1)
             items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
-        if (settings->joystick.enabled)
+        if (settings->joystick.enabled && !inkhud->twoWayRocker)
             items.push_back(MenuItem("Align Joystick", MenuAction::ALIGN_JOYSTICK, MenuPage::EXIT));
         items.push_back(MenuItem("Notifications", MenuAction::TOGGLE_NOTIFICATIONS, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.notifications));
@@ -916,31 +915,32 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         invertedColors = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
         items.push_back(MenuItem("Invert Color", MenuAction::TOGGLE_INVERT_COLOR, MenuPage::OPTIONS, &invertedColors));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
-        previousPage = MenuPage::ROOT;
         break;
 
     case APPLETS:
-        populateAppletPage(); // must be first
-        items.insert(items.begin(), MenuItem("Back", MenuAction::BACK, MenuPage::OPTIONS));
-        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         previousPage = MenuPage::OPTIONS;
+        populateAppletPage(); // must be first
+        items.insert(items.begin(), MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case AUTOSHOW:
-        populateAutoshowPage(); // must be first
-        items.insert(items.begin(), MenuItem("Back", MenuAction::BACK, MenuPage::OPTIONS));
-        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         previousPage = MenuPage::OPTIONS;
+        populateAutoshowPage(); // must be first
+        items.insert(items.begin(), MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case RECENTS:
+        previousPage = MenuPage::OPTIONS;
         populateRecentsPage(); // builds only the options
-        items.insert(items.begin(), MenuItem("Back", MenuAction::BACK, MenuPage::OPTIONS));
+        items.insert(items.begin(), MenuItem("Back", previousPage));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case NODE_CONFIG:
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::ROOT));
+        previousPage = MenuPage::ROOT;
+        items.push_back(MenuItem("Back", previousPage));
         // Radio Config Section
         items.push_back(MenuItem::Header("Radio Config"));
         items.push_back(MenuItem("LoRa", MenuPage::NODE_CONFIG_LORA));
@@ -965,8 +965,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case NODE_CONFIG_DEVICE: {
-
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         const char *role = DisplayFormatters::getDeviceRole(config.device.role);
         nodeConfigLabels.emplace_back("Role: " + std::string(role));
@@ -981,7 +981,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_POSITION: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 #if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
         const auto mode = config.position.gps_mode;
         if (mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
@@ -996,7 +997,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_POWER: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 #if defined(ARCH_ESP32)
         items.push_back(MenuItem("Powersave", MenuAction::TOGGLE_POWER_SAVE, MenuPage::EXIT, &config.power.is_power_saving));
 #endif
@@ -1029,7 +1031,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_POWER_ADC_CAL: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_POWER));
+        previousPage = MenuPage::NODE_CONFIG_POWER;
+        items.push_back(MenuItem("Back", previousPage));
 
         // Instruction text (header-style, non-selectable)
         items.push_back(MenuItem::Header("Run on full charge Only"));
@@ -1042,7 +1045,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_NETWORK: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         const char *wifiLabel = config.network.wifi_enabled ? "WiFi: On" : "WiFi: Off";
 
@@ -1099,7 +1103,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_DISPLAY: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         items.push_back(MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::NODE_CONFIG_DISPLAY,
                                  &config.display.use_12h_clock));
@@ -1114,7 +1119,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_BLUETOOTH: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         const char *btLabel = config.bluetooth.enabled ? "Bluetooth: On" : "Bluetooth: Off";
         items.push_back(MenuItem(btLabel, MenuAction::TOGGLE_BLUETOOTH, MenuPage::EXIT));
@@ -1127,8 +1133,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_LORA: {
-
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         const char *region = myRegion ? myRegion->name : "Unset";
         nodeConfigLabels.emplace_back("Region: " + std::string(region));
@@ -1150,10 +1156,11 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_CHANNELS: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
 
         for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
-            meshtastic_Channel &ch = channels.getByIndex(i);
+            const meshtastic_Channel &ch = channels.getByIndex(i);
 
             if (!ch.has_settings)
                 continue;
@@ -1181,7 +1188,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_CHANNEL_DETAIL: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_CHANNELS));
+        previousPage = MenuPage::NODE_CONFIG_CHANNELS;
+        items.push_back(MenuItem("Back", previousPage));
 
         meshtastic_Channel &ch = channels.getByIndex(selectedChannelIndex);
 
@@ -1226,8 +1234,9 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_CHANNEL_PRECISION: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_CHANNEL_DETAIL));
-        meshtastic_Channel &ch = channels.getByIndex(selectedChannelIndex);
+        previousPage = MenuPage::NODE_CONFIG_CHANNEL_DETAIL;
+        items.push_back(MenuItem("Back", previousPage));
+        const meshtastic_Channel &ch = channels.getByIndex(selectedChannelIndex);
         if (!ch.settings.has_module_settings || ch.settings.module_settings.position_precision == 0) {
             items.push_back(MenuItem("Position is Off", MenuPage::NODE_CONFIG_CHANNEL_DETAIL));
             break;
@@ -1247,7 +1256,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case NODE_CONFIG_DEVICE_ROLE: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_DEVICE));
+        previousPage = MenuPage::NODE_CONFIG_DEVICE;
+        items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("Client", MenuAction::SET_ROLE_CLIENT, MenuPage::EXIT));
         items.push_back(MenuItem("Client Mute", MenuAction::SET_ROLE_CLIENT_MUTE, MenuPage::EXIT));
         items.push_back(MenuItem("Router", MenuAction::SET_ROLE_ROUTER, MenuPage::EXIT));
@@ -1257,7 +1267,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
 
     case TIMEZONE:
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_DEVICE));
+        previousPage = MenuPage::NODE_CONFIG_DEVICE;
+        items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("US/Hawaii", SET_TZ_US_HAWAII, MenuPage::NODE_CONFIG_DEVICE));
         items.push_back(MenuItem("US/Alaska", SET_TZ_US_ALASKA, MenuPage::NODE_CONFIG_DEVICE));
         items.push_back(MenuItem("US/Pacific", SET_TZ_US_PACIFIC, MenuPage::NODE_CONFIG_DEVICE));
@@ -1279,7 +1290,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case REGION:
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_LORA));
+        previousPage = MenuPage::NODE_CONFIG_LORA;
+        items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("US", MenuAction::SET_REGION_US, MenuPage::EXIT));
         items.push_back(MenuItem("EU 868", MenuAction::SET_REGION_EU_868, MenuPage::EXIT));
         items.push_back(MenuItem("EU 433", MenuAction::SET_REGION_EU_433, MenuPage::EXIT));
@@ -1310,7 +1322,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case NODE_CONFIG_PRESET: {
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG_LORA));
+        previousPage = MenuPage::NODE_CONFIG_LORA;
+        items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("Long Moderate", MenuAction::SET_PRESET_LONG_MODERATE, MenuPage::EXIT));
         items.push_back(MenuItem("Long Fast", MenuAction::SET_PRESET_LONG_FAST, MenuPage::EXIT));
         items.push_back(MenuItem("Medium Slow", MenuAction::SET_PRESET_MEDIUM_SLOW, MenuPage::EXIT));
@@ -1323,7 +1336,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     }
     // Administration Section
     case NODE_CONFIG_ADMIN_RESET:
-        items.push_back(MenuItem("Back", MenuAction::BACK, MenuPage::NODE_CONFIG));
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("Reset All", MenuAction::RESET_NODEDB_ALL, MenuPage::EXIT));
         items.push_back(MenuItem("Keep Favorites Only", MenuAction::RESET_NODEDB_KEEP_FAVORITES, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
@@ -1361,8 +1375,14 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     currentPage = page;
 }
 
-void InkHUD::MenuApplet::onRender()
+void InkHUD::MenuApplet::onRender(bool full)
 {
+    // Free text mode draws a text input field and skips the normal rendering
+    if (freeTextMode) {
+        drawInputField(0, fontSmall.lineHeight(), X(1.0), Y(1.0) - fontSmall.lineHeight() - 1, cm.freeTextItem.rawText);
+        return;
+    }
+
     if (items.size() == 0)
         LOG_ERROR("Empty Menu");
 
@@ -1481,44 +1501,56 @@ void InkHUD::MenuApplet::onRender()
 
 void InkHUD::MenuApplet::onButtonShortPress()
 {
-    // Push the auto-close timer back
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        // Push the auto-close timer back
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    if (!settings->joystick.enabled) {
-        if (!cursorShown) {
-            cursorShown = true;
-            cursor = 0;
-        } else {
-            do {
-                cursor = (cursor + 1) % items.size();
-            } while (items.at(cursor).isHeader);
-        }
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
-    } else {
-        if (cursorShown)
-            execute(items.at(cursor));
-        else
-            showPage(MenuPage::EXIT);
-        if (!wantsToRender())
+        if (!settings->joystick.enabled) {
+            if (!cursorShown) {
+                cursorShown = true;
+                // Select the first item that isn't a header
+                cursor = 0;
+                while (cursor < items.size() && items.at(cursor).isHeader) {
+                    cursor++;
+                }
+                if (cursor >= items.size()) {
+                    cursorShown = false;
+                    cursor = 0;
+                }
+            } else {
+                do {
+                    cursor = (cursor + 1) % items.size();
+                } while (items.at(cursor).isHeader);
+            }
             requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        } else {
+            if (cursorShown)
+                execute(items.at(cursor));
+            else
+                showPage(MenuPage::EXIT);
+            if (!wantsToRender())
+                requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        }
     }
 }
 
 void InkHUD::MenuApplet::onButtonLongPress()
 {
-    // Push the auto-close timer back
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        // Push the auto-close timer back
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    if (cursorShown)
-        execute(items.at(cursor));
-    else
-        showPage(MenuPage::EXIT); // Special case: Peek at root-menu; longpress again to close
+        if (cursorShown)
+            execute(items.at(cursor));
+        else
+            showPage(MenuPage::EXIT); // Special case: Peek at root-menu; longpress again to close
 
-    // If we didn't already request a specialized update, when handling a menu action,
-    // then perform the usual fast update.
-    // FAST keeps things responsive: important because we're dealing with user input
-    if (!wantsToRender())
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        // If we didn't already request a specialized update, when handling a menu action,
+        // then perform the usual fast update.
+        // FAST keeps things responsive: important because we're dealing with user input
+        if (!wantsToRender())
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onExitShort()
@@ -1531,56 +1563,123 @@ void InkHUD::MenuApplet::onExitShort()
 
 void InkHUD::MenuApplet::onNavUp()
 {
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    if (!cursorShown) {
-        cursorShown = true;
-        cursor = 0;
-    } else {
-        do {
-            if (cursor == 0)
-                cursor = items.size() - 1;
-            else
+        if (!cursorShown) {
+            cursorShown = true;
+            // Select the last item that isn't a header
+            cursor = items.size() - 1;
+            while (items.at(cursor).isHeader) {
+                if (cursor == 0) {
+                    cursorShown = false;
+                    break;
+                }
                 cursor--;
-        } while (items.at(cursor).isHeader);
-    }
+            }
+        } else {
+            do {
+                if (cursor == 0)
+                    cursor = items.size() - 1;
+                else
+                    cursor--;
+            } while (items.at(cursor).isHeader);
+        }
 
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onNavDown()
 {
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    if (!cursorShown) {
-        cursorShown = true;
-        cursor = 0;
-    } else {
-        do {
-            cursor = (cursor + 1) % items.size();
-        } while (items.at(cursor).isHeader);
+        if (!cursorShown) {
+            cursorShown = true;
+            // Select the first item that isn't a header
+            cursor = 0;
+            while (cursor < items.size() && items.at(cursor).isHeader) {
+                cursor++;
+            }
+            if (cursor >= items.size()) {
+                cursorShown = false;
+                cursor = 0;
+            }
+        } else {
+            do {
+                cursor = (cursor + 1) % items.size();
+            } while (items.at(cursor).isHeader);
+        }
+
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     }
-
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onNavLeft()
 {
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-    // Go to the previous menu page
-    showPage(previousPage);
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+        // Go to the previous menu page
+        showPage(previousPage);
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
 }
 
 void InkHUD::MenuApplet::onNavRight()
 {
-    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    if (!freeTextMode) {
+        OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+        if (cursorShown)
+            execute(items.at(cursor));
+        if (!wantsToRender())
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    }
+}
 
-    if (cursorShown)
-        execute(items.at(cursor));
-    if (!wantsToRender())
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+void InkHUD::MenuApplet::onFreeText(char c)
+{
+    if (cm.freeTextItem.rawText.length() >= menuTextLimit && c != '\b')
+        return;
+    if (c == '\b') {
+        if (!cm.freeTextItem.rawText.empty())
+            cm.freeTextItem.rawText.pop_back();
+    } else {
+        cm.freeTextItem.rawText += c;
+    }
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::MenuApplet::onFreeTextDone()
+{
+    // Restart the auto-close timeout
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    OSThread::enabled = true;
+
+    handleFreeText = false;
+    freeTextMode = false;
+
+    if (!cm.freeTextItem.rawText.empty()) {
+        cm.selectedMessageItem = &cm.freeTextItem;
+        showPage(MenuPage::CANNEDMESSAGE_RECIPIENT);
+    }
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::MenuApplet::onFreeTextCancel()
+{
+    // Restart the auto-close timeout
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    OSThread::enabled = true;
+
+    handleFreeText = false;
+    freeTextMode = false;
+
+    // Clear the free text message
+    cm.freeTextItem.rawText.erase();
+
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 // Dynamically create MenuItem entries for activating / deactivating Applets, for the "Applet Selection" submenu
@@ -1635,6 +1734,10 @@ void InkHUD::MenuApplet::populateSendPage()
     // Position / NodeInfo packet
     items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
 
+    // If joystick is available, include the Free Text option
+    if (settings->joystick.enabled && !inkhud->twoWayRocker)
+        items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::SEND));
+
     // One menu item for each canned message
     uint8_t count = cm.store->size();
     for (uint8_t i = 0; i < count; i++) {
@@ -1664,7 +1767,7 @@ void InkHUD::MenuApplet::populateRecipientPage()
 
     for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
         // Get the channel, and check if it's enabled
-        meshtastic_Channel &channel = channels.getByIndex(i);
+        const meshtastic_Channel &channel = channels.getByIndex(i);
         if (!channel.has_settings || channel.role == meshtastic_Channel_Role_DISABLED)
             continue;
 
@@ -1734,6 +1837,48 @@ void InkHUD::MenuApplet::populateRecipientPage()
     items.push_back(MenuItem("Exit", MenuPage::EXIT));
 }
 
+void InkHUD::MenuApplet::drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height, const std::string &text)
+{
+    setFont(fontSmall);
+    uint16_t wrapMaxH = 0;
+
+    // Draw the text, input box, and cursor
+    // Adjusting the box for screen height
+    while (wrapMaxH < height - fontSmall.lineHeight()) {
+        wrapMaxH += fontSmall.lineHeight();
+    }
+
+    // If the text is so long that it goes outside of the input box, the text is actually rendered off screen.
+    uint32_t textHeight = getWrappedTextHeight(0, width - 5, text);
+    if (!text.empty()) {
+        uint16_t textPadding = X(1.0) > Y(1.0) ? wrapMaxH - textHeight : wrapMaxH - textHeight + 1;
+        if (textHeight > wrapMaxH)
+            printWrapped(2, textPadding, width - 5, text);
+        else
+            printWrapped(2, top + 2, width - 5, text);
+    }
+
+    uint16_t textCursorX = text.empty() ? 1 : getCursorX();
+    uint16_t textCursorY = text.empty() ? fontSmall.lineHeight() + 2 : getCursorY() - fontSmall.lineHeight() + 3;
+
+    if (textCursorX + 1 > width - 5) {
+        textCursorX = getCursorX() - width + 5;
+        textCursorY += fontSmall.lineHeight();
+    }
+
+    fillRect(textCursorX + 1, textCursorY, 1, fontSmall.lineHeight(), BLACK);
+
+    // A white rectangle clears the top part of the screen for any text that's printed beyond the input box
+    fillRect(0, 0, X(1.0), top, WHITE);
+
+    // Draw character limit
+    std::string ftlen = std::to_string(text.length()) + "/" + to_string(menuTextLimit);
+    uint16_t textLen = getTextWidth(ftlen);
+    printAt(X(1.0) - textLen - 2, 0, ftlen);
+
+    // Draw the border
+    drawRect(0, top, width, wrapMaxH + 5, BLACK);
+}
 // Renders the panel shown at the top of the root menu.
 // Displays the clock, and several other pieces of instantaneous system info,
 // which we'd prefer not to have displayed in a normal applet, as they update too frequently.
@@ -1867,7 +2012,7 @@ void InkHUD::MenuApplet::sendText(NodeNum dest, ChannelIndex channel, const char
     service->sendToMesh(p, RX_SRC_LOCAL, true); // Send to mesh, cc to phone
 }
 
-// Free up any heap mmemory we'd used while selecting / sending canned messages
+// Free up any heap memory we'd used while selecting / sending canned messages
 void InkHUD::MenuApplet::freeCannedMessageResources()
 {
     cm.selectedMessageItem = nullptr;
