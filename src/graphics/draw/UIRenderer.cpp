@@ -247,6 +247,21 @@ static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int
     }
 }
 
+static inline void drawCompassCardinalLabel(OLEDDisplay *display, int16_t x, int16_t y, const char *label)
+{
+    const int16_t labelTop = y - (FONT_HEIGHT_SMALL / 2);
+    const int16_t textWidth = static_cast<int16_t>(display->getStringWidth(label));
+    const int16_t padX = 1;
+    const int16_t padY = 1;
+
+    // Clear any ring/tick pixels behind the label so letters remain clean.
+    display->setColor(BLACK);
+    display->fillRect(x - (textWidth / 2) - padX, labelTop - padY, textWidth + (padX * 2), FONT_HEIGHT_SMALL + (padY * 2));
+
+    display->setColor(WHITE);
+    display->drawString(x, labelTop, label);
+}
+
 static inline void drawCompassCardinalLabels(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius,
                                              float heading)
 {
@@ -264,13 +279,12 @@ static inline void drawCompassCardinalLabels(OLEDDisplay *display, int16_t compa
     const int16_t wX = compassX - static_cast<int16_t>(radius * cosNorth);
     const int16_t wY = compassY - static_cast<int16_t>(radius * sinNorth);
 
-    display->setColor(WHITE);
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
-    display->drawString(eX, eY - FONT_HEIGHT_SMALL / 2, "E");
-    display->drawString(sX, sY - FONT_HEIGHT_SMALL / 2, "S");
-    display->drawString(wX, wY - FONT_HEIGHT_SMALL / 2, "W");
+    drawCompassCardinalLabel(display, nX, nY, "N");
+    drawCompassCardinalLabel(display, eX, eY, "E");
+    drawCompassCardinalLabel(display, sX, sY, "S");
+    drawCompassCardinalLabel(display, wX, wY, "W");
 }
 
 static inline void drawCompassDegreeMarkers(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius,
