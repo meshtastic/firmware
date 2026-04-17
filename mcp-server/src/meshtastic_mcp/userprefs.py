@@ -69,6 +69,7 @@ def _parse_jsonc_state(text: str) -> dict[str, Any]:
           "commented": {key: string_value, ...}, # commented examples
           "order": [key, ...]                   # source order for round-trip
         }
+
     """
     active: dict[str, str] = {}
     commented: dict[str, str] = {}
@@ -415,12 +416,14 @@ def build_testing_profile(
             isolation).
         region: short code from `KNOWN_REGIONS`.
         modem_preset: short code from `KNOWN_MODEM_PRESETS`.
-        short_name / long_name: optional owner identity stamps.
+        short_name: optional owner short-name stamp (≤4 chars). None = unset.
+        long_name: optional owner long-name stamp. None = unset.
         disable_mqtt: if True (default), disables the MQTT module and the
             uplink/downlink bridge on the primary channel — so private test
             traffic never leaks to a public broker.
         disable_position: if True, disables GPS + position broadcasts — useful
             when test devices sit on a bench without antennas.
+
     """
     if region not in KNOWN_REGIONS:
         raise ValueError(

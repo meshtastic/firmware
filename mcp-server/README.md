@@ -148,7 +148,7 @@ _The tool tables below document 38 currently registered MCP server tools._
 
 ## Layout
 
-```
+```text
 mcp-server/
 ├── pyproject.toml
 ├── README.md

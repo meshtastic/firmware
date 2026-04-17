@@ -7,8 +7,6 @@ misconfig), this test fails within a minute of reboot.
 
 from __future__ import annotations
 
-import os
-import re
 import time
 from typing import Any
 

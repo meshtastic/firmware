@@ -101,13 +101,16 @@ class ReceiveCollector:
                 pass
 
     def snapshot(self) -> list[dict[str, Any]]:
-        """Current list of collected packets (thread-safe copy)."""
+        """Return a thread-safe copy of the list of collected packets."""
         with self._lock:
             return list(self._packets)
 
     def log_snapshot(self) -> list[str]:
-        """Captured firmware log lines (only populated if `capture_logs=True`
-        AND the device has `security.debug_log_api_enabled=True`)."""
+        """Return captured firmware log lines.
+
+        Only populated if `capture_logs=True` AND the device has
+        `security.debug_log_api_enabled=True`.
+        """
         with self._lock:
             return list(self._log_lines)
 

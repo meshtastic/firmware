@@ -208,6 +208,7 @@ def set_config(path: str, value: Any, port: str | None = None) -> dict[str, Any]
         set_config("device.role", "ROUTER")
         set_config("mqtt.enabled", True)
         set_config("mqtt.address", "mqtt.example.com")
+
     """
     segments = [s for s in path.split(".") if s]
     if not segments:

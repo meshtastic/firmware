@@ -28,7 +28,7 @@ This prompt assumes the meshtastic MCP server is registered with your VS Code Co
 
 4. **Render per-device report** as a compact block:
 
-   ```
+   ```text
    [nrf52 @ /dev/cu.usbmodem1101]      fw=2.7.23.bce2825, hw=RAK4631
      owner       : Meshtastic 40eb / 40eb
      region/band : US, channel 88, LONG_FAST

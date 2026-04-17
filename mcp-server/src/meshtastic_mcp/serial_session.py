@@ -19,7 +19,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import boards, config, pio
+from . import boards, config
 
 _BUFFER_MAX_LINES = 10_000
 _POLL_NEW_PORT_TIMEOUT_S = 3.0

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from typing import Any, Callable
+from typing import Any
 
 _counts: dict[str, int] = {}
 _installed = False
@@ -108,14 +108,17 @@ def install() -> None:
     for tool_name, (module_path, attr) in _TOOL_MAP.items():
         # Defense in depth: if someone mutates `_TOOL_MAP` at runtime
         # (shouldn't happen; it's module-level) the whitelist catches it.
+        # `module_path` is a key from the hardcoded `_TOOL_MAP` dict and
+        # is gated above by membership in `_allowed_modules` (itself
+        # derived from the same literal values). There is no path for
+        # untrusted input to reach the `import_module` call below; the
+        # Semgrep suppression must sit on the line immediately preceding
+        # the call (multi-line comment blocks between comment and call
+        # break the rule's scope detection).
         if module_path not in _allowed_modules:
             continue
         try:
             # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
-            # `module_path` is a key from the hardcoded `_TOOL_MAP` dict
-            # and is gated above by membership in `_allowed_modules`
-            # (itself derived from the same literal values). There is no
-            # path for untrusted input to reach this call.
             mod = importlib.import_module(module_path)
         except ImportError:
             continue

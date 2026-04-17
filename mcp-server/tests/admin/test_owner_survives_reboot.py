@@ -21,7 +21,6 @@ def test_owner_survives_reboot(
 ) -> None:
     """Runs once per connected role — proves the reboot-persistence
     round-trip works on each device independently, not just one."""
-    role = baked_single["role"]
     port = baked_single["port"]
 
     pre = info.device_info(port=port, timeout_s=8.0)

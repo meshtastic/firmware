@@ -25,7 +25,7 @@ Equivalent of `.claude/commands/repro.md`. Use when the operator says "that one 
 
 4. **Tally** results as you go:
 
-   ```
+   ```text
    attempt 1: PASS (42s)
    attempt 2: FAIL (128s)    ← fw log captured
    attempt 3: PASS (39s)

@@ -35,7 +35,10 @@ import pytest
 
 # Ensure the MCP server is on `sys.path` without requiring installation in
 # development mode for every checkout (we DO install in .venv but this makes
-# `pytest tests/` work from a fresh clone too).
+# `pytest tests/` work from a fresh clone too). The path mutation must
+# happen before `meshtastic_mcp.*` imports below — hence the `noqa: E402`
+# markers on those imports (ruff's "module-level import not at top of file"
+# rule doesn't understand path-bootstrapping patterns).
 _HERE = pathlib.Path(__file__).resolve().parent
 _MCP_SRC = _HERE.parent / "src"
 if str(_MCP_SRC) not in sys.path:
@@ -44,18 +47,9 @@ if str(_MCP_SRC) not in sys.path:
 # Default firmware root: the repo this mcp-server/ lives inside.
 os.environ.setdefault("MESHTASTIC_FIRMWARE_ROOT", str(_HERE.parent.parent))
 
-from meshtastic_mcp import (
-    admin,
-)
-from meshtastic_mcp import (  # noqa: E402  (import after path setup)
-    devices as devices_module,
-)
-from meshtastic_mcp import (
-    flash,
-    info,
-    serial_session,
-    userprefs,
-)
+from meshtastic_mcp import admin  # noqa: E402
+from meshtastic_mcp import devices as devices_module  # noqa: E402
+from meshtastic_mcp import info, serial_session, userprefs  # noqa: E402
 
 from . import tool_coverage  # noqa: E402
 
@@ -407,7 +401,7 @@ def baked_mesh(
     session_seed: str,
     request: pytest.FixtureRequest,
 ) -> dict[str, Any]:
-    """Verifies that both roles are baked with the session `test_profile`.
+    """Verify that both roles are baked with the session `test_profile`.
 
     Does NOT reflash. `test_00_bake.py` is responsible for applying the bake;
     this fixture just checks the result by connecting to each device and
@@ -696,7 +690,7 @@ class _SerialCapture:
 
 @pytest.fixture
 def serial_capture(hub_devices: dict[str, str], request: pytest.FixtureRequest) -> Any:
-    """Returns a `_SerialCapture` factory.
+    """Return a `_SerialCapture` factory.
 
     Usage:
         cap = serial_capture("esp32s3")
@@ -929,7 +923,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
     # Attach serial captures (if the test used `serial_capture`)
     caps = getattr(item, "_serial_captures", None)
     if caps:
-        for i, cap in enumerate(caps):
+        for cap in caps:
             try:
                 lines = _run_with_timeout(lambda c=cap: c.snapshot(max_lines=2000), 5.0)
             except Exception as exc:

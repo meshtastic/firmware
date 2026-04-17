@@ -46,6 +46,7 @@ class FirmwareLogTailer(threading.Thread):
     wait_s:
         How long to poll for the file's creation before giving up. Default
         30 s; pytest collection on a cold cache can be slow.
+
     """
 
     def __init__(

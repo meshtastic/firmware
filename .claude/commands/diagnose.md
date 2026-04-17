@@ -26,7 +26,7 @@ Call the meshtastic MCP tool bundle and format a structured health report for on
 
 4. **Render per-device report** as:
 
-   ```
+   ```text
    [nrf52 @ /dev/cu.usbmodem1101]      fw=2.7.23.bce2825, hw=RAK4631
      owner       : Meshtastic 40eb / 40eb
      region/band : US, channel 88, LONG_FAST

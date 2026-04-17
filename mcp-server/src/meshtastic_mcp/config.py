@@ -18,7 +18,7 @@ class ConfigError(RuntimeError):
 
 
 def firmware_root() -> Path:
-    """The root of the Meshtastic firmware repo.
+    """Resolve the root of the Meshtastic firmware repo.
 
     Resolution order:
       1. `MESHTASTIC_FIRMWARE_ROOT` env var.

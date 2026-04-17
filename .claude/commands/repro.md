@@ -23,7 +23,7 @@ Re-run a single pytest node ID N times in isolation, track pass rate, and surfac
 
 4. **Track a small structured tally**:
 
-   ```
+   ```text
    attempt 1: PASS (42s)
    attempt 2: FAIL (128s)  ← firmware log 200-line tail captured
    attempt 3: PASS (39s)

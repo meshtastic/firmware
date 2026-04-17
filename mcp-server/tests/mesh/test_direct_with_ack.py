@@ -86,7 +86,7 @@ def test_direct_with_ack_roundtrip(
             # sufficient on its own with fresh keys; the retry is purely
             # an airtime-collision safety net.
             got = None
-            for attempt in range(2):
+            for _attempt in range(2):
                 packet = tx_iface.sendText(
                     unique,
                     destinationId=rx_node_num,

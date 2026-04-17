@@ -205,7 +205,7 @@ def userprefs_get() -> dict[str, Any]:
 
 @app.tool()
 def userprefs_set(prefs: dict[str, Any]) -> dict[str, Any]:
-    """Persistently merge `prefs` into userPrefs.jsonc (uncommenting keys).
+    """Merge `prefs` into userPrefs.jsonc persistently (uncommenting keys).
 
     Existing active values not in `prefs` are kept. To remove a key from the
     active set, call `userprefs_reset` (restores the MCP backup if present)
@@ -275,6 +275,7 @@ def userprefs_testing_profile(
         long_name: optional owner long name stamped into the build.
         disable_mqtt: disable MQTT module + uplink/downlink (default True).
         disable_position: disable GPS + smart-position broadcasts (default False).
+
     """
     return userprefs_mod.build_testing_profile(
         psk_seed=psk_seed,

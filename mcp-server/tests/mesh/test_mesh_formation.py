@@ -11,7 +11,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from meshtastic_mcp import info
 from meshtastic_mcp.connection import connect
 
 
