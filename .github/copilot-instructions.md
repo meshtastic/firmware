@@ -4,11 +4,11 @@ This document provides context and guidelines for AI assistants working with the
 
 ## Project Overview
 
-Meshtastic is an open-source LoRa mesh networking project for long-range, low-power communication without relying on internet or cellular infrastructure. The firmware enables text messaging, location sharing, and telemetry over a decentralized mesh network.
+Meshtastic is an open-source LoRa mesh networking project for long-range, low-power communication without relying on internet or cellular infrastructure. The firmware enables text messaging, location sharing, and telemetry over a decentralized mesh network. The project uses **C++17** as its language standard across all platforms.
 
 ### Supported Hardware Platforms
 
-- **ESP32** (ESP32, ESP32-S3, ESP32-C3) - Most common platform
+- **ESP32** (ESP32, ESP32-S3, ESP32-C3, ESP32-C6) - Most common platform
 - **nRF52** (nRF52840, nRF52833) - Low power Nordic chips
 - **RP2040/RP2350** - Raspberry Pi Pico variants
 - **STM32WL** - STM32 with integrated LoRa
@@ -80,21 +80,46 @@ firmware/
 │   │   ├── NodeDB.*       # Node database management
 │   │   ├── Router.*       # Packet routing
 │   │   ├── Channels.*     # Channel management
+│   │   ├── CryptoEngine.* # AES-CCM encryption
 │   │   ├── *Interface.*   # Radio interface implementations
+│   │   ├── api/           # WiFi/Ethernet server APIs (ServerAPI, PacketAPI)
+│   │   ├── http/          # HTTP server (WebServer, ContentHandler)
+│   │   ├── wifi/          # WiFi support (WiFiAPClient)
+│   │   ├── eth/           # Ethernet support (ethClient)
+│   │   ├── udp/           # UDP multicast
+│   │   ├── compression/   # Message compression (unishox2)
 │   │   └── generated/     # Protobuf generated code
 │   ├── modules/           # Feature modules (Position, Telemetry, etc.)
+│   │   └── Telemetry/     # Telemetry subsystem
+│   │       └── Sensor/    # 50+ I2C sensor drivers
 │   ├── gps/               # GPS handling
 │   ├── graphics/          # Display drivers and UI
-│   ├── platform/          # Platform-specific code
-│   ├── input/             # Input device handling
-│   └── concurrency/       # Threading utilities
+│   │   └── niche/         # Specialized UIs (InkHUD e-ink framework)
+│   ├── platform/          # Platform-specific code (esp32, nrf52, rp2xx0, stm32wl, portduino)
+│   ├── input/             # Input device handling (InputBroker, keyboards, buttons)
+│   ├── detect/            # I2C hardware auto-detection (80+ device types)
+│   ├── motion/            # Accelerometer drivers (BMA423, BMI270, MPU6050, etc.)
+│   ├── mqtt/              # MQTT bridge client
+│   ├── power/             # Power HAL
+│   ├── nimble/            # BLE via NimBLE
+│   ├── buzz/              # Audio/notification (buzzer, RTTTL)
+│   ├── serialization/     # JSON serialization, COBS encoding
+│   ├── watchdog/          # Hardware watchdog thread
+│   ├── concurrency/       # Threading utilities (OSThread, Lock)
+│   ├── PowerFSM.*         # Power finite state machine
+│   └── Observer.h         # Observer/Observable event pattern
 ├── variants/              # Hardware variant definitions
 │   ├── esp32/            # ESP32 variants
 │   ├── esp32s3/          # ESP32-S3 variants
-│   ├── nrf52/            # nRF52 variants
-│   └── rp2xxx/           # RP2040/RP2350 variants
+│   ├── esp32c3/          # ESP32-C3 variants
+│   ├── esp32c6/          # ESP32-C6 variants
+│   ├── nrf52840/         # nRF52 variants
+│   ├── rp2040/           # RP2040/RP2350 variants
+│   ├── stm32/            # STM32WL variants
+│   └── native/           # Linux/Portduino variants
 ├── protobufs/            # Protocol buffer definitions
 ├── boards/               # Custom PlatformIO board definitions
+├── test/                 # Unit tests (12 test suites)
 └── bin/                  # Build and utility scripts
 ```
 
@@ -105,6 +130,7 @@ firmware/
 - Follow existing code style - run `trunk fmt` before commits
 - Prefer `LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR` for logging
 - Use `assert()` for invariants that should never fail
+- C++17 features are available (`std::optional`, structured bindings, `if constexpr`, etc.)
 
 ### Naming Conventions
 
@@ -118,19 +144,43 @@ firmware/
 
 #### Module System
 
-Modules inherit from `MeshModule` or `ProtobufModule<T>` and implement:
+Modules use a three-tier class hierarchy:
 
-- `handleReceivedProtobuf()` - Process incoming packets
-- `allocReply()` - Generate response packets
-- `runOnce()` - Periodic task execution (returns next run interval in ms)
+1. **`MeshModule`** - Base class. Implement `wantPacket()` and `handleReceived()`. Returns `ProcessMessage::STOP` or `ProcessMessage::CONTINUE`.
+2. **`SinglePortModule`** - Handles a single portnum. Simplified `wantPacket()` that checks `decoded.portnum`.
+3. **`ProtobufModule<T>`** - Template for protobuf-based modules. Handles encoding/decoding automatically.
+
+Most modules also inherit from **`OSThread`** for periodic tasks (the "mixin" pattern):
 
 ```cpp
-class MyModule : public ProtobufModule<meshtastic_MyMessage>
+class MyModule : public ProtobufModule<meshtastic_MyMessage>, private concurrency::OSThread
 {
+  public:
+    MyModule();
+
   protected:
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_MyMessage *msg) override;
-    virtual int32_t runOnce() override;
+    virtual meshtastic_MeshPacket *allocReply() override;       // Generate response packets
+    virtual int32_t runOnce() override;                         // Periodic task (returns next interval in ms)
+    virtual bool alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_MyMessage *msg); // Modify in-flight
+    virtual bool wantUIFrame();                                 // Request a UI display frame
 };
+```
+
+Modules are registered in `src/modules/Modules.cpp` guarded by `MESHTASTIC_EXCLUDE_*` flags.
+
+#### Observer/Observable Pattern
+
+Event-driven communication between subsystems uses `src/Observer.h`:
+
+```cpp
+// Observable emits events
+Observable<const meshtastic::Status *> newStatus;
+newStatus.notifyObservers(&status);
+
+// Observer receives events via callback
+CallbackObserver<MyClass, const meshtastic::Status *> statusObserver =
+    CallbackObserver<MyClass, const meshtastic::Status *>(this, &MyClass::handleStatusUpdate);
 ```
 
 #### Configuration Access
@@ -138,20 +188,69 @@ class MyModule : public ProtobufModule<meshtastic_MyMessage>
 - `config.*` - Device configuration (LoRa, position, power, etc.)
 - `moduleConfig.*` - Module-specific configuration
 - `channels.*` - Channel configuration and management
+- `owner` - Device owner info
+- `myNodeInfo` - Local node info
 
 #### Default Values
 
 Use the `Default` class helpers in `src/mesh/Default.h`:
 
 - `Default::getConfiguredOrDefaultMs(configured, default)` - Returns ms, using default if configured is 0
+- `Default::getConfiguredOrDefault(configured, default)` - Generic configured/default getter
 - `Default::getConfiguredOrMinimumValue(configured, min)` - Enforces minimum values
 - `Default::getConfiguredOrDefaultMsScaled(configured, default, numNodes)` - Scales based on network size
 
 #### Thread Safety
 
-- Use `concurrency::Lock` for mutex protection
+- Use `concurrency::Lock` and `concurrency::LockGuard` for mutex protection
 - Radio SPI access uses `SPILock`
 - Prefer `OSThread` for background tasks
+
+### Hardware Detection
+
+`src/detect/ScanI2C` automatically enumerates 80+ I2C device types at boot including displays, sensors, RTCs, keyboards, PMUs, and touch controllers. This drives automatic initialization of the correct drivers.
+
+### Graphics/UI System
+
+Multiple display driver families in `src/graphics/`:
+
+- **OLED**: SSD1306, SH1106, ST7567
+- **TFT**: TFTDisplay (LovyanGFX-based)
+- **E-Ink**: EInkDisplay2, EInkDynamicDisplay, EInkParallelDisplay
+
+**InkHUD** (`src/graphics/niche/InkHUD/`) is an event-driven e-ink UI framework:
+
+- Applet-based architecture — modular display tiles
+- Read-only, static display optimized for minimal refreshes and low power
+- Configured per-variant via `nicheGraphics.h`
+- Separate PlatformIO config: `src/graphics/niche/InkHUD/PlatformioConfig.ini`
+
+### Input System
+
+`src/input/InputBroker` is the centralized input event dispatcher. Supports multiple input sources: buttons, keyboards (BBQ10, Cardputer, TCA8418), touch screens, rotary encoders, and matrix keyboards.
+
+### Power Management
+
+`src/PowerFSM.*` implements a finite state machine with states: `stateON`, `statePOWER`, `stateSERIAL`, `stateDARK`. Key events: `EVENT_PRESS`, `EVENT_WAKE_TIMER`, `EVENT_LOW_BATTERY`, `EVENT_RECEIVED_MSG`, `EVENT_SHUTDOWN`. Conditionally excluded with `MESHTASTIC_EXCLUDE_POWER_FSM` (falls back to `FakeFsm`).
+
+### Motion Sensors
+
+`src/motion/AccelerometerThread` provides background motion monitoring with automatic screen wake and double-tap button press detection. Supports 10+ accelerometer/gyroscope chips (BMA423, BMI270, MPU6050, LIS3DH, LSM6DS3, STK8XXX, QMA6100P, ICM20948, BMX160).
+
+### Telemetry Sensor Library
+
+`src/modules/Telemetry/Sensor/` contains 50+ I2C sensor drivers organized by category:
+
+- **Power monitoring**: INA219/226/260/3221, MAX17048
+- **Environmental**: BME280/680, SCD4X (CO₂), SEN5X (particulate)
+- **Humidity/Temperature**: SHT3X/4X, AHT10, MCP9808, MLX90614
+- **Light**: BH1750, TSL2561/2591, VEML7700, LTR390UV, OPT3001
+- **Air quality**: PMSA003I, SFA30
+- **Specialized**: CGRadSens (radiation), NAU7802 (weight scale)
+
+### API/Networking
+
+`src/mesh/api/` provides a template-based `ServerAPI` for client communication over WiFi (`WiFiServerAPI`) and Ethernet (`ethServerAPI`). Default port: **4403**. HTTP server in `src/mesh/http/`. JSON serialization in `src/serialization/MeshPacketSerializer`.
 
 ### Hardware Variants
 
@@ -159,29 +258,37 @@ Each hardware variant has:
 
 - `variant.h` - Pin definitions and hardware capabilities
 - `platformio.ini` - Build configuration
-- Optional: `pins_arduino.h`, `rfswitch.h`
+- Optional: `pins_arduino.h`, `rfswitch.h`, `nicheGraphics.h` (for InkHUD variants)
 
 Key defines in variant.h:
 
 ```cpp
 #define USE_SX1262          // Radio chip selection
 #define HAS_GPS 1           // Hardware capabilities
+#define HAS_SCREEN 1        // Display present
 #define LORA_CS 36          // Pin assignments
 #define SX126X_DIO1 14      // Radio-specific pins
 ```
 
 ### Protobuf Messages
 
-- Defined in `protobufs/meshtastic/*.proto`
-- Generated code in `src/mesh/generated/`
+- Defined in `protobufs/meshtastic/*.proto` (~32 proto files)
+- Generated code in `src/mesh/generated/meshtastic/`
 - Regenerate with `bin/regen-protos.sh`
 - Message types prefixed with `meshtastic_`
+- Nanopb `.options` files control field sizes and encoding
 
 ### Conditional Compilation
 
 ```cpp
 #if !MESHTASTIC_EXCLUDE_GPS        // Feature exclusion
+#if !MESHTASTIC_EXCLUDE_WIFI       // Network feature exclusion
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH  // BLE exclusion
+#if !MESHTASTIC_EXCLUDE_POWER_FSM  // Power FSM exclusion
 #ifdef ARCH_ESP32                   // Architecture-specific
+#ifdef ARCH_NRF52                   // Nordic platform
+#ifdef ARCH_RP2040                  // Raspberry Pi Pico
+#ifdef ARCH_PORTDUINO               // Linux native
 #if defined(USE_SX1262)            // Radio-specific
 #ifdef HAS_SCREEN                   // Hardware capability
 #if USERPREFS_EVENT_MODE           // User preferences
@@ -192,7 +299,7 @@ Key defines in variant.h:
 Uses **PlatformIO** with custom scripts:
 
 - `bin/platformio-pre.py` - Pre-build script
-- `bin/platformio-custom.py` - Custom build logic
+- `bin/platformio-custom.py` - Custom build logic, manifest generation
 
 Build commands:
 
@@ -202,21 +309,38 @@ pio run -e tbeam -t upload    # Build and upload
 pio run -e native             # Build native/Linux version
 ```
 
+### Build Manifest
+
+`bin/platformio-custom.py` emits a build manifest with metadata:
+
+- `hasMui`, `hasInkHud` - UI capability flags (overridable via `custom_meshtastic_has_mui`, `custom_meshtastic_has_ink_hud`)
+- Architecture normalization (e.g., `esp32s3` → `esp32-s3` for API compatibility)
+
 ## Common Tasks
 
 ### Adding a New Module
 
 1. Create `src/modules/MyModule.cpp` and `.h`
-2. Inherit from appropriate base class
-3. Register in `src/modules/Modules.cpp`
-4. Add protobuf messages if needed in `protobufs/`
+2. Inherit from appropriate base class (`MeshModule`, `SinglePortModule`, or `ProtobufModule<T>`)
+3. Mix in `concurrency::OSThread` if periodic work is needed
+4. Register in `src/modules/Modules.cpp` guarded by `#if !MESHTASTIC_EXCLUDE_MYMODULE`
+5. Add protobuf messages if needed in `protobufs/meshtastic/`
+6. Add test suite in `test/test_mymodule/` if applicable
 
 ### Adding a New Hardware Variant
 
 1. Create directory under `variants/<arch>/<name>/`
-2. Add `variant.h` with pin definitions
-3. Add `platformio.ini` with build config
-4. Reference common configs with `extends`
+2. Add `variant.h` with pin definitions and hardware capability defines
+3. Add `platformio.ini` with build config — use `extends` to reference common base (e.g., `esp32s3_base`)
+4. Set `custom_meshtastic_support_level = 1` (PR builds) or `2` (merge builds)
+5. For e-ink displays, add `nicheGraphics.h` for InkHUD configuration
+
+### Adding a New Telemetry Sensor
+
+1. Create driver in `src/modules/Telemetry/Sensor/` following existing sensor pattern
+2. Register I2C address in `src/detect/ScanI2C` for auto-detection
+3. Integrate with the appropriate telemetry module (Environment, Health, Power, AirQuality)
+4. Add proto fields in `protobufs/meshtastic/telemetry.proto` if new data types are needed
 
 ### Modifying Configuration Defaults
 
@@ -305,9 +429,22 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ## Testing
 
-- Unit tests in `test/` directory
-- Run with `pio test -e native`
-- Use `bin/test-simulator.sh` for simulation testing
+Unit tests in `test/` directory with 12 test suites:
+
+- `test_crypto/` - Cryptography
+- `test_mqtt/` - MQTT integration
+- `test_radio/` - Radio interface
+- `test_mesh_module/` - Module framework
+- `test_meshpacket_serializer/` - Packet serialization
+- `test_transmit_history/` - Retransmission tracking
+- `test_atak/` - ATAK integration
+- `test_default/` - Default configuration
+- `test_http_content_handler/` - HTTP handling
+- `test_serial/` - Serial communication
+
+Run with: `pio test -e native`
+
+Simulation testing: `bin/test-simulator.sh`
 
 ## Resources
 
