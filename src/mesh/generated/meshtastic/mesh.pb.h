@@ -890,6 +890,10 @@ typedef struct _meshtastic_RemoteShell {
     uint32_t rows;
     /* Bit flags for protocol extensions. */
     uint32_t flags;
+    /* The last sequence number TX'd. */
+    uint32_t last_tx_seq;
+    /* The last sequence number RX'd. */
+    uint32_t last_rx_seq;
 } meshtastic_RemoteShell;
 
 /* Waypoint message, used to share arbitrary locations across the mesh */
@@ -1512,7 +1516,7 @@ extern "C" {
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
-#define meshtastic_RemoteShell_init_default      {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0}
+#define meshtastic_RemoteShell_init_default      {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
@@ -1546,7 +1550,7 @@ extern "C" {
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
-#define meshtastic_RemoteShell_init_zero         {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0}
+#define meshtastic_RemoteShell_init_zero         {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
@@ -1644,6 +1648,8 @@ extern "C" {
 #define meshtastic_RemoteShell_cols_tag          6
 #define meshtastic_RemoteShell_rows_tag          7
 #define meshtastic_RemoteShell_flags_tag         8
+#define meshtastic_RemoteShell_last_tx_seq_tag   9
+#define meshtastic_RemoteShell_last_rx_seq_tag   10
 #define meshtastic_Waypoint_id_tag               1
 #define meshtastic_Waypoint_latitude_i_tag       2
 #define meshtastic_Waypoint_longitude_i_tag      3
@@ -1884,7 +1890,9 @@ X(a, STATIC,   SINGULAR, UINT32,   ack_seq,           4) \
 X(a, STATIC,   SINGULAR, BYTES,    payload,           5) \
 X(a, STATIC,   SINGULAR, UINT32,   cols,              6) \
 X(a, STATIC,   SINGULAR, UINT32,   rows,              7) \
-X(a, STATIC,   SINGULAR, UINT32,   flags,             8)
+X(a, STATIC,   SINGULAR, UINT32,   flags,             8) \
+X(a, STATIC,   SINGULAR, UINT32,   last_tx_seq,       9) \
+X(a, STATIC,   SINGULAR, UINT32,   last_rx_seq,      10)
 #define meshtastic_RemoteShell_CALLBACK NULL
 #define meshtastic_RemoteShell_DEFAULT NULL
 
@@ -2262,7 +2270,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
-#define meshtastic_RemoteShell_size              241
+#define meshtastic_RemoteShell_size              253
 #define meshtastic_RouteDiscovery_size           256
 #define meshtastic_Routing_size                  259
 #define meshtastic_StatusMessage_size            81
