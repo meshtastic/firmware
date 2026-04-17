@@ -45,7 +45,10 @@ PB_BIND(meshtastic_Route, meshtastic_Route, 2)
 PB_BIND(meshtastic_Route_Link, meshtastic_Route_Link, AUTO)
 
 
-PB_BIND(meshtastic_CasevacReport, meshtastic_CasevacReport, AUTO)
+PB_BIND(meshtastic_CasevacReport, meshtastic_CasevacReport, 2)
+
+
+PB_BIND(meshtastic_ZMistEntry, meshtastic_ZMistEntry, AUTO)
 
 
 PB_BIND(meshtastic_EmergencyAlert, meshtastic_EmergencyAlert, AUTO)
@@ -54,7 +57,15 @@ PB_BIND(meshtastic_EmergencyAlert, meshtastic_EmergencyAlert, AUTO)
 PB_BIND(meshtastic_TaskRequest, meshtastic_TaskRequest, AUTO)
 
 
+PB_BIND(meshtastic_TAKEnvironment, meshtastic_TAKEnvironment, AUTO)
+
+
+PB_BIND(meshtastic_SensorFov, meshtastic_SensorFov, AUTO)
+
+
 PB_BIND(meshtastic_TAKPacketV2, meshtastic_TAKPacketV2, 2)
+
+
 
 
 
