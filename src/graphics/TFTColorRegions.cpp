@@ -25,19 +25,27 @@ static constexpr uint16_t toBe565(uint16_t color)
     return static_cast<uint16_t>((color >> 8) | (color << 8));
 }
 
+static constexpr bool kRoleIsBody[static_cast<size_t>(TFTColorRole::Count)] = {
+    false, // HeaderBackground
+    false, // HeaderTitle
+    false, // HeaderStatus
+    true,  // SignalBars
+    true,  // ConnectionIcon
+    true,  // UtilizationFill
+    true,  // FavoriteNode
+    true,  // ActionMenuBorder
+    true,  // ActionMenuBody
+    true,  // ActionMenuTitle
+    true,  // FrameMono
+    false, // BootSplash
+    true,  // BodyYellow
+    false, // NavigationBar
+    false  // NavigationArrow
+};
+
 static inline bool isBodyColorRole(TFTColorRole role)
 {
-    switch (role) {
-    case TFTColorRole::HeaderBackground:
-    case TFTColorRole::HeaderTitle:
-    case TFTColorRole::HeaderStatus:
-    case TFTColorRole::BootSplash:
-    case TFTColorRole::NavigationBar:
-    case TFTColorRole::NavigationArrow:
-        return false;
-    default:
-        return true;
-    }
+    return kRoleIsBody[static_cast<size_t>(role)];
 }
 
 static inline bool isMonochromeTheme(uint32_t themeId)
@@ -790,6 +798,19 @@ uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool isset, uint16_t default
         }
     }
     return isset ? defaultOnColor : defaultOffColor;
+}
+
+uint16_t resolveTFTOffColorAt(int16_t x, int16_t y, uint16_t defaultOffColor)
+{
+#if !GRAPHICS_TFT_COLORING_ENABLED
+    (void)x;
+    (void)y;
+    return defaultOffColor;
+#else
+    const uint16_t defaultOffBe = toBe565(defaultOffColor);
+    const uint16_t sampledBe = resolveTFTColorPixel(x, y, false, defaultOffBe, defaultOffBe);
+    return static_cast<uint16_t>((sampledBe >> 8) | (sampledBe << 8));
+#endif
 }
 
 } // namespace graphics

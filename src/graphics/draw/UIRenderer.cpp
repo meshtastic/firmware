@@ -44,6 +44,113 @@ static inline void drawSatelliteIcon(OLEDDisplay *display, int16_t x, int16_t y)
     }
 }
 
+struct StandardCompassNeedlePoints {
+    int16_t northTipX;
+    int16_t northTipY;
+    int16_t northLeftX;
+    int16_t northLeftY;
+    int16_t northRightX;
+    int16_t northRightY;
+    int16_t southTipX;
+    int16_t southTipY;
+    int16_t southLeftX;
+    int16_t southLeftY;
+    int16_t southRightX;
+    int16_t southRightY;
+};
+
+static inline void swapPoint(int16_t &ax, int16_t &ay, int16_t &bx, int16_t &by)
+{
+    const int16_t tx = ax;
+    const int16_t ty = ay;
+    ax = bx;
+    ay = by;
+    bx = tx;
+    by = ty;
+}
+
+static inline void transformNeedlePoint(float localX, float localY, float sinHeading, float cosHeading, float scale,
+                                        int16_t centerX, int16_t centerY, int16_t &outX, int16_t &outY)
+{
+    const float x = ((localX * cosHeading) - (localY * sinHeading)) * scale + centerX;
+    const float y = ((localX * sinHeading) + (localY * cosHeading)) * scale + centerY;
+    outX = static_cast<int16_t>(x);
+    outY = static_cast<int16_t>(y);
+}
+
+static float getCompassRingAngleOffset(float heading)
+{
+    return (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) ? -heading : 0.0f;
+}
+
+static inline StandardCompassNeedlePoints computeStandardCompassNeedlePoints(int16_t compassX, int16_t compassY,
+                                                                             uint16_t compassDiam, float headingRadian,
+                                                                             float centerGapPx)
+{
+    // Standard-style symmetric needle with a narrow waist and a tiny center gap
+    // between north/south halves to prevent seam bleed while rotating.
+    const float scaledDiam = compassDiam * 0.76f;
+    const float gapNormHalf = (centerGapPx * 0.5f) / scaledDiam;
+    const float sinHeading = sin(headingRadian);
+    const float cosHeading = cos(headingRadian);
+
+    StandardCompassNeedlePoints points{};
+    transformNeedlePoint(0.0f, -0.5f, sinHeading, cosHeading, scaledDiam, compassX, compassY, points.northTipX, points.northTipY);
+    transformNeedlePoint(-0.09f, -gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, points.northLeftX,
+                         points.northLeftY);
+    transformNeedlePoint(0.09f, -gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, points.northRightX,
+                         points.northRightY);
+    transformNeedlePoint(0.0f, 0.5f, sinHeading, cosHeading, scaledDiam, compassX, compassY, points.southTipX, points.southTipY);
+    transformNeedlePoint(-0.09f, gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, points.southLeftX,
+                         points.southLeftY);
+    transformNeedlePoint(0.09f, gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, points.southRightX,
+                         points.southRightY);
+    return points;
+}
+
+static inline void drawCompassNorthOnlyLabel(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius,
+                                             float heading)
+{
+    const float northAngle = getCompassRingAngleOffset(heading);
+    const float radius = compassRadius - 1.0f;
+    const int16_t nX = compassX + static_cast<int16_t>(radius * sin(northAngle));
+    const int16_t nY = compassY - static_cast<int16_t>(radius * cos(northAngle));
+
+    display->setColor(WHITE);
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+}
+
+static inline void drawMonoCompass(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius, float heading)
+{
+    const StandardCompassNeedlePoints points =
+        computeStandardCompassNeedlePoints(compassX, compassY, static_cast<uint16_t>(compassRadius * 2), -heading, 0.0f);
+
+#ifdef USE_EINK
+    display->setColor(WHITE);
+    display->drawTriangle(points.northTipX, points.northTipY, points.northLeftX, points.northLeftY, points.northRightX,
+                          points.northRightY);
+    display->drawTriangle(points.southTipX, points.southTipY, points.southLeftX, points.southLeftY, points.southRightX,
+                          points.southRightY);
+#else
+    // OLED variant: same needle geometry as TFT, but monochrome contrast.
+    display->setColor(WHITE);
+    display->fillTriangle(points.northTipX, points.northTipY, points.northLeftX, points.northLeftY, points.northRightX,
+                          points.northRightY);
+    display->setColor(BLACK);
+    display->fillTriangle(points.southTipX, points.southTipY, points.southLeftX, points.southLeftY, points.southRightX,
+                          points.southRightY);
+    // Keep a white outline so the black half remains visible on dark backgrounds.
+    display->setColor(WHITE);
+    display->drawTriangle(points.southTipX, points.southTipY, points.southLeftX, points.southLeftY, points.southRightX,
+                          points.southRightY);
+#endif
+
+    display->drawCircle(compassX, compassY, compassRadius);
+    drawCompassNorthOnlyLabel(display, compassX, compassY, compassRadius, heading);
+}
+
 #if GRAPHICS_TFT_COLORING_ENABLED
 struct NeedleColorBand {
     int16_t xMin;
@@ -83,30 +190,6 @@ static inline void emitNeedleSpan(OLEDDisplay *display, NeedleColorBand (&bands)
         region.yMin = y;
     if (y > region.yMax)
         region.yMax = y;
-}
-
-static inline void swapPoint(int16_t &ax, int16_t &ay, int16_t &bx, int16_t &by)
-{
-    const int16_t tx = ax;
-    const int16_t ty = ay;
-    ax = bx;
-    ay = by;
-    bx = tx;
-    by = ty;
-}
-
-static inline void transformNeedlePoint(float localX, float localY, float sinHeading, float cosHeading, float scale,
-                                        int16_t centerX, int16_t centerY, int16_t &outX, int16_t &outY)
-{
-    const float x = ((localX * cosHeading) - (localY * sinHeading)) * scale + centerX;
-    const float y = ((localX * sinHeading) + (localY * cosHeading)) * scale + centerY;
-    outX = static_cast<int16_t>(x);
-    outY = static_cast<int16_t>(y);
-}
-
-static float getCompassRingAngleOffset(float heading)
-{
-    return (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) ? -heading : 0.0f;
 }
 
 static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2,
@@ -217,46 +300,52 @@ static inline void drawCompassDegreeMarkers(OLEDDisplay *display, int16_t compas
 }
 
 static inline void drawStandardCompassNeedle(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam,
-                                             float headingRadian)
+                                             float headingRadian, uint16_t needleOffColor)
 {
-    // Standard-style symmetric needle with a narrow waist and a tiny center gap
-    // between north/south halves to prevent color seam bleed while rotating.
-    const float scaledDiam = compassDiam * 0.76f;
-    const float gapNormHalf = 4.5f / scaledDiam; // 9px center split
-    const float sinHeading = sin(headingRadian);
-    const float cosHeading = cos(headingRadian);
-
-    // Match OLED rasterization exactly (fillTriangle takes integer coordinates).
-    int16_t northTipXi, northTipYi;
-    int16_t northLeftXi, northLeftYi;
-    int16_t northRightXi, northRightYi;
-    int16_t southTipXi, southTipYi;
-    int16_t southLeftXi, southLeftYi;
-    int16_t southRightXi, southRightYi;
-
-    transformNeedlePoint(0.0f, -0.5f, sinHeading, cosHeading, scaledDiam, compassX, compassY, northTipXi, northTipYi);
-    transformNeedlePoint(-0.09f, -gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, northLeftXi, northLeftYi);
-    transformNeedlePoint(0.09f, -gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, northRightXi, northRightYi);
-    transformNeedlePoint(0.0f, 0.5f, sinHeading, cosHeading, scaledDiam, compassX, compassY, southTipXi, southTipYi);
-    transformNeedlePoint(-0.09f, gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, southLeftXi, southLeftYi);
-    transformNeedlePoint(0.09f, gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, southRightXi, southRightYi);
+    const StandardCompassNeedlePoints points =
+        computeStandardCompassNeedlePoints(compassX, compassY, compassDiam, headingRadian, 9.0f);
 
     display->setColor(WHITE);
 #ifdef USE_EINK
-    display->drawTriangle(northTipXi, northTipYi, northLeftXi, northLeftYi, northRightXi, northRightYi);
-    display->drawTriangle(southTipXi, southTipYi, southLeftXi, southLeftYi, southRightXi, southRightYi);
+    display->drawTriangle(points.northTipX, points.northTipY, points.northLeftX, points.northLeftY, points.northRightX,
+                          points.northRightY);
+    display->drawTriangle(points.southTipX, points.southTipY, points.southLeftX, points.southLeftY, points.southRightX,
+                          points.southRightY);
 #else
-    const uint16_t needleOffColor = getThemeBodyBg();
-    drawNeedleHalfAndRegisterBands(display, northTipXi, northTipYi, northLeftXi, northLeftYi, northRightXi, northRightYi,
+    drawNeedleHalfAndRegisterBands(display, points.northTipX, points.northTipY, points.northLeftX, points.northLeftY,
+                                   points.northRightX, points.northRightY,
                                    TFTPalette::Red, needleOffColor);
-    drawNeedleHalfAndRegisterBands(display, southTipXi, southTipYi, southLeftXi, southLeftYi, southRightXi, southRightYi,
+    drawNeedleHalfAndRegisterBands(display, points.southTipX, points.southTipY, points.southLeftX, points.southLeftY,
+                                   points.southRightX, points.southRightY,
                                    TFTPalette::Blue, needleOffColor);
 #endif
 }
 
 static inline void drawTftCompass(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius, float heading)
 {
-    drawStandardCompassNeedle(display, compassX, compassY, static_cast<uint16_t>(compassRadius * 2), -heading);
+    // Compass colors should follow whatever background role is already active at this location.
+    const uint16_t compassBgColor = resolveTFTOffColorAt(compassX, compassY, getThemeBodyBg());
+    const uint16_t compassGlyphColor = TFTPalette::pickReadableMonoFg(compassBgColor);
+    const int16_t pad = 2;
+    const int16_t labelPadX = static_cast<int16_t>(display->getStringWidth("W") / 2) + 2;
+    const int16_t labelPadY = static_cast<int16_t>(FONT_HEIGHT_SMALL / 2) + 2;
+    const int16_t boxX = compassX - compassRadius - pad - labelPadX;
+    const int16_t boxY = compassY - compassRadius - pad - labelPadY;
+    const int16_t boxW = (compassRadius * 2) + (pad * 2) + 1 + (labelPadX * 2);
+    const int16_t boxH = (compassRadius * 2) + (pad * 2) + 1 + (labelPadY * 2);
+    // Never let compass-local tint regions override the header role regions.
+    const int16_t bodyTop = static_cast<int16_t>(getTextPositions(display)[1]);
+    int16_t clippedY = boxY;
+    int16_t clippedH = boxH;
+    if (clippedY < bodyTop) {
+        clippedH = static_cast<int16_t>(clippedH - (bodyTop - clippedY));
+        clippedY = bodyTop;
+    }
+    if (clippedH > 0) {
+        registerTFTColorRegionDirect(boxX, clippedY, boxW, clippedH, compassGlyphColor, compassBgColor);
+    }
+
+    drawStandardCompassNeedle(display, compassX, compassY, static_cast<uint16_t>(compassRadius * 2), -heading, compassBgColor);
     display->drawCircle(compassX, compassY, compassRadius);
     drawCompassDegreeMarkers(display, compassX, compassY, compassRadius, heading);
     drawCompassCardinalLabels(display, compassX, compassY, compassRadius, heading);
@@ -596,14 +685,12 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
 
                 // Only do work if it overflows
                 if (w > screenW) {
-                    bool truncated = false;
                     if (ellipseW > screenW) {
                         statusLine.clear();
                     } else {
                         while (!statusLine.empty()) {
                             // remove one char (byte) at a time
                             statusLine.pop_back();
-                            truncated = true;
 
                             // Measure candidate with ellipsis appended
                             std::string candidate = statusLine + "...";
@@ -964,8 +1051,9 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
             }
 
             display->drawCircle(compassX, compassY, compassRadius);
-            CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
-            CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
+            drawCompassNorthOnlyLabel(display, compassX, compassY, compassRadius, myHeading);
+            const int arrowSize = static_cast<int>(compassDiam * 0.6f);
+            CompassRenderer::drawArrowToNode(display, compassX, compassY, arrowSize, bearing * RAD_TO_DEG);
         }
         // else show nothing
     } else {
@@ -1006,7 +1094,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
                 myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
                                                  : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
             }
-            graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+            drawCompassNorthOnlyLabel(display, compassX, compassY, compassRadius, myHeading);
 
             const auto &p = node->position;
             /* unused
@@ -1016,7 +1104,8 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
             if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
                 bearing -= myHeading;
-            graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
+            const int arrowSize = static_cast<int>((compassRadius * 2) * 0.6f);
+            graphics::CompassRenderer::drawArrowToNode(display, compassX, compassY, arrowSize, bearing * RAD_TO_DEG);
 
             display->drawCircle(compassX, compassY, compassRadius);
         }
@@ -1603,25 +1692,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 #if GRAPHICS_TFT_COLORING_ENABLED
             drawTftCompass(display, compassX, compassY, compassRadius, heading);
 #else
-            CompassRenderer::drawNodeHeading(display, compassX, compassY, static_cast<uint16_t>(compassRadius * 2), -heading);
-            display->drawCircle(compassX, compassY, compassRadius);
-
-            // "N" label
-            float northAngle = 0;
-            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
-                northAngle = -heading;
-            float radius = compassRadius;
-            int16_t nX = compassX + (radius - 1) * sin(northAngle);
-            int16_t nY = compassY - (radius - 1) * cos(northAngle);
-            int16_t nLabelWidth = display->getStringWidth("N") + 2;
-            int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
-
-            display->setColor(BLACK);
-            display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
-            display->setColor(WHITE);
-            display->setFont(FONT_SMALL);
-            display->setTextAlignment(TEXT_ALIGN_CENTER);
-            display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+            drawMonoCompass(display, compassX, compassY, compassRadius, heading);
 #endif
         } else {
             // Portrait or square: put compass at the bottom and centered, scaled to fit available space
@@ -1650,25 +1721,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 #if GRAPHICS_TFT_COLORING_ENABLED
             drawTftCompass(display, compassX, compassY, compassRadius, heading);
 #else
-            CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, -heading);
-            display->drawCircle(compassX, compassY, compassRadius);
-
-            // "N" label
-            float northAngle = 0;
-            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
-                northAngle = -heading;
-            float radius = compassRadius;
-            int16_t nX = compassX + (radius - 1) * sin(northAngle);
-            int16_t nY = compassY - (radius - 1) * cos(northAngle);
-            int16_t nLabelWidth = display->getStringWidth("N") + 2;
-            int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
-
-            display->setColor(BLACK);
-            display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
-            display->setColor(WHITE);
-            display->setFont(FONT_SMALL);
-            display->setTextAlignment(TEXT_ALIGN_CENTER);
-            display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+            drawMonoCompass(display, compassX, compassY, compassRadius, heading);
 #endif
         }
     }

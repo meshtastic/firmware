@@ -257,6 +257,22 @@ struct MessageBlock {
 };
 
 #if GRAPHICS_TFT_COLORING_ENABLED
+static void setDarkModeBubbleRoleColors(uint32_t themeId, bool mine)
+{
+    uint16_t bubbleOnColor;
+    uint16_t bubbleOffColor;
+
+    if (themeId == ThemeID::Blue) {
+        bubbleOnColor = mine ? TFTPalette::Navy : TFTPalette::White;
+        bubbleOffColor = mine ? TFTPalette::SkyBlue : TFTPalette::DeepBlue;
+    } else {
+        bubbleOnColor = mine ? TFTPalette::Black : getThemeBodyFg();
+        bubbleOffColor = mine ? TFTPalette::SkyBlue : TFTPalette::DarkGray;
+    }
+
+    setTFTColorRole(TFTColorRole::ActionMenuBody, bubbleOnColor, bubbleOffColor);
+}
+
 static void registerRoundedBubbleFillRegion(int x, int y, int w, int h, int radius)
 {
     if (w <= 0 || h <= 0) {
@@ -817,16 +833,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
 #if GRAPHICS_TFT_COLORING_ENABLED
                 if (useDarkModeBubbleFill) {
-                    uint16_t bubbleOnColor;
-                    uint16_t bubbleOffColor;
-                    if (themeId == ThemeID::Blue) {
-                        bubbleOnColor = b.mine ? TFTPalette::Navy : TFTPalette::White;
-                        bubbleOffColor = b.mine ? TFTPalette::SkyBlue : TFTPalette::DeepBlue;
-                    } else {
-                        bubbleOnColor = b.mine ? TFTPalette::Black : getThemeBodyFg();
-                        bubbleOffColor = b.mine ? TFTPalette::SkyBlue : TFTPalette::DarkGray;
-                    }
-                    setTFTColorRole(TFTColorRole::ActionMenuBody, bubbleOnColor, bubbleOffColor);
+                    setDarkModeBubbleRoleColors(themeId, b.mine);
                     registerRoundedBubbleFillRegion(bx, by, bw, bh, r);
                 }
 #endif
@@ -853,16 +860,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
 #if GRAPHICS_TFT_COLORING_ENABLED
                 if (useDarkModeBubbleFill) {
-                    uint16_t bubbleOnColor;
-                    uint16_t bubbleOffColor;
-                    if (themeId == ThemeID::Blue) {
-                        bubbleOnColor = b.mine ? TFTPalette::Navy : TFTPalette::White;
-                        bubbleOffColor = b.mine ? TFTPalette::SkyBlue : TFTPalette::DeepBlue;
-                    } else {
-                        bubbleOnColor = b.mine ? TFTPalette::Black : getThemeBodyFg();
-                        bubbleOffColor = b.mine ? TFTPalette::SkyBlue : TFTPalette::DarkGray;
-                    }
-                    setTFTColorRole(TFTColorRole::ActionMenuBody, bubbleOnColor, bubbleOffColor);
+                    setDarkModeBubbleRoleColors(themeId, b.mine);
                     registerTFTColorRegion(TFTColorRole::ActionMenuBody, bubbleX, topY, bubbleW, bubbleH);
                 }
 #endif

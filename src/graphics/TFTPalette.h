@@ -56,5 +56,15 @@ constexpr uint16_t MeshtasticGreen = rgb565(0x67, 0xEA, 0x94);
 constexpr uint16_t ClassicRed = rgb565(255, 64, 64);
 // Monochrome White reuses TFTPalette::White above.
 
+// Fast contrast picker for monochrome glyph overlays on arbitrary RGB565 backgrounds.
+// Uses channel-sum brightness approximation to keep code size small.
+constexpr uint16_t pickReadableMonoFg(uint16_t backgroundColor)
+{
+    const uint16_t r = (backgroundColor >> 11) & 0x1F;
+    const uint16_t g = (backgroundColor >> 5) & 0x3F;
+    const uint16_t b = backgroundColor & 0x1F;
+    return ((r + g + b) >= 70) ? DarkGray : White;
+}
+
 } // namespace TFTPalette
 } // namespace graphics
