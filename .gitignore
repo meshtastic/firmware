@@ -47,6 +47,10 @@ data/boot/logo.*
 managed_components/*
 arduino-lib-builder*
 dependencies.lock
+
+# JLink / RTT debug artifacts (nRF SoCs)
+flash.jlink
+rtt_*.txt
 idf_component.yml
 CMakeLists.txt
 /sdkconfig.*

@@ -104,6 +104,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     static RadioLibInterface *instance;
 
+    /** Clear instance on destruction so stale pointer checks in loop() are safe */
+    virtual ~RadioLibInterface()
+    {
+        if (instance == this)
+            instance = nullptr;
+    }
+
     /**
      * Glue functions called from ISR land
      */
@@ -286,4 +293,5 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
 
     void checkRxDoneIrqFlag();
+    void checkTxDoneIrqFlag();
 };

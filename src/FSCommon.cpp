@@ -271,8 +271,8 @@ void rmDir(const char *dirname)
 
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     listDir(dirname, 10, true);
-#elif defined(ARCH_NRF52)
-    // nRF52 implementation of LittleFS has a recursive delete function
+#elif defined(ARCH_NRF52) || defined(ARCH_NRF54L15)
+    // LittleFS rmdir_r for nRF52 and nRF54L15
     FSCom.rmdir_r(dirname);
 #endif
 

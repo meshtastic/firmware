@@ -217,6 +217,13 @@ NodeDB::NodeDB()
     } else {
         LOG_WARN("Failed to read unique id from efuse");
     }
+#elif defined(ARCH_NRF54L15)
+    // nRF54L15: DEVICEID is under FICR->INFO sub-struct (not top-level as on nRF52)
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->INFO.DEVICEID[1] << 32) | NRF_FICR->INFO.DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
+    memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    myNodeInfo.device_id.size = 16;
 #elif defined(ARCH_NRF52)
     // Nordic applies a FIPS compliant Random ID to each chip at the factory
     // We concatenate the device address to the Random ID to create a unique ID for now
@@ -611,6 +618,23 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #else
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+#endif
+#ifdef USERPREFS_LORACONFIG_USE_PRESET
+    config.lora.use_preset = USERPREFS_LORACONFIG_USE_PRESET;
+#else
+    config.lora.use_preset = true;
+#endif
+#ifdef USERPREFS_LORACONFIG_BANDWIDTH
+    config.lora.bandwidth = USERPREFS_LORACONFIG_BANDWIDTH;
+#endif
+#ifdef USERPREFS_LORACONFIG_SPREAD_FACTOR
+    config.lora.spread_factor = USERPREFS_LORACONFIG_SPREAD_FACTOR;
+#endif
+#ifdef USERPREFS_LORACONFIG_CODING_RATE
+    config.lora.coding_rate = USERPREFS_LORACONFIG_CODING_RATE;
+#endif
+#ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
+    config.lora.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
 #endif
     config.lora.hop_limit = HOP_RELIABLE;
 #ifdef USERPREFS_CONFIG_LORA_IGNORE_MQTT
@@ -1311,6 +1335,28 @@ void NodeDB::loadFromDisk()
 
 #if defined(USERPREFS_LORA_TX_DISABLED) && USERPREFS_LORA_TX_DISABLED
     config.lora.tx_enabled = false;
+#endif
+
+    // Always-apply LoRa overrides: applied after loading saved config so they
+    // take effect even when NVS already has a valid config (e.g. region-locked
+    // dev boards with no BLE/serial to set the region at runtime).
+#ifdef USERPREFS_CONFIG_LORA_REGION
+    config.lora.region = USERPREFS_CONFIG_LORA_REGION;
+#endif
+#ifdef USERPREFS_LORACONFIG_USE_PRESET
+    config.lora.use_preset = USERPREFS_LORACONFIG_USE_PRESET;
+#endif
+#ifdef USERPREFS_LORACONFIG_BANDWIDTH
+    config.lora.bandwidth = USERPREFS_LORACONFIG_BANDWIDTH;
+#endif
+#ifdef USERPREFS_LORACONFIG_SPREAD_FACTOR
+    config.lora.spread_factor = USERPREFS_LORACONFIG_SPREAD_FACTOR;
+#endif
+#ifdef USERPREFS_LORACONFIG_CODING_RATE
+    config.lora.coding_rate = USERPREFS_LORACONFIG_CODING_RATE;
+#endif
+#ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
+    config.lora.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
 #endif
 
     if (backupSecurity.private_key.size > 0) {

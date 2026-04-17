@@ -1,0 +1,67 @@
+/*
+ * Zephyr device tree overlay — Nordic nRF54L15-DK + EBYTE E22-900M30S (SX1262)
+ *
+ * P1 GPIO bank runs at 1.8V VDDIO (LP domain) — NOT compatible with SX1262
+ * which needs VIH ≥ 2.31V (0.7 × 3.3V).  All E22 signals therefore use P2,
+ * which is in the HP domain (3.0V VDDIO), via SPIM00.
+ *
+ * SPIM00 (HP domain, 3.0V) replaces SPIM20 (LP domain, 1.8V).
+ * Default pinctrl from cpuapp_common.dtsi already maps SPIM00 to P2 pins:
+ *   MISO = P2.04, MOSI = P2.02, SCK = P2.01
+ *
+ * The on-board MX25R64 NOR flash was attached to SPIM00; it is not used by
+ * Meshtastic (LittleFS lives in internal RRAM), so we delete its DTS node to
+ * free the bus and P2.05 (its CS pin) for our use.
+ *
+ * Physical wiring (all P2, HP domain):
+ *   E22 MISO  → P2.04  (SPIM00 MISO)
+ *   E22 NSS   → P2.05  (freed from MX25R64 CS, RadioLib GPIO)
+ *   E22 DIO1  → P2.06  (IRQ — interrupt capable via gpiote30)
+ *   E22 BUSY  → P2.03  (GPIO input)
+ *   E22 RST   → P2.00  (GPIO output)
+ *   E22 RXEN  → P2.07  (held HIGH via ANT_SW; replaces LED2 on DK)
+ *   E22 MOSI  → P2.02  (SPIM00 MOSI)
+ *   E22 SCK   → P2.01  (SPIM00 SCK)
+ *
+ * Pin numbering convention: P0.n = n, P1.n = 16+n, P2.n = 32+n.
+ */
+
+/* Disable uart20 — no longer needed for LoRa (P1 domain abandoned). */
+&uart20 {
+    status = "disabled";
+};
+
+/* Enable uart30 — IMCU VCOM debug console (P0.00 TX, P0.01 RX, 3.0V) */
+&uart30 {
+    status = "okay";
+};
+
+/ {
+    chosen {
+        zephyr,console = &uart30;
+        zephyr,shell-uart = &uart30;
+    };
+
+    buttons {
+        /* button1 (P1.09) and button2 (P1.08) no longer repurposed —
+         * E22 now uses P2. Restore them if needed, or leave deleted
+         * to keep the overlay minimal. */
+        /delete-node/ button_1;
+        /delete-node/ button_2;
+    };
+
+    aliases {
+        /delete-property/ sw1;
+        /delete-property/ sw2;
+    };
+};
+
+/*
+ * Override SPIM00 to remove the MX25R64 NOR flash child.
+ * The SPIM00 peripheral itself stays enabled (status = "okay" from
+ * cpuapp_common.dtsi) with its existing pinctrl (P2.01/P2.02/P2.04).
+ * RadioLib drives CS (P2.05) as a plain GPIO — no hardware CS needed.
+ */
+&spi00 {
+    /delete-node/ mx25r6435f@0;
+};
