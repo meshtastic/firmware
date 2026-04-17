@@ -167,7 +167,10 @@ def upload_firmware(host: str, port: int, firmware: bytes, psk: bytes, timeout: 
             0x01: "CRC mismatch",
             0x02: "Size error",
             0x03: "Write error",
-            0x06: "Timeout",
+            0x04: "Magic mismatch",
+            0x05: "Updater.begin() failed",
+            0x07: "Auth failed",
+            0x08: "Timeout",
         }
         code = result[0]
         msg = result_codes.get(code, f"Unknown result 0x{code:02X}")
