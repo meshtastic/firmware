@@ -133,6 +133,8 @@ uint16_t SphereOfInfluenceModule::estimateSampledMeshSize() const
     return static_cast<uint16_t>(std::min(rollingSampledAvg12h, 65535.0f));
 }
 
+// Roll the hourly eviction count and sampled node count into their respective 12h moving averages, then reset the hourly
+// counters. Also performs adaptive adjustment of the sampling denominator to keep the sample tracker load within optimal bounds.
 void SphereOfInfluenceModule::rollHour()
 {
     // EMA with alpha = 1/12: approximates a 12h rolling average
@@ -171,6 +173,8 @@ void SphereOfInfluenceModule::rollHour()
     saveState();
 }
 
+// Load persisted state from storage to maintain continuity across reboots. Validates magic, version, and sampling denominator
+// before applying.
 void SphereOfInfluenceModule::loadState()
 {
 #ifdef FSCom
@@ -201,6 +205,7 @@ void SphereOfInfluenceModule::loadState()
 #endif
 }
 
+// Store the current state to allow continuity across reboots.
 void SphereOfInfluenceModule::saveState() const
 {
 #ifdef FSCom
@@ -235,6 +240,7 @@ void SphereOfInfluenceModule::saveState() const
 #endif
 }
 
+// Iterate through NodeDB to build a snapshot of recent activity, classifying nodes into hop buckets and age buckets for analysis.
 void SphereOfInfluenceModule::buildSnapshot(Snapshot &snapshot) const
 {
     snapshot.recent1h.clear();
@@ -289,6 +295,9 @@ float SphereOfInfluenceModule::computeActivityWeight(const Snapshot &snapshot) c
     return activityWeight;
 }
 
+// Select a politeness factor based on the activity weight. More recent activity (higher weight) => stricter politeness to avoid
+// overloading the mesh; older activity (lower weight) => more generous to allow faster propagation and recovery. The default
+// mid-range politeness applies when the activity weight is close to 1, indicating a stable mesh with balanced recent
 float SphereOfInfluenceModule::selectPolitenessFactor(float activityWeight) const
 {
     if (activityWeight < ACTIVITY_WEIGHT_GENEROUS_MAX) {
@@ -300,23 +309,31 @@ float SphereOfInfluenceModule::selectPolitenessFactor(float activityWeight) cons
     return POLITENESS_DEFAULT;
 }
 
+// Estimate a scale factor to apply to the raw NodeDB counts when computing the required hop. This compensates for the nodeDB
+// being an incomplete sample of the whole mesh. Estimation logic tries to adapt to small, medium and megameshes with varying
+// turnover patterns by using a combination of heuristics based on NodeDB capacity, eviction rates, and sampling-based mesh size
+// estimation.
 float SphereOfInfluenceModule::estimateScaleFactor(const Snapshot &snapshot) const
 {
-    // Not-full NodeDB with headroom: direct counts are accurate, no scaling needed.
+    float scale = 1.0f; // default (no scaling)
+    const uint16_t knownNodeCount = MAX_NUM_NODES - snapshot.cumulative12h.unknownHopCount;
+
+    // Not-full NodeDB with headroom: direct counts are accurate, scaling only for unknown hops needed.
     const float nearCapacity = NODEDB_NEAR_CAPACITY_RATIO * MAX_NUM_NODES;
     if (!nodeDB || (!nodeDB->isFull() && snapshot.cumulative12h.total < nearCapacity)) {
-        LOG_DEBUG("[SOI] scaleFactor=1.0 (DB has headroom: %u/%d nodes)", snapshot.cumulative12h.total, MAX_NUM_NODES);
-        return 1.0f;
+        scale = MAX_NUM_NODES / static_cast<float>(knownNodeCount);
+        LOG_DEBUG("[SOI] scaleFactor=%.2f (DB has headroom: %u/%d nodes, of which %.2f unknown hops)", static_cast<double>(scale),
+                  snapshot.cumulative12h.total, MAX_NUM_NODES, static_cast<double>(snapshot.cumulative12h.unknownHopCount));
+        return scale;
     }
 
     // NodeDB at or near capacity — use rolling 12h eviction average to decide scale.
     if (rollingEvictionAvg12h < (TURNOVER_CAPACITY_LIMIT_RATIO * MAX_NUM_NODES)) {
         // Low turnover: NodeDB is full but few evictions; modest scale-up.
         // Scale proportionally: at 0 evictions => 1.0, approaching threshold => 1.2^12
-        const float t = (1.0f + (rollingEvictionAvg12h / (MAX_NUM_NODES)));
-        const float scale = powf(t, 12.0f);
-        LOG_DEBUG("[SOI] scaleFactor=%.2f (low turnover: evict/h=%.1f, t=%.3f)", static_cast<double>(scale),
-                  static_cast<double>(rollingEvictionAvg12h), static_cast<double>(t));
+        scale = (1.0f + (rollingEvictionAvg12h / knownNodeCount));
+        LOG_DEBUG("[SOI] scaleFactor=%.2f (low turnover: evict/h=%.1f)", static_cast<double>(scale),
+                  static_cast<double>(rollingEvictionAvg12h));
         return scale;
     }
 
@@ -325,41 +342,49 @@ float SphereOfInfluenceModule::estimateScaleFactor(const Snapshot &snapshot) con
     const uint16_t sampledEstimate = estimateSampledMeshSize();
     if (sampledEstimate > 8.8f * MAX_NUM_NODES) {
         // Scale = estimated true mesh size / maximum NodeDB count
-        const float scale = std::max(static_cast<float>(sampledEstimate) / MAX_NUM_NODES, 1.0f);
+        scale = std::max(static_cast<float>(sampledEstimate) / knownNodeCount, 1.0f);
         LOG_DEBUG("[SOI] scaleFactor=%.2f (sampled: est=%u nodes, DB=%d)", static_cast<double>(scale), sampledEstimate,
                   MAX_NUM_NODES);
         return scale;
     } else {
         // Fallback to eviction rate but scale more aggressively, over the full capacity turnover
-        const float t = 1.1f + (rollingEvictionAvg12h / (MAX_NUM_NODES));
-        const float scale = powf(t, 12.0f);
-        LOG_DEBUG("[SOI] scaleFactor=%.2f (high turnover fallback: evict/h=%.1f, sampled=%u, t=%.3f)", static_cast<double>(scale),
-                  static_cast<double>(rollingEvictionAvg12h), sampledEstimate, static_cast<double>(t));
+        scale = 1.1f + (rollingEvictionAvg12h / knownNodeCount);
+        LOG_DEBUG("[SOI] scaleFactor=%.2f (high turnover fallback: evict/h=%.1f, sampled=%u)", static_cast<double>(scale),
+                  static_cast<double>(rollingEvictionAvg12h), sampledEstimate);
         return scale;
     }
 }
 
+// Compute the required hop distance to reach the target number of affected nodes, applying scaling and politeness adjustments.
+// The base hop is the minimum hop at which the cumulative affected nodes meets or exceeds the target. If extending to the next
+// hop would still keep the total under the politeness limit, extend by one more hop to be more generous. Scaling
 uint8_t SphereOfInfluenceModule::computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const
 {
     uint16_t affectedNodesPerHop[HOP_MAX + 1];
+    uint16_t avg1hFrom3hPerHop[HOP_MAX + 1];
     memset(affectedNodesPerHop, 0, sizeof(affectedNodesPerHop));
+    memset(avg1hFrom3hPerHop, 0, sizeof(avg1hFrom3hPerHop));
 
     for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
         // Average the three 1h buckets down to a single-hour node count at this hop.
-        const uint16_t avg1hFrom3h = static_cast<uint16_t>(
+        avg1hFrom3hPerHop[hop] = static_cast<uint16_t>(
             (snapshot.recent1h.perHop[hop] + snapshot.old1hFrom2h.perHop[hop] + snapshot.old1hFrom3h.perHop[hop]) / 3);
+        const uint16_t scaledFrom3hAverage =
+            static_cast<uint16_t>(std::min(avg1hFrom3hPerHop[hop] * scaleFactor, static_cast<float>(UINT16_MAX)));
 
-        // 12h cumulative is the best population estimate; scaleFactor compensates for eviction undercount.
-        const float scaled12h = snapshot.cumulative12h.perHop[hop] * scaleFactor;
+        // 12h cumulative is the best population estimate; scaleFactor compensates for eviction undercount or megamesh that
+        // exceeds NodeDB capacity.
+        const float scaled12h = snapshot.cumulative12h.perHop[hop] * powf(scaleFactor, 12);
         const uint16_t scaled12hInt = static_cast<uint16_t>(std::min(scaled12h, static_cast<float>(UINT16_MAX)));
 
         // If there isn't much action in the 12 hour window, or there is a flurry of activity in the recent 1-3h average, use the
         // recent average to avoid underestimation. Otherwise, use the scaled 12h count for a more stable estimate of the affected
         // nodes.
-        affectedNodesPerHop[hop] = std::max(avg1hFrom3h, scaled12hInt);
+        affectedNodesPerHop[hop] = std::max(scaledFrom3hAverage, scaled12hInt);
     }
-
-    LOG_INFO("[SOI] perHop raw:    [%u %u %u %u %u %u %u %u]", snapshot.cumulative12h.perHop[0], snapshot.cumulative12h.perHop[1],
+    LOG_INFO("[SOI] perHop 3h ave: [%u %u %u %u %u %u %u %u]", avg1hFrom3hPerHop[0], avg1hFrom3hPerHop[1], avg1hFrom3hPerHop[2],
+             avg1hFrom3hPerHop[3], avg1hFrom3hPerHop[4], avg1hFrom3hPerHop[5], avg1hFrom3hPerHop[6], avg1hFrom3hPerHop[7]);
+    LOG_INFO("[SOI] perHop 12h:    [%u %u %u %u %u %u %u %u]", snapshot.cumulative12h.perHop[0], snapshot.cumulative12h.perHop[1],
              snapshot.cumulative12h.perHop[2], snapshot.cumulative12h.perHop[3], snapshot.cumulative12h.perHop[4],
              snapshot.cumulative12h.perHop[5], snapshot.cumulative12h.perHop[6], snapshot.cumulative12h.perHop[7]);
     LOG_INFO("[SOI] perHop scaled: [%u %u %u %u %u %u %u %u]", affectedNodesPerHop[0], affectedNodesPerHop[1],
@@ -387,6 +412,7 @@ uint8_t SphereOfInfluenceModule::computeRequiredHop(const Snapshot &snapshot, fl
     return baseHop;
 }
 
+// Main scheduled task: run once per hour to update the hop recommendation based on recent mesh activity and NodeDB state.
 int32_t SphereOfInfluenceModule::runOnce()
 {
     static bool hasCompletedInitialRun = false;
