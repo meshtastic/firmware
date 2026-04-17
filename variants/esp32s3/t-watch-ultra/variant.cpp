@@ -16,6 +16,8 @@ void earlyInitVariant()
     digitalWrite(DISP_CS, HIGH);
     pinMode(SDCARD_CS, OUTPUT);
     digitalWrite(SDCARD_CS, HIGH);
+    pinMode(NFC_CS, OUTPUT);
+    digitalWrite(NFC_CS, HIGH);
 
     if (io.begin(Wire, XL9555_SLAVE_ADDRESS0)) {
         io.pinMode(EXPANDS_DRV_EN, OUTPUT);
