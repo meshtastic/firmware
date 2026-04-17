@@ -202,8 +202,8 @@ static inline void applyFavoriteNodeNameColor(OLEDDisplay *display, meshtastic_N
         return;
     }
 
-    setTFTColorRole(TFTColorRole::FavoriteNode, TFTPalette::Yellow, TFTPalette::Black);
-    registerTFTColorRegion(TFTColorRole::FavoriteNode, nameX, regionY, regionWidth, regionHeight);
+    setAndRegisterTFTColorRole(TFTColorRole::FavoriteNode, TFTPalette::Yellow, TFTPalette::Black, nameX, regionY, regionWidth,
+                               regionHeight);
 }
 
 // =============================
@@ -319,8 +319,8 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
         }
 
         // Highest bar reaches 6 px in this renderer.
-        setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black);
-        registerTFTColorRegion(TFTColorRole::SignalBars, barStartX, barStartY - 6, (4 * barWidth) + (3 * barGap), 6);
+        setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, barStartX, barStartY - 6,
+                                   (4 * barWidth) + (3 * barGap), 6);
     }
 
     for (int b = 0; b < 4; b++) {

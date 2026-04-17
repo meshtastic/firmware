@@ -110,8 +110,8 @@ static inline void prepareFrameColorRegions()
     clearTFTColorRegions();
     // Full-frame FrameMono inversion for themes that need it (e.g. light themes).
     if (isThemeFullFrameInvert()) {
-        setTFTColorRole(TFTColorRole::FrameMono, getThemeBodyFg(), getThemeBodyBg());
-        registerTFTColorRegion(TFTColorRole::FrameMono, 0, 0, screen->getWidth(), screen->getHeight());
+        setAndRegisterTFTColorRole(TFTColorRole::FrameMono, getThemeBodyFg(), getThemeBodyBg(), 0, 0, screen->getWidth(),
+                                   screen->getHeight());
     }
 #endif
 }
@@ -388,6 +388,10 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #endif
 
 #if defined(USE_ST7789)
+    // Keep firmware and ST7789 driver region structs layout-compatible:
+    // we pass `graphics::colorRegions` through a type cast below.
+    static_assert(sizeof(graphics::TFTColorRegion) == sizeof(::TFTColorRegion),
+                  "graphics::TFTColorRegion layout must match ST7789 TFTColorRegion");
     dispdev->setRGB(TFTPalette::White, (::TFTColorRegion *)colorRegions);
 #elif defined(USE_ST7796)
     static_cast<ST7796Spi *>(dispdev)->setRGB(TFTPalette::White);
@@ -578,6 +582,8 @@ void Screen::setup()
 #endif
 
 #if defined(USE_ST7789)
+    static_assert(sizeof(graphics::TFTColorRegion) == sizeof(::TFTColorRegion),
+                  "graphics::TFTColorRegion layout must match ST7789 TFTColorRegion");
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFTPalette::White, (::TFTColorRegion *)colorRegions);
 #endif
 #if defined(MUZI_BASE)

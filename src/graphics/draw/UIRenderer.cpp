@@ -50,8 +50,37 @@ struct NeedleColorBand {
     bool used;
 };
 
-static constexpr int kMaxNeedleBands = 10;
 static constexpr int kNeedleBandCount = 6;
+
+static inline void emitNeedleSpan(OLEDDisplay *display, NeedleColorBand (&bands)[kNeedleBandCount], int16_t bandTop,
+                                  int16_t bandHeight, int16_t y, int16_t a, int16_t b)
+{
+    if (a > b) {
+        const int16_t t = a;
+        a = b;
+        b = t;
+    }
+    display->drawHorizontalLine(a, y, b - a + 1);
+    const int band = (static_cast<int32_t>(y - bandTop) * kNeedleBandCount) / bandHeight;
+
+    NeedleColorBand &region = bands[band];
+    if (!region.used) {
+        region.used = true;
+        region.xMin = a;
+        region.xMax = b;
+        region.yMin = y;
+        region.yMax = y;
+        return;
+    }
+    if (a < region.xMin)
+        region.xMin = a;
+    if (b > region.xMax)
+        region.xMax = b;
+    if (y < region.yMin)
+        region.yMin = y;
+    if (y > region.yMax)
+        region.yMax = y;
+}
 
 static inline void swapPoint(int16_t &ax, int16_t &ay, int16_t &bx, int16_t &by)
 {
@@ -95,34 +124,6 @@ static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int
     const int16_t bandTop = y0;
     const int16_t bandBottom = y2;
     const int16_t bandHeight = (bandBottom >= bandTop) ? static_cast<int16_t>(bandBottom - bandTop + 1) : 1;
-    auto emitSpan = [&](int16_t y, int16_t a, int16_t b) {
-        if (a > b) {
-            const int16_t t = a;
-            a = b;
-            b = t;
-        }
-        display->drawHorizontalLine(a, y, b - a + 1);
-        const int band = (static_cast<int32_t>(y - bandTop) * kNeedleBandCount) / bandHeight;
-
-        NeedleColorBand &region = bands[band];
-        if (!region.used) {
-            region.used = true;
-            region.xMin = a;
-            region.xMax = b;
-            region.yMin = y;
-            region.yMax = y;
-            return;
-        }
-        if (a < region.xMin)
-            region.xMin = a;
-        if (b > region.xMax)
-            region.xMax = b;
-        if (y < region.yMin)
-            region.yMin = y;
-        if (y > region.yMax)
-            region.yMax = y;
-    };
-
     const int32_t dx01 = x1 - x0;
     const int32_t dy01 = y1 - y0;
     const int32_t dx02 = x2 - x0;
@@ -139,7 +140,7 @@ static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int
         const int16_t b = static_cast<int16_t>(x0 + ((dy02 != 0) ? (sb / dy02) : 0));
         sa += dx01;
         sb += dx02;
-        emitSpan(y, a, b);
+        emitNeedleSpan(display, bands, bandTop, bandHeight, y, a, b);
     }
 
     sa = dx12 * static_cast<int32_t>(y - y1);
@@ -149,7 +150,7 @@ static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int
         const int16_t b = static_cast<int16_t>(x0 + ((dy02 != 0) ? (sb / dy02) : 0));
         sa += dx12;
         sb += dx02;
-        emitSpan(y, a, b);
+        emitNeedleSpan(display, bands, bandTop, bandHeight, y, a, b);
     }
 
     for (int i = 0; i < kNeedleBandCount; i++) {
@@ -231,15 +232,11 @@ static inline void drawStandardCompassNeedle(OLEDDisplay *display, int16_t compa
     int16_t southRightXi, southRightYi;
 
     transformNeedlePoint(0.0f, -0.5f, sinHeading, cosHeading, scaledDiam, compassX, compassY, northTipXi, northTipYi);
-    transformNeedlePoint(-0.09f, -gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, northLeftXi,
-                         northLeftYi);
-    transformNeedlePoint(0.09f, -gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, northRightXi,
-                         northRightYi);
+    transformNeedlePoint(-0.09f, -gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, northLeftXi, northLeftYi);
+    transformNeedlePoint(0.09f, -gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, northRightXi, northRightYi);
     transformNeedlePoint(0.0f, 0.5f, sinHeading, cosHeading, scaledDiam, compassX, compassY, southTipXi, southTipYi);
-    transformNeedlePoint(-0.09f, gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, southLeftXi,
-                         southLeftYi);
-    transformNeedlePoint(0.09f, gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, southRightXi,
-                         southRightYi);
+    transformNeedlePoint(-0.09f, gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, southLeftXi, southLeftYi);
+    transformNeedlePoint(0.09f, gapNormHalf, sinHeading, cosHeading, scaledDiam, compassX, compassY, southRightXi, southRightYi);
 
     display->setColor(WHITE);
 #ifdef USE_EINK
@@ -566,8 +563,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
     if (username) {
 #if GRAPHICS_TFT_COLORING_ENABLED
         const int usernameWidth = UIRenderer::measureStringWithEmotes(display, username);
-        setTFTColorRole(TFTColorRole::BodyYellow, TFTPalette::Yellow, TFTPalette::Black);
-        registerTFTColorRegion(TFTColorRole::BodyYellow, x, getTextPositions(display)[line], usernameWidth, FONT_HEIGHT_SMALL);
+        setAndRegisterTFTColorRole(TFTColorRole::BodyYellow, TFTPalette::Yellow, TFTPalette::Black, x,
+                                   getTextPositions(display)[line], usernameWidth, FONT_HEIGHT_SMALL);
 #endif
         UIRenderer::drawStringWithEmotes(display, x, getTextPositions(display)[line++], username, FONT_HEIGHT_SMALL, 1, false);
     }
@@ -697,8 +694,8 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, i
                 signalBarsColor = TFTPalette::Bad;
             }
 
-            setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black);
-            registerTFTColorRegion(TFTColorRole::SignalBars, barX, barY, totalBarsWidth, maxBarHeight);
+            setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, barX, barY, totalBarsWidth,
+                                       maxBarHeight);
 
             for (int bi = 0; bi < kMaxBars; bi++) {
                 int barHeight = maxBarHeight * (bi + 1) / kMaxBars;
@@ -1135,9 +1132,8 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         } else if (raw_chutil_percent >= 35) {
             UtilizationFillColor = TFTPalette::Medium;
         }
-        setTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black);
-        registerTFTColorRegion(TFTColorRole::UtilizationFill, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
-                               chutil_bar_height - 2);
+        setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
+                                   starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
 #endif
         display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
     }
@@ -1430,8 +1426,7 @@ void UIRenderer::drawBootIconScreen(const char *upperMsg, OLEDDisplay *display, 
 #if GRAPHICS_TFT_COLORING_ENABLED
     // Meshtastic brand green background with black foreground text/icon on TFT startup screen.
     static constexpr uint16_t kMeshtasticGreen = TFTPalette::rgb565(103, 234, 145);
-    setTFTColorRole(TFTColorRole::BootSplash, TFTPalette::Black, kMeshtasticGreen);
-    registerTFTColorRegion(TFTColorRole::BootSplash, x, y, SCREEN_WIDTH, SCREEN_HEIGHT);
+    setAndRegisterTFTColorRole(TFTColorRole::BootSplash, TFTPalette::Black, kMeshtasticGreen, x, y, SCREEN_WIDTH, SCREEN_HEIGHT);
 #endif
     gBootSplashBoldPass = true;
     drawIconScreen(upperMsg, display, state, x, y);
@@ -1546,7 +1541,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             int16_t compassRadius = usableHeight / 2;
             if (compassRadius < 8)
                 compassRadius = 8;
-            const int16_t compassDiam = compassRadius * 2;
             const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
 
             // Center vertically and nudge down slightly to keep "N" clear of header
@@ -1555,7 +1549,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 #if GRAPHICS_TFT_COLORING_ENABLED
             drawTftCompass(display, compassX, compassY, compassRadius, heading);
 #else
-            CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, -heading);
+            CompassRenderer::drawNodeHeading(display, compassX, compassY, static_cast<uint16_t>(compassRadius * 2), -heading);
             display->drawCircle(compassX, compassY, compassRadius);
 
             // "N" label
@@ -1780,10 +1774,9 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const auto &navBarRole = theme.roles[static_cast<size_t>(TFTColorRole::NavigationBar)];
     const auto &navArrowRole = theme.roles[static_cast<size_t>(TFTColorRole::NavigationArrow)];
 
-    setTFTColorRole(TFTColorRole::NavigationBar, navBarRole.onColor, navBarRole.offColor);
+    setAndRegisterTFTColorRole(TFTColorRole::NavigationBar, navBarRole.onColor, navBarRole.offColor, rectX, rectY, rectWidth,
+                               rectHeight);
     setTFTColorRole(TFTColorRole::NavigationArrow, navArrowRole.onColor, navArrowRole.offColor);
-
-    registerTFTColorRegion(TFTColorRole::NavigationBar, rectX, rectY, rectWidth, rectHeight);
     display->fillRect(rectX, rectY, rectWidth, rectHeight);
 #else
     // Keep legacy OLED behavior untouched.

@@ -642,8 +642,8 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             if (alertBannerOptions > 0) {
                 const uint16_t titleTextColor =
                     (getActiveTheme().id == ThemeID::DefaultLight) ? TFTPalette::Black : getThemeHeaderText();
-                setTFTColorRole(TFTColorRole::ActionMenuTitle, getThemeHeaderBg(), titleTextColor);
-                registerTFTColorRegion(TFTColorRole::ActionMenuTitle, boxLeft, titleBarY - 1, boxWidth, titleBarHeight + 1);
+                setAndRegisterTFTColorRole(TFTColorRole::ActionMenuTitle, getThemeHeaderBg(), titleTextColor, boxLeft,
+                                           titleBarY - 1, boxWidth, titleBarHeight + 1);
             }
 #endif
             display->setColor(BLACK);
@@ -688,7 +688,10 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                     } else if (graphics::bannerSignalBars >= 4) {
                         signalBarsColor = TFTPalette::Good;
                     }
-                    setTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black);
+                    const int activeBars = min(graphics::bannerSignalBars, totalBars);
+                    const int regionWidth = activeBars * barWidth + (activeBars - 1) * barSpacing;
+                    setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, baseX,
+                                               baseY - maxBarHeight, regionWidth, maxBarHeight);
                 }
 #endif
                 for (int b = 0; b < totalBars; b++) {
@@ -697,11 +700,6 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                     int y = baseY - barHeight;
 
                     if (b < graphics::bannerSignalBars) {
-#if GRAPHICS_TFT_COLORING_ENABLED
-                        if (graphics::bannerSignalBars > 0) {
-                            registerTFTColorRegion(TFTColorRole::SignalBars, x, baseY - maxBarHeight, barWidth, maxBarHeight);
-                        }
-#endif
                         display->fillRect(x, y, barWidth, barHeight);
                     } else {
                         display->drawRect(x, y, barWidth, barHeight);

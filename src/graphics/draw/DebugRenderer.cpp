@@ -522,9 +522,8 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         } else if (raw_chutil_percent >= 35) {
             UtilizationFillColor = TFTPalette::Medium;
         }
-        setTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black);
-        registerTFTColorRegion(TFTColorRole::UtilizationFill, starting_position + chUtil_x + 1, chUtil_y + 1, fillRight,
-                               chutil_bar_height - 2);
+        setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
+                                   starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
 #endif
         display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
     }
@@ -606,8 +605,8 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         } else if (percent >= 60) {
             UtilizationFillColor = TFTPalette::Medium;
         }
-        setTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black);
-        registerTFTColorRegion(TFTColorRole::UtilizationFill, barX + 1, barY + 1, fillWidth - 1, barHeight - 2);
+        setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black, barX + 1, barY + 1,
+                                   fillWidth - 1, barHeight - 2);
 #endif
 
         display->fillRect(barX, barY, fillWidth, barHeight);

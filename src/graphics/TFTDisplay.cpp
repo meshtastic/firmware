@@ -1272,7 +1272,7 @@ void TFTDisplay::display(bool fromBlank)
 #if defined(HACKADAY_COMMUNICATOR)
             tft->draw16bitBeRGBBitmap(0, yStart, repaintChunkBuffer, displayWidth, rowsThisChunk);
 #else
-            tft->pushRect(0, yStart, displayWidth, rowsThisChunk, repaintChunkBuffer);
+            tft->pushImage(0, yStart, displayWidth, rowsThisChunk, repaintChunkBuffer);
 #endif
         }
 
@@ -1371,8 +1371,8 @@ void TFTDisplay::display(bool fromBlank)
 #else
             // Step 4: Send the changed pixels on this line to the screen as a single block transfer.
             // This function accepts pixel data MSB first so it can dump the memory straight out the SPI port.
-            tft->pushRect(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
-                          &linePixelBuffer[x_FirstPixelUpdate]);
+            tft->pushImage(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
+                           &linePixelBuffer[x_FirstPixelUpdate]);
 #endif
             somethingChanged = true;
         }

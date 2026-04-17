@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "configuration.h"
 #include <stdint.h>
@@ -13,6 +13,7 @@ struct TFTColorRegion {
     int16_t height;
     uint16_t onColorBe;
     uint16_t offColorBe;
+    // Required by ST7789 driver: it scans until the first disabled entry.
     bool enabled = false;
 };
 
@@ -54,6 +55,9 @@ constexpr bool isTFTColoringEnabled()
 
 void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor);
 void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t width, int16_t height);
+// Convenience helper for the common "set role then register one region" flow.
+void setAndRegisterTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor, int16_t x, int16_t y, int16_t width,
+                                int16_t height);
 // Register a region using explicit colors (no role lookup). Use when the
 // color comes from a theme field rather than a role (e.g. battery fill).
 void registerTFTColorRegionDirect(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t onColor, uint16_t offColor);
@@ -63,29 +67,35 @@ uint8_t getTFTColorRegionCount();
 void clearTFTColorRegions();
 uint16_t resolveTFTColorPixel(int16_t x, int16_t y, bool isset, uint16_t defaultOnColor, uint16_t defaultOffColor);
 
-// ── Theme engine ──────────────────────────────────────────────────────
-// Each theme has three fields that work together:
+// -- Theme engine ------------------------------------------------------
+// Each theme has four fields that work together:
 //
-//   id               — ThemeID:: constant, used for in-code references.
-//   name             — human-readable label shown in the theme picker.
-//   uniqueIdentifier — the stable numeric value persisted to
+//   id               - ThemeID:: constant, used for in-code references.
+//   name             - human-readable label shown in the theme picker.
+//   uniqueIdentifier - the stable numeric value persisted to
 //                      uiconfig.screen_rgb_color and restored at boot.
-//                      This is a CONTRACT with saved configs on disk — once
+//                      This is a CONTRACT with saved configs on disk - once
 //                      assigned, never reuse or renumber, even if the theme is
 //                      deleted or the kThemes[] array is reordered.
+//   visible          - controls whether a theme appears in the picker menu.
+//                      Hidden themes can still be restored and applied if their
+//                      uniqueIdentifier is persisted.
 //
-// Display order in the menu is controlled by kThemes[] array order, NOT by
-// any of the numeric values above.
+// Display order in the menu is controlled by kThemes[] array order among
+// themes where visible == true, NOT by any numeric value above.
 //
 // To add a new theme:
 //   1. Add a unique constant in ThemeID below (next unused value).
 //   2. Add a kThemes[] entry at the desired menu position, with a unique
 //      uniqueIdentifier that has never been used by any prior theme.
+//   3. Set visible=true if it should appear in the picker.
 //
 // To retire a theme without breaking saved configs:
-//   - Remove its kThemes[] entry.  resolveThemeIndex() will fall back to
-//     DefaultDark if the persisted uniqueIdentifier no longer matches any
-//     theme.  Do NOT reuse the retired uniqueIdentifier for a future theme.
+//   - Preferred: keep the entry and set visible=false so existing saved
+//     uniqueIdentifier values still resolve to the same theme.
+//   - If you remove the entry, resolveThemeIndex() falls back to DefaultDark
+//     when the persisted uniqueIdentifier no longer matches any theme.
+//   - Do NOT reuse a retired uniqueIdentifier for a future theme.
 namespace ThemeID
 {
 constexpr uint32_t DefaultDark = 0;
@@ -107,30 +117,18 @@ struct TFTThemeRoleColor {
 
 // Complete theme definition.
 struct TFTThemeDef {
-    uint32_t id;               // ThemeID constant — in-code identifier for this theme.
+    uint32_t id;               // ThemeID constant - in-code identifier for this theme.
     const char *name;          // Human-readable label shown in the theme picker.
     uint32_t uniqueIdentifier; // Stable persisted value copied into uiconfig.screen_rgb_color.
-                               // Never reuse or renumber — see file-level notes above.
+                               // Never reuse or renumber - see file-level notes above.
     TFTThemeRoleColor roles[static_cast<size_t>(TFTColorRole::Count)];
     uint16_t batteryFillGood;
     uint16_t batteryFillMedium;
     uint16_t batteryFillBad;
-    uint16_t headerBg;     // Header bar background
-    uint16_t headerText;   // Header title text
-    uint16_t headerStatus; // Header status icons / text
-    uint16_t bodyBg;       // Default body / transparent-header background
-    uint16_t bodyFg;       // Default body foreground
-    bool fullFrameInvert;  // Apply full-frame FrameMono inversion (ST7789 light themes)
-    bool visible;          // Show in the theme picker menu.  Hidden themes still apply
-                           // correctly if their uniqueIdentifier is persisted (dev/legacy themes).
+    bool fullFrameInvert; // Apply full-frame FrameMono inversion (ST7789 light themes)
+    bool visible;         // Show in the theme picker menu.  Hidden themes still apply
+                          // correctly if their uniqueIdentifier is persisted (dev/legacy themes).
 };
-
-// Total number of built-in themes (includes hidden ones).
-size_t getThemeCount();
-
-// Access theme by array index (0 .. getThemeCount()-1).  Array position controls
-// menu display order for visible themes.
-const TFTThemeDef &getThemeByIndex(size_t index);
 
 // Count of themes whose .visible flag is true.  Use this when building menus.
 size_t getVisibleThemeCount();
@@ -142,14 +140,11 @@ const TFTThemeDef &getVisibleThemeByIndex(size_t visibleIndex);
 // Return the theme that matches uiconfig.screen_rgb_color (falls back to Dark).
 const TFTThemeDef &getActiveTheme();
 
-// Return the kThemes[] index for the currently active theme.
-size_t getActiveThemeIndex();
-
 // Return the visible-theme index for the currently active theme, or SIZE_MAX
 // if the active theme is hidden (so menus can show "no selection").
 size_t getActiveVisibleThemeIndex();
 
-// Convenience accessors – safe to call even when coloring is compiled out.
+// Convenience accessors - safe to call even when coloring is compiled out.
 uint16_t getThemeHeaderBg();
 uint16_t getThemeHeaderText();
 uint16_t getThemeHeaderStatus();

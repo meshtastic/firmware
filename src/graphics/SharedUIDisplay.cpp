@@ -14,6 +14,7 @@
 #include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include <OLEDDisplay.h>
+#include <cctype>
 #include <graphics/images.h>
 
 namespace graphics
@@ -68,6 +69,12 @@ uint32_t lastBlinkShared = 0;
 bool isMailIconVisible = true;
 uint32_t lastMailBlink = 0;
 
+static inline bool useClockHeaderAccentTheme(uint32_t themeId)
+{
+    return themeId == ThemeID::Pink || themeId == ThemeID::Creamsicle || themeId == ThemeID::MeshtasticGreen ||
+           themeId == ThemeID::ClassicRed || themeId == ThemeID::MonochromeWhite;
+}
+
 // *********************************
 // * Rounded Header when inverted *
 // *********************************
@@ -114,6 +121,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     int statusRightStartX = screenW;
     const bool isClockHeader = transparent_background && show_date && (!titleStr || titleStr[0] == '\0');
     const auto activeThemeId = getActiveTheme().id;
+    const bool useClockHeaderAccent = isClockHeader && useClockHeaderAccentTheme(activeThemeId);
 #endif
 
     {
@@ -123,11 +131,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         uint16_t headerStatusColor = getThemeHeaderStatus();
 #if GRAPHICS_TFT_COLORING_ENABLED
         // Clock frame uses transparent header + date + empty title.
-        // For Pink/Creamsicle themes, tint status items (battery outline, %, date, mail icon)
-        // to the theme accent color in the clock frame.
-        if (isClockHeader && (activeThemeId == ThemeID::Pink || activeThemeId == ThemeID::Creamsicle ||
-                              activeThemeId == ThemeID::MeshtasticGreen || activeThemeId == ThemeID::ClassicRed ||
-                              activeThemeId == ThemeID::MonochromeWhite)) {
+        // For accent clock themes (Pink/Creamsicle + classic monochrome), tint
+        // status items (battery outline, %, date, mail icon) to the header accent.
+        if (useClockHeaderAccent) {
             headerStatusColor = getThemeHeaderBg();
         }
 
@@ -136,15 +142,15 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             setTFTColorRole(TFTColorRole::HeaderTitle, headerTitleColorForRole, transparentBgColor);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, transparentBgColor);
         } else if (useInvertedHeaderStyle) {
-            setTFTColorRole(TFTColorRole::HeaderBackground, headerColor, TFTPalette::Black);
+            setAndRegisterTFTColorRole(TFTColorRole::HeaderBackground, headerColor, TFTPalette::Black, 0, 0, screenW,
+                                       headerHeight);
             setTFTColorRole(TFTColorRole::HeaderTitle, headerColor, headerTitleColorForRole);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerColor, headerStatusColor);
-            registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
         } else {
-            setTFTColorRole(TFTColorRole::HeaderBackground, TFTPalette::Black, headerColor);
+            setAndRegisterTFTColorRole(TFTColorRole::HeaderBackground, TFTPalette::Black, headerColor, 0, 0, screenW,
+                                       headerHeight);
             setTFTColorRole(TFTColorRole::HeaderTitle, headerTitleColorForRole, headerColor);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, headerColor);
-            registerTFTColorRegion(TFTColorRole::HeaderBackground, 0, 0, screenW, headerHeight);
         }
 #endif
 
@@ -216,8 +222,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     bool useHorizontalBattery = (currentResolution == ScreenResolution::High && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-#if GRAPHICS_TFT_COLORING_ENABLED
-#endif
     bool hasBatteryFillRegion = false;
     int16_t batteryFillRegionX = 0;
     int16_t batteryFillRegionY = 0;
@@ -225,9 +229,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     int16_t batteryFillRegionH = 0;
 #if GRAPHICS_TFT_COLORING_ENABLED
     uint16_t batteryFillColor = getThemeBatteryFillColor(chargePercent);
-    if (isClockHeader &&
-        (activeThemeId == ThemeID::Pink || activeThemeId == ThemeID::Creamsicle || activeThemeId == ThemeID::MeshtasticGreen ||
-         activeThemeId == ThemeID::ClassicRed || activeThemeId == ThemeID::MonochromeWhite)) {
+    if (useClockHeaderAccent) {
         batteryFillColor = getThemeHeaderBg();
     }
 #endif
@@ -562,8 +564,7 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 
 #if GRAPHICS_TFT_COLORING_ENABLED
     // Only tint the link glyph itself on TFT; keep the footer background black.
-    setTFTColorRole(TFTColorRole::ConnectionIcon, TFTPalette::Blue, TFTPalette::Black);
-    registerTFTColorRegion(TFTColorRole::ConnectionIcon, iconX, iconY, iconW, iconH);
+    setAndRegisterTFTColorRole(TFTColorRole::ConnectionIcon, TFTPalette::Blue, TFTPalette::Black, iconX, iconY, iconW, iconH);
 #endif
 
     display->setColor(BLACK);
@@ -590,58 +591,121 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 
 bool isAllowedPunctuation(char c)
 {
-    const std::string allowed = ".,!?;:-_()[]{}'\"@#$/\\&+=%~^ ";
-    return allowed.find(c) != std::string::npos;
+    switch (c) {
+    case '.':
+    case ',':
+    case '!':
+    case '?':
+    case ';':
+    case ':':
+    case '-':
+    case '_':
+    case '(':
+    case ')':
+    case '[':
+    case ']':
+    case '{':
+    case '}':
+    case '\'':
+    case '"':
+    case '@':
+    case '#':
+    case '$':
+    case '/':
+    case '\\':
+    case '&':
+    case '+':
+    case '=':
+    case '%':
+    case '~':
+    case '^':
+    case ' ':
+        return true;
+    default:
+        return false;
+    }
 }
 
-static void replaceAll(std::string &s, const std::string &from, const std::string &to)
+static inline size_t utf8CodePointLength(unsigned char lead)
 {
-    if (from.empty())
-        return;
-    size_t pos = 0;
-    while ((pos = s.find(from, pos)) != std::string::npos) {
-        s.replace(pos, from.size(), to);
-        pos += to.size();
+    if ((lead & 0x80) == 0x00) {
+        return 1;
     }
+    if ((lead & 0xE0) == 0xC0) {
+        return 2;
+    }
+    if ((lead & 0xF0) == 0xE0) {
+        return 3;
+    }
+    if ((lead & 0xF8) == 0xF0) {
+        return 4;
+    }
+    return 1;
 }
 
 std::string sanitizeString(const std::string &input)
 {
+    static constexpr char kReplacementChar = static_cast<char>(0xBF); // Inverted question mark in ISO-8859-1.
     std::string output;
+    output.reserve(input.size());
     bool inReplacement = false;
-
-    // Make a mutable copy so we can normalize UTF-8 “smart punctuation” into ASCII first.
-    std::string s = input;
-
-    // Curly single quotes: ‘ ’
-    replaceAll(s, "\xE2\x80\x98", "'"); // U+2018
-    replaceAll(s, "\xE2\x80\x99", "'"); // U+2019
-
-    // Curly double quotes: “ ”
-    replaceAll(s, "\xE2\x80\x9C", "\""); // U+201C
-    replaceAll(s, "\xE2\x80\x9D", "\""); // U+201D
-
-    // En dash / Em dash: – —
-    replaceAll(s, "\xE2\x80\x93", "-"); // U+2013
-    replaceAll(s, "\xE2\x80\x94", "-"); // U+2014
-
-    // Non-breaking space
-    replaceAll(s, "\xC2\xA0", " "); // U+00A0
-
-    // Now do your original sanitize pass over the normalized string.
-    for (unsigned char uc : s) {
-        char c = static_cast<char>(uc);
-        if (std::isalnum(uc) || isAllowedPunctuation(c)) {
-            output += c;
-            inReplacement = false;
-        } else {
+    const size_t inputSize = input.size();
+    size_t i = 0;
+    while (i < inputSize) {
+        const unsigned char byte0 = static_cast<unsigned char>(input[i]);
+        char normalized = '\0';
+        size_t consumed = 0;
+        if (byte0 < 0x80) {
+            normalized = static_cast<char>(byte0);
+            consumed = 1;
+        } else if ((i + 2) < inputSize && byte0 == 0xE2 && static_cast<unsigned char>(input[i + 1]) == 0x80) {
+            // Smart punctuation: ' ' \" \" - -
+            switch (static_cast<unsigned char>(input[i + 2])) {
+            case 0x98:
+            case 0x99:
+                normalized = '\'';
+                consumed = 3;
+                break;
+            case 0x9C:
+            case 0x9D:
+                normalized = '\"';
+                consumed = 3;
+                break;
+            case 0x93:
+            case 0x94:
+                normalized = '-';
+                consumed = 3;
+                break;
+            default:
+                break;
+            }
+        } else if ((i + 1) < inputSize && byte0 == 0xC2 && static_cast<unsigned char>(input[i + 1]) == 0xA0) {
+            // Non-breaking space.
+            normalized = ' ';
+            consumed = 2;
+        }
+        if (consumed == 0) {
+            size_t seqLen = utf8CodePointLength(byte0);
+            if (seqLen > (inputSize - i)) {
+                seqLen = 1;
+            }
             if (!inReplacement) {
-                output += static_cast<char>(0xBF); // ISO-8859-1 for inverted question mark
+                output.push_back(kReplacementChar);
                 inReplacement = true;
             }
+            i += seqLen;
+            continue;
         }
+        const unsigned char normalizedUc = static_cast<unsigned char>(normalized);
+        if (std::isalnum(normalizedUc) || isAllowedPunctuation(normalized)) {
+            output.push_back(normalized);
+            inReplacement = false;
+        } else if (!inReplacement) {
+            output.push_back(kReplacementChar);
+            inReplacement = true;
+        }
+        i += consumed;
     }
-
     return output;
 }
 

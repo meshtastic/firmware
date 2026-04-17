@@ -40,6 +40,25 @@ static inline bool isBodyColorRole(TFTColorRole role)
     }
 }
 
+static inline bool isMonochromeTheme(uint32_t themeId)
+{
+    return themeId == ThemeID::MeshtasticGreen || themeId == ThemeID::ClassicRed || themeId == ThemeID::MonochromeWhite;
+}
+
+static inline uint16_t getMonochromeAccent(uint32_t themeId)
+{
+    return (themeId == ThemeID::MeshtasticGreen) ? TFTPalette::MeshtasticGreen
+           : (themeId == ThemeID::ClassicRed)    ? TFTPalette::ClassicRed
+                                                 : TFTPalette::White;
+}
+
+static inline void replaceColor(uint16_t &value, uint16_t from, uint16_t to)
+{
+    if (value == from) {
+        value = to;
+    }
+}
+
 static inline uint32_t fnv1aAppendByte(uint32_t hash, uint8_t value)
 {
     return (hash ^ value) * kFnv1aPrime;
@@ -52,7 +71,7 @@ static inline uint32_t fnv1aAppendU16(uint32_t hash, uint16_t value)
     return hash;
 }
 
-// ── Compile-time header color overrides (backward-compatible) ─────────
+// Compile-time header color overrides (backward-compatible)
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
 static constexpr uint16_t kHeaderBackground = TFT_HEADER_BG_COLOR_OVERRIDE;
 #else
@@ -71,13 +90,13 @@ static constexpr uint16_t kStatusColor = TFT_HEADER_STATUS_COLOR_OVERRIDE;
 static constexpr uint16_t kStatusColor = TFTPalette::White;
 #endif
 
-// ── Theme definitions ─────────────────────────────────────────────────
+// Theme definitions
 // Stored in kThemes[] and looked up by matching uiconfig.screen_rgb_color
 // against each entry's .uniqueIdentifier field.
 
 static const TFTThemeDef kThemes[] = {
 
-    // ── Default Dark (ThemeID::DefaultDark = 0) ──────────────────────
+    // Default Dark (ThemeID::DefaultDark = 0)
     {
         ThemeID::DefaultDark, // id
         "Default Dark",       // name
@@ -103,16 +122,11 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::Good,   // batteryFillGood
         TFTPalette::Medium, // batteryFillMedium
         TFTPalette::Bad,    // batteryFillBad
-        kHeaderBackground,  // headerBg
-        kTitleColor,        // headerText
-        kStatusColor,       // headerStatus
-        TFTPalette::Black,  // bodyBg
-        TFTPalette::White,  // bodyFg
         false,              // fullFrameInvert
         true,               // visible
     },
 
-    // ── Default Light (ThemeID::DefaultLight = 1) ────────────────────
+    // Default Light (ThemeID::DefaultLight = 1)
     {
         ThemeID::DefaultLight, // id
         "Default Light",       // name
@@ -134,19 +148,14 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::Black, TFTPalette::LightGray}, // NavigationBar  (icon fg, bar bg)
             {TFTPalette::Black, TFTPalette::White},     // NavigationArrow (arrow fg, body bg)
         },
-        TFTPalette::Good,      // batteryFillGood
-        TFTPalette::Medium,    // batteryFillMedium
-        TFTPalette::Bad,       // batteryFillBad
-        TFTPalette::LightGray, // headerBg
-        TFTPalette::Black,     // headerText
-        TFTPalette::Black,     // headerStatus
-        TFTPalette::White,     // bodyBg
-        TFTPalette::Black,     // bodyFg
-        true,                  // fullFrameInvert
-        true,                  // visible
+        TFTPalette::Good,   // batteryFillGood
+        TFTPalette::Medium, // batteryFillMedium
+        TFTPalette::Bad,    // batteryFillBad
+        true,               // fullFrameInvert
+        true,               // visible
     },
 
-    // ── Christmas (ThemeID::Christmas = 2) ───────────────────────────
+    // Christmas (ThemeID::Christmas = 2)
     {
         ThemeID::Christmas, // id
         "Christmas",        // name
@@ -171,16 +180,11 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::ChristmasGreen, // batteryFillGood
         TFTPalette::Gold,           // batteryFillMedium
         TFTPalette::ChristmasRed,   // batteryFillBad
-        TFTPalette::ChristmasRed,   // headerBg
-        TFTPalette::Gold,           // headerText
-        TFTPalette::Gold,           // headerStatus
-        TFTPalette::Pine,           // bodyBg
-        TFTPalette::White,          // bodyFg
         true,                       // fullFrameInvert
         false,                      // visible
     },
 
-    // ── Pink (ThemeID::Pink = 3) — light variant ─────────────────────
+    // Pink (ThemeID::Pink = 3) light variant
     {
         ThemeID::Pink, // id
         "Pink",        // name
@@ -205,16 +209,11 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::DeepPink, // batteryFillGood
         TFTPalette::HotPink,  // batteryFillMedium
         TFTPalette::Bad,      // batteryFillBad
-        TFTPalette::HotPink,  // headerBg
-        TFTPalette::White,    // headerText
-        TFTPalette::White,    // headerStatus
-        TFTPalette::PalePink, // bodyBg
-        TFTPalette::Black,    // bodyFg
         true,                 // fullFrameInvert
         true,                 // visible
     },
 
-    // ── Blue (ThemeID::Blue = 4) — dark variant ──────────────────────
+    // Blue (ThemeID::Blue = 4) dark variant
     {
         ThemeID::Blue, // id
         "Blue",        // name
@@ -236,19 +235,14 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::SkyBlue, TFTPalette::DeepBlue}, // NavigationBar  (icon fg, bar bg)
             {TFTPalette::SkyBlue, TFTPalette::Black},    // NavigationArrow (arrow fg, body bg)
         },
-        TFTPalette::SkyBlue,  // batteryFillGood
-        TFTPalette::Medium,   // batteryFillMedium
-        TFTPalette::Bad,      // batteryFillBad
-        TFTPalette::DeepBlue, // headerBg
-        TFTPalette::White,    // headerText
-        TFTPalette::SkyBlue,  // headerStatus
-        TFTPalette::Navy,     // bodyBg
-        TFTPalette::White,    // bodyFg
-        true,                 // fullFrameInvert
-        true,                 // visible
+        TFTPalette::SkyBlue, // batteryFillGood
+        TFTPalette::Medium,  // batteryFillMedium
+        TFTPalette::Bad,     // batteryFillBad
+        true,                // fullFrameInvert
+        true,                // visible
     },
 
-    // ── Creamsicle (ThemeID::Creamsicle = 5) — light variant ─────────
+    // Creamsicle (ThemeID::Creamsicle = 5)light variant
     {
         ThemeID::Creamsicle, // id
         "Creamsicle",        // name
@@ -270,19 +264,14 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::White, TFTPalette::CreamOrange}, // NavigationBar  (icon fg, bar bg)
             {TFTPalette::CreamOrange, TFTPalette::White}, // NavigationArrow (arrow fg, body bg)
         },
-        TFTPalette::DeepOrange,  // batteryFillGood
-        TFTPalette::Gold,        // batteryFillMedium
-        TFTPalette::Bad,         // batteryFillBad
-        TFTPalette::CreamOrange, // headerBg
-        TFTPalette::White,       // headerText
-        TFTPalette::White,       // headerStatus
-        TFTPalette::Cream,       // bodyBg
-        TFTPalette::Black,       // bodyFg
-        true,                    // fullFrameInvert
-        true,                    // visible
+        TFTPalette::DeepOrange, // batteryFillGood
+        TFTPalette::Gold,       // batteryFillMedium
+        TFTPalette::Bad,        // batteryFillBad
+        true,                   // fullFrameInvert
+        true,                   // visible
     },
 
-    // ── Meshtastic Green (ThemeID::MeshtasticGreen = 6) — classic monochrome ─
+    // Meshtastic Green (ThemeID::MeshtasticGreen = 6) classic monochrome
     // Pure single-color-on-black look.  Every role maps foreground pixels to
     // the theme color and background pixels to Black.
     {
@@ -306,19 +295,14 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // NavigationBar
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // NavigationArrow
         },
-        TFTPalette::Black,           // batteryFillGood
-        TFTPalette::Black,           // batteryFillMedium
-        TFTPalette::Black,           // batteryFillBad
-        TFTPalette::MeshtasticGreen, // headerBg (no separate bar — pure monochrome)
-        TFTPalette::Black,           // headerText
-        TFTPalette::Black,           // headerStatus
-        TFTPalette::Black,           // bodyBg
-        TFTPalette::MeshtasticGreen, // bodyFg
-        true,                        // fullFrameInvert
-        true,                        // visible
+        TFTPalette::Black, // batteryFillGood
+        TFTPalette::Black, // batteryFillMedium
+        TFTPalette::Black, // batteryFillBad
+        true,              // fullFrameInvert
+        true,              // visible
     },
 
-    // ── Classic Red (ThemeID::ClassicRed = 7) — classic monochrome ──────────
+    // Classic Red (ThemeID::ClassicRed = 7) classic monochrome
     {
         ThemeID::ClassicRed, // id
         "Classic Red",       // name
@@ -340,19 +324,14 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::ClassicRed, TFTPalette::Black}, // NavigationBar
             {TFTPalette::ClassicRed, TFTPalette::Black}, // NavigationArrow
         },
-        TFTPalette::Black,      // batteryFillGood
-        TFTPalette::Black,      // batteryFillMedium
-        TFTPalette::Black,      // batteryFillBad
-        TFTPalette::ClassicRed, // headerBg
-        TFTPalette::Black,      // headerText
-        TFTPalette::Black,      // headerStatus
-        TFTPalette::Black,      // bodyBg
-        TFTPalette::ClassicRed, // bodyFg
-        true,                   // fullFrameInvert
-        true,                   // visible
+        TFTPalette::Black, // batteryFillGood
+        TFTPalette::Black, // batteryFillMedium
+        TFTPalette::Black, // batteryFillBad
+        true,              // fullFrameInvert
+        true,              // visible
     },
 
-    // ── Monochrome White (ThemeID::MonochromeWhite = 8) — classic monochrome ─
+    // Monochrome White (ThemeID::MonochromeWhite = 8) classic monochrome
     {
         ThemeID::MonochromeWhite, // id
         "Monochrome White",       // name
@@ -377,11 +356,6 @@ static const TFTThemeDef kThemes[] = {
         TFTPalette::Black, // batteryFillGood
         TFTPalette::Black, // batteryFillMedium
         TFTPalette::Black, // batteryFillBad
-        TFTPalette::White, // headerBg
-        TFTPalette::Black, // headerText
-        TFTPalette::Black, // headerStatus
-        TFTPalette::Black, // bodyBg
-        TFTPalette::White, // bodyFg
         true,              // fullFrameInvert
         true,              // visible
     },
@@ -392,7 +366,7 @@ static constexpr size_t kInternalThemeCount = sizeof(kThemes) / sizeof(kThemes[0
 // Resolve the kThemes[] index for the currently persisted theme.  Called at
 // boot (indirectly via getActiveTheme()) and whenever the active theme is
 // queried, so uiconfig.screen_rgb_color remains the single source of truth.
-// Matches against .uniqueIdentifier — that's the field whose value is stored
+// Matches against .uniqueIdentifier - that's the field whose value is stored
 // in the user's config.  Falls back to 0 (DefaultDark) if no match is found,
 // which gracefully handles removed or retired themes.
 static inline size_t resolveThemeIndex()
@@ -403,6 +377,46 @@ static inline size_t resolveThemeIndex()
             return i;
     }
     return 0; // Default Dark fallback
+}
+
+static inline bool normalizeRegion(int16_t &x, int16_t &y, int16_t &width, int16_t &height)
+{
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+
+    if (x < 0) {
+        width += x;
+        x = 0;
+    }
+    if (y < 0) {
+        height += y;
+        y = 0;
+    }
+
+    return width > 0 && height > 0;
+}
+
+static inline void appendColorRegion(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t onColorBe, uint16_t offColorBe)
+{
+    if (colorRegionCount >= MAX_TFT_COLOR_REGIONS) {
+        memmove(&colorRegions[0], &colorRegions[1], sizeof(TFTColorRegion) * (MAX_TFT_COLOR_REGIONS - 1));
+        colorRegionCount = MAX_TFT_COLOR_REGIONS - 1;
+    }
+
+    TFTColorRegion &region = colorRegions[colorRegionCount++];
+    region.x = x;
+    region.y = y;
+    region.width = width;
+    region.height = height;
+    region.onColorBe = onColorBe;
+    region.offColorBe = offColorBe;
+    region.enabled = true;
+
+    // Keep one disabled sentinel after the active range for ST7789 countColorRegions().
+    if (colorRegionCount < MAX_TFT_COLOR_REGIONS) {
+        colorRegions[colorRegionCount].enabled = false;
+    }
 }
 
 // Current working role colors (big-endian).  Initialised to Dark defaults;
@@ -427,29 +441,14 @@ static TFTRoleColorsBe roleColors[static_cast<size_t>(TFTColorRole::Count)] = {
 
 } // namespace
 
-// ── Theme accessors ───────────────────────────────────────────────────
-
-size_t getThemeCount()
-{
-    return kInternalThemeCount;
-}
-
-const TFTThemeDef &getThemeByIndex(size_t index)
-{
-    return kThemes[index < kInternalThemeCount ? index : 0];
-}
+// Theme accessors
 
 const TFTThemeDef &getActiveTheme()
 {
     return kThemes[resolveThemeIndex()];
 }
 
-size_t getActiveThemeIndex()
-{
-    return resolveThemeIndex();
-}
-
-// ── Visible-theme accessors ───────────────────────────────────────────
+// Visible-theme accessors
 // These iterate only themes flagged .visible = true, preserving kThemes[]
 // order.  Menu code should use these so hidden themes don't appear in the
 // picker while still applying correctly if their ID is persisted.
@@ -497,7 +496,7 @@ uint16_t getThemeHeaderBg()
 #ifdef TFT_HEADER_BG_COLOR_OVERRIDE
     return TFT_HEADER_BG_COLOR_OVERRIDE;
 #else
-    return kThemes[resolveThemeIndex()].headerBg;
+    return kThemes[resolveThemeIndex()].roles[static_cast<size_t>(TFTColorRole::HeaderBackground)].onColor;
 #endif
 #else
     return TFTPalette::DarkGray;
@@ -510,7 +509,7 @@ uint16_t getThemeHeaderText()
 #ifdef TFT_HEADER_TITLE_COLOR_OVERRIDE
     return TFT_HEADER_TITLE_COLOR_OVERRIDE;
 #else
-    return kThemes[resolveThemeIndex()].headerText;
+    return kThemes[resolveThemeIndex()].roles[static_cast<size_t>(TFTColorRole::HeaderTitle)].offColor;
 #endif
 #else
     return TFTPalette::White;
@@ -523,7 +522,7 @@ uint16_t getThemeHeaderStatus()
 #ifdef TFT_HEADER_STATUS_COLOR_OVERRIDE
     return TFT_HEADER_STATUS_COLOR_OVERRIDE;
 #else
-    return kThemes[resolveThemeIndex()].headerStatus;
+    return kThemes[resolveThemeIndex()].roles[static_cast<size_t>(TFTColorRole::HeaderStatus)].offColor;
 #endif
 #else
     return TFTPalette::White;
@@ -533,7 +532,7 @@ uint16_t getThemeHeaderStatus()
 uint16_t getThemeBodyBg()
 {
 #if GRAPHICS_TFT_COLORING_ENABLED
-    return kThemes[resolveThemeIndex()].bodyBg;
+    return kThemes[resolveThemeIndex()].roles[static_cast<size_t>(TFTColorRole::FrameMono)].onColor;
 #else
     return TFTPalette::Black;
 #endif
@@ -542,7 +541,7 @@ uint16_t getThemeBodyBg()
 uint16_t getThemeBodyFg()
 {
 #if GRAPHICS_TFT_COLORING_ENABLED
-    return kThemes[resolveThemeIndex()].bodyFg;
+    return kThemes[resolveThemeIndex()].roles[static_cast<size_t>(TFTColorRole::FrameMono)].offColor;
 #else
     return TFTPalette::White;
 #endif
@@ -580,7 +579,7 @@ void loadThemeDefaults()
 #endif
 }
 
-// ── Role color assignment with theme-aware transforms ─────────────────
+// Role color assignment with theme-aware transforms
 
 void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
 {
@@ -588,129 +587,77 @@ void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
     return;
 #endif
 
-    const uint32_t themeId = uiconfig.screen_rgb_color;
-
-    // Classic monochrome themes: callers pass generic accents (Yellow, Blue,
-    // Good/Medium/Bad, White) expecting theme adaptation.  For these themes,
-    // every non-black accent collapses to the single theme color so the whole
-    // UI reads as one-color-on-black like a classic phosphor display.
-    // offColor is passed through — current callers always supply Black (or
-    // the theme's headerBg, which is also Black for monochrome themes).
-    if (themeId == ThemeID::MeshtasticGreen || themeId == ThemeID::ClassicRed || themeId == ThemeID::MonochromeWhite) {
-        const uint16_t monoAccent = (themeId == ThemeID::MeshtasticGreen) ? TFTPalette::MeshtasticGreen
-                                    : (themeId == ThemeID::ClassicRed)    ? TFTPalette::ClassicRed
-                                                                          : TFTPalette::White;
-        if (onColor != TFTPalette::Black) {
-            onColor = monoAccent;
-        }
-        const uint8_t monoIndex = static_cast<uint8_t>(role);
-        if (monoIndex < static_cast<uint8_t>(TFTColorRole::Count)) {
-            roleColors[monoIndex].onColorBe = toBe565(onColor);
-            roleColors[monoIndex].offColorBe = toBe565(offColor);
-        }
-        return;
-    }
-
-    // Highlight roles (FavoriteNode / BodyYellow) get per-theme accent treatment.
-    if (role == TFTColorRole::FavoriteNode || role == TFTColorRole::BodyYellow) {
-        switch (themeId) {
-        case ThemeID::DefaultLight:
-            // High-contrast: black glyphs on yellow background.
-            onColor = TFTPalette::Black;
-            offColor = TFTPalette::Yellow;
-            break;
-        case ThemeID::Christmas:
-            // Gold accent on pine background.
-            if (onColor == TFTPalette::Yellow)
-                onColor = TFTPalette::Gold;
-            if (offColor == TFTPalette::Black)
-                offColor = TFTPalette::Pine;
-            break;
-        case ThemeID::Pink:
-            // Pink light theme: high-contrast dark on pink.
-            onColor = TFTPalette::Black;
-            offColor = TFTPalette::HotPink;
-            break;
-        case ThemeID::Blue:
-            // Blue accent on navy background.
-            if (onColor == TFTPalette::Yellow)
-                onColor = TFTPalette::SkyBlue;
-            if (offColor == TFTPalette::Black)
-                offColor = TFTPalette::Navy;
-            break;
-        case ThemeID::Creamsicle:
-            // Orange-on-cream: high-contrast dark on orange.
-            onColor = TFTPalette::Black;
-            offColor = TFTPalette::CreamOrange;
-            break;
-        default:
-            break;
-        }
-    } else if (isBodyColorRole(role)) {
-        // Body / indicator roles: adjust to fit the active theme's palette.
-        switch (themeId) {
-        case ThemeID::DefaultLight:
-            // Invert body colours for readability on white frames.
-            if (offColor == TFTPalette::Black && role != TFTColorRole::ActionMenuTitle) {
-                offColor = TFTPalette::White;
-            }
-            if (onColor == TFTPalette::White) {
-                onColor = TFTPalette::Black;
-            }
-            break;
-        case ThemeID::Christmas:
-            // Swap yellow accents to gold; black backgrounds to pine.
-            if (onColor == TFTPalette::Yellow)
-                onColor = TFTPalette::Gold;
-            if (offColor == TFTPalette::Black)
-                offColor = TFTPalette::Pine;
-            break;
-        case ThemeID::Pink:
-            // Invert body colours for readability on pale pink frames.
-            if (offColor == TFTPalette::Black) {
-                offColor = TFTPalette::PalePink;
-            }
-            if (onColor == TFTPalette::White) {
-                onColor = TFTPalette::Black;
-            }
-            if (onColor == TFTPalette::Yellow) {
-                onColor = TFTPalette::DeepPink;
-            }
-            break;
-        case ThemeID::Blue:
-            // Swap yellow accents to sky blue; black backgrounds to navy.
-            if (onColor == TFTPalette::Yellow)
-                onColor = TFTPalette::SkyBlue;
-            if (offColor == TFTPalette::Black)
-                offColor = TFTPalette::Navy;
-            break;
-        case ThemeID::Creamsicle:
-            // Invert body colours for readability on cream frames.
-            if (offColor == TFTPalette::Black) {
-                offColor = TFTPalette::Cream;
-            }
-            if (onColor == TFTPalette::White) {
-                onColor = TFTPalette::Black;
-            }
-            if (onColor == TFTPalette::Yellow) {
-                onColor = TFTPalette::DeepOrange;
-            }
-            break;
-        default:
-            break;
-        }
-    }
-
     const uint8_t index = static_cast<uint8_t>(role);
     if (index >= static_cast<uint8_t>(TFTColorRole::Count)) {
         return;
+    }
+
+    const uint32_t themeId = uiconfig.screen_rgb_color;
+    const bool isHighlightRole = (role == TFTColorRole::FavoriteNode || role == TFTColorRole::BodyYellow);
+    const bool isBodyRole = !isHighlightRole && isBodyColorRole(role);
+
+    // Classic monochrome themes collapse all non-black accents into one tone.
+    if (isMonochromeTheme(themeId)) {
+        if (onColor != TFTPalette::Black) {
+            onColor = getMonochromeAccent(themeId);
+        }
+    } else {
+        switch (themeId) {
+        case ThemeID::DefaultLight:
+            if (isHighlightRole) {
+                // High-contrast highlight chips on light UI.
+                onColor = TFTPalette::Black;
+                offColor = TFTPalette::Yellow;
+            } else if (isBodyRole) {
+                // Invert body colors for readability on white frames.
+                if (offColor == TFTPalette::Black && role != TFTColorRole::ActionMenuTitle) {
+                    offColor = TFTPalette::White;
+                }
+                replaceColor(onColor, TFTPalette::White, TFTPalette::Black);
+            }
+            break;
+        case ThemeID::Christmas:
+            if (isHighlightRole || isBodyRole) {
+                replaceColor(onColor, TFTPalette::Yellow, TFTPalette::Gold);
+                replaceColor(offColor, TFTPalette::Black, TFTPalette::Pine);
+            }
+            break;
+        case ThemeID::Pink:
+            if (isHighlightRole) {
+                onColor = TFTPalette::Black;
+                offColor = TFTPalette::HotPink;
+            } else if (isBodyRole) {
+                replaceColor(offColor, TFTPalette::Black, TFTPalette::PalePink);
+                replaceColor(onColor, TFTPalette::White, TFTPalette::Black);
+                replaceColor(onColor, TFTPalette::Yellow, TFTPalette::DeepPink);
+            }
+            break;
+        case ThemeID::Creamsicle:
+            if (isHighlightRole) {
+                onColor = TFTPalette::Black;
+                offColor = TFTPalette::CreamOrange;
+            } else if (isBodyRole) {
+                replaceColor(offColor, TFTPalette::Black, TFTPalette::Cream);
+                replaceColor(onColor, TFTPalette::White, TFTPalette::Black);
+                replaceColor(onColor, TFTPalette::Yellow, TFTPalette::DeepOrange);
+            }
+            break;
+        case ThemeID::Blue:
+            if (isHighlightRole || isBodyRole) {
+                replaceColor(onColor, TFTPalette::Yellow, TFTPalette::SkyBlue);
+                replaceColor(offColor, TFTPalette::Black, TFTPalette::Navy);
+            }
+            break;
+        default:
+            break;
+        }
     }
 
     roleColors[index].onColorBe = toBe565(onColor);
     roleColors[index].offColorBe = toBe565(offColor);
 }
 
-// ── Region registration ───────────────────────────────────────────────
+// Region registration
 
 void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t width, int16_t height)
 {
@@ -718,46 +665,35 @@ void registerTFTColorRegion(TFTColorRole role, int16_t x, int16_t y, int16_t wid
     return;
 #endif
 
-    if (width <= 0 || height <= 0) {
-        return;
-    }
-
     const uint8_t roleIndex = static_cast<uint8_t>(role);
     if (roleIndex >= static_cast<uint8_t>(TFTColorRole::Count)) {
         return;
     }
 
-    if (x < 0) {
-        width += x;
-        x = 0;
-    }
-    if (y < 0) {
-        height += y;
-        y = 0;
-    }
-    if (width <= 0 || height <= 0) {
+    if (!normalizeRegion(x, y, width, height)) {
         return;
     }
 
-    if (colorRegionCount >= MAX_TFT_COLOR_REGIONS) {
-        memmove(&colorRegions[0], &colorRegions[1], sizeof(TFTColorRegion) * (MAX_TFT_COLOR_REGIONS - 1));
-        colorRegionCount = MAX_TFT_COLOR_REGIONS - 1;
-    }
-
     const TFTRoleColorsBe &colors = roleColors[roleIndex];
-    TFTColorRegion region;
-    region.x = x;
-    region.y = y;
-    region.width = width;
-    region.height = height;
-    region.onColorBe = colors.onColorBe;
-    region.offColorBe = colors.offColorBe;
-    region.enabled = true;
-    colorRegions[colorRegionCount++] = region;
-    // Keep a disabled terminator after active regions.
-    if (colorRegionCount < MAX_TFT_COLOR_REGIONS) {
-        colorRegions[colorRegionCount].enabled = false;
-    }
+    appendColorRegion(x, y, width, height, colors.onColorBe, colors.offColorBe);
+}
+
+void setAndRegisterTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor, int16_t x, int16_t y, int16_t width,
+                                int16_t height)
+{
+#if !GRAPHICS_TFT_COLORING_ENABLED
+    (void)role;
+    (void)onColor;
+    (void)offColor;
+    (void)x;
+    (void)y;
+    (void)width;
+    (void)height;
+    return;
+#else
+    setTFTColorRole(role, onColor, offColor);
+    registerTFTColorRegion(role, x, y, width, height);
+#endif
 }
 
 void registerTFTColorRegionDirect(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t onColor, uint16_t offColor)
@@ -765,34 +701,11 @@ void registerTFTColorRegionDirect(int16_t x, int16_t y, int16_t width, int16_t h
 #if !GRAPHICS_TFT_COLORING_ENABLED
     return;
 #endif
-    if (width <= 0 || height <= 0)
-        return;
-    if (x < 0) {
-        width += x;
-        x = 0;
-    }
-    if (y < 0) {
-        height += y;
-        y = 0;
-    }
-    if (width <= 0 || height <= 0)
+
+    if (!normalizeRegion(x, y, width, height))
         return;
 
-    if (colorRegionCount >= MAX_TFT_COLOR_REGIONS) {
-        memmove(&colorRegions[0], &colorRegions[1], sizeof(TFTColorRegion) * (MAX_TFT_COLOR_REGIONS - 1));
-        colorRegionCount = MAX_TFT_COLOR_REGIONS - 1;
-    }
-    TFTColorRegion region;
-    region.x = x;
-    region.y = y;
-    region.width = width;
-    region.height = height;
-    region.onColorBe = toBe565(onColor);
-    region.offColorBe = toBe565(offColor);
-    region.enabled = true;
-    colorRegions[colorRegionCount++] = region;
-    if (colorRegionCount < MAX_TFT_COLOR_REGIONS)
-        colorRegions[colorRegionCount].enabled = false;
+    appendColorRegion(x, y, width, height, toBe565(onColor), toBe565(offColor));
 }
 
 void registerTFTActionMenuRegions(int16_t boxLeft, int16_t boxTop, int16_t boxWidth, int16_t boxHeight)
@@ -810,22 +723,22 @@ void registerTFTActionMenuRegions(int16_t boxLeft, int16_t boxTop, int16_t boxWi
     const TFTThemeRoleColor &menuBorder = theme.roles[static_cast<size_t>(TFTColorRole::ActionMenuBorder)];
 
     // Fill role includes a 1px shadow guard so stale frame edges are overwritten uniformly.
-    setTFTColorRole(TFTColorRole::ActionMenuBody, menuBody.onColor, menuBody.offColor);
-    registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
+    setAndRegisterTFTColorRole(TFTColorRole::ActionMenuBody, menuBody.onColor, menuBody.offColor, boxLeft - 1, boxTop - 1,
+                               boxWidth + 2, boxHeight + 2);
     registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop - 2, boxWidth, 1);
     registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
     registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft - 2, boxTop, 1, boxHeight);
     registerTFTColorRegion(TFTColorRole::ActionMenuBody, boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
 
-    setTFTColorRole(TFTColorRole::ActionMenuBorder, menuBorder.onColor, menuBorder.offColor);
-    registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, boxWidth, 1);
+    setAndRegisterTFTColorRole(TFTColorRole::ActionMenuBorder, menuBorder.onColor, menuBorder.offColor, boxLeft, boxTop, boxWidth,
+                               1);
     registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop + boxHeight - 1, boxWidth, 1);
     registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft, boxTop, 1, boxHeight);
     registerTFTColorRegion(TFTColorRole::ActionMenuBorder, boxLeft + boxWidth - 1, boxTop, 1, boxHeight);
 #endif
 }
 
-// ── Frame signature & utilities ───────────────────────────────────────
+// Frame signature & utilities
 
 uint32_t getTFTColorFrameSignature()
 {
