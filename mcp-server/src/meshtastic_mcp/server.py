@@ -1,4 +1,4 @@
-"""FastMCP server wiring — 32 tools across 6 categories.
+"""FastMCP server wiring — 38 tools across 7 categories.
 
 Each tool handler is a thin delegation to a named module (pio.py, admin.py,
 etc.). Business logic does not live here.

@@ -54,18 +54,17 @@ def all_sessions() -> list[SerialSession]:
 
 def sweep_dead() -> int:
     """Remove sessions whose subprocess has exited. Returns count removed."""
-    removed = 0
+    removed_sessions: list[SerialSession] = []
     with _LOCK:
-        for sid in list(_sessions):
-            s = _sessions[sid]
+        for sid, s in list(_sessions.items()):
             if s.proc.poll() is not None:
-                # Leave the session object around for one read so callers can
-                # see eof=True. We only remove after stopped_at is older than
-                # a few seconds, so an immediate poll-after-close still sees
-                # it. For v1 simpler: just leave dead sessions until explicit
-                # close. No-op.
-                pass
-    return removed
+                removed_sessions.append(_sessions.pop(sid))
+    for session in removed_sessions:
+        try:
+            close_session(session)
+        except Exception:
+            pass
+    return len(removed_sessions)
 
 
 def shutdown_all() -> None:

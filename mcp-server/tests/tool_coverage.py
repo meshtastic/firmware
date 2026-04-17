@@ -1,7 +1,7 @@
 """Tool-surface coverage: track which MCP tools the test suite actually exercises.
 
 This is NOT line coverage (that's `coverage.py`). This measures which of the
-37 public MCP tools in `meshtastic_mcp.server` got invoked during a pytest
+38 public MCP tools in `meshtastic_mcp.server` got invoked during a pytest
 run — a quick signal for "where are the test-coverage gaps".
 
 Approach: introspect `meshtastic_mcp.server.app` for registered tools, find
@@ -57,6 +57,7 @@ _TOOL_MAP: dict[str, tuple[str, str]] = {
     # Serial log sessions — module-level functions on serial_session
     "serial_open": ("meshtastic_mcp.serial_session", "open_session"),
     "serial_read": ("meshtastic_mcp.serial_session", "read_session"),
+    "serial_list": ("meshtastic_mcp.registry", "all_sessions"),
     "serial_close": ("meshtastic_mcp.serial_session", "close_session"),
     # Device reads
     "device_info": ("meshtastic_mcp.info", "device_info"),
@@ -67,6 +68,7 @@ _TOOL_MAP: dict[str, tuple[str, str]] = {
     "set_config": ("meshtastic_mcp.admin", "set_config"),
     "get_channel_url": ("meshtastic_mcp.admin", "get_channel_url"),
     "set_channel_url": ("meshtastic_mcp.admin", "set_channel_url"),
+    "set_debug_log_api": ("meshtastic_mcp.admin", "set_debug_log_api"),
     "send_text": ("meshtastic_mcp.admin", "send_text"),
     "reboot": ("meshtastic_mcp.admin", "reboot"),
     "shutdown": ("meshtastic_mcp.admin", "shutdown"),

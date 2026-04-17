@@ -49,9 +49,9 @@ pytest tests/ --force-bake --html=report.html
 
 - `MESHTASTIC_FIRMWARE_ROOT` — firmware repo path (defaults to `../` from tests/)
 - `MESHTASTIC_MCP_ENV_NRF52` — PlatformIO env for the nRF52 role (default
-  `heltec-mesh-node-t114`)
+  `rak4631`)
 - `MESHTASTIC_MCP_ENV_ESP32S3` — PlatformIO env for the ESP32-S3 role (default
-  `t-beam-1w`)
+  `heltec-v3`)
 - `MESHTASTIC_MCP_SEED` — override the session PSK seed (default:
   `pytest-<unix-ts>`). Set this to reproduce a specific failing run.
 
@@ -85,7 +85,7 @@ predicate(), timeout=60)` replaces flaky `time.sleep()` patterns.
 `pytest --junitxml=junit.xml` produces CI-integration XML.
 
 `tool_coverage.json` is emitted at session end in the tests directory — shows
-which of the 37 MCP tools the run exercised. Useful for closing test gaps.
+which of the 38 MCP tools the run exercised. Useful for closing test gaps.
 
 ## Adding a new test
 

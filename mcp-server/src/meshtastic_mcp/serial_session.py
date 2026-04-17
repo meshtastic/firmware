@@ -19,7 +19,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import config, pio
+from . import boards, config, pio
 
 _BUFFER_MAX_LINES = 10_000
 _POLL_NEW_PORT_TIMEOUT_S = 3.0
@@ -76,7 +76,43 @@ def open_session(
     effective_baud: int = baud
     if env is not None:
         args.extend(["-e", env])
-        effective_filters = filters or []  # pio will fill in from env
+        raw_config: dict[str, Any] = {}
+        try:
+            raw = boards.get_board(env).get("raw_config")
+            if isinstance(raw, dict):
+                raw_config = raw
+        except Exception:
+            raw_config = {}
+
+        monitor_speed = raw_config.get("monitor_speed")
+        has_board_speed = False
+        if monitor_speed is not None:
+            try:
+                effective_baud = int(str(monitor_speed).strip())
+                has_board_speed = True
+            except (TypeError, ValueError):
+                pass
+
+        monitor_filters_raw = raw_config.get("monitor_filters")
+        parsed_board_filters: list[str] = []
+        if isinstance(monitor_filters_raw, str):
+            for token in monitor_filters_raw.replace("\n", ",").split(","):
+                item = token.strip()
+                if item:
+                    parsed_board_filters.append(item)
+        elif isinstance(monitor_filters_raw, list):
+            parsed_board_filters = [
+                str(item).strip() for item in monitor_filters_raw if str(item).strip()
+            ]
+
+        has_board_filters = len(parsed_board_filters) > 0
+        effective_filters = parsed_board_filters if has_board_filters else (filters or [])
+
+        if not has_board_speed:
+            args.extend(["--baud", str(effective_baud)])
+        if not has_board_filters:
+            for f in effective_filters:
+                args.extend(["--filter", f])
     else:
         args.extend(["--baud", str(baud)])
         effective_filters = filters or ["direct"]

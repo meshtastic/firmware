@@ -10,6 +10,7 @@ artifacts to exist, so these tools build first if needed.
 from __future__ import annotations
 
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -308,7 +309,7 @@ def _do_1200bps_touch(port: str, settle_ms: int, touch_timeout_s: float = 3.0) -
     worker that's still blocked in the background after timeout has already
     delivered the signal.
     """
-    import concurrent.futures
+    errors: list[BaseException] = []
 
     def _inner() -> None:
         try:
@@ -325,12 +326,19 @@ def _do_1200bps_touch(port: str, settle_ms: int, touch_timeout_s: float = 3.0) -
             except Exception:
                 pass
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_inner)
+    def _runner() -> None:
         try:
-            future.result(timeout=touch_timeout_s)
-        except concurrent.futures.TimeoutError:
-            pass  # signal already delivered; worker thread leaks harmlessly
+            _inner()
+        except BaseException as exc:  # re-raised on caller thread after join
+            errors.append(exc)
+
+    worker = threading.Thread(target=_runner, daemon=True)
+    worker.start()
+    worker.join(timeout=touch_timeout_s)
+    if worker.is_alive():
+        return  # signal already delivered; allow daemon worker to finish/exit
+    if errors:
+        raise errors[0]
 
 
 # Adafruit nRF52 bootloader VID/PID (BOTH RAK4631 and most Feather nRF52 boards).

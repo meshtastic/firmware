@@ -61,7 +61,7 @@ Replace `<firmware-repo>` with the absolute path, e.g. `/Users/you/GitHub/firmwa
 
 Same `mcpServers` block, but in `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 
-## Tools (32)
+## Tools (38)
 
 ### Discovery & metadata
 
@@ -100,7 +100,7 @@ Backed by long-running `pio device monitor` subprocesses with a 10k-line ring bu
 | `device_info` | my_node_num, long/short name, firmware version, region, channel, node count |
 | `list_nodes`  | Full node database with position, SNR, RSSI, last_heard, battery            |
 
-_The tool tables below document 35 currently registered MCP server tools._
+_The tool tables below document 38 currently registered MCP server tools._
 
 ### Device writes
 
