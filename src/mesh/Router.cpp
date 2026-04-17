@@ -15,7 +15,7 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 #if HAS_VARIABLE_HOPS
-#include "modules/SphereOfInfluenceModule.h"
+#include "modules/HopScalingModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -360,15 +360,14 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // set the relayer to us
 
 #if HAS_VARIABLE_HOPS
-    // Apply SoI hop recommendation to routine outgoing broadcasts
-    if (isFromUs(p) && isBroadcast(p->to) && sphereOfInfluenceModule &&
-        p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+    // Apply HopScaling hop recommendation to routine outgoing broadcasts
+    if (isFromUs(p) && isBroadcast(p->to) && hopScalingModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         switch (p->decoded.portnum) {
         case meshtastic_PortNum_POSITION_APP:
         case meshtastic_PortNum_TELEMETRY_APP:
         case meshtastic_PortNum_NODEINFO_APP:
         case meshtastic_PortNum_NEIGHBORINFO_APP: {
-            uint8_t variableHopLimit = sphereOfInfluenceModule->getLastRequiredHop();
+            uint8_t variableHopLimit = hopScalingModule->getLastRequiredHop();
 
 #if VARIABLE_HOP_ROLE_FLOOR
             // Role-based hop floor: ensure minimum reach for mobile/sensor roles
@@ -390,7 +389,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
             // Never exceed user-configured hop_limit
             if (variableHopLimit < p->hop_limit) {
-                LOG_DEBUG("[SOI] hop_limit %u -> %u for portnum %u", p->hop_limit, variableHopLimit, p->decoded.portnum);
+                LOG_DEBUG("[HOPSCALE] hop_limit %u -> %u for portnum %u", p->hop_limit, variableHopLimit, p->decoded.portnum);
                 p->hop_limit = variableHopLimit;
             }
             break;

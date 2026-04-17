@@ -24,7 +24,7 @@
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
 #if HAS_VARIABLE_HOPS
-#include "modules/SphereOfInfluenceModule.h"
+#include "modules/HopScalingModule.h"
 #endif
 #include <ErriezCRC32.h>
 #include <algorithm>
@@ -1958,8 +1958,8 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
 #if HAS_VARIABLE_HOPS
         // Feed sampling-based mesh size estimator (skip MQTT-forwarded packets)
-        if (!mp.via_mqtt && sphereOfInfluenceModule) {
-            sphereOfInfluenceModule->recordPacketSender(mp.from);
+        if (!mp.via_mqtt && hopScalingModule) {
+            hopScalingModule->recordPacketSender(mp.from);
         }
 #endif
 
@@ -2145,10 +2145,10 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             }
 
             if (oldestIndex != -1) {
-                // Notify SphereOfInfluence module about the eviction for tracking
+                // Notify HopScaling module about the eviction for tracking
 #if HAS_VARIABLE_HOPS
-                if (sphereOfInfluenceModule) {
-                    sphereOfInfluenceModule->recordEviction();
+                if (hopScalingModule) {
+                    hopScalingModule->recordEviction();
                 }
 #endif
                 // Shove the remaining nodes down the chain

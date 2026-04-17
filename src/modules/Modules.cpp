@@ -42,7 +42,7 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 #if HAS_VARIABLE_HOPS
-#include "modules/SphereOfInfluenceModule.h"
+#include "modules/HopScalingModule.h"
 #endif
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
@@ -135,7 +135,7 @@ void setupModules()
 #endif
 
 #if HAS_VARIABLE_HOPS
-    sphereOfInfluenceModule = new SphereOfInfluenceModule();
+    hopScalingModule = new HopScalingModule();
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ADMIN

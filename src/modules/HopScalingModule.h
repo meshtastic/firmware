@@ -13,10 +13,18 @@
 // runOnce() is invoked cooperatively by mainController. No preemption occurs
 // between these paths, so no locking is required.
 
-class SphereOfInfluenceModule : private concurrency::OSThread
+class HopScalingModule : private concurrency::OSThread
 {
   public:
-    SphereOfInfluenceModule();
+    HopScalingModule();
+
+    enum StatusMode : uint8_t {
+        STATUS_STARTUP_NOT_ENOUGH_DATA = 0,
+        STATUS_SMALL_STABLE_MESH = 1,
+        STATUS_SCALED_FROM_EVICTION = 2,
+        STATUS_SCALED_FROM_MESH_ESTIMATE = 3,
+        STATUS_FALLBACK_EVICTION_SCALE = 4,
+    };
 
     /// Called by NodeDB when it evicts a node to make room for a new one.
     void recordEviction();
@@ -67,9 +75,11 @@ class SphereOfInfluenceModule : private concurrency::OSThread
     void buildSnapshot(Snapshot &snapshot) const;
     float computeActivityWeight(const Snapshot &snapshot) const;
     float selectPolitenessFactor(float activityWeight) const;
-    float estimateScaleFactor(const Snapshot &snapshot) const;
+    float estimateScaleFactor(const Snapshot &snapshot, uint8_t &statusMode, uint16_t &sampledEstimate) const;
     uint16_t estimateSampledMeshSize() const;
     uint8_t computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const;
+    bool checkStableStatus(const Snapshot &snapshot) const;
+    void logStatusReport(const Snapshot &snapshot, bool didHourlyUpdate) const;
     void rollHour();
     void loadState();
     void saveState() const;
@@ -78,6 +88,9 @@ class SphereOfInfluenceModule : private concurrency::OSThread
     uint8_t lastRequiredHop = HOP_MAX;
     float lastActivityWeight = 1.0f;
     float lastScaleFactor = 1.0f;
+    float lastPolitenessFactor = 1.5f;
+    uint8_t lastStatusMode = STATUS_STARTUP_NOT_ENOUGH_DATA;
+    uint16_t lastSampledEstimate = 0;
 
     // Eviction tracking: EMA of hourly eviction counts (12h half-life)
     uint16_t evictionsCurrentHour = 0;  // accumulates between rollovers
@@ -88,6 +101,6 @@ class SphereOfInfluenceModule : private concurrency::OSThread
     float rollingSampledAvg12h = 0.0f; // EMA of estimated mesh size per hour (denominator-normalised)
 };
 
-extern SphereOfInfluenceModule *sphereOfInfluenceModule;
+extern HopScalingModule *hopScalingModule;
 
 #endif

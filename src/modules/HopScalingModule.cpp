@@ -1,4 +1,4 @@
-#include "SphereOfInfluenceModule.h"
+#include "HopScalingModule.h"
 
 #if HAS_VARIABLE_HOPS
 
@@ -21,7 +21,8 @@ constexpr uint32_t TWELVE_HOURS_SECS = 12 * ONE_HOUR_SECS;
 
 // Module scheduling
 constexpr uint32_t INITIAL_DELAY_MS = 30 * 1000UL;     // Startup grace period before first run
-constexpr uint32_t RUN_INTERVAL_MS = 60 * 60 * 1000UL; // Recalculate hop recommendation hourly
+constexpr uint32_t RUN_INTERVAL_MS = 10 * 60 * 1000UL; // Emit status report every 10 minutes
+constexpr uint8_t RUNS_PER_HOUR = 6;                   // 6 x 10-minute runs = 1 hour
 
 // Hop recommendation: cumulative node target before constraining hops
 constexpr uint16_t TARGET_AFFECTED_NODES = 40;
@@ -46,14 +47,24 @@ constexpr uint8_t SAMPLING_DENOMINATOR_MIN = 1;
 constexpr uint8_t SAMPLING_DENOMINATOR_MAX = 200;
 
 // Persistence
-constexpr const char *SOI_STATE_FILE = "/prefs/soi.bin";
-constexpr uint32_t SOI_STATE_MAGIC = 0x534F4931; // 'SOI1'
-constexpr uint8_t SOI_STATE_VERSION = 1;
+constexpr const char *HOP_SCALING_STATE_FILE = "/prefs/hop_scaling.bin";
+// TODO: REMOVE BEFORE PR SUBMISSION - temporary one-time migration source file.
+constexpr const char *LEGACY_SOI_STATE_FILE = "/prefs/soi.bin";
+constexpr uint32_t HOP_SCALING_STATE_MAGIC = 0x534F4931; // 'SOI1' (kept for on-disk compatibility)
+constexpr uint8_t HOP_SCALING_STATE_VERSION = 1;
+
+struct PersistedState {
+    uint32_t magic;
+    uint8_t version;
+    uint8_t samplingDenominator;
+    float rollingEvictionAvg12h;
+    float rollingSampledAvg12h;
+};
 } // namespace
 
-SphereOfInfluenceModule *sphereOfInfluenceModule;
+HopScalingModule *hopScalingModule;
 
-void SphereOfInfluenceModule::HopBucket::clear()
+void HopScalingModule::HopBucket::clear()
 {
     memset(perHop, 0, sizeof(perHop));
     unknownHopCount = 0;
@@ -63,7 +74,7 @@ void SphereOfInfluenceModule::HopBucket::clear()
 /// Classify a node into its hop distance bucket.
 /// Nodes with a valid hops_away (0..HOP_MAX) increment the per-hop histogram;
 /// nodes without hop info are counted separately so they don't skew the distribution.
-void SphereOfInfluenceModule::HopBucket::add(const meshtastic_NodeInfoLite &node)
+void HopScalingModule::HopBucket::add(const meshtastic_NodeInfoLite &node)
 {
     total++;
     if (node.has_hops_away && node.hops_away <= HOP_MAX) {
@@ -73,7 +84,7 @@ void SphereOfInfluenceModule::HopBucket::add(const meshtastic_NodeInfoLite &node
     }
 }
 
-SphereOfInfluenceModule::SphereOfInfluenceModule() : concurrency::OSThread("SphereOfInfluence")
+HopScalingModule::HopScalingModule() : concurrency::OSThread("HopScaling")
 {
     loadState();
     setIntervalFromNow(INITIAL_DELAY_MS);
@@ -81,12 +92,12 @@ SphereOfInfluenceModule::SphereOfInfluenceModule() : concurrency::OSThread("Sphe
 
 /// Called by NodeDB each time a node is evicted to make room for a new one.
 /// The count is rolled into a 12h EMA once per hour by rollHour().
-void SphereOfInfluenceModule::recordEviction()
+void HopScalingModule::recordEviction()
 {
     evictionsCurrentHour++;
 }
 
-void SphereOfInfluenceModule::SampleTracker::clear()
+void HopScalingModule::SampleTracker::clear()
 {
     memset(slots, 0, sizeof(slots));
     uniqueCount = 0;
@@ -94,7 +105,7 @@ void SphereOfInfluenceModule::SampleTracker::clear()
 
 /// Insert a node ID into the hash set. Returns true if the ID was newly added.
 /// Uses open-addressing with linear probing; slot 0 value 0 is reserved as "empty".
-bool SphereOfInfluenceModule::SampleTracker::record(uint32_t nodeId)
+bool HopScalingModule::SampleTracker::record(uint32_t nodeId)
 {
     if (nodeId == 0)
         return false; // 0 is the empty sentinel
@@ -117,7 +128,7 @@ bool SphereOfInfluenceModule::SampleTracker::record(uint32_t nodeId)
 
 /// Record a packet sender for sampling-based mesh size estimation.
 /// Only 1-in-SAMPLING_DENOMINATOR nodes are tracked (deterministic by node ID).
-void SphereOfInfluenceModule::recordPacketSender(uint32_t nodeId)
+void HopScalingModule::recordPacketSender(uint32_t nodeId)
 {
     if (nodeId % SAMPLING_DENOMINATOR == 0) {
         sampledNodesCurrentHour.record(nodeId);
@@ -126,7 +137,7 @@ void SphereOfInfluenceModule::recordPacketSender(uint32_t nodeId)
 
 /// Extrapolate total mesh size from the sampled unique node count.
 /// Returns 0 if too few samples to be reliable (caller should fall back to NodeDB count).
-uint16_t SphereOfInfluenceModule::estimateSampledMeshSize() const
+uint16_t HopScalingModule::estimateSampledMeshSize() const
 {
     if (rollingSampledAvg12h < 2.0f)
         return 0; // EMA of estimated mesh size too low to be reliable
@@ -135,7 +146,7 @@ uint16_t SphereOfInfluenceModule::estimateSampledMeshSize() const
 
 // Roll the hourly eviction count and sampled node count into their respective 12h moving averages, then reset the hourly
 // counters. Also performs adaptive adjustment of the sampling denominator to keep the sample tracker load within optimal bounds.
-void SphereOfInfluenceModule::rollHour()
+void HopScalingModule::rollHour()
 {
     // EMA with alpha = 1/12: approximates a 12h rolling average
     // newAvg = oldAvg * (11/12) + currentHour * (1/12)
@@ -159,13 +170,13 @@ void SphereOfInfluenceModule::rollHour()
         // Tracker getting too full; reduce sample rate (increase denominator)
         SAMPLING_DENOMINATOR = static_cast<uint8_t>(
             std::min(static_cast<uint16_t>(SAMPLING_DENOMINATOR * 2), static_cast<uint16_t>(SAMPLING_DENOMINATOR_MAX)));
-        LOG_INFO("[SOI] Adaptive sampling: denominator increased to %u (load ratio=%.2f)", SAMPLING_DENOMINATOR,
+        LOG_INFO("[HOPSCALE] Adaptive sampling: denominator increased to %u (load ratio=%.2f)", SAMPLING_DENOMINATOR,
                  static_cast<double>(loadRatio));
     } else if (loadRatio < 1.0f / 8.0f && SAMPLING_DENOMINATOR > SAMPLING_DENOMINATOR_MIN) {
         // Tracker underutilized; increase sample rate (decrease denominator)
         SAMPLING_DENOMINATOR = static_cast<uint8_t>(
             std::max(static_cast<uint16_t>(SAMPLING_DENOMINATOR / 2), static_cast<uint16_t>(SAMPLING_DENOMINATOR_MIN)));
-        LOG_INFO("[SOI] Adaptive sampling: denominator decreased to %u (load ratio=%.2f)", SAMPLING_DENOMINATOR,
+        LOG_INFO("[HOPSCALE] Adaptive sampling: denominator decreased to %u (load ratio=%.2f)", SAMPLING_DENOMINATOR,
                  static_cast<double>(loadRatio));
     }
 
@@ -175,30 +186,45 @@ void SphereOfInfluenceModule::rollHour()
 
 // Load persisted state from storage to maintain continuity across reboots. Validates magic, version, and sampling denominator
 // before applying.
-void SphereOfInfluenceModule::loadState()
+void HopScalingModule::loadState()
 {
 #ifdef FSCom
     concurrency::LockGuard g(spiLock);
-    auto file = FSCom.open(SOI_STATE_FILE, FILE_O_READ);
+
+    // TODO: REMOVE BEFORE PR SUBMISSION - one-time migration from legacy SoI state filename.
+    if (!FSCom.exists(HOP_SCALING_STATE_FILE) && FSCom.exists(LEGACY_SOI_STATE_FILE)) {
+        auto legacyFile = FSCom.open(LEGACY_SOI_STATE_FILE, FILE_O_READ);
+        if (legacyFile) {
+            PersistedState legacyState{};
+            if (legacyFile.read((uint8_t *)&legacyState, sizeof(legacyState)) == sizeof(legacyState)) {
+                legacyState.magic = HOP_SCALING_STATE_MAGIC;
+                legacyState.version = HOP_SCALING_STATE_VERSION;
+
+                auto migratedFile = FSCom.open(HOP_SCALING_STATE_FILE, FILE_O_WRITE);
+                if (migratedFile) {
+                    migratedFile.write((uint8_t *)&legacyState, sizeof(legacyState));
+                    migratedFile.flush();
+                    migratedFile.close();
+                    LOG_INFO("[HOPSCALE] Migrated legacy state file %s -> %s", LEGACY_SOI_STATE_FILE, HOP_SCALING_STATE_FILE);
+                }
+            }
+            legacyFile.close();
+        }
+    }
+
+    auto file = FSCom.open(HOP_SCALING_STATE_FILE, FILE_O_READ);
     if (file) {
-        struct PersistedState {
-            uint32_t magic;
-            uint8_t version;
-            uint8_t samplingDenominator;
-            float rollingEvictionAvg12h;
-            float rollingSampledAvg12h;
-        };
         PersistedState state{};
-        if (file.read((uint8_t *)&state, sizeof(state)) == sizeof(state) && state.magic == SOI_STATE_MAGIC &&
-            state.version == SOI_STATE_VERSION && state.samplingDenominator >= SAMPLING_DENOMINATOR_MIN &&
+        if (file.read((uint8_t *)&state, sizeof(state)) == sizeof(state) && state.magic == HOP_SCALING_STATE_MAGIC &&
+            state.version == HOP_SCALING_STATE_VERSION && state.samplingDenominator >= SAMPLING_DENOMINATOR_MIN &&
             state.samplingDenominator <= SAMPLING_DENOMINATOR_MAX) {
             rollingEvictionAvg12h = state.rollingEvictionAvg12h;
             rollingSampledAvg12h = state.rollingSampledAvg12h;
             SAMPLING_DENOMINATOR = state.samplingDenominator;
-            LOG_INFO("[SOI] Restored state: evict/h=%.1f sampledAvg=%.1f denom=%u", static_cast<double>(rollingEvictionAvg12h),
-                     static_cast<double>(rollingSampledAvg12h), SAMPLING_DENOMINATOR);
+            LOG_INFO("[HOPSCALE] Restored state: evict/h=%.1f sampledAvg=%.1f  sampling 1 in %u",
+                     static_cast<double>(rollingEvictionAvg12h), static_cast<double>(rollingSampledAvg12h), SAMPLING_DENOMINATOR);
         } else {
-            LOG_DEBUG("[SOI] No valid persisted state, starting fresh");
+            LOG_DEBUG("[HOPSCALE] No valid persisted state, starting fresh");
         }
         file.close();
     }
@@ -206,42 +232,35 @@ void SphereOfInfluenceModule::loadState()
 }
 
 // Store the current state to allow continuity across reboots.
-void SphereOfInfluenceModule::saveState() const
+void HopScalingModule::saveState() const
 {
 #ifdef FSCom
     FSCom.mkdir("/prefs");
-    if (FSCom.exists(SOI_STATE_FILE)) {
-        FSCom.remove(SOI_STATE_FILE);
+    if (FSCom.exists(HOP_SCALING_STATE_FILE)) {
+        FSCom.remove(HOP_SCALING_STATE_FILE);
     }
     concurrency::LockGuard g(spiLock);
-    auto file = FSCom.open(SOI_STATE_FILE, FILE_O_WRITE);
+    auto file = FSCom.open(HOP_SCALING_STATE_FILE, FILE_O_WRITE);
     if (file) {
-        struct PersistedState {
-            uint32_t magic;
-            uint8_t version;
-            uint8_t samplingDenominator;
-            float rollingEvictionAvg12h;
-            float rollingSampledAvg12h;
-        };
         PersistedState state{};
-        state.magic = SOI_STATE_MAGIC;
-        state.version = SOI_STATE_VERSION;
+        state.magic = HOP_SCALING_STATE_MAGIC;
+        state.version = HOP_SCALING_STATE_VERSION;
         state.samplingDenominator = SAMPLING_DENOMINATOR;
         state.rollingEvictionAvg12h = rollingEvictionAvg12h;
         state.rollingSampledAvg12h = rollingSampledAvg12h;
         file.write((uint8_t *)&state, sizeof(state));
         file.flush();
         file.close();
-        LOG_DEBUG("[SOI] Saved state: evict/h=%.1f sampledAvg=%.1f denom=%u", static_cast<double>(rollingEvictionAvg12h),
-                  static_cast<double>(rollingSampledAvg12h), SAMPLING_DENOMINATOR);
+        LOG_DEBUG("[HOPSCALE] Saved state: evict/h=%.1f sampledAvg=%.1f  sampling 1 in %u",
+                  static_cast<double>(rollingEvictionAvg12h), static_cast<double>(rollingSampledAvg12h), SAMPLING_DENOMINATOR);
     } else {
-        LOG_WARN("[SOI] Failed to open %s for write", SOI_STATE_FILE);
+        LOG_WARN("[HOPSCALE] Failed to open %s for write", HOP_SCALING_STATE_FILE);
     }
 #endif
 }
 
 // Iterate through NodeDB to build a snapshot of recent activity, classifying nodes into hop buckets and age buckets for analysis.
-void SphereOfInfluenceModule::buildSnapshot(Snapshot &snapshot) const
+void HopScalingModule::buildSnapshot(Snapshot &snapshot) const
 {
     snapshot.recent1h.clear();
     snapshot.old1hFrom2h.clear();
@@ -275,7 +294,7 @@ void SphereOfInfluenceModule::buildSnapshot(Snapshot &snapshot) const
     }
 }
 
-float SphereOfInfluenceModule::computeActivityWeight(const Snapshot &snapshot) const
+float HopScalingModule::computeActivityWeight(const Snapshot &snapshot) const
 {
     // Ratio of overlapping activity windows: nodes seen within the last 0-2h
     // versus nodes seen within 1-3h. Using the shared 1-2h bucket smooths the
@@ -298,7 +317,7 @@ float SphereOfInfluenceModule::computeActivityWeight(const Snapshot &snapshot) c
 // Select a politeness factor based on the activity weight. More recent activity (higher weight) => stricter politeness to avoid
 // overloading the mesh; older activity (lower weight) => more generous to allow faster propagation and recovery. The default
 // mid-range politeness applies when the activity weight is close to 1, indicating a stable mesh with balanced recent
-float SphereOfInfluenceModule::selectPolitenessFactor(float activityWeight) const
+float HopScalingModule::selectPolitenessFactor(float activityWeight) const
 {
     if (activityWeight < ACTIVITY_WEIGHT_GENEROUS_MAX) {
         return POLITENESS_GENEROUS;
@@ -313,52 +332,77 @@ float SphereOfInfluenceModule::selectPolitenessFactor(float activityWeight) cons
 // being an incomplete sample of the whole mesh. Estimation logic tries to adapt to small, medium and megameshes with varying
 // turnover patterns by using a combination of heuristics based on NodeDB capacity, eviction rates, and sampling-based mesh size
 // estimation.
-float SphereOfInfluenceModule::estimateScaleFactor(const Snapshot &snapshot) const
+float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &statusMode, uint16_t &sampledEstimate) const
 {
     float scale = 1.0f; // default (no scaling)
     const uint16_t knownNodeCount = MAX_NUM_NODES - snapshot.cumulative12h.unknownHopCount;
+    sampledEstimate = 0;
 
     // Not-full NodeDB with headroom: direct counts are accurate, scaling only for unknown hops needed.
     const float nearCapacity = NODEDB_NEAR_CAPACITY_RATIO * MAX_NUM_NODES;
     if (!nodeDB || (!nodeDB->isFull() && snapshot.cumulative12h.total < nearCapacity)) {
+        statusMode = STATUS_SMALL_STABLE_MESH;
         scale = MAX_NUM_NODES / static_cast<float>(knownNodeCount);
-        LOG_DEBUG("[SOI] scaleFactor=%.2f (DB has headroom: %u/%d nodes, of which %.2f unknown hops)", static_cast<double>(scale),
-                  snapshot.cumulative12h.total, MAX_NUM_NODES, static_cast<double>(snapshot.cumulative12h.unknownHopCount));
+        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (DB has headroom: %u/%d nodes, of which %.2f unknown hops)",
+                  static_cast<double>(scale), snapshot.cumulative12h.total, MAX_NUM_NODES,
+                  static_cast<double>(snapshot.cumulative12h.unknownHopCount));
         return scale;
     }
 
     // NodeDB at or near capacity — use rolling 12h eviction average to decide scale.
     if (rollingEvictionAvg12h < (TURNOVER_CAPACITY_LIMIT_RATIO * MAX_NUM_NODES)) {
+        statusMode = STATUS_SCALED_FROM_EVICTION;
         // Low turnover: NodeDB is full but few evictions; modest scale-up.
         // Scale proportionally: at 0 evictions => 1.0, approaching threshold => 1.2^12
         scale = (1.0f + (rollingEvictionAvg12h / knownNodeCount));
-        LOG_DEBUG("[SOI] scaleFactor=%.2f (low turnover: evict/h=%.1f)", static_cast<double>(scale),
+        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (low turnover: evict/h=%.1f)", static_cast<double>(scale),
                   static_cast<double>(rollingEvictionAvg12h));
         return scale;
     }
 
     // High turnover: many evictions per hour, NodeDB is cycling rapidly.
     // Use sampling-based estimate if available; otherwise fall back to eviction-pressure scaling.
-    const uint16_t sampledEstimate = estimateSampledMeshSize();
+    sampledEstimate = estimateSampledMeshSize();
     if (sampledEstimate > 8.8f * MAX_NUM_NODES) {
+        statusMode = STATUS_SCALED_FROM_MESH_ESTIMATE;
         // Scale = estimated true mesh size / maximum NodeDB count
         scale = std::max(static_cast<float>(sampledEstimate) / knownNodeCount, 1.0f);
-        LOG_DEBUG("[SOI] scaleFactor=%.2f (sampled: est=%u nodes, DB=%d)", static_cast<double>(scale), sampledEstimate,
+        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (sampled: est=%u nodes, DB=%d)", static_cast<double>(scale), sampledEstimate,
                   MAX_NUM_NODES);
         return scale;
     } else {
+        statusMode = STATUS_FALLBACK_EVICTION_SCALE;
         // Fallback to eviction rate but scale more aggressively, over the full capacity turnover
         scale = 1.1f + (rollingEvictionAvg12h / knownNodeCount);
-        LOG_DEBUG("[SOI] scaleFactor=%.2f (high turnover fallback: evict/h=%.1f, sampled=%u)", static_cast<double>(scale),
+        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (high turnover fallback: evict/h=%.1f, sampled=%u)", static_cast<double>(scale),
                   static_cast<double>(rollingEvictionAvg12h), sampledEstimate);
         return scale;
     }
 }
 
+bool HopScalingModule::checkStableStatus(const Snapshot &snapshot) const
+{
+    // Require at least a minimal amount of temporal spread before classifying status mode as stable.
+    const uint32_t recentActiveNodes = snapshot.recent1h.total + snapshot.old1hFrom2h.total;
+    const uint32_t olderActiveNodes = snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total;
+    return snapshot.cumulative12h.total > 1 && recentActiveNodes > 1 && olderActiveNodes > 1;
+}
+
+void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyUpdate) const
+{
+    LOG_INFO("[HOPSCALE] status mode=%u hourly=%u hop=%u actWt=%.2f polite=%.2f scale=%.2f evict/h=%.1f sampledEst=%u sampling 1 "
+             "in %u n1=%u n2=%u n3=%u n12=%u",
+             lastStatusMode, didHourlyUpdate ? 1 : 0, lastRequiredHop, static_cast<double>(lastActivityWeight),
+             static_cast<double>(lastPolitenessFactor), static_cast<double>(lastScaleFactor),
+             static_cast<double>(rollingEvictionAvg12h), lastSampledEstimate, SAMPLING_DENOMINATOR, snapshot.recent1h.total,
+             snapshot.recent1h.total + snapshot.old1hFrom2h.total,
+             snapshot.recent1h.total + snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total, snapshot.cumulative12h.total);
+}
+
 // Compute the required hop distance to reach the target number of affected nodes, applying scaling and politeness adjustments.
 // The base hop is the minimum hop at which the cumulative affected nodes meets or exceeds the target. If extending to the next
 // hop would still keep the total under the politeness limit, extend by one more hop to be more generous. Scaling
-uint8_t SphereOfInfluenceModule::computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const
+uint8_t HopScalingModule::computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const
 {
     uint16_t affectedNodesPerHop[HOP_MAX + 1];
     uint16_t avg1hFrom3hPerHop[HOP_MAX + 1];
@@ -382,12 +426,14 @@ uint8_t SphereOfInfluenceModule::computeRequiredHop(const Snapshot &snapshot, fl
         // nodes.
         affectedNodesPerHop[hop] = std::max(scaledFrom3hAverage, scaled12hInt);
     }
-    LOG_INFO("[SOI] perHop 3h ave: [%u %u %u %u %u %u %u %u]", avg1hFrom3hPerHop[0], avg1hFrom3hPerHop[1], avg1hFrom3hPerHop[2],
-             avg1hFrom3hPerHop[3], avg1hFrom3hPerHop[4], avg1hFrom3hPerHop[5], avg1hFrom3hPerHop[6], avg1hFrom3hPerHop[7]);
-    LOG_INFO("[SOI] perHop 12h:    [%u %u %u %u %u %u %u %u]", snapshot.cumulative12h.perHop[0], snapshot.cumulative12h.perHop[1],
-             snapshot.cumulative12h.perHop[2], snapshot.cumulative12h.perHop[3], snapshot.cumulative12h.perHop[4],
-             snapshot.cumulative12h.perHop[5], snapshot.cumulative12h.perHop[6], snapshot.cumulative12h.perHop[7]);
-    LOG_INFO("[SOI] perHop scaled: [%u %u %u %u %u %u %u %u]", affectedNodesPerHop[0], affectedNodesPerHop[1],
+    LOG_INFO("[HOPSCALE] perHop 3h ave: [%u %u %u %u %u %u %u %u]", avg1hFrom3hPerHop[0], avg1hFrom3hPerHop[1],
+             avg1hFrom3hPerHop[2], avg1hFrom3hPerHop[3], avg1hFrom3hPerHop[4], avg1hFrom3hPerHop[5], avg1hFrom3hPerHop[6],
+             avg1hFrom3hPerHop[7]);
+    LOG_INFO("[HOPSCALE] perHop 12h:    [%u %u %u %u %u %u %u %u]", snapshot.cumulative12h.perHop[0],
+             snapshot.cumulative12h.perHop[1], snapshot.cumulative12h.perHop[2], snapshot.cumulative12h.perHop[3],
+             snapshot.cumulative12h.perHop[4], snapshot.cumulative12h.perHop[5], snapshot.cumulative12h.perHop[6],
+             snapshot.cumulative12h.perHop[7]);
+    LOG_INFO("[HOPSCALE] perHop scaled: [%u %u %u %u %u %u %u %u]", affectedNodesPerHop[0], affectedNodesPerHop[1],
              affectedNodesPerHop[2], affectedNodesPerHop[3], affectedNodesPerHop[4], affectedNodesPerHop[5],
              affectedNodesPerHop[6], affectedNodesPerHop[7]);
 
@@ -412,31 +458,48 @@ uint8_t SphereOfInfluenceModule::computeRequiredHop(const Snapshot &snapshot, fl
     return baseHop;
 }
 
-// Main scheduled task: run once per hour to update the hop recommendation based on recent mesh activity and NodeDB state.
-int32_t SphereOfInfluenceModule::runOnce()
+// Main scheduled task: run every 10 minutes for status reporting,
+// and perform full recomputation once per hour.
+int32_t HopScalingModule::runOnce()
 {
     static bool hasCompletedInitialRun = false;
+    static uint8_t runsSinceLastHourlyUpdate = 0;
 
-    // The first run is scheduled after INITIAL_DELAY_MS, not RUN_INTERVAL_MS,
-    // so do not roll the hourly eviction bucket until subsequent hourly runs.
-    if (hasCompletedInitialRun) {
-        rollHour();
-    } else {
+    const bool isFirstRun = !hasCompletedInitialRun;
+    bool didHourlyUpdate = false;
+
+    if (isFirstRun) {
         hasCompletedInitialRun = true;
+        runsSinceLastHourlyUpdate = 0;
+        didHourlyUpdate = true;
+    } else {
+        runsSinceLastHourlyUpdate++;
+        if (runsSinceLastHourlyUpdate >= RUNS_PER_HOUR) {
+            runsSinceLastHourlyUpdate = 0;
+            didHourlyUpdate = true;
+        }
     }
+
+    // The first run happens shortly after boot and should not roll the hourly bucket.
+    if (didHourlyUpdate && !isFirstRun) {
+        rollHour();
+    }
+
     Snapshot snapshot{};
     buildSnapshot(snapshot);
 
-    lastActivityWeight = computeActivityWeight(snapshot);
-    const float politenessFactor = selectPolitenessFactor(lastActivityWeight);
-    lastScaleFactor = estimateScaleFactor(snapshot);
-    lastRequiredHop = computeRequiredHop(snapshot, lastScaleFactor, politenessFactor);
+    if (didHourlyUpdate) {
+        lastActivityWeight = computeActivityWeight(snapshot);
+        lastPolitenessFactor = selectPolitenessFactor(lastActivityWeight);
+        lastScaleFactor = estimateScaleFactor(snapshot, lastStatusMode, lastSampledEstimate);
+        if (!checkStableStatus(snapshot)) {
+            lastStatusMode = STATUS_STARTUP_NOT_ENOUGH_DATA;
+        }
+        lastRequiredHop = computeRequiredHop(snapshot, lastScaleFactor, lastPolitenessFactor);
+    }
 
-    LOG_INFO("[SOI] hop=%u actWt=%.2f polite=%.2f scale=%.2f evict/h=%.1f n1=%u n2=%u n3=%u n12=%u", lastRequiredHop,
-             static_cast<double>(lastActivityWeight), static_cast<double>(politenessFactor), static_cast<double>(lastScaleFactor),
-             static_cast<double>(rollingEvictionAvg12h), snapshot.recent1h.total,
-             snapshot.recent1h.total + snapshot.old1hFrom2h.total,
-             snapshot.recent1h.total + snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total, snapshot.cumulative12h.total);
+    // Shared status report path for both periodic and hourly updates.
+    logStatusReport(snapshot, didHourlyUpdate);
 
     return RUN_INTERVAL_MS;
 }
