@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "meshtastic": {
+      "command": "/Users/benmeadors/Documents/GitHub/firmware/mcp-server/.venv/bin/python",
+      "args": ["-m", "meshtastic_mcp"],
+      "env": {
+        "MESHTASTIC_FIRMWARE_ROOT": "/Users/benmeadors/Documents/GitHub/firmware"
+      }
+    }
+  }
+}
