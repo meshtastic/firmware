@@ -75,15 +75,15 @@ static inline int get_max_num_nodes()
 #define HAS_TRAFFIC_MANAGEMENT 0
 #endif
 
-// Sphere of Influence - variable hop module: dynamically adjusts broadcast hop_limit based on mesh density
+// HopScalingModule - variable hop module: dynamically adjusts broadcast hop_limit based on mesh density
 // Enable per-variant by defining HAS_VARIABLE_HOPS=1 in variant.h
-#ifndef HAS_VARIABLE_HOPS
+#if !defined(HAS_VARIABLE_HOPS) && !defined(ARCH_STM32WL)
 #define HAS_VARIABLE_HOPS 1
 #endif
 
 // SoI role-based hop floor: TRACKER/TAK_TRACKER get min 2 hops, SENSOR get min 1
 // Enable per-variant by defining VARIABLE_HOP_ROLE_FLOOR=1 in variant.h
-#ifndef VARIABLE_HOP_ROLE_FLOOR
+#if !defined(VARIABLE_HOP_ROLE_FLOOR) && !defined(ARCH_STM32WL)
 #define VARIABLE_HOP_ROLE_FLOOR 1
 #endif
 
