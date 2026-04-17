@@ -28,6 +28,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
+from typing import TextIO
 
 from . import config
 
@@ -130,6 +131,11 @@ def _run_capturing(
     # Streaming path: line-buffered Popen, threaded readers, tee to file.
     # Ensure parent directory exists so the first tee write doesn't fail.
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_fh: TextIO | None = None
+    try:
+        log_fh = log_path.open("a", encoding="utf-8")
+    except OSError:
+        log_fh = None
     # Append mode: the TUI truncates on startup, the session may produce
     # many tee'd commands (erase + flash + factory-reset response), and
     # we want all of them chronologically in one log.
@@ -148,16 +154,23 @@ def _run_capturing(
     def _append_log(line: str) -> None:
         # Hold the lock briefly to serialize interleaved stdout/stderr writes
         # so a half-written line from one stream doesn't get garbled by the
-        # other. The `with` + fsync-free write is ~µs per line, negligible.
+        # other.
+        nonlocal log_fh
         with log_lock:
+            if log_fh is None:
+                return
             try:
-                with log_path.open("a", encoding="utf-8") as fh:
-                    fh.write(line)
+                log_fh.write(line)
+                log_fh.flush()
             except OSError:
                 # Log file disappeared (umount, operator deleted the dir).
                 # Don't let that bubble up — the subprocess output is still
                 # collected in-memory for the return value.
-                pass
+                try:
+                    log_fh.close()
+                except OSError:
+                    pass
+                log_fh = None
 
     def _tee(stream, sink: list[str]) -> None:
         try:
@@ -199,12 +212,19 @@ def _run_capturing(
     if tee_header:
         _append_log(f"--- {tee_header} (exit {proc.returncode} in {duration:.1f}s)\n")
 
-    return (
-        proc.returncode,
-        "".join(stdout_chunks),
-        "".join(stderr_chunks),
-        duration,
-    )
+    try:
+        return (
+            proc.returncode,
+            "".join(stdout_chunks),
+            "".join(stderr_chunks),
+            duration,
+        )
+    finally:
+        if log_fh is not None:
+            try:
+                log_fh.close()
+            except OSError:
+                pass
 
 
 def run(
