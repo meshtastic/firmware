@@ -135,7 +135,7 @@ def _run_capturing(
     try:
         log_fh = log_path.open("a", encoding="utf-8")
     except OSError:
-        log_fh = None
+        pass
     # Append mode: the TUI truncates on startup, the session may produce
     # many tee'd commands (erase + flash + factory-reset response), and
     # we want all of them chronologically in one log.
