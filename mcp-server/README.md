@@ -100,19 +100,22 @@ Backed by long-running `pio device monitor` subprocesses with a 10k-line ring bu
 | `device_info` | my_node_num, long/short name, firmware version, region, channel, node count |
 | `list_nodes`  | Full node database with position, SNR, RSSI, last_heard, battery            |
 
+_The tool tables below document 35 currently registered MCP server tools._
+
 ### Device writes
 
-| Tool              | What it does                                                               |
-| ----------------- | -------------------------------------------------------------------------- |
-| `set_owner`       | Long name + optional short name (≤4 chars)                                 |
-| `get_config`      | One section or all (LocalConfig + ModuleConfig)                            |
-| `set_config`      | Dot-path field write: `lora.region`=`"US"`, `device.role`=`"ROUTER"`, etc. |
-| `get_channel_url` | Primary-only or include_all=admin URL                                      |
-| `set_channel_url` | Import channels from a Meshtastic URL                                      |
-| `send_text`       | Broadcast or direct text message                                           |
-| `reboot`          | `localNode.reboot(secs)` — requires `confirm=True`                         |
-| `shutdown`        | `localNode.shutdown(secs)` — requires `confirm=True`                       |
-| `factory_reset`   | `localNode.factoryReset(full?)` — requires `confirm=True`                  |
+| Tool                | What it does                                                               |
+| ------------------- | -------------------------------------------------------------------------- |
+| `set_owner`         | Long name + optional short name (≤4 chars)                                 |
+| `get_config`        | One section or all (LocalConfig + ModuleConfig)                            |
+| `set_config`        | Dot-path field write: `lora.region`=`"US"`, `device.role`=`"ROUTER"`, etc. |
+| `get_channel_url`   | Primary-only or include_all=admin URL                                      |
+| `set_channel_url`   | Import channels from a Meshtastic URL                                      |
+| `set_debug_log_api` | Enable or disable debug logging for the Meshtastic Python API client       |
+| `send_text`         | Broadcast or direct text message                                           |
+| `reboot`            | `localNode.reboot(secs)` — requires `confirm=True`                         |
+| `shutdown`          | `localNode.shutdown(secs)` — requires `confirm=True`                       |
+| `factory_reset`     | `localNode.factoryReset(full?)` — requires `confirm=True`                  |
 
 ### Direct hardware tools (escape hatches)
 
