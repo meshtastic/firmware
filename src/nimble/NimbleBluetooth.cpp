@@ -145,7 +145,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     std::mutex toPhoneMutex;
     std::atomic<size_t> toPhoneQueueSize{0};
     // We use array here (and pay the cost of memcpy) to avoid dynamic memory allocations and frees across FreeRTOS tasks.
-    std::array<std::array<uint8_t, meshtastic_FromRadio_size>, NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE> toPhoneQueue{};
+    std::array<std::array<uint8_t, MAX_TO_FROM_RADIO_SIZE>, NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE> toPhoneQueue{};
     std::array<size_t, NIMBLE_BLUETOOTH_TO_PHONE_QUEUE_SIZE> toPhoneQueueByteSizes{};
     // The onReadCallbackIsWaitingForData flag provides synchronization between the NimBLE task's onRead callback and our main
     // task's runOnce. It's only set by onRead, and only cleared by runOnce.
@@ -245,7 +245,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     void runOnceHandleToPhoneQueue()
     {
         // Stack buffer for getFromRadio packet
-        uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0};
+        uint8_t fromRadioBytes[MAX_TO_FROM_RADIO_SIZE] = {0};
         size_t numBytes = 0;
 
         if (onReadCallbackIsWaitingForData || runOnceToPhoneCanPreloadNextPacket()) {
@@ -524,7 +524,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
         }
 
         // Pop from toPhoneQueue, protected by toPhoneMutex. Hold the mutex as briefly as possible.
-        uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0}; // Stack buffer for getFromRadio packet
+        uint8_t fromRadioBytes[MAX_TO_FROM_RADIO_SIZE] = {0}; // Stack buffer for getFromRadio packet
         size_t numBytes = 0;
         { // scope for toPhoneMutex mutex
             std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->toPhoneMutex);

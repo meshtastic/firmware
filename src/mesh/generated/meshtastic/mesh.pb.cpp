@@ -45,6 +45,9 @@ PB_BIND(meshtastic_MeshPacket, meshtastic_MeshPacket, 2)
 PB_BIND(meshtastic_NodeInfo, meshtastic_NodeInfo, 2)
 
 
+PB_BIND(meshtastic_NodeInfoBatch, meshtastic_NodeInfoBatch, AUTO)
+
+
 PB_BIND(meshtastic_MyNodeInfo, meshtastic_MyNodeInfo, AUTO)
 
 

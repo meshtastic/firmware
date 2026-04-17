@@ -18,10 +18,7 @@
 #include "concurrency/LockGuard.h"
 #include "main.h"
 #include "xmodem.h"
-
-#if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
-#error FromRadio is too big
-#endif
+#include <pb_encode.h>
 
 #if ToRadio_size > MAX_TO_FROM_RADIO_SIZE
 #error ToRadio is too big
@@ -61,13 +58,14 @@ void PhoneAPI::handleStartConfig()
     onConfigStart();
 
     // even if we were already connected - restart our state machine
-    if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
+    if (config_nonce == SPECIAL_NONCE_ONLY_NODES || config_nonce == SPECIAL_NONCE_BATCH_ONLY_NODES) {
         // If client only wants node info, jump directly to sending nodes
         state = STATE_SEND_OWN_NODEINFO;
         LOG_INFO("Client only wants node info, skipping other config");
     } else {
         state = STATE_SEND_MY_INFO;
     }
+    batchNodeInfo = (config_nonce == SPECIAL_NONCE_BATCH || config_nonce == SPECIAL_NONCE_BATCH_ONLY_NODES);
     pauseBluetoothLogging = true;
     spiLock->lock();
     filesManifest = getFiles("/", 10);
@@ -223,6 +221,48 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     STATE_SEND_PACKETS // send packets or debug strings
  */
 
+/// Context passed to the nanopb encoding callback for batched NodeInfo
+struct NodeInfoBatchEncodeContext {
+    std::deque<meshtastic_NodeInfo> *items;
+    size_t itemCount; // How many items from the front of the deque to encode
+};
+
+/// Nanopb encoding callback for repeated NodeInfo items in a NodeInfoBatch.
+/// Called by pb_encode during both sizing and actual encoding passes.
+static bool nodeInfoBatchEncodeCallback(pb_ostream_t *stream, const pb_field_iter_t *field, void *const *arg)
+{
+    auto *ctx = static_cast<NodeInfoBatchEncodeContext *>(*arg);
+    for (size_t i = 0; i < ctx->itemCount && i < ctx->items->size(); i++) {
+        if (!pb_encode_tag_for_field(stream, field))
+            return false;
+        if (!pb_encode_submessage(stream, meshtastic_NodeInfo_fields, &(*ctx->items)[i]))
+            return false;
+    }
+    return true;
+}
+
+/// Calculate how many NodeInfos from the front of the deque fit within maxPayloadBytes.
+/// maxPayloadBytes is the budget for the inner NodeInfoBatch content (repeated field entries).
+static size_t calculateBatchCount(std::deque<meshtastic_NodeInfo> &items, size_t maxPayloadBytes)
+{
+    size_t totalSize = 0;
+    size_t count = 0;
+    for (const auto &info : items) {
+        pb_ostream_t sizestream = PB_OSTREAM_SIZING;
+        if (!pb_encode(&sizestream, meshtastic_NodeInfo_fields, &info))
+            break;
+        size_t itemSize = sizestream.bytes_written;
+        // Per-item overhead: 1 byte tag (field 1, wire type 2) + varint length prefix
+        size_t overhead = 1 + (itemSize < 128 ? 1 : 2);
+        if (totalSize + overhead + itemSize > maxPayloadBytes)
+            break;
+        totalSize += overhead + itemSize;
+        count++;
+    }
+    // Always include at least 1 item if available (even if it slightly exceeds budget)
+    return count > 0 ? count : (items.empty() ? 0 : 1);
+}
+
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
     // Respond to heartbeat by sending queue status
@@ -231,7 +271,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
         fromRadioScratch.queueStatus = router->getQueueStatus();
         heartbeatReceived = false;
-        size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
+        size_t numbytes = pb_encode_to_bytes(buf, MAX_TO_FROM_RADIO_SIZE, &meshtastic_FromRadio_msg, &fromRadioScratch);
         LOG_DEBUG("FromRadio=STATE_SEND_QUEUE_STATUS, numbytes=%u", numbytes);
         return numbytes;
     }
@@ -286,7 +326,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 nodeInfoForPhone.num = 0;
             }
         }
-        if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
+        if (config_nonce == SPECIAL_NONCE_ONLY_NODES || config_nonce == SPECIAL_NONCE_BATCH_ONLY_NODES) {
             // If client only wants node info, jump directly to sending nodes
             state = STATE_SEND_OTHER_NODEINFOS;
             onNowHasData(0);
@@ -479,6 +519,81 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_INFO("Start sending nodeinfos millis=%u", millis());
         }
 
+        if (batchNodeInfo) {
+            // Batched path: pack multiple NodeInfos into a single FromRadio packet.
+            // Consolidate any pending nodeInfoForPhone into the queue, then top it up.
+            {
+                concurrency::LockGuard guard(&nodeInfoMutex);
+                if (nodeInfoForPhone.num != 0) {
+                    nodeInfoQueue.push_front(nodeInfoForPhone);
+                    nodeInfoForPhone = {};
+                }
+            }
+            prefetchNodeInfos();
+
+            bool queueEmpty;
+            {
+                concurrency::LockGuard guard(&nodeInfoMutex);
+                queueEmpty = nodeInfoQueue.empty();
+            }
+
+            if (queueEmpty) {
+                LOG_DEBUG("Done sending %d of %d nodeinfos (batched) millis=%u", readIndex, nodeDB->getNumMeshNodes(), millis());
+                concurrency::LockGuard guard(&nodeInfoMutex);
+                nodeInfoQueue.clear();
+                state = STATE_SEND_FILEMANIFEST;
+                return getFromRadio(buf);
+            }
+
+            // Fix up user IDs and log progress
+            {
+                concurrency::LockGuard guard(&nodeInfoMutex);
+                for (auto &info : nodeInfoQueue) {
+                    sprintf(info.user.id, "!%08x", info.num);
+                }
+            }
+
+            // Estimate overhead: FromRadio id (~2B) + oneof tag 18 (~2B) + NodeInfoBatch length varint (~2B) = ~6 bytes
+            constexpr size_t kFromRadioOverhead = 10; // conservative
+            size_t batchCount;
+            {
+                concurrency::LockGuard guard(&nodeInfoMutex);
+                batchCount = calculateBatchCount(nodeInfoQueue, MAX_TO_FROM_RADIO_SIZE - kFromRadioOverhead);
+            }
+
+            if (readIndex == 2 || readIndex % 20 == 0) {
+                concurrency::LockGuard guard(&nodeInfoMutex);
+                LOG_DEBUG("nodeinfo batch: %d items, %d/%d total", batchCount, readIndex, nodeDB->getNumMeshNodes());
+            }
+
+            // Use a local FromRadio so the callback context pointer doesn't outlive its scope.
+            meshtastic_FromRadio batchRadio = {};
+            NodeInfoBatchEncodeContext ctx;
+            {
+                concurrency::LockGuard guard(&nodeInfoMutex);
+                ctx.items = &nodeInfoQueue;
+                ctx.itemCount = batchCount;
+            }
+
+            batchRadio.which_payload_variant = meshtastic_FromRadio_node_info_batch_tag;
+            batchRadio.node_info_batch.items.funcs.encode = nodeInfoBatchEncodeCallback;
+            batchRadio.node_info_batch.items.arg = &ctx;
+
+            size_t numbytes = pb_encode_to_bytes(buf, MAX_TO_FROM_RADIO_SIZE, &meshtastic_FromRadio_msg, &batchRadio);
+
+            // Remove consumed items from the queue
+            {
+                concurrency::LockGuard guard(&nodeInfoMutex);
+                for (size_t i = 0; i < batchCount && !nodeInfoQueue.empty(); i++) {
+                    nodeInfoQueue.pop_front();
+                }
+            }
+
+            prefetchNodeInfos();
+            return numbytes;
+        }
+
+        // Non-batched path: send one NodeInfo per FromRadio packet (legacy behavior)
         meshtastic_NodeInfo infoToSend = {};
         {
             concurrency::LockGuard guard(&nodeInfoMutex);
@@ -495,11 +610,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (infoToSend.num != 0) {
             // Just in case we stored a different user.id in the past, but should never happen going forward
             sprintf(infoToSend.user.id, "!%08x", infoToSend.num);
-
-            // Logging this really slows down sending nodes on initial connection because the serial console is so slow, so only
-            // uncomment if you really need to:
-            // LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
-            // nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
 
             // Occasional progress logging. (readIndex==2 will be true for the first non-us node)
             if (readIndex == 2 || readIndex % 20 == 0) {
@@ -523,8 +633,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_FILEMANIFEST: {
         LOG_DEBUG("FromRadio=STATE_SEND_FILEMANIFEST");
         // last element
-        if (config_state == filesManifest.size() ||
-            config_nonce == SPECIAL_NONCE_ONLY_NODES) { // also handles an empty filesManifest
+        if (config_state == filesManifest.size() || config_nonce == SPECIAL_NONCE_ONLY_NODES ||
+            config_nonce == SPECIAL_NONCE_BATCH_ONLY_NODES) { // also handles an empty filesManifest
             config_state = 0;
             filesManifest.clear();
             // Skip to complete packet
@@ -579,7 +689,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     // Do we have a message from the mesh?
     if (fromRadioScratch.which_payload_variant != 0) {
         // Encapsulate as a FromRadio packet
-        size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
+        size_t numbytes = pb_encode_to_bytes(buf, MAX_TO_FROM_RADIO_SIZE, &meshtastic_FromRadio_msg, &fromRadioScratch);
 
         // VERY IMPORTANT to not print debug messages while writing to fromRadioScratch - because we use that same buffer
         // for logging (when we are encapsulating with protobufs)

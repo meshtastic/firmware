@@ -25,7 +25,7 @@ static BLEDfuSecure bledfusecure;                                             //
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // process at once
 // static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
-static uint8_t fromRadioBytes[meshtastic_FromRadio_size];
+static uint8_t fromRadioBytes[MAX_TO_FROM_RADIO_SIZE];
 static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 
 // Last ToRadio value received from the phone
