@@ -837,7 +837,8 @@ void setup()
             setenv("TZ", "GMT0", 1);
         } else {
             setenv("TZ", (const char *)slipstreamTZString, 1);
-            strcpy(config.device.tzdef, (const char *)slipstreamTZString);
+            strncpy(config.device.tzdef, (const char *)slipstreamTZString, sizeof(config.device.tzdef) - 1);
+            config.device.tzdef[sizeof(config.device.tzdef) - 1] = '\0';
         }
     }
     tzset();
@@ -911,7 +912,7 @@ void setup()
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_WARNING;
         cn->time = getValidTime(RTCQualityFromNet);
-        sprintf(cn->message, LOW_ENTROPY_WARNING);
+        snprintf(cn->message, sizeof(cn->message), "%s", LOW_ENTROPY_WARNING);
         service->sendClientNotification(cn);
         nodeDB->hasWarned = true;
     }

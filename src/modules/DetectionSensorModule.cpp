@@ -120,7 +120,7 @@ void DetectionSensorModule::sendDetectionMessage()
 {
     LOG_DEBUG("Detected event observed. Send message");
     char *message = new char[40];
-    sprintf(message, "%s detected", moduleConfig.detection_sensor.name);
+    snprintf(message, 40, "%s detected", moduleConfig.detection_sensor.name);
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
@@ -142,7 +142,7 @@ void DetectionSensorModule::sendDetectionMessage()
 void DetectionSensorModule::sendCurrentStateMessage(bool state)
 {
     char *message = new char[40];
-    sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, state);
+    snprintf(message, 40, "%s state: %i", moduleConfig.detection_sensor.name, state);
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);

@@ -44,7 +44,7 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     display->drawString(x, y, "Calibrating\nCompass");
 
     uint8_t timeRemaining = (screen->getEndCalibration() - millis()) / 1000;
-    sprintf(timeRemainingBuffer, "( %02d )", timeRemaining);
+    snprintf(timeRemainingBuffer, sizeof(timeRemainingBuffer), "( %02d )", timeRemaining);
     display->setFont(FONT_SMALL);
     display->drawString(x, y + 40, timeRemainingBuffer);
 

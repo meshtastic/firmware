@@ -230,9 +230,11 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             auto thread = concurrency::OSThread::currentThread;
             meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
             logRecord.level = getLogLevel(logLevel);
-            vsprintf(logRecord.message, format, arg);
-            if (thread)
-                strcpy(logRecord.source, thread->ThreadName.c_str());
+            vsnprintf(logRecord.message, sizeof(logRecord.message), format, arg);
+            if (thread) {
+                strncpy(logRecord.source, thread->ThreadName.c_str(), sizeof(logRecord.source) - 1);
+                logRecord.source[sizeof(logRecord.source) - 1] = '\0';
+            }
             logRecord.time = getValidTime(RTCQuality::RTCQualityDevice, true);
 
             auto buffer = std::unique_ptr<uint8_t[]>(new uint8_t[meshtastic_LogRecord_size]);
@@ -280,7 +282,7 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     // append \n to format
     size_t len = strlen(format);
     auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
-    strcpy(newFormat.get(), format);
+    memcpy(newFormat.get(), format, len);
     newFormat[len] = '\n';
     newFormat[len + 1] = '\0';
 
@@ -368,7 +370,7 @@ void RedirectablePrint::hexDump(const char *logLevel, const unsigned char *buf, 
             }
         }
         uint8_t index = i / 16;
-        sprintf(s, "%03x", index);
+        snprintf(s, 4, "%03x", index);
         s[3] = '.';
         log(logLevel, s);
     }
@@ -382,7 +384,7 @@ std::string RedirectablePrint::mt_sprintf(const std::string fmt_str, ...)
     va_list ap;
     while (1) {
         formatted.reset(new char[n]); /* Wrap the plain char array into the unique_ptr */
-        strcpy(&formatted[0], fmt_str.c_str());
+        memcpy(&formatted[0], fmt_str.c_str(), fmt_str.size() + 1);
         va_start(ap, fmt_str);
         int final_n = vsnprintf(&formatted[0], n, fmt_str.c_str(), ap);
         va_end(ap);
