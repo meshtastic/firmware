@@ -106,7 +106,9 @@ def open_session(
             ]
 
         has_board_filters = len(parsed_board_filters) > 0
-        effective_filters = parsed_board_filters if has_board_filters else (filters or [])
+        effective_filters = (
+            parsed_board_filters if has_board_filters else (filters or [])
+        )
 
         if not has_board_speed:
             args.extend(["--baud", str(effective_baud)])
