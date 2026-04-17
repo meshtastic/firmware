@@ -86,6 +86,7 @@ class ScanI2C
         DA217,
         CHSC6X,
         CST226SE,
+        HDC1080,
         BMI270,
         SEN5X,
         SFA30,

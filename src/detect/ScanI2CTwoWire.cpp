@@ -412,10 +412,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = AHT10;
                 break;
 #endif
+
 #if !defined(M5STACK_UNITC6L)
-            case INA_ADDR: // Same as SHT2X
+            case INA_ADDR: // Same as SHT2X and HDC1080
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2); // Check for HDC1080 first
+                if (registerValue == 0x1050) {                                                     // Device ID for HDC1080
+                    logFoundDevice("HDC1080", (uint8_t)addr.address);
+                    type = HDC1080;
+                    break;
+                }
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID: 0x%x", registerValue);
                 if (registerValue == 0x5449) {
@@ -464,6 +471,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     // else: probably a RAK12500/UBLOX GPS on I2C
                 }
                 break;
+#else
+                SCAN_SIMPLE_CASE(INA_ADDR, HDC1080, "HDC1080", (uint8_t)addr.address)
 #endif
             case MCP9808_ADDR:
                 // We need to check for STK8BAXX first, since register 0x07 is new data flag for the z-axis and can produce some
