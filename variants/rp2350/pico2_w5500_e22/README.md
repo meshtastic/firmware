@@ -126,8 +126,7 @@ Services available once connected:
 | `SX126X_ANT_SW 3`              | GP3 (RXEN) driven HIGH at init and never toggled again        |
 | `SX126X_DIO2_AS_RF_SWITCH`     | SX1262 drives DIO2 HIGH during TX → enables TXEN via bridge  |
 | `SX126X_DIO3_TCXO_VOLTAGE 1.8` | E22 TCXO controlled by DIO3                                  |
-| `-D EBYTE_E22`                 | Enables TCXO support in firmware                              |
-| `-D EBYTE_E22_900M30S`         | Sets `TX_GAIN_LORA=10`, max power 22 dBm                     |
+| `-D EBYTE_E22_900M30S`         | Sets `TX_GAIN_LORA=7`, max power 22 dBm                      |
 
 > RXEN and TXEN may both be HIGH simultaneously during TX — this is safe for the E22 RF switch.
 

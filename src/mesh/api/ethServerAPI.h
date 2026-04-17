@@ -2,7 +2,7 @@
 
 #include "ServerAPI.h"
 #if !defined(USE_WS5500)
-#if defined(WIZNET_5500_EVB_PICO2)
+#if defined(PICO2_W5500_E22)
 #include <Ethernet.h>
 #else
 #include <RAK13800_W5100S.h>
