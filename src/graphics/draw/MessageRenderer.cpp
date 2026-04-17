@@ -824,7 +824,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                         bubbleOffColor = b.mine ? TFTPalette::SkyBlue : TFTPalette::DeepBlue;
                     } else {
                         bubbleOnColor = b.mine ? TFTPalette::Black : getThemeBodyFg();
-                        bubbleOffColor = b.mine ? TFTPalette::LightGray : TFTPalette::DarkGray;
+                        bubbleOffColor = b.mine ? TFTPalette::SkyBlue : TFTPalette::DarkGray;
                     }
                     setTFTColorRole(TFTColorRole::ActionMenuBody, bubbleOnColor, bubbleOffColor);
                     registerRoundedBubbleFillRegion(bx, by, bw, bh, r);
@@ -860,7 +860,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                         bubbleOffColor = b.mine ? TFTPalette::SkyBlue : TFTPalette::DeepBlue;
                     } else {
                         bubbleOnColor = b.mine ? TFTPalette::Black : getThemeBodyFg();
-                        bubbleOffColor = b.mine ? TFTPalette::LightGray : TFTPalette::DarkGray;
+                        bubbleOffColor = b.mine ? TFTPalette::SkyBlue : TFTPalette::DarkGray;
                     }
                     setTFTColorRole(TFTColorRole::ActionMenuBody, bubbleOnColor, bubbleOffColor);
                     registerTFTColorRegion(TFTColorRole::ActionMenuBody, bubbleX, topY, bubbleW, bubbleH);
