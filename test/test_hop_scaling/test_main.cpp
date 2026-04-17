@@ -12,8 +12,18 @@
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 #include "modules/HopScalingModule.h"
+#include <cstdio>
 #include <cstring>
 #include <memory>
+
+// Unity only shows TEST_MESSAGE output. printf goes to stdout which the runner swallows.
+#define MSG_BUF_LEN 200
+#define TEST_MSG_FMT(fmt, ...)                                                                                                   \
+    do {                                                                                                                         \
+        char _buf[MSG_BUF_LEN];                                                                                                  \
+        snprintf(_buf, sizeof(_buf), fmt, __VA_ARGS__);                                                                          \
+        TEST_MESSAGE(_buf);                                                                                                      \
+    } while (0)
 
 namespace
 {
@@ -123,7 +133,7 @@ static void populateLargeMesh()
 /// Should log the initial status report with default values.
 void test_startup_blank_state()
 {
-    printf("\n--- test_startup_blank_state ---\n");
+    TEST_MESSAGE("--- test_startup_blank_state ---");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -138,8 +148,9 @@ void test_startup_blank_state()
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= HOP_MAX);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, shim->getRollingEvictionAverage());
 
-    printf("--- startup blank: hop=%u actWt=%.2f scale=%.2f evict/h=%.1f ---\n", shim->getLastRequiredHop(),
-           (double)shim->getLastActivityWeight(), (double)shim->getLastScaleFactor(), (double)shim->getRollingEvictionAverage());
+    TEST_MSG_FMT("startup blank: hop=%u actWt=%.2f scale=%.2f evict/h=%.1f", shim->getLastRequiredHop(),
+                 (double)shim->getLastActivityWeight(), (double)shim->getLastScaleFactor(),
+                 (double)shim->getRollingEvictionAverage());
 
     hopScalingModule = nullptr;
 }
@@ -149,7 +160,7 @@ void test_startup_blank_state()
 /// then create a second instance that should restore the persisted state.
 void test_startup_restored_state()
 {
-    printf("\n--- test_startup_restored_state ---\n");
+    TEST_MESSAGE("--- test_startup_restored_state ---");
 
     populateSmallMesh();
 
@@ -165,7 +176,7 @@ void test_startup_restored_state()
         for (int run = 0; run < 7; run++)
             shim->runOnce();
 
-        printf("--- phase 1 done: evict/h=%.1f ---\n", (double)shim->getRollingEvictionAverage());
+        TEST_MSG_FMT("phase 1 done: evict/h=%.1f", (double)shim->getRollingEvictionAverage());
         TEST_ASSERT_GREATER_THAN(0.0f, shim->getRollingEvictionAverage());
 
         hopScalingModule = nullptr;
@@ -178,8 +189,8 @@ void test_startup_restored_state()
 
         shim->runOnce();
 
-        printf("--- phase 2 restored: evict/h=%.1f hop=%u scale=%.2f ---\n", (double)shim->getRollingEvictionAverage(),
-               shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
+        TEST_MSG_FMT("phase 2 restored: evict/h=%.1f hop=%u scale=%.2f", (double)shim->getRollingEvictionAverage(),
+                     shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
 
         // The restored eviction average should be non-zero from phase 1
         TEST_ASSERT_GREATER_THAN(0.0f, shim->getRollingEvictionAverage());
@@ -192,7 +203,7 @@ void test_startup_restored_state()
 /// Feed enough packet senders to hit the 75% load cap and trigger rollSampleWindow(true).
 void test_early_sample_flush()
 {
-    printf("\n--- test_early_sample_flush ---\n");
+    TEST_MESSAGE("--- test_early_sample_flush ---");
 
     populateLargeMesh();
 
@@ -205,7 +216,7 @@ void test_early_sample_flush()
     // Feed node IDs that pass the modulo-8 filter. We need 96 unique IDs
     // (SAMPLE_TRACKER_LOAD_CAP) to trigger the early flush.
     // Use IDs that are multiples of 8.
-    printf("--- feeding %u unique sampled node IDs to trigger early flush ---\n", (unsigned)96);
+    TEST_MESSAGE("feeding 96 unique sampled node IDs to trigger early flush");
     for (uint32_t i = 1; i <= 120; i++) {
         shim->recordPacketSender(i * 8); // multiples of 8 pass modulo-8 filter
     }
@@ -214,7 +225,7 @@ void test_early_sample_flush()
     // when uniqueCount hit 96. Run once more to see the status report.
     shim->runOnce();
 
-    printf("--- early flush done: hop=%u scale=%.2f ---\n", shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
+    TEST_MSG_FMT("early flush done: hop=%u scale=%.2f", shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
 
     hopScalingModule = nullptr;
 }
@@ -223,7 +234,7 @@ void test_early_sample_flush()
 /// Run through 7 iterations (initial + 6 ten-minute runs) to trigger rollHour().
 void test_hourly_roll()
 {
-    printf("\n--- test_hourly_roll ---\n");
+    TEST_MESSAGE("--- test_hourly_roll ---");
 
     populateSmallMesh();
 
@@ -244,8 +255,9 @@ void test_hourly_roll()
         TEST_ASSERT_GREATER_THAN(0, interval);
     }
 
-    printf("--- hourly roll: hop=%u actWt=%.2f scale=%.2f evict/h=%.1f ---\n", shim->getLastRequiredHop(),
-           (double)shim->getLastActivityWeight(), (double)shim->getLastScaleFactor(), (double)shim->getRollingEvictionAverage());
+    TEST_MSG_FMT("hourly roll: hop=%u actWt=%.2f scale=%.2f evict/h=%.1f", shim->getLastRequiredHop(),
+                 (double)shim->getLastActivityWeight(), (double)shim->getLastScaleFactor(),
+                 (double)shim->getRollingEvictionAverage());
 
     // After rolling, eviction average should reflect the 12 evictions we added
     TEST_ASSERT_GREATER_THAN(0.0f, shim->getRollingEvictionAverage());
@@ -258,7 +270,7 @@ void test_hourly_roll()
 /// without recomputing hop/scale (didHourlyUpdate = false).
 void test_intermediate_status()
 {
-    printf("\n--- test_intermediate_status ---\n");
+    TEST_MESSAGE("--- test_intermediate_status ---");
 
     populateSmallMesh();
 
@@ -270,7 +282,7 @@ void test_intermediate_status()
     uint8_t hopAfterInitial = shim->getLastRequiredHop();
     float scaleAfterInitial = shim->getLastScaleFactor();
 
-    printf("--- initial: hop=%u scale=%.2f ---\n", hopAfterInitial, (double)scaleAfterInitial);
+    TEST_MSG_FMT("initial: hop=%u scale=%.2f", hopAfterInitial, (double)scaleAfterInitial);
 
     // Next few runs are intermediate (no hourly update) — hop and scale should not change
     for (int run = 0; run < 3; run++) {
@@ -279,8 +291,8 @@ void test_intermediate_status()
         TEST_ASSERT_FLOAT_WITHIN(0.001f, scaleAfterInitial, shim->getLastScaleFactor());
     }
 
-    printf("--- intermediate (x3): hop=%u scale=%.2f (unchanged) ---\n", shim->getLastRequiredHop(),
-           (double)shim->getLastScaleFactor());
+    TEST_MSG_FMT("intermediate (x3): hop=%u scale=%.2f (unchanged)", shim->getLastRequiredHop(),
+                 (double)shim->getLastScaleFactor());
 
     hopScalingModule = nullptr;
 }
@@ -288,7 +300,7 @@ void test_intermediate_status()
 /// Test 6: Multiple hourly rolls with growing evictions to show scale factor increase.
 void test_multiple_hourly_rolls_with_evictions()
 {
-    printf("\n--- test_multiple_hourly_rolls_with_evictions ---\n");
+    TEST_MESSAGE("--- test_multiple_hourly_rolls_with_evictions ---");
 
     populateSmallMesh();
 
@@ -307,8 +319,8 @@ void test_multiple_hourly_rolls_with_evictions()
         for (int run = 0; run < 7; run++)
             shim->runOnce();
 
-        printf("--- hour %d: hop=%u scale=%.2f evict/h=%.1f ---\n", hour + 1, shim->getLastRequiredHop(),
-               (double)shim->getLastScaleFactor(), (double)shim->getRollingEvictionAverage());
+        TEST_MSG_FMT("hour %d: hop=%u scale=%.2f evict/h=%.1f", hour + 1, shim->getLastRequiredHop(),
+                     (double)shim->getLastScaleFactor(), (double)shim->getRollingEvictionAverage());
 
         // Eviction average should be growing
         TEST_ASSERT_GREATER_OR_EQUAL(prevEvictionAvg, shim->getRollingEvictionAverage());
