@@ -122,7 +122,8 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             // NULL packet has the destination filename
             memset(filename, 0, sizeof(filename));
             size_t filenameLen = xmodemPacket.buffer.size;
-            if (filenameLen >= sizeof(filename)) filenameLen = sizeof(filename) - 1;
+            if (filenameLen >= sizeof(filename))
+                filenameLen = sizeof(filename) - 1;
             memcpy(filename, xmodemPacket.buffer.bytes, filenameLen);
             filename[filenameLen] = '\0';
             if (filename[0] == '\0') {
