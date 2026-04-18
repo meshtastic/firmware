@@ -1,3 +1,4 @@
+#include "MeshTypes.h"
 #include "TestUtil.h"
 #include <unity.h>
 
