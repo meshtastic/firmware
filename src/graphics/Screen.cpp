@@ -27,8 +27,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "configuration.h"
 #include "meshUtils.h"
 #if HAS_SCREEN
-#include "EInkParallelDisplay.h"
 #include <OLEDDisplay.h>
+
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#include "graphics/BaseUIEInkDisplay.h"
+// Provided by each niche-enabled variant's nicheGraphics.h (defined once, in main.cpp TU).
+extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
+#endif
 
 #include "DisplayFormatters.h"
 #include "TimeFormatters.h"
@@ -365,14 +370,9 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY) && !defined(USE_EINK_PARALLELDISPLAY)
-    dispdev = new EInkDisplay(address.address, -1, -1, geometry,
-                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
-    dispdev = new EInkDynamicDisplay(address.address, -1, -1, geometry,
-                                     (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif defined(USE_EINK_PARALLELDISPLAY)
-    dispdev = new EInkParallelDisplay(EPD_WIDTH, EPD_HEIGHT, EInkParallelDisplay::EPD_ROT_PORTRAIT);
+#elif defined(USE_EINK) && defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    // NicheGraphics-backed BaseUI E-Ink path. Variant provides setupNicheGraphicsBaseUI() in its nicheGraphics.h.
+    dispdev = setupNicheGraphicsBaseUI();
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -762,10 +762,8 @@ void Screen::forceDisplay(bool forceUiUpdate)
     }
 
     // Tell EInk class to update the display
-#if defined(USE_EINK_PARALLELDISPLAY)
-    static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay();
-#elif defined(USE_EINK)
-    static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay();
 #endif
 #else
     // No delay between UI frame rendering
@@ -939,12 +937,7 @@ int32_t Screen::runOnce()
             NotificationRenderer::current_notification_type != notificationTypeEnum::text_input &&
             !Throttle::isWithinTimespanMs(lastScreenTransition, config.display.auto_screen_carousel_secs * 1000)) {
 
-            // If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
-            // Carousel is potentially a major source of E-Ink display wear
-#if !defined(EINK_BACKGROUND_USES_FAST)
-            EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
-#endif
-
+            // Carousel rotations let BaseUIEInkDisplay's DisplayHealth debt model decide FAST vs FULL.
             LOG_DEBUG("LastScreenTransition exceeded %ums transition to next frame", (millis() - lastScreenTransition));
             handleOnPress();
         }
@@ -978,11 +971,8 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     static FrameCallback screensaverFrame;
     static OverlayCallback screensaverOverlay;
 
-#if defined(HAS_EINK_ASYNCFULL) && defined(USE_EINK_DYNAMICDISPLAY)
-    // Join (await) a currently running async refresh, then run the post-update code.
-    // Avoid skipping of screensaver frame. Would otherwise be handled by NotifiedWorkerThread.
+    // Join (await) any currently running async refresh before drawing the screensaver frame.
     EINK_JOIN_ASYNCREFRESH(dispdev);
-#endif
 
     // If: one-off screensaver frame passed as argument. Handles doDeepSleep()
     if (einkScreensaver != NULL) {
@@ -1005,23 +995,17 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
         ui->update();
     } while (ui->getUiState()->lastUpdate < startUpdate);
 
-#if defined(USE_EINK_PARALLELDISPLAY)
-    static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay(0);
-#elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
-    // Old EInkDisplay class
-    static_cast<EInkDisplay *>(dispdev)->forceDisplay(0); // Screen::forceDisplay(), but override rate-limit
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay(0);
 #endif
 
     // Prepare now for next frame, shown when display wakes
     ui->setOverlays(NULL, 0);  // Clear overlay
     setFrames(FOCUS_PRESERVE); // Return to normal display updates, showing same frame as before screensaver, ideally
 
-    // Pick a refresh method, for when display wakes
-#ifdef EINK_HASQUIRK_GHOSTING
-    EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // Really ugly to see ghosting from "screen paused"
-#else
-    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE);              // Really nice to wake screen with a fast-refresh
-#endif
+    // Pick a refresh method for when the display wakes. RESPONSIVE = FAST; DisplayHealth
+    // will promote to FULL on its own schedule if FAST debt has built up.
+    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE);
 }
 #endif
 
