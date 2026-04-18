@@ -81,26 +81,28 @@ static void addNodesAtHop(uint32_t baseId, uint8_t hop, uint32_t count, uint32_t
         mockNodeDB->addTestNode(baseId + i, hop, true, ageSecs + i * stride);
 }
 
-// Scenario A: Dense local mesh — 60+ nodes clustered at hops 0–2.
+// Scenario A: Dense local mesh — 110 nodes with a heavy core at hops 0–2.
 // A telemetry broadcast here shouldn't need to travel far.
 // Expected: hop 1 or 2 (cumulative easily exceeds 40 by hop 1-2).
 static void buildDenseLocalMesh()
 {
     mockNodeDB->clearTestNodes();
-    addNodesAtHop(0x1000, 0, 25, 120); // 25 nodes at hop 0, ~2 min old
-    addNodesAtHop(0x2000, 1, 30, 300); // 30 nodes at hop 1, ~5 min old
-    addNodesAtHop(0x3000, 2, 15, 600); // 15 nodes at hop 2, ~10 min old
-    addNodesAtHop(0x4000, 3, 5, 1200); //  5 nodes at hop 3, ~20 min old
-    addNodesAtHop(0x5000, 4, 2, 1800); //  2 nodes at hop 4, ~30 min old
-    // Total: 77 nodes. Cumulative at hop 1: 25+30=55 > 40 → expect baseHop=1.
+    addNodesAtHop(0x1000, 0, 25, 120);  // 25 nodes at hop 0, ~2 min old
+    addNodesAtHop(0x2000, 1, 30, 300);  // 30 nodes at hop 1, ~5 min old
+    addNodesAtHop(0x3000, 2, 15, 600);  // 15 nodes at hop 2, ~10 min old
+    addNodesAtHop(0x4000, 3, 5, 1200);  //  5 nodes at hop 3, ~20 min old
+    addNodesAtHop(0x5000, 4, 10, 1800); //  10 nodes at hop 4, ~30 min old
+    addNodesAtHop(0x6000, 5, 15, 2400); //  15 nodes at hop 5, ~40 min old
+    addNodesAtHop(0x7000, 6, 10, 3000); //  10 nodes at hop 6, ~50 min old
+    // Total: 110 nodes. Cumulative at hop 1: 25+30=55 > 40 → expect baseHop=1.
     // Politeness extension: 55*1.25=68.75, extending to hop 2 adds 15 → 70 > 68.75 → no extend.
     // With generous politeness (quiet mesh): 55*2.0=110, 70 < 110 → extend to hop 2.
 }
 
-// Scenario B: Spread suburban mesh — nodes distributed across hops 0–5.
+// Scenario B: Spread sparse mesh — nodes distributed across hops 0–7.
 // A position broadcast needs moderate reach.
 // Expected: hop 3 or 4 (need to accumulate across several hops to reach 40).
-static void buildSpreadSuburbanMesh()
+static void buildSpreadSparseMesh()
 {
     mockNodeDB->clearTestNodes();
     addNodesAtHop(0x1000, 0, 5, 120);   //  5 at hop 0
@@ -109,12 +111,14 @@ static void buildSpreadSuburbanMesh()
     addNodesAtHop(0x4000, 3, 15, 900);  // 15 at hop 3
     addNodesAtHop(0x5000, 4, 10, 1200); // 10 at hop 4
     addNodesAtHop(0x6000, 5, 6, 1800);  //  6 at hop 5
-    // Total: 56 nodes. Cumulative: h0=5, h1=13, h2=25, h3=40 → baseHop=3.
+    addNodesAtHop(0x7000, 6, 10, 3000); // 10 at hop 6
+    addNodesAtHop(0x8000, 7, 10, 3600); // 10 at hop 7
+    // Total: 76 nodes. Cumulative: h0=5, h1=13, h2=25, h3=40 → baseHop=3.
     // Politeness check: extending to hop 4 → 50; limit = 40*polite.
     // Generous: 40*2=80, 50<80 → extend. Default: 40*1.5=60, 50<60 → extend. Strict: 40*1.25=50, 50<=50 → extend.
 }
 
-// Scenario C: Deep linear chain — few nodes per hop, spread to hop 6.
+// Scenario C: Deep linear chain — few nodes per hop, spread to hop 7.
 // Remote/rural network where nodes are spread thinly over many hops.
 // Expected: hop 7 (can't reach 40 nodes even at max hop).
 static void buildDeepLinearChain()
@@ -127,38 +131,45 @@ static void buildDeepLinearChain()
     addNodesAtHop(0x5000, 4, 3, 1200); // 3 at hop 4
     addNodesAtHop(0x6000, 5, 2, 1800); // 2 at hop 5
     addNodesAtHop(0x7000, 6, 2, 2400); // 2 at hop 6
-    // Total: 19 nodes. Never reaches 40 → baseHop = HOP_MAX = 7.
+    addNodesAtHop(0x8000, 7, 3, 3600); // 3 at hop 7
+    // Total: 22 nodes. Never reaches 40 → baseHop = HOP_MAX = 7.
 }
 
-// Scenario D: Concentrated hop-2 cluster — simulates a repeater-heavy setup
-// where most nodes are exactly 2 hops away (common with hilltop repeaters).
+// Scenario D: Concentrated hop-2 cluster — simulates a router-heavy setup
+// where most nodes are exactly 2 hops away (common with hilltop routers).
 // Expected: hop 2 (cumulative at hop 2 exceeds 40).
 static void buildRepeaterCluster()
 {
     mockNodeDB->clearTestNodes();
     addNodesAtHop(0x1000, 0, 3, 120);  //  3 at hop 0 (local)
-    addNodesAtHop(0x2000, 1, 5, 300);  //  5 at hop 1 (repeaters)
-    addNodesAtHop(0x3000, 2, 45, 600); // 45 at hop 2 (behind repeaters)
+    addNodesAtHop(0x2000, 1, 5, 300);  //  5 at hop 1 (routers)
+    addNodesAtHop(0x3000, 2, 45, 600); // 45 at hop 2 (behind routers)
     addNodesAtHop(0x4000, 3, 8, 1200); //  8 at hop 3
-    // Total: 61. Cumulative: h0=3, h1=8, h2=53 > 40 → baseHop=2.
+    addNodesAtHop(0x5000, 4, 3, 1200); // 3 at hop 4
+    addNodesAtHop(0x6000, 5, 2, 1800); // 2 at hop 5
+    addNodesAtHop(0x7000, 6, 2, 2400); // 2 at hop 6
+    addNodesAtHop(0x8000, 7, 3, 3600); // 3 at hop 7
+    // Total: 71. Cumulative: h0=3, h1=8, h2=53 > 40 → baseHop=2.
     // Politeness: extending to hop 3 → 61; limit=53*polite.
     // Strict: 53*1.25=66.25, 61<66 → extend. Default: 53*1.5=79.5, 61<79 → extend.
 }
 
 // Scenario E: Megamesh with high eviction turnover.
-// DB is near capacity (180+ nodes) with steady evictions.
+// DB is near capacity (199 of 200 nodes) with steady evictions.
 // Scale factor should inflate counts, potentially reducing required hops.
 static void buildMegamesh()
 {
     mockNodeDB->clearTestNodes();
-    // Fill DB near capacity with nodes spread across hops 0-5
+    // Fill DB near capacity with nodes spread across hops 0-7
     addNodesAtHop(0x01000, 0, 30, 120);  // 30 at hop 0
     addNodesAtHop(0x02000, 1, 40, 300);  // 40 at hop 1
     addNodesAtHop(0x03000, 2, 35, 600);  // 35 at hop 2
     addNodesAtHop(0x04000, 3, 30, 900);  // 30 at hop 3
     addNodesAtHop(0x05000, 4, 20, 1200); // 20 at hop 4
     addNodesAtHop(0x06000, 5, 15, 1800); // 15 at hop 5
-    // Total: 170 nodes (85% of 200). Near capacity.
+    addNodesAtHop(0x07000, 6, 14, 2400); // 14 at hop 6
+    addNodesAtHop(0x08000, 7, 15, 3600); // 15 at hop 7
+    // Total: 199 nodes (99.5% of 200). At capacity.
     // Without scaling: cumulative at h0=30, h1=70 > 40 → hop 1. With scaling, even more compressed.
 }
 
@@ -167,11 +178,13 @@ static void buildMegamesh()
 // ---------------------------------------------------------------------------
 
 // Scenario A: Dense local mesh — telemetry broadcast.
-// 77 nodes clustered at hops 0-4, mostly at 0-1. Cumulative at hop 1 = 55 > 40.
-// A telemetry packet should not need to travel beyond hop 2.
+// 110 nodes with a heavy local core and a thinner tail to hop 6.
+// Cumulative at hop 1 = 55 > 40, so a telemetry packet should stay near hop 1-2.
 void test_dense_local_telemetry()
 {
     TEST_MESSAGE("=== Dense local mesh: telemetry broadcast ===");
+    TEST_MESSAGE("Topology: 110 nodes with 25/30/15 nodes at hops 0/1/2 and a thinner tail to hop 6.");
+    TEST_MESSAGE("Expectation: cumulative reaches 55 nodes by hop 1, so required hop should stay near 1-2.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -183,29 +196,31 @@ void test_dense_local_telemetry()
                  (double)shim->getLastScaleFactor(), (double)shim->getLastActivityWeight(), 0.0,
                  0); // polite/mode logged by module
 
-    // With 55 nodes reachable at hop 1, hop should be constrained to 1-2
+    TEST_MESSAGE("Assertion: 55 nodes are reachable by hop 1, so the result should remain tightly constrained.");
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= 3);
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() >= 1);
 
     hopScalingModule = nullptr;
 }
 
-// Scenario B: Spread suburban mesh — position broadcast.
-// 56 nodes distributed across hops 0-5. Need hop 3 to reach 40.
-// A position packet should travel 3-4 hops.
-void test_spread_suburban_position()
+// Scenario B: Spread sparse mesh — position broadcast.
+// 76 nodes distributed across hops 0-7. Need hop 3 to reach 40.
+// A position packet should travel about 3-4 hops.
+void test_spread_sparse_position()
 {
-    TEST_MESSAGE("=== Spread suburban mesh: position broadcast ===");
+    TEST_MESSAGE("=== Spread sparse mesh: position broadcast ===");
+    TEST_MESSAGE("Topology: 76 nodes spread across all hops, reaching 40 nodes only when hop 3 is included.");
+    TEST_MESSAGE("Expectation: base hop lands at 3 and politeness can extend reach to hop 4.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
-    buildSpreadSuburbanMesh();
+    buildSpreadSparseMesh();
 
     shim->runOnce();
 
-    TEST_MSG_FMT("Spread suburban: hop=%u scale=%.2f", shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
+    TEST_MSG_FMT("Spread sparse: hop=%u scale=%.2f", shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
 
-    // Cumulative at hop 3 = 40. Politeness extends to hop 4.
+    TEST_MESSAGE("Assertion: hop should settle in the 3-5 range for this spread-out mesh.");
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() >= 3);
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= 5);
 
@@ -213,11 +228,13 @@ void test_spread_suburban_position()
 }
 
 // Scenario C: Deep linear chain — position broadcast.
-// 19 nodes thinly spread across hops 0-6. Never reaches 40 cumulative.
+// 22 nodes spread thinly across hops 0-7. Never reaches 40 cumulative.
 // Must use maximum hops to reach everyone.
 void test_deep_chain_position()
 {
     TEST_MESSAGE("=== Deep linear chain: position broadcast ===");
+    TEST_MESSAGE("Topology: 22 nodes spread thinly across hops 0-7, never reaching the 40-node floor.");
+    TEST_MESSAGE("Expectation: the module must keep HOP_MAX so end-of-chain nodes remain reachable.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -227,18 +244,20 @@ void test_deep_chain_position()
 
     TEST_MSG_FMT("Deep chain: hop=%u scale=%.2f", shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
 
-    // Only 19 nodes total — can never reach TARGET=40, so hop stays at HOP_MAX=7
+    TEST_MESSAGE("Assertion: total active population is too small to reduce hop count.");
     TEST_ASSERT_EQUAL_UINT8(HOP_MAX, shim->getLastRequiredHop());
 
     hopScalingModule = nullptr;
 }
 
 // Scenario D: Repeater cluster — telemetry broadcast.
-// 61 nodes, 45 of which sit behind repeaters at hop 2. Cumulative at hop 2 = 53.
-// A telemetry packet needs exactly 2-3 hops.
+// 71 nodes, 45 of which sit behind repeaters at hop 2. Cumulative at hop 2 = 53.
+// A telemetry packet generally needs 2-3 hops here.
 void test_repeater_cluster_telemetry()
 {
     TEST_MESSAGE("=== Repeater cluster: telemetry broadcast ===");
+    TEST_MESSAGE("Topology: 71 nodes with a concentrated 45-node cluster at hop 2 behind a small router layer.");
+    TEST_MESSAGE("Expectation: cumulative reaches 53 at hop 2 and politeness commonly extends to hop 3.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -248,7 +267,7 @@ void test_repeater_cluster_telemetry()
 
     TEST_MSG_FMT("Repeater cluster: hop=%u scale=%.2f", shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
 
-    // 53 nodes reachable at hop 2, politeness should extend to hop 3
+    TEST_MESSAGE("Assertion: result should stay in the 2-4 range for this repeater-backed topology.");
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() >= 2);
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= 4);
 
@@ -256,25 +275,27 @@ void test_repeater_cluster_telemetry()
 }
 
 // Scenario E: Megamesh with evictions — telemetry broadcast.
-// 170 nodes (near capacity), then 3 hours of escalating evictions.
+// 199 nodes (near capacity), then 3 hours of escalating evictions.
 // Scale factor should grow, concentrating estimated nodes at lower hops.
 // Hop limit should decrease as the mesh grows denser.
 void test_megamesh_eviction_scaling()
 {
     TEST_MESSAGE("=== Megamesh with eviction scaling ===");
+    TEST_MESSAGE("Topology: 199-node near-capacity mesh spanning hops 0-7 with sustained eviction pressure.");
+    TEST_MESSAGE("Expectation: scale factor grows above 1.0 and required hop compresses toward the local core.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
     buildMegamesh();
 
-    // Initial run — no evictions yet
+    TEST_MESSAGE("Phase 1: initial run without evictions.");
     shim->runOnce();
     uint8_t hopBefore = shim->getLastRequiredHop();
 
     TEST_MSG_FMT("Megamesh initial: hop=%u scale=%.2f evict/h=%.1f", hopBefore, (double)shim->getLastScaleFactor(),
                  (double)shim->getRollingEvictionAverage());
 
-    // Simulate 3 hours of increasing eviction pressure
+    TEST_MESSAGE("Phase 2: simulate 3 hours of increasing evictions plus sampled-node traffic.");
     for (int hour = 0; hour < 3; hour++) {
         for (int i = 0; i < 15 * (hour + 1); i++)
             shim->recordEviction();
@@ -290,44 +311,44 @@ void test_megamesh_eviction_scaling()
                      (double)shim->getLastScaleFactor(), (double)shim->getRollingEvictionAverage());
     }
 
-    // After sustained evictions, scale factor should be > 1
+    TEST_MESSAGE("Assertion: sustained evictions should push scale above 1.0 and keep hop well below HOP_MAX.");
     TEST_ASSERT_TRUE(shim->getLastScaleFactor() > 1.0f);
-    // Hop should still be constrained (not HOP_MAX) given 170 nodes
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= 3);
 
     hopScalingModule = nullptr;
 }
 
 // Scenario F: Transition from sparse to dense — watches hop decrease.
-// Start with a deep chain (19 nodes, hop=7), then add nodes at low hops
+// Start with a deep chain (22 nodes, hop=7), then add nodes at low hops
 // to simulate a mesh growing denser locally. Hop should decrease.
 void test_sparse_to_dense_transition()
 {
     TEST_MESSAGE("=== Sparse-to-dense transition ===");
+    TEST_MESSAGE("Topology change: start with a 22-node deep chain, then inject 50 new neighbors at hops 0-1.");
+    TEST_MESSAGE("Expectation: hop should drop sharply once the local neighborhood becomes dense.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
 
-    // Phase 1: sparse chain — expect HOP_MAX
+    TEST_MESSAGE("Phase 1: sparse chain should hold at HOP_MAX.");
     buildDeepLinearChain();
     shim->runOnce();
     uint8_t hopSparse = shim->getLastRequiredHop();
     TEST_MSG_FMT("Phase 1 sparse: hop=%u (expect %u)", hopSparse, HOP_MAX);
     TEST_ASSERT_EQUAL_UINT8(HOP_MAX, hopSparse);
 
-    // Phase 2: add 50 nodes at hop 0-1 (new neighbors joined).
-    // Simulate an hourly update by running through a full hour cycle.
+    TEST_MESSAGE("Phase 2: add 50 nodes at hops 0-1 and drive the hourly recomputation path.");
     addNodesAtHop(0xA000, 0, 25, 120);
     addNodesAtHop(0xB000, 1, 25, 300);
 
-    // Force hourly recomputation (6 more runs)
+    TEST_MESSAGE("Running six more cycles to force the hourly recomputation.");
     for (int run = 0; run < 6; run++)
         shim->runOnce();
 
     uint8_t hopDense = shim->getLastRequiredHop();
     TEST_MSG_FMT("Phase 2 dense: hop=%u (expect <= 3)", hopDense);
 
-    // With 50 new local nodes, cumulative at hop 1 should exceed 40
+    TEST_MESSAGE("Assertion: added local nodes should reduce required hop below the sparse baseline.");
     TEST_ASSERT_TRUE(hopDense < hopSparse);
     TEST_ASSERT_TRUE(hopDense <= 3);
 
@@ -340,8 +361,9 @@ void test_sparse_to_dense_transition()
 void test_state_persistence()
 {
     TEST_MESSAGE("=== State persistence across restart ===");
+    TEST_MESSAGE("Expectation: eviction-derived state should survive instance teardown and reload.");
 
-    // Phase 1: run with evictions
+    TEST_MESSAGE("Phase 1: accumulate eviction history and save state.");
     {
         auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
         hopScalingModule = shim.get();
@@ -360,7 +382,7 @@ void test_state_persistence()
         hopScalingModule = nullptr;
     }
 
-    // Phase 2: new instance restores state
+    TEST_MESSAGE("Phase 2: create a new module instance and verify restored rolling averages.");
     {
         auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
         hopScalingModule = shim.get();
@@ -377,10 +399,11 @@ void test_state_persistence()
 }
 
 // Scenario H: Early sample flush under load.
-// Large mesh with 96+ unique sampled IDs triggers rollSampleWindow(true).
+// A near-capacity mesh with 96+ unique sampled IDs triggers rollSampleWindow(true).
 void test_early_sample_flush()
 {
     TEST_MESSAGE("=== Early sample flush under load ===");
+    TEST_MESSAGE("Expectation: feeding more than 96 unique sampled IDs triggers an early sample-window roll.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -392,7 +415,7 @@ void test_early_sample_flush()
     for (uint32_t i = 1; i <= 120; i++)
         shim->recordPacketSender(i * 8);
 
-    // Early flush should have fired; run once more for status report
+    TEST_MESSAGE("Running one more cycle after the forced flush to emit updated status.");
     shim->runOnce();
 
     TEST_MSG_FMT("After early flush: hop=%u scale=%.2f", shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
@@ -408,10 +431,11 @@ void test_early_sample_flush()
 void test_hourly_roll()
 {
     TEST_MESSAGE("=== Hourly roll cycle ===");
+    TEST_MESSAGE("Expectation: hourly integration folds evictions and sampled senders into rolling averages.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
-    buildSpreadSuburbanMesh();
+    buildSpreadSparseMesh();
 
     for (int i = 0; i < 12; i++)
         shim->recordEviction();
@@ -437,6 +461,7 @@ void test_hourly_roll()
 void test_intermediate_status()
 {
     TEST_MESSAGE("=== Intermediate status (no recomputation) ===");
+    TEST_MESSAGE("Expectation: runs between hourly updates should leave hop and scale unchanged.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -464,6 +489,7 @@ void test_intermediate_status()
 void test_startup_blank_state()
 {
     TEST_MESSAGE("=== Startup with blank state ===");
+    TEST_MESSAGE("Expectation: a fresh instance starts with zeroed rolling averages and a valid hop result.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -480,6 +506,21 @@ void test_startup_blank_state()
                  (double)shim->getRollingEvictionAverage());
 
     hopScalingModule = nullptr;
+}
+
+// Final scenario summary emitted into the test log for quick CI review.
+void test_scenario_summary_output()
+{
+    TEST_MESSAGE("=== Scenario summary ===");
+    TEST_MESSAGE("Scenario       | Nodes | Distribution                 | Scale | Hop | Why");
+    TEST_MESSAGE("A: Dense local | 110   | 25/30/15/5/10/15/10 h0-6    | 1.0   | 1-2 | 55 nodes at h1 >> 40");
+    TEST_MESSAGE("B: Spread      | 76    | 5/8/12/15/10/6/10/10 h0-7   | 1.0   | 3-4 | Need h3 to reach 40");
+    TEST_MESSAGE("C: Deep chain  | 22    | 2/3/3/4/3/2/2/3 h0-7        | 1.0   | 7   | Never reaches 40");
+    TEST_MESSAGE("D: Repeater    | 71    | 3/5/45/8/3/2/2/3 h0-7       | 1.0   | 2-3 | 45-node hop-2 cluster");
+    TEST_MESSAGE("E: Megamesh    | 199   | 30/40/35/30/20/15/14/15 h0-7 | >1.0 | 0-1 | Scale inflates counts");
+    TEST_MESSAGE("F: Transition  | 22->72 | Chain -> dense local         | 1.0   | 7-><=3 | Adapts to new neighbors");
+    TEST_MESSAGE("G: Persistence | --    | --                           | --    | --  | State survives reboot");
+    TEST_MESSAGE("H: Early flush | 199   | Near-capacity sampled mesh   | --    | --  | Sample tracker overflow");
 }
 
 // ---------------------------------------------------------------------------
@@ -511,7 +552,7 @@ void setup()
     UNITY_BEGIN();
     // Topology-driven hop reduction
     RUN_TEST(test_dense_local_telemetry);
-    RUN_TEST(test_spread_suburban_position);
+    RUN_TEST(test_spread_sparse_position);
     RUN_TEST(test_deep_chain_position);
     RUN_TEST(test_repeater_cluster_telemetry);
     RUN_TEST(test_megamesh_eviction_scaling);
@@ -522,6 +563,7 @@ void setup()
     RUN_TEST(test_hourly_roll);
     RUN_TEST(test_intermediate_status);
     RUN_TEST(test_startup_blank_state);
+    RUN_TEST(test_scenario_summary_output);
     exit(UNITY_END());
 }
 
