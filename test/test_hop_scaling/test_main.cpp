@@ -1,12 +1,6 @@
 #include "TestUtil.h"
 #include <unity.h>
 
-#if defined(ARCH_PORTDUINO)
-#define HS_TEST_ENTRY extern "C"
-#else
-#define HS_TEST_ENTRY
-#endif
-
 #if HAS_VARIABLE_HOPS
 
 #include "gps/RTC.h"
@@ -353,7 +347,7 @@ void tearDown(void)
     hopScalingModule = nullptr;
 }
 
-HS_TEST_ENTRY void setup()
+void setup()
 {
     initializeTestEnvironment();
     nodeDB = mockNodeDB;
@@ -368,20 +362,20 @@ HS_TEST_ENTRY void setup()
     exit(UNITY_END());
 }
 
-HS_TEST_ENTRY void loop() {}
+void loop() {}
 
 #else // !HAS_VARIABLE_HOPS
 
 void setUp(void) {}
 void tearDown(void) {}
 
-HS_TEST_ENTRY void setup()
+void setup()
 {
     initializeTestEnvironment();
     UNITY_BEGIN();
     exit(UNITY_END());
 }
 
-HS_TEST_ENTRY void loop() {}
+void loop() {}
 
 #endif

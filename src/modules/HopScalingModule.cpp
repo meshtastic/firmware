@@ -421,9 +421,11 @@ bool HopScalingModule::checkStableStatus(const Snapshot &snapshot) const
 
 void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyUpdate) const
 {
-    LOG_INFO("[HOPSCALE] status mode=%u hourly=%u hop=%u actWt=%.2f polite=%.2f scale=%.2f evict/h=%.1f sampledEst=%u sampling 1 "
+    static const char *const modeNames[] = {"STARTUP", "STABLE", "EVICTION", "SAMPLED", "FALLBACK"};
+    const char *modeName = (lastStatusMode < sizeof(modeNames) / sizeof(modeNames[0])) ? modeNames[lastStatusMode] : "?";
+    LOG_INFO("[HOPSCALE] status mode=%s hourly=%u hop=%u actWt=%.2f polite=%.2f scale=%.2f evict/h=%.1f sampledEst=%u sampling 1 "
              "in %u n1=%u n2=%u n3=%u n12=%u",
-             lastStatusMode, didHourlyUpdate ? 1 : 0, lastRequiredHop, static_cast<double>(lastActivityWeight),
+             modeName, didHourlyUpdate ? 1 : 0, lastRequiredHop, static_cast<double>(lastActivityWeight),
              static_cast<double>(lastPolitenessFactor), static_cast<double>(lastScaleFactor),
              static_cast<double>(rollingEvictionAvg12h), lastSampledEstimate, SAMPLING_DENOMINATOR, snapshot.recent1h.total,
              snapshot.recent1h.total + snapshot.old1hFrom2h.total,
