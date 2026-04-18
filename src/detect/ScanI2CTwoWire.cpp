@@ -589,21 +589,21 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 {
                     // T-Deck pro V1.1 new touch panel use CST3530
                     int retry = 5;
-                    while(retry--) {
+                    while (retry--) {
                         uint8_t buffer[7];
-                        uint8_t r_cmd[] = {0x0d0,0x03,0x00,0x00};
+                        uint8_t r_cmd[] = {0x0d0, 0x03, 0x00, 0x00};
                         i2cBus->beginTransmission(addr.address);
                         i2cBus->write(r_cmd, sizeof(r_cmd));
-                        if(i2cBus->endTransmission() == 0){
-                            i2cBus->requestFrom((int)addr.address,7);
-                            i2cBus->readBytes(buffer,7);
-                            if(buffer[2] == 0xCA && buffer[3] == 0xCA){
+                        if (i2cBus->endTransmission() == 0) {
+                            i2cBus->requestFrom((int)addr.address, 7);
+                            i2cBus->readBytes(buffer, 7);
+                            if (buffer[2] == 0xCA && buffer[3] == 0xCA) {
                                 logFoundDevice("CST3530", (uint8_t)addr.address);
                                 type = CST3530;
                                 break;
                             }
                         }
-                        uint8_t cmd1[] = {0xD0,0x00,0x04,0x00};
+                        uint8_t cmd1[] = {0xD0, 0x00, 0x04, 0x00};
                         i2cBus->beginTransmission(addr.address);
                         i2cBus->write(cmd1, sizeof(cmd1));
                         i2cBus->endTransmission();

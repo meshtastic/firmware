@@ -10,13 +10,14 @@ CSE_CST328 tsPanel = CSE_CST328(EINK_WIDTH, EINK_HEIGHT, &Wire, CST328_PIN_RST, 
 
 static bool is_cst3530 = false;
 volatile bool touch_isr = false;
-#define CST3530_ADDR        0x1A
+#define CST3530_ADDR 0x1A
 
-bool read_cst3530_touch(int16_t *x, int16_t *y) {
+bool read_cst3530_touch(int16_t *x, int16_t *y)
+{
     uint8_t buffer[9] = {0};
     uint8_t r_cmd[] = {0xD0, 0x07, 0x00, 0x00};
-    uint8_t clear_cmd[] = {0xD0, 0x00, 0x02, 0xAB}; 
-    
+    uint8_t clear_cmd[] = {0xD0, 0x00, 0x02, 0xAB};
+
     Wire.beginTransmission(CST3530_ADDR);
     Wire.write(r_cmd, sizeof(r_cmd));
     if (Wire.endTransmission() != 0) {
@@ -41,13 +42,13 @@ bool read_cst3530_touch(int16_t *x, int16_t *y) {
     }
 
     uint8_t touch_points = buffer[3] & 0x0F;
-    if (touch_points == 0 || touch_points > 1) { 
+    if (touch_points == 0 || touch_points > 1) {
         LOG_DEBUG("CST3530 touch points invalid: %d", touch_points);
         return false;
     }
 
-    *x = buffer[4] + ((uint16_t)(buffer[7] & 0x0F) << 8); 
-    *y = buffer[5] + ((uint16_t)(buffer[7] & 0xF0) << 4); 
+    *x = buffer[4] + ((uint16_t)(buffer[7] & 0x0F) << 8);
+    *y = buffer[5] + ((uint16_t)(buffer[7] & 0xF0) << 4);
 
     // LOG_DEBUG("CST3530 touch: num:%d x=%d,y=%d", touch_points, *x, *y);
 
@@ -63,13 +64,13 @@ bool read_cst3530_touch(int16_t *x, int16_t *y) {
 bool readTouch(int16_t *x, int16_t *y)
 {
 
-    if(is_cst3530){
-        if(touch_isr){
+    if (is_cst3530) {
+        if (touch_isr) {
             touch_isr = false;
             return read_cst3530_touch(x, y);
         }
         return false;
-    }else{
+    } else {
         if (tsPanel.getTouches()) {
             *x = tsPanel.getPoint(0).x;
             *y = tsPanel.getPoint(0).y;
@@ -79,8 +80,8 @@ bool readTouch(int16_t *x, int16_t *y)
     return false;
 }
 
-
-static void IRAM_ATTR touchInterruptHandler(){
+static void IRAM_ATTR touchInterruptHandler()
+{
     touch_isr = true;
 }
 
@@ -98,30 +99,30 @@ void lateInitVariant()
 
     int retry = 5;
     uint8_t buffer[7];
-    uint8_t r_cmd[] = {0x0d0,0x03,0x00,0x00};
+    uint8_t r_cmd[] = {0x0d0, 0x03, 0x00, 0x00};
 
     // Probe touch chip
-    while(retry--) {
+    while (retry--) {
         Wire.beginTransmission(CST3530_ADDR);
         Wire.write(r_cmd, sizeof(r_cmd));
-        if(Wire.endTransmission() == 0){
-            Wire.requestFrom((int)CST3530_ADDR,7);
-            Wire.readBytes(buffer,7);
-            if(buffer[2] == 0xCA && buffer[3] == 0xCA){
+        if (Wire.endTransmission() == 0) {
+            Wire.requestFrom((int)CST3530_ADDR, 7);
+            Wire.readBytes(buffer, 7);
+            if (buffer[2] == 0xCA && buffer[3] == 0xCA) {
                 LOG_DEBUG("CST3530 detected");
                 is_cst3530 = true;
 
-                // The CST3530 will automatically enter sleep mode; 
-                // polling should not be used, but rather an interrupt method should be employed. 
+                // The CST3530 will automatically enter sleep mode;
+                // polling should not be used, but rather an interrupt method should be employed.
                 pinMode(CST328_PIN_INT, INPUT);
                 attachInterrupt(digitalPinToInterrupt(CST328_PIN_INT), touchInterruptHandler, FALLING);
 
                 break;
-            }else{
+            } else {
                 LOG_DEBUG("CST3530 not response ~!");
             }
         }
-        uint8_t cmd1[] = {0xD0,0x00,0x04,0x00};
+        uint8_t cmd1[] = {0xD0, 0x00, 0x04, 0x00};
         Wire.beginTransmission(CST3530_ADDR);
         Wire.write(cmd1, sizeof(cmd1));
         Wire.endTransmission();
