@@ -1205,7 +1205,7 @@ void Screen::setFrames(FrameFocus focus)
         if (!UIRenderer::favoritedNodes.empty()) {
             fsi.positions.firstFavorite = numframes;
             for (size_t i = 0; i < UIRenderer::favoritedNodes.size(); ++i) {
-                normalFrames[numframes++] = graphics::UIRenderer::drawNodeInfo;
+                normalFrames[numframes++] = graphics::UIRenderer::drawFavoriteNode;
                 indicatorIcons.push_back(icon_node);
             }
             fsi.positions.lastFavorite = numframes - 1;
@@ -1226,7 +1226,7 @@ void Screen::setFrames(FrameFocus focus)
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
-    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list just changed)
+    prevFrame = -1; // Force drawFavoriteNode to pick a new node (because our list just changed)
 
     // Focus on a specific frame, in the frame set we just created
     switch (focus) {

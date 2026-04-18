@@ -301,10 +301,12 @@ jobs:
         id: release_notes
         run: |
           chmod +x ./bin/generate_release_notes.py
-          NOTES=$(./bin/generate_release_notes.py ${{ needs.version.outputs.long }})
+          NOTES=$(./bin/generate_release_notes.py ${{ needs.version.outputs.long }} --compare-ref HEAD 2>release_notes.log)
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          echo "### Release note range" >> $GITHUB_STEP_SUMMARY
+          cat release_notes.log >> $GITHUB_STEP_SUMMARY
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -466,7 +468,7 @@ jobs:
       - name: Generate release notes
         run: |
           chmod +x ./bin/generate_release_notes.py
-          ./bin/generate_release_notes.py ${{ needs.version.outputs.long }} > ./publish/release_notes.md
+          ./bin/generate_release_notes.py ${{ needs.version.outputs.long }} --compare-ref HEAD > ./publish/release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
