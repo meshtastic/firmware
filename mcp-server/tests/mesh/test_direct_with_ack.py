@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from meshtastic_mcp.connection import connect
 
-from ._receive import ReceiveCollector
+from ._receive import ReceiveCollector, nudge_nodeinfo
 
 
 @pytest.mark.timeout(240)
@@ -44,24 +44,37 @@ def test_direct_with_ack_roundtrip(
     #   SerialInterface immediately after sendText() races that retry loop —
     #   empirically the packet never reaches RX.
     #
-    # Why we ping RX for a fresh NodeInfo before polling:
+    # Why we ping BOTH RX and TX for a fresh NodeInfo before polling:
     #   Directed packets are PKI-encrypted with the destination's public key.
-    #   After a factory_reset or reboot, a peer's entry in the sender's
-    #   nodeDB can still contain that peer's OLD public key — a directed
-    #   send then fails with Routing.Error=39 (PKI_SEND_FAIL_PUBLIC_KEY) or
-    #   decryption fails on the receiver side. NodeInfo broadcasts are the
-    #   sole source of fresh pubkeys, and firmware rate-limits them to
-    #   every 10 min organically. ToRadio.heartbeat(nonce=1) bypasses that
-    #   — it triggers an on-demand NodeInfo broadcast via
-    #   `src/mesh/PhoneAPI.cpp::handleToRadio` (serial) and
-    #   `src/mesh/api/PacketAPI.cpp::handlePacket` (TCP/UDP), both sharing
-    #   the 60s shorterTimeout path in `src/modules/NodeInfoModule.cpp`.
-    #   After ping, poll TX's nodesByNum until publicKey propagates, then
-    #   send. A small retry loop guards against transient LoRa collisions.
+    #   The ENCRYPT path needs TX to hold RX's current pubkey; the DECRYPT
+    #   path needs RX to hold TX's current pubkey. After a factory_reset or
+    #   reboot, either side's nodeDB entry for the other can still carry
+    #   a stale pubkey — directed sends then NAK with Routing.Error=35
+    #   (PKI_UNKNOWN_PUBKEY, receiver can't decrypt) or 39
+    #   (PKI_SEND_FAIL_PUBLIC_KEY, sender has no pubkey at all). NodeInfo
+    #   broadcasts are the sole source of fresh pubkeys and the firmware
+    #   rate-limits them to every 10 min. ToRadio.heartbeat(nonce=1)
+    #   bypasses that via the 60-s shorterTimeout path
+    #   (`src/mesh/PhoneAPI.cpp::handleToRadio` for serial,
+    #   `src/mesh/api/PacketAPI.cpp::handlePacket` for TCP/UDP, both
+    #   calling `NodeInfoModule::sendOurNodeInfo(..., true)`).
+    #
+    #   Earlier revisions of this test only nudged RX — which covers the
+    #   common case of a recently-baked RX whose TX doesn't know its new
+    #   key yet. But when the OPPOSITE side is the one with stale state
+    #   (RX holds an old TX pubkey), the test would silently fail with
+    #   err=35 in the firmware log. Bilateral nudge eliminates that blind
+    #   spot. Poll TX's nodesByNum for RX's publicKey as a proxy for "the
+    #   exchange has propagated"; a matching symmetry on RX's side is
+    #   implied by the firmware's NodeInfo-on-receipt update path.
     with ReceiveCollector(rx_port, topic="meshtastic.receive.text") as rx:
         rx.broadcast_nodeinfo_ping()
 
         with connect(port=tx_port) as tx_iface:
+            # Bilateral warmup: nudge TX to broadcast too, so RX's nodeDB
+            # also gets refreshed with TX's current pubkey.
+            nudge_nodeinfo(tx_iface)
+
             pk_deadline = time.monotonic() + 45.0
             last_nudge = time.monotonic()
             last_rec: dict[str, Any] = {}
@@ -70,10 +83,13 @@ def test_direct_with_ack_roundtrip(
                 user = last_rec.get("user", {})
                 if user.get("publicKey"):
                     break
-                # Re-nudge every 15s in case the first NodeInfo was lost to
-                # a LoRa collision with concurrent traffic.
+                # Re-nudge every 15s in case the first NodeInfo broadcast
+                # was lost to a LoRa collision with concurrent traffic. Both
+                # sides re-broadcast for the same reason they were nudged
+                # initially — stale pubkeys can live on either side.
                 if time.monotonic() - last_nudge > 15.0:
                     rx.broadcast_nodeinfo_ping()
+                    nudge_nodeinfo(tx_iface)
                     last_nudge = time.monotonic()
                 time.sleep(1.0)
             else:

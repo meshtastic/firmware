@@ -7,6 +7,18 @@ accessible through `meshtastic.SerialInterface`'s pubsub mechanism.
 `ReceiveCollector` opens a long-lived SerialInterface on a port, subscribes
 to the pubsub topic of interest, and exposes an atomic `wait_for(predicate)`
 that mesh tests use to verify end-to-end delivery.
+
+This module also exposes two module-level helpers for forcing a device to
+broadcast a fresh NodeInfo — the on-demand path that sidesteps the
+firmware's 10-minute NodeInfo rate-limit. Tests doing directed PKI-encrypted
+sends need BOTH endpoints to hold current pubkeys for each other:
+
+    nudge_nodeinfo(iface)    # nudge an already-open SerialInterface
+    nudge_nodeinfo_port(port) # open briefly, nudge, close
+
+See `ReceiveCollector.broadcast_nodeinfo_ping` for the firmware-side
+rationale (PKI staleness → directed sends NAK with Routing.Error=35
+PKI_UNKNOWN_PUBKEY or 39 PKI_SEND_FAIL_PUBLIC_KEY).
 """
 
 from __future__ import annotations
@@ -14,6 +26,39 @@ from __future__ import annotations
 import threading
 import time
 from typing import Any, Callable
+
+
+def nudge_nodeinfo(iface: Any) -> None:
+    """Force the device behind ``iface`` to broadcast a fresh NodeInfo.
+
+    Sends a ``ToRadio.Heartbeat(nonce=1)`` — the firmware's documented
+    on-demand NodeInfo trigger (see `src/mesh/api/PacketAPI.cpp:74-79`
+    for TCP/UDP and `src/mesh/PhoneAPI.cpp::handleToRadio` for serial,
+    both routed to `NodeInfoModule::sendOurNodeInfo(..., shorterTimeout=true)`
+    with the 60-s window rather than the 10-min rate-limit).
+
+    Call on BOTH TX and RX ifaces before a directed PKI-encrypted send.
+    Nudging only one side leaves the other with a stale pubkey cache and
+    makes the directed send NAK with PKI_UNKNOWN_PUBKEY.
+    """
+    from meshtastic.protobuf import mesh_pb2  # type: ignore[import-untyped]
+
+    tr = mesh_pb2.ToRadio()
+    tr.heartbeat.nonce = 1
+    iface._sendToRadio(tr)
+
+
+def nudge_nodeinfo_port(port: str) -> None:
+    """Open ``port`` briefly, nudge, close — for when no iface is open yet.
+
+    Uses the meshtastic_mcp port-lock-aware `connect()` context manager
+    so we don't race ReceiveCollector or other long-lived handles on
+    the same port.
+    """
+    from meshtastic_mcp.connection import connect
+
+    with connect(port=port) as iface:
+        nudge_nodeinfo(iface)
 
 
 class ReceiveCollector:
@@ -139,29 +184,18 @@ class ReceiveCollector:
     def broadcast_nodeinfo_ping(self) -> None:
         """Force the firmware on `port` to broadcast a fresh NodeInfo.
 
-        Why this exists: firmware rate-limits NodeInfo broadcasts to every
-        10 min (and 12 h for reply suppression). After a reboot, an existing
-        cooldown window can leave peers with a stale nodesByNum entry that
-        lacks `publicKey`, which makes directed PKI-encrypted sends fail
-        with Routing.Error=39 (PKI_SEND_FAIL_PUBLIC_KEY). But a ToRadio
-        `Heartbeat` with `nonce == 1` is treated as a special "nodeinfo
-        ping" trigger in `src/mesh/api/PacketAPI.cpp:74-79`:
+        Thin wrapper around the module-level :func:`nudge_nodeinfo` that
+        also validates the context-manager invariant. Delegates so tests
+        that need to nudge BOTH sides (bilateral PKI warmup) share one
+        implementation — the caller just passes each iface in turn.
 
-            if (mr->heartbeat.nonce == 1) {
-                nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true);
-            }
-
-        The trailing `true` puts it on the 60-second shorterTimeout path
-        rather than the 10-minute one — so tests can force a fresh NodeInfo
-        broadcast (with public key) on demand.
+        Firmware-side details (rate-limit bypass, nonce==1 trigger path,
+        shorterTimeout=true window) are documented on the module-level
+        helper.
         """
-        from meshtastic.protobuf import mesh_pb2  # type: ignore[import-untyped]
-
         if self._iface is None:
             raise RuntimeError("ReceiveCollector not started; use as context manager")
-        tr = mesh_pb2.ToRadio()
-        tr.heartbeat.nonce = 1
-        self._iface._sendToRadio(tr)
+        nudge_nodeinfo(self._iface)
 
     def wait_for(
         self,

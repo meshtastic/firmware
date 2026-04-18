@@ -27,8 +27,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
-from typing import TextIO
+from typing import Sequence, TextIO
 
 from . import config
 
