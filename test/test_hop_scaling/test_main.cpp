@@ -95,8 +95,9 @@ static void buildDenseLocalMesh()
     addNodesAtHop(0x6000, 5, 15, 2400); //  15 nodes at hop 5, ~40 min old
     addNodesAtHop(0x7000, 6, 10, 3000); //  10 nodes at hop 6, ~50 min old
     // Total: 110 nodes. Cumulative at hop 1: 25+30=55 > 40 → expect baseHop=1.
-    // Politeness extension: 55*1.25=68.75, extending to hop 2 adds 15 → 70 > 68.75 → no extend.
-    // With generous politeness (quiet mesh): 55*2.0=110, 70 < 110 → extend to hop 2.
+    // Politeness extension uses the 40-node floor: limit = 40*polite.
+    // Strict: 40*1.25=50, Default: 40*1.5=60, Generous: 40*2=80; extending to hop 2 gives 70.
+    // So only generous extends to hop 2.
 }
 
 // Scenario B: Spread sparse mesh — nodes distributed across hops 0–7.
@@ -138,7 +139,7 @@ static void buildDeepLinearChain()
 // Scenario D: Concentrated hop-2 cluster — simulates a router-heavy setup
 // where most nodes are exactly 2 hops away (common with hilltop routers).
 // Expected: hop 2 (cumulative at hop 2 exceeds 40).
-static void buildRepeaterCluster()
+static void buildRouterCluster()
 {
     mockNodeDB->clearTestNodes();
     addNodesAtHop(0x1000, 0, 3, 120);  //  3 at hop 0 (local)
@@ -150,8 +151,9 @@ static void buildRepeaterCluster()
     addNodesAtHop(0x7000, 6, 2, 2400); // 2 at hop 6
     addNodesAtHop(0x8000, 7, 3, 3600); // 3 at hop 7
     // Total: 71. Cumulative: h0=3, h1=8, h2=53 > 40 → baseHop=2.
-    // Politeness: extending to hop 3 → 61; limit=53*polite.
-    // Strict: 53*1.25=66.25, 61<66 → extend. Default: 53*1.5=79.5, 61<79 → extend.
+    // Politeness uses the 40-node floor: extending to hop 3 gives 61.
+    // Strict: 40*1.25=50, Default: 40*1.5=60, Generous: 40*2=80.
+    // So only generous extends to hop 3.
 }
 
 // Scenario E: Megamesh with high eviction turnover.
@@ -184,7 +186,7 @@ void test_dense_local_telemetry()
 {
     TEST_MESSAGE("=== Dense local mesh: telemetry broadcast ===");
     TEST_MESSAGE("Topology: 110 nodes with 25/30/15 nodes at hops 0/1/2 and a thinner tail to hop 6.");
-    TEST_MESSAGE("Expectation: cumulative reaches 55 nodes by hop 1, so required hop should stay near 1-2.");
+    TEST_MESSAGE("Expectation: cumulative reaches 55 nodes by hop 1, and only generous politeness extends to hop 2.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
@@ -250,24 +252,24 @@ void test_deep_chain_position()
     hopScalingModule = nullptr;
 }
 
-// Scenario D: Repeater cluster — telemetry broadcast.
-// 71 nodes, 45 of which sit behind repeaters at hop 2. Cumulative at hop 2 = 53.
+// Scenario D: Router cluster — telemetry broadcast.
+// 71 nodes, 45 of which sit behind routers at hop 2. Cumulative at hop 2 = 53.
 // A telemetry packet generally needs 2-3 hops here.
-void test_repeater_cluster_telemetry()
+void test_router_cluster_telemetry()
 {
-    TEST_MESSAGE("=== Repeater cluster: telemetry broadcast ===");
+    TEST_MESSAGE("=== Router cluster: telemetry broadcast ===");
     TEST_MESSAGE("Topology: 71 nodes with a concentrated 45-node cluster at hop 2 behind a small router layer.");
-    TEST_MESSAGE("Expectation: cumulative reaches 53 at hop 2 and politeness commonly extends to hop 3.");
+    TEST_MESSAGE("Expectation: cumulative reaches 53 at hop 2; only generous politeness extends to hop 3.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
-    buildRepeaterCluster();
+    buildRouterCluster();
 
     shim->runOnce();
 
-    TEST_MSG_FMT("Repeater cluster: hop=%u scale=%.2f", shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
+    TEST_MSG_FMT("Router cluster: hop=%u scale=%.2f", shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
 
-    TEST_MESSAGE("Assertion: result should stay in the 2-4 range for this repeater-backed topology.");
+    TEST_MESSAGE("Assertion: result should stay in the 2-4 range for this router-backed topology.");
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() >= 2);
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= 4);
 
@@ -465,7 +467,7 @@ void test_intermediate_status()
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
-    buildRepeaterCluster();
+    buildRouterCluster();
 
     shim->runOnce();
     uint8_t hopAfterInitial = shim->getLastRequiredHop();
@@ -516,7 +518,7 @@ void test_scenario_summary_output()
     TEST_MESSAGE("A: Dense local | 110   | 25/30/15/5/10/15/10 h0-6    | 1.0   | 1-2 | 55 nodes at h1 >> 40");
     TEST_MESSAGE("B: Spread      | 76    | 5/8/12/15/10/6/10/10 h0-7   | 1.0   | 3-4 | Need h3 to reach 40");
     TEST_MESSAGE("C: Deep chain  | 22    | 2/3/3/4/3/2/2/3 h0-7        | 1.0   | 7   | Never reaches 40");
-    TEST_MESSAGE("D: Repeater    | 71    | 3/5/45/8/3/2/2/3 h0-7       | 1.0   | 2-3 | 45-node hop-2 cluster");
+    TEST_MESSAGE("D: Router      | 71    | 3/5/45/8/3/2/2/3 h0-7       | 1.0   | 2-3 | 45-node hop-2 cluster");
     TEST_MESSAGE("E: Megamesh    | 199   | 30/40/35/30/20/15/14/15 h0-7 | >1.0 | 0-1 | Scale inflates counts");
     TEST_MESSAGE("F: Transition  | 22->72 | Chain -> dense local         | 1.0   | 7-><=3 | Adapts to new neighbors");
     TEST_MESSAGE("G: Persistence | --    | --                           | --    | --  | State survives reboot");
@@ -554,7 +556,7 @@ void setup()
     RUN_TEST(test_dense_local_telemetry);
     RUN_TEST(test_spread_sparse_position);
     RUN_TEST(test_deep_chain_position);
-    RUN_TEST(test_repeater_cluster_telemetry);
+    RUN_TEST(test_router_cluster_telemetry);
     RUN_TEST(test_megamesh_eviction_scaling);
     RUN_TEST(test_sparse_to_dense_transition);
     // Storage and lifecycle

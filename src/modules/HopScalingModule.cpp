@@ -27,7 +27,7 @@ constexpr uint8_t RUNS_PER_HOUR = 6;                   // 6 x 10-minute runs = 1
 // Hop recommendation: cumulative node target before constraining hops
 constexpr uint16_t TARGET_AFFECTED_NODES = 40;
 
-// Politeness factors: max ratio of (nodes at hop+1) / (nodes at hop 0..base)
+// Politeness factors: multiplier applied to the 40-node floor when deciding one-hop extension.
 constexpr float POLITENESS_GENEROUS = 2.0f; // Quiet mesh: allow doubling
 constexpr float POLITENESS_DEFAULT = 1.5f;  // Stable mesh: allow 50% growth
 constexpr float POLITENESS_STRICT = 1.25f;  // Busy mesh: allow 25% growth
@@ -473,7 +473,7 @@ uint8_t HopScalingModule::computeRequiredHop(const Snapshot &snapshot, float sca
 
     if (baseHop < HOP_MAX) {
         const uint32_t affectedIfExtend = affectedNodes + affectedNodesPerHop[baseHop + 1];
-        const float politeLimit = affectedNodes * politenessFactor;
+        const float politeLimit = TARGET_AFFECTED_NODES * politenessFactor;
         if (affectedIfExtend <= politeLimit) {
             baseHop++;
         }
