@@ -447,15 +447,17 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     // Add extra spacing on the left if we have an API connection to account for the common footer icons
     const char *leftSideSpacing =
         graphics::isAPIConnected(service->api_state) ? (currentResolution == ScreenResolution::High ? "     " : "   ") : " ";
+    const bool isZeroHop = node->has_hops_away && node->hops_away == 0;
+    const bool hasNonZeroHops = node->has_hops_away && node->hops_away > 0;
 
     // --- Build the Signal/Hops line ---
-    // Only show signal if we have valid SNR
-    if (snr > -100 && snr != 0) {
+    // Only show signal for zero hop node with valid SNR.
+    if (isZeroHop && snr > -100 && snr != 0) {
         snprintf(signalHopsStr, sizeof(signalHopsStr), "%sSig:%s", leftSideSpacing, qualityLabel);
         haveSignal = true;
     }
 
-    if (node->hops_away > 0) {
+    if (hasNonZeroHops) {
         size_t len = strlen(signalHopsStr);
         if (haveSignal) {
             snprintf(signalHopsStr + len, sizeof(signalHopsStr) - len, " [#]");
@@ -533,7 +535,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
         }
 
         // Draw hops AFTER the bars as: [ number + hop icon ]
-        if (hopPart && node->hops_away > 0) {
+        if (hopPart && hasNonZeroHops) {
 
             // open bracket
             display->drawString(curX, yPos, "[");
