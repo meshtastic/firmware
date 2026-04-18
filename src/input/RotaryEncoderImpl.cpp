@@ -1,4 +1,4 @@
-#ifdef T_LORA_PAGER
+ #ifdef T_LORA_PAGER
 
 #include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
@@ -95,34 +95,34 @@ void RotaryEncoderImpl::pollOnce()
     }
 }
 
-void RotaryEncoderImpl::detachRotaryEncoderInterrupts()
-{
-    LOG_DEBUG("RotaryEncoderImpl detach button interrupts");
-    if (interruptInstance == this) {
-        detachInterrupt(moduleConfig.canned_message.inputbroker_pin_a);
-        detachInterrupt(moduleConfig.canned_message.inputbroker_pin_b);
-        detachInterrupt(moduleConfig.canned_message.inputbroker_pin_press);
-        interruptInstance = nullptr;
-    } else {
-        LOG_WARN("RotaryEncoderImpl: interrupts already detached");
-    }
-}
-
-void RotaryEncoderImpl::attachRotaryEncoderInterrupts()
-{
-    LOG_DEBUG("RotaryEncoderImpl attach button interrupts");
-    if (rotary != nullptr && interruptInstance == nullptr) {
-        rotary->resetButton();
-
-        interruptInstance = this;
-        auto interruptHandler = []() { inputBroker->requestPollSoon(interruptInstance); };
-        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_a, interruptHandler, CHANGE);
-        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_b, interruptHandler, CHANGE);
-        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_press, interruptHandler, CHANGE);
-    } else {
-        LOG_WARN("RotaryEncoderImpl: interrupts already attached");
-    }
-}
+//void RotaryEncoderImpl::detachRotaryEncoderInterrupts()
+//{
+//    LOG_DEBUG("RotaryEncoderImpl detach button interrupts");
+//    if (interruptInstance == this) {
+//        detachInterrupt(moduleConfig.canned_message.inputbroker_pin_a);
+//        detachInterrupt(moduleConfig.canned_message.inputbroker_pin_b);
+//        detachInterrupt(moduleConfig.canned_message.inputbroker_pin_press);
+//        interruptInstance = nullptr;
+//    } else {
+//        LOG_WARN("RotaryEncoderImpl: interrupts already detached");
+//    }
+//}
+//
+//void RotaryEncoderImpl::attachRotaryEncoderInterrupts()
+//{
+//    LOG_DEBUG("RotaryEncoderImpl attach button interrupts");
+//    if (rotary != nullptr && interruptInstance == nullptr) {
+//        rotary->resetButton();
+//
+//        interruptInstance = this;
+//        auto interruptHandler = []() { inputBroker->requestPollSoon(interruptInstance); };
+//        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_a, interruptHandler, CHANGE);
+//        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_b, interruptHandler, CHANGE);
+//        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_press, interruptHandler, CHANGE);
+//    } else {
+//        LOG_WARN("RotaryEncoderImpl: interrupts already attached");
+//    }
+//}
 
 #ifdef ARCH_ESP32
 
