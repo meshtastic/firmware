@@ -394,6 +394,73 @@ def hub_devices(hub_profile: dict[str, dict[str, Any]]) -> dict[str, str]:
     return resolved
 
 
+def _reset_transmit_history_state(role: str, port: str) -> str:
+    """Wipe `/prefs/transmit_history.dat` + in-memory throttle cache via
+    delete_file_request + reboot. Returns the post-reboot port (nRF52
+    re-enumerates). Best-effort — errors log to stderr + return original
+    port so a flaky start doesn't block the session.
+    """
+    from ._port_discovery import resolve_port_by_role
+
+    try:
+        from meshtastic.protobuf import admin_pb2  # type: ignore[import-untyped]
+        from meshtastic_mcp.connection import connect
+
+        with connect(port=port) as iface:
+            msg = admin_pb2.AdminMessage()
+            msg.delete_file_request = "/prefs/transmit_history.dat"
+            iface.localNode._sendAdmin(msg)
+            time.sleep(1.0)
+            # Reboot clears in-memory cache; otherwise the 5-min auto-flush
+            # rewrites the file with pre-reset timestamps.
+            iface.localNode.reboot(3)
+    except Exception as exc:
+        print(
+            f"[transmit-history-reset] {role} @ {port} clear failed: {exc!r}",
+            file=sys.stderr,
+        )
+        return port
+
+    time.sleep(8.0)
+    try:
+        fresh = resolve_port_by_role(role, timeout_s=45.0)
+    except Exception as exc:
+        print(
+            f"[transmit-history-reset] {role} didn't reappear: {exc!r}",
+            file=sys.stderr,
+        )
+        return port
+    for _ in range(20):
+        try:
+            if info.device_info(port=fresh, timeout_s=5.0).get("my_node_num"):
+                return fresh
+        except Exception:
+            time.sleep(1.5)
+    return fresh
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _session_clear_transmit_history(hub_devices: dict[str, str]) -> None:
+    """Wipe transmit_history.dat on each device at session start.
+
+    Without this, the firmware's per-portnum last-broadcast cache
+    (`src/mesh/TransmitHistory.h`) carries throttle state across sessions
+    and suppresses early broadcasts. Mutates `hub_devices` in place with
+    post-reboot ports since nRF52 re-enumerates.
+    """
+    if not hub_devices:
+        yield
+        return
+    # Iterate over a snapshot — _reset_transmit_history_state can mutate
+    # hub_devices mid-loop via the update below, and dict-iteration isn't
+    # safe during mutation.
+    for role, port in list(hub_devices.items()):
+        fresh_port = _reset_transmit_history_state(role, port)
+        if fresh_port != port:
+            hub_devices[role] = fresh_port
+    yield
+
+
 @pytest.fixture(scope="session")
 def baked_mesh(
     hub_devices: dict[str, str],
