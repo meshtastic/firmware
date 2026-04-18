@@ -110,7 +110,7 @@ static const uint8_t A0 = PIN_A0;
 #define LR1110_SPI_MOSI_PIN LORA_MOSI
 #define LR1110_SPI_MISO_PIN LORA_MISO
 
-#define LR11X0_DIO3_TCXO_VOLTAGE 1.6
+#define LR11X0_TCXO_VOLTAGE 1.6
 #define LR11X0_DIO_AS_RF_SWITCH
 
 // Peripherals on I2C bus. Active Low
