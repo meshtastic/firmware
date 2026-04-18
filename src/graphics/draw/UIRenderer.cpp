@@ -420,30 +420,6 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
         }
     };
 
-    // Calculate signal grade using modem preset and SNR only
-    float snrLimit = getSnrLimit(config.lora.modem_preset);
-    float snr = node->snr;
-
-    // Determine signal quality label and bars using SNR-only grading
-    const char *qualityLabel = nullptr;
-
-    if (snr > snrLimit + 10) {
-        qualityLabel = "Good";
-        bars = 4;
-    } else if (snr > snrLimit + 6) {
-        qualityLabel = "Good";
-        bars = 3;
-    } else if (snr > snrLimit + 2) {
-        qualityLabel = "Good";
-        bars = 2;
-    } else if (snr > snrLimit - 4) {
-        qualityLabel = "Fair";
-        bars = 1;
-    } else {
-        qualityLabel = "Bad";
-        bars = 1;
-    }
-
     // Add extra spacing on the left if we have an API connection to account for the common footer icons
     const char *leftSideSpacing =
         graphics::isAPIConnected(service->api_state) ? (currentResolution == ScreenResolution::High ? "     " : "   ") : " ";
@@ -451,18 +427,42 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     const bool hasNonZeroHops = node->has_hops_away && node->hops_away > 0;
 
     // --- Build the Signal/Hops line ---
-    // Only show signal for zero hop node with valid SNR.
-    if (isZeroHop && snr > -100 && snr != 0) {
-        snprintf(signalHopsStr, sizeof(signalHopsStr), "%sSig:%s", leftSideSpacing, qualityLabel);
-        haveSignal = true;
+    // Only show signal for zero-hop nodes with valid SNR.
+    if (isZeroHop) {
+        float snr = node->snr;
+        if (snr > -100 && snr != 0) {
+            float snrLimit = getSnrLimit(config.lora.modem_preset);
+            const char *qualityLabel = nullptr;
+
+            // Determine signal quality label and bars using SNR-only grading.
+            if (snr > snrLimit + 10) {
+                qualityLabel = "Good";
+                bars = 4;
+            } else if (snr > snrLimit + 6) {
+                qualityLabel = "Good";
+                bars = 3;
+            } else if (snr > snrLimit + 2) {
+                qualityLabel = "Good";
+                bars = 3;
+            } else if (snr > snrLimit - 4) {
+                qualityLabel = "Fair";
+                bars = 2;
+            } else {
+                qualityLabel = "Bad";
+                bars = 1;
+            }
+
+            snprintf(signalHopsStr, sizeof(signalHopsStr), "%sSig:%s", leftSideSpacing, qualityLabel);
+            haveSignal = true;
+        }
     }
 
     if (hasNonZeroHops) {
         size_t len = strlen(signalHopsStr);
         if (haveSignal) {
-            snprintf(signalHopsStr + len, sizeof(signalHopsStr) - len, " [#]");
+            snprintf(signalHopsStr + len, sizeof(signalHopsStr) - len, " Hop:[#]");
         } else {
-            snprintf(signalHopsStr, sizeof(signalHopsStr), "[#]");
+            snprintf(signalHopsStr, sizeof(signalHopsStr), "%sHop:[#]", leftSideSpacing);
         }
     }
 
