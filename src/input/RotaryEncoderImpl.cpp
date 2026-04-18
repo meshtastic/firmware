@@ -95,8 +95,8 @@ void RotaryEncoderImpl::pollOnce()
     }
 }
 
-//void RotaryEncoderImpl::detachRotaryEncoderInterrupts()
-//{
+void RotaryEncoderImpl::detachRotaryEncoderInterrupts()
+{
 //    LOG_DEBUG("RotaryEncoderImpl detach button interrupts");
 //    if (interruptInstance == this) {
 //        detachInterrupt(moduleConfig.canned_message.inputbroker_pin_a);
@@ -106,10 +106,10 @@ void RotaryEncoderImpl::pollOnce()
 //    } else {
 //        LOG_WARN("RotaryEncoderImpl: interrupts already detached");
 //    }
-//}
+}
 //
-//void RotaryEncoderImpl::attachRotaryEncoderInterrupts()
-//{
+void RotaryEncoderImpl::attachRotaryEncoderInterrupts()
+{
 //    LOG_DEBUG("RotaryEncoderImpl attach button interrupts");
 //    if (rotary != nullptr && interruptInstance == nullptr) {
 //        rotary->resetButton();
@@ -122,7 +122,7 @@ void RotaryEncoderImpl::pollOnce()
 //    } else {
 //        LOG_WARN("RotaryEncoderImpl: interrupts already attached");
 //    }
-//}
+}
 
 #ifdef ARCH_ESP32
 
