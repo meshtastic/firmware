@@ -160,15 +160,15 @@ struct NeedleColorBand {
 
 static constexpr int kNeedleBandCount = 6;
 
-static inline void emitNeedleSpan(OLEDDisplay *display, NeedleColorBand (&bands)[kNeedleBandCount], int16_t bandTop,
-                                  int16_t bandHeight, int16_t y, int16_t a, int16_t b)
+static inline void registerNeedleSpan(NeedleColorBand (&bands)[kNeedleBandCount], int16_t bandTop, int16_t bandHeight, int16_t y,
+                                      int16_t a, int16_t b)
 {
     if (a > b) {
         const int16_t t = a;
         a = b;
         b = t;
     }
-    display->drawHorizontalLine(a, y, b - a + 1);
+
     int band = (static_cast<int32_t>(y - bandTop) * kNeedleBandCount) / bandHeight;
     if (band < 0) {
         band = 0;
@@ -200,12 +200,13 @@ static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int
 {
     // Important for maintainers:
     // The compass needle rotates continuously, so color-region registration must
-    // track the triangle shape (or close approximation), not just its AABB.
-    // Using one bounding box per half looks smaller in code, but it leaks south
-    // color into north at diagonal headings (notably ~45 degrees), because the
-    // region matcher is rectangle-based and ignores triangle geometry.
-    // Keep this banded shape-aware approach unless the replacement preserves
-    // per-angle triangle coverage.
+    // track triangle shape (or a close approximation), not only one AABB.
+    // Coarse rectangles can leak south color into north at diagonal angles.
+    // Keep this banded approach unless a replacement preserves per-angle coverage.
+    // Performance note: draw the triangle once via fillTriangle(), then build
+    // band regions in software for accurate color-role registration.
+    display->fillTriangle(x0, y0, x1, y1, x2, y2);
+
     if (y0 > y1)
         swapPoint(x0, y0, x1, y1);
     if (y1 > y2)
@@ -221,12 +222,14 @@ static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int
     const int16_t bandTop = y0;
     const int16_t bandBottom = y2;
     const int16_t bandHeight = (bandBottom >= bandTop) ? static_cast<int16_t>(bandBottom - bandTop + 1) : 1;
+
     const int32_t dx01 = x1 - x0;
     const int32_t dy01 = y1 - y0;
     const int32_t dx02 = x2 - x0;
     const int32_t dy02 = y2 - y0;
     const int32_t dx12 = x2 - x1;
     const int32_t dy12 = y2 - y1;
+
     int32_t sa = 0;
     int32_t sb = 0;
     int16_t y = y0;
@@ -237,7 +240,7 @@ static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int
         const int16_t b = static_cast<int16_t>(x0 + ((dy02 != 0) ? (sb / dy02) : 0));
         sa += dx01;
         sb += dx02;
-        emitNeedleSpan(display, bands, bandTop, bandHeight, y, a, b);
+        registerNeedleSpan(bands, bandTop, bandHeight, y, a, b);
     }
 
     sa = dx12 * static_cast<int32_t>(y - y1);
@@ -247,7 +250,7 @@ static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int
         const int16_t b = static_cast<int16_t>(x0 + ((dy02 != 0) ? (sb / dy02) : 0));
         sa += dx12;
         sb += dx02;
-        emitNeedleSpan(display, bands, bandTop, bandHeight, y, a, b);
+        registerNeedleSpan(bands, bandTop, bandHeight, y, a, b);
     }
 
     for (int i = 0; i < kNeedleBandCount; i++) {
@@ -386,6 +389,101 @@ static void drawCompassStatusText(OLEDDisplay *display, int16_t compassX, int16_
     display->drawString(compassX, compassY, statusLine2);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
+
+static void drawBearingCompassOrStatus(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius,
+                                       bool showCompass, float myHeading, float bearing, const char *statusLine1,
+                                       const char *statusLine2)
+{
+    // Shared "favorite node" compass renderer: draw ring, then either heading data or fallback status text.
+    display->drawCircle(compassX, compassY, compassRadius);
+    if (showCompass) {
+        CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+        CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
+    } else {
+        drawCompassStatusText(display, compassX, compassY, statusLine1, statusLine2);
+    }
+}
+
+static void drawDetailedCompassOrStatus(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius,
+                                        bool validHeading, float heading, const char *statusLine1, const char *statusLine2)
+{
+    // Shared "position screen" compass renderer: use mono/TFT path only when heading is valid.
+    if (validHeading) {
+#if GRAPHICS_TFT_COLORING_ENABLED
+        drawTftCompass(display, compassX, compassY, compassRadius, heading);
+#else
+        drawMonoCompass(display, compassX, compassY, compassRadius, heading);
+#endif
+    } else {
+        display->drawCircle(compassX, compassY, compassRadius);
+        drawCompassStatusText(display, compassX, compassY, statusLine1, statusLine2);
+    }
+}
+
+static bool computeLandscapeCompassPlacement(OLEDDisplay *display, int16_t xOffset, int16_t topY, int16_t *compassX,
+                                             int16_t *compassY, int16_t *compassRadius)
+{
+    // Keep compass vertically centered in the body area while reserving footer/nav space.
+    const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
+    const int16_t usableHeight = bottomY - topY - 5;
+    int16_t radius = usableHeight / 2;
+    if (radius < 8) {
+        radius = 8;
+    }
+
+    *compassRadius = radius;
+    *compassX = xOffset + SCREEN_WIDTH - radius - 8;
+    *compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
+    return true;
+}
+
+static bool computeBottomCompassPlacement(OLEDDisplay *display, int16_t xOffset, int16_t yBelowContent,
+                                          int16_t bottomReserved, int16_t margin, int16_t *compassX, int16_t *compassY,
+                                          int16_t *compassRadius)
+{
+    // Return false when content leaves no room for a readable compass.
+    int availableHeight = SCREEN_HEIGHT - yBelowContent - bottomReserved - margin;
+    if (availableHeight < FONT_HEIGHT_SMALL * 2) {
+        return false;
+    }
+
+    int16_t radius = static_cast<int16_t>(availableHeight / 2);
+    if (radius < 8) {
+        radius = 8;
+    }
+    if (radius * 2 > SCREEN_WIDTH - 16) {
+        radius = (SCREEN_WIDTH - 16) / 2;
+    }
+
+    *compassRadius = radius;
+    *compassX = xOffset + (SCREEN_WIDTH / 2);
+    *compassY = static_cast<int16_t>(yBelowContent + (availableHeight / 2));
+    return true;
+}
+
+static void drawTruncatedStatusLine(OLEDDisplay *display, int16_t x, int16_t y, const std::string &statusText)
+{
+    // Fixed-buffer truncate helper replaces iterative std::string chopping to keep code size down.
+    char rawStatus[96];
+    snprintf(rawStatus, sizeof(rawStatus), " Status: %s", statusText.c_str());
+
+    char clippedStatus[96];
+    UIRenderer::truncateStringWithEmotes(display, rawStatus, clippedStatus, sizeof(clippedStatus), display->getWidth());
+    display->drawString(x, y, clippedStatus);
+}
+
+static int computeChannelUtilizationFill(int percent, int maxFill)
+{
+    // Compact linear fill mapping for the utilization bar.
+    if (percent <= 0 || maxFill <= 0) {
+        return 0;
+    }
+    if (percent >= 100) {
+        return maxFill;
+    }
+    return (maxFill * percent + 50) / 100;
+}
+
 void graphics::UIRenderer::rebuildFavoritedNodes()
 {
     favoritedNodes.clear();
@@ -711,65 +809,31 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
         }
 
         if (found) {
-            std::string statusLine = std::string(" Status: ") + found->statusText;
-            {
-                const int screenW = display->getWidth();
-                const int ellipseW = display->getStringWidth("...");
-                int w = display->getStringWidth(statusLine.c_str());
-
-                // Only do work if it overflows
-                if (w > screenW) {
-                    if (ellipseW > screenW) {
-                        statusLine.clear();
-                    } else {
-                        while (!statusLine.empty()) {
-                            // remove one char (byte) at a time
-                            statusLine.pop_back();
-
-                            // Measure candidate with ellipsis appended
-                            std::string candidate = statusLine + "...";
-                            if (display->getStringWidth(candidate.c_str()) <= screenW) {
-                                statusLine = std::move(candidate);
-                                break;
-                            }
-                        }
-                        if (statusLine.empty() && ellipseW <= screenW) {
-                            statusLine = "...";
-                        }
-                    }
-                }
-            }
-            display->drawString(x, getTextPositions(display)[line++], statusLine.c_str());
+            drawTruncatedStatusLine(display, x, getTextPositions(display)[line++], found->statusText);
         }
     }
 #endif
 
     // === 2. Signal and Hops (combined on one line, if available) ===
-    char signalHopsStr[32] = "";
+    char signalText[24] = "";
     bool haveSignal = false;
     int bars = 0;
 
-    // Helper to get SNR limit based on modem preset
-    auto getSnrLimit = [](meshtastic_Config_LoRaConfig_ModemPreset preset) -> float {
-        switch (preset) {
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
-            return -6.0f;
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-            return -5.5f;
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
-            return -4.5f;
-        default:
-            return -6.0f;
-        }
-    };
-
     // Calculate signal grade using modem preset and SNR only
-    float snrLimit = getSnrLimit(config.lora.modem_preset);
+    float snrLimit = -6.0f;
+    switch (config.lora.modem_preset) {
+    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+        snrLimit = -5.5f;
+        break;
+    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+        snrLimit = -4.5f;
+        break;
+    default:
+        break;
+    }
     float snr = node->snr;
 
     // Determine signal quality label and bars using SNR-only grading
@@ -799,100 +863,71 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     // --- Build the Signal/Hops line ---
     // Only show signal if we have valid SNR
     if (snr > -100 && snr != 0) {
-        snprintf(signalHopsStr, sizeof(signalHopsStr), "%sSig:%s", leftSideSpacing, qualityLabel);
+        snprintf(signalText, sizeof(signalText), "%sSig:%s", leftSideSpacing, qualityLabel);
         haveSignal = true;
     }
 
-    if (node->hops_away > 0) {
-        size_t len = strlen(signalHopsStr);
-        if (haveSignal) {
-            snprintf(signalHopsStr + len, sizeof(signalHopsStr) - len, " [#]");
-        } else {
-            snprintf(signalHopsStr, sizeof(signalHopsStr), "[#]");
-        }
-    }
-
-    if (signalHopsStr[0]) {
+    if (haveSignal || node->hops_away > 0) {
+        // Render signal text/bars and hops on one pass without building/parsing a combined temp string.
         int yPos = getTextPositions(display)[line++];
         int curX = x;
 
-        // Split combined string into signal text and hop suffix
-        char sigPart[20] = "";
-        const char *hopPart = nullptr;
+        if (haveSignal) {
+            // Draw signal quality text
+            display->drawString(curX, yPos, signalText);
+            curX += display->getStringWidth(signalText) + 4;
 
-        char *bracket = strchr(signalHopsStr, '[');
-        if (bracket) {
-            size_t n = (size_t)(bracket - signalHopsStr);
-            if (n >= sizeof(sigPart))
-                n = sizeof(sigPart) - 1;
-            memcpy(sigPart, signalHopsStr, n);
-            sigPart[n] = '\0';
+            // Draw signal bars (skip on UltraLow, text only)
+            if (currentResolution != ScreenResolution::UltraLow && bars > 0) {
+                const int kMaxBars = 4;
+                if (bars < 1)
+                    bars = 1;
+                if (bars > kMaxBars)
+                    bars = kMaxBars;
 
-            // Trim trailing spaces
-            while (strlen(sigPart) && sigPart[strlen(sigPart) - 1] == ' ') {
-                sigPart[strlen(sigPart) - 1] = '\0';
-            }
+                int barX = curX;
 
-            hopPart = bracket; // "[n Hop(s)]"
-        } else {
-            strncpy(sigPart, signalHopsStr, sizeof(sigPart) - 1);
-            sigPart[sizeof(sigPart) - 1] = '\0';
-        }
+                const bool hi = (currentResolution == ScreenResolution::High);
+                int barWidth = hi ? 2 : 1;
+                int barGap = hi ? 2 : 1;
+                int maxBarHeight = FONT_HEIGHT_SMALL - 7;
+                if (!hi)
+                    maxBarHeight -= 1;
+                int barY = yPos + (FONT_HEIGHT_SMALL - maxBarHeight) / 2;
+                int totalBarsWidth = (kMaxBars * barWidth) + ((kMaxBars - 1) * barGap);
 
-        // Draw signal quality text
-        display->drawString(curX, yPos, sigPart);
-        curX += display->getStringWidth(sigPart) + 4;
-
-        // Draw signal bars (skip on UltraLow, text only)
-        if (currentResolution != ScreenResolution::UltraLow && haveSignal && bars > 0) {
-            const int kMaxBars = 4;
-            if (bars < 1)
-                bars = 1;
-            if (bars > kMaxBars)
-                bars = kMaxBars;
-
-            int barX = curX;
-
-            const bool hi = (currentResolution == ScreenResolution::High);
-            int barWidth = hi ? 2 : 1;
-            int barGap = hi ? 2 : 1;
-            int maxBarHeight = FONT_HEIGHT_SMALL - 7;
-            if (!hi)
-                maxBarHeight -= 1;
-            int barY = yPos + (FONT_HEIGHT_SMALL - maxBarHeight) / 2;
-            int totalBarsWidth = (kMaxBars * barWidth) + ((kMaxBars - 1) * barGap);
-
-            uint16_t signalBarsColor = TFTPalette::Good;
-            if (qualityLabel && strcmp(qualityLabel, "Fair") == 0) {
-                signalBarsColor = TFTPalette::Medium;
-            } else if (qualityLabel && strcmp(qualityLabel, "Bad") == 0) {
-                signalBarsColor = TFTPalette::Bad;
-            }
-
-            setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, barX, barY, totalBarsWidth,
-                                       maxBarHeight);
-
-            for (int bi = 0; bi < kMaxBars; bi++) {
-                int barHeight = maxBarHeight * (bi + 1) / kMaxBars;
-                if (barHeight < 2)
-                    barHeight = 2;
-
-                int bx = barX + bi * (barWidth + barGap);
-                int by = barY + maxBarHeight - barHeight;
-
-                if (bi < bars) {
-                    display->fillRect(bx, by, barWidth, barHeight);
-                } else {
-                    int baseY = barY + maxBarHeight - 1;
-                    display->drawHorizontalLine(bx, baseY, barWidth);
+                uint16_t signalBarsColor = TFTPalette::Good;
+                if (qualityLabel && strcmp(qualityLabel, "Fair") == 0) {
+                    signalBarsColor = TFTPalette::Medium;
+                } else if (qualityLabel && strcmp(qualityLabel, "Bad") == 0) {
+                    signalBarsColor = TFTPalette::Bad;
                 }
-            }
 
-            curX += totalBarsWidth + 2;
+                setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, barX, barY,
+                                           totalBarsWidth, maxBarHeight);
+
+                for (int bi = 0; bi < kMaxBars; bi++) {
+                    int barHeight = maxBarHeight * (bi + 1) / kMaxBars;
+                    if (barHeight < 2)
+                        barHeight = 2;
+
+                    int bx = barX + bi * (barWidth + barGap);
+                    int by = barY + maxBarHeight - barHeight;
+
+                    if (bi < bars) {
+                        display->fillRect(bx, by, barWidth, barHeight);
+                    } else {
+                        int baseY = barY + maxBarHeight - 1;
+                        display->drawHorizontalLine(bx, baseY, barWidth);
+                    }
+                }
+
+                curX += totalBarsWidth + 2;
+            }
         }
 
         // Draw hops AFTER the bars as: [ number + hop icon ]
-        if (hopPart && node->hops_away > 0) {
+        if (node->hops_away > 0) {
 
             // open bracket
             display->drawString(curX, yPos, "[");
@@ -949,48 +984,28 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     bool haveDistance = false;
 
     if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node)) {
-        double lat1 = ourNode->position.latitude_i * 1e-7;
-        double lon1 = ourNode->position.longitude_i * 1e-7;
-        double lat2 = node->position.latitude_i * 1e-7;
-        double lon2 = node->position.longitude_i * 1e-7;
-        double earthRadiusKm = 6371.0;
-        double dLat = (lat2 - lat1) * DEG_TO_RAD;
-        double dLon = (lon2 - lon1) * DEG_TO_RAD;
-        double a =
-            sin(dLat / 2) * sin(dLat / 2) + cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * sin(dLon / 2) * sin(dLon / 2);
-        double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-        double distanceKm = earthRadiusKm * c;
-
+        // Use shared meter conversion, then format display units with lightweight integer rounding.
+        const float distanceMeters = GeoCoord::latLongToMeter(DegD(node->position.latitude_i), DegD(node->position.longitude_i),
+                                                               DegD(ourNode->position.latitude_i), DegD(ourNode->position.longitude_i));
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            double miles = distanceKm * 0.621371;
-            if (miles < 0.1) {
-                int feet = (int)(miles * 5280);
-                if (feet > 0 && feet < 1000) {
-                    snprintf(distStr, sizeof(distStr), "%sDistance:%dft", leftSideSpacing, feet);
-                    haveDistance = true;
-                } else if (feet >= 1000) {
-                    snprintf(distStr, sizeof(distStr), "%sDistance:¼mi", leftSideSpacing);
-                    haveDistance = true;
-                }
+            const int feet = static_cast<int>((distanceMeters * METERS_TO_FEET) + 0.5f);
+            if (feet > 0 && feet < 1000) {
+                snprintf(distStr, sizeof(distStr), "%sDistance:%dft", leftSideSpacing, feet);
+                haveDistance = true;
             } else {
-                int roundedMiles = (int)(miles + 0.5);
-                if (roundedMiles > 0 && roundedMiles < 1000) {
-                    snprintf(distStr, sizeof(distStr), "%sDistance:%dmi", leftSideSpacing, roundedMiles);
+                const int miles = (feet + 2640) / 5280; // rounded to nearest mile
+                if (miles > 0 && miles < 1000) {
+                    snprintf(distStr, sizeof(distStr), "%sDistance:%dmi", leftSideSpacing, miles);
                     haveDistance = true;
                 }
             }
         } else {
-            if (distanceKm < 1.0) {
-                int meters = (int)(distanceKm * 1000);
-                if (meters > 0 && meters < 1000) {
-                    snprintf(distStr, sizeof(distStr), "%sDistance:%dm", leftSideSpacing, meters);
-                    haveDistance = true;
-                } else if (meters >= 1000) {
-                    snprintf(distStr, sizeof(distStr), "%sDistance:1km", leftSideSpacing);
-                    haveDistance = true;
-                }
+            const int meters = static_cast<int>(distanceMeters + 0.5f);
+            if (meters > 0 && meters < 1000) {
+                snprintf(distStr, sizeof(distStr), "%sDistance:%dm", leftSideSpacing, meters);
+                haveDistance = true;
             } else {
-                int km = (int)(distanceKm + 0.5);
+                const int km = (meters + 500) / 1000; // rounded to nearest km
                 if (km > 0 && km < 1000) {
                     snprintf(distStr, sizeof(distStr), "%sDistance:%dkm", leftSideSpacing, km);
                     haveDistance = true;
@@ -1075,64 +1090,29 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 
     // --- Compass Rendering: landscape (wide) screens use the original side-aligned logic ---
-    if (SCREEN_WIDTH > SCREEN_HEIGHT) {
-        if (showCompass || statusLine1) {
+    if (showCompass || statusLine1) {
+        int16_t compassX = 0;
+        int16_t compassY = 0;
+        int16_t compassRadius = 0;
+        if (SCREEN_WIDTH > SCREEN_HEIGHT) {
             const int16_t topY = getTextPositions(display)[1];
-            const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
-            const int16_t usableHeight = bottomY - topY - 5;
-            int16_t compassRadius = usableHeight / 2;
-            if (compassRadius < 8)
-                compassRadius = 8;
-            const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
-            const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
-            const int16_t compassDiam = compassRadius * 2;
-
-            display->drawCircle(compassX, compassY, compassRadius);
-            if (showCompass) {
-                CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
-                CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
-            } else {
-                drawCompassStatusText(display, compassX, compassY, statusLine1, statusLine2);
-            }
-        }
-        // else show nothing
-    } else {
-        // Portrait or square: put compass at the bottom and centered, scaled to fit available space
-        if (showCompass || statusLine1) {
-            int yBelowContent = (line > 0 && line <= 5) ? (getTextPositions(display)[line - 1] + FONT_HEIGHT_SMALL + 2)
-                                                        : getTextPositions(display)[1];
-            const int margin = 4;
-// --------- PATCH FOR EINK NAV BAR (ONLY CHANGE BELOW) -----------
+            computeLandscapeCompassPlacement(display, x, topY, &compassX, &compassY, &compassRadius);
+        } else {
+            const int yBelowContent = (line > 0 && line <= 5) ? (getTextPositions(display)[line - 1] + FONT_HEIGHT_SMALL + 2)
+                                                              : getTextPositions(display)[1];
 #if defined(USE_EINK)
             const int iconSize = (currentResolution == ScreenResolution::High) ? 16 : 8;
             const int navBarHeight = iconSize + 6;
 #else
             const int navBarHeight = 0;
 #endif
-            // --------- END PATCH FOR EINK NAV BAR -----------
-            int availableHeight = SCREEN_HEIGHT - yBelowContent - navBarHeight - margin;
-
-            if (availableHeight < FONT_HEIGHT_SMALL * 2)
+            if (!computeBottomCompassPlacement(display, x, yBelowContent, navBarHeight, 4, &compassX, &compassY,
+                                               &compassRadius)) {
                 return;
-
-            int compassRadius = availableHeight / 2;
-            if (compassRadius < 8)
-                compassRadius = 8;
-            if (compassRadius * 2 > SCREEN_WIDTH - 16)
-                compassRadius = (SCREEN_WIDTH - 16) / 2;
-
-            int compassX = x + SCREEN_WIDTH / 2;
-            int compassY = yBelowContent + availableHeight / 2;
-
-            display->drawCircle(compassX, compassY, compassRadius);
-            if (showCompass) {
-                graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
-                graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
-            } else {
-                drawCompassStatusText(display, compassX, compassY, statusLine1, statusLine2);
             }
         }
-        // else show nothing
+        drawBearingCompassOrStatus(display, compassX, compassY, compassRadius, showCompass, myHeading, bearing, statusLine1,
+                                   statusLine2);
     }
 #endif
     graphics::drawCommonFooter(display, x, y);
@@ -1157,12 +1137,6 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 
     // === Content below header ===
-
-    // Determine if we need to show 4 or 5 rows on the screen
-    int rows = 4;
-    if (!config.bluetooth.enabled) {
-        rows = 5;
-    }
 
     // === First Row: Region / Channel Utilization and Uptime ===
     bool origBold = config.display.heading_bold;
@@ -1227,7 +1201,8 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     // === Third Row: Channel Utilization Bluetooth Off (Only If Actually Off) ===
     const char *chUtil = "ChUtil:";
     char chUtilPercentage[10];
-    snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
+    int chutil_percent = static_cast<int>(airTime->channelUtilizationPercent() + 0.5f);
+    snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%d%%", chutil_percent);
 
     int chUtil_x = (currentResolution == ScreenResolution::High) ? display->getStringWidth(chUtil) + 10
                                                                  : display->getStringWidth(chUtil) + 5;
@@ -1247,15 +1222,10 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (!config.bluetooth.enabled) {
         extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 1;
     }
-    int chutil_percent = airTime->channelUtilizationPercent();
     const int raw_chutil_percent = chutil_percent;
 
-    int centerofscreen = SCREEN_WIDTH / 2;
-    int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
-    int starting_position = centerofscreen - total_line_content_width;
-    if (!config.bluetooth.enabled) {
-        starting_position = 0;
-    }
+    // With BT disabled we pin this row left to make room for the extra "BT off" indicator.
+    const int starting_position = config.bluetooth.enabled ? x : 0;
 
     display->drawString(starting_position, getTextPositions(display)[line], chUtil);
 
@@ -1264,27 +1234,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         chutil_percent = 100;
     }
 
-    // Weighting for nonlinear segments
-    float milestone1 = 25;
-    float milestone2 = 40;
-    float weight1 = 0.45; // Weight for 0–25%
-    float weight2 = 0.35; // Weight for 25–40%
-    float weight3 = 0.20; // Weight for 40–100%
-    float totalWeight = weight1 + weight2 + weight3;
-
-    int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
-    int seg2 = chutil_bar_max_fill * (weight2 / totalWeight);
-    int seg3 = chutil_bar_max_fill - seg1 - seg2; // Remainder absorbs rounding errors
-
-    int fillRight = 0;
-
-    if (chutil_percent <= milestone1) {
-        fillRight = (seg1 * (chutil_percent / milestone1));
-    } else if (chutil_percent <= milestone2) {
-        fillRight = seg1 + (seg2 * ((chutil_percent - milestone1) / (milestone2 - milestone1)));
-    } else {
-        fillRight = seg1 + seg2 + (seg3 * ((chutil_percent - milestone2) / (100 - milestone2)));
-    }
+    int fillRight = computeChannelUtilizationFill(chutil_percent, chutil_bar_max_fill);
 
     // Draw outline
     display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
@@ -1332,9 +1282,8 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (SCREEN_WIDTH - UIRenderer::measureStringWithEmotes(display, combinedName) > 10) {
         textWidth = UIRenderer::measureStringWithEmotes(display, combinedName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        UIRenderer::drawStringWithEmotes(
-            display, nameX, ((rows == 4) ? getTextPositions(display)[line++] : getTextPositions(display)[line++]) + yOffset,
-            combinedName, FONT_HEIGHT_SMALL, 1, false);
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + yOffset, combinedName,
+                                         FONT_HEIGHT_SMALL, 1, false);
     } else {
         // === LongName Centered ===
         textWidth = UIRenderer::measureStringWithEmotes(display, longName);
@@ -1731,26 +1680,17 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             // Center vertically and nudge down slightly to keep "N" clear of header
             const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
 
-            if (validHeading) {
-#if GRAPHICS_TFT_COLORING_ENABLED
-                drawTftCompass(display, compassX, compassY, compassRadius, heading);
-#else
-                drawMonoCompass(display, compassX, compassY, compassRadius, heading);
-#endif
-            } else {
-                display->drawCircle(compassX, compassY, compassRadius);
-                drawCompassStatusText(display, compassX, compassY, statusLine1, statusLine2);
-            }
+            drawDetailedCompassOrStatus(display, compassX, compassY, compassRadius, validHeading, heading, statusLine1, statusLine2);
         } else {
             // Portrait or square: put compass at the bottom and centered, scaled to fit available space
             // For E-Ink screens, account for navigation bar at the bottom!
-            int yBelowContent = textPos[5] + FONT_HEIGHT_SMALL + 2;
-            const int margin = 4;
-            int availableHeight =
+            const int yBelowContent = textPos[5] + FONT_HEIGHT_SMALL + 2;
 #if defined(USE_EINK)
-                SCREEN_HEIGHT - yBelowContent - 24; // Leave extra space for nav bar on E-Ink
+            const int margin = 4;
+            int availableHeight = SCREEN_HEIGHT - yBelowContent - 24; // Leave extra space for nav bar on E-Ink
 #else
-                SCREEN_HEIGHT - yBelowContent - margin;
+            const int margin = 4;
+            int availableHeight = SCREEN_HEIGHT - yBelowContent - margin;
 #endif
 
             if (availableHeight < FONT_HEIGHT_SMALL * 2)
@@ -1765,16 +1705,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             int compassX = x + SCREEN_WIDTH / 2;
             int compassY = yBelowContent + availableHeight / 2;
 
-            if (validHeading) {
-#if GRAPHICS_TFT_COLORING_ENABLED
-                drawTftCompass(display, compassX, compassY, compassRadius, heading);
-#else
-                drawMonoCompass(display, compassX, compassY, compassRadius, heading);
-#endif
-            } else {
-                display->drawCircle(compassX, compassY, compassRadius);
-                drawCompassStatusText(display, compassX, compassY, statusLine1, statusLine2);
-            }
+            drawDetailedCompassOrStatus(display, compassX, compassY, compassRadius, validHeading, heading, statusLine1, statusLine2);
         }
     }
 #endif
