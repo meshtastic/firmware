@@ -52,7 +52,7 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {meshtas
 // Region profiles: bundle preset list + regulatory parameters shared across regions
 // presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle, override slot
 const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 0, 0, 0};
-const RegionProfile PROFILE_EU868 = {PRESETS_STD, 0, 0, false, false, 0, 0, 0, 0};
+const RegionProfile PROFILE_EU868 = PROFILE_STD;
 const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 0, 0, 0};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr)                   \
