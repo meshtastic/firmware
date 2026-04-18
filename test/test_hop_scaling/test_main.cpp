@@ -297,7 +297,6 @@ void tearDown(void)
 
 void setup()
 {
-    delay(10);
     initializeTestEnvironment();
     nodeDB = mockNodeDB;
 
@@ -320,7 +319,6 @@ void tearDown(void) {}
 
 void setup()
 {
-    delay(10);
     initializeTestEnvironment();
     UNITY_BEGIN();
     exit(UNITY_END());
