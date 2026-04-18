@@ -748,27 +748,27 @@ Standard AdafruitGFX fonts contain no glyphs below `'\x20'`, so will ignore thes
 
 This mapping of emoji to control characters is fairly arbitrary. Selection was influenced by [PR #3940 Oled screen emojis](https://github.com/meshtastic/firmware/pull/3940) and [Emoji Frequency Spreadsheet](https://docs.google.com/spreadsheets/d/1Zs13WJYdZL1pNZP0dCIXkWau_tZOjK3mmJz0KNq4I30/).
 
-| Code Point | Emoji                                          |
-| ---------- | ---------------------------------------------- |
-| ~~`0x00`~~ | (null term, unused)                            |
-| `0x01`     | 👍                                             |
-| `0x02`     | 👎                                             |
-| `0x03`     | 🙂                                             |
-| `0x04`     | 😆                                             |
-| `0x05`     | 👋                                             |
-| `0x06`     | ☀                                              |
-| ~~`0x07`~~ | (bell char, unused)                            |
-| `0x08`     | 🌧                                             |
-| `0x09`     | ☁                                              |
-| ~~`0x0A`~~ | (line feed, unused)                            |
-| `0x0B`     | ♥                                              |
-| `0x0C`     | 💩                                             |
-| ~~`0x0D`~~ | (carriage return, unused)                      |
-| `0x0E`     | 🔔                                             |
-| `0x0F`     | 😭                                             |
-| `0x1A`     | (substitution "⍰", used for unprintable chars) |
-| `0x1B`     | 🤗                                             |
-| `0x1C`     | 😉                                             |
-| `0x1D`     | 😏                                             |
-| `0x1E`     | 🫡 (saluting face)                             |
-| `0x1F`     | 👌                                             |
+| Code Point | Emoji |
+| --- | --- |
+| ~~`0x00`~~ | (null term, unused) |
+| `0x01` | 👍 |
+| `0x02` | 👎 |
+| `0x03` | 🙂 |
+| `0x04` | 😆 |
+| `0x05` | 👋 |
+| `0x06` | ☀ |
+| ~~`0x07`~~ | (bell char, unused) |
+| `0x08` | 🌧 |
+| `0x09` | ☁ |
+| ~~`0x0A`~~ | (line feed, unused) |
+| `0x0B` | ♥ |
+| `0x0C` | 💩 |
+| ~~`0x0D`~~ | (carriage return, unused) |
+| `0x0E` | 🔔 |
+| `0x0F` | 😭 |
+| `0x1A` | (substitution "⍰", used for unprintable chars) |
+| `0x1B` | 🤗 |
+| `0x1C` | 😉 |
+| `0x1D` | 😏 |
+| `0x1E` | 🫡 (saluting face) |
+| `0x1F` | 👌 |
