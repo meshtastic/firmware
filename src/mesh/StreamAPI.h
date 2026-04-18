@@ -2,6 +2,7 @@
 
 #include "PhoneAPI.h"
 #include "Stream.h"
+#include "concurrency/Lock.h"
 #include "concurrency/OSThread.h"
 #include <cstdarg>
 
@@ -89,4 +90,27 @@ class StreamAPI : public PhoneAPI
 
     /// Low level function to emit a protobuf encapsulated log record
     void emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg);
+
+  private:
+    /// Dedicated scratch + tx buffer for LogRecord emission.
+    ///
+    /// The main packet emission path (`writeStream` -> `getFromRadio` ->
+    /// `emitTxBuffer`) holds `fromRadioScratch` (from PhoneAPI) and `txBuf`
+    /// from the moment `getFromRadio` starts encoding until `emitTxBuffer`
+    /// finishes pushing bytes to the stream. If a `LOG_` macro fires during
+    /// that window and we emit through the API, the old implementation
+    /// re-used `fromRadioScratch` / `txBuf` and corrupted whatever the main
+    /// path had already encoded. Symptoms on the host were
+    /// `google.protobuf.message.DecodeError: Error parsing message with type
+    /// 'meshtastic.protobuf.FromRadio'` — any tool with
+    /// `config.security.debug_log_api_enabled=true` under traffic would see
+    /// torn frames every few messages.
+    ///
+    /// Giving the log path its own scratch + txBuf means the main path is
+    /// never clobbered. We still need `streamLock` to serialize the actual
+    /// `stream->write` call so a log emission and a packet emission don't
+    /// interleave on the wire.
+    meshtastic_FromRadio fromRadioScratchLog = {};
+    uint8_t txBufLog[MAX_STREAM_BUF_SIZE] = {0};
+    concurrency::Lock streamLock;
 };

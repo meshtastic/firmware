@@ -23,10 +23,11 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
     display->setTextAlignment(TEXT_ALIGN_CENTER);
 #if !GRAPHICS_TFT_COLORING_ENABLED
     display->setColor(BLACK);
+    const int16_t nLabelWidth = display->getStringWidth("N");
     if (currentResolution == ScreenResolution::High) {
-        display->fillRect(nX - 8, nY - 1, display->getStringWidth("N") + 3, FONT_HEIGHT_SMALL - 6);
+        display->fillRect(nX - 8, nY - 1, nLabelWidth + 3, FONT_HEIGHT_SMALL - 6);
     } else {
-        display->fillRect(nX - 4, nY - 1, display->getStringWidth("N") + 2, FONT_HEIGHT_SMALL - 6);
+        display->fillRect(nX - 4, nY - 1, nLabelWidth + 2, FONT_HEIGHT_SMALL - 6);
     }
 #endif
     display->setColor(WHITE);
@@ -63,6 +64,48 @@ void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, u
 {
     const int16_t size = static_cast<int16_t>(compassDiam * 0.6f);
     drawArrowToNode(display, compassX, compassY, size, headingRadian * RAD_TO_DEG);
+}
+
+bool getHeadingRadians(double lat, double lon, float &headingRadian)
+{
+    headingRadian = 0.0f;
+
+    if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING)
+        return true;
+
+    if (!screen)
+        return false;
+
+    if (screen->hasHeading()) {
+        headingRadian = screen->getHeading() * DEG_TO_RAD;
+        return true;
+    }
+
+    const float estimatedHeadingDeg = screen->estimatedHeading(lat, lon);
+    if (!(estimatedHeadingDeg >= 0.0f))
+        return false;
+
+    headingRadian = estimatedHeadingDeg * DEG_TO_RAD;
+    return true;
+}
+
+float adjustBearingForCompassMode(float bearingRadian, float headingRadian)
+{
+    if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
+        return bearingRadian - headingRadian;
+
+    return bearingRadian;
+}
+
+float radiansToDegrees360(float angleRadian)
+{
+    constexpr float fullTurnDeg = 360.0f;
+    float degrees = angleRadian * RAD_TO_DEG;
+    if (degrees < 0.0f)
+        degrees += fullTurnDeg;
+    else if (degrees >= fullTurnDeg)
+        degrees -= fullTurnDeg;
+    return degrees;
 }
 
 uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)

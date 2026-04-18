@@ -23,6 +23,11 @@ namespace CompassRenderer
 void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading, int16_t radius);
 void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian);
 void drawArrowToNode(OLEDDisplay *display, int16_t x, int16_t y, int16_t size, float bearing);
+
+// Navigation and location functions
+bool getHeadingRadians(double lat, double lon, float &headingRadian);
+float adjustBearingForCompassMode(float bearingRadian, float headingRadian);
+float radiansToDegrees360(float angleRadian);
 uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight);
 
 } // namespace CompassRenderer

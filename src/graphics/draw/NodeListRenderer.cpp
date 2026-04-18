@@ -461,14 +461,13 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         }
     }
 
-    if (strlen(distStr) > 0) {
-        int offset = (currentResolution == ScreenResolution::High)
-                         ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
-                         : (isLeftCol ? 4 : 7); // Offset for Narrow Screens (Left Column:Right Column)
-        int rightEdge = x + columnWidth - offset;
-        int textWidth = display->getStringWidth(distStr);
-        display->drawString(rightEdge - textWidth, y, distStr);
-    }
+    const char *distanceLabel = (strlen(distStr) > 0) ? distStr : "?";
+    int offset = (currentResolution == ScreenResolution::High)
+                     ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
+                     : (isLeftCol ? 4 : 7); // Offset for Narrow Screens (Left Column:Right Column)
+    int rightEdge = x + columnWidth - offset;
+    int textWidth = display->getStringWidth(distanceLabel);
+    display->drawString(rightEdge - textWidth, y, distanceLabel);
 }
 
 void drawEntryDynamic_Nodes(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
@@ -522,8 +521,8 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 }
 
-void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float myHeading,
-                      double userLat, double userLon)
+void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth,
+                      float myHeadingRadian, double userLat, double userLon)
 {
     if (!nodeDB->hasValidPosition(node))
         return;
@@ -537,11 +536,11 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     double nodeLat = node->position.latitude_i * 1e-7;
     double nodeLon = node->position.longitude_i * 1e-7;
     float bearing = GeoCoord::bearing(userLat, userLon, nodeLat, nodeLon);
-    float bearingToNode = RAD_TO_DEG * bearing;
-    float relativeBearing = fmod((bearingToNode - myHeading + 360), 360);
+    float relativeBearing = CompassRenderer::adjustBearingForCompassMode(bearing, myHeadingRadian);
+    float relativeBearingDeg = CompassRenderer::radiansToDegrees360(relativeBearing);
     // Shrink size by 2px
     int size = FONT_HEIGHT_SMALL - 5;
-    CompassRenderer::drawArrowToNode(display, centerX, centerY, size, relativeBearing);
+    CompassRenderer::drawArrowToNode(display, centerX, centerY, size, relativeBearingDeg);
     /*
     float angle = relativeBearing * DEG_TO_RAD;
     float halfSize = size / 2.0;
@@ -571,12 +570,27 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     */
 }
 
+void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float, double,
+                        double)
+{
+    if (!nodeDB->hasValidPosition(node))
+        return;
+
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
+    int arrowXOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
+    int centerX = x + columnWidth - arrowXOffset;
+
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(centerX, y, "?");
+}
+
 // =============================
 // Main Screen Functions
 // =============================
 
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
-                        EntryRenderer renderer, NodeExtrasRenderer extras, float heading, double lat, double lon)
+                        EntryRenderer renderer, NodeExtrasRenderer extras, float headingRadian, double lat, double lon)
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
@@ -661,7 +675,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         renderer(display, node, xPos, yPos, columnWidth);
 
         if (extras)
-            extras(display, node, xPos, yPos, columnWidth, heading, lat, lon);
+            extras(display, node, xPos, yPos, columnWidth, headingRadian, lat, lon);
 
         lastNodeY = max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;
@@ -859,9 +873,13 @@ void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 #endif
 void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    float heading = 0;
-    bool validHeading = false;
+    float headingRadian = 0.0f;
     auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    if (!ourNode || !nodeDB->hasValidPosition(ourNode)) {
+        drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassUnknown, headingRadian, 0.0, 0.0);
+        return;
+    }
+
     double lat = DegD(ourNode->position.latitude_i);
     double lon = DegD(ourNode->position.longitude_i);
 
@@ -873,21 +891,12 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
         lastSwitchTime = now;
     }
 #endif
-    if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
-#if HAS_GPS
-        if (screen->hasHeading()) {
-            heading = screen->getHeading(); // degrees
-            validHeading = true;
-        } else {
-            heading = screen->estimatedHeading(lat, lon);
-            validHeading = !isnan(heading);
-        }
-#endif
-
-        if (!validHeading)
-            return;
+    if (!CompassRenderer::getHeadingRadians(lat, lon, headingRadian)) {
+        drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassUnknown, headingRadian, lat, lon);
+        return;
     }
-    drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
+
+    drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, headingRadian, lat, lon);
 }
 
 /// Draw a series of fields in a column, wrapping to multiple columns if needed
