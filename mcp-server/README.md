@@ -182,8 +182,7 @@ in the pre-flight header.
 - **`unit`** — pure Python, no hardware. boards / PIO wrapper /
   userPrefs-parse / testing-profile fixtures.
 - **`mesh`** — 2-device mesh: formation, broadcast delivery, direct+ACK,
-  traceroute, position broadcast, bidirectional. Parametrized over both
-  directions.
+  traceroute, bidirectional. Parametrized over both directions.
 - **`telemetry`** — periodic telemetry broadcast + on-demand request/reply
   (`TELEMETRY_APP` with `wantResponse=True`).
 - **`monitor`** — boot log has no panic markers within 60 s of reboot.
