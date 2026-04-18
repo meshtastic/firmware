@@ -44,7 +44,7 @@ extern bool isUSBPowered;
 
 #ifdef HAS_DRV2605
 #include <Adafruit_DRV2605.h>
-extern Adafruit_DRV2605 drv;
+extern Adafruit_DRV2605 hapticDriver;
 #endif
 
 #ifdef HAS_PCA9557

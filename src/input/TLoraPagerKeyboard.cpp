@@ -190,9 +190,9 @@ void TLoraPagerKeyboard::released()
 
 void TLoraPagerKeyboard::hapticFeedback()
 {
-    drv.setWaveform(0, 14); // strong buzz 100%
-    drv.setWaveform(1, 0);  // end waveform
-    drv.go();
+    hapticDriver.setWaveform(0, 14); // strong buzz 100%
+    hapticDriver.setWaveform(1, 0);  // end waveform
+    hapticDriver.go();
 }
 
 // toggle brightness of the backlight in three steps
