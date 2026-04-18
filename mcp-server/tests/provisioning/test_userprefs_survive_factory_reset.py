@@ -14,6 +14,8 @@ from typing import Any
 import pytest
 from meshtastic_mcp import admin, info
 
+from .._port_discovery import resolve_port_by_role
+
 
 @pytest.mark.timeout(180)
 def test_baked_prefs_survive_factory_reset(
@@ -24,10 +26,14 @@ def test_baked_prefs_survive_factory_reset(
     """Runs once per connected role. Flow:
     1. Change owner name to a known-non-default value.
     2. Trigger factory_reset(full=False).
-    3. Wait for device to come back.
-    4. Confirm owner is back to USERPREFS-baked default (or blank default if
+    3. Rediscover the port (macOS re-enumerates the CDC endpoint on nRF52
+       factory_reset; the path can change e.g. `/dev/cu.usbmodem101` →
+       `/dev/cu.usbmodem1101`).
+    4. Wait for device to come back.
+    5. Confirm owner is back to USERPREFS-baked default (or blank default if
        not baked), and primary channel/region/slot are still the baked values.
     """
+    role = baked_single["role"]
     port = baked_single["port"]
 
     # Snapshot pre-reset config
@@ -45,8 +51,16 @@ def test_baked_prefs_survive_factory_reset(
     # Trigger non-full factory reset
     admin.factory_reset(port=port, confirm=True, full=False)
 
-    # Wait for device to come back (serial reappears)
-    time.sleep(10.0)  # reset takes a moment
+    # Device re-enumerates — rediscover its port before probing. nRF52's
+    # CDC endpoint drops and comes back with a new `/dev/cu.usbmodem*`
+    # path on macOS; ESP32-S3 usually keeps the same path but the helper
+    # works either way (it just returns the current path for this role).
+    # Early sleep lets the USB kernel driver settle before we start
+    # polling — list_devices during a transient re-enumeration can return
+    # an empty list and the helper's poll-with-backoff handles that too,
+    # so the sleep is optimization not correctness.
+    time.sleep(10.0)
+    port = resolve_port_by_role(role, timeout_s=60.0)
     wait_until(
         lambda: info.device_info(port=port, timeout_s=5.0).get("my_node_num")
         is not None,

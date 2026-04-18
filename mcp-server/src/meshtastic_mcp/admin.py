@@ -221,7 +221,12 @@ def set_config(path: str, value: Any, port: str | None = None) -> dict[str, Any]
 
         # Treat the section as the root; the rest of the path walks into it.
         leaf_parent, field = _walk_to_field(container, segments[1:] or [])
-        if field.label == pb_descriptor.FieldDescriptor.LABEL_REPEATED:
+        # Use `is_repeated` (modern upb protobuf API) rather than the
+        # deprecated `label == LABEL_REPEATED` check — the C-extension
+        # FieldDescriptor in protobuf >= 5.x doesn't expose `.label` at
+        # all, and `is_repeated` is the supported replacement that works
+        # across both the pure-python and upb backends.
+        if field.is_repeated:
             raise AdminError(
                 f"{path!r} is a repeated field; v1 only supports scalar sets. "
                 "Use the raw meshtastic CLI for now."

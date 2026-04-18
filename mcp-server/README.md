@@ -138,13 +138,107 @@ _The tool tables below document 38 currently registered MCP server tools._
 
 ## Environment variables
 
-| Var                        | Default                                                     | Purpose                 |
-| -------------------------- | ----------------------------------------------------------- | ----------------------- |
-| `MESHTASTIC_FIRMWARE_ROOT` | walks up from cwd for `platformio.ini`                      | Pin the firmware repo   |
-| `MESHTASTIC_PIO_BIN`       | `~/.platformio/penv/bin/pio` → `$PATH` `pio` → `platformio` | Override `pio` location |
-| `MESHTASTIC_ESPTOOL_BIN`   | `<firmware>/.venv/bin/esptool` → `$PATH`                    | Override esptool        |
-| `MESHTASTIC_NRFUTIL_BIN`   | `$PATH`                                                     | Override nrfutil        |
-| `MESHTASTIC_PICOTOOL_BIN`  | `$PATH`                                                     | Override picotool       |
+| Var                        | Default                                                     | Purpose                                                             |
+| -------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| `MESHTASTIC_FIRMWARE_ROOT` | walks up from cwd for `platformio.ini`                      | Pin the firmware repo                                               |
+| `MESHTASTIC_PIO_BIN`       | `~/.platformio/penv/bin/pio` → `$PATH` `pio` → `platformio` | Override `pio` location                                             |
+| `MESHTASTIC_ESPTOOL_BIN`   | `<firmware>/.venv/bin/esptool` → `$PATH`                    | Override esptool                                                    |
+| `MESHTASTIC_NRFUTIL_BIN`   | `$PATH`                                                     | Override nrfutil                                                    |
+| `MESHTASTIC_PICOTOOL_BIN`  | `$PATH`                                                     | Override picotool                                                   |
+| `MESHTASTIC_MCP_SEED`      | `mcp-<user>-<host>`                                         | PSK seed for test-harness session (CI override)                     |
+| `MESHTASTIC_MCP_FLASH_LOG` | `<mcp-server>/tests/flash.log`                              | Tee target for pio/esptool/nrfutil subprocess output (TUI tails it) |
+
+## Hardware Test Suite
+
+`mcp-server/tests/` holds a pytest-based integration suite that exercises
+real USB-connected Meshtastic devices against the MCP server surface. Separate
+from the native C++ unit tests in the firmware repo's top-level `test/`
+directory — this one validates the device-facing behavior end-to-end.
+
+### Invocation
+
+```bash
+./mcp-server/run-tests.sh                               # full suite (auto-detect + auto-bake-if-needed)
+./mcp-server/run-tests.sh --force-bake                  # reflash devices before testing
+./mcp-server/run-tests.sh --assume-baked                # skip the bake step (caller vouches for state)
+./mcp-server/run-tests.sh tests/mesh                    # one tier
+./mcp-server/run-tests.sh tests/mesh/test_traceroute.py # one file
+./mcp-server/run-tests.sh -k telemetry                  # pytest name filter
+```
+
+The wrapper auto-detects connected devices (VID `0x239A` → `nrf52` → env
+`rak4631`; `0x303A` or `0x10C4` → `esp32s3` → env `heltec-v3`), exports
+`MESHTASTIC_MCP_ENV_<ROLE>` env vars, and invokes pytest. Overrides via
+per-role env vars: `MESHTASTIC_MCP_ENV_NRF52=heltec-mesh-node-t114 ./run-tests.sh`.
+
+No hardware connected? The wrapper narrows to `tests/unit/` only and says so
+in the pre-flight header.
+
+### Tiers (run in this order)
+
+- **`bake`** (`tests/test_00_bake.py`) — flashes both hub roles with the
+  session's test profile. Has a skip-if-already-baked check (region + channel
+  match); `--force-bake` overrides.
+- **`unit`** — pure Python, no hardware. boards / PIO wrapper /
+  userPrefs-parse / testing-profile fixtures.
+- **`mesh`** — 2-device mesh: formation, broadcast delivery, direct+ACK,
+  traceroute, position broadcast, bidirectional. Parametrized over both
+  directions.
+- **`telemetry`** — periodic telemetry broadcast + on-demand request/reply
+  (`TELEMETRY_APP` with `wantResponse=True`).
+- **`monitor`** — boot log has no panic markers within 60 s of reboot.
+- **`fleet`** — PSK-seed isolation: two labs with different seeds never
+  overlap.
+- **`admin`** — owner persistence across reboot, channel URL round-trip,
+  `lora.hop_limit` persistence.
+- **`provisioning`** — region/channel baking, userPrefs survive
+  `factory_reset(full=False)`.
+
+### Artifacts (regenerated every run, under `tests/`)
+
+- `report.html` — self-contained pytest-html report. Each test gets a
+  **Meshtastic debug** section attached on failure with a 200-line firmware
+  log tail + device-state dump. Open this first on failures.
+- `junit.xml` — CI-parseable.
+- `reportlog.jsonl` — `pytest-reportlog` event stream; consumed by the TUI.
+- `fwlog.jsonl` — firmware log mirror (`meshtastic.log.line` pubsub → JSONL).
+- `flash.log` — tee of all pio / esptool / nrfutil / picotool subprocess
+  output during the run (driven by `MESHTASTIC_MCP_FLASH_LOG`).
+
+### Live TUI
+
+```bash
+.venv/bin/meshtastic-mcp-test-tui
+.venv/bin/meshtastic-mcp-test-tui tests/mesh    # pytest args pass through
+```
+
+Textual-based wrapper over `run-tests.sh` with a live test tree, tier
+counters, pytest output pane, firmware-log pane, and a device-status strip.
+Key bindings: `r` re-run focused, `f` filter, `d` failure detail, `g` open
+`report.html`, `x` export reproducer bundle, `l` cycle fw-log filter, `q`
+quit (SIGINT → SIGTERM → SIGKILL escalation).
+
+### Slash commands
+
+Three AI-assisted workflows are wired up for Claude Code operators
+(`.claude/commands/`) and Copilot operators (`.github/prompts/`):
+`/test` (run + interpret), `/diagnose` (read-only health report), `/repro`
+(flake triage, N-times re-run with log diff).
+
+### House rules (for human + agent contributors)
+
+- Session-scoped fixtures in `tests/conftest.py` snapshot + restore
+  `userPrefs.jsonc`; **never edit `userPrefs.jsonc` from inside a test**.
+  Use the `test_profile` / `no_region_profile` fixtures for ephemeral
+  overrides.
+- `SerialInterface` holds an **exclusive port lock**; sequence calls
+  open → mutate → close, then next device. No parallel calls to the
+  same port.
+- Directed PKI-encrypted sends need **bilateral NodeInfo warmup** —
+  both sides must hold the other's current pubkey. See
+  `tests/mesh/_receive.py::nudge_nodeinfo_port` and the three directed-
+  send tests (`test_direct_with_ack`, `test_traceroute`,
+  `test_telemetry_request_reply`) for the canonical pattern.
 
 ## Layout
 
