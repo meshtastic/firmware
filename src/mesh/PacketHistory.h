@@ -51,7 +51,7 @@ class PacketHistory
     PacketHistory(const PacketHistory &);            // non construction-copyable
     PacketHistory &operator=(const PacketHistory &); // non copyable
   public:
-    explicit PacketHistory(uint32_t size = -1); // Constructor with size parameter, default is PACKETHISTORY_MAX
+    explicit PacketHistory(uint32_t size = -1); // Constructor with optional capacity override; invalid sizes use the default
     ~PacketHistory();
 
     /**

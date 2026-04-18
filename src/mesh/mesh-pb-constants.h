@@ -38,32 +38,43 @@
 #endif
 
 /// Verify baseline assumption of node size. If it increases, we need to reevaluate
-/// the impact of its memory footprint, notably on MAX_NUM_NODES.
-static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
+/// the impact of its memory footprint, notably on NodeDB target caps.
+static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increased. Reconsider NodeDB target caps.");
+
+static constexpr size_t NODEDB_STM32WL_TARGET_CAP = 10;
+static constexpr size_t NODEDB_NRF52_TARGET_CAP = 100;
+static constexpr size_t NODEDB_ESP32_NO_PSRAM_TARGET_CAP = 500;
+static constexpr size_t NODEDB_ESP32S3_PSRAM_TARGET_CAP = 3000;
+
+#if defined(BOARD_HAS_PSRAM)
+static constexpr size_t NODEDB_PSRAM_HEADROOM_BYTES = 512 * 1024;
+static constexpr size_t NODEDB_HEAP_HEADROOM_BYTES = 96 * 1024;
+static constexpr size_t NODEDB_ESTIMATED_DRAM_BYTES_PER_NODE = 32;
+#endif
+
+// `NODEDB_TARGET_CAP` is the build's upper bound. `MAX_NUM_NODES` remains as the
+// compatibility macro consumed by the rest of the codebase and by Portduino overrides.
+#if defined(MAX_NUM_NODES) && !defined(NODEDB_TARGET_CAP)
+#define NODEDB_TARGET_CAP MAX_NUM_NODES
+#endif
 
 /// max number of nodes allowed in the nodeDB
-#ifndef MAX_NUM_NODES
+#ifndef NODEDB_TARGET_CAP
 #if defined(ARCH_STM32WL)
-#define MAX_NUM_NODES 10
+#define NODEDB_TARGET_CAP NODEDB_STM32WL_TARGET_CAP
 #elif defined(ARCH_NRF52)
-#define MAX_NUM_NODES 80
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#include "Esp.h"
-static inline int get_max_num_nodes()
-{
-    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Convert Bytes to MB
-    if (flash_size >= 15) {
-        return 250;
-    } else if (flash_size >= 7) {
-        return 200;
-    } else {
-        return 100;
-    }
-}
-#define MAX_NUM_NODES get_max_num_nodes()
+#define NODEDB_TARGET_CAP NODEDB_NRF52_TARGET_CAP
+#elif defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)
+#define NODEDB_TARGET_CAP NODEDB_ESP32S3_PSRAM_TARGET_CAP
+#elif defined(ARCH_ESP32)
+#define NODEDB_TARGET_CAP NODEDB_ESP32_NO_PSRAM_TARGET_CAP
 #else
-#define MAX_NUM_NODES 100
+#define NODEDB_TARGET_CAP 100
 #endif
+#endif
+
+#ifndef MAX_NUM_NODES
+#define MAX_NUM_NODES NODEDB_TARGET_CAP
 #endif
 
 /// Max number of channels allowed

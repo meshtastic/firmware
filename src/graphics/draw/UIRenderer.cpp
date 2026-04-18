@@ -29,7 +29,7 @@ static uint32_t lastSwitchTime = 0;
 namespace graphics
 {
 NodeNum UIRenderer::currentFavoriteNodeNum = 0;
-std::vector<meshtastic_NodeInfoLite *> graphics::UIRenderer::favoritedNodes;
+std::vector<NodeNum> graphics::UIRenderer::favoritedNodes;
 
 static inline void drawSatelliteIcon(OLEDDisplay *display, int16_t x, int16_t y)
 {
@@ -50,11 +50,10 @@ void graphics::UIRenderer::rebuildFavoritedNodes()
         if (!n || n->num == nodeDB->getNodeNum())
             continue;
         if (n->is_favorite)
-            favoritedNodes.push_back(n);
+            favoritedNodes.push_back(n->num);
     }
 
-    std::sort(favoritedNodes.begin(), favoritedNodes.end(),
-              [](const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b) { return a->num < b->num; });
+    std::sort(favoritedNodes.begin(), favoritedNodes.end());
 }
 
 #if !MESHTASTIC_EXCLUDE_GPS
@@ -260,12 +259,19 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 {
     char usersString[20];
     int nodes_online = (nodeStatus->getNumOnline() > 0) ? nodeStatus->getNumOnline() + node_offset : 0;
-
-    snprintf(usersString, sizeof(usersString), "%d %s", nodes_online, additional_words);
+    const bool hasAdditionalWords = additional_words && additional_words[0] != '\0';
 
     if (show_total) {
         int nodes_total = (nodeStatus->getNumTotal() > 0) ? nodeStatus->getNumTotal() + node_offset : 0;
-        snprintf(usersString, sizeof(usersString), "%d/%d %s", nodes_online, nodes_total, additional_words);
+        if (hasAdditionalWords)
+            snprintf(usersString, sizeof(usersString), "%d/%d %s", nodes_online, nodes_total, additional_words);
+        else
+            snprintf(usersString, sizeof(usersString), "%d/%d", nodes_online, nodes_total);
+    } else {
+        if (hasAdditionalWords)
+            snprintf(usersString, sizeof(usersString), "%d %s", nodes_online, additional_words);
+        else
+            snprintf(usersString, sizeof(usersString), "%d", nodes_online);
     }
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
@@ -303,7 +309,8 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (nodeIndex < 0 || nodeIndex >= (int)favoritedNodes.size())
         return;
 
-    meshtastic_NodeInfoLite *node = favoritedNodes[nodeIndex];
+    const NodeNum favoriteNodeNum = favoritedNodes[nodeIndex];
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(favoriteNodeNum);
     if (!node || node->num == nodeDB->getNodeNum() || !node->is_favorite)
         return;
     display->clear();
@@ -315,7 +322,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
         lastSwitchTime = now;
     }
 #endif
-    currentFavoriteNodeNum = node->num;
+    currentFavoriteNodeNum = favoriteNodeNum;
     // === Create the shortName and title string ===
     const char *shortName = (node->has_user && node->user.short_name[0]) ? node->user.short_name : "Node";
     char titlestr[40];
@@ -820,9 +827,9 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     // Display Region and Channel Utilization
     if (currentResolution == ScreenResolution::UltraLow) {
-        drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1);
     } else {
-        drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1);
     }
     char uptimeStr[32] = "";
     if (currentResolution != ScreenResolution::UltraLow) {

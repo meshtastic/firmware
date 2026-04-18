@@ -154,10 +154,11 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
 {
     if (ostream) {
         std::vector<meshtastic_NodeInfoLite> const *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
-        for (auto item : *vec) {
+        for (const auto &item : *vec) {
             if (!pb_encode_tag_for_field(ostream, field))
                 return false;
-            pb_encode_submessage(ostream, meshtastic_NodeInfoLite_fields, &item);
+            if (!pb_encode_submessage(ostream, meshtastic_NodeInfoLite_fields, &item))
+                return false;
         }
     }
     if (istream) {
@@ -192,7 +193,7 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
-NodeDB::NodeDB()
+NodeDB::NodeDB() : meshNodes(&nodeDatabase.nodes), arraySlotStore(nodeDatabase.nodes), nodeStore(&arraySlotStore)
 {
     LOG_INFO("Init NodeDB");
     loadFromDisk();
@@ -299,10 +300,20 @@ NodeDB::NodeDB()
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = TypeConversions::ConvertToUserLite(owner);
     info->has_user = true;
+    refreshNodeMeta(getStorageIndex(info));
 
     // If node database has not been saved for the first time, save it now
 #ifdef FSCom
-    if (!FSCom.exists(nodeDatabaseFileName)) {
+    bool hasPersistedNodeDatabase = false;
+    if (prefersFlashSlotStore()) {
+        FlashSlotStore::Manifest manifest;
+        hasPersistedNodeDatabase = flashSlotStore.readManifest(manifest);
+    } else {
+        concurrency::LockGuard g(spiLock);
+        hasPersistedNodeDatabase = FSCom.exists(nodeDatabaseFileName);
+    }
+
+    if (!hasPersistedNodeDatabase) {
         saveNodeDatabaseToDisk();
     }
 #endif
@@ -448,6 +459,7 @@ NodeDB::NodeDB()
 #endif
     }
 #endif
+    refreshNodeMeta(getStorageIndex(info));
     sortMeshDB();
     saveToDisk(saveWhat);
 }
@@ -460,6 +472,303 @@ NodeNum getFrom(const meshtastic_MeshPacket *p)
 {
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
 }
+
+namespace
+{
+constexpr NodeNum kNumReservedNodeNums = 4;
+constexpr uint16_t INVALID_FLASH_SLOT_INDEX = UINT16_MAX;
+
+uint32_t secondsSinceTimestamp(uint32_t timestamp)
+{
+    uint32_t now = getTime();
+
+    int delta = (int)(now - timestamp);
+    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
+        delta = 0;
+
+    return delta;
+}
+
+void removeStorageIndexFromDisplayOrder(std::vector<uint16_t> &displayOrder, uint16_t removedStorageIndex)
+{
+    displayOrder.erase(std::remove(displayOrder.begin(), displayOrder.end(), removedStorageIndex), displayOrder.end());
+    for (uint16_t &storageIndex : displayOrder) {
+        if (storageIndex > removedStorageIndex) {
+            --storageIndex;
+        }
+    }
+}
+
+void removeStorageIndicesFromDisplayOrder(std::vector<uint16_t> &displayOrder, std::vector<uint16_t> removedStorageIndices)
+{
+    std::sort(removedStorageIndices.begin(), removedStorageIndices.end());
+    for (auto it = removedStorageIndices.rbegin(); it != removedStorageIndices.rend(); ++it) {
+        removeStorageIndexFromDisplayOrder(displayOrder, *it);
+    }
+}
+
+bool encodeLiveNodeDatabase(pb_ostream_t *stream, uint32_t version, const NodeStore &store, pb_size_t liveNodeCount)
+{
+    if (liveNodeCount > store.slotCount()) {
+        PB_RETURN_ERROR(stream, "NodeDB live count exceeds backing store");
+    }
+
+    if (version != 0) {
+        if (!pb_encode_tag(stream, PB_WT_VARINT, meshtastic_NodeDatabase_version_tag) || !pb_encode_varint(stream, version)) {
+            return false;
+        }
+    }
+
+    for (pb_size_t i = 0; i < liveNodeCount; ++i) {
+        const meshtastic_NodeInfoLite &node = store.slot(i);
+        if (!pb_encode_tag(stream, PB_WT_STRING, meshtastic_NodeDatabase_nodes_tag) ||
+            !pb_encode_submessage(stream, meshtastic_NodeInfoLite_fields, &node)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void resetLoadedNodeDatabaseStorage(meshtastic_NodeDatabase &database)
+{
+    database.version = 0;
+    // Replace the backing vector outright so any oversized capacity left by a
+    // legacy callback-based load is released before we admit new records.
+    database.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
+}
+
+void scrubAllZeroPublicKey(meshtastic_NodeInfoLite &node)
+{
+    if (node.user.public_key.size > 0 && memfll(node.user.public_key.bytes, 0, node.user.public_key.size)) {
+        node.user.public_key.size = 0;
+    }
+}
+
+bool shouldAdmitLoadedNode(meshtastic_NodeInfoLite &node)
+{
+    scrubAllZeroPublicKey(node);
+    return node.num != NODENUM_BROADCAST && node.num >= kNumReservedNodeNums && node.has_user;
+}
+
+bool decodeLiveNodeDatabase(pb_istream_t *stream, meshtastic_NodeDatabase &database, pb_size_t &liveNodeCount,
+                            pb_size_t &rejectedNodeCount, pb_size_t &truncatedNodeCount)
+{
+    liveNodeCount = 0;
+    rejectedNodeCount = 0;
+    truncatedNodeCount = 0;
+
+    pb_wire_type_t wireType;
+    uint32_t tag = 0;
+    bool eof = false;
+
+    while (pb_decode_tag(stream, &wireType, &tag, &eof)) {
+        if (tag == meshtastic_NodeDatabase_version_tag) {
+            if (wireType != PB_WT_VARINT || !pb_decode_varint32(stream, &database.version)) {
+                return false;
+            }
+            continue;
+        }
+
+        if (tag == meshtastic_NodeDatabase_nodes_tag) {
+            if (wireType != PB_WT_STRING) {
+                PB_RETURN_ERROR(stream, "NodeDB node field has wrong wire type");
+            }
+
+            pb_istream_t substream;
+            if (!pb_make_string_substream(stream, &substream)) {
+                return false;
+            }
+
+            meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_default;
+            const bool decoded = pb_decode(&substream, meshtastic_NodeInfoLite_fields, &node);
+            const bool closed = pb_close_string_substream(stream, &substream);
+            if (!decoded || !closed) {
+                return false;
+            }
+
+            if (!shouldAdmitLoadedNode(node)) {
+                ++rejectedNodeCount;
+                continue;
+            }
+
+            bool duplicateNodeNum = false;
+            for (pb_size_t i = 0; i < liveNodeCount; ++i) {
+                if (database.nodes[i].num == node.num) {
+                    duplicateNodeNum = true;
+                    break;
+                }
+            }
+
+            if (duplicateNodeNum) {
+                ++rejectedNodeCount;
+                continue;
+            }
+
+            if (liveNodeCount >= MAX_NUM_NODES) {
+                ++truncatedNodeCount;
+                continue;
+            }
+
+            database.nodes[liveNodeCount++] = node;
+            continue;
+        }
+
+        if (!pb_skip_field(stream, wireType)) {
+            return false;
+        }
+    }
+
+    if (!eof) {
+        return false;
+    }
+
+    database.nodes.resize(liveNodeCount);
+    return true;
+}
+
+void logNodeDbMemorySnapshot(const char *label, pb_size_t liveNodeCount, size_t slotCount)
+{
+#if defined(ARCH_ESP32)
+    LOG_INFO("NodeDB memory %s: live=%u slots=%u heap=%u/%u psram=%u/%u", label, liveNodeCount, static_cast<unsigned>(slotCount),
+             memGet.getFreeHeap(), memGet.getHeapSize(), memGet.getFreePsram(), memGet.getPsramSize());
+#else
+    (void)label;
+    (void)liveNodeCount;
+    (void)slotCount;
+#endif
+}
+
+#ifdef FSCom
+LoadFileResult loadNodeDatabaseProto(const char *filename, File &file, meshtastic_NodeDatabase &database)
+{
+    resetLoadedNodeDatabaseStorage(database);
+
+    pb_size_t liveNodeCount = 0;
+    pb_size_t rejectedNodeCount = 0;
+    pb_size_t truncatedNodeCount = 0;
+    pb_istream_t stream = {&readcb, &file, static_cast<size_t>(file.size())};
+
+    if (!decodeLiveNodeDatabase(&stream, database, liveNodeCount, rejectedNodeCount, truncatedNodeCount)) {
+        LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+        database.version = 0;
+        database.nodes.clear();
+        return LoadFileResult::DECODE_FAILED;
+    }
+
+    LOG_INFO("Loaded %s successfully", filename);
+    LOG_INFO("Loaded NodeDB version %u with %u live nodes (%u rejected, %u truncated)", database.version, liveNodeCount,
+             rejectedNodeCount, truncatedNodeCount);
+    return LoadFileResult::LOAD_SUCCESS;
+}
+#endif
+
+bool encodeNodeForComparison(const meshtastic_NodeInfoLite &node, uint8_t *buffer, size_t bufferSize, size_t &encodedLen)
+{
+    encodedLen = pb_encode_to_bytes(buffer, bufferSize, meshtastic_NodeInfoLite_fields, &node);
+    return encodedLen > 0 && encodedLen <= bufferSize;
+}
+
+bool nodesHaveEquivalentEncoding(const meshtastic_NodeInfoLite &lhs, const meshtastic_NodeInfoLite &rhs)
+{
+    uint8_t lhsBuffer[meshtastic_NodeInfoLite_size] = {};
+    uint8_t rhsBuffer[meshtastic_NodeInfoLite_size] = {};
+    size_t lhsLen = 0;
+    size_t rhsLen = 0;
+
+    return encodeNodeForComparison(lhs, lhsBuffer, sizeof(lhsBuffer), lhsLen) &&
+           encodeNodeForComparison(rhs, rhsBuffer, sizeof(rhsBuffer), rhsLen) && lhsLen == rhsLen &&
+           memcmp(lhsBuffer, rhsBuffer, lhsLen) == 0;
+}
+
+bool verifyFlashNodeSlot(const FlashSlotStore &flashSlotStore, const FlashSlotStore::Manifest &manifest, uint16_t slotIndex,
+                         const meshtastic_NodeInfoLite &expectedNode)
+{
+    meshtastic_NodeInfoLite decodedNode = meshtastic_NodeInfoLite_init_default;
+    return flashSlotStore.readSlot(manifest, slotIndex, decodedNode) && nodesHaveEquivalentEncoding(expectedNode, decodedNode);
+}
+
+bool verifyFlashNodeSlotCleared(const FlashSlotStore &flashSlotStore, const FlashSlotStore::Manifest &manifest,
+                                uint16_t slotIndex)
+{
+    meshtastic_NodeInfoLite decodedNode = meshtastic_NodeInfoLite_init_default;
+    return !flashSlotStore.readSlot(manifest, slotIndex, decodedNode);
+}
+
+bool verifyFlashNodeDatabase(const FlashSlotStore &flashSlotStore, const FlashSlotStore::Manifest &manifest,
+                             const NodeStore &nodeStore, pb_size_t liveNodeCount)
+{
+    if (manifest.slot_count != nodeStore.slotCount()) {
+        LOG_ERROR("Flash NodeDB verification failed: manifest mismatch");
+        return false;
+    }
+
+    for (uint16_t storageIndex = 0; storageIndex < liveNodeCount; ++storageIndex) {
+        if (!verifyFlashNodeSlot(flashSlotStore, manifest, storageIndex, nodeStore.slot(storageIndex))) {
+            LOG_ERROR("Flash NodeDB verification failed at slot %u", static_cast<unsigned>(storageIndex));
+            return false;
+        }
+    }
+
+    for (uint16_t storageIndex = liveNodeCount; storageIndex < nodeStore.slotCount(); ++storageIndex) {
+        if (!verifyFlashNodeSlotCleared(flashSlotStore, manifest, storageIndex)) {
+            LOG_ERROR("Flash NodeDB verification found stale slot %u", static_cast<unsigned>(storageIndex));
+            return false;
+        }
+    }
+
+    return true;
+}
+
+struct FlashPageUpdate {
+    uint16_t storageIndex;
+    uint16_t flashSlotIndex;
+    uint16_t pageIndex;
+};
+
+size_t flashPageSizeBytes(const FlashSlotStore::Manifest &manifest)
+{
+    return static_cast<size_t>(manifest.record_size) * manifest.slots_per_page;
+}
+
+uint16_t flashPageCount(const FlashSlotStore::Manifest &manifest)
+{
+    return static_cast<uint16_t>((manifest.slot_count + manifest.slots_per_page - 1) / manifest.slots_per_page);
+}
+
+uint16_t flashPageIndexForSlot(const FlashSlotStore::Manifest &manifest, uint16_t slotIndex)
+{
+    return slotIndex / manifest.slots_per_page;
+}
+
+uint16_t flashLivePageCount(const FlashSlotStore::Manifest &manifest, pb_size_t liveNodeCount)
+{
+    return liveNodeCount == 0 ? 0
+                              : static_cast<uint16_t>((static_cast<uint32_t>(liveNodeCount) + manifest.slots_per_page - 1) /
+                                                      manifest.slots_per_page);
+}
+
+bool verifyFlashPageImage(const FlashSlotStore &flashSlotStore, const FlashSlotStore::Manifest &manifest, uint16_t pageIndex,
+                          const std::vector<uint8_t> &expectedPage)
+{
+    std::vector<uint8_t> storedPage;
+    return flashSlotStore.loadPage(manifest, pageIndex, storedPage) && storedPage == expectedPage;
+}
+
+#ifdef FSCom
+bool fileExists(const char *path)
+{
+    concurrency::LockGuard g(spiLock);
+    return FSCom.exists(path);
+}
+
+bool removeFile(const char *path)
+{
+    concurrency::LockGuard g(spiLock);
+    return !FSCom.exists(path) || FSCom.remove(path);
+}
+#endif
+} // namespace
 
 // Returns true if the packet originated from the local node
 bool isFromUs(const meshtastic_MeshPacket *p)
@@ -538,9 +847,12 @@ void NodeDB::installDefaultNodeDatabase()
 {
     LOG_DEBUG("Install default NodeDatabase");
     nodeDatabase.version = DEVICESTATE_CUR_VER;
-    nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
+    nodeStore->reset(MAX_NUM_NODES);
+    resetFlashSlotState();
     numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
+    resetDisplayOrder();
+    rebuildNodeMeta();
 }
 
 void NodeDB::installDefaultConfig(bool preserveKey = false)
@@ -1012,21 +1324,29 @@ void NodeDB::resetNodes(bool keepFavorites)
 {
     if (!config.position.fixed_position)
         clearLocalPosition();
-    numMeshNodes = 1;
     if (keepFavorites) {
         LOG_INFO("Clearing node database - preserving favorites");
-        for (size_t i = 0; i < meshNodes->size(); i++) {
-            meshtastic_NodeInfoLite &node = meshNodes->at(i);
-            if (i > 0 && !node.is_favorite) {
-                node = meshtastic_NodeInfoLite();
-            } else {
-                numMeshNodes += 1;
+        size_t newPos = 1;
+        for (size_t i = 1; i < numMeshNodes; i++) {
+            meshtastic_NodeInfoLite &node = slotAt(static_cast<uint16_t>(i));
+            if (node.is_favorite) {
+                if (newPos != i) {
+                    moveStorageSlot(static_cast<uint16_t>(newPos), static_cast<uint16_t>(i));
+                }
+                newPos++;
             }
-        };
+        }
+        numMeshNodes = newPos;
+        clearStorageSlots(numMeshNodes, nodeStore->slotCount());
     } else {
         LOG_INFO("Clearing node database - removing favorites");
-        std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
+        numMeshNodes = 1;
+        clearStorageSlots(1, nodeStore->slotCount());
     }
+    resetDisplayOrder();
+    rebuildNodeMeta();
+    lastSort = 0;
+    sortMeshDB();
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
@@ -1037,16 +1357,25 @@ void NodeDB::resetNodes(bool keepFavorites)
 
 void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
+    const size_t oldNumMeshNodes = numMeshNodes;
     int newPos = 0, removed = 0;
+    std::vector<uint16_t> removedStorageIndices;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).num != nodeNum)
-            meshNodes->at(newPos++) = meshNodes->at(i);
-        else
+        if (slotAt(static_cast<uint16_t>(i)).num != nodeNum) {
+            moveStorageSlot(static_cast<uint16_t>(newPos++), static_cast<uint16_t>(i));
+        } else {
             removed++;
+            removedStorageIndices.push_back(static_cast<uint16_t>(i));
+        }
     }
     numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
-              meshtastic_NodeInfoLite());
+    clearStorageSlots(numMeshNodes, numMeshNodes + removed);
+    if (displayOrder.size() >= oldNumMeshNodes) {
+        removeStorageIndicesFromDisplayOrder(displayOrder, std::move(removedStorageIndices));
+    } else {
+        resetDisplayOrder();
+    }
+    rebuildNodeMeta();
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveNodeDatabaseToDisk();
 }
@@ -1054,36 +1383,507 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
 void NodeDB::clearLocalPosition()
 {
     meshtastic_NodeInfoLite *node = getMeshNode(nodeDB->getNodeNum());
+    if (!node) {
+        return;
+    }
     node->position.latitude_i = 0;
     node->position.longitude_i = 0;
     node->position.altitude = 0;
     node->position.time = 0;
     setLocalPosition(meshtastic_Position_init_default);
     localPositionUpdatedSinceBoot = false;
+    refreshNodeMeta(getStorageIndex(node));
 }
 
 void NodeDB::cleanupMeshDB()
 {
+    if (flashSlotStoreActive) {
+        LOG_DEBUG("cleanupMeshDB skipped after flash boot scan");
+        return;
+    }
+
+    const size_t oldNumMeshNodes = numMeshNodes;
     int newPos = 0, removed = 0;
+    std::vector<uint16_t> removedStorageIndices;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).has_user) {
-            if (meshNodes->at(i).user.public_key.size > 0) {
-                if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
-                    meshNodes->at(i).user.public_key.size = 0;
-                }
+        meshtastic_NodeInfoLite &node = slotAt(static_cast<uint16_t>(i));
+        if (node.has_user) {
+            if (node.user.public_key.size > 0) {
+                scrubAllZeroPublicKey(node);
             }
             if (newPos != i)
-                meshNodes->at(newPos++) = meshNodes->at(i);
+                moveStorageSlot(static_cast<uint16_t>(newPos++), static_cast<uint16_t>(i));
             else
                 newPos++;
         } else {
             removed++;
+            removedStorageIndices.push_back(static_cast<uint16_t>(i));
         }
     }
     numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
-              meshtastic_NodeInfoLite());
+    clearStorageSlots(numMeshNodes, numMeshNodes + removed);
+    if (displayOrder.size() >= oldNumMeshNodes) {
+        removeStorageIndicesFromDisplayOrder(displayOrder, std::move(removedStorageIndices));
+    } else {
+        resetDisplayOrder();
+    }
+    rebuildNodeMeta();
     LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
+}
+
+void NodeDB::resetDisplayOrder()
+{
+    displayOrder.resize(numMeshNodes);
+    for (size_t i = 0; i < numMeshNodes; ++i) {
+        displayOrder[i] = static_cast<uint16_t>(i);
+    }
+}
+
+void NodeDB::rebuildNodeMeta()
+{
+    rebuildingNodeMeta = true;
+    nodeMeta.resize(numMeshNodes);
+    for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
+        refreshNodeMeta(storageIndex);
+    }
+    rebuildingNodeMeta = false;
+    rebuildNodeMetaLookup();
+}
+
+bool NodeDB::prefersFlashSlotStore() const
+{
+#if (defined(ARCH_ESP32) && !defined(BOARD_HAS_PSRAM)) || defined(ARCH_NRF52)
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool NodeDB::loadFromFlashSlotStore()
+{
+    FlashSlotStore::Manifest manifest;
+    if (!flashSlotStore.readManifest(manifest)) {
+        return false;
+    }
+
+    nodeDatabase.version = DEVICESTATE_CUR_VER;
+    nodeStore->reset(MAX_NUM_NODES);
+    meshNodes = &nodeDatabase.nodes;
+
+    flashSlotStoreActive = true;
+    flashSlotByStorageIndex.assign(nodeStore->slotCount(), INVALID_FLASH_SLOT_INDEX);
+    flashSlotCacheValid.assign(nodeStore->slotCount(), 0);
+    resizeFlashSlotTracking(nodeStore->slotCount());
+
+    // Boot scan compacts the persisted flash layout into dense live storage
+    // order without decoding every node into the RAM overlay up front.
+    std::vector<NodeMeta> scannedMeta;
+    std::vector<NodeNum> admittedNodeNums;
+    scannedMeta.reserve(std::min<size_t>(manifest.slot_count, nodeStore->slotCount()));
+    admittedNodeNums.reserve(scannedMeta.capacity());
+
+    pb_size_t rejectedNodeCount = 0;
+    pb_size_t truncatedNodeCount = 0;
+    bool requiresFullRewrite = false;
+    for (uint16_t flashSlotIndex = 0; flashSlotIndex < manifest.slot_count; ++flashSlotIndex) {
+        meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_default;
+        if (!flashSlotStore.readSlot(manifest, flashSlotIndex, node)) {
+            continue;
+        }
+
+        bool duplicateNodeNum = false;
+        for (const NodeNum admittedNodeNum : admittedNodeNums) {
+            if (admittedNodeNum == node.num) {
+                duplicateNodeNum = true;
+                break;
+            }
+        }
+
+        if (!shouldAdmitLoadedNode(node) || duplicateNodeNum) {
+            ++rejectedNodeCount;
+            continue;
+        }
+
+        if (scannedMeta.size() >= nodeStore->slotCount()) {
+            ++truncatedNodeCount;
+            continue;
+        }
+
+        const uint16_t storageIndex = static_cast<uint16_t>(scannedMeta.size());
+        flashSlotByStorageIndex.at(storageIndex) = flashSlotIndex;
+        requiresFullRewrite = requiresFullRewrite || (flashSlotIndex != storageIndex);
+        scannedMeta.push_back(makeNodeMeta(node, storageIndex));
+        admittedNodeNums.push_back(node.num);
+    }
+
+    numMeshNodes = static_cast<pb_size_t>(scannedMeta.size());
+    nodeMeta = std::move(scannedMeta);
+    resetDisplayOrder();
+    rebuildNodeMetaLookup();
+    flashSlotFullRewriteRequired = requiresFullRewrite || rejectedNodeCount > 0 || truncatedNodeCount > 0;
+
+    LOG_INFO("Loaded flash-slot NodeDB with %u live nodes (%u rejected, %u truncated)", static_cast<unsigned>(numMeshNodes),
+             static_cast<unsigned>(rejectedNodeCount), static_cast<unsigned>(truncatedNodeCount));
+    if (flashSlotFullRewriteRequired) {
+        LOG_WARN("Flash slot NodeDB will normalize on next save");
+    }
+    return true;
+}
+
+bool NodeDB::ensureFlashSlotLoaded(uint16_t storageIndex)
+{
+    if (!flashSlotStoreActive) {
+        return true;
+    }
+
+    if (storageIndex >= nodeStore->slotCount() || storageIndex >= flashSlotCacheValid.size()) {
+        return false;
+    }
+
+    if (flashSlotCacheValid.at(storageIndex)) {
+        return true;
+    }
+
+    // The flash-backed mode keeps NodeMeta hot in RAM and only pulls the full
+    // record into the compatibility overlay when a caller actually needs it.
+    const uint16_t flashSlotIndex = flashSlotByStorageIndex.at(storageIndex);
+    if (flashSlotIndex == INVALID_FLASH_SLOT_INDEX) {
+        return false;
+    }
+
+    meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_default;
+    if (!flashSlotStore.readSlot(flashSlotIndex, node)) {
+        LOG_WARN("Failed to load flash slot %u for storage index %u", static_cast<unsigned>(flashSlotIndex),
+                 static_cast<unsigned>(storageIndex));
+        return false;
+    }
+
+    scrubAllZeroPublicKey(node);
+    nodeStore->slot(storageIndex) = node;
+    flashSlotCacheValid.at(storageIndex) = 1;
+    return true;
+}
+
+bool NodeDB::ensureAllLiveSlotsLoaded()
+{
+    for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
+        if (!ensureFlashSlotLoaded(storageIndex)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void NodeDB::resizeFlashSlotTracking(size_t slotCount)
+{
+    flashSlotDirty.assign(slotCount, 0);
+}
+
+void NodeDB::markFlashSlotDirty(uint16_t storageIndex)
+{
+    if (!prefersFlashSlotStore() || storageIndex >= nodeStore->slotCount()) {
+        return;
+    }
+
+    if (flashSlotDirty.size() != nodeStore->slotCount()) {
+        resizeFlashSlotTracking(nodeStore->slotCount());
+    }
+
+    flashSlotDirty.at(storageIndex) = 1;
+}
+
+void NodeDB::clearFlashSlotDirty(size_t beginIndex, size_t endIndex)
+{
+    if (flashSlotDirty.empty() || beginIndex >= endIndex || beginIndex >= flashSlotDirty.size()) {
+        return;
+    }
+
+    const size_t clampedEndIndex = std::min(endIndex, flashSlotDirty.size());
+    std::fill(flashSlotDirty.begin() + beginIndex, flashSlotDirty.begin() + clampedEndIndex, 0);
+}
+
+void NodeDB::markFlashSlotLayoutDirty()
+{
+    if (!prefersFlashSlotStore()) {
+        return;
+    }
+
+    // Any storage move or clear changes the dense layout, so our next save has to repack flash in slot order.
+    flashSlotFullRewriteRequired = true;
+    if (flashSlotDirty.size() != nodeStore->slotCount()) {
+        resizeFlashSlotTracking(nodeStore->slotCount());
+    }
+}
+
+void NodeDB::moveStorageSlot(uint16_t destIndex, uint16_t sourceIndex)
+{
+    if (destIndex == sourceIndex) {
+        return;
+    }
+
+    // Dense storage order is still authoritative inside NodeDB even when the
+    // durable representation lives in flash. Compaction updates that dense view
+    // first and lets the next save normalize the on-flash layout if needed.
+    markFlashSlotLayoutDirty();
+
+    if (!flashSlotStoreActive) {
+        nodeStore->slot(destIndex) = nodeStore->slot(sourceIndex);
+        return;
+    }
+
+    assert(destIndex < flashSlotByStorageIndex.size());
+    assert(sourceIndex < flashSlotByStorageIndex.size());
+    flashSlotByStorageIndex.at(destIndex) = flashSlotByStorageIndex.at(sourceIndex);
+
+    if (flashSlotCacheValid.at(sourceIndex)) {
+        nodeStore->slot(destIndex) = nodeStore->slot(sourceIndex);
+        flashSlotCacheValid.at(destIndex) = 1;
+    } else {
+        flashSlotCacheValid.at(destIndex) = 0;
+    }
+}
+
+void NodeDB::clearStorageSlots(size_t beginIndex, size_t endIndex)
+{
+    const size_t clampedEndIndex = std::min(endIndex, nodeStore->slotCount());
+    if (beginIndex < clampedEndIndex) {
+        markFlashSlotLayoutDirty();
+    }
+    nodeStore->clearSlots(beginIndex, clampedEndIndex);
+
+    if (!flashSlotStoreActive) {
+        return;
+    }
+
+    for (size_t storageIndex = beginIndex; storageIndex < clampedEndIndex; ++storageIndex) {
+        flashSlotByStorageIndex.at(storageIndex) = INVALID_FLASH_SLOT_INDEX;
+        flashSlotCacheValid.at(storageIndex) = 0;
+    }
+}
+
+void NodeDB::resetFlashSlotState()
+{
+    flashSlotStoreActive = false;
+    flashSlotByStorageIndex.clear();
+    flashSlotCacheValid.clear();
+    flashSlotDirty.clear();
+    flashSlotFullRewriteRequired = false;
+}
+
+NodeDB::NodeMeta NodeDB::makeNodeMeta(const meshtastic_NodeInfoLite &node, uint16_t storageIndex)
+{
+    NodeMeta meta;
+    meta.node_num = node.num;
+    meta.last_heard = node.last_heard;
+    meta.storage_index = storageIndex;
+    meta.snr_q4 = quantizeSnrQ4(node.snr);
+    meta.channel = node.channel;
+    meta.hops_away = node.has_hops_away ? node.hops_away : UINT8_MAX;
+    meta.next_hop = node.next_hop;
+    meta.flags = buildNodeMetaFlags(node);
+    meta.role = node.has_user ? static_cast<uint8_t>(node.user.role) : 0;
+    meta.hw_model = node.has_user ? static_cast<uint8_t>(node.user.hw_model) : 0;
+    return meta;
+}
+
+meshtastic_NodeInfoLite &NodeDB::slotAt(uint16_t storageIndex)
+{
+    const bool loaded = ensureFlashSlotLoaded(storageIndex);
+    assert(loaded);
+    (void)loaded;
+    return nodeStore->slot(storageIndex);
+}
+
+meshtastic_NodeInfoLite *NodeDB::slotPtr(uint16_t storageIndex)
+{
+    if (!ensureFlashSlotLoaded(storageIndex)) {
+        return nullptr;
+    }
+    return &nodeStore->slot(storageIndex);
+}
+
+void NodeDB::rebuildNodeMetaLookup()
+{
+    if (numMeshNodes == 0) {
+        nodeMetaLookup.clear();
+        nodeMetaLookupMask = 0;
+        return;
+    }
+
+    assert(nodeMeta.size() >= numMeshNodes);
+    nodeMetaLookup.assign(chooseNodeMetaLookupCapacity(numMeshNodes), UINT16_MAX);
+    nodeMetaLookupMask = nodeMetaLookup.size() - 1;
+
+    // Simple linear probing is enough here: the table is private to NodeDB,
+    // rebuilt in one pass, and sized to stay comfortably below full.
+    for (uint16_t metaIndex = 0; metaIndex < numMeshNodes; ++metaIndex) {
+        const NodeMeta &meta = nodeMeta.at(metaIndex);
+        size_t probeIndex = hashNodeMetaKey(meta.node_num) & nodeMetaLookupMask;
+        while (true) {
+            uint16_t &entry = nodeMetaLookup.at(probeIndex);
+            if (entry == UINT16_MAX) {
+                entry = metaIndex;
+                break;
+            }
+
+            if (nodeMeta.at(entry).node_num == meta.node_num) {
+                break;
+            }
+
+            probeIndex = (probeIndex + 1) & nodeMetaLookupMask;
+        }
+    }
+}
+
+void NodeDB::refreshNodeMeta(uint16_t storageIndex)
+{
+    if (storageIndex >= numMeshNodes) {
+        return;
+    }
+
+    const size_t previousMetaCount = nodeMeta.size();
+    const NodeNum previousNodeNum = (storageIndex < previousMetaCount) ? nodeMeta.at(storageIndex).node_num : 0;
+    if (previousMetaCount < numMeshNodes) {
+        nodeMeta.resize(numMeshNodes);
+    }
+
+    // This is the central "record changed, resync the hot cache" path.
+    nodeMeta.at(storageIndex) = makeNodeMeta(slotAt(storageIndex), storageIndex);
+    if (!rebuildingNodeMeta) {
+        markFlashSlotDirty(storageIndex);
+    }
+
+    if (!rebuildingNodeMeta && ((storageIndex >= previousMetaCount) || (previousNodeNum != nodeMeta.at(storageIndex).node_num))) {
+        rebuildNodeMetaLookup();
+    }
+}
+
+uint16_t NodeDB::getStorageIndex(const meshtastic_NodeInfoLite *node) const
+{
+    assert(node != nullptr);
+    const meshtastic_NodeInfoLite *base = static_cast<const NodeStore *>(nodeStore)->data();
+    const ptrdiff_t storageIndex = node - base;
+    assert(storageIndex >= 0);
+    assert(static_cast<size_t>(storageIndex) < numMeshNodes);
+    return static_cast<uint16_t>(storageIndex);
+}
+
+const NodeDB::NodeMeta *NodeDB::getNodeMeta(NodeNum n) const
+{
+    if (n == NODENUM_BROADCAST || numMeshNodes == 0) {
+        return nullptr;
+    }
+
+    assert(nodeMeta.size() >= numMeshNodes);
+    assert(!nodeMetaLookup.empty());
+    assert((nodeMetaLookup.size() & (nodeMetaLookup.size() - 1)) == 0);
+
+    size_t probeIndex = hashNodeMetaKey(n) & nodeMetaLookupMask;
+    for (size_t probes = 0; probes < nodeMetaLookup.size(); ++probes) {
+        const uint16_t metaIndex = nodeMetaLookup.at(probeIndex);
+        if (metaIndex == UINT16_MAX) {
+            return nullptr;
+        }
+
+        assert(metaIndex < numMeshNodes);
+        const NodeMeta &meta = nodeMeta.at(metaIndex);
+        if (meta.node_num == n) {
+            return &meta;
+        }
+
+        probeIndex = (probeIndex + 1) & nodeMetaLookupMask;
+    }
+
+    return nullptr;
+}
+
+uint16_t NodeDB::buildNodeMetaFlags(const meshtastic_NodeInfoLite &node)
+{
+    uint16_t flags = 0;
+    if (node.has_user) {
+        flags |= NODEMETA_HAS_USER;
+        if (node.user.is_licensed) {
+            flags |= NODEMETA_IS_LICENSED;
+        }
+    }
+    if (node.has_position) {
+        flags |= NODEMETA_HAS_POSITION;
+    }
+    if (node.has_device_metrics) {
+        flags |= NODEMETA_HAS_DEVICE_METRICS;
+    }
+    if (node.via_mqtt) {
+        flags |= NODEMETA_VIA_MQTT;
+    }
+    if (node.has_hops_away) {
+        flags |= NODEMETA_HAS_HOPS_AWAY;
+    }
+    if (node.is_favorite) {
+        flags |= NODEMETA_IS_FAVORITE;
+    }
+    if (node.is_ignored) {
+        flags |= NODEMETA_IS_IGNORED;
+    }
+    if (node.user.public_key.size > 0) {
+        flags |= NODEMETA_HAS_PUBLIC_KEY;
+    }
+    if (node.bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) {
+        flags |= NODEMETA_IS_KEY_VERIFIED;
+    }
+    if (node.bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) {
+        flags |= NODEMETA_IS_MUTED;
+    }
+    return flags;
+}
+
+int8_t NodeDB::quantizeSnrQ4(float snr)
+{
+    const float scaled = snr * 4.0f;
+    if (scaled <= static_cast<float>(INT8_MIN)) {
+        return INT8_MIN;
+    }
+    if (scaled >= static_cast<float>(INT8_MAX)) {
+        return INT8_MAX;
+    }
+    return static_cast<int8_t>(scaled);
+}
+
+size_t NodeDB::chooseNodeMetaLookupCapacity(size_t liveNodes)
+{
+    size_t capacity = 8;
+    const size_t requiredCapacity = std::max<size_t>(liveNodes * 2, 1);
+    while (capacity < requiredCapacity) {
+        capacity <<= 1;
+    }
+    return capacity;
+}
+
+size_t NodeDB::hashNodeMetaKey(NodeNum n)
+{
+    uint32_t hash = n;
+    hash ^= hash >> 16;
+    hash *= 0x7feb352dU;
+    hash ^= hash >> 15;
+    hash *= 0x846ca68bU;
+    hash ^= hash >> 16;
+    return hash;
+}
+
+bool NodeDB::shouldDisplayNodeBefore(const NodeMeta &lhs, const NodeMeta &rhs, NodeNum localNodeNum)
+{
+    if (lhs.node_num == localNodeNum) {
+        return rhs.node_num != localNodeNum;
+    }
+    if (rhs.node_num == localNodeNum) {
+        return false;
+    }
+    const bool lhsFavorite = (lhs.flags & NODEMETA_IS_FAVORITE) != 0;
+    const bool rhsFavorite = (rhs.flags & NODEMETA_IS_FAVORITE) != 0;
+    if (lhsFavorite != rhsFavorite) {
+        return lhsFavorite;
+    }
+    return lhs.last_heard > rhs.last_heard;
 }
 
 void NodeDB::installDefaultDeviceState()
@@ -1120,8 +1920,6 @@ void NodeDB::installDefaultDeviceState()
 }
 
 // We reserve a few nodenums for future use
-#define NUM_RESERVED 4
-
 /**
  * get our starting (provisional) nodenum from flash.
  */
@@ -1136,8 +1934,8 @@ void NodeDB::pickNewNodeNum()
 
     meshtastic_NodeInfoLite *found;
     while (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
-           (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
-        NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
+           (nodeNum == NODENUM_BROADCAST || nodeNum < kNumReservedNodeNums)) {
+        NodeNum candidate = random(kNumReservedNodeNums, LONG_MAX); // try a new random choice
         if (found)
             LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%02x%02x vs our 0x%02x%02x, so "
                      "trying for 0x%x",
@@ -1161,15 +1959,18 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 
     if (f) {
         LOG_INFO("Load %s", filename);
-        pb_istream_t stream = {&readcb, &f, protoSize};
-        if (fields != &meshtastic_NodeDatabase_msg) // contains a vector object
-            memset(dest_struct, 0, objSize);
-        if (!pb_decode(&stream, fields, dest_struct)) {
-            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
-            state = LoadFileResult::DECODE_FAILED;
+        if (fields == &meshtastic_NodeDatabase_msg) {
+            state = loadNodeDatabaseProto(filename, f, *static_cast<meshtastic_NodeDatabase *>(dest_struct));
         } else {
-            LOG_INFO("Loaded %s successfully", filename);
-            state = LoadFileResult::LOAD_SUCCESS;
+            pb_istream_t stream = {&readcb, &f, protoSize};
+            memset(dest_struct, 0, objSize);
+            if (!pb_decode(&stream, fields, dest_struct)) {
+                LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+                state = LoadFileResult::DECODE_FAILED;
+            } else {
+                LOG_INFO("Loaded %s successfully", filename);
+                state = LoadFileResult::LOAD_SUCCESS;
+            }
         }
         f.close();
     } else {
@@ -1230,22 +2031,76 @@ void NodeDB::loadFromDisk()
     }
 
 #endif
+    logNodeDbMemorySnapshot("before nodedb load", 0, nodeStore->slotCount());
     auto state = loadProto(nodeDatabaseFileName, getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
-    if (nodeDatabase.version < DEVICESTATE_MIN_VER) {
-        LOG_WARN("NodeDatabase %d is old, discard", nodeDatabase.version);
-        installDefaultNodeDatabase();
-    } else {
+    bool loadedNodeDatabase = false;
+    bool loadedLegacyNodeDatabase = false;
+    bool loadedFlashSlotFallbackNodeDatabase = false;
+    // Boot order is: legacy streamed protobuf if present, otherwise flash slot
+    // store on flash-preferred targets, otherwise start from defaults.
+    if (nodeDatabase.version >= DEVICESTATE_MIN_VER) {
+        resetFlashSlotState();
         meshNodes = &nodeDatabase.nodes;
         numMeshNodes = nodeDatabase.nodes.size();
         LOG_INFO("Loaded saved nodedatabase version %d, with nodes count: %d", nodeDatabase.version, nodeDatabase.nodes.size());
+        loadedNodeDatabase = true;
+        loadedLegacyNodeDatabase = prefersFlashSlotStore();
+    } else if (loadFromFlashSlotStore()) {
+        LOG_INFO("Loaded NodeDB from flash slot store because %s was unavailable or invalid", nodeDatabaseFileName);
+        loadedNodeDatabase = true;
+        if (!prefersFlashSlotStore()) {
+            // If a non-flash-preferred build boots from an older flash-slot install,
+            // hydrate the full records into RAM and switch back to streamed
+            // nodes.proto saves for subsequent boots.
+            if (!ensureAllLiveSlotsLoaded()) {
+                LOG_ERROR("Failed to hydrate flash-slot NodeDB for streamed fallback");
+                installDefaultNodeDatabase();
+                loadedNodeDatabase = false;
+            } else {
+                loadedFlashSlotFallbackNodeDatabase = true;
+                resetFlashSlotState();
+            }
+        }
+    } else {
+        LOG_WARN("NodeDatabase %d is old, discard", nodeDatabase.version);
+        installDefaultNodeDatabase();
     }
 
-    if (numMeshNodes > MAX_NUM_NODES) {
-        LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
-        numMeshNodes = MAX_NUM_NODES;
+    if (!flashSlotStoreActive) {
+        nodeStore->resize(MAX_NUM_NODES);
+        if (numMeshNodes > nodeStore->slotCount()) {
+            LOG_WARN("Node count %u exceeds runtime node cap %u, truncating", static_cast<unsigned>(numMeshNodes),
+                     static_cast<unsigned>(nodeStore->slotCount()));
+            numMeshNodes = static_cast<pb_size_t>(nodeStore->slotCount());
+        }
+        resetDisplayOrder();
+        rebuildNodeMeta();
+        if (prefersFlashSlotStore()) {
+            resizeFlashSlotTracking(nodeStore->slotCount());
+            flashSlotFullRewriteRequired = loadedLegacyNodeDatabase;
+        }
+
+        if (loadedLegacyNodeDatabase && !saveNodeDatabaseToDisk()) {
+            LOG_ERROR("Failed to migrate legacy NodeDB into flash slot store");
+        }
+
+        if (loadedFlashSlotFallbackNodeDatabase) {
+            if (!saveNodeDatabaseToDisk()) {
+                LOG_WARN("Retrying streamed NodeDB save after removing stale flash slot store");
+                rmDir(FlashSlotStore::DEFAULT_DIRECTORY);
+                if (!saveNodeDatabaseToDisk()) {
+                    LOG_ERROR("Failed to migrate flash slot NodeDB back into streamed %s", nodeDatabaseFileName);
+                }
+            } else {
+                rmDir(FlashSlotStore::DEFAULT_DIRECTORY);
+            }
+        }
+    } else if (!loadedNodeDatabase) {
+        installDefaultNodeDatabase();
     }
-    meshNodes->resize(MAX_NUM_NODES);
+
+    logNodeDbMemorySnapshot("after nodedb load", numMeshNodes, nodeStore->slotCount());
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1520,10 +2375,240 @@ bool NodeDB::saveNodeDatabaseToDisk()
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
+
+    if (prefersFlashSlotStore()) {
+        if (nodeStore->slotCount() > UINT16_MAX) {
+            LOG_ERROR("Flash NodeDB slot count %u exceeds flash manifest capacity",
+                      static_cast<unsigned>(nodeStore->slotCount()));
+            return false;
+        }
+
+        resizeFlashSlotTracking(nodeStore->slotCount());
+        const uint16_t slotCount = static_cast<uint16_t>(nodeStore->slotCount());
+        FlashSlotStore::Manifest manifest;
+        // Phase 16 can skip unchanged slots, but layout changes or manifest mismatches send us back to the dense rewrite path.
+        bool fullRewrite = flashSlotFullRewriteRequired;
+        if (!flashSlotStore.readManifest(manifest) || manifest.slot_count != slotCount) {
+            LOG_INFO("Initialize flash slot NodeDB with %u slots", static_cast<unsigned>(slotCount));
+            if (!flashSlotStore.initialize(slotCount)) {
+                LOG_ERROR("Can't initialize flash slot NodeDB");
+                return false;
+            }
+            if (!flashSlotStore.readManifest(manifest) || manifest.slot_count != slotCount) {
+                LOG_ERROR("Can't reload flash slot NodeDB manifest after initialization");
+                return false;
+            }
+            fullRewrite = true;
+        }
+
+        if (fullRewrite) {
+            // Layout changes, migration, and flash-boot normalization all land
+            // here. We rewrite dense storage order straight through to pages so
+            // the next boot sees the same slot numbering NodeDB uses in RAM.
+            if (!ensureAllLiveSlotsLoaded()) {
+                LOG_ERROR("Can't save prefs because not all live flash-backed slots could be loaded");
+                return false;
+            }
+
+            const uint16_t livePageCount = flashLivePageCount(manifest, numMeshNodes);
+            const uint16_t totalPageCount = flashPageCount(manifest);
+            const uint16_t deletedTailPages = totalPageCount - livePageCount;
+
+            LOG_INFO("Save flash slot NodeDB (%u live nodes, full rewrite across %u live pages, %u deleted tail pages)",
+                     numMeshNodes, static_cast<unsigned>(livePageCount), static_cast<unsigned>(deletedTailPages));
+            logNodeDbMemorySnapshot("before flash nodedb save", numMeshNodes, nodeStore->slotCount());
+
+            std::vector<uint8_t> page;
+            page.assign(flashPageSizeBytes(manifest), 0);
+
+            for (uint16_t pageIndex = 0; pageIndex < livePageCount; ++pageIndex) {
+                std::fill(page.begin(), page.end(), 0);
+
+                const uint16_t firstStorageIndex = static_cast<uint16_t>(pageIndex * manifest.slots_per_page);
+                const uint16_t endStorageIndex = std::min<uint16_t>(
+                    static_cast<uint16_t>(firstStorageIndex + manifest.slots_per_page), static_cast<uint16_t>(numMeshNodes));
+
+                for (uint16_t storageIndex = firstStorageIndex; storageIndex < endStorageIndex; ++storageIndex) {
+                    if (!flashSlotStore.writeSlotToPage(manifest, storageIndex, nodeStore->slot(storageIndex), page)) {
+                        LOG_ERROR("Failed to stage flash slot %u into page %u", static_cast<unsigned>(storageIndex),
+                                  static_cast<unsigned>(pageIndex));
+                        return false;
+                    }
+                }
+
+                if (!flashSlotStore.storePage(manifest, pageIndex, page)) {
+                    LOG_ERROR("Failed to store flash page %u during full rewrite", static_cast<unsigned>(pageIndex));
+                    return false;
+                }
+            }
+
+            for (uint16_t pageIndex = livePageCount; pageIndex < totalPageCount; ++pageIndex) {
+                if (!flashSlotStore.deletePage(manifest, pageIndex)) {
+                    LOG_ERROR("Failed to delete empty flash page %u", static_cast<unsigned>(pageIndex));
+                    return false;
+                }
+            }
+
+            if (!verifyFlashNodeDatabase(flashSlotStore, manifest, *nodeStore, numMeshNodes)) {
+                LOG_ERROR("Flash slot NodeDB verification failed");
+                return false;
+            }
+
+            flashSlotFullRewriteRequired = false;
+            clearFlashSlotDirty(0, slotCount);
+
+            if (flashSlotStoreActive) {
+                for (uint16_t storageIndex = 0; storageIndex < slotCount; ++storageIndex) {
+                    flashSlotByStorageIndex.at(storageIndex) =
+                        (storageIndex < numMeshNodes) ? storageIndex : INVALID_FLASH_SLOT_INDEX;
+                    flashSlotCacheValid.at(storageIndex) = storageIndex < numMeshNodes;
+                }
+            }
+        } else {
+            // Incremental saves reuse the current flash home for each dirty
+            // dense slot, then batch by page so one save rewrites each touched
+            // page once instead of once per slot.
+            std::vector<uint16_t> dirtyStorageIndices;
+            dirtyStorageIndices.reserve(numMeshNodes);
+            for (uint16_t storageIndex = 0; storageIndex < numMeshNodes; ++storageIndex) {
+                if (flashSlotDirty.at(storageIndex)) {
+                    dirtyStorageIndices.push_back(storageIndex);
+                }
+            }
+
+            if (dirtyStorageIndices.empty()) {
+                LOG_INFO("Flash slot NodeDB save skipped (%u live nodes, no dirty slots)", numMeshNodes);
+                return true;
+            }
+
+            std::vector<FlashPageUpdate> pendingUpdates;
+            pendingUpdates.reserve(dirtyStorageIndices.size());
+            for (const uint16_t storageIndex : dirtyStorageIndices) {
+                if (!ensureFlashSlotLoaded(storageIndex)) {
+                    LOG_ERROR("Failed to hydrate dirty storage index %u before flash save", static_cast<unsigned>(storageIndex));
+                    return false;
+                }
+
+                // Dense storage order stays authoritative; if we already know a flash home for this slot, reuse it.
+                uint16_t flashSlotIndex = storageIndex;
+                if (flashSlotStoreActive && storageIndex < flashSlotByStorageIndex.size() &&
+                    flashSlotByStorageIndex.at(storageIndex) != INVALID_FLASH_SLOT_INDEX) {
+                    flashSlotIndex = flashSlotByStorageIndex.at(storageIndex);
+                }
+
+                if (flashSlotIndex >= slotCount) {
+                    LOG_ERROR("Dirty storage index %u resolved to out-of-range flash slot %u",
+                              static_cast<unsigned>(storageIndex), static_cast<unsigned>(flashSlotIndex));
+                    return false;
+                }
+
+                pendingUpdates.push_back(
+                    FlashPageUpdate{storageIndex, flashSlotIndex, flashPageIndexForSlot(manifest, flashSlotIndex)});
+            }
+
+            std::sort(pendingUpdates.begin(), pendingUpdates.end(), [](const FlashPageUpdate &lhs, const FlashPageUpdate &rhs) {
+                if (lhs.pageIndex != rhs.pageIndex) {
+                    return lhs.pageIndex < rhs.pageIndex;
+                }
+                return lhs.flashSlotIndex < rhs.flashSlotIndex;
+            });
+
+            size_t touchedPageCount = 0;
+            for (size_t i = 0; i < pendingUpdates.size(); ++i) {
+                if (i == 0 || pendingUpdates[i].pageIndex != pendingUpdates[i - 1].pageIndex) {
+                    ++touchedPageCount;
+                }
+
+                if (i > 0 && pendingUpdates[i].flashSlotIndex == pendingUpdates[i - 1].flashSlotIndex) {
+                    LOG_ERROR("Dirty flash save resolved duplicate flash slot %u",
+                              static_cast<unsigned>(pendingUpdates[i].flashSlotIndex));
+                    return false;
+                }
+            }
+
+            LOG_INFO("Save flash slot NodeDB (%u live nodes, %u dirty slots across %u pages)", numMeshNodes,
+                     static_cast<unsigned>(dirtyStorageIndices.size()), static_cast<unsigned>(touchedPageCount));
+            logNodeDbMemorySnapshot("before flash nodedb save", numMeshNodes, nodeStore->slotCount());
+
+            std::vector<uint8_t> page;
+            for (size_t groupBegin = 0; groupBegin < pendingUpdates.size();) {
+                const uint16_t pageIndex = pendingUpdates[groupBegin].pageIndex;
+                if (!flashSlotStore.loadPage(manifest, pageIndex, page)) {
+                    LOG_ERROR("Failed to load flash page %u for batched dirty save", static_cast<unsigned>(pageIndex));
+                    return false;
+                }
+
+                size_t groupEnd = groupBegin;
+                while (groupEnd < pendingUpdates.size() && pendingUpdates[groupEnd].pageIndex == pageIndex) {
+                    const FlashPageUpdate &update = pendingUpdates[groupEnd];
+                    if (!flashSlotStore.writeSlotToPage(manifest, update.flashSlotIndex, nodeStore->slot(update.storageIndex),
+                                                        page)) {
+                        LOG_ERROR("Failed to stage flash slot %u for storage index %u into page %u",
+                                  static_cast<unsigned>(update.flashSlotIndex), static_cast<unsigned>(update.storageIndex),
+                                  static_cast<unsigned>(pageIndex));
+                        return false;
+                    }
+                    ++groupEnd;
+                }
+
+                if (!flashSlotStore.storePage(manifest, pageIndex, page)) {
+                    LOG_ERROR("Failed to write flash page %u for dirty save", static_cast<unsigned>(pageIndex));
+                    return false;
+                }
+
+                if (!verifyFlashPageImage(flashSlotStore, manifest, pageIndex, page)) {
+                    LOG_ERROR("Flash slot NodeDB page verification failed at page %u", static_cast<unsigned>(pageIndex));
+                    return false;
+                }
+
+                for (size_t i = groupBegin; i < groupEnd; ++i) {
+                    const FlashPageUpdate &update = pendingUpdates[i];
+                    if (flashSlotStoreActive) {
+                        flashSlotByStorageIndex.at(update.storageIndex) = update.flashSlotIndex;
+                        flashSlotCacheValid.at(update.storageIndex) = 1;
+                    }
+                    flashSlotDirty.at(update.storageIndex) = 0;
+                }
+
+                groupBegin = groupEnd;
+            }
+        }
+
+        if (fileExists(nodeDatabaseFileName) && !removeFile(nodeDatabaseFileName)) {
+            LOG_ERROR("Flash slot NodeDB verified but failed to remove legacy %s", nodeDatabaseFileName);
+            return false;
+        }
+
+        logNodeDbMemorySnapshot("after flash nodedb save", numMeshNodes, nodeStore->slotCount());
+        return true;
+    }
+
+    auto f = SafeFile(nodeDatabaseFileName, false);
+
+    LOG_INFO("Save %s (%u live nodes)", nodeDatabaseFileName, numMeshNodes);
+    logNodeDbMemorySnapshot("before nodedb save", numMeshNodes, nodeStore->slotCount());
+    pb_ostream_t stream = {};
+    stream.callback = &writecb;
+    stream.state = static_cast<Print *>(&f);
+    stream.max_size = (size_t)-1;
+
+    bool okay = encodeLiveNodeDatabase(&stream, nodeDatabase.version, *nodeStore, numMeshNodes);
+    if (!okay) {
+        LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+    }
+
+    bool writeSucceeded = f.close();
+
+    if (!okay || !writeSucceeded) {
+        LOG_ERROR("Can't write prefs!");
+    }
+
+    logNodeDbMemorySnapshot("after nodedb save", numMeshNodes, nodeStore->slotCount());
+    return okay && writeSucceeded;
+#else
+    LOG_ERROR("ERROR: Filesystem not implemented");
+    return false;
 #endif
-    size_t nodeDatabaseSize;
-    pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
-    return saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
 }
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
@@ -1622,21 +2707,25 @@ bool NodeDB::saveToDisk(int saveWhat)
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
     if (readIndex < numMeshNodes)
-        return &meshNodes->at(readIndex++);
+        return getMeshNodeByIndex(readIndex++);
     else
         return NULL;
+}
+
+meshtastic_NodeInfoLite *NodeDB::getMeshNodeByIndex(size_t x)
+{
+    assert(x < numMeshNodes);
+    assert(displayOrder.size() >= numMeshNodes);
+
+    const size_t storageIndex = displayOrder.at(x);
+    assert(storageIndex < numMeshNodes);
+    return slotPtr(static_cast<uint16_t>(storageIndex));
 }
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
 {
-    uint32_t now = getTime();
-
-    int delta = (int)(now - n->last_heard);
-    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
-        delta = 0;
-
-    return delta;
+    return secondsSinceTimestamp(n->last_heard);
 }
 
 uint32_t sinceReceived(const meshtastic_MeshPacket *p)
@@ -1692,11 +2781,12 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 {
     size_t numseen = 0;
 
-    // FIXME this implementation is kinda expensive
-    for (int i = 0; i < numMeshNodes; i++) {
-        if (localOnly && meshNodes->at(i).via_mqtt)
+    assert(nodeMeta.size() >= numMeshNodes);
+    for (size_t i = 0; i < numMeshNodes; i++) {
+        const NodeMeta &meta = nodeMeta[i];
+        if (localOnly && (meta.flags & NODEMETA_VIA_MQTT))
             continue;
-        if (sinceLastSeen(&meshNodes->at(i)) < NUM_ONLINE_SECS)
+        if (secondsSinceTimestamp(meta.last_heard) < NUM_ONLINE_SECS)
             numseen++;
     }
 
@@ -1762,6 +2852,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
             info->position.time = tmp_time;
     }
     info->has_position = true;
+    refreshNodeMeta(getStorageIndex(info));
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
@@ -1785,6 +2876,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     }
     info->device_metrics = t.variant.device_metrics;
     info->has_device_metrics = true;
+    refreshNodeMeta(getStorageIndex(info));
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
@@ -1846,8 +2938,12 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         }
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
+        refreshNodeMeta(getStorageIndex(info));
         sortMeshDB();
         notifyObservers(true); // Force an update whether or not our node counts have changed
+    }
+    if (contact.should_ignore) {
+        refreshNodeMeta(getStorageIndex(info));
     }
     saveNodeDatabaseToDisk();
 }
@@ -1910,6 +3006,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     LOG_DEBUG("Update changed=%d user %s/%s, id=0x%08x, channel=%d", changed, info->user.long_name, info->user.short_name, nodeId,
               info->channel);
     info->has_user = true;
+    refreshNodeMeta(getStorageIndex(info));
 
     if (changed) {
         updateGUIforNode = info;
@@ -1959,18 +3056,134 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->has_hops_away = true;
             info->hops_away = hopsAway;
         }
+        refreshNodeMeta(getStorageIndex(info));
         sortMeshDB();
     }
 }
 
-void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
+namespace
+{
+bool clearIgnoredNodeData(meshtastic_NodeInfoLite &node)
+{
+    bool changed = false;
+
+    if (node.has_device_metrics) {
+        node.has_device_metrics = false;
+        changed = true;
+    }
+    if (node.has_position) {
+        node.has_position = false;
+        changed = true;
+    }
+    if (node.user.public_key.size != 0) {
+        node.user.public_key.size = 0;
+        changed = true;
+    }
+    for (size_t i = 0; i < sizeof(node.user.public_key.bytes); ++i) {
+        if (node.user.public_key.bytes[i] != 0) {
+            memset(node.user.public_key.bytes, 0, sizeof(node.user.public_key.bytes));
+            changed = true;
+            break;
+        }
+    }
+
+    return changed;
+}
+} // namespace
+
+void NodeDB::setFavorite(NodeNum nodeId, bool isFavorite)
 {
     meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
-    if (lite && lite->is_favorite != is_favorite) {
-        lite->is_favorite = is_favorite;
+    if (lite && lite->is_favorite != isFavorite) {
+        lite->is_favorite = isFavorite;
+        refreshNodeMeta(getStorageIndex(lite));
         sortMeshDB();
         saveNodeDatabaseToDisk();
     }
+}
+
+void NodeDB::setIgnored(NodeNum nodeId, bool isIgnored)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    if (!lite) {
+        return;
+    }
+
+    bool changed = lite->is_ignored != isIgnored;
+    lite->is_ignored = isIgnored;
+
+    if (isIgnored) {
+        changed = clearIgnoredNodeData(*lite) || changed;
+    }
+
+    if (changed) {
+        refreshNodeMeta(getStorageIndex(lite));
+        saveNodeDatabaseToDisk();
+    }
+}
+
+void NodeDB::setMuted(NodeNum nodeId, bool isMuted)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    if (!lite) {
+        return;
+    }
+
+    const bool currentlyMuted = (lite->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    if (currentlyMuted == isMuted) {
+        return;
+    }
+
+    if (isMuted) {
+        lite->bitfield |= NODEINFO_BITFIELD_IS_MUTED_MASK;
+    } else {
+        lite->bitfield &= ~NODEINFO_BITFIELD_IS_MUTED_MASK;
+    }
+
+    refreshNodeMeta(getStorageIndex(lite));
+    saveNodeDatabaseToDisk();
+}
+
+void NodeDB::setKeyVerified(NodeNum nodeId, bool isVerified)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    if (!lite) {
+        return;
+    }
+
+    const bool currentlyVerified = (lite->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) != 0;
+    if (currentlyVerified == isVerified) {
+        return;
+    }
+
+    if (isVerified) {
+        lite->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+    } else {
+        lite->bitfield &= ~NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+    }
+
+    refreshNodeMeta(getStorageIndex(lite));
+    saveNodeDatabaseToDisk();
+}
+
+meshtastic_NodeInfoLite *NodeDB::touchLocalNodeTime()
+{
+    meshtastic_NodeInfoLite *node = getOrCreateMeshNode(getNodeNum());
+    if (!node) {
+        return nullptr;
+    }
+
+    if (!node->has_position) {
+        memset(&node->position, 0, sizeof(node->position));
+        node->has_position = true;
+    }
+
+    const uint32_t now = getValidTime(RTCQualityFromNet);
+    node->last_heard = now;
+    node->position.time = now;
+    refreshNodeMeta(getStorageIndex(node));
+
+    return node;
 }
 
 bool NodeDB::isFavorite(uint32_t nodeId)
@@ -1981,55 +3194,23 @@ bool NodeDB::isFavorite(uint32_t nodeId)
     if (nodeId == NODENUM_BROADCAST)
         return false;
 
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
-
-    if (lite) {
-        return lite->is_favorite;
-    }
-    return false;
+    const NodeMeta *meta = getNodeMeta(nodeId);
+    return meta ? ((meta->flags & NODEMETA_IS_FAVORITE) != 0) : false;
 }
 
 bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
 {
-    // This method is logically equivalent to:
-    //   return isFavorite(p.from) || isFavorite(p.to);
-    // but is more efficient by:
-    //   1. doing only one pass through the database, instead of two
-    //   2. exiting early when a favorite is found, or if both from and to have been seen
-
-    if (p.to == NODENUM_BROADCAST)
-        return isFavorite(p.from); // we never store NODENUM_BROADCAST in the DB, so we only need to check p.from
-
-    meshtastic_NodeInfoLite *lite = NULL;
-
-    bool seenFrom = false;
-    bool seenTo = false;
-
-    for (int i = 0; i < numMeshNodes; i++) {
-        lite = &meshNodes->at(i);
-
-        if (lite->num == p.from) {
-            if (lite->is_favorite)
-                return true;
-
-            seenFrom = true;
-        }
-
-        if (lite->num == p.to) {
-            if (lite->is_favorite)
-                return true;
-
-            seenTo = true;
-        }
-
-        if (seenFrom && seenTo)
-            return false; // we've seen both, and neither is a favorite, so we can stop searching early
-
-        // Note: if we knew that sortMeshDB was always called after any change to is_favorite, we could exit early after searching
-        // all favorited nodes first.
+    const NodeMeta *fromMeta = getNodeMeta(p.from);
+    if (fromMeta && (fromMeta->flags & NODEMETA_IS_FAVORITE)) {
+        return true;
     }
 
-    return false;
+    if (p.to == NODENUM_BROADCAST) {
+        return false;
+    }
+
+    const NodeMeta *toMeta = getNodeMeta(p.to);
+    return toMeta && ((toMeta->flags & NODEMETA_IS_FAVORITE) != 0);
 }
 
 void NodeDB::pause_sort(bool paused)
@@ -2040,25 +3221,20 @@ void NodeDB::pause_sort(bool paused)
 void NodeDB::sortMeshDB()
 {
     if (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5))) {
+        if (numMeshNodes < 2) {
+            return;
+        }
         lastSort = millis();
         bool changed = true;
+        assert(displayOrder.size() >= numMeshNodes);
+        assert(nodeMeta.size() >= numMeshNodes);
         while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
             changed = false;
             for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
-                if (meshNodes->at(i - 1).num == getNodeNum()) {
-                    // noop
-                } else if (meshNodes->at(i).num ==
-                           getNodeNum()) { // in the oddball case our own node num is not at location 0, put it there
-                    // TODO: Look for at(i-1) also matching own node num, and throw the DB in the trash
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
-                    changed = true;
-                } else if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
-                    changed = true;
-                } else if (!meshNodes->at(i).is_favorite && meshNodes->at(i - 1).is_favorite) {
-                    // noop
-                } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
-                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                const uint16_t lhsStorageIndex = displayOrder.at(i - 1);
+                const uint16_t rhsStorageIndex = displayOrder.at(i);
+                if (shouldDisplayNodeBefore(nodeMeta.at(rhsStorageIndex), nodeMeta.at(lhsStorageIndex), getNodeNum())) {
+                    std::swap(displayOrder.at(i), displayOrder.at(i - 1));
                     changed = true;
                 }
             }
@@ -2069,11 +3245,11 @@ void NodeDB::sortMeshDB()
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    const meshtastic_NodeInfoLite *info = getMeshNode(n);
-    if (!info) {
+    const NodeMeta *meta = getNodeMeta(n);
+    if (!meta) {
         return 0; // defaults to PRIMARY
     }
-    return info->channel;
+    return meta->channel;
 }
 
 std::string NodeDB::getNodeId() const
@@ -2087,9 +3263,11 @@ std::string NodeDB::getNodeId() const
 /// NOTE: This function might be called from an ISR
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
-    for (int i = 0; i < numMeshNodes; i++)
-        if (meshNodes->at(i).num == n)
-            return &meshNodes->at(i);
+    const NodeMeta *meta = getNodeMeta(n);
+    if (meta) {
+        assert(meta->storage_index < numMeshNodes);
+        return slotPtr(meta->storage_index);
+    }
 
     return NULL;
 }
@@ -2097,7 +3275,7 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 // returns true if the maximum number of nodes is reached or we are running low on memory
 bool NodeDB::isFull()
 {
-    return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+    return (numMeshNodes >= nodeStore->slotCount()) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
 }
 
 /// Find a node in our DB, create an empty NodeInfo if missing
@@ -2114,18 +3292,19 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             uint32_t oldestBoring = UINT32_MAX;
             int oldestIndex = -1;
             int oldestBoringIndex = -1;
+            assert(nodeMeta.size() >= numMeshNodes);
             for (int i = 1; i < numMeshNodes; i++) {
+                const NodeMeta &meta = nodeMeta.at(i);
                 // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored &&
-                    !(meshNodes->at(i).bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) &&
-                    meshNodes->at(i).last_heard < oldest) {
-                    oldest = meshNodes->at(i).last_heard;
+                if (!(meta.flags & NODEMETA_IS_FAVORITE) && !(meta.flags & NODEMETA_IS_IGNORED) &&
+                    !(meta.flags & NODEMETA_IS_KEY_VERIFIED) && meta.last_heard < oldest) {
+                    oldest = meta.last_heard;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored && meshNodes->at(i).user.public_key.size == 0 &&
-                    meshNodes->at(i).last_heard < oldestBoring) {
-                    oldestBoring = meshNodes->at(i).last_heard;
+                if (!(meta.flags & NODEMETA_IS_FAVORITE) && !(meta.flags & NODEMETA_IS_IGNORED) &&
+                    !(meta.flags & NODEMETA_HAS_PUBLIC_KEY) && meta.last_heard < oldestBoring) {
+                    oldestBoring = meta.last_heard;
                     oldestBoringIndex = i;
                 }
             }
@@ -2137,17 +3316,36 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             if (oldestIndex != -1) {
                 // Shove the remaining nodes down the chain
                 for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
-                    meshNodes->at(i) = meshNodes->at(i + 1);
+                    moveStorageSlot(static_cast<uint16_t>(i), static_cast<uint16_t>(i + 1));
                 }
                 (numMeshNodes)--;
+                if (displayOrder.size() >= (static_cast<size_t>(numMeshNodes) + 1)) {
+                    removeStorageIndexFromDisplayOrder(displayOrder, static_cast<uint16_t>(oldestIndex));
+                } else {
+                    resetDisplayOrder();
+                }
+                rebuildNodeMeta();
             }
         }
         // add the node at the end
-        lite = &meshNodes->at((numMeshNodes)++);
+        const uint16_t storageIndex = static_cast<uint16_t>(numMeshNodes++);
+        if (flashSlotStoreActive) {
+            flashSlotByStorageIndex.at(storageIndex) = INVALID_FLASH_SLOT_INDEX;
+            flashSlotCacheValid.at(storageIndex) = 1;
+            lite = &nodeStore->slot(storageIndex);
+        } else {
+            lite = slotPtr(storageIndex);
+        }
 
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
+        if (displayOrder.size() == (static_cast<size_t>(numMeshNodes) - 1)) {
+            displayOrder.push_back(static_cast<uint16_t>(numMeshNodes - 1));
+        } else {
+            resetDisplayOrder();
+        }
+        refreshNodeMeta(static_cast<uint16_t>(numMeshNodes - 1));
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
     }
 
@@ -2165,11 +3363,11 @@ bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
 /// we consider them licensed
 UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(nodeNum);
-    if (!info || !info->has_user) {
+    const NodeMeta *meta = getNodeMeta(nodeNum);
+    if (!meta || !(meta->flags & NODEMETA_HAS_USER)) {
         return UserLicenseStatus::NotKnown;
     }
-    return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
+    return (meta->flags & NODEMETA_IS_LICENSED) ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
 #if !defined(MESHTASTIC_EXCLUDE_PKI)

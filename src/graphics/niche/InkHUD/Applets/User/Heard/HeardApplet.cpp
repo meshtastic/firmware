@@ -60,19 +60,23 @@ void InkHUD::HeardApplet::handleParsed(CardInfo c)
 // These initial cards from node db will be gradually pushed out by new packets which originate from out base applet instead
 void InkHUD::HeardApplet::populateFromNodeDB()
 {
-    // Fill a collection with pointers to each node in db
-    std::vector<meshtastic_NodeInfoLite *> ordered;
-    for (auto mn = nodeDB->meshNodes->begin(); mn != nodeDB->meshNodes->end(); ++mn) {
-        // Only copy if valid, and not our own node
-        if (mn->num != 0 && mn->num != nodeDB->getNodeNum())
-            ordered.push_back(&*mn);
+    struct HeardNodeEntry {
+        NodeNum nodeNum;
+        uint32_t lastHeard;
+    };
+
+    // Fill a collection with node IDs so this stale prefill path does not
+    // retain raw storage pointers across later NodeDB layout changes.
+    std::vector<HeardNodeEntry> ordered;
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); ++i) {
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        if (node && node->num != 0 && node->num != nodeDB->getNodeNum())
+            ordered.push_back({node->num, node->last_heard});
     }
 
     // Sort the collection by age
     std::sort(ordered.begin(), ordered.end(),
-              [](const meshtastic_NodeInfoLite *top, const meshtastic_NodeInfoLite *bottom) -> bool {
-                  return (top->last_heard > bottom->last_heard);
-              });
+              [](const HeardNodeEntry &top, const HeardNodeEntry &bottom) -> bool { return top.lastHeard > bottom.lastHeard; });
 
     // Keep the most recent entries only
     // Just enough to fill the screen
@@ -81,9 +85,13 @@ void InkHUD::HeardApplet::populateFromNodeDB()
 
     // Create card info for these (stale) node observations
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    for (meshtastic_NodeInfoLite *node : ordered) {
+    for (const HeardNodeEntry &entry : ordered) {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(entry.nodeNum);
+        if (!node)
+            continue;
+
         CardInfo c;
-        c.nodeNum = node->num;
+        c.nodeNum = entry.nodeNum;
 
         if (node->has_hops_away)
             c.hopsAway = node->hops_away;
@@ -108,16 +116,13 @@ void InkHUD::HeardApplet::populateFromNodeDB()
 // Handled by base class: ChronoListApplet
 std::string InkHUD::HeardApplet::getHeaderText()
 {
-    uint16_t nodeCount = nodeDB->getNumMeshNodes() - 1; // Don't count our own node
+    const uint16_t totalNodes = nodeDB->getNumMeshNodes();
+    const uint16_t nodeCount = (totalNodes > 0) ? (totalNodes - 1) : 0; // Don't count our own node
 
     std::string text = "Heard: ";
-
-    // Print node count, if nodeDB not yet nearing full
-    if (nodeCount < MAX_NUM_NODES) {
-        text += to_string(nodeCount); // Max nodes
-        text += " ";
-        text += (nodeCount == 1) ? "node" : "nodes";
-    }
+    text += to_string(nodeCount);
+    text += " ";
+    text += (nodeCount == 1) ? "node" : "nodes";
 
     return text;
 }

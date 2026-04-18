@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "ArraySlotStore.h"
+#include "FlashSlotStore.h"
 #include "MeshTypes.h"
 #include "NodeStatus.h"
 #include "configuration.h"
@@ -160,6 +162,8 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
 
   public:
+    // Compatibility alias for older callers that still expect the backing
+    // vector to exist. NodeDB now treats NodeStore as authoritative internally.
     std::vector<meshtastic_NodeInfoLite> *meshNodes;
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
@@ -207,9 +211,24 @@ class NodeDB
     bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
 
     /*
-     * Sets a node either favorite or unfavorite
+     * Durable node-flag mutators. These are the write path that later
+     * storage phases can preserve while the backing store changes.
      */
-    void set_favorite(bool is_favorite, uint32_t nodeId);
+    void setFavorite(NodeNum nodeId, bool isFavorite);
+    void setIgnored(NodeNum nodeId, bool isIgnored);
+    void setMuted(NodeNum nodeId, bool isMuted);
+    void setKeyVerified(NodeNum nodeId, bool isVerified);
+
+    /*
+     * Local-node helper for transient time refreshes. This keeps the
+     * in-place last-heard / position-time update inside NodeDB while
+     * callers still use pointer reads in the current storage model.
+     */
+    meshtastic_NodeInfoLite *touchLocalNodeTime();
+
+    // Temporary compatibility wrapper for older callers that have not
+    // migrated to the stable camelCase API yet.
+    void set_favorite(bool is_favorite, uint32_t nodeId) { setFavorite(nodeId, is_favorite); }
 
     /*
      * Returns true if the node is in the NodeDB and marked as favorite
@@ -266,13 +285,9 @@ class NodeDB
 
     void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
 
+    // Presentation-order iteration. x is a display index, not a storage slot.
     const meshtastic_NodeInfoLite *readNextMeshNode(uint32_t &readIndex);
-
-    meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
-    {
-        assert(x < numMeshNodes);
-        return &meshNodes->at(x);
-    }
+    meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x);
 
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
@@ -329,6 +344,45 @@ class NodeDB
     }
 
   private:
+    // Compact hot-path summary for one live node. Full NodeInfoLite records stay
+    // in the active NodeStore; this is the part we keep cheap to sort and hash.
+    struct NodeMeta {
+        uint32_t node_num = 0;
+        uint32_t last_heard = 0;
+        // Dense slot index in the active NodeStore.
+        uint16_t storage_index = 0;
+        int8_t snr_q4 = 0;
+        uint8_t channel = 0;
+        uint8_t hops_away = UINT8_MAX;
+        uint8_t next_hop = 0;
+        uint16_t flags = 0;
+        uint8_t role = 0;
+        uint8_t hw_model = 0;
+    };
+
+    enum NodeMetaFlags : uint16_t {
+        NODEMETA_HAS_USER = 1 << 0,
+        NODEMETA_HAS_POSITION = 1 << 1,
+        NODEMETA_HAS_DEVICE_METRICS = 1 << 2,
+        NODEMETA_VIA_MQTT = 1 << 3,
+        NODEMETA_HAS_HOPS_AWAY = 1 << 4,
+        NODEMETA_IS_FAVORITE = 1 << 5,
+        NODEMETA_IS_IGNORED = 1 << 6,
+        NODEMETA_HAS_PUBLIC_KEY = 1 << 7,
+        NODEMETA_IS_KEY_VERIFIED = 1 << 8,
+        NODEMETA_IS_MUTED = 1 << 9,
+        NODEMETA_IS_LICENSED = 1 << 10,
+    };
+
+    // Presentation order is maintained separately from storage order.
+    std::vector<uint16_t> displayOrder;
+    // Phase 6 shadow cache: compact hot metadata stays aligned to storage slots
+    // while the full record vector remains the source of truth.
+    std::vector<NodeMeta> nodeMeta;
+    // Phase 7 lookup table: open-addressed NodeNum -> nodeMeta index map.
+    std::vector<uint16_t> nodeMetaLookup;
+    size_t nodeMetaLookupMask = 0;
+    bool rebuildingNodeMeta = false;
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
@@ -350,6 +404,41 @@ class NodeDB
 
     /// purge db entries without user info
     void cleanupMeshDB();
+    // Reset presentation to dense storage order. Callers that want sorted UI
+    // order still need to run sortMeshDB() afterward.
+    void resetDisplayOrder();
+    // Full metadata rebuild used after boot/load and bulk layout changes.
+    void rebuildNodeMeta();
+    // Refresh one storage slot after a mutation and keep dirty tracking in sync.
+    void refreshNodeMeta(uint16_t storageIndex);
+    void rebuildNodeMetaLookup();
+    // Backend selection and flash-backed boot/load helpers.
+    bool prefersFlashSlotStore() const;
+    bool loadFromFlashSlotStore();
+    // Flash-backed boots keep a RAM overlay only for slots that have actually
+    // been read or mutated during this boot.
+    bool ensureFlashSlotLoaded(uint16_t storageIndex);
+    bool ensureAllLiveSlotsLoaded();
+    void resizeFlashSlotTracking(size_t slotCount);
+    void markFlashSlotDirty(uint16_t storageIndex);
+    void clearFlashSlotDirty(size_t beginIndex, size_t endIndex);
+    void markFlashSlotLayoutDirty();
+    void moveStorageSlot(uint16_t destIndex, uint16_t sourceIndex);
+    void clearStorageSlots(size_t beginIndex, size_t endIndex);
+    void resetFlashSlotState();
+    static NodeMeta makeNodeMeta(const meshtastic_NodeInfoLite &node, uint16_t storageIndex);
+    // slotAt()/slotPtr() are the only helpers that may hand back a full-record
+    // pointer or reference; they hide the lazy flash hydration details.
+    meshtastic_NodeInfoLite &slotAt(uint16_t storageIndex);
+    meshtastic_NodeInfoLite *slotPtr(uint16_t storageIndex);
+    // Only valid for pointers that already point into the current NodeStore.
+    uint16_t getStorageIndex(const meshtastic_NodeInfoLite *node) const;
+    const NodeMeta *getNodeMeta(NodeNum n) const;
+    static uint16_t buildNodeMetaFlags(const meshtastic_NodeInfoLite &node);
+    static int8_t quantizeSnrQ4(float snr);
+    static size_t chooseNodeMetaLookupCapacity(size_t liveNodes);
+    static size_t hashNodeMetaKey(NodeNum n);
+    static bool shouldDisplayNodeBefore(const NodeMeta &lhs, const NodeMeta &rhs, NodeNum localNodeNum);
 
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultNodeDatabase(), installDefaultChannels(),
@@ -363,6 +452,21 @@ class NodeDB
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
     void sortMeshDB();
+
+    FlashSlotStore flashSlotStore;
+    bool flashSlotStoreActive = false;
+    // Dense storage indices stay in NodeDB order; this map remembers which flash slot currently backs each live slot
+    // so phase 16 can rewrite only dirty entries without losing the on-flash layout.
+    std::vector<uint16_t> flashSlotByStorageIndex;
+    // Whether the RAM overlay currently holds a decoded copy of that live slot.
+    std::vector<uint8_t> flashSlotCacheValid;
+    // Phase 16 dirty tracking: only live storage slots that changed since the last save need another flash write.
+    std::vector<uint8_t> flashSlotDirty;
+    bool flashSlotFullRewriteRequired = false;
+    ArraySlotStore arraySlotStore;
+    // Active full-record backend. Today this is always the array store, but
+    // NodeDB no longer relies on that implementation detail.
+    NodeStore *nodeStore = nullptr;
 };
 
 extern NodeDB *nodeDB;

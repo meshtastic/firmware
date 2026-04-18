@@ -268,14 +268,14 @@ void CannedMessageModule::updateDestinationSelectionList()
         const String &nodeName = node->user.long_name;
 
         if (searchQuery.length() == 0) {
-            this->filteredNodes.push_back({node, sinceLastSeen(node)});
+            this->filteredNodes.push_back({node->num});
         } else {
             // Avoid unnecessary lowercase conversion if already matched
             String lowerNodeName = nodeName;
             lowerNodeName.toLowerCase();
 
             if (lowerNodeName.indexOf(lowerSearchQuery) != -1) {
-                this->filteredNodes.push_back({node, sinceLastSeen(node)});
+                this->filteredNodes.push_back({node->num});
             }
         }
     }
@@ -618,15 +618,11 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         } else {
             int nodeIndex = destIndex - static_cast<int>(activeChannelIndices.size());
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(filteredNodes.size())) {
-                const meshtastic_NodeInfoLite *selectedNode = filteredNodes[nodeIndex].node;
-                if (selectedNode) {
-                    dest = selectedNode->num;
-                    channel = selectedNode->channel;
-                    // Already saves here, but for clarity, also:
-                    lastDest = dest;
-                    lastChannel = channel;
-                    lastDestSet = true;
-                }
+                dest = filteredNodes[nodeIndex].nodeNum;
+                channel = nodeDB->getMeshNodeChannel(dest);
+                lastDest = dest;
+                lastChannel = channel;
+                lastDestSet = true;
             }
         }
 
@@ -1720,7 +1716,8 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
         else {
             int nodeIndex = itemIndex - numActiveChannels;
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
-                meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                const NodeNum nodeNum = this->filteredNodes[nodeIndex].nodeNum;
+                meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
                 if (node) {
                     if (display->getWidth() <= 64) {
                         entryText = node->user.short_name;
@@ -1729,6 +1726,8 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                     } else {
                         entryText = node->user.short_name;
                     }
+                } else {
+                    entryText = getNodeName(nodeNum);
                 }
 
                 int availWidth = display->getWidth() -
@@ -1770,7 +1769,8 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
         if (itemIndex >= numActiveChannels) {
             int nodeIndex = itemIndex - numActiveChannels;
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
-                const meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                const NodeNum nodeNum = this->filteredNodes[nodeIndex].nodeNum;
+                const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
                 if (node && hasKeyForNode(node)) {
                     int iconX = display->getWidth() - key_symbol_width - 15;
                     int iconY = yOffset + (FONT_HEIGHT_SMALL - key_symbol_height) / 2;
