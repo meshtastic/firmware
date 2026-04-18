@@ -132,7 +132,7 @@ For e-ink display variants using the InkHUD framework, add `nicheGraphics.h`:
 // Configure display, applets, and refresh behavior per device
 ```
 
-InkHUD has its own PlatformIO config: `src/graphics/niche/InkHUD/PlatformioConfig.ini`
+InkHUD and the shared E-Ink layer are wired up via the top-level `platformio.ini` `[niche]` (BaseUI + driver/panel layer in `src/graphics/eink/`) and `[inkhud]` (adds the InkHUD UI in `src/graphics/niche/`). Variants opt in with `extends = ..., niche` or `extends = ..., inkhud`.
 
 ## I2C Device Detection
 

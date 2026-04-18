@@ -216,14 +216,14 @@ Multiple display driver families in `src/graphics/`:
 
 - **OLED**: SSD1306, SH1106, ST7567
 - **TFT**: TFTDisplay (LovyanGFX-based)
-- **E-Ink**: EInkDisplay2, EInkDynamicDisplay, EInkParallelDisplay
+- **E-Ink**: `src/graphics/BaseUIEInkDisplay.*` is the OLEDDisplay-compatible adapter (peer of `TFTDisplay`). The hardware layer it drives lives in `src/graphics/eink/` — chipset drivers in `Drivers/`, panel profiles in `Panels/`, optional `Backlight/`. Shared by both BaseUI-on-eink and InkHUD builds.
 
-**InkHUD** (`src/graphics/niche/InkHUD/`) is an event-driven e-ink UI framework:
+**InkHUD** (`src/graphics/niche/`) is an event-driven e-ink UI framework that sits on top of the `graphics/eink/` layer:
 
 - Applet-based architecture — modular display tiles
 - Read-only, static display optimized for minimal refreshes and low power
 - Configured per-variant via `nicheGraphics.h`
-- Separate PlatformIO config: `src/graphics/niche/InkHUD/PlatformioConfig.ini`
+- Build helpers in top-level `platformio.ini` — `[niche]` pulls `graphics/eink/` only (BaseUI path), `[inkhud]` extends it with `graphics/niche/`
 
 ### Input System
 
