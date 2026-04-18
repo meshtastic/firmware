@@ -5,7 +5,7 @@
 #define PIN_EINK_RES 16
 #define PIN_EINK_SCLK 36
 #define PIN_EINK_MOSI 47
-#define TFT_BL  45      // option , default not backlight
+#define TFT_BL 45 // option , default not backlight
 
 #define I2C_SDA SDA
 #define I2C_SCL SCL
