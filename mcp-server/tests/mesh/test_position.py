@@ -1,130 +1,181 @@
-"""Mesh: a fixed-position broadcast from TX arrives decoded on RX.
+"""Mesh: on-demand Position request gets a prompt reply.
 
 Exercises ``POSITION_APP`` (portnum 3) — the core Meshtastic portnum that
-map apps and fleet dashboards depend on. Without real GPS hardware on
-either device we put TX into **fixed-position** mode with a short
-broadcast interval; the firmware's ``PositionModule::runOnce`` then
-emits a Position packet every N seconds independent of GPS state. RX
-listens on ``meshtastic.receive.position`` and verifies the decode.
+map apps and fleet dashboards depend on. Pattern mirrors
+``test_telemetry_request_reply``: TX sends a directed Position request
+with ``want_response=True``; RX's ``modules/PositionModule.cpp::allocReply``
+fires and returns a populated Position packet.
 
-Scope: validating the *routing + decode* path through
-``modules/PositionModule.cpp``, not GPS accuracy. We don't set or assert
-any specific lat/lon — the test is "a Position protobuf rode the wire
-and was decoded correctly", which is what a downstream map client needs.
+Why we seed RX with a fake fixed position first:
+``PositionModule::allocPositionPacket`` returns nullptr when
+``localPosition.latitude_i == 0 && longitude_i == 0``
+(`src/modules/PositionModule.cpp:201-204`). Our test devices have no
+GPS and start life at (0, 0) — without a seed, RX can't build a reply
+and the firmware NAKs with ``Routing.Error.NO_RESPONSE`` instead. We
+use ``localNode.setFixedPosition(lat, lon, alt)`` — an AdminMessage
+handled on the local device — to stash a non-zero position in NVS
+before the request, then ``removeFixedPosition`` at teardown so
+downstream tests don't inherit it.
 
-Why directed/PKI warmup matters: the config writes (``set_config``) are
-directed admin sends. They don't fire unless the firmware trusts the
-sender — same PKI staleness trap as the other directed-send tests, so
-we do the bilateral warmup first.
+Why request/reply instead of a periodic broadcast test:
+  * Request/reply runs in seconds on a direct 2-device mesh instead of
+    minutes waiting for the next broadcast window.
+  * Matches the real ``meshtastic --request-position`` CLI path, so
+    we're exercising user-facing behavior end-to-end.
+
+Matching the reply via ``onResponse``: the library stores
+``responseHandlers[sent_packet.id]`` at send time and fires when a
+received packet's ``decoded.request_id`` matches. This rejects stray
+broadcasts + stale replies to prior requests.
 """
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import Any
 
 import pytest
-from meshtastic_mcp import admin
+from meshtastic.protobuf import mesh_pb2, portnums_pb2  # type: ignore[import-untyped]
+from meshtastic_mcp.connection import connect
 
 from ._receive import ReceiveCollector, nudge_nodeinfo_port
 
-
-def _restore_position_config(port: str, orig: dict[str, Any]) -> None:
-    """Best-effort teardown: restore the 3 config fields this test mutates.
-
-    Runs in a ``finally`` block — if the test failed mid-way we still
-    want the device back to its pre-test state so downstream tests
-    don't inherit a short broadcast interval + fixed-position flag.
-    Swallows exceptions to avoid masking the underlying assertion.
-    """
-    for path, value in (
-        ("position.fixed_position", orig.get("fixed_position", False)),
-        (
-            "position.position_broadcast_secs",
-            orig.get("position_broadcast_secs", 0),
-        ),
-        (
-            "position.position_broadcast_smart_enabled",
-            orig.get("position_broadcast_smart_enabled", True),
-        ),
-    ):
-        try:
-            admin.set_config(path, value, port=port)
-        except Exception:
-            pass
+# Fake position — Null Island plus an offset so lat/lon are both non-zero
+# (otherwise `allocPositionPacket` bails out per the firmware rationale
+# in the module docstring). The specific coordinates don't matter; the
+# test validates the *routing + decode* path, not GPS accuracy. Pick
+# an alt value of 10 (meters) to match proto's uint32 for the field.
+_FAKE_LAT_DEG = 37.7749  # approx San Francisco, non-zero, not default
+_FAKE_LON_DEG = -122.4194
+_FAKE_ALT_M = 10
 
 
-@pytest.mark.timeout(240)
-def test_position_broadcast_and_receive(mesh_pair: dict[str, Any]) -> None:
-    """Runs for every directed pair. TX emits a periodic Position; RX
-    receives and decodes it via the ``receive.position`` pubsub topic.
+def _seed_fixed_position(port: str) -> None:
+    """Stash a non-zero fixed position in the RX device's local storage
+    so its ``PositionModule::allocPositionPacket`` returns a reply
+    instead of nullptr."""
+    with connect(port=port) as iface:
+        iface.localNode.setFixedPosition(_FAKE_LAT_DEG, _FAKE_LON_DEG, _FAKE_ALT_M)
+
+
+def _clear_fixed_position(port: str) -> None:
+    """Undo :func:`_seed_fixed_position` so downstream tests see clean
+    state. Best-effort — exceptions here would mask the real test
+    assertion, so we swallow them."""
+    try:
+        with connect(port=port) as iface:
+            iface.localNode.removeFixedPosition()
+    except Exception:
+        pass
+
+
+@pytest.mark.timeout(180)
+def test_position_request_reply(mesh_pair: dict[str, Any]) -> None:
+    """Runs for every directed pair. TX asks RX for its current Position
+    via ``want_response=True``; asserts the reply carries a decoded
+    Position payload.
     """
     tx_port = mesh_pair["tx"]["port"]
     rx_port = mesh_pair["rx"]["port"]
-    tx_node_num = mesh_pair["tx"]["my_node_num"]
+    rx_node_num = mesh_pair["rx"]["my_node_num"]
     tx_role = mesh_pair["tx_role"]
     rx_role = mesh_pair["rx_role"]
-    assert tx_node_num is not None, f"{tx_role} my_node_num missing"
+    assert rx_node_num is not None, f"{rx_role} my_node_num missing"
 
-    # Snapshot current position config so teardown can restore.
-    orig_position = (
-        admin.get_config("position", port=tx_port).get("config", {}).get("position", {})
-    )
-
+    # Seed RX with a fake fixed position before the request. Without
+    # this, `allocPositionPacket` returns nullptr (zero lat/lon) and
+    # the firmware NAKs our request with Routing.Error.NO_RESPONSE.
+    # Runs BEFORE opening tx_listener so the brief RX connection here
+    # doesn't race the listener's port acquisition.
+    _seed_fixed_position(rx_port)
     try:
-        # Configure TX for periodic fixed-position broadcasts. 30 s is a
-        # compromise: short enough for the test to finish inside the
-        # 240 s timeout, long enough that one dropped broadcast still
-        # leaves a 90 s window for the next. smart_enabled=False
-        # disables the distance/interval throttle in
-        # `PositionModule::hasChanged` so we get broadcasts on a fixed
-        # cadence instead of "only when position changes".
-        admin.set_config("position.fixed_position", True, port=tx_port)
-        admin.set_config("position.position_broadcast_secs", 30, port=tx_port)
-        admin.set_config(
-            "position.position_broadcast_smart_enabled", False, port=tx_port
-        )
-        # Small settle: the firmware applies config writes asynchronously,
-        # and the next broadcast is scheduled off the *new* interval. A
-        # brief pause keeps a racy first-broadcast-at-the-old-interval
-        # from confusing the listener.
-        time.sleep(2.0)
+        # Topic is irrelevant — we match via onResponse, not pubsub — but
+        # keeping a concrete subscription avoids receiving every packet type.
+        with ReceiveCollector(
+            tx_port, topic="meshtastic.receive.position"
+        ) as tx_listener:
+            # Bilateral PKI warmup — directed requests are encrypted with
+            # RX's pubkey; RX needs TX's pubkey to decrypt. Same pattern as
+            # test_telemetry_request_reply / test_direct_with_ack / test_traceroute.
+            nudge_nodeinfo_port(rx_port)
+            tx_listener.broadcast_nodeinfo_ping()
 
-        # Bilateral PKI warmup — broadcast packets aren't PKI-encrypted
-        # (they use channel keys), but we also want both sides in each
-        # other's node tables so `PositionModule::hasChanged` doesn't
-        # suppress the broadcast as "no peers to tell". NodeInfo pings
-        # achieve both.
-        nudge_nodeinfo_port(tx_port)
-        nudge_nodeinfo_port(rx_port)
-        time.sleep(3.0)
+            pk_deadline = time.monotonic() + 45.0
+            last_nudge = time.monotonic()
+            last_rec: dict[str, Any] = {}
+            while time.monotonic() < pk_deadline:
+                last_rec = (tx_listener._iface.nodesByNum or {}).get(rx_node_num, {})
+                if last_rec.get("user", {}).get("publicKey"):
+                    break
+                if time.monotonic() - last_nudge > 15.0:
+                    nudge_nodeinfo_port(rx_port)
+                    tx_listener.broadcast_nodeinfo_ping()
+                    last_nudge = time.monotonic()
+                time.sleep(1.0)
+            else:
+                pytest.fail(
+                    f"TX ({tx_role}) never saw RX ({rx_role}) public key within "
+                    f"45s; nodesByNum entry={last_rec!r}"
+                )
 
-        with ReceiveCollector(rx_port, topic="meshtastic.receive.position") as rx:
-            got = rx.wait_for(
-                lambda pkt: pkt.get("from") == tx_node_num,
-                timeout=120.0,  # 2× the broadcast_secs for one retransmit
+            # Send the request. An empty Position payload + wantResponse=True
+            # is the firmware's cue to reply via `allocPositionPacket()`
+            # with the current local position. No oneof variant to set —
+            # Position is a flat message (unlike Telemetry), so the
+            # default-constructed empty body is the canonical request.
+            #
+            # One retry for transient LoRa collisions on request or reply.
+            reply_holder: list[dict[str, Any]] = []
+            got_reply = threading.Event()
+
+            def _on_reply(packet: dict[str, Any]) -> None:
+                reply_holder.append(packet)
+                got_reply.set()
+
+            got = None
+            for _attempt in range(2):
+                got_reply.clear()
+                del reply_holder[:]
+                req = mesh_pb2.Position()
+                tx_listener._iface.sendData(
+                    req,
+                    destinationId=rx_node_num,
+                    portNum=portnums_pb2.PortNum.POSITION_APP,
+                    wantResponse=True,
+                    onResponse=_on_reply,
+                    hopLimit=3,
+                )
+                if got_reply.wait(timeout=45.0):
+                    got = reply_holder[0]
+                    break
+                time.sleep(5.0)
+
+            assert got is not None, (
+                f"no Position reply from {rx_role} (0x{rx_node_num:08x}) "
+                f"within 90s of 2 requests; onResponse callback never "
+                f"fired. PositionModule::allocReply may be throttled "
+                f"(3-min per-peer window) — check firmware log for "
+                f"'Skip Position reply'."
             )
 
-        assert got is not None, (
-            f"no Position packet from {tx_role} (0x{tx_node_num:08x}) within "
-            f"120 s; RX ({rx_role}) saw {len(rx.snapshot())} position packet(s) "
-            f"from {[hex(p.get('from') or 0) for p in rx.snapshot()]!r}. "
-            f"Check that TX's PositionModule is enabled and the broadcast "
-            f"schedule isn't throttled elsewhere."
-        )
+            # Sanity: reply origin matches. Same rejection criterion as
+            # the telemetry test — protects against a firmware routing
+            # bug that dispatches our onResponse on the wrong packet.
+            assert got.get("from") == rx_node_num, (
+                f"Position reply origin mismatch: "
+                f"from=0x{got.get('from'):08x}, "
+                f"expected 0x{rx_node_num:08x}"
+            )
 
-        # Validate the decode path. `decoded.position` is the
-        # MessageToDict version of the Position proto; the protobuf
-        # serializer strips default-valued optional fields, so we can't
-        # rely on lat/lon being present (fixed-position without stored
-        # coords is a valid zero-state). What we CAN rely on is the
-        # outer `position` sub-dict existing and the `raw` protobuf
-        # parsing cleanly — those prove the POSITION_APP portnum
-        # decoded without errors.
-        decoded = got.get("decoded", {})
-        assert "position" in decoded, (
-            f"packet from {tx_role} had no `decoded.position` — "
-            f"POSITION_APP decode failed. decoded={decoded!r}"
-        )
+            # Validate the decode path. `decoded.position` is the
+            # MessageToDict version of the Position proto; seeding with
+            # a fake fixed position ensures lat/lon are non-zero and
+            # the proto strip-defaults behavior keeps them in the dict.
+            decoded = got.get("decoded", {})
+            assert "position" in decoded, (
+                f"Position reply from {rx_role} had no `decoded.position` — "
+                f"POSITION_APP decode failed. decoded={decoded!r}"
+            )
     finally:
-        _restore_position_config(tx_port, orig_position)
+        _clear_fixed_position(rx_port)
