@@ -366,7 +366,9 @@ float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &s
 {
     float scale = 1.0f; // default (no scaling)
     const uint16_t knownNodeCount = MAX_NUM_NODES - snapshot.cumulative12h.unknownHopCount;
-    sampledEstimate = 0;
+    // Compute sampled estimate for status visibility in all modes.
+    // It is only used for scaling decisions in the high-turnover branch below.
+    sampledEstimate = estimateSampledMeshSize();
 
     // Not-full NodeDB with headroom: direct counts are accurate, scaling only for unknown hops needed.
     const float nearCapacity = NODEDB_NEAR_CAPACITY_RATIO * MAX_NUM_NODES;
@@ -392,7 +394,6 @@ float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &s
 
     // High turnover: many evictions per hour, NodeDB is cycling rapidly.
     // Compute both sampling and eviction estimates, prefer whichever is larger.
-    sampledEstimate = estimateSampledMeshSize();
     const float evictionScale = 1.1f + (rollingEvictionAvg12h / knownNodeCount);
     const float samplingScale =
         (sampledEstimate > 0) ? std::max(static_cast<float>(sampledEstimate) / knownNodeCount, 1.0f) : 0.0f;
@@ -486,20 +487,17 @@ uint8_t HopScalingModule::computeRequiredHop(const Snapshot &snapshot, float sca
 // and perform full recomputation once per hour.
 int32_t HopScalingModule::runOnce()
 {
-    static bool hasCompletedInitialRun = false;
-    static uint8_t runsSinceLastHourlyUpdate = 0;
-
-    const bool isFirstRun = !hasCompletedInitialRun;
+    const bool isFirstRun = !this->hasCompletedInitialRun;
     bool didHourlyUpdate = false;
 
     if (isFirstRun) {
-        hasCompletedInitialRun = true;
-        runsSinceLastHourlyUpdate = 0;
+        this->hasCompletedInitialRun = true;
+        this->runsSinceLastHourlyUpdate = 0;
         didHourlyUpdate = true;
     } else {
-        runsSinceLastHourlyUpdate++;
-        if (runsSinceLastHourlyUpdate >= RUNS_PER_HOUR) {
-            runsSinceLastHourlyUpdate = 0;
+        this->runsSinceLastHourlyUpdate++;
+        if (this->runsSinceLastHourlyUpdate >= RUNS_PER_HOUR) {
+            this->runsSinceLastHourlyUpdate = 0;
             didHourlyUpdate = true;
         }
     }

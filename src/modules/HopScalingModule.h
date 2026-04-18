@@ -103,6 +103,10 @@ class HopScalingModule : private concurrency::OSThread
     SampleTracker sampledNodesCurrentHour = {};
     float rollingSampledAvg12h = 0.0f; // Rolling average estimate of mesh size per hour (denominator-normalised)
     uint32_t sampleWindowStartMs = 0;
+
+    // Per-instance scheduler state for hourly recomputation cadence.
+    bool hasCompletedInitialRun = false;
+    uint8_t runsSinceLastHourlyUpdate = 0;
 };
 
 extern HopScalingModule *hopScalingModule;
