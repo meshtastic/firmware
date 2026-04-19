@@ -93,7 +93,7 @@ Every Meshtastic packet on the air is encrypted in one of two ways: the **per-ch
   - **16 bytes** → raw AES-128 key
   - **32 bytes** → raw AES-256 key
 - **Nonce (128 bit)**: `packet_id` (u64 LE) ‖ `from_node` (u32 LE) ‖ `block_counter` (u32, starts at 0). Built in `CryptoEngine::initNonce`.
-- **No AEAD**: channel packets carry no MAC. Integrity is "soft" — receivers drop packets whose channel hash doesn't match one of their own channels. `Channels::getHash` = XOR of the channel name bytes and the PSK bytes. An active attacker with the PSK can still forge; an attacker without it can't produce a hash any receiver accepts.
+- **No AEAD**: channel packets carry no MAC, so the channel-hash byte is not an integrity or authenticity check. `Channels::getHash` is a 1-byte XOR-derived hint over the channel name bytes and PSK bytes that helps receivers pick a candidate channel/PSK for decryption. Because it is only a small hint and collisions are easy to find, it should be described purely as a PSK-selection aid, not as a security filter an attacker cannot bypass.
 - **Channel 0 is special in one way only**: it's the channel the Router attempts PKI decryption on before falling through to AES-CTR. Non-zero channels always go straight to AES-CTR.
 
 ### PKI encryption for DMs (X25519 ECDH + AES-256-CCM)
