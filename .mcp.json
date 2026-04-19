@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "meshtastic": {
+      "command": "./mcp-server/.venv/bin/python",
+      "args": ["-m", "meshtastic_mcp"],
+      "env": {
+        "MESHTASTIC_FIRMWARE_ROOT": "."
+      }
+    }
+  }
+}

@@ -1,2 +1,28 @@
 [bandit]
-skips = B101
+# Rule IDs: https://bandit.readthedocs.io/en/latest/plugins/index.html
+#
+# B101 assert_used
+#   pytest assertions + internal invariants; required for pytest.
+# B110 try_except_pass
+#   best-effort cleanup paths (atexit handlers, pubsub unsubscribe,
+#   session-end file close, socket shutdown). Logging inside the
+#   except block would be worse than the silent pass — teardown is
+#   already at end-of-session and the surrounding caller has context.
+# B112 try_except_continue
+#   defensive loops over flaky sources (pubsub handlers, device
+#   re-enumeration polls). One failed iteration shouldn't abort the loop.
+# B404 import_subprocess
+#   mcp-server wraps PlatformIO, esptool, nrfutil, picotool, and the
+#   pytest test-runner — subprocess is a load-bearing import here, not
+#   a smell. The "consider possible security implications" advisory is
+#   redundant given the file-level review already applied.
+# B603 subprocess_without_shell_equals_true
+#   all subprocess calls use a static argv list; `shell=False` is the
+#   default and we never string-interpolate user input into the command.
+# B606 start_process_with_no_shell
+#   same invariant as B603 — running a binary via argv list (not
+#   `shell=True`) is the safe pattern bandit is asking for.
+#
+# Higher-severity checks (B102 exec_used, B301 pickle, B307 eval,
+# B602 shell=True, etc.) remain enabled.
+skips = B101,B110,B112,B404,B603,B606

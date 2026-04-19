@@ -4,11 +4,11 @@ This document provides context and guidelines for AI assistants working with the
 
 ## Project Overview
 
-Meshtastic is an open-source LoRa mesh networking project for long-range, low-power communication without relying on internet or cellular infrastructure. The firmware enables text messaging, location sharing, and telemetry over a decentralized mesh network.
+Meshtastic is an open-source LoRa mesh networking project for long-range, low-power communication without relying on internet or cellular infrastructure. The firmware enables text messaging, location sharing, and telemetry over a decentralized mesh network. The project uses **C++17** as its language standard across all platforms.
 
 ### Supported Hardware Platforms
 
-- **ESP32** (ESP32, ESP32-S3, ESP32-C3) - Most common platform
+- **ESP32** (ESP32, ESP32-S3, ESP32-C3, ESP32-C6) - Most common platform
 - **nRF52** (nRF52840, nRF52833) - Low power Nordic chips
 - **RP2040/RP2350** - Raspberry Pi Pico variants
 - **STM32WL** - STM32 with integrated LoRa
@@ -80,21 +80,46 @@ firmware/
 │   │   ├── NodeDB.*       # Node database management
 │   │   ├── Router.*       # Packet routing
 │   │   ├── Channels.*     # Channel management
+│   │   ├── CryptoEngine.* # AES-CCM encryption
 │   │   ├── *Interface.*   # Radio interface implementations
+│   │   ├── api/           # WiFi/Ethernet server APIs (ServerAPI, PacketAPI)
+│   │   ├── http/          # HTTP server (WebServer, ContentHandler)
+│   │   ├── wifi/          # WiFi support (WiFiAPClient)
+│   │   ├── eth/           # Ethernet support (ethClient)
+│   │   ├── udp/           # UDP multicast
+│   │   ├── compression/   # Message compression (unishox2)
 │   │   └── generated/     # Protobuf generated code
 │   ├── modules/           # Feature modules (Position, Telemetry, etc.)
+│   │   └── Telemetry/     # Telemetry subsystem
+│   │       └── Sensor/    # 50+ I2C sensor drivers
 │   ├── gps/               # GPS handling
 │   ├── graphics/          # Display drivers and UI
-│   ├── platform/          # Platform-specific code
-│   ├── input/             # Input device handling
-│   └── concurrency/       # Threading utilities
+│   │   └── niche/         # Specialized UIs (InkHUD e-ink framework)
+│   ├── platform/          # Platform-specific code (esp32, nrf52, rp2xx0, stm32wl, portduino)
+│   ├── input/             # Input device handling (InputBroker, keyboards, buttons)
+│   ├── detect/            # I2C hardware auto-detection (80+ device types)
+│   ├── motion/            # Accelerometer drivers (BMA423, BMI270, MPU6050, etc.)
+│   ├── mqtt/              # MQTT bridge client
+│   ├── power/             # Power HAL
+│   ├── nimble/            # BLE via NimBLE
+│   ├── buzz/              # Audio/notification (buzzer, RTTTL)
+│   ├── serialization/     # JSON serialization, COBS encoding
+│   ├── watchdog/          # Hardware watchdog thread
+│   ├── concurrency/       # Threading utilities (OSThread, Lock)
+│   ├── PowerFSM.*         # Power finite state machine
+│   └── Observer.h         # Observer/Observable event pattern
 ├── variants/              # Hardware variant definitions
 │   ├── esp32/            # ESP32 variants
 │   ├── esp32s3/          # ESP32-S3 variants
-│   ├── nrf52/            # nRF52 variants
-│   └── rp2xxx/           # RP2040/RP2350 variants
+│   ├── esp32c3/          # ESP32-C3 variants
+│   ├── esp32c6/          # ESP32-C6 variants
+│   ├── nrf52840/         # nRF52 variants
+│   ├── rp2040/           # RP2040/RP2350 variants
+│   ├── stm32/            # STM32WL variants
+│   └── native/           # Linux/Portduino variants
 ├── protobufs/            # Protocol buffer definitions
 ├── boards/               # Custom PlatformIO board definitions
+├── test/                 # Unit tests (12 test suites)
 └── bin/                  # Build and utility scripts
 ```
 
@@ -105,6 +130,7 @@ firmware/
 - Follow existing code style - run `trunk fmt` before commits
 - Prefer `LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR` for logging
 - Use `assert()` for invariants that should never fail
+- C++17 features are available (`std::optional`, structured bindings, `if constexpr`, etc.)
 
 ### Naming Conventions
 
@@ -118,19 +144,43 @@ firmware/
 
 #### Module System
 
-Modules inherit from `MeshModule` or `ProtobufModule<T>` and implement:
+Modules use a three-tier class hierarchy:
 
-- `handleReceivedProtobuf()` - Process incoming packets
-- `allocReply()` - Generate response packets
-- `runOnce()` - Periodic task execution (returns next run interval in ms)
+1. **`MeshModule`** - Base class. Implement `wantPacket()` and `handleReceived()`. Returns `ProcessMessage::STOP` or `ProcessMessage::CONTINUE`.
+2. **`SinglePortModule`** - Handles a single portnum. Simplified `wantPacket()` that checks `decoded.portnum`.
+3. **`ProtobufModule<T>`** - Template for protobuf-based modules. Handles encoding/decoding automatically.
+
+Most modules also inherit from **`OSThread`** for periodic tasks (the "mixin" pattern):
 
 ```cpp
-class MyModule : public ProtobufModule<meshtastic_MyMessage>
+class MyModule : public ProtobufModule<meshtastic_MyMessage>, private concurrency::OSThread
 {
+  public:
+    MyModule();
+
   protected:
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_MyMessage *msg) override;
-    virtual int32_t runOnce() override;
+    virtual meshtastic_MeshPacket *allocReply() override;       // Generate response packets
+    virtual int32_t runOnce() override;                         // Periodic task (returns next interval in ms)
+    virtual bool alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_MyMessage *msg); // Modify in-flight
+    virtual bool wantUIFrame();                                 // Request a UI display frame
 };
+```
+
+Modules are registered in `src/modules/Modules.cpp` guarded by `MESHTASTIC_EXCLUDE_*` flags.
+
+#### Observer/Observable Pattern
+
+Event-driven communication between subsystems uses `src/Observer.h`:
+
+```cpp
+// Observable emits events
+Observable<const meshtastic::Status *> newStatus;
+newStatus.notifyObservers(&status);
+
+// Observer receives events via callback
+CallbackObserver<MyClass, const meshtastic::Status *> statusObserver =
+    CallbackObserver<MyClass, const meshtastic::Status *>(this, &MyClass::handleStatusUpdate);
 ```
 
 #### Configuration Access
@@ -138,20 +188,69 @@ class MyModule : public ProtobufModule<meshtastic_MyMessage>
 - `config.*` - Device configuration (LoRa, position, power, etc.)
 - `moduleConfig.*` - Module-specific configuration
 - `channels.*` - Channel configuration and management
+- `owner` - Device owner info
+- `myNodeInfo` - Local node info
 
 #### Default Values
 
 Use the `Default` class helpers in `src/mesh/Default.h`:
 
 - `Default::getConfiguredOrDefaultMs(configured, default)` - Returns ms, using default if configured is 0
+- `Default::getConfiguredOrDefault(configured, default)` - Generic configured/default getter
 - `Default::getConfiguredOrMinimumValue(configured, min)` - Enforces minimum values
 - `Default::getConfiguredOrDefaultMsScaled(configured, default, numNodes)` - Scales based on network size
 
 #### Thread Safety
 
-- Use `concurrency::Lock` for mutex protection
+- Use `concurrency::Lock` and `concurrency::LockGuard` for mutex protection
 - Radio SPI access uses `SPILock`
 - Prefer `OSThread` for background tasks
+
+### Hardware Detection
+
+`src/detect/ScanI2C` automatically enumerates 80+ I2C device types at boot including displays, sensors, RTCs, keyboards, PMUs, and touch controllers. This drives automatic initialization of the correct drivers.
+
+### Graphics/UI System
+
+Multiple display driver families in `src/graphics/`:
+
+- **OLED**: SSD1306, SH1106, ST7567
+- **TFT**: TFTDisplay (LovyanGFX-based)
+- **E-Ink**: EInkDisplay2, EInkDynamicDisplay, EInkParallelDisplay
+
+**InkHUD** (`src/graphics/niche/InkHUD/`) is an event-driven e-ink UI framework:
+
+- Applet-based architecture — modular display tiles
+- Read-only, static display optimized for minimal refreshes and low power
+- Configured per-variant via `nicheGraphics.h`
+- Separate PlatformIO config: `src/graphics/niche/InkHUD/PlatformioConfig.ini`
+
+### Input System
+
+`src/input/InputBroker` is the centralized input event dispatcher. Supports multiple input sources: buttons, keyboards (BBQ10, Cardputer, TCA8418), touch screens, rotary encoders, and matrix keyboards.
+
+### Power Management
+
+`src/PowerFSM.*` implements a finite state machine with states: `stateON`, `statePOWER`, `stateSERIAL`, `stateDARK`. Key events: `EVENT_PRESS`, `EVENT_WAKE_TIMER`, `EVENT_LOW_BATTERY`, `EVENT_RECEIVED_MSG`, `EVENT_SHUTDOWN`. Conditionally excluded with `MESHTASTIC_EXCLUDE_POWER_FSM` (falls back to `FakeFsm`).
+
+### Motion Sensors
+
+`src/motion/AccelerometerThread` provides background motion monitoring with automatic screen wake and double-tap button press detection. Supports 10+ accelerometer/gyroscope chips (BMA423, BMI270, MPU6050, LIS3DH, LSM6DS3, STK8XXX, QMA6100P, ICM20948, BMX160).
+
+### Telemetry Sensor Library
+
+`src/modules/Telemetry/Sensor/` contains 50+ I2C sensor drivers organized by category:
+
+- **Power monitoring**: INA219/226/260/3221, MAX17048
+- **Environmental**: BME280/680, SCD4X (CO₂), SEN5X (particulate)
+- **Humidity/Temperature**: SHT3X/4X, AHT10, MCP9808, MLX90614
+- **Light**: BH1750, TSL2561/2591, VEML7700, LTR390UV, OPT3001
+- **Air quality**: PMSA003I, SFA30
+- **Specialized**: CGRadSens (radiation), NAU7802 (weight scale)
+
+### API/Networking
+
+`src/mesh/api/` provides a template-based `ServerAPI` for client communication over WiFi (`WiFiServerAPI`) and Ethernet (`ethServerAPI`). Default port: **4403**. HTTP server in `src/mesh/http/`. JSON serialization in `src/serialization/MeshPacketSerializer`.
 
 ### Hardware Variants
 
@@ -159,29 +258,37 @@ Each hardware variant has:
 
 - `variant.h` - Pin definitions and hardware capabilities
 - `platformio.ini` - Build configuration
-- Optional: `pins_arduino.h`, `rfswitch.h`
+- Optional: `pins_arduino.h`, `rfswitch.h`, `nicheGraphics.h` (for InkHUD variants)
 
 Key defines in variant.h:
 
 ```cpp
 #define USE_SX1262          // Radio chip selection
 #define HAS_GPS 1           // Hardware capabilities
+#define HAS_SCREEN 1        // Display present
 #define LORA_CS 36          // Pin assignments
 #define SX126X_DIO1 14      // Radio-specific pins
 ```
 
 ### Protobuf Messages
 
-- Defined in `protobufs/meshtastic/*.proto`
-- Generated code in `src/mesh/generated/`
+- Defined in `protobufs/meshtastic/*.proto` (~32 proto files)
+- Generated code in `src/mesh/generated/meshtastic/`
 - Regenerate with `bin/regen-protos.sh`
 - Message types prefixed with `meshtastic_`
+- Nanopb `.options` files control field sizes and encoding
 
 ### Conditional Compilation
 
 ```cpp
 #if !MESHTASTIC_EXCLUDE_GPS        // Feature exclusion
+#if !MESHTASTIC_EXCLUDE_WIFI       // Network feature exclusion
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH  // BLE exclusion
+#if !MESHTASTIC_EXCLUDE_POWER_FSM  // Power FSM exclusion
 #ifdef ARCH_ESP32                   // Architecture-specific
+#ifdef ARCH_NRF52                   // Nordic platform
+#ifdef ARCH_RP2040                  // Raspberry Pi Pico
+#ifdef ARCH_PORTDUINO               // Linux native
 #if defined(USE_SX1262)            // Radio-specific
 #ifdef HAS_SCREEN                   // Hardware capability
 #if USERPREFS_EVENT_MODE           // User preferences
@@ -192,7 +299,7 @@ Key defines in variant.h:
 Uses **PlatformIO** with custom scripts:
 
 - `bin/platformio-pre.py` - Pre-build script
-- `bin/platformio-custom.py` - Custom build logic
+- `bin/platformio-custom.py` - Custom build logic, manifest generation
 
 Build commands:
 
@@ -202,21 +309,38 @@ pio run -e tbeam -t upload    # Build and upload
 pio run -e native             # Build native/Linux version
 ```
 
+### Build Manifest
+
+`bin/platformio-custom.py` emits a build manifest with metadata:
+
+- `hasMui`, `hasInkHud` - UI capability flags (overridable via `custom_meshtastic_has_mui`, `custom_meshtastic_has_ink_hud`)
+- Architecture normalization (e.g., `esp32s3` → `esp32-s3` for API compatibility)
+
 ## Common Tasks
 
 ### Adding a New Module
 
 1. Create `src/modules/MyModule.cpp` and `.h`
-2. Inherit from appropriate base class
-3. Register in `src/modules/Modules.cpp`
-4. Add protobuf messages if needed in `protobufs/`
+2. Inherit from appropriate base class (`MeshModule`, `SinglePortModule`, or `ProtobufModule<T>`)
+3. Mix in `concurrency::OSThread` if periodic work is needed
+4. Register in `src/modules/Modules.cpp` guarded by `#if !MESHTASTIC_EXCLUDE_MYMODULE`
+5. Add protobuf messages if needed in `protobufs/meshtastic/`
+6. Add test suite in `test/test_mymodule/` if applicable
 
 ### Adding a New Hardware Variant
 
 1. Create directory under `variants/<arch>/<name>/`
-2. Add `variant.h` with pin definitions
-3. Add `platformio.ini` with build config
-4. Reference common configs with `extends`
+2. Add `variant.h` with pin definitions and hardware capability defines
+3. Add `platformio.ini` with build config — use `extends` to reference common base (e.g., `esp32s3_base`)
+4. Set `custom_meshtastic_support_level = 1` (PR builds) or `2` (merge builds)
+5. For e-ink displays, add `nicheGraphics.h` for InkHUD configuration
+
+### Adding a New Telemetry Sensor
+
+1. Create driver in `src/modules/Telemetry/Sensor/` following existing sensor pattern
+2. Register I2C address in `src/detect/ScanI2C` for auto-detection
+3. Integrate with the appropriate telemetry module (Environment, Health, Power, AirQuality)
+4. Add proto fields in `protobufs/meshtastic/telemetry.proto` if new data types are needed
 
 ### Modifying Configuration Defaults
 
@@ -305,9 +429,182 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ## Testing
 
-- Unit tests in `test/` directory
-- Run with `pio test -e native`
-- Use `bin/test-simulator.sh` for simulation testing
+### Native unit tests (C++)
+
+Unit tests in `test/` directory with 12 test suites:
+
+- `test_crypto/` - Cryptography
+- `test_mqtt/` - MQTT integration
+- `test_radio/` - Radio interface
+- `test_mesh_module/` - Module framework
+- `test_meshpacket_serializer/` - Packet serialization
+- `test_transmit_history/` - Retransmission tracking
+- `test_atak/` - ATAK integration
+- `test_default/` - Default configuration
+- `test_http_content_handler/` - HTTP handling
+- `test_serial/` - Serial communication
+
+Run with: `pio test -e native`
+
+Simulation testing: `bin/test-simulator.sh`
+
+### Hardware-in-the-loop tests (`mcp-server/tests/`)
+
+Separate pytest suite that exercises real USB-connected Meshtastic devices. See the **MCP Server & Hardware Test Harness** section below for invocation, tier layout, and agent usage rules.
+
+## MCP Server & Hardware Test Harness
+
+The `mcp-server/` directory houses a firmware-aware [MCP](https://modelcontextprotocol.io/) server plus a pytest-based integration suite. AI agents that speak MCP get a well-defined tool surface for flashing, configuring, and inspecting physical Meshtastic devices — use it instead of hand-rolling `pio` or `meshtastic --port` calls where possible. `mcp-server/README.md` is the operator-facing setup doc; this section is the agent-facing usage contract.
+
+The repo registers the server via `.mcp.json` at the repo root — Claude Code picks it up automatically once `mcp-server/.venv/` is built (`cd mcp-server && python3 -m venv .venv && .venv/bin/pip install -e '.[test]'`).
+
+### When to use which surface
+
+| Goal                                              | Tool                                                                                                             |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Find a connected device                           | `mcp__meshtastic__list_devices`                                                                                  |
+| Read a live node's config/state                   | `mcp__meshtastic__device_info`, `list_nodes`, `get_config`                                                       |
+| Mutate a device (owner, region, channels, reboot) | `set_owner`, `set_config`, `set_channel_url`, `reboot`, `shutdown`, `factory_reset` — all require `confirm=True` |
+| Flash firmware to a variant                       | `pio_flash` (any arch) or `erase_and_flash` (ESP32 factory install)                                              |
+| Stream serial logs while debugging                | `serial_open` → `serial_read` loop → `serial_close`                                                              |
+| Administer `userPrefs.jsonc` build-time constants | `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`                                        |
+| Run the regression suite                          | `./mcp-server/run-tests.sh` (or `/test` slash command)                                                           |
+| Diagnose a specific device                        | `/diagnose [role]` slash command (read-only)                                                                     |
+| Triage a flaky test                               | `/repro <node-id> [count]` slash command                                                                         |
+
+**One MCP call per port at a time.** `SerialInterface` holds an exclusive OS-level lock on the serial port for its lifetime. If a `serial_*` session is open on `/dev/cu.usbmodem101`, calling `device_info` on the same port will fail fast pointing at the active session. Sequence calls: open → read/mutate → close, then next device. Never parallelize tool calls on the same port.
+
+### MCP tool surface (~32 tools)
+
+Grouped by purpose. Full argument shapes in `mcp-server/README.md`; a few high-value signatures are called out here.
+
+- **Discovery & metadata**: `list_devices`, `list_boards`, `get_board`
+- **Build & flash**: `build`, `clean`, `pio_flash`, `erase_and_flash` (ESP32 only), `update_flash` (ESP32 OTA), `touch_1200bps`
+- **Serial sessions** (long-running, 10k-line ring buffer): `serial_open`, `serial_read`, `serial_list`, `serial_close`
+- **Device reads**: `device_info`, `list_nodes`
+- **Device writes** (all require `confirm=True`): `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `reboot`, `shutdown`, `factory_reset`, `set_debug_log_api`
+- **userPrefs admin** (build-time constants, not runtime config): `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
+- **Vendor escape hatches**: `esptool_chip_info`, `esptool_erase_flash`, `esptool_raw`, `nrfutil_dfu`, `nrfutil_raw`, `picotool_info`, `picotool_load`, `picotool_raw`
+
+`confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve — it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `factory_reset` and `erase_and_flash`.
+
+### Hardware test suite (`mcp-server/run-tests.sh`)
+
+The wrapper auto-detects connected devices (VID → role map: `0x239A` → `nrf52`, `0x303A`/`0x10C4` → `esp32s3`), maps each role to a PlatformIO env (`nrf52` → `rak4631`, `esp32s3` → `heltec-v3`, overridable via `MESHTASTIC_MCP_ENV_<ROLE>`), then invokes pytest. Zero pre-flight config needed from the operator.
+
+Suite tiers (collected + run in this order via `pytest_collection_modifyitems`):
+
+1. `tests/unit/` — pure Python (boards parse, pio wrapper, userPrefs parse, testing profile). No hardware.
+2. `tests/test_00_bake.py` — flashes each detected device with current `userPrefs.jsonc` merged with the session's test profile. Has its own skip-if-already-baked check comparing region + primary channel to the session profile; skips cheaply on warm devices.
+3. `tests/mesh/` — multi-device mesh: bidirectional send, broadcast delivery, direct-with-ACK, mesh formation within 60s. Parametrized `[nrf52->esp32s3]` and `[esp32s3->nrf52]`.
+4. `tests/telemetry/` — `DEVICE_METRICS_APP` broadcast timing.
+5. `tests/monitor/` — boot-log panic check.
+6. `tests/fleet/` — PSK seed session isolation.
+7. `tests/admin/` — channel URL roundtrip, owner persistence across reboot.
+8. `tests/provisioning/` — region + modem + slot bake, admin key presence, `UNSET` region blocks TX, userPrefs survive factory reset.
+
+Invocation patterns:
+
+```bash
+./mcp-server/run-tests.sh                                        # full suite (auto-bake-if-needed)
+./mcp-server/run-tests.sh --force-bake                           # reflash before testing
+./mcp-server/run-tests.sh --assume-baked                         # skip bake (caller vouches for device state)
+./mcp-server/run-tests.sh tests/mesh                             # one tier
+./mcp-server/run-tests.sh tests/mesh/test_direct_with_ack.py     # one file
+./mcp-server/run-tests.sh -k telemetry                           # name filter
+```
+
+**No hardware detected?** The wrapper auto-narrows to `tests/unit/` only and prints `detected hub : (none)` in the pre-flight header. Agents interpreting the output should call this out explicitly — a 52-test green run without hardware is qualitatively different from a 12-unit-test green run.
+
+**Artifacts every run produces:**
+
+- `mcp-server/tests/report.html` — self-contained pytest-html. Each test gets a `Meshtastic debug` section with the tail of firmware log + device state dump. **Open this first** on failures; it's the canonical evidence source.
+- `mcp-server/tests/junit.xml` — CI-parseable.
+- `mcp-server/tests/reportlog.jsonl` — pytest-reportlog stream (`$report_type` keyed JSONL). Consumed by the live TUI.
+- `mcp-server/tests/fwlog.jsonl` — firmware log mirror from the `meshtastic.log.line` pubsub topic. Populated by the `_firmware_log_stream` autouse session fixture.
+
+### Live TUI (`meshtastic-mcp-test-tui`)
+
+A Textual-based live view that wraps `run-tests.sh`. Tails reportlog for per-test state, streams firmware logs, polls device state at startup + post-run (gated out of the active run because `hub_devices` holds exclusive port locks). Key bindings:
+
+| Key | Action                                                                                                       |
+| --- | ------------------------------------------------------------------------------------------------------------ |
+| `r` | re-run focused test (leaf → that node id; internal node → directory or `-k`)                                 |
+| `f` | filter tree by substring                                                                                     |
+| `d` | failure detail modal (pulls `longrepr` + captured stdout from the reportlog)                                 |
+| `g` | export reproducer bundle (tar.gz with README, test_report.json, time-filtered fwlog, devices.json, env.json) |
+| `l` | toggle firmware log pane                                                                                     |
+| `x` | tool coverage modal                                                                                          |
+| `c` | cross-run history sparkline                                                                                  |
+| `q` | quit (SIGINT → SIGTERM → SIGKILL escalation, 5-s windows each)                                               |
+
+Launch:
+
+```bash
+cd mcp-server
+.venv/bin/meshtastic-mcp-test-tui                 # full suite
+.venv/bin/meshtastic-mcp-test-tui tests/mesh      # args pass through to pytest
+```
+
+The plain CLI stays primary; the TUI is for operators who want a live dashboard. Both consume the same `run-tests.sh`.
+
+### Slash commands (Claude Code + Copilot)
+
+Three AI-assisted workflows wrap the test harness. Claude Code operators get `/test`, `/diagnose`, `/repro`; Copilot operators get `/mcp-test`, `/mcp-diagnose`, `/mcp-repro`. Bodies:
+
+- `.claude/commands/{test,diagnose,repro}.md`
+- `.github/prompts/mcp-{test,diagnose,repro}.prompt.md`
+
+`.claude/commands/README.md` is the index.
+
+House rules for agents running these prompts:
+
+- **Interpret failures, don't just echo them.** Pull firmware log tails from `report.html` and classify each failure as transient / environmental / regression. Use the exact format in `.claude/commands/test.md`.
+- **No destructive writes without operator approval.** Any skill that could reflash, factory-reset, or reboot a device must describe the action and stop. The operator authorizes.
+- **Sequential MCP calls per port.** See above.
+- **"Unknown" is a valid classification.** If evidence doesn't support a root cause, say so and list what would disambiguate. Do not invent.
+
+### Key fixtures (test authors + agents debugging)
+
+`mcp-server/tests/conftest.py` provides:
+
+- **`_session_userprefs`** (autouse session) — snapshots `userPrefs.jsonc` at session start, merges the session test profile via `userprefs.merge_active(test_profile)`, restores at teardown. Four layers of safety: pytest teardown + `atexit` + sidecar file (`userPrefs.jsonc.mcp-session-bak`) + startup self-heal in `run-tests.sh`. **Do not edit `userPrefs.jsonc` from inside a test.**
+- **`_firmware_log_stream`** (autouse session) — subscribes to `meshtastic.log.line` pubsub on every connected `SerialInterface` and mirrors lines to `tests/fwlog.jsonl`. Drives the TUI firmware-log pane.
+- **`_debug_log_buffer`** (autouse per-test) — captures last 200 firmware log lines + device state for attachment to the pytest-html `Meshtastic debug` section on failure.
+- **`hub_devices`** (session) — `dict[role, SerialInterface]` with session-long exclusive port locks. Reason the TUI's device poller is gated to startup + post-run only.
+- **`baked_mesh`** — parametrized mesh-pair fixture; depends on `test_00_bake`. `pytest_generate_tests` in `conftest.py` auto-generates `[nrf52->esp32s3]` and `[esp32s3->nrf52]` variants.
+- **`test_profile`** — session-scoped dict: region, primary channel, admin key, PSK seed. Derived from `MESHTASTIC_MCP_SEED` (defaults to `mcp-<user>-<host>`).
+
+### Firmware integration points tied to the test harness
+
+Two firmware changes exist specifically so the test harness works reliably. **Keep these in mind when touching related code.**
+
+- **`src/mesh/StreamAPI.cpp` + `StreamAPI.h`** — `emitLogRecord` uses a dedicated `fromRadioScratchLog` + `txBufLog` pair and a `concurrency::Lock streamLock`. Before this fix, `debug_log_api_enabled=true` would tear `FromRadio` protobufs on the serial transport because `emitTxBuffer` and `emitLogRecord` shared a single scratch buffer. The conftest enables the log stream session-wide; without this fix the device would corrupt its own FromRadio replies mid-session.
+- **`src/mesh/PhoneAPI.cpp`** — `ToRadio` `Heartbeat(nonce=1)` triggers `nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true)` for serial clients, mirroring the pre-existing behavior for TCP/UDP clients in `PacketAPI.cpp`. The mesh tests rely on this to force a NodeInfo broadcast right after connect so the peer discovers them before the test's first assertion.
+
+If you're modifying `StreamAPI`, `PhoneAPI`, `NodeInfoModule`, or `userPrefs` flow, run `./mcp-server/run-tests.sh` at minimum before asking for review.
+
+### Recovery playbooks
+
+| Symptom                                                    | First check                                                   | Fix                                                                                                                                                                        |
+| ---------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `userPrefs.jsonc` dirty after test run                     | `git status --porcelain userPrefs.jsonc`                      | If non-empty, re-run `./mcp-server/run-tests.sh` once — the pre-flight self-heal restores from sidecar. If still dirty, `git checkout userPrefs.jsonc`.                    |
+| Port busy / wedged CP2102 on macOS                         | `lsof /dev/cu.usbserial-0001`                                 | Kill the holder. USB replug if the kernel still reports busy. Often a stale `pio device monitor` or zombie `meshtastic_mcp` process.                                       |
+| nRF52 appears unresponsive                                 | `list_devices` shows VID `0x239A` but `device_info` times out | `touch_1200bps(port=...)` drops it into the DFU bootloader → `pio_flash` re-installs.                                                                                      |
+| Multiple MCP server processes                              | `ps aux \| grep meshtastic_mcp` shows >1                      | Kill all but the one your MCP host spawned. Zombies hold ports and break tests.                                                                                            |
+| Mesh formation fails, one side sees peer but other doesn't | `/diagnose` (or `list_nodes` on both sides)                   | Asymmetric NodeInfo. `test_direct_with_ack` has a heal path; `/repro` it a few times. If persistent, both devices' clocks may be out of sync with their NodeInfo cooldown. |
+| "role not present on hub" in skip reasons                  | `list_devices`                                                | Expected if a device is unplugged. Reconnect before re-running the tier.                                                                                                   |
+| Tests fail only on first attempt then pass on rerun        | —                                                             | State leak from a prior session. Run with `--force-bake` to reset to a known state.                                                                                        |
+
+### Never do these without asking
+
+- `factory_reset` — wipes node identity; regenerates PKI keypair. Mesh peers will reject old DMs until re-exchange. Legitimate only when the operator explicitly wants it.
+- `erase_and_flash` — full chip erase; destroys all on-device state.
+- `esptool_erase_flash` / `esptool_raw` write/erase — bypasses pio's safety chain.
+- `set_config` on `lora.region` — changes regulatory domain; requires physical-location context the operator has and the agent doesn't.
+- `reboot` / `shutdown` mid-test — breaks fixture invariants.
+- `push -f`, `rebase -i`, `reset --hard`, or any history-rewriting git operation.
+- Clicking computer-use tools on web links in Mail/Messages/PDFs — open URLs via the claude-in-chrome MCP so the extension's link-safety checks apply.
 
 ## Resources
 

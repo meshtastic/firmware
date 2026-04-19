@@ -16,6 +16,11 @@ Do not expect a working Meshtastic device with this target.
 #define LED_POWER PA0 // Green LED
 #define LED_STATE_ON 1
 
+#define BATTERY_PIN AVBAT
+// ADC_MULTIPLIER: 3.0 = internal 1:3 bridge divider (DS13105§3.18.3)
+// Margin: 1.10 = AVBAT divider tolerance ±10% (Table 82)
+#define ADC_MULTIPLIER (1.01f * 3)
+
 #define RAK3172
 #define SERIAL_PRINT_PORT 1
 
