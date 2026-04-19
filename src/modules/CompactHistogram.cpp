@@ -3,7 +3,35 @@
 #include <cmath>
 #include <cstdlib>
 
-CompactHistogram::CompactHistogram() : sessionStartTime(millis()), lastWindowRollTime(millis()), currentWindowIndex(0)
+#ifdef UNIT_TEST
+bool CompactHistogram::s_useTestTime = false;
+uint32_t CompactHistogram::s_testNowMs = 0;
+#endif
+
+uint32_t CompactHistogram::nowMs()
+{
+#ifdef UNIT_TEST
+    if (s_useTestTime) {
+        return s_testNowMs;
+    }
+#endif
+    return millis();
+}
+
+#ifdef UNIT_TEST
+void CompactHistogram::setTimeForTest(uint32_t nowMsValue)
+{
+    s_testNowMs = nowMsValue;
+    s_useTestTime = true;
+}
+
+void CompactHistogram::clearTimeForTest()
+{
+    s_useTestTime = false;
+}
+#endif
+
+CompactHistogram::CompactHistogram() : sessionStartTime(nowMs()), lastWindowRollTime(nowMs()), currentWindowIndex(0)
 {
     clear();
 }
@@ -12,8 +40,8 @@ void CompactHistogram::clear()
 {
     memset(entries, 0, sizeof(entries));
     count = 0;
-    sessionStartTime = millis();
-    lastWindowRollTime = millis();
+    sessionStartTime = nowMs();
+    lastWindowRollTime = nowMs();
     currentWindowIndex = 0;
 
     // On explicit clear, re-randomize jitter offset
@@ -101,20 +129,20 @@ HistogramEntry *CompactHistogram::findEntry(uint32_t nodeId) const
 
 void CompactHistogram::updateCurrentWindowIndex()
 {
-    uint32_t now = millis();
+    uint32_t now = nowMs();
     uint32_t elapsed = now - sessionStartTime;
     currentWindowIndex = (elapsed / SHORT_WINDOW_DURATION_MS) % SHORT_TERM_WINDOWS;
 }
 
 bool CompactHistogram::isWindowRollDue() const
 {
-    uint32_t now = millis();
+    uint32_t now = nowMs();
     return (now - lastWindowRollTime) >= SHORT_WINDOW_DURATION_MS;
 }
 
 void CompactHistogram::rollWindows()
 {
-    uint32_t now = millis();
+    uint32_t now = nowMs();
 
     // Check if 30 minutes have passed
     if ((now - lastWindowRollTime) < SHORT_WINDOW_DURATION_MS) {
@@ -179,6 +207,28 @@ CompactHistogram::HopDistribution CompactHistogram::getHopDistribution(bool rece
     dist.medianHops = hops[hops.size() / 2];
     dist.percentile25Hops = hops[(hops.size() * 1) / 4];
     dist.percentile75Hops = hops[(hops.size() * 3) / 4];
+
+    return dist;
+}
+
+CompactHistogram::PerHopDistribution CompactHistogram::getPerHopDistribution(bool recentOnly) const
+{
+    PerHopDistribution dist;
+    memset(dist.perHop, 0, sizeof(dist.perHop));
+    dist.totalSamples = 0;
+
+    for (size_t i = 0; i < count; i++) {
+        // Filter by recency if requested (only nodes seen in last 2 hours)
+        if (recentOnly && !CompactHistogramOps::wasSeenInShortTerm(entries[i].windowBitmap)) {
+            continue;
+        }
+
+        const uint8_t hopCount = CompactHistogramOps::getHopCount(entries[i].nodeIdAndHops);
+        if (hopCount <= MAX_HOP) {
+            dist.perHop[hopCount]++;
+            dist.totalSamples++;
+        }
+    }
 
     return dist;
 }

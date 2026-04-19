@@ -88,9 +88,18 @@ class CompactHistogram
         size_t sampleCount = 0;
     };
 
+    struct PerHopDistribution {
+        uint16_t perHop[MAX_HOP + 1];
+        size_t totalSamples = 0;
+    };
+
     /// Get hop distribution from histogram entries.
     /// If recentOnly=true, only count entries seen in the last 2 hours (short-term windows).
     HopDistribution getHopDistribution(bool recentOnly = false) const;
+
+    /// Get per-hop node counts from histogram entries.
+    /// If recentOnly=true, only count entries seen in the last 2 hours (short-term windows).
+    PerHopDistribution getPerHopDistribution(bool recentOnly = false) const;
 
     // --- Adaptive Denominator Scaling ---
 
@@ -129,6 +138,12 @@ class CompactHistogram
     /// Get session start time (for testing)
     uint32_t getSessionStartTime() const { return sessionStartTime; }
 
+#ifdef UNIT_TEST
+    /// Override internal clock for deterministic unit tests.
+    static void setTimeForTest(uint32_t nowMs);
+    static void clearTimeForTest();
+#endif
+
   private:
     // --- Data Storage ---
     HistogramEntry entries[CAPACITY];
@@ -161,6 +176,14 @@ class CompactHistogram
 
     /// Validate and clamp denominator to power-of-2 range
     static uint8_t validateDenominator(uint8_t d);
+
+    /// Current clock source (millis in production, injectable in UNIT_TEST).
+    static uint32_t nowMs();
+
+#ifdef UNIT_TEST
+    static bool s_useTestTime;
+    static uint32_t s_testNowMs;
+#endif
 };
 
 // --- Inline Bit Operation Functions ---

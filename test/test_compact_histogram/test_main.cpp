@@ -1,28 +1,27 @@
+#include "MeshTypes.h"
+#include "TestUtil.h"
 #include "modules/CompactHistogram.h"
 #include <cstring>
 #include <unity.h>
 
-// Mock millis() for testing
+// Deterministic clock for CompactHistogram UNIT_TEST hooks
 static uint32_t mockTime = 0;
-
-extern "C" uint32_t millis()
-{
-    return mockTime;
-}
 
 void advanceTime(uint32_t ms)
 {
     mockTime += ms;
+    CompactHistogram::setTimeForTest(mockTime);
 }
 
 void setUp(void)
 {
     mockTime = 0;
+    CompactHistogram::setTimeForTest(mockTime);
 }
 
 void tearDown(void)
 {
-    // Nothing to clean up
+    CompactHistogram::clearTimeForTest();
 }
 
 // ============================================================================
@@ -403,12 +402,9 @@ void test_histogram_memory_size(void)
     TEST_ASSERT_EQUAL_size_t(128, CompactHistogram::CAPACITY);
 }
 
-// ============================================================================
-// MAIN
-// ============================================================================
-
-int main(int argc, char **argv)
+void setup()
 {
+    initializeTestEnvironment();
     UNITY_BEGIN();
 
     // Bit packing tests
@@ -451,5 +447,7 @@ int main(int argc, char **argv)
     RUN_TEST(test_histogram_integration_sample_and_query);
     RUN_TEST(test_histogram_memory_size);
 
-    return UNITY_END();
+    exit(UNITY_END());
 }
+
+void loop() {}

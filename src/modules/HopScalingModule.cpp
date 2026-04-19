@@ -571,12 +571,32 @@ void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyU
     const uint8_t histSuggestedHop = suggestedHopFromCompactHistogram(histRecent, histAll);
     const int8_t delta = static_cast<int8_t>(histSuggestedHop) - static_cast<int8_t>(lastRequiredHop);
 
+    // Get per-hop distribution from histogram (mirroring NodeDB format)
+    const auto histPerHopRecent = hopScalingHistogram.getPerHopDistribution(true);
+    const auto histPerHopAll = hopScalingHistogram.getPerHopDistribution(false);
+
+    // Scale histogram per-hop arrays using 12-hour scale factor (same as NodeDB)
+    const float scale12h = std::max(1.0f + 12.0f * (lastScaleFactor - 1.0f), 1.0f);
+    uint16_t histHopsRecent[HOP_MAX + 1];
+    uint16_t histHopsAll[HOP_MAX + 1];
+    for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
+        const float scaledRecent = histPerHopRecent.perHop[hop] * scale12h;
+        const float scaledAll = histPerHopAll.perHop[hop] * scale12h;
+        histHopsRecent[hop] = static_cast<uint16_t>(std::min(scaledRecent, static_cast<float>(UINT16_MAX)));
+        histHopsAll[hop] = static_cast<uint16_t>(std::min(scaledAll, static_cast<float>(UINT16_MAX)));
+    }
+
     LOG_INFO("[HOPSCALE] compare nodedbHop=%u histHop=%u delta=%d histRecent=%u histAll=%u "
              "histP25/P50/P75=%u/%u/%u histFill=%u%% histDeno=1/%u stepUp=%u stepDown=%u",
              lastRequiredHop, histSuggestedHop, delta, static_cast<unsigned>(histRecent.sampleCount),
              static_cast<unsigned>(histAll.sampleCount), histRecent.percentile25Hops, histRecent.medianHops,
              histRecent.percentile75Hops, hopScalingHistogram.getFillPercentage(), hopScalingHistogram.getSamplingDenominator(),
              hopScalingHistogram.getStepUpEvents(), hopScalingHistogram.getStepDownEvents());
+
+    LOG_INFO("[HOPSCALE] histPerHop recent: [%u %u %u %u %u %u %u %u]", histHopsRecent[0], histHopsRecent[1], histHopsRecent[2],
+             histHopsRecent[3], histHopsRecent[4], histHopsRecent[5], histHopsRecent[6], histHopsRecent[7]);
+    LOG_INFO("[HOPSCALE] histPerHop all:     [%u %u %u %u %u %u %u %u]", histHopsAll[0], histHopsAll[1], histHopsAll[2],
+             histHopsAll[3], histHopsAll[4], histHopsAll[5], histHopsAll[6], histHopsAll[7]);
 }
 
 /**

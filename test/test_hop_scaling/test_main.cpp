@@ -71,6 +71,7 @@ class HopScalingTestShim : public HopScalingModule
     // Test-only clock and window helpers (require UNIT_TEST friend access)
     void setSampleWindowStartMs(uint32_t ms) { sampleWindowStartMs = ms; }
     void rollSampleWindowTest(bool earlyTrigger) { rollSampleWindow(earlyTrigger); }
+    void setHistogramDenominator(uint8_t d) { hopScalingHistogram.setSamplingDenominator(d); }
 };
 
 static MockNodeDB *mockNodeDB = nullptr;
@@ -96,6 +97,10 @@ static void addNodesAtHop(uint32_t baseId, uint8_t hop, uint32_t count, uint32_t
 // With warm-up alpha (1/1, 1/2, ..., 1/12) the rolling average converges within 12-16 rolls.
 static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId, uint16_t meshSize, uint8_t numRolls = 16)
 {
+    // Set denominator to 1 to ensure all samples are captured in tests
+    HopScalingModule::setDenominatorForTest(1);
+    shim.setHistogramDenominator(1);
+
     for (uint8_t roll = 0; roll < numRolls; ++roll) {
         // Simulate a full one-hour window so alpha = 1/12 (no 0.25f floor needed)
         shim.setSampleWindowStartMs(millis() - 3600000UL);
@@ -477,6 +482,10 @@ void test_early_sample_flush()
     hopScalingModule = shim.get();
     buildMegamesh();
 
+    // Ensure histogram captures all test samples
+    HopScalingModule::setDenominatorForTest(1);
+    shim->setHistogramDenominator(1);
+
     shim->runOnce();
 
     TEST_MESSAGE("Feeding 120 unique sampled node IDs (96 needed for flush)");
@@ -509,6 +518,10 @@ void test_hourly_roll()
     hopScalingModule = shim.get();
     buildSpreadSparseMesh();
 
+    // Ensure histogram captures all test samples
+    HopScalingModule::setDenominatorForTest(1);
+    shim->setHistogramDenominator(1);
+
     for (int i = 0; i < 12; i++)
         shim->recordEviction();
 
@@ -518,7 +531,8 @@ void test_hourly_roll()
         shim->samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
     }
 
-    for (int run = 0; run < 7; run++) {
+    // Run 13 cycles (instead of 7) to reach multiple hourly rolls and stable histogram state
+    for (int run = 0; run < 13; run++) {
         int32_t interval = shim->runOnce();
         TEST_ASSERT_GREATER_THAN(0, interval);
     }
