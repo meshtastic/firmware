@@ -79,7 +79,7 @@ Meshtastic packets on the air are typically encrypted one of two ways: the **per
 - **Channels** are symmetric rooms: anyone with the PSK can read any message on the channel. Channel 0 is the "primary" channel and ships with the short-form default PSK on factory devices, forming the public mesh most users join. (The LoRa modem preset `LONG_FAST` lives on `config.lora.modem_preset` and is an independent field — don't conflate "channel 0 default PSK" with the modem preset name.)
 - **DMs** addressed to a single node require PKI so that other holders of the channel PSK can't read them. Outside Ham mode, Meshtastic does not fall back to channel-symmetric encryption when the destination public key is unknown.
 - **Remote admin** is a DM carrying an `AdminMessage`. The receiver only acts on it if the sender's public key is on its allowlist (`config.security.admin_key[0..2]`).
-- **Ham mode** (`user.is_licensed=true`) disables PKI entirely and sends cleartext — FCC Part 97 prohibits encryption on amateur bands.
+- **Ham mode** (`owner.is_licensed=true`, where `owner` is the local `meshtastic_User` record) disables PKI entirely and sends cleartext — FCC Part 97 prohibits encryption on amateur bands.
 - **No ratchet, no session.** Every packet is encrypted from scratch — a stateless design that matches the high-loss, store-and-forward nature of LoRa.
 
 ### Symmetric channel encryption (AES-CTR)
