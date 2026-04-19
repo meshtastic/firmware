@@ -33,6 +33,11 @@ class HopScalingModule : private concurrency::OSThread
     /// Only nodes whose ID passes the modulo filter are tracked (1-in-SAMPLING_DENOMINATOR).
     void recordPacketSender(uint32_t nodeId);
 
+    /// Enable or disable denominator jitter. Jitter is on by default; disable in unit tests
+    /// to keep SAMPLING_DENOMINATOR on power-of-2 values so injectSampleTraffic() works.
+    static void setSamplingJitter(bool enabled) { s_samplingJitter = enabled; }
+    static bool s_samplingJitter; // true by default; friend-visible to jitterDenominator()
+
     uint8_t getLastRequiredHop() const { return lastRequiredHop; }
     float getLastActivityWeight() const { return lastActivityWeight; }
     float getLastScaleFactor() const { return lastScaleFactor; }

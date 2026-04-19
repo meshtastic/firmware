@@ -567,11 +567,16 @@ void setUp(void)
     moduleConfig = meshtastic_LocalModuleConfig_init_zero;
     myNodeInfo.my_node_num = kLocalNode;
     nodeDB = mockNodeDB;
+
+    // Disable denominator jitter so SAMPLING_DENOMINATOR stays on power-of-2 values
+    // and injectSampleTraffic() IDs (stride 128) always pass the modulo filter.
+    HopScalingModule::setSamplingJitter(false);
 }
 
 void tearDown(void)
 {
     hopScalingModule = nullptr;
+    HopScalingModule::setSamplingJitter(true); // restore default for any non-test code paths
 }
 
 void setup()

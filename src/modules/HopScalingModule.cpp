@@ -9,6 +9,7 @@
 #include "mesh-pb-constants.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 namespace
@@ -45,6 +46,23 @@ constexpr float TURNOVER_CAPACITY_LIMIT_RATIO = 0.2f; // Evictions below 20% of 
 uint8_t SAMPLING_DENOMINATOR = 8; // mutable
 constexpr uint8_t SAMPLING_DENOMINATOR_MIN = 1;
 constexpr uint8_t SAMPLING_DENOMINATOR_MAX = 128;
+
+/// Apply random jitter to a target denominator value.
+/// The jittered result lies in [target/2 + 1, target*2 - 1], clamped to [MIN, MAX].
+/// This prevents a bad actor from predicting which node IDs will pass the modulo filter.
+/// When s_samplingJitter is false (e.g. in unit tests) the target is returned unchanged.
+uint8_t jitterDenominator(uint8_t target)
+{
+    if (!HopScalingModule::s_samplingJitter)
+        return target;
+    const uint16_t lo = static_cast<uint16_t>(target / 2) + 1;
+    const uint16_t hi = static_cast<uint16_t>(target) * 2 - 1;
+    const uint16_t loC = std::max(lo, static_cast<uint16_t>(SAMPLING_DENOMINATOR_MIN));
+    const uint16_t hiC = std::min(hi, static_cast<uint16_t>(SAMPLING_DENOMINATOR_MAX));
+    if (loC >= hiC)
+        return static_cast<uint8_t>(loC);
+    return static_cast<uint8_t>(loC + static_cast<uint16_t>(rand()) % (hiC - loC + 1));
+}
 constexpr uint32_t ONE_HOUR_MS = ONE_HOUR_SECS * 1000UL;
 
 // Persistence
@@ -153,16 +171,20 @@ uint16_t HopScalingModule::estimateSampledMeshSize() const
     return static_cast<uint16_t>(std::min(rollingSampledAvg12h, 65535.0f));
 }
 
+bool HopScalingModule::s_samplingJitter = true;
+
 void HopScalingModule::adjustSamplingDenominatorForLoad(float loadRatio)
 {
     const char *direction = nullptr;
     if (loadRatio > 5.0f / 8.0f && SAMPLING_DENOMINATOR < SAMPLING_DENOMINATOR_MAX) {
-        SAMPLING_DENOMINATOR = static_cast<uint8_t>(
+        const uint8_t doubled = static_cast<uint8_t>(
             std::min(static_cast<uint16_t>(SAMPLING_DENOMINATOR * 2), static_cast<uint16_t>(SAMPLING_DENOMINATOR_MAX)));
+        SAMPLING_DENOMINATOR = jitterDenominator(doubled);
         direction = "increased";
     } else if (loadRatio < 1.0f / 8.0f && SAMPLING_DENOMINATOR > SAMPLING_DENOMINATOR_MIN) {
-        SAMPLING_DENOMINATOR = static_cast<uint8_t>(
+        const uint8_t halved = static_cast<uint8_t>(
             std::max(static_cast<uint16_t>(SAMPLING_DENOMINATOR / 2), static_cast<uint16_t>(SAMPLING_DENOMINATOR_MIN)));
+        SAMPLING_DENOMINATOR = jitterDenominator(halved);
         direction = "decreased";
     }
     if (direction) {
