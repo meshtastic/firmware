@@ -91,8 +91,8 @@ static inline StandardCompassNeedlePoints computeStandardCompassNeedlePoints(int
     // between north/south halves to prevent seam bleed while rotating.
     const float scaledDiam = compassDiam * 0.76f;
     const float gapNormHalf = (centerGapPx * 0.5f) / scaledDiam;
-    const float sinHeading = sin(headingRadian);
-    const float cosHeading = cos(headingRadian);
+    const float sinHeading = sinf(headingRadian);
+    const float cosHeading = cosf(headingRadian);
 
     StandardCompassNeedlePoints points{};
     transformNeedlePoint(0.0f, -0.5f, sinHeading, cosHeading, scaledDiam, compassX, compassY, points.northTipX, points.northTipY);
@@ -214,10 +214,7 @@ static void drawNeedleHalfAndRegisterBands(OLEDDisplay *display, int16_t x0, int
     if (y0 > y1)
         swapPoint(x0, y0, x1, y1);
 
-    NeedleColorBand bands[kNeedleBandCount];
-    for (int i = 0; i < kNeedleBandCount; i++) {
-        bands[i].used = false;
-    }
+    NeedleColorBand bands[kNeedleBandCount] = {};
 
     const int16_t bandTop = y0;
     const int16_t bandBottom = y2;
@@ -280,8 +277,8 @@ static inline void drawCompassCardinalLabels(OLEDDisplay *display, int16_t compa
 {
     const float northAngle = getCompassRingAngleOffset(heading);
     const float radius = compassRadius - 1.0f;
-    const float sinNorth = sin(northAngle);
-    const float cosNorth = cos(northAngle);
+    const float sinNorth = sinf(northAngle);
+    const float cosNorth = cosf(northAngle);
 
     const int16_t nX = compassX + static_cast<int16_t>(radius * sinNorth);
     const int16_t nY = compassY - static_cast<int16_t>(radius * cosNorth);
@@ -311,18 +308,25 @@ static inline void drawCompassDegreeMarkers(OLEDDisplay *display, int16_t compas
 
     display->setColor(WHITE);
     constexpr float kStepAngle = 15.0f * DEG_TO_RAD;
-    float angle = baseAngle;
+    const float sinStep = sinf(kStepAngle);
+    const float cosStep = cosf(kStepAngle);
+    float sinAngle = sinf(baseAngle);
+    float cosAngle = cosf(baseAngle);
     bool isMajor = true;
     for (int tick = 0; tick < 24; tick++) {
         const int16_t tickLen = isMajor ? majorLen : minorLen;
 
-        const int16_t xOuter = compassX + static_cast<int16_t>((compassRadius - 1) * sin(angle));
-        const int16_t yOuter = compassY - static_cast<int16_t>((compassRadius - 1) * cos(angle));
-        const int16_t xInner = compassX + static_cast<int16_t>((compassRadius - tickLen) * sin(angle));
-        const int16_t yInner = compassY - static_cast<int16_t>((compassRadius - tickLen) * cos(angle));
+        const int16_t xOuter = compassX + static_cast<int16_t>((compassRadius - 1) * sinAngle);
+        const int16_t yOuter = compassY - static_cast<int16_t>((compassRadius - 1) * cosAngle);
+        const int16_t xInner = compassX + static_cast<int16_t>((compassRadius - tickLen) * sinAngle);
+        const int16_t yInner = compassY - static_cast<int16_t>((compassRadius - tickLen) * cosAngle);
         display->drawLine(xInner, yInner, xOuter, yOuter);
 
-        angle += kStepAngle;
+        // Rotate [sin, cos] by a fixed step instead of recomputing trig 24x/frame.
+        const float nextSin = (sinAngle * cosStep) + (cosAngle * sinStep);
+        const float nextCos = (cosAngle * cosStep) - (sinAngle * sinStep);
+        sinAngle = nextSin;
+        cosAngle = nextCos;
         isMajor = !isMajor;
     }
 }
