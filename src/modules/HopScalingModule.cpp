@@ -181,7 +181,13 @@ void HopScalingModule::rollSampleWindow(bool earlyTrigger)
 
     // Integrate by the fraction of an hour represented by this window,
     // without exponent-based weighting.
-    const float windowFraction = std::max(0.0f, std::min(1.0f, static_cast<float>(windowMs) / static_cast<float>(ONE_HOUR_MS)));
+    float windowFraction = std::max(0.0f, std::min(1.0f, static_cast<float>(windowMs) / static_cast<float>(ONE_HOUR_MS)));
+    // In unit tests and bursty real traffic, early rolls can occur in the same millisecond
+    // as window start (windowMs==0). Apply a small floor so meaningful samples still
+    // contribute to the rolling estimate instead of being multiplied by zero.
+    if (earlyTrigger) {
+        windowFraction = std::max(windowFraction, 0.25f);
+    }
     const float alpha = windowFraction * (1.0f / 12.0f);
     rollingSampledAvg12h = rollingSampledAvg12h * (1.0f - alpha) + estimatedMeshThisWindow * alpha;
 

@@ -321,9 +321,10 @@ void test_megamesh_eviction_scaling()
         for (int i = 0; i < 15 * (hour + 1); i++)
             shim->recordEviction();
 
-        // Feed sampled nodes to build up the sampling estimate
+        // Feed sampled nodes to build up the sampling estimate.
+        // Use IDs divisible by 128 so they pass modulo filtering for all denominators 1..128.
         for (uint32_t i = 1; i <= 40; i++)
-            shim->recordPacketSender(i * 8 + hour * 1000);
+            shim->recordPacketSender(i * 128 + hour * 10000);
 
         for (int run = 0; run < 7; run++)
             shim->runOnce();
@@ -541,15 +542,15 @@ void test_startup_blank_state()
 void test_scenario_summary_output()
 {
     TEST_MESSAGE("=== Scenario summary ===");
-    TEST_MESSAGE("Scenario       | Nodes | Distribution                 | Scale | Hop | Why");
-    TEST_MESSAGE("A: Dense local | 110   | 25/30/15/5/10/15/10 h0-6    | 1.0   | 1-2 | 55 nodes at h1 >> 40");
-    TEST_MESSAGE("B: Spread      | 76    | 5/8/12/15/10/6/10/10 h0-7   | 1.0   | 3-4 | Need h3 to reach 40");
-    TEST_MESSAGE("C: Deep chain  | 22    | 2/3/3/4/3/2/2/3 h0-7        | 1.0   | 7   | Never reaches 40");
-    TEST_MESSAGE("D: Router      | 71    | 3/5/45/8/3/2/2/3 h0-7       | 1.0   | 2-3 | 45-node hop-2 cluster");
-    TEST_MESSAGE("E: Megamesh    | 199   | 30/40/35/30/20/15/14/15 h0-7 | >1.0 | 0-1 | Scale inflates counts");
+    TEST_MESSAGE("Scenario       | Nodes | Distribution                  | Scale | Hop    | Why");
+    TEST_MESSAGE("A: Dense local | 110   | 25/30/15/5/10/15/10 h0-6      | 1.0   | 1-2    | 55 nodes at h1 >> 40");
+    TEST_MESSAGE("B: Spread      | 76    | 5/8/12/15/10/6/10/10 h0-7     | 1.0   | 3-4    | Need h3 to reach 40");
+    TEST_MESSAGE("C: Deep chain  | 22    | 2/3/3/4/3/2/2/3 h0-7          | 1.0   | 7      | Never reaches 40");
+    TEST_MESSAGE("D: Router      | 71    | 3/5/45/8/3/2/2/3 h0-7         | 1.0   | 2-3    | 45-node hop-2 cluster");
+    TEST_MESSAGE("E: Megamesh    | 199   | 30/40/35/30/20/15/14/15 h0-7  | >1.0  | 0-1    | Scale inflates counts");
     TEST_MESSAGE("F: Transition  | 22->72 | Chain -> dense local         | 1.0   | 7-><=3 | Adapts to new neighbors");
-    TEST_MESSAGE("G: Persistence | --    | --                           | --    | --  | State survives reboot");
-    TEST_MESSAGE("H: Early flush | 199   | Near-capacity sampled mesh   | --    | --  | Sample tracker overflow");
+    TEST_MESSAGE("G: Persistence | --    | --                            | --    | --     | State survives reboot");
+    TEST_MESSAGE("H: Early flush | 199   | Near-capacity sampled mesh    | --    | --     | Sample tracker overflow");
 }
 
 // ---------------------------------------------------------------------------
