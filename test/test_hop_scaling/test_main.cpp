@@ -4,6 +4,7 @@
 
 #if HAS_VARIABLE_HOPS
 
+#include "FSCommon.h"
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 #include "modules/HopScalingModule.h"
@@ -79,6 +80,16 @@ static void addNodesAtHop(uint32_t baseId, uint8_t hop, uint32_t count, uint32_t
 {
     for (uint32_t i = 0; i < count; i++)
         mockNodeDB->addTestNode(baseId + i, hop, true, ageSecs + i * stride);
+}
+
+// Feed enough unique sampled IDs to force at least one early sample-window roll
+// and seed rollingSampledAvg12h so sampledEst is visible in status logs.
+static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId = 0x90000000, uint16_t uniqueCount = 120)
+{
+    for (uint16_t i = 1; i <= uniqueCount; ++i) {
+        // Use a stride divisible by all supported denominators (1..128) so IDs pass modulo filtering.
+        shim.recordPacketSender(baseId + static_cast<uint32_t>(i) * 128);
+    }
 }
 
 // Scenario A: Dense local mesh — 110 nodes with a heavy core at hops 0–2.
@@ -191,6 +202,8 @@ void test_dense_local_telemetry()
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
     buildDenseLocalMesh();
+    TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
+    injectSampleTraffic(*shim, 0x91000000);
 
     shim->runOnce();
 
@@ -217,6 +230,8 @@ void test_spread_sparse_position()
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
     buildSpreadSparseMesh();
+    TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
+    injectSampleTraffic(*shim, 0x92000000);
 
     shim->runOnce();
 
@@ -241,6 +256,8 @@ void test_deep_chain_position()
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
     buildDeepLinearChain();
+    TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
+    injectSampleTraffic(*shim, 0x93000000);
 
     shim->runOnce();
 
@@ -264,6 +281,8 @@ void test_router_cluster_telemetry()
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
     buildRouterCluster();
+    TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
+    injectSampleTraffic(*shim, 0x94000000);
 
     shim->runOnce();
 
@@ -334,6 +353,8 @@ void test_sparse_to_dense_transition()
 
     TEST_MESSAGE("Phase 1: sparse chain should hold at HOP_MAX.");
     buildDeepLinearChain();
+    TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
+    injectSampleTraffic(*shim, 0x95000000);
     shim->runOnce();
     uint8_t hopSparse = shim->getLastRequiredHop();
     TEST_MSG_FMT("Phase 1 sparse: hop=%u (expect %u)", hopSparse, HOP_MAX);
@@ -492,6 +513,12 @@ void test_startup_blank_state()
 {
     TEST_MESSAGE("=== Startup with blank state ===");
     TEST_MESSAGE("Expectation: a fresh instance starts with zeroed rolling averages and a valid hop result.");
+
+#ifdef FSCom
+    TEST_MESSAGE("Clearing persisted hop scaling state files before startup test.");
+    FSCom.remove("/prefs/hop_scaling.bin");
+    FSCom.remove("/prefs/soi.bin");
+#endif
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
