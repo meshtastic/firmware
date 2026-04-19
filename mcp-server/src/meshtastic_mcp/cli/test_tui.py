@@ -518,6 +518,7 @@ def _build_app(
     from . import _fwlog as _fwlog_mod
     from . import _history as _history_mod
     from . import _reproducer as _reproducer_mod
+    from . import _uicap as _uicap_mod
 
     # ---------------- Messages ----------------
 
@@ -545,6 +546,16 @@ def _build_app(
         instead of 3 minutes of pytest-captured silence."""
 
         def __init__(self, line: str) -> None:
+            self.line = line
+            super().__init__()
+
+    class UiCaptureLine(tx.Message):
+        """Live line from the UI-tier camera transcript — one per
+        `frame_capture()` call. Posted only when the camera panel is
+        enabled via `MESHTASTIC_UI_TUI_CAMERA=1`."""
+
+        def __init__(self, test_id: str, line: str) -> None:
+            self.test_id = test_id
             self.line = line
             super().__init__()
 
@@ -871,6 +882,10 @@ def _build_app(
         #pytest-pane { height: 50%; border-bottom: solid $primary-background; }
         #fwlog-header { height: 1; padding: 0 1; background: $panel; }
         #fwlog-pane { height: 1fr; }
+        #uicap-header { height: 1; padding: 0 1; background: $boost; }
+        #uicap-pane { height: 14; border-top: solid $primary-background; }
+        #uicap-image { width: 36; border-right: solid $primary-background; padding: 0 1; }
+        #uicap-log { width: 1fr; height: 14; }
         Tree { height: 100%; }
         RichLog { height: 100%; }
         #device-table { height: auto; max-height: 6; }
@@ -912,6 +927,11 @@ def _build_app(
             self._device_worker: DevicePollerWorker | None = None
             self._fwlog_worker: _fwlog_mod.FirmwareLogTailer | None = None
             self._flashlog_worker: _flashlog_mod.FlashLogTailer | None = None
+            self._uicap_worker: _uicap_mod.UiCaptureTailer | None = None
+            # Env-gated; only mounts the UI-capture panel when operator asks for it.
+            self._ui_camera_enabled = bool(
+                int(os.environ.get("MESHTASTIC_UI_TUI_CAMERA", "0") or "0")
+            )
             self._tree_filter: str = ""
             self._sigint_count = 0
             # Firmware-log port filter: None = all, else exact port match.
@@ -959,6 +979,22 @@ def _build_app(
                             wrap=True,
                             max_lines=5000,
                         )
+                    if self._ui_camera_enabled:
+                        yield tx.Static(
+                            "UI camera — latest capture + transcript   (MESHTASTIC_UI_TUI_CAMERA=1)",
+                            id="uicap-header",
+                        )
+                        with tx.Horizontal(id="uicap-pane"):
+                            yield tx.Static(
+                                "(waiting…)", id="uicap-image", markup=False
+                            )
+                            yield tx.RichLog(
+                                id="uicap-log",
+                                highlight=False,
+                                markup=False,
+                                wrap=True,
+                                max_lines=500,
+                            )
             yield tx.DataTable(id="device-table", show_cursor=False)
             yield tx.Footer()
 
@@ -1023,6 +1059,21 @@ def _build_app(
                 stop=self._stop,
             )
             self._flashlog_worker.start()
+            # UI-capture transcript tailer — only runs when the camera panel
+            # is enabled. Watches tests/ui_captures/**/transcript.md for new
+            # lines as UI tests execute.
+            if self._ui_camera_enabled:
+                captures_root = self._root / "mcp-server" / "tests" / "ui_captures"
+                # When the TUI is launched from inside mcp-server (the usual
+                # case), `self._root` is already mcp-server/, so adjust:
+                if not captures_root.parent.name == "mcp-server":
+                    captures_root = self._root / "tests" / "ui_captures"
+                self._uicap_worker = _uicap_mod.UiCaptureTailer(
+                    root=captures_root,
+                    post=lambda tid, line: self.post_message(UiCaptureLine(tid, line)),
+                    stop=self._stop,
+                )
+                self._uicap_worker.start()
             self._spawn_pytest(self._pytest_args)
             # Header tick (seed / runtime / sparkline re-renders at 1 Hz).
             # Also refreshes the device-status column so the per-test elapsed
@@ -1216,6 +1267,84 @@ def _build_app(
             """
             log = self.query_one("#pytest-log", tx.RichLog)
             log.write(f"[flash] {message.line}")
+
+        def on_ui_capture_line(self, message: Any) -> None:
+            """Route a UI-capture transcript line into the camera panel.
+
+            Each line is already formatted by frame_capture — e.g.
+            `1. **initial** — frame 2/8 name=home — OCR: ...`. We write
+            the text into the RichLog AND try to render the corresponding
+            PNG on the left side (requires rich-pixels, Pillow).
+            """
+            if not self._ui_camera_enabled:
+                return
+            try:
+                log_panel = self.query_one("#uicap-log", tx.RichLog)
+            except Exception:
+                return
+            log_panel.write(f"[{message.test_id}] {message.line}")
+            self._render_latest_ui_capture(message.test_id, message.line)
+
+        def _render_latest_ui_capture(self, test_id: str, line: str) -> None:
+            """Find the PNG that corresponds to `line` and render it on the
+            left of the uicap pane. Soft-fails if rich-pixels isn't
+            installed or the PNG isn't found — operator still has the text
+            transcript on the right.
+            """
+            try:
+                from PIL import Image  # type: ignore[import-untyped]
+                from rich_pixels import Pixels  # type: ignore[import-untyped]
+            except ImportError:
+                return
+
+            # Transcript lines look like `1. **label** — ...`. Pull the leading
+            # integer to locate the capture file.
+            import re as _re
+
+            m = _re.match(r"\s*(\d+)\.\s", line)
+            if not m:
+                return
+            step = int(m.group(1))
+
+            # Captures directory is sibling of tests/ — mirror the path the
+            # tailer watches. Search both likely layouts (in-mcp-server vs.
+            # firmware-root invocation).
+            candidates = [
+                self._root / "tests" / "ui_captures",
+                self._root / "mcp-server" / "tests" / "ui_captures",
+            ]
+            captures_root = next((p for p in candidates if p.is_dir()), None)
+            if captures_root is None:
+                return
+
+            # Drill into <session_seed>/<test_id>/ — test_id is the
+            # sanitized nodeid the tailer already passed through.
+            matches = list(captures_root.rglob(f"{test_id}/{step:03d}-*.png"))
+            if not matches:
+                return
+            png_path = matches[-1]
+
+            try:
+                img = Image.open(png_path).convert("RGB")
+                # Resize to fit ~32 cells wide × ~12 rows tall (half-block
+                # renderer gives 2× vertical resolution, so 32×24 px input
+                # lands at ~32×12 cells). Keep aspect ratio.
+                target_w = 60
+                w, h = img.size
+                target_h = max(1, int(h * (target_w / max(1, w))))
+                # Clamp: the image panel is 14 rows; half-blocks give 2 rows
+                # per vertical cell, so cap pixel height at ~26.
+                target_h = min(target_h, 26)
+                img = img.resize((target_w, target_h))
+                pixels = Pixels.from_image(img)
+            except Exception:
+                return
+
+            try:
+                image_widget = self.query_one("#uicap-image", tx.Static)
+                image_widget.update(pixels)
+            except Exception:
+                pass
 
         def on_firmware_log_line(self, message: Any) -> None:
             rec = message.record
