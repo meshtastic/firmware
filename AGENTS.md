@@ -22,6 +22,25 @@ This file (`AGENTS.md`) is a short pointer + quick reference for agents that don
 | Regenerate protobuf bindings     | `bin/regen-protos.sh`                                                               |
 | Generate CI matrix               | `./bin/generate_ci_matrix.py all [--level pr]`                                      |
 
+New test-module entry point: see `test/README.md` for the native unit-test authoring guide and suite skeleton.
+
+## Agent Tooling Baseline
+
+Mirror counterpart: `.github/copilot-instructions.md` under **Agent Tooling Baseline**.
+
+To reduce avoidable agent mistakes, assume these tools are available (or install them before significant repo work):
+
+- **Required CLI basics**: `bash`, `git`, `find`, `grep`, `sed`, `awk`, `xargs`
+- **Strongly recommended**: `rg` (ripgrep) for fast file/text search, `jq` for JSON processing
+- **Build/test tools**: `python3`, `pip`, virtualenv (`python3 -m venv`), `platformio` (`pio`)
+- **Containerized native testing**: `docker` (especially important on macOS / non-Linux hosts)
+
+Fallback expectations for agents:
+
+- If `rg` is unavailable, use `find` + `grep` instead of failing.
+- For native tests on hosts without Linux deps, prefer `./bin/test-native-docker.sh`.
+- The simulator helper script is `./bin/test-simulator.sh`.
+
 ## MCP server (device + test automation)
 
 The `mcp-server/` package exposes ~32 MCP tools for device discovery, building, flashing, serial monitoring, and live-node administration. Tools are grouped as:
@@ -97,6 +116,7 @@ Sequence these; don't parallelize on the same port.
 | `variants/`                       | 200+ hardware variant definitions (`variant.h` + `platformio.ini` per board)                         |
 | `protobufs/`                      | `.proto` definitions; regenerate with `bin/regen-protos.sh`                                          |
 | `test/`                           | Firmware unit tests (12 suites; `pio test -e native`)                                                |
+| `test/README.md`                  | Quick start for writing new native test modules (structure, skeleton, pitfalls, checklist)           |
 | `mcp-server/`                     | Python MCP server + pytest hardware integration tests                                                |
 | `mcp-server/tests/`               | Tiered pytest suite: `unit/`, `mesh/`, `telemetry/`, `monitor/`, `fleet/`, `admin/`, `provisioning/` |
 | `.claude/commands/`               | Claude Code slash command bodies                                                                     |

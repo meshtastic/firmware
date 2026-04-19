@@ -296,6 +296,23 @@ Key defines in variant.h:
 
 ## Build System
 
+## Agent Tooling Baseline
+
+Mirror counterpart: `AGENTS.md` under **Agent Tooling Baseline**.
+
+To reduce avoidable agent mistakes, assume these tools are available (or install them before significant repo work):
+
+- **Required CLI basics**: `bash`, `git`, `find`, `grep`, `sed`, `awk`, `xargs`
+- **Strongly recommended**: `rg` (ripgrep) for fast file/text search, `jq` for JSON processing
+- **Build/test tools**: `python3`, `pip`, virtualenv (`python3 -m venv`), `platformio` (`pio`)
+- **Containerized native testing**: `docker` (especially important on macOS / non-Linux hosts)
+
+Fallback expectations for agents:
+
+- If `rg` is unavailable, use `find` + `grep` instead of failing.
+- For native tests on hosts without Linux deps, prefer `./bin/test-native-docker.sh`.
+- The simulator helper script is `./bin/test-simulator.sh`.
+
 Uses **PlatformIO** with custom scripts:
 
 - `bin/platformio-pre.py` - Pre-build script
@@ -447,6 +464,8 @@ Unit tests in `test/` directory with 12 test suites:
 Run with: `pio test -e native`
 
 Simulation testing: `bin/test-simulator.sh`
+
+Quick entry point for new test modules: `test/README.md` (native unit-test authoring guide, skeleton, pitfalls, and setup checklist).
 
 ### Hardware-in-the-loop tests (`mcp-server/tests/`)
 

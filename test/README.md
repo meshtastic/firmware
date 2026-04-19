@@ -15,6 +15,38 @@ pio test -e native -f test_your_module
 pio test -e native -f test_your_module -vvv
 ```
 
+### Helper Scripts (Useful Shortcuts)
+
+These wrappers are handy when local host dependencies are missing or when you want repeatable commands.
+
+```bash
+# Run native tests in Docker (recommended on macOS / non-Linux hosts)
+./bin/test-native-docker.sh
+
+# Pass normal PlatformIO test args through to Dockerized test run
+./bin/test-native-docker.sh -f test_your_module
+
+# Force Docker image rebuild (after dependency changes)
+./bin/test-native-docker.sh --rebuild
+
+# Run simulator integration check (build native first)
+pio run -e native && ./bin/test-simulator.sh
+
+# Build and run meshtasticd natively
+./bin/native-run.sh
+
+# Build and run under gdbserver on localhost:2345
+./bin/native-gdbserver.sh
+
+# Build native release artifact into ./release/
+./bin/build-native.sh native
+```
+
+Notes:
+
+- The repository script name is `./bin/test-simulator.sh` (there is no `test-native-simulator.sh`).
+- `./bin/test-native-docker.sh` is the closest match to CI behavior for native tests and avoids host package setup.
+
 ### System Dependencies (Ubuntu/Debian)
 
 The native build requires several system libraries. Install them all at once:
