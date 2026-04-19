@@ -72,7 +72,11 @@ SerialModuleRadio *serialModuleRadio;
 #elif SERIAL_PRINT_PORT == 1
 #define SERIAL_PRINT_OBJECT Serial1
 #elif SERIAL_PRINT_PORT == 2
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+#define SERIAL_PRINT_OBJECT Serial1
+#else
 #define SERIAL_PRINT_OBJECT Serial2
+#endif
 #else
 #error "Unsupported SERIAL_PRINT_PORT value. Allowed values are 0, 1, or 2."
 #endif
