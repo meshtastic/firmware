@@ -7,7 +7,7 @@ on:
       targets:
         description: 'Space-separated PlatformIO targets'
         required: false
-        default: 'seeed_wio_tracker_L1 heltec-v4'
+        default: 'seeed_wio_tracker_L1 heltec-v4-tft'
 permissions:
   contents: write
 jobs:
@@ -52,7 +52,7 @@ jobs:
     steps:
       - id: m
         run: |
-          INPUT="${{ inputs.targets || 'seeed_wio_tracker_L1 heltec-v4' }}"
+          INPUT="${{ inputs.targets || 'seeed_wio_tracker_L1 heltec-v4-tft' }}"
           echo "matrix=$(echo "$INPUT" | tr ' ' '\n' | jq -R . | jq -sc .)" >> $GITHUB_OUTPUT
   build:
     needs: [sync, setup-matrix]
