@@ -43,7 +43,8 @@ constexpr float TURNOVER_CAPACITY_LIMIT_RATIO = 0.2f; // Evictions below 20% of 
 
 // Modulo sampling: track 1-in-N unique node IDs from the packet stream
 // Dynamically adjusted to keep sample tracker load between 1/8 and 5/8 capacity
-uint8_t SAMPLING_DENOMINATOR = 8; // mutable
+constexpr uint8_t SAMPLING_DENOMINATOR_INITIAL = 8;
+uint8_t SAMPLING_DENOMINATOR = SAMPLING_DENOMINATOR_INITIAL; // mutable
 constexpr uint8_t SAMPLING_DENOMINATOR_MIN = 1;
 constexpr uint8_t SAMPLING_DENOMINATOR_MAX = 128;
 
@@ -70,7 +71,7 @@ constexpr const char *HOP_SCALING_STATE_FILE = "/prefs/hop_scaling.bin";
 constexpr const char *LEGACY_SOI_STATE_FILE = "/prefs/soi.bin";
 constexpr uint32_t HOP_SCALING_STATE_MAGIC = 0x48534331;        // 'HSC1' (Hop SCaling state)
 constexpr uint32_t LEGACY_HOP_SCALING_STATE_MAGIC = 0x534F4931; // 'SOI1' (legacy)
-constexpr uint8_t HOP_SCALING_STATE_VERSION = 1;
+constexpr uint8_t HOP_SCALING_STATE_VERSION = 2;
 
 struct PersistedState {
     uint32_t magic;
@@ -78,6 +79,7 @@ struct PersistedState {
     uint8_t samplingDenominator;
     float rollingEvictionAvg12h;
     float rollingSampledAvg12h;
+    uint8_t rollingAvgRollCount; // v2: warm-up counter (0..12)
 };
 } // namespace
 
@@ -111,7 +113,7 @@ HopScalingModule::HopScalingModule() : concurrency::OSThread("HopScaling")
 }
 
 /// Called by NodeDB each time a node is evicted to make room for a new one.
-/// The count is rolled into a 12h EMA once per hour by rollHour().
+/// The count is rolled into a 12h rolling average once per hour by rollHour().
 void HopScalingModule::recordEviction()
 {
     evictionsCurrentHour++;
@@ -172,9 +174,22 @@ uint16_t HopScalingModule::estimateSampledMeshSize() const
 }
 
 bool HopScalingModule::s_samplingJitter = true;
+bool HopScalingModule::s_samplingAdaptationEnabled = true;
+
+void HopScalingModule::resetSamplingDenominator()
+{
+    SAMPLING_DENOMINATOR = SAMPLING_DENOMINATOR_INITIAL;
+}
+
+void HopScalingModule::setDenominatorForTest(uint8_t d)
+{
+    SAMPLING_DENOMINATOR = d;
+}
 
 void HopScalingModule::adjustSamplingDenominatorForLoad(float loadRatio)
 {
+    if (!s_samplingAdaptationEnabled)
+        return;
     const char *direction = nullptr;
     if (loadRatio > 5.0f / 8.0f && SAMPLING_DENOMINATOR < SAMPLING_DENOMINATOR_MAX) {
         const uint8_t doubled = static_cast<uint8_t>(
@@ -202,7 +217,8 @@ void HopScalingModule::rollSampleWindow(bool earlyTrigger)
     const float estimatedMeshThisWindow = samplesThisWindow * SAMPLING_DENOMINATOR;
 
     // Integrate by the fraction of an hour represented by this window,
-    // without exponent-based weighting.
+    // using warm-up alpha: 1/min(rollCount,12) during the first 12 rolls,
+    // settling to 1/12 for the steady-state 12-hour rolling average.
     float windowFraction = std::max(0.0f, std::min(1.0f, static_cast<float>(windowMs) / static_cast<float>(ONE_HOUR_MS)));
     // In unit tests and bursty real traffic, early rolls can occur in the same millisecond
     // as window start (windowMs==0). Apply a small floor so meaningful samples still
@@ -210,8 +226,11 @@ void HopScalingModule::rollSampleWindow(bool earlyTrigger)
     if (earlyTrigger) {
         windowFraction = std::max(windowFraction, 0.25f);
     }
-    const float alpha = windowFraction * (1.0f / 12.0f);
+    const uint8_t effectiveRolls = std::max(static_cast<uint8_t>(1), std::min(rollingAvgRollCount, static_cast<uint8_t>(12)));
+    const float alpha = windowFraction * (1.0f / effectiveRolls);
     rollingSampledAvg12h = rollingSampledAvg12h * (1.0f - alpha) + estimatedMeshThisWindow * alpha;
+    if (rollingAvgRollCount < 12)
+        rollingAvgRollCount++;
 
     const float maxUseful = static_cast<float>(SAMPLE_TRACKER_SLOTS) * (3.0f / 4.0f); // 75% load factor cap
     const float loadRatio = samplesThisWindow / maxUseful;
@@ -233,8 +252,11 @@ void HopScalingModule::rollSampleWindow(bool earlyTrigger)
 // counters. Also performs adaptive adjustment of the sampling denominator to keep the sample tracker load within optimal bounds.
 void HopScalingModule::rollHour()
 {
-    // Rolling-average update using a fixed 1/12 hourly contribution.
-    rollingEvictionAvg12h = rollingEvictionAvg12h * (11.0f / 12.0f) + evictionsCurrentHour * (1.0f / 12.0f);
+    // Warm-up alpha for eviction rolling average: same counter as sample average
+    // ensures both converge at the same rate during the cold-start phase.
+    const uint8_t effectiveRolls = std::max(static_cast<uint8_t>(1), std::min(rollingAvgRollCount, static_cast<uint8_t>(12)));
+    const float evictAlpha = 1.0f / effectiveRolls;
+    rollingEvictionAvg12h = rollingEvictionAvg12h * (1.0f - evictAlpha) + evictionsCurrentHour * evictAlpha;
     evictionsCurrentHour = 0;
 
     rollSampleWindow(false);
@@ -274,13 +296,16 @@ void HopScalingModule::loadState()
         PersistedState state{};
         const bool readOk = (file.read((uint8_t *)&state, sizeof(state)) == sizeof(state));
         const bool magicOk = (state.magic == HOP_SCALING_STATE_MAGIC || state.magic == LEGACY_HOP_SCALING_STATE_MAGIC);
-        if (readOk && magicOk && state.version == HOP_SCALING_STATE_VERSION &&
+        if (readOk && magicOk && (state.version == HOP_SCALING_STATE_VERSION || state.version == 1) &&
             state.samplingDenominator >= SAMPLING_DENOMINATOR_MIN && state.samplingDenominator <= SAMPLING_DENOMINATOR_MAX) {
             rollingEvictionAvg12h = state.rollingEvictionAvg12h;
             rollingSampledAvg12h = state.rollingSampledAvg12h;
             SAMPLING_DENOMINATOR = state.samplingDenominator;
-            LOG_INFO("[HOPSCALE] Restored state: evict/h=%.1f sampledAvg=%.1f  sampling 1 in %u",
-                     static_cast<double>(rollingEvictionAvg12h), static_cast<double>(rollingSampledAvg12h), SAMPLING_DENOMINATOR);
+            // v1 state files lack rollingAvgRollCount; treat as fully converged.
+            rollingAvgRollCount = (state.version >= 2 && state.rollingAvgRollCount <= 12) ? state.rollingAvgRollCount : 12;
+            LOG_INFO("[HOPSCALE] Restored state: evict/h=%.1f sampledAvg=%.1f  sampling 1 in %u rollCount=%u",
+                     static_cast<double>(rollingEvictionAvg12h), static_cast<double>(rollingSampledAvg12h), SAMPLING_DENOMINATOR,
+                     rollingAvgRollCount);
         } else {
             LOG_DEBUG("[HOPSCALE] No valid persisted state, starting fresh");
         }
@@ -306,6 +331,7 @@ void HopScalingModule::saveState() const
         state.samplingDenominator = SAMPLING_DENOMINATOR;
         state.rollingEvictionAvg12h = rollingEvictionAvg12h;
         state.rollingSampledAvg12h = rollingSampledAvg12h;
+        state.rollingAvgRollCount = rollingAvgRollCount;
         file.write((uint8_t *)&state, sizeof(state));
         file.flush();
         file.close();

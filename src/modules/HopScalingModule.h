@@ -38,6 +38,20 @@ class HopScalingModule : private concurrency::OSThread
     static void setSamplingJitter(bool enabled) { s_samplingJitter = enabled; }
     static bool s_samplingJitter; // true by default; friend-visible to jitterDenominator()
 
+    /// Enable or disable adaptive denominator adjustment. Enabled by default; disable in unit
+    /// tests so the denominator stays pinned at its initial value across all scenarios.
+    static void setSamplingAdaptation(bool enabled) { s_samplingAdaptationEnabled = enabled; }
+    static bool s_samplingAdaptationEnabled;
+
+    /// Reset SAMPLING_DENOMINATOR to its initial value (8). Call in test setUp after pinning
+    /// adaptation off, so each test starts with a known denominator regardless of prior state.
+    static void resetSamplingDenominator();
+
+    /// Set SAMPLING_DENOMINATOR to an explicit value. For test use only — lets megamesh
+    /// scenarios pin the denominator high enough that per-window samples stay under the
+    /// 96-slot tracker cap, producing correct estimates without needing adaptive adjustment.
+    static void setDenominatorForTest(uint8_t d);
+
     uint8_t getLastRequiredHop() const { return lastRequiredHop; }
     float getLastActivityWeight() const { return lastActivityWeight; }
     float getLastScaleFactor() const { return lastScaleFactor; }
@@ -50,6 +64,10 @@ class HopScalingModule : private concurrency::OSThread
   private:
     static constexpr uint16_t SAMPLE_TRACKER_SLOTS = 128; // power of 2 for fast modulo
     static constexpr uint16_t SAMPLE_TRACKER_LOAD_CAP = SAMPLE_TRACKER_SLOTS * 3 / 4;
+
+#ifdef UNIT_TEST
+    friend class HopScalingTestShim; // grants access to private members for test-only helpers
+#endif
 
     /// Open-addressing hash set for deduplicating sampled node IDs within one hour.
     /// Capacity is SAMPLE_TRACKER_SLOTS; collisions are resolved by linear probing.
@@ -108,6 +126,7 @@ class HopScalingModule : private concurrency::OSThread
     SampleTracker sampledNodesCurrentHour = {};
     float rollingSampledAvg12h = 0.0f; // Rolling average estimate of mesh size per hour (denominator-normalised)
     uint32_t sampleWindowStartMs = 0;
+    uint8_t rollingAvgRollCount = 0; // Warm-up counter: ramps alpha from 1/1 to 1/12 over the first 12 rolls
 
     // Per-instance scheduler state for hourly recomputation cadence.
     bool hasCompletedInitialRun = false;
