@@ -248,29 +248,65 @@ bool DS248XSensor::getMetrics(meshtastic_Telemetry *measurement)
             return true;
         }
     } else if (_variant == ds248x_variant_t::DS248X_DS2482_800) {
-        // If using DS248X_DS2482_800, we read all channels, but we will only report ch0
-        bool readChannel0 = false;
+        // If using DS248X_DS2482_800, we read all channels
+        uint8_t channelCount = 0;
+
+        // Note, the reason why we are using an unpacked version of this message
+        // (instead of repeated) it's to save space. With repeated, we have to send all
+        // channels (even if null) or otherwise we don't know where each channel is
+        // being reported
         for (uint8_t channel = 0; channel < 8; channel++) {
             if (readTemperatureChannel(channel)) {
-                // TODO Support more than one temperature via repeated (3.0)
-                // TODO Select which channel can be reported as main temperature
-                if (channel == 0) {
-                    readChannel0 = true;
-                    measurement->variant.environment_metrics.temperature = ds2482800Data.ds248xData[0].temperature;
-                    measurement->variant.environment_metrics.has_temperature = true;
-                    LOG_DEBUG("Got %s readings: temperature=%.2f", sensorName,
-                              measurement->variant.environment_metrics.temperature);
-                }
-                measurement->variant.environment_metrics.has_multi_measurement = true;
-                measurement->variant.environment_metrics.multi_measurement.sensor_type = meshtastic_TelemetrySensorType_DS248X;
+                channelCount += 1;
 
-                measurement->variant.environment_metrics.multi_measurement.measurement[channel] =
-                    ds2482800Data.ds248xData[channel].temperature;
+                switch (channel) {
+                case 0:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch0 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch0 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 1:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch1 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch1 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 2:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch2 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch2 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 3:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch3 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch3 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 4:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch4 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch4 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 5:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch5 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch5 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 6:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch6 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch6 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                case 7:
+                    measurement->variant.environment_metrics.has_one_wire_temperature_ch7 = true;
+                    measurement->variant.environment_metrics.one_wire_temperature_ch7 =
+                        ds2482800Data.ds248xData[channel].temperature;
+                    break;
+                }
+
                 LOG_DEBUG("Got %s readings: temperature_ch%u=%.2f", sensorName, channel,
-                          measurement->variant.environment_metrics.multi_measurement.measurement[channel]);
+                          ds2482800Data.ds248xData[channel].temperature);
             }
         }
-        return readChannel0;
+        return channelCount > 0;
     }
     return false;
 }
