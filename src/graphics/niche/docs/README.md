@@ -748,6 +748,7 @@ Standard AdafruitGFX fonts contain no glyphs below `'\x20'`, so will ignore thes
 
 This mapping of emoji to control characters is fairly arbitrary. Selection was influenced by [PR #3940 Oled screen emojis](https://github.com/meshtastic/firmware/pull/3940) and [Emoji Frequency Spreadsheet](https://docs.google.com/spreadsheets/d/1Zs13WJYdZL1pNZP0dCIXkWau_tZOjK3mmJz0KNq4I30/).
 
+<!-- prettier-ignore -->
 | Code Point | Emoji |
 | --- | --- |
 | ~~`0x00`~~ | (null term, unused) |
