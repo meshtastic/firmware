@@ -521,6 +521,19 @@ typedef enum _meshtastic_TaskRequest_Status {
     meshtastic_TaskRequest_Status_Status_Cancelled = 5 /* cancelled before completion */
 } meshtastic_TaskRequest_Status;
 
+/* Coarse sensor category, inferred from `model` on parse when the source
+ XML doesn't label it. Receivers that render differently per sensor
+ class (thermal overlay vs daylight cone) use this. */
+typedef enum _meshtastic_SensorFov_SensorType {
+    meshtastic_SensorFov_SensorType_SensorType_Unspecified = 0,
+    meshtastic_SensorFov_SensorType_SensorType_Camera = 1, /* daylight / general optical */
+    meshtastic_SensorFov_SensorType_SensorType_Thermal = 2, /* FLIR, thermal imager */
+    meshtastic_SensorFov_SensorType_SensorType_Laser = 3, /* rangefinder, LRF, designator */
+    meshtastic_SensorFov_SensorType_SensorType_Nvg = 4, /* night vision goggles */
+    meshtastic_SensorFov_SensorType_SensorType_Rf = 5, /* radio/radar direction-finding */
+    meshtastic_SensorFov_SensorType_SensorType_Other = 6
+} meshtastic_SensorFov_SensorType;
+
 /* Struct definitions */
 /* ATAK GeoChat message */
 typedef struct _meshtastic_GeoChat {
@@ -865,7 +878,81 @@ typedef struct _meshtastic_CasevacReport {
     /* Line 2: radio frequency / callsign metadata (e.g. "38.90 Mhz" or
  "Victor 6"). Capped tight in options. */
     char frequency[16];
+    /* Short title / MEDEVAC identifier (e.g. "EAGLE.15.181230"). Usually the
+ same as the envelope callsign but ATAK sometimes carries a distinct
+ ops-number here. */
+    pb_callback_t title;
+    /* Primary medline free-text — the single most clinically important line
+ on a MEDLINE form (e.g. "2 urgent litter patients, smoke on approach").
+ MUST be preserved under MTU pressure as long as any casevac is sent. */
+    pb_callback_t medline_remarks;
+    /* Line 3 (newer ATAK format): patient counts by precedence level.
+ Coexists with the enum-style `precedence` field (tag 1) — older ATAK
+ emits a single enum, newer ATAK emits these counts, and both can be
+ set simultaneously. Senders populate whichever style(s) the source
+ XML had; receivers prefer counts when non-zero. */
+    uint32_t urgent_count;
+    uint32_t urgent_surgical_count;
+    uint32_t priority_count;
+    uint32_t routine_count;
+    uint32_t convenience_count;
+    /* Line 4 supplementary: free-text description of non-standard equipment
+ (e.g. "Blood warmer"). Pairs with the `equipment_flags` bitfield. */
+    pb_callback_t equipment_detail;
+    /* Line 1 override: MGRS grid when distinct from the event anchor point
+ (e.g. "34T CQ 12345 67890"). Event lat/lon/hae still carries the
+ numeric location; this field preserves the exact MGRS string the
+ medic entered. */
+    pb_callback_t zone_protected_coord;
+    /* Line 9 supplementary: slope direction (e.g. "N", "NE", "SSW") when
+ `terrain_flags` bit 0 (slope) is set. */
+    pb_callback_t terrain_slope_dir;
+    /* Line 9 supplementary: free-text description of "other" terrain hazards
+ (e.g. "Loose debris on west edge") when `terrain_flags` bit 5 (other)
+ is set. Tier-2 strippable under MTU pressure. */
+    pb_callback_t terrain_other_detail;
+    /* Line 7 supplementary: how the zone is being marked right now
+ (e.g. "Orange smoke", "VS-17 panel"). Complements the structured
+ `hlz_marking` enum with a specific human-readable description. */
+    pb_callback_t marked_by;
+    /* Nearby obstacles on the approach (e.g. "Power lines north of HLZ"). */
+    pb_callback_t obstacles;
+    /* Wind direction and speed (e.g. "270 at 12 kts"). */
+    pb_callback_t winds_are_from;
+    /* Friendly forces posture near the pickup zone
+ (e.g. "Squad east of HLZ"). */
+    pb_callback_t friendlies;
+    /* Known or suspected enemy positions near the pickup zone
+ (e.g. "Possible enemy on south ridge"). */
+    pb_callback_t enemy;
+    /* Free-text description of the HLZ itself
+ (e.g. "Primary HLZ is soccer field"). */
+    pb_callback_t hlz_remarks;
+    /* Per-patient clinical records. Each entry is one patient's ZMIST card
+ (Zap number / Mechanism / Injuries / Signs / Treatment). Repeatable —
+ a mass-casualty event can carry 1-6 entries in practice, limited by
+ the 237 B LoRa MTU. */
+    pb_callback_t zmist;
 } meshtastic_CasevacReport;
+
+/* Per-patient clinical summary record — one entry per patient in a CASEVAC.
+ Maps directly to ATAK's <zMist> child element inside <zMistsMap>.
+ All fields are optional free-text; senders populate what they have. */
+typedef struct _meshtastic_ZMistEntry {
+    /* Patient identifier / sequence label (e.g. "ZMIST-1", "ZMIST-2"). */
+    pb_callback_t title;
+    /* Zap number — unique patient tracking ID (often a terse code like
+ "Gunshot" or a serial). */
+    pb_callback_t z;
+    /* Mechanism of injury (e.g. "Penetrating trauma", "Blast injury"). */
+    pb_callback_t m;
+    /* Injuries observed (e.g. "Left thigh", "Concussion"). */
+    pb_callback_t i;
+    /* Signs / vital stats (e.g. "Stable", "Priority", "BP 110/70"). */
+    pb_callback_t s;
+    /* Treatment given (e.g. "Tourniquet 1810Z", "O2 administered"). */
+    pb_callback_t t;
+} meshtastic_ZMistEntry;
 
 /* Emergency alert / 911 beacon (CoT types b-a-o-tbl, b-a-o-pan, b-a-o-opn,
  b-a-o-can, b-a-o-c, b-a-g).
@@ -910,6 +997,76 @@ typedef struct _meshtastic_TaskRequest {
  tight in options to keep the worst-case under the LoRa MTU. */
     char note[48];
 } meshtastic_TaskRequest;
+
+/* Weather annotation from <environment> CoT detail element.
+
+ Attaches to any TAKPacketV2 regardless of payload_variant — an Aircraft,
+ PLI, or Marker can all carry observed conditions at the emitting station.
+ ATAK-CIV ships an XSD for <environment> but no dedicated handler, so the
+ element round-trips through the generic detail pipeline; this message
+ promotes it to a first-class structured field.
+
+ Target wire cost: ~6-8 bytes compressed with a fully populated instance.
+
+ Named `TAKEnvironment` (not just `Environment`) because the bare name
+ collides with `SwiftUI.Environment` — every SwiftUI view in a consuming
+ iOS app uses the `@Environment` property wrapper, and importing the
+ generated proto module would make `Environment` ambiguous in every one
+ of those files. The `TAK` prefix matches the convention used by the
+ outer `TAKPacketV2` wrapper and is unambiguous across all target
+ languages (Swift, Kotlin, Python, TypeScript, C#). */
+typedef struct _meshtastic_TAKEnvironment {
+    /* Temperature in deci-degrees Celsius. 225 = 22.5°C.
+ Range covers -50°C to +50°C (-500 to +500) which spans every realistic
+ outdoor TAK deployment. sint32 because negative temps are common in
+ cold-weather ops. */
+    int32_t temperature_c_x10;
+    /* Wind direction in whole degrees, 0-359. "Direction FROM" per
+ meteorological convention (matches CoT / ATAK). */
+    uint32_t wind_direction_deg;
+    /* Wind speed in cm/s. Matches the unit of TAKPacketV2.speed for
+ consistency. 1200 = 12.00 m/s = ~27 mph. */
+    uint32_t wind_speed_cm_s;
+} meshtastic_TAKEnvironment;
+
+/* Sensor field-of-view cone from <sensor> CoT detail element.
+
+ Encodes the 8 geometry attributes that ATAK-CIV's SensorDetailHandler
+ reads from the wire; drops the 9 visual-styling attributes that are
+ receiver-side render hints (fovAlpha, fovRed/Green/Blue, strokeColor,
+ strokeWeight, displayMagneticReference, hideFov, fovLabels, rangeLines).
+ The receiving ATAK client restores those from its own defaults, same as
+ every other CoT carried over Meshtastic today.
+
+ Attaches to any TAKPacketV2 — a PLI with a sensor on the operator's head,
+ an Aircraft with a FLIR turret, a Marker dropped on a UAV.
+ Target wire cost: ~7-14 bytes compressed (dominated by model string). */
+typedef struct _meshtastic_SensorFov {
+    meshtastic_SensorFov_SensorType type;
+    /* Azimuth in whole degrees, 0-359. "Pointing direction" of the cone axis,
+ measured clockwise from true north. Whole degrees match ATAK-CIV's
+ SensorDetailHandler default (270°) and save varint bytes over centi-deg. */
+    uint32_t azimuth_deg;
+    /* Maximum range of the cone in meters.
+ Optional — if unset, receivers should use the ATAK-CIV default of 100m. */
+    bool has_range_m;
+    uint32_t range_m;
+    /* Horizontal field of view in whole degrees (cone's angular width).
+ ATAK-CIV default is 45°. */
+    uint32_t fov_horizontal_deg;
+    /* Vertical field of view in whole degrees. ATAK-CIV default is 45°.
+ Optional — a value of 0 means "not set / use horizontal FOV". */
+    uint32_t fov_vertical_deg;
+    /* Elevation angle in whole degrees. Positive = up, negative = down.
+ Range -90 to +90. sint32 for varint efficiency on small negatives. */
+    int32_t elevation_deg;
+    /* Roll (camera tilt) in whole degrees, -180 to +180.
+ Optional — use 0 if the sensor doesn't track roll. */
+    int32_t roll_deg;
+    /* Free-form device model identifier, e.g. "FLIR-Boson-640", "SEEK".
+ Optional — empty string means "unknown model" (ATAK-CIV default). */
+    pb_callback_t model;
+} meshtastic_SensorFov;
 
 typedef PB_BYTES_ARRAY_T(220) meshtastic_TAKPacketV2_raw_detail_t;
 /* ATAK v2 packet with expanded CoT field support and zstd dictionary compression.
@@ -970,6 +1127,14 @@ typedef struct _meshtastic_TAKPacketV2 {
  GeoChat messages carry their text in GeoChat.message instead.
  Empty string (proto3 default) means no remarks were present. */
     pb_callback_t remarks;
+    /* Observed weather conditions (temperature, wind). From <environment>.
+ Type is `TAKEnvironment`, not `Environment`, to avoid colliding with
+ SwiftUI's `@Environment` property wrapper in iOS consumers. */
+    bool has_environment;
+    meshtastic_TAKEnvironment environment;
+    /* Sensor field-of-view cone (camera, FLIR, laser, etc.). From <sensor>. */
+    bool has_sensor_fov;
+    meshtastic_SensorFov sensor_fov;
     pb_size_t which_payload_variant;
     union {
         /* Position report (true = PLI, no extra fields beyond the common ones above) */
@@ -1075,6 +1240,10 @@ extern "C" {
 #define _meshtastic_TaskRequest_Status_MAX meshtastic_TaskRequest_Status_Status_Cancelled
 #define _meshtastic_TaskRequest_Status_ARRAYSIZE ((meshtastic_TaskRequest_Status)(meshtastic_TaskRequest_Status_Status_Cancelled+1))
 
+#define _meshtastic_SensorFov_SensorType_MIN meshtastic_SensorFov_SensorType_SensorType_Unspecified
+#define _meshtastic_SensorFov_SensorType_MAX meshtastic_SensorFov_SensorType_SensorType_Other
+#define _meshtastic_SensorFov_SensorType_ARRAYSIZE ((meshtastic_SensorFov_SensorType)(meshtastic_SensorFov_SensorType_SensorType_Other+1))
+
 
 #define meshtastic_GeoChat_receipt_type_ENUMTYPE meshtastic_GeoChat_ReceiptType
 
@@ -1104,10 +1273,14 @@ extern "C" {
 #define meshtastic_CasevacReport_security_ENUMTYPE meshtastic_CasevacReport_Security
 #define meshtastic_CasevacReport_hlz_marking_ENUMTYPE meshtastic_CasevacReport_HlzMarking
 
+
 #define meshtastic_EmergencyAlert_type_ENUMTYPE meshtastic_EmergencyAlert_Type
 
 #define meshtastic_TaskRequest_priority_ENUMTYPE meshtastic_TaskRequest_Priority
 #define meshtastic_TaskRequest_status_ENUMTYPE meshtastic_TaskRequest_Status
+
+
+#define meshtastic_SensorFov_type_ENUMTYPE meshtastic_SensorFov_SensorType
 
 #define meshtastic_TAKPacketV2_cot_type_id_ENUMTYPE meshtastic_CotType
 #define meshtastic_TAKPacketV2_how_ENUMTYPE meshtastic_CotHow
@@ -1131,10 +1304,13 @@ extern "C" {
 #define meshtastic_RangeAndBearing_init_default  {false, meshtastic_CotGeoPoint_init_default, "", 0, 0, _meshtastic_Team_MIN, 0, 0}
 #define meshtastic_Route_init_default            {_meshtastic_Route_Method_MIN, _meshtastic_Route_Direction_MIN, "", 0, 0, {meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default}, 0}
 #define meshtastic_Route_Link_init_default       {false, meshtastic_CotGeoPoint_init_default, "", "", 0}
-#define meshtastic_CasevacReport_init_default    {_meshtastic_CasevacReport_Precedence_MIN, 0, 0, 0, _meshtastic_CasevacReport_Security_MIN, _meshtastic_CasevacReport_HlzMarking_MIN, "", 0, 0, 0, 0, 0, 0, 0, ""}
+#define meshtastic_CasevacReport_init_default    {_meshtastic_CasevacReport_Precedence_MIN, 0, 0, 0, _meshtastic_CasevacReport_Security_MIN, _meshtastic_CasevacReport_HlzMarking_MIN, "", 0, 0, 0, 0, 0, 0, 0, "", {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_ZMistEntry_init_default       {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define meshtastic_EmergencyAlert_init_default   {_meshtastic_EmergencyAlert_Type_MIN, "", ""}
 #define meshtastic_TaskRequest_init_default      {"", "", "", _meshtastic_TaskRequest_Priority_MIN, _meshtastic_TaskRequest_Status_MIN, ""}
-#define meshtastic_TAKPacketV2_init_default      {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, 0, {0}}
+#define meshtastic_TAKEnvironment_init_default   {0, 0, 0}
+#define meshtastic_SensorFov_init_default        {_meshtastic_SensorFov_SensorType_MIN, 0, false, 0, 0, 0, 0, 0, {{NULL}, NULL}}
+#define meshtastic_TAKPacketV2_init_default      {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_default, false, meshtastic_SensorFov_init_default, 0, {0}}
 #define meshtastic_TAKPacket_init_zero           {0, false, meshtastic_Contact_init_zero, false, meshtastic_Group_init_zero, false, meshtastic_Status_init_zero, 0, {meshtastic_PLI_init_zero}}
 #define meshtastic_GeoChat_init_zero             {"", false, "", false, "", "", _meshtastic_GeoChat_ReceiptType_MIN}
 #define meshtastic_Group_init_zero               {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
@@ -1148,10 +1324,13 @@ extern "C" {
 #define meshtastic_RangeAndBearing_init_zero     {false, meshtastic_CotGeoPoint_init_zero, "", 0, 0, _meshtastic_Team_MIN, 0, 0}
 #define meshtastic_Route_init_zero               {_meshtastic_Route_Method_MIN, _meshtastic_Route_Direction_MIN, "", 0, 0, {meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero}, 0}
 #define meshtastic_Route_Link_init_zero          {false, meshtastic_CotGeoPoint_init_zero, "", "", 0}
-#define meshtastic_CasevacReport_init_zero       {_meshtastic_CasevacReport_Precedence_MIN, 0, 0, 0, _meshtastic_CasevacReport_Security_MIN, _meshtastic_CasevacReport_HlzMarking_MIN, "", 0, 0, 0, 0, 0, 0, 0, ""}
+#define meshtastic_CasevacReport_init_zero       {_meshtastic_CasevacReport_Precedence_MIN, 0, 0, 0, _meshtastic_CasevacReport_Security_MIN, _meshtastic_CasevacReport_HlzMarking_MIN, "", 0, 0, 0, 0, 0, 0, 0, "", {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_ZMistEntry_init_zero          {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define meshtastic_EmergencyAlert_init_zero      {_meshtastic_EmergencyAlert_Type_MIN, "", ""}
 #define meshtastic_TaskRequest_init_zero         {"", "", "", _meshtastic_TaskRequest_Priority_MIN, _meshtastic_TaskRequest_Status_MIN, ""}
-#define meshtastic_TAKPacketV2_init_zero         {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, 0, {0}}
+#define meshtastic_TAKEnvironment_init_zero      {0, 0, 0}
+#define meshtastic_SensorFov_init_zero           {_meshtastic_SensorFov_SensorType_MIN, 0, false, 0, 0, 0, 0, 0, {{NULL}, NULL}}
+#define meshtastic_TAKPacketV2_init_zero         {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_zero, false, meshtastic_SensorFov_init_zero, 0, {0}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_GeoChat_message_tag           1
@@ -1244,6 +1423,30 @@ extern "C" {
 #define meshtastic_CasevacReport_child_tag       13
 #define meshtastic_CasevacReport_terrain_flags_tag 14
 #define meshtastic_CasevacReport_frequency_tag   15
+#define meshtastic_CasevacReport_title_tag       16
+#define meshtastic_CasevacReport_medline_remarks_tag 17
+#define meshtastic_CasevacReport_urgent_count_tag 18
+#define meshtastic_CasevacReport_urgent_surgical_count_tag 19
+#define meshtastic_CasevacReport_priority_count_tag 20
+#define meshtastic_CasevacReport_routine_count_tag 21
+#define meshtastic_CasevacReport_convenience_count_tag 22
+#define meshtastic_CasevacReport_equipment_detail_tag 23
+#define meshtastic_CasevacReport_zone_protected_coord_tag 24
+#define meshtastic_CasevacReport_terrain_slope_dir_tag 25
+#define meshtastic_CasevacReport_terrain_other_detail_tag 26
+#define meshtastic_CasevacReport_marked_by_tag   27
+#define meshtastic_CasevacReport_obstacles_tag   28
+#define meshtastic_CasevacReport_winds_are_from_tag 29
+#define meshtastic_CasevacReport_friendlies_tag  30
+#define meshtastic_CasevacReport_enemy_tag       31
+#define meshtastic_CasevacReport_hlz_remarks_tag 32
+#define meshtastic_CasevacReport_zmist_tag       33
+#define meshtastic_ZMistEntry_title_tag          1
+#define meshtastic_ZMistEntry_z_tag              2
+#define meshtastic_ZMistEntry_m_tag              3
+#define meshtastic_ZMistEntry_i_tag              4
+#define meshtastic_ZMistEntry_s_tag              5
+#define meshtastic_ZMistEntry_t_tag              6
 #define meshtastic_EmergencyAlert_type_tag       1
 #define meshtastic_EmergencyAlert_authoring_uid_tag 2
 #define meshtastic_EmergencyAlert_cancel_reference_uid_tag 3
@@ -1253,6 +1456,17 @@ extern "C" {
 #define meshtastic_TaskRequest_priority_tag      4
 #define meshtastic_TaskRequest_status_tag        5
 #define meshtastic_TaskRequest_note_tag          6
+#define meshtastic_TAKEnvironment_temperature_c_x10_tag 1
+#define meshtastic_TAKEnvironment_wind_direction_deg_tag 2
+#define meshtastic_TAKEnvironment_wind_speed_cm_s_tag 3
+#define meshtastic_SensorFov_type_tag            1
+#define meshtastic_SensorFov_azimuth_deg_tag     2
+#define meshtastic_SensorFov_range_m_tag         3
+#define meshtastic_SensorFov_fov_horizontal_deg_tag 4
+#define meshtastic_SensorFov_fov_vertical_deg_tag 5
+#define meshtastic_SensorFov_elevation_deg_tag   6
+#define meshtastic_SensorFov_roll_deg_tag        7
+#define meshtastic_SensorFov_model_tag           8
 #define meshtastic_TAKPacketV2_cot_type_id_tag   1
 #define meshtastic_TAKPacketV2_how_tag           2
 #define meshtastic_TAKPacketV2_callsign_tag      3
@@ -1277,6 +1491,8 @@ extern "C" {
 #define meshtastic_TAKPacketV2_phone_tag         22
 #define meshtastic_TAKPacketV2_cot_type_str_tag  23
 #define meshtastic_TAKPacketV2_remarks_tag       24
+#define meshtastic_TAKPacketV2_environment_tag   25
+#define meshtastic_TAKPacketV2_sensor_fov_tag    26
 #define meshtastic_TAKPacketV2_pli_tag           30
 #define meshtastic_TAKPacketV2_chat_tag          31
 #define meshtastic_TAKPacketV2_aircraft_tag      32
@@ -1441,9 +1657,38 @@ X(a, STATIC,   SINGULAR, UINT32,   non_us_civilian,  11) \
 X(a, STATIC,   SINGULAR, UINT32,   epw,              12) \
 X(a, STATIC,   SINGULAR, UINT32,   child,            13) \
 X(a, STATIC,   SINGULAR, UINT32,   terrain_flags,    14) \
-X(a, STATIC,   SINGULAR, STRING,   frequency,        15)
-#define meshtastic_CasevacReport_CALLBACK NULL
+X(a, STATIC,   SINGULAR, STRING,   frequency,        15) \
+X(a, CALLBACK, SINGULAR, STRING,   title,            16) \
+X(a, CALLBACK, SINGULAR, STRING,   medline_remarks,  17) \
+X(a, STATIC,   SINGULAR, UINT32,   urgent_count,     18) \
+X(a, STATIC,   SINGULAR, UINT32,   urgent_surgical_count,  19) \
+X(a, STATIC,   SINGULAR, UINT32,   priority_count,   20) \
+X(a, STATIC,   SINGULAR, UINT32,   routine_count,    21) \
+X(a, STATIC,   SINGULAR, UINT32,   convenience_count,  22) \
+X(a, CALLBACK, SINGULAR, STRING,   equipment_detail,  23) \
+X(a, CALLBACK, SINGULAR, STRING,   zone_protected_coord,  24) \
+X(a, CALLBACK, SINGULAR, STRING,   terrain_slope_dir,  25) \
+X(a, CALLBACK, SINGULAR, STRING,   terrain_other_detail,  26) \
+X(a, CALLBACK, SINGULAR, STRING,   marked_by,        27) \
+X(a, CALLBACK, SINGULAR, STRING,   obstacles,        28) \
+X(a, CALLBACK, SINGULAR, STRING,   winds_are_from,   29) \
+X(a, CALLBACK, SINGULAR, STRING,   friendlies,       30) \
+X(a, CALLBACK, SINGULAR, STRING,   enemy,            31) \
+X(a, CALLBACK, SINGULAR, STRING,   hlz_remarks,      32) \
+X(a, CALLBACK, REPEATED, MESSAGE,  zmist,            33)
+#define meshtastic_CasevacReport_CALLBACK pb_default_field_callback
 #define meshtastic_CasevacReport_DEFAULT NULL
+#define meshtastic_CasevacReport_zmist_MSGTYPE meshtastic_ZMistEntry
+
+#define meshtastic_ZMistEntry_FIELDLIST(X, a) \
+X(a, CALLBACK, SINGULAR, STRING,   title,             1) \
+X(a, CALLBACK, SINGULAR, STRING,   z,                 2) \
+X(a, CALLBACK, SINGULAR, STRING,   m,                 3) \
+X(a, CALLBACK, SINGULAR, STRING,   i,                 4) \
+X(a, CALLBACK, SINGULAR, STRING,   s,                 5) \
+X(a, CALLBACK, SINGULAR, STRING,   t,                 6)
+#define meshtastic_ZMistEntry_CALLBACK pb_default_field_callback
+#define meshtastic_ZMistEntry_DEFAULT NULL
 
 #define meshtastic_EmergencyAlert_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    type,              1) \
@@ -1461,6 +1706,25 @@ X(a, STATIC,   SINGULAR, UENUM,    status,            5) \
 X(a, STATIC,   SINGULAR, STRING,   note,              6)
 #define meshtastic_TaskRequest_CALLBACK NULL
 #define meshtastic_TaskRequest_DEFAULT NULL
+
+#define meshtastic_TAKEnvironment_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, SINT32,   temperature_c_x10,   1) \
+X(a, STATIC,   SINGULAR, UINT32,   wind_direction_deg,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   wind_speed_cm_s,   3)
+#define meshtastic_TAKEnvironment_CALLBACK NULL
+#define meshtastic_TAKEnvironment_DEFAULT NULL
+
+#define meshtastic_SensorFov_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    type,              1) \
+X(a, STATIC,   SINGULAR, UINT32,   azimuth_deg,       2) \
+X(a, STATIC,   OPTIONAL, UINT32,   range_m,           3) \
+X(a, STATIC,   SINGULAR, UINT32,   fov_horizontal_deg,   4) \
+X(a, STATIC,   SINGULAR, UINT32,   fov_vertical_deg,   5) \
+X(a, STATIC,   SINGULAR, SINT32,   elevation_deg,     6) \
+X(a, STATIC,   SINGULAR, SINT32,   roll_deg,          7) \
+X(a, CALLBACK, SINGULAR, STRING,   model,             8)
+#define meshtastic_SensorFov_CALLBACK pb_default_field_callback
+#define meshtastic_SensorFov_DEFAULT NULL
 
 #define meshtastic_TAKPacketV2_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    cot_type_id,       1) \
@@ -1487,6 +1751,8 @@ X(a, STATIC,   SINGULAR, STRING,   endpoint,         21) \
 X(a, STATIC,   SINGULAR, STRING,   phone,            22) \
 X(a, STATIC,   SINGULAR, STRING,   cot_type_str,     23) \
 X(a, CALLBACK, SINGULAR, STRING,   remarks,          24) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  environment,      25) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  sensor_fov,       26) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,pli,payload_variant.pli),  30) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,chat,payload_variant.chat),  31) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,aircraft,payload_variant.aircraft),  32) \
@@ -1500,6 +1766,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,emergency,payload_variant.em
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,task,payload_variant.task),  40)
 #define meshtastic_TAKPacketV2_CALLBACK pb_default_field_callback
 #define meshtastic_TAKPacketV2_DEFAULT NULL
+#define meshtastic_TAKPacketV2_environment_MSGTYPE meshtastic_TAKEnvironment
+#define meshtastic_TAKPacketV2_sensor_fov_MSGTYPE meshtastic_SensorFov
 #define meshtastic_TAKPacketV2_payload_variant_chat_MSGTYPE meshtastic_GeoChat
 #define meshtastic_TAKPacketV2_payload_variant_aircraft_MSGTYPE meshtastic_AircraftTrack
 #define meshtastic_TAKPacketV2_payload_variant_shape_MSGTYPE meshtastic_DrawnShape
@@ -1524,8 +1792,11 @@ extern const pb_msgdesc_t meshtastic_RangeAndBearing_msg;
 extern const pb_msgdesc_t meshtastic_Route_msg;
 extern const pb_msgdesc_t meshtastic_Route_Link_msg;
 extern const pb_msgdesc_t meshtastic_CasevacReport_msg;
+extern const pb_msgdesc_t meshtastic_ZMistEntry_msg;
 extern const pb_msgdesc_t meshtastic_EmergencyAlert_msg;
 extern const pb_msgdesc_t meshtastic_TaskRequest_msg;
+extern const pb_msgdesc_t meshtastic_TAKEnvironment_msg;
+extern const pb_msgdesc_t meshtastic_SensorFov_msg;
 extern const pb_msgdesc_t meshtastic_TAKPacketV2_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -1543,15 +1814,20 @@ extern const pb_msgdesc_t meshtastic_TAKPacketV2_msg;
 #define meshtastic_Route_fields &meshtastic_Route_msg
 #define meshtastic_Route_Link_fields &meshtastic_Route_Link_msg
 #define meshtastic_CasevacReport_fields &meshtastic_CasevacReport_msg
+#define meshtastic_ZMistEntry_fields &meshtastic_ZMistEntry_msg
 #define meshtastic_EmergencyAlert_fields &meshtastic_EmergencyAlert_msg
 #define meshtastic_TaskRequest_fields &meshtastic_TaskRequest_msg
+#define meshtastic_TAKEnvironment_fields &meshtastic_TAKEnvironment_msg
+#define meshtastic_SensorFov_fields &meshtastic_SensorFov_msg
 #define meshtastic_TAKPacketV2_fields &meshtastic_TAKPacketV2_msg
 
 /* Maximum encoded size of messages (where known) */
+/* meshtastic_CasevacReport_size depends on runtime parameters */
+/* meshtastic_ZMistEntry_size depends on runtime parameters */
+/* meshtastic_SensorFov_size depends on runtime parameters */
 /* meshtastic_TAKPacketV2_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_ATAK_PB_H_MAX_SIZE meshtastic_Route_size
 #define meshtastic_AircraftTrack_size            134
-#define meshtastic_CasevacReport_size            70
 #define meshtastic_Contact_size                  242
 #define meshtastic_CotGeoPoint_size              12
 #define meshtastic_DrawnShape_size               553
@@ -1564,6 +1840,7 @@ extern const pb_msgdesc_t meshtastic_TAKPacketV2_msg;
 #define meshtastic_Route_Link_size               83
 #define meshtastic_Route_size                    1379
 #define meshtastic_Status_size                   3
+#define meshtastic_TAKEnvironment_size           18
 #define meshtastic_TAKPacket_size                756
 #define meshtastic_TaskRequest_size              132
 
