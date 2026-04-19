@@ -233,7 +233,6 @@ for _arg in "$@"; do
 	esac
 done
 if [[ $_running_ui -eq 1 && $_cv2_ok -eq 0 ]]; then
-	# trunk-ignore(shellcheck/SC2059): color format strings are intentional
 	printf '\033[33m[pre-flight] tests/ui tier detected, but opencv-python-headless is not installed — deselecting.\033[0m\n'
 	printf '             install with: .venv/bin/pip install -e "mcp-server/.[ui]"\n'
 	echo
@@ -246,7 +245,6 @@ fi
 # recovery hook also benefits from having uhubctl available across the
 # whole suite.
 if ! command -v uhubctl >/dev/null 2>&1; then
-	# trunk-ignore(shellcheck/SC2059): color format strings needed for %b / escape sequences
 	printf "\033[33m[pre-flight] uhubctl not found on PATH — recovery tier will skip, and\n"
 	printf "             wedged-device auto-recovery is disabled.\033[0m\n"
 	printf "             install with: brew install uhubctl (macOS) or apt install uhubctl (Debian/Ubuntu).\n"

@@ -75,6 +75,6 @@ class TestRegexAnchoring:
         assert FRAME_RE.search("Screen: frame 0/0 name=home reason=next") is not None
 
     def test_regex_allows_unusual_names(self) -> None:
-        """Name is `\\S+`, so compound names with underscores/digits match."""
+        r"""Name is `\S+`, so compound names with underscores/digits match."""
         m = FRAME_RE.search("Screen: frame 5/10 name=nodelist_hopsignal reason=fn_f2")
         assert m is not None and m["name"] == "nodelist_hopsignal"
