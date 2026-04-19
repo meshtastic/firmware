@@ -1967,6 +1967,9 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         // Feed sampling-based mesh size estimator (skip MQTT-forwarded packets)
         if (!mp.via_mqtt && hopScalingModule) {
             hopScalingModule->recordPacketSender(mp.from);
+            // Also feed the bitwise histogram sampler (parallel system)
+            uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
+            hopScalingModule->samplePacketForHistogram(mp.from, hopCount);
         }
 #endif
 

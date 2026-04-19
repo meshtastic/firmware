@@ -191,10 +191,12 @@ echo
 # PASS/FAIL — every hardware test would SKIP with "role not present". We
 # narrow to tests/unit explicitly so the summary reads as "no hardware,
 # unit suite only" instead of "big skip count looks suspicious".
+# Keep terminal output condensed (`-q -r fE`) so skip-heavy runs do not print
+# each skipped test in full; skip counts still appear in pytest's summary.
 if [[ -z $DETECTED && $# -eq 0 ]]; then
 	echo "[pre-flight] no supported devices detected; running unit tier only."
 	echo
-	exec "$VENV_PY" -m pytest tests/unit -v --report-log=tests/reportlog.jsonl
+	exec "$VENV_PY" -m pytest tests/unit -q -r fE --report-log=tests/reportlog.jsonl
 fi
 
 # Default pytest args when the user passed none. Power users can invoke
@@ -210,11 +212,13 @@ fi
 # skipping half the hardware tests with "not baked with session profile"
 # errors. Power users who know their hardware is current and want to shave
 # those seconds can pass `--assume-baked` explicitly.
+# Defaults also use condensed reporting (`-q -r fE`) to avoid listing every
+# skipped test verbatim while still surfacing failures/errors and summary data.
 if [[ $# -eq 0 ]]; then
 	set -- tests/ \
 		--html=tests/report.html --self-contained-html \
 		--junitxml=tests/junit.xml \
-		-v --tb=short
+		-q -r fE --tb=short
 fi
 
 # Always emit `tests/reportlog.jsonl` (unless the operator explicitly passed
