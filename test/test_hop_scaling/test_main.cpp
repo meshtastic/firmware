@@ -592,6 +592,14 @@ void setUp(void)
     myNodeInfo.my_node_num = kLocalNode;
     nodeDB = mockNodeDB;
 
+    // Clear persisted state files so each test starts with a blank rolling average.
+    // Without this, saveState() from a prior test (e.g. megamesh) leaks sampledEst
+    // and rollingAvgRollCount into all subsequent tests via loadState() in the constructor.
+#ifdef FSCom
+    FSCom.remove("/prefs/hop_scaling.bin");
+    FSCom.remove("/prefs/soi.bin");
+#endif
+
     // Disable denominator jitter so SAMPLING_DENOMINATOR stays on deterministic values
     // and injectSampleTraffic() produces consistent results across runs.
     HopScalingModule::setSamplingJitter(false);

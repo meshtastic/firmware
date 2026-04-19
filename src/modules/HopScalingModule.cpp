@@ -48,10 +48,15 @@ uint8_t SAMPLING_DENOMINATOR = SAMPLING_DENOMINATOR_INITIAL; // mutable
 constexpr uint8_t SAMPLING_DENOMINATOR_MIN = 1;
 constexpr uint8_t SAMPLING_DENOMINATOR_MAX = 128;
 
-/// Apply random jitter to a target denominator value.
-/// The jittered result lies in [target/2 + 1, target*2 - 1], clamped to [MIN, MAX].
-/// This prevents a bad actor from predicting which node IDs will pass the modulo filter.
-/// When s_samplingJitter is false (e.g. in unit tests) the target is returned unchanged.
+/**
+ * Apply random jitter to a target denominator value.
+ * The jittered result lies in [target/2 + 1, target*2 - 1], clamped to [MIN, MAX].
+ * This prevents a bad actor from predicting which node IDs will pass the modulo filter.
+ * When s_samplingJitter is false (e.g. in unit tests) the target is returned unchanged.
+ *
+ * @param target The canonical denominator value before jitter (e.g. 16, 32, 64).
+ * @return       Jittered denominator within the target's neighbourhood, or target itself if jitter is disabled.
+ */
 uint8_t jitterDenominator(uint8_t target)
 {
     if (!HopScalingModule::s_samplingJitter)
@@ -85,6 +90,7 @@ struct PersistedState {
 
 HopScalingModule *hopScalingModule;
 
+/// Reset all hop bucket counters to zero.
 void HopScalingModule::HopBucket::clear()
 {
     memset(perHop, 0, sizeof(perHop));
@@ -105,6 +111,7 @@ void HopScalingModule::HopBucket::add(const meshtastic_NodeInfoLite &node)
     }
 }
 
+/// Initialise the module, restore persisted state, and schedule the first run after a startup grace period.
 HopScalingModule::HopScalingModule() : concurrency::OSThread("HopScaling")
 {
     loadState();
@@ -119,14 +126,20 @@ void HopScalingModule::recordEviction()
     evictionsCurrentHour++;
 }
 
+/// Clear all slots and reset the unique count.
 void HopScalingModule::SampleTracker::clear()
 {
     memset(slots, 0, sizeof(slots));
     uniqueCount = 0;
 }
 
-/// Insert a node ID into the hash set.
-/// Uses open-addressing with linear probing; slot 0 value 0 is reserved as "empty".
+/**
+ * Insert a node ID into the hash set.
+ * Uses open-addressing with linear probing; slot 0 value 0 is reserved as "empty".
+ *
+ * @param nodeId The node ID to record (must be non-zero).
+ * @return       true if the ID was newly inserted, false if already present, zero, or table full.
+ */
 bool HopScalingModule::SampleTracker::record(uint32_t nodeId)
 {
     if (nodeId == 0)
@@ -176,16 +189,23 @@ uint16_t HopScalingModule::estimateSampledMeshSize() const
 bool HopScalingModule::s_samplingJitter = true;
 bool HopScalingModule::s_samplingAdaptationEnabled = true;
 
+/// Reset SAMPLING_DENOMINATOR to its compiled-in initial value.
 void HopScalingModule::resetSamplingDenominator()
 {
     SAMPLING_DENOMINATOR = SAMPLING_DENOMINATOR_INITIAL;
 }
 
+/// Override SAMPLING_DENOMINATOR to an explicit value (test-only).
 void HopScalingModule::setDenominatorForTest(uint8_t d)
 {
     SAMPLING_DENOMINATOR = d;
 }
 
+/**
+ * Double or halve the sampling denominator if the tracker load ratio is outside the 1/8–5/8 target band.
+ *
+ * @param loadRatio Current sample tracker utilisation (uniqueCount / capacity), in [0.0, 1.0].
+ */
 void HopScalingModule::adjustSamplingDenominatorForLoad(float loadRatio)
 {
     if (!s_samplingAdaptationEnabled)
@@ -208,6 +228,13 @@ void HopScalingModule::adjustSamplingDenominatorForLoad(float loadRatio)
     }
 }
 
+/**
+ * Commit the current sample window into the rolling average and reset the tracker.
+ * For early triggers (tracker overflow) a floor is applied to avoid zero-weight integration.
+ *
+ * @param earlyTrigger true when called from recordPacketSender() at the 75% load cap;
+ *                     false for the normal hourly roll from rollHour().
+ */
 void HopScalingModule::rollSampleWindow(bool earlyTrigger)
 {
     const uint32_t nowMs = millis();
@@ -378,6 +405,13 @@ void HopScalingModule::buildSnapshot(Snapshot &snapshot) const
     }
 }
 
+/**
+ * Compute an activity weight from the ratio of recent (0–2h) to older (1–3h) node counts.
+ * Returns 1.0 as a neutral fallback when not enough data exists for a meaningful comparison.
+ *
+ * @param snapshot Current NodeDB age-bucketed snapshot.
+ * @return         Activity weight: >1.0 means more recent activity, <1.0 means activity is aging out.
+ */
 float HopScalingModule::computeActivityWeight(const Snapshot &snapshot) const
 {
     // Ratio of overlapping activity windows: nodes seen within the last 0-2h
@@ -398,9 +432,15 @@ float HopScalingModule::computeActivityWeight(const Snapshot &snapshot) const
     return activityWeight;
 }
 
-// Select a politeness factor based on the activity weight. More recent activity (higher weight) => stricter politeness to avoid
-// overloading the mesh; older activity (lower weight) => more generous to allow faster propagation and recovery. The default
-// mid-range politeness applies when the activity weight is close to 1, indicating a stable mesh with balanced recent
+/**
+ * Select a politeness factor based on the activity weight. More recent activity (higher weight) =>
+ * stricter politeness to avoid overloading the mesh; older activity (lower weight) => more generous
+ * to allow faster propagation and recovery. The default mid-range politeness applies when the
+ * activity weight is close to 1, indicating a stable mesh with balanced recent/older traffic.
+ *
+ * @param activityWeight Ratio from computeActivityWeight().
+ * @return               One of POLITENESS_GENEROUS, POLITENESS_DEFAULT, or POLITENESS_STRICT.
+ */
 float HopScalingModule::selectPolitenessFactor(float activityWeight) const
 {
     if (activityWeight < ACTIVITY_WEIGHT_GENEROUS_MAX) {
@@ -412,10 +452,17 @@ float HopScalingModule::selectPolitenessFactor(float activityWeight) const
     return POLITENESS_DEFAULT;
 }
 
-// Estimate a scale factor to apply to the raw NodeDB counts when computing the required hop. This compensates for the nodeDB
-// being an incomplete sample of the whole mesh. Estimation logic tries to adapt to small, medium and megameshes with varying
-// turnover patterns by using a combination of heuristics based on NodeDB capacity, eviction rates, and sampling-based mesh size
-// estimation.
+/**
+ * Estimate a scale factor to apply to the raw NodeDB counts when computing the required hop.
+ * This compensates for the NodeDB being an incomplete sample of the whole mesh. Estimation logic
+ * adapts to small, medium and megameshes with varying turnover patterns by using heuristics based
+ * on NodeDB capacity, eviction rates, and sampling-based mesh size estimation.
+ *
+ * @param snapshot         Current NodeDB age-bucketed snapshot.
+ * @param statusMode       [out] Set to one of the StatusMode enum values indicating which estimation branch was taken.
+ * @param sampledEstimate  [out] Set to the sampling-derived mesh size estimate (0 if unreliable).
+ * @return                 Scale factor >= 1.0 to multiply per-hop counts by.
+ */
 float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &statusMode, uint16_t &sampledEstimate) const
 {
     float scale = 1.0f; // default (no scaling)
@@ -466,6 +513,7 @@ float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &s
     return scale;
 }
 
+/// Return true if the snapshot has enough temporal spread across age buckets for a meaningful activity ratio.
 bool HopScalingModule::checkStableStatus(const Snapshot &snapshot) const
 {
     // Require at least a minimal amount of temporal spread before classifying status mode as stable.
@@ -474,6 +522,12 @@ bool HopScalingModule::checkStableStatus(const Snapshot &snapshot) const
     return snapshot.cumulative12h.total > 1 && recentActiveNodes > 1 && olderActiveNodes > 1;
 }
 
+/**
+ * Emit a single-line LOG_INFO with all current module state for periodic monitoring.
+ *
+ * @param snapshot        Current NodeDB snapshot (used for age-bucket node counts).
+ * @param didHourlyUpdate true if this run performed a full hourly recomputation.
+ */
 void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyUpdate) const
 {
     static const char *const modeNames[] = {"STARTUP", "STABLE", "EVICTION", "SAMPLED", "FALLBACK"};
@@ -487,9 +541,17 @@ void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyU
              snapshot.recent1h.total + snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total, snapshot.cumulative12h.total);
 }
 
-// Compute the required hop distance to reach the target number of affected nodes, applying scaling and politeness adjustments.
-// The base hop is the minimum hop at which the cumulative affected nodes meets or exceeds the target. If extending to the next
-// hop would still keep the total under the politeness limit, extend by one more hop to be more generous. Scaling
+/**
+ * Compute the required hop distance to reach the target number of affected nodes, applying
+ * scaling and politeness adjustments. The base hop is the minimum hop at which the cumulative
+ * affected nodes meets or exceeds TARGET_AFFECTED_NODES. If extending to the next hop would
+ * still keep the total under the politeness limit, extend by one more hop.
+ *
+ * @param snapshot         Current NodeDB age-bucketed snapshot.
+ * @param scaleFactor      Multiplier from estimateScaleFactor() to inflate per-hop counts.
+ * @param politenessFactor Multiplier from selectPolitenessFactor() for the one-hop extension check.
+ * @return                 Required hop count in [0, HOP_MAX].
+ */
 uint8_t HopScalingModule::computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const
 {
     uint16_t affectedNodesPerHop[HOP_MAX + 1];
