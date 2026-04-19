@@ -80,10 +80,13 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 {
 #ifdef FSCom
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_NRF54L15)
     // take SPI Lock
     spiLock->lock();
-    // rename was fixed for ESP32 IDF LittleFS in April
+    // ESP32 IDF LittleFS (fixed April) and Zephyr LittleFS (nrf54l15) both
+    // support atomic fs_rename. Using it avoids the copyFile fallback which
+    // truncates the destination before copying — any interruption leaves a
+    // 0-byte file.
     bool result = FSCom.rename(pathFrom, pathTo);
     spiLock->unlock();
     return result;
