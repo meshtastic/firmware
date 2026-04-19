@@ -65,10 +65,479 @@ typedef enum _meshtastic_MemberRole {
     meshtastic_MemberRole_K9 = 8
 } meshtastic_MemberRole;
 
+/* CoT how field values.
+ Represents how the coordinates were generated. */
+typedef enum _meshtastic_CotHow {
+    /* Unspecified */
+    meshtastic_CotHow_CotHow_Unspecified = 0,
+    /* Human entered */
+    meshtastic_CotHow_CotHow_h_e = 1,
+    /* Machine generated */
+    meshtastic_CotHow_CotHow_m_g = 2,
+    /* Human GPS/INS derived */
+    meshtastic_CotHow_CotHow_h_g_i_g_o = 3,
+    /* Machine relayed (imported from another system/gateway) */
+    meshtastic_CotHow_CotHow_m_r = 4,
+    /* Machine fused (corroborated from multiple sources) */
+    meshtastic_CotHow_CotHow_m_f = 5,
+    /* Machine predicted */
+    meshtastic_CotHow_CotHow_m_p = 6,
+    /* Machine simulated */
+    meshtastic_CotHow_CotHow_m_s = 7
+} meshtastic_CotHow;
+
+/* Well-known CoT event types.
+ When the type is known, use the enum value for efficient encoding.
+ For unknown types, set cot_type_id to CotType_Other and populate cot_type_str. */
+typedef enum _meshtastic_CotType {
+    /* Unknown or unmapped type, use cot_type_str */
+    meshtastic_CotType_CotType_Other = 0,
+    /* a-f-G-U-C: Friendly ground unit combat */
+    meshtastic_CotType_CotType_a_f_G_U_C = 1,
+    /* a-f-G-U-C-I: Friendly ground unit combat infantry */
+    meshtastic_CotType_CotType_a_f_G_U_C_I = 2,
+    /* a-n-A-C-F: Neutral aircraft civilian fixed-wing */
+    meshtastic_CotType_CotType_a_n_A_C_F = 3,
+    /* a-n-A-C-H: Neutral aircraft civilian helicopter */
+    meshtastic_CotType_CotType_a_n_A_C_H = 4,
+    /* a-n-A-C: Neutral aircraft civilian */
+    meshtastic_CotType_CotType_a_n_A_C = 5,
+    /* a-f-A-M-H: Friendly aircraft military helicopter */
+    meshtastic_CotType_CotType_a_f_A_M_H = 6,
+    /* a-f-A-M: Friendly aircraft military */
+    meshtastic_CotType_CotType_a_f_A_M = 7,
+    /* a-f-A-M-F-F: Friendly aircraft military fixed-wing fighter */
+    meshtastic_CotType_CotType_a_f_A_M_F_F = 8,
+    /* a-f-A-M-H-A: Friendly aircraft military helicopter attack */
+    meshtastic_CotType_CotType_a_f_A_M_H_A = 9,
+    /* a-f-A-M-H-U-M: Friendly aircraft military helicopter utility medium */
+    meshtastic_CotType_CotType_a_f_A_M_H_U_M = 10,
+    /* a-h-A-M-F-F: Hostile aircraft military fixed-wing fighter */
+    meshtastic_CotType_CotType_a_h_A_M_F_F = 11,
+    /* a-h-A-M-H-A: Hostile aircraft military helicopter attack */
+    meshtastic_CotType_CotType_a_h_A_M_H_A = 12,
+    /* a-u-A-C: Unknown aircraft civilian */
+    meshtastic_CotType_CotType_a_u_A_C = 13,
+    /* t-x-d-d: Tasking delete/disconnect */
+    meshtastic_CotType_CotType_t_x_d_d = 14,
+    /* a-f-G-E-S-E: Friendly ground equipment sensor */
+    meshtastic_CotType_CotType_a_f_G_E_S_E = 15,
+    /* a-f-G-E-V-C: Friendly ground equipment vehicle */
+    meshtastic_CotType_CotType_a_f_G_E_V_C = 16,
+    /* a-f-S: Friendly sea */
+    meshtastic_CotType_CotType_a_f_S = 17,
+    /* a-f-A-M-F: Friendly aircraft military fixed-wing */
+    meshtastic_CotType_CotType_a_f_A_M_F = 18,
+    /* a-f-A-M-F-C-H: Friendly aircraft military fixed-wing cargo heavy */
+    meshtastic_CotType_CotType_a_f_A_M_F_C_H = 19,
+    /* a-f-A-M-F-U-L: Friendly aircraft military fixed-wing utility light */
+    meshtastic_CotType_CotType_a_f_A_M_F_U_L = 20,
+    /* a-f-A-M-F-L: Friendly aircraft military fixed-wing liaison */
+    meshtastic_CotType_CotType_a_f_A_M_F_L = 21,
+    /* a-f-A-M-F-P: Friendly aircraft military fixed-wing patrol */
+    meshtastic_CotType_CotType_a_f_A_M_F_P = 22,
+    /* a-f-A-C-H: Friendly aircraft civilian helicopter */
+    meshtastic_CotType_CotType_a_f_A_C_H = 23,
+    /* a-n-A-M-F-Q: Neutral aircraft military fixed-wing drone */
+    meshtastic_CotType_CotType_a_n_A_M_F_Q = 24,
+    /* b-t-f: GeoChat message */
+    meshtastic_CotType_CotType_b_t_f = 25,
+    /* b-r-f-h-c: CASEVAC/MEDEVAC report */
+    meshtastic_CotType_CotType_b_r_f_h_c = 26,
+    /* b-a-o-pan: Ring the bell / alert all */
+    meshtastic_CotType_CotType_b_a_o_pan = 27,
+    /* b-a-o-opn: Troops in contact */
+    meshtastic_CotType_CotType_b_a_o_opn = 28,
+    /* b-a-o-can: Cancel alert */
+    meshtastic_CotType_CotType_b_a_o_can = 29,
+    /* b-a-o-tbl: 911 alert */
+    meshtastic_CotType_CotType_b_a_o_tbl = 30,
+    /* b-a-g: Geofence breach alert */
+    meshtastic_CotType_CotType_b_a_g = 31,
+    /* a-f-G: Friendly ground (generic) */
+    meshtastic_CotType_CotType_a_f_G = 32,
+    /* a-f-G-U: Friendly ground unit (generic) */
+    meshtastic_CotType_CotType_a_f_G_U = 33,
+    /* a-h-G: Hostile ground (generic) */
+    meshtastic_CotType_CotType_a_h_G = 34,
+    /* a-u-G: Unknown ground (generic) */
+    meshtastic_CotType_CotType_a_u_G = 35,
+    /* a-n-G: Neutral ground (generic) */
+    meshtastic_CotType_CotType_a_n_G = 36,
+    /* b-m-r: Route */
+    meshtastic_CotType_CotType_b_m_r = 37,
+    /* b-m-p-w: Route waypoint */
+    meshtastic_CotType_CotType_b_m_p_w = 38,
+    /* b-m-p-s-p-i: Self-position marker */
+    meshtastic_CotType_CotType_b_m_p_s_p_i = 39,
+    /* u-d-f: Freeform shape (line/polygon) */
+    meshtastic_CotType_CotType_u_d_f = 40,
+    /* u-d-r: Rectangle */
+    meshtastic_CotType_CotType_u_d_r = 41,
+    /* u-d-c-c: Circle */
+    meshtastic_CotType_CotType_u_d_c_c = 42,
+    /* u-rb-a: Range/bearing line */
+    meshtastic_CotType_CotType_u_rb_a = 43,
+    /* a-h-A: Hostile aircraft (generic) */
+    meshtastic_CotType_CotType_a_h_A = 44,
+    /* a-u-A: Unknown aircraft (generic) */
+    meshtastic_CotType_CotType_a_u_A = 45,
+    /* a-f-A-M-H-Q: Friendly aircraft military helicopter observation */
+    meshtastic_CotType_CotType_a_f_A_M_H_Q = 46,
+    /* a-f-A-C-F: Friendly aircraft civilian fixed-wing */
+    meshtastic_CotType_CotType_a_f_A_C_F = 47,
+    /* a-f-A-C: Friendly aircraft civilian (generic) */
+    meshtastic_CotType_CotType_a_f_A_C = 48,
+    /* a-f-A-C-L: Friendly aircraft civilian lighter-than-air */
+    meshtastic_CotType_CotType_a_f_A_C_L = 49,
+    /* a-f-A: Friendly aircraft (generic) */
+    meshtastic_CotType_CotType_a_f_A = 50,
+    /* a-f-A-M-H-C: Friendly aircraft military helicopter cargo */
+    meshtastic_CotType_CotType_a_f_A_M_H_C = 51,
+    /* a-n-A-M-F-F: Neutral aircraft military fixed-wing fighter */
+    meshtastic_CotType_CotType_a_n_A_M_F_F = 52,
+    /* a-u-A-C-F: Unknown aircraft civilian fixed-wing */
+    meshtastic_CotType_CotType_a_u_A_C_F = 53,
+    /* a-f-G-U-C-F-T-A: Friendly ground unit combat forces theater aviation */
+    meshtastic_CotType_CotType_a_f_G_U_C_F_T_A = 54,
+    /* a-f-G-U-C-V-S: Friendly ground unit combat vehicle support */
+    meshtastic_CotType_CotType_a_f_G_U_C_V_S = 55,
+    /* a-f-G-U-C-R-X: Friendly ground unit combat reconnaissance exploitation */
+    meshtastic_CotType_CotType_a_f_G_U_C_R_X = 56,
+    /* a-f-G-U-C-I-Z: Friendly ground unit combat infantry mechanized */
+    meshtastic_CotType_CotType_a_f_G_U_C_I_Z = 57,
+    /* a-f-G-U-C-E-C-W: Friendly ground unit combat engineer construction wheeled */
+    meshtastic_CotType_CotType_a_f_G_U_C_E_C_W = 58,
+    /* a-f-G-U-C-I-L: Friendly ground unit combat infantry light */
+    meshtastic_CotType_CotType_a_f_G_U_C_I_L = 59,
+    /* a-f-G-U-C-R-O: Friendly ground unit combat reconnaissance other */
+    meshtastic_CotType_CotType_a_f_G_U_C_R_O = 60,
+    /* a-f-G-U-C-R-V: Friendly ground unit combat reconnaissance cavalry */
+    meshtastic_CotType_CotType_a_f_G_U_C_R_V = 61,
+    /* a-f-G-U-H: Friendly ground unit headquarters */
+    meshtastic_CotType_CotType_a_f_G_U_H = 62,
+    /* a-f-G-U-U-M-S-E: Friendly ground unit support medical surgical evacuation */
+    meshtastic_CotType_CotType_a_f_G_U_U_M_S_E = 63,
+    /* a-f-G-U-S-M-C: Friendly ground unit support maintenance collection */
+    meshtastic_CotType_CotType_a_f_G_U_S_M_C = 64,
+    /* a-f-G-E-S: Friendly ground equipment sensor (generic) */
+    meshtastic_CotType_CotType_a_f_G_E_S = 65,
+    /* a-f-G-E: Friendly ground equipment (generic) */
+    meshtastic_CotType_CotType_a_f_G_E = 66,
+    /* a-f-G-E-V-C-U: Friendly ground equipment vehicle utility */
+    meshtastic_CotType_CotType_a_f_G_E_V_C_U = 67,
+    /* a-f-G-E-V-C-ps: Friendly ground equipment vehicle public safety */
+    meshtastic_CotType_CotType_a_f_G_E_V_C_ps = 68,
+    /* a-u-G-E-V: Unknown ground equipment vehicle */
+    meshtastic_CotType_CotType_a_u_G_E_V = 69,
+    /* a-f-S-N-N-R: Friendly sea surface non-naval rescue */
+    meshtastic_CotType_CotType_a_f_S_N_N_R = 70,
+    /* a-f-F-B: Friendly force boundary */
+    meshtastic_CotType_CotType_a_f_F_B = 71,
+    /* b-m-p-s-p-loc: Self-position location marker */
+    meshtastic_CotType_CotType_b_m_p_s_p_loc = 72,
+    /* b-i-v: Imagery/video */
+    meshtastic_CotType_CotType_b_i_v = 73,
+    /* b-f-t-r: File transfer request */
+    meshtastic_CotType_CotType_b_f_t_r = 74,
+    /* b-f-t-a: File transfer acknowledgment */
+    meshtastic_CotType_CotType_b_f_t_a = 75,
+    /* u-d-f-m: Freehand telestration / annotation. Anchor at event point,
+ geometry carried via DrawnShape.vertices. May be truncated to
+ MAX_VERTICES by the sender. */
+    meshtastic_CotType_CotType_u_d_f_m = 76,
+    /* u-d-p: Closed polygon. Geometry carried via DrawnShape.vertices,
+ implicitly closed (receiver duplicates first vertex as needed). */
+    meshtastic_CotType_CotType_u_d_p = 77,
+    /* b-m-p-s-m: Spot map marker (colored dot at a point of interest). */
+    meshtastic_CotType_CotType_b_m_p_s_m = 78,
+    /* b-m-p-c: Checkpoint (intermediate route control point). */
+    meshtastic_CotType_CotType_b_m_p_c = 79,
+    /* u-r-b-c-c: Ranging circle (range rings centered on the event point). */
+    meshtastic_CotType_CotType_u_r_b_c_c = 80,
+    /* u-r-b-bullseye: Bullseye with configurable range rings and bearing
+ reference (magnetic / true / grid). */
+    meshtastic_CotType_CotType_u_r_b_bullseye = 81,
+    /* a-f-G-E-V-A: Friendly armored vehicle, user-selectable self PLI. */
+    meshtastic_CotType_CotType_a_f_G_E_V_A = 82,
+    /* a-n-A: Neutral aircraft (friendly/hostile/unknown already present). */
+    meshtastic_CotType_CotType_a_n_A = 83,
+    /* --- 2525 quick-drop: artillery (4) ---------------------------------- */
+    meshtastic_CotType_CotType_a_u_G_U_C_F = 84,
+    meshtastic_CotType_CotType_a_n_G_U_C_F = 85,
+    meshtastic_CotType_CotType_a_h_G_U_C_F = 86,
+    meshtastic_CotType_CotType_a_f_G_U_C_F = 87,
+    /* --- 2525 quick-drop: building (4) ----------------------------------- */
+    meshtastic_CotType_CotType_a_u_G_I = 88,
+    meshtastic_CotType_CotType_a_n_G_I = 89,
+    meshtastic_CotType_CotType_a_h_G_I = 90,
+    meshtastic_CotType_CotType_a_f_G_I = 91,
+    /* --- 2525 quick-drop: mine (4) --------------------------------------- */
+    meshtastic_CotType_CotType_a_u_G_E_X_M = 92,
+    meshtastic_CotType_CotType_a_n_G_E_X_M = 93,
+    meshtastic_CotType_CotType_a_h_G_E_X_M = 94,
+    meshtastic_CotType_CotType_a_f_G_E_X_M = 95,
+    /* --- 2525 quick-drop: ship (3; a-f-S already at 17) ------------------ */
+    meshtastic_CotType_CotType_a_u_S = 96,
+    meshtastic_CotType_CotType_a_n_S = 97,
+    meshtastic_CotType_CotType_a_h_S = 98,
+    /* --- 2525 quick-drop: sniper (4) ------------------------------------- */
+    meshtastic_CotType_CotType_a_u_G_U_C_I_d = 99,
+    meshtastic_CotType_CotType_a_n_G_U_C_I_d = 100,
+    meshtastic_CotType_CotType_a_h_G_U_C_I_d = 101,
+    meshtastic_CotType_CotType_a_f_G_U_C_I_d = 102,
+    /* --- 2525 quick-drop: tank (4) --------------------------------------- */
+    meshtastic_CotType_CotType_a_u_G_E_V_A_T = 103,
+    meshtastic_CotType_CotType_a_n_G_E_V_A_T = 104,
+    meshtastic_CotType_CotType_a_h_G_E_V_A_T = 105,
+    meshtastic_CotType_CotType_a_f_G_E_V_A_T = 106,
+    /* --- 2525 quick-drop: troops (3; a-f-G-U-C-I already at 2) ----------- */
+    meshtastic_CotType_CotType_a_u_G_U_C_I = 107,
+    meshtastic_CotType_CotType_a_n_G_U_C_I = 108,
+    meshtastic_CotType_CotType_a_h_G_U_C_I = 109,
+    /* --- 2525 quick-drop: generic vehicle (3; a-u-G-E-V already at 69) --- */
+    meshtastic_CotType_CotType_a_n_G_E_V = 110,
+    meshtastic_CotType_CotType_a_h_G_E_V = 111,
+    meshtastic_CotType_CotType_a_f_G_E_V = 112,
+    /* b-m-p-w-GOTO: Go To / bloodhound navigation target. */
+    meshtastic_CotType_CotType_b_m_p_w_GOTO = 113,
+    /* b-m-p-c-ip: Initial point (mission planning). */
+    meshtastic_CotType_CotType_b_m_p_c_ip = 114,
+    /* b-m-p-c-cp: Contact point (mission planning). */
+    meshtastic_CotType_CotType_b_m_p_c_cp = 115,
+    /* b-m-p-s-p-op: Observation post. */
+    meshtastic_CotType_CotType_b_m_p_s_p_op = 116,
+    /* u-d-v: 2D vehicle outline drawn on the map. */
+    meshtastic_CotType_CotType_u_d_v = 117,
+    /* u-d-v-m: 3D vehicle model reference. */
+    meshtastic_CotType_CotType_u_d_v_m = 118,
+    /* u-d-c-e: Non-circular ellipse (circle with distinct major/minor axes). */
+    meshtastic_CotType_CotType_u_d_c_e = 119,
+    /* b-i-x-i: Quick Pic geotagged image marker. The image itself does not
+ ride on LoRa; this event references the image via iconset metadata. */
+    meshtastic_CotType_CotType_b_i_x_i = 120,
+    /* b-t-f-d: GeoChat delivered receipt. Carried on the existing `chat`
+ payload_variant via GeoChat.receipt_for_uid + receipt_type. */
+    meshtastic_CotType_CotType_b_t_f_d = 121,
+    /* b-t-f-r: GeoChat read receipt. Same wire slot as b-t-f-d. */
+    meshtastic_CotType_CotType_b_t_f_r = 122,
+    /* b-a-o-c: Custom / generic emergency beacon. */
+    meshtastic_CotType_CotType_b_a_o_c = 123,
+    /* t-s: Task / engage request. Structured payload carried via the new
+ TaskRequest typed variant. */
+    meshtastic_CotType_CotType_t_s = 124
+} meshtastic_CotType;
+
+/* Geopoint and altitude source */
+typedef enum _meshtastic_GeoPointSource {
+    /* Unspecified */
+    meshtastic_GeoPointSource_GeoPointSource_Unspecified = 0,
+    /* GPS derived */
+    meshtastic_GeoPointSource_GeoPointSource_GPS = 1,
+    /* User entered */
+    meshtastic_GeoPointSource_GeoPointSource_USER = 2,
+    /* Network/external */
+    meshtastic_GeoPointSource_GeoPointSource_NETWORK = 3
+} meshtastic_GeoPointSource;
+
+/* Receipt discriminator. Set alongside cot_type_id = b-t-f-d (delivered)
+ or b-t-f-r (read). ReceiptType_None is the default for a normal chat
+ message (cot_type_id = b-t-f).
+
+ Receivers can detect a receipt by checking receipt_type != ReceiptType_None
+ without re-parsing the envelope cot_type_id. */
+typedef enum _meshtastic_GeoChat_ReceiptType {
+    meshtastic_GeoChat_ReceiptType_ReceiptType_None = 0, /* normal chat message */
+    meshtastic_GeoChat_ReceiptType_ReceiptType_Delivered = 1, /* b-t-f-d delivered receipt */
+    meshtastic_GeoChat_ReceiptType_ReceiptType_Read = 2 /* b-t-f-r read receipt */
+} meshtastic_GeoChat_ReceiptType;
+
+/* Shape kind discriminator. Drives receiver rendering and also controls
+ which optional fields below are meaningful. */
+typedef enum _meshtastic_DrawnShape_Kind {
+    /* Unspecified (do not use on the wire) */
+    meshtastic_DrawnShape_Kind_Kind_Unspecified = 0,
+    /* u-d-c-c: User-drawn circle (uses major/minor/angle, anchor = event point) */
+    meshtastic_DrawnShape_Kind_Kind_Circle = 1,
+    /* u-d-r: User-drawn rectangle (uses vertices = 4 corners) */
+    meshtastic_DrawnShape_Kind_Kind_Rectangle = 2,
+    /* u-d-f: User-drawn polyline (uses vertices, not closed) */
+    meshtastic_DrawnShape_Kind_Kind_Freeform = 3,
+    /* u-d-f-m: Freehand telestration / annotation (uses vertices, may be truncated) */
+    meshtastic_DrawnShape_Kind_Kind_Telestration = 4,
+    /* u-d-p: Closed polygon (uses vertices, implicitly closed) */
+    meshtastic_DrawnShape_Kind_Kind_Polygon = 5,
+    /* u-r-b-c-c: Ranging circle (major/minor/angle, stroke + optional fill) */
+    meshtastic_DrawnShape_Kind_Kind_RangingCircle = 6,
+    /* u-r-b-bullseye: Bullseye ring with range rings and bearing reference */
+    meshtastic_DrawnShape_Kind_Kind_Bullseye = 7,
+    /* u-d-c-e: Ellipse with distinct major/minor axes (same storage as
+ Kind_Circle — uses major_cm/minor_cm/angle_deg — but receivers
+ render it as a non-circular ellipse rather than a round circle). */
+    meshtastic_DrawnShape_Kind_Kind_Ellipse = 8,
+    /* u-d-v: 2D vehicle outline drawn on the map. Vertices carry the
+ outline polygon; receivers draw it as a filled polygon. */
+    meshtastic_DrawnShape_Kind_Kind_Vehicle2D = 9,
+    /* u-d-v-m: 3D vehicle model reference. Same vertex polygon as
+ Kind_Vehicle2D; receivers that support 3D rendering extrude it. */
+    meshtastic_DrawnShape_Kind_Kind_Vehicle3D = 10
+} meshtastic_DrawnShape_Kind;
+
+/* Explicit stroke/fill/both discriminator.
+
+ ATAK's source XML distinguishes "stroke-only polyline" from "closed shape
+ with both stroke and fill" by the presence of the <fillColor> element.
+ Both states can hash to all-zero color fields, so we carry the signal
+ explicitly. Parser sets this from (sawStrokeColor, sawFillColor) at the
+ end of parse; builder uses it to decide which of <strokeColor> /
+ <fillColor> to emit in the reconstructed XML. */
+typedef enum _meshtastic_DrawnShape_StyleMode {
+    /* Unspecified — receiver infers from which color fields are non-zero. */
+    meshtastic_DrawnShape_StyleMode_StyleMode_Unspecified = 0,
+    /* Stroke only. No <fillColor> in the source XML. Used for polylines,
+ ranging lines, bullseye rings. */
+    meshtastic_DrawnShape_StyleMode_StyleMode_StrokeOnly = 1,
+    /* Fill only. No <strokeColor> in the source XML. Rare but valid in
+ ATAK (solid region with no outline). */
+    meshtastic_DrawnShape_StyleMode_StyleMode_FillOnly = 2,
+    /* Both stroke and fill present. Closed shapes: circle, rectangle,
+ polygon, ranging circle. */
+    meshtastic_DrawnShape_StyleMode_StyleMode_StrokeAndFill = 3
+} meshtastic_DrawnShape_StyleMode;
+
+/* Marker kind. Used to pick sensible receiver defaults when the CoT type
+ alone is ambiguous (e.g. a-u-G could be a 2525 symbol or a custom icon
+ depending on the iconset path). */
+typedef enum _meshtastic_Marker_Kind {
+    /* Unspecified — fall back to TAKPacketV2.cot_type_id */
+    meshtastic_Marker_Kind_Kind_Unspecified = 0,
+    /* b-m-p-s-m: Spot map marker */
+    meshtastic_Marker_Kind_Kind_Spot = 1,
+    /* b-m-p-w: Route waypoint */
+    meshtastic_Marker_Kind_Kind_Waypoint = 2,
+    /* b-m-p-c: Checkpoint */
+    meshtastic_Marker_Kind_Kind_Checkpoint = 3,
+    /* b-m-p-s-p-i / b-m-p-s-p-loc: Self-position marker */
+    meshtastic_Marker_Kind_Kind_SelfPosition = 4,
+    /* 2525B/C military symbol (iconsetpath = COT_MAPPING_2525B/...) */
+    meshtastic_Marker_Kind_Kind_Symbol2525 = 5,
+    /* COT_MAPPING_SPOTMAP icon (e.g. colored dot) */
+    meshtastic_Marker_Kind_Kind_SpotMap = 6,
+    /* Custom icon set (UUID/GroupName/filename.png) */
+    meshtastic_Marker_Kind_Kind_CustomIcon = 7,
+    /* b-m-p-w-GOTO: Go To / bloodhound navigation waypoint. */
+    meshtastic_Marker_Kind_Kind_GoToPoint = 8,
+    /* b-m-p-c-ip: Initial point (mission planning control point). */
+    meshtastic_Marker_Kind_Kind_InitialPoint = 9,
+    /* b-m-p-c-cp: Contact point (mission planning control point). */
+    meshtastic_Marker_Kind_Kind_ContactPoint = 10,
+    /* b-m-p-s-p-op: Observation post. */
+    meshtastic_Marker_Kind_Kind_ObservationPost = 11,
+    /* b-i-x-i: Quick Pic geotagged image marker. iconset carries the
+ image reference (local filename or remote URL); the image itself
+ does not ride on the LoRa wire. */
+    meshtastic_Marker_Kind_Kind_ImageMarker = 12
+} meshtastic_Marker_Kind;
+
+/* Travel method for the route. */
+typedef enum _meshtastic_Route_Method {
+    /* Unspecified / unknown */
+    meshtastic_Route_Method_Method_Unspecified = 0,
+    /* Driving / vehicle */
+    meshtastic_Route_Method_Method_Driving = 1,
+    /* Walking / foot */
+    meshtastic_Route_Method_Method_Walking = 2,
+    /* Flying */
+    meshtastic_Route_Method_Method_Flying = 3,
+    /* Swimming (individual) */
+    meshtastic_Route_Method_Method_Swimming = 4,
+    /* Watercraft (boat) */
+    meshtastic_Route_Method_Method_Watercraft = 5
+} meshtastic_Route_Method;
+
+/* Route direction (infil = ingress, exfil = egress). */
+typedef enum _meshtastic_Route_Direction {
+    /* Unspecified */
+    meshtastic_Route_Direction_Direction_Unspecified = 0,
+    /* Infiltration (ingress) */
+    meshtastic_Route_Direction_Direction_Infil = 1,
+    /* Exfiltration (egress) */
+    meshtastic_Route_Direction_Direction_Exfil = 2
+} meshtastic_Route_Direction;
+
+/* Line 3: precedence / urgency. */
+typedef enum _meshtastic_CasevacReport_Precedence {
+    meshtastic_CasevacReport_Precedence_Precedence_Unspecified = 0,
+    meshtastic_CasevacReport_Precedence_Precedence_Urgent = 1, /* A - immediate, life-threatening */
+    meshtastic_CasevacReport_Precedence_Precedence_UrgentSurgical = 2, /* B - needs surgery */
+    meshtastic_CasevacReport_Precedence_Precedence_Priority = 3, /* C - within 4 hours */
+    meshtastic_CasevacReport_Precedence_Precedence_Routine = 4, /* D - within 24 hours */
+    meshtastic_CasevacReport_Precedence_Precedence_Convenience = 5 /* E - convenience */
+} meshtastic_CasevacReport_Precedence;
+
+/* Line 7: HLZ marking method. */
+typedef enum _meshtastic_CasevacReport_HlzMarking {
+    meshtastic_CasevacReport_HlzMarking_HlzMarking_Unspecified = 0,
+    meshtastic_CasevacReport_HlzMarking_HlzMarking_Panels = 1,
+    meshtastic_CasevacReport_HlzMarking_HlzMarking_PyroSignal = 2,
+    meshtastic_CasevacReport_HlzMarking_HlzMarking_Smoke = 3,
+    meshtastic_CasevacReport_HlzMarking_HlzMarking_None = 4,
+    meshtastic_CasevacReport_HlzMarking_HlzMarking_Other = 5
+} meshtastic_CasevacReport_HlzMarking;
+
+/* Line 6: security situation at the pickup zone. */
+typedef enum _meshtastic_CasevacReport_Security {
+    meshtastic_CasevacReport_Security_Security_Unspecified = 0,
+    meshtastic_CasevacReport_Security_Security_NoEnemy = 1, /* N - no enemy activity */
+    meshtastic_CasevacReport_Security_Security_PossibleEnemy = 2, /* P - possible enemy */
+    meshtastic_CasevacReport_Security_Security_EnemyInArea = 3, /* E - enemy, approach with caution */
+    meshtastic_CasevacReport_Security_Security_EnemyInArmedContact = 4 /* X - armed escort required */
+} meshtastic_CasevacReport_Security;
+
+typedef enum _meshtastic_EmergencyAlert_Type {
+    meshtastic_EmergencyAlert_Type_Type_Unspecified = 0,
+    meshtastic_EmergencyAlert_Type_Type_Alert911 = 1, /* b-a-o-tbl */
+    meshtastic_EmergencyAlert_Type_Type_RingTheBell = 2, /* b-a-o-pan */
+    meshtastic_EmergencyAlert_Type_Type_InContact = 3, /* b-a-o-opn */
+    meshtastic_EmergencyAlert_Type_Type_GeoFenceBreached = 4, /* b-a-g */
+    meshtastic_EmergencyAlert_Type_Type_Custom = 5, /* b-a-o-c */
+    meshtastic_EmergencyAlert_Type_Type_Cancel = 6 /* b-a-o-can */
+} meshtastic_EmergencyAlert_Type;
+
+typedef enum _meshtastic_TaskRequest_Priority {
+    meshtastic_TaskRequest_Priority_Priority_Unspecified = 0,
+    meshtastic_TaskRequest_Priority_Priority_Low = 1,
+    meshtastic_TaskRequest_Priority_Priority_Normal = 2,
+    meshtastic_TaskRequest_Priority_Priority_High = 3,
+    meshtastic_TaskRequest_Priority_Priority_Critical = 4
+} meshtastic_TaskRequest_Priority;
+
+typedef enum _meshtastic_TaskRequest_Status {
+    meshtastic_TaskRequest_Status_Status_Unspecified = 0,
+    meshtastic_TaskRequest_Status_Status_Pending = 1, /* assigned, not yet acknowledged */
+    meshtastic_TaskRequest_Status_Status_Acknowledged = 2, /* assignee has seen it */
+    meshtastic_TaskRequest_Status_Status_InProgress = 3, /* assignee is working it */
+    meshtastic_TaskRequest_Status_Status_Completed = 4, /* task done */
+    meshtastic_TaskRequest_Status_Status_Cancelled = 5 /* cancelled before completion */
+} meshtastic_TaskRequest_Status;
+
+/* Coarse sensor category, inferred from `model` on parse when the source
+ XML doesn't label it. Receivers that render differently per sensor
+ class (thermal overlay vs daylight cone) use this. */
+typedef enum _meshtastic_SensorFov_SensorType {
+    meshtastic_SensorFov_SensorType_SensorType_Unspecified = 0,
+    meshtastic_SensorFov_SensorType_SensorType_Camera = 1, /* daylight / general optical */
+    meshtastic_SensorFov_SensorType_SensorType_Thermal = 2, /* FLIR, thermal imager */
+    meshtastic_SensorFov_SensorType_SensorType_Laser = 3, /* rangefinder, LRF, designator */
+    meshtastic_SensorFov_SensorType_SensorType_Nvg = 4, /* night vision goggles */
+    meshtastic_SensorFov_SensorType_SensorType_Rf = 5, /* radio/radar direction-finding */
+    meshtastic_SensorFov_SensorType_SensorType_Other = 6
+} meshtastic_SensorFov_SensorType;
+
 /* Struct definitions */
 /* ATAK GeoChat message */
 typedef struct _meshtastic_GeoChat {
-    /* The text message */
+    /* The text message. Empty for receipts. */
     char message[200];
     /* Uid recipient of the message */
     bool has_to;
@@ -76,6 +545,14 @@ typedef struct _meshtastic_GeoChat {
     /* Callsign of the recipient for the message */
     bool has_to_callsign;
     char to_callsign[120];
+    /* UID of the chat message this event is acknowledging. Empty for a
+ normal chat message; set for delivered / read receipts. Paired with
+ receipt_type so receivers can match the ack back to the original
+ outbound GeoChat by its event uid. */
+    char receipt_for_uid[48];
+    /* Receipt kind discriminator. See ReceiptType doc. Default ReceiptType_None
+ means this is a regular chat message, not a receipt. */
+    meshtastic_GeoChat_ReceiptType receipt_type;
 } meshtastic_GeoChat;
 
 /* ATAK Group
@@ -146,6 +623,549 @@ typedef struct _meshtastic_TAKPacket {
     } payload_variant;
 } meshtastic_TAKPacket;
 
+/* Aircraft track information from ADS-B or military air tracking.
+ Covers the majority of observed real-world CoT traffic. */
+typedef struct _meshtastic_AircraftTrack {
+    /* ICAO hex identifier (e.g. "AD237C") */
+    char icao[8];
+    /* Aircraft registration (e.g. "N946AK") */
+    char registration[16];
+    /* Flight number/callsign (e.g. "ASA864") */
+    char flight[16];
+    /* ICAO aircraft type designator (e.g. "B39M") */
+    char aircraft_type[8];
+    /* Transponder squawk code (0-7777 octal) */
+    uint16_t squawk;
+    /* ADS-B emitter category (e.g. "A3") */
+    char category[4];
+    /* Received signal strength * 10 (e.g. -194 for -19.4 dBm) */
+    int32_t rssi_x10;
+    /* Whether receiver has GPS fix */
+    bool gps;
+    /* CoT host ID for source attribution */
+    char cot_host_id[64];
+} meshtastic_AircraftTrack;
+
+/* Compact geographic vertex used by repeated vertex lists in TAK geometry
+ payloads. Named with a `Cot` prefix to avoid a namespace collision with
+ `meshtastic.GeoPoint` in `device_ui.proto`, which is an unrelated zoom/
+ latitude/longitude type used by the on-device map UI.
+
+ Encoded as a signed DELTA from TAKPacketV2.latitude_i / longitude_i (the
+ enclosing event's anchor point). The absolute coordinate is recovered by
+ the receiver as `event.latitude_i + vertex.lat_delta_i` (and likewise for
+ longitude).
+
+ Why deltas: a 32-vertex telestration with vertices clustered within a few
+ hundred meters of the anchor has per-vertex deltas in the ±10^4 range.
+ Under sint32+zigzag those encode as 2 bytes each (tag+varint), versus the
+ 4 bytes that sfixed32 would always require. At 32 vertices that is ~128
+ bytes of savings — the difference between fitting under the LoRa MTU or
+ not. Absolute coordinates (values ~10^9) would cost sint32 varint 5 bytes
+ per field, which is why TAKPacketV2's top-level latitude_i / longitude_i
+ stay sfixed32 — only small values win with sint32. */
+typedef struct _meshtastic_CotGeoPoint {
+    /* Latitude delta from TAKPacketV2.latitude_i, in 1e-7 degree units.
+ Add to the enclosing event's latitude_i to recover the absolute latitude. */
+    int32_t lat_delta_i;
+    /* Longitude delta from TAKPacketV2.longitude_i, in 1e-7 degree units. */
+    int32_t lon_delta_i;
+} meshtastic_CotGeoPoint;
+
+/* User-drawn tactical graphic: circle, rectangle, polygon, polyline, freehand
+ telestration, ranging circle, or bullseye.
+
+ Covers CoT types u-d-c-c, u-d-r, u-d-f, u-d-f-m, u-d-p, u-r-b-c-c,
+ u-r-b-bullseye. The shape's anchor position is carried on
+ TAKPacketV2.latitude_i/longitude_i; polyline/polygon vertices are in the
+ `vertices` repeated field as `CotGeoPoint` deltas from that anchor.
+
+ Colors use the Team enum as a 14-color palette (see color encoding below)
+ with a fixed32 exact-ARGB fallback for custom user-picked colors that
+ don't map to a palette entry. */
+typedef struct _meshtastic_DrawnShape {
+    /* Shape kind (circle, rectangle, freeform, etc.) */
+    meshtastic_DrawnShape_Kind kind;
+    /* Explicit stroke/fill/both discriminator. See StyleMode doc. */
+    meshtastic_DrawnShape_StyleMode style;
+    /* Ellipse major radius in centimeters. 0 for non-ellipse kinds. */
+    uint32_t major_cm;
+    /* Ellipse minor radius in centimeters. 0 for non-ellipse kinds. */
+    uint32_t minor_cm;
+    /* Ellipse rotation angle in degrees. Valid values are 0..360 inclusive;
+ 0 and 360 are equivalent rotations. In proto3, an unset uint32 reads
+ as 0, so senders should emit 0 when the angle is unspecified. */
+    uint16_t angle_deg;
+    /* Stroke color as a named palette entry from the Team enum. If
+ Unspecifed_Color, the exact ARGB is carried in stroke_argb.
+ Valid only when style is StrokeOnly or StrokeAndFill. */
+    meshtastic_Team stroke_color;
+    /* Stroke color as an exact 32-bit ARGB bit pattern. Always populated
+ on the wire; readers MUST use this value when stroke_color ==
+ Unspecifed_Color and MAY use it to recover the exact original bytes
+ even when a palette entry is set. */
+    uint32_t stroke_argb;
+    /* Stroke weight in tenths of a unit (e.g. 30 = 3.0). Typical ATAK
+ range 10..60. */
+    uint16_t stroke_weight_x10;
+    /* Fill color as a named palette entry. See stroke_color docs.
+ Valid only when style is FillOnly or StrokeAndFill. */
+    meshtastic_Team fill_color;
+    /* Fill color exact ARGB fallback. See stroke_argb docs. */
+    uint32_t fill_argb;
+    /* Whether labels are rendered on this shape. */
+    bool labels_on;
+    /* Vertex list for polyline/polygon/rectangle shapes. Capped at 32 by
+ the nanopb pool; senders MUST truncate longer inputs and set
+ `truncated = true`. */
+    pb_size_t vertices_count;
+    meshtastic_CotGeoPoint vertices[32];
+    /* True if the sender truncated `vertices` to fit the pool. */
+    bool truncated; /* --- Bullseye-only fields. All ignored unless kind == Kind_Bullseye. --- */
+    /* Bullseye distance in meters * 10 (e.g. 3285 = 328.5 m). 0 = unset. */
+    uint32_t bullseye_distance_dm;
+    /* Bullseye bearing reference: 0 unset, 1 Magnetic, 2 True, 3 Grid. */
+    uint8_t bullseye_bearing_ref;
+    /* Bullseye attribute bit flags:
+   bit 0: rangeRingVisible
+   bit 1: hasRangeRings
+   bit 2: edgeToCenter
+   bit 3: mils */
+    uint8_t bullseye_flags;
+    /* Bullseye reference UID (anchor marker). Empty = anchor is self. */
+    char bullseye_uid_ref[48];
+} meshtastic_DrawnShape;
+
+/* Fixed point of interest: spot marker, waypoint, checkpoint, 2525 symbol,
+ or custom icon.
+
+ Covers CoT types b-m-p-s-m, b-m-p-w, b-m-p-c, b-m-p-s-p-i, b-m-p-s-p-loc,
+ plus a-u-G / a-f-G / a-h-G / a-n-G with iconset paths. The marker position
+ is carried on TAKPacketV2.latitude_i/longitude_i; fields below carry only
+ the marker-specific metadata. */
+typedef struct _meshtastic_Marker {
+    /* Marker kind */
+    meshtastic_Marker_Kind kind;
+    /* Marker color as a named palette entry. If Unspecifed_Color, the exact
+ ARGB is in color_argb. */
+    meshtastic_Team color;
+    /* Marker color exact ARGB bit pattern. Always populated on the wire. */
+    uint32_t color_argb;
+    /* Status readiness flag (ATAK <status readiness="true"/>). */
+    bool readiness;
+    /* Parent link UID (ATAK <link uid=... relation="p-p"/>). Empty = no parent.
+ For spot/waypoint markers this is typically the producing TAK user's UID. */
+    char parent_uid[48];
+    /* Parent CoT type (e.g. "a-f-G-U-C"). Usually the parent TAK user's type. */
+    char parent_type[24];
+    /* Parent callsign (e.g. "HOPE"). */
+    char parent_callsign[24];
+    /* Iconset path stored verbatim. ATAK emits three flavors:
+   Kind_Symbol2525    -> "COT_MAPPING_2525B/<cot-type-prefix>/<cot-type>"
+   Kind_SpotMap       -> "COT_MAPPING_SPOTMAP/<cot-type>/<argb>"
+   Kind_CustomIcon    -> "<UUID>/<GroupName>/<filename>.png"
+ Stored end-to-end without prefix stripping; the ~19 bytes saved by
+ stripping well-known prefixes are not worth the builder-side bug
+ surface, and the dict compresses the repetition effectively. */
+    char iconset[80];
+} meshtastic_Marker;
+
+/* Range and bearing measurement line from the event anchor to a target point.
+
+ Covers CoT type u-rb-a. The anchor position is on
+ TAKPacketV2.latitude_i/longitude_i; the target endpoint is carried as a
+ CotGeoPoint — same delta-from-anchor encoding used by DrawnShape.vertices
+ so a self-anchored RAB (common case) encodes in zero bytes. */
+typedef struct _meshtastic_RangeAndBearing {
+    /* Target/anchor endpoint (delta-encoded from TAKPacketV2.latitude_i/longitude_i). */
+    bool has_anchor;
+    meshtastic_CotGeoPoint anchor;
+    /* Anchor UID (from <link uid="anchor-1"/>). Empty = free-standing. */
+    char anchor_uid[48];
+    /* Range in centimeters (value * 100). Range 0..4294 km. */
+    uint32_t range_cm;
+    /* Bearing in degrees * 100 (0..36000). */
+    uint16_t bearing_cdeg;
+    /* Stroke color as a Team palette entry. See DrawnShape.stroke_color doc. */
+    meshtastic_Team stroke_color;
+    /* Stroke color exact ARGB fallback. */
+    uint32_t stroke_argb;
+    /* Stroke weight * 10 (e.g. 30 = 3.0). */
+    uint16_t stroke_weight_x10;
+} meshtastic_RangeAndBearing;
+
+/* Route waypoint or control point. Each link corresponds to one ATAK
+ <link type=... point=...> entry inside the b-m-r event. */
+typedef struct _meshtastic_Route_Link {
+    /* Waypoint position (delta-encoded from TAKPacketV2.latitude_i/longitude_i). */
+    bool has_point;
+    meshtastic_CotGeoPoint point;
+    /* Optional UID (empty = receiver derives). */
+    char uid[48];
+    /* Optional display callsign (e.g. "CP1"). Empty for unnamed control points. */
+    char callsign[16];
+    /* Link role: 0 = waypoint (b-m-p-w), 1 = checkpoint (b-m-p-c). */
+    uint8_t link_type;
+} meshtastic_Route_Link;
+
+/* Named route consisting of ordered waypoints and control points.
+
+ Covers CoT type b-m-r. The first waypoint's position is on
+ TAKPacketV2.latitude_i/longitude_i; subsequent waypoints and checkpoints
+ are in `links`. Link count is capped at 16 by the nanopb pool; senders
+ MUST truncate longer routes and set `truncated = true`. */
+typedef struct _meshtastic_Route {
+    /* Travel method */
+    meshtastic_Route_Method method;
+    /* Direction (infil/exfil) */
+    meshtastic_Route_Direction direction;
+    /* Waypoint name prefix (e.g. "CP"). */
+    char prefix[8];
+    /* Stroke weight * 10 (e.g. 30 = 3.0). 0 = default. */
+    uint16_t stroke_weight_x10;
+    /* Ordered list of route control points. Capped at 16. */
+    pb_size_t links_count;
+    meshtastic_Route_Link links[16];
+    /* True if the sender truncated `links` to fit the pool. */
+    bool truncated;
+} meshtastic_Route;
+
+/* 9-line MEDEVAC request (CoT type b-r-f-h-c).
+
+ Mirrors the ATAK MedLine tool's <_medevac_> detail element. Every field
+ is optional (proto3 default); senders omit lines they don't have. The
+ envelope (TAKPacketV2.uid, cot_type_id=b-r-f-h-c, latitude_i/longitude_i,
+ altitude, callsign) carries Line 1 (location) and Line 2 (callsign).
+
+ All numeric fields are tight varints so a complete 9-line request fits
+ in well under 100 bytes of proto on the wire. */
+typedef struct _meshtastic_CasevacReport {
+    /* Line 3: precedence / urgency. */
+    meshtastic_CasevacReport_Precedence precedence;
+    /* Line 4: special equipment required, as a bitfield.
+   bit 0: none
+   bit 1: hoist
+   bit 2: extraction equipment
+   bit 3: ventilator
+   bit 4: blood */
+    uint8_t equipment_flags;
+    /* Line 5: number of litter (stretcher-bound) patients. */
+    uint8_t litter_patients;
+    /* Line 5: number of ambulatory (walking-wounded) patients. */
+    uint8_t ambulatory_patients;
+    /* Line 6: security situation at the PZ. */
+    meshtastic_CasevacReport_Security security;
+    /* Line 7: HLZ marking method. */
+    meshtastic_CasevacReport_HlzMarking hlz_marking;
+    /* Line 7 supplementary: short free-text describing the zone marker
+ (e.g. "Green smoke", "VS-17 panel west"). Capped tight in options. */
+    char zone_marker[16];
+    /* --- Line 8: patient nationality counts --- */
+    uint8_t us_military;
+    uint8_t us_civilian;
+    uint8_t non_us_military;
+    uint8_t non_us_civilian;
+    uint8_t epw; /* enemy prisoner of war */
+    uint8_t child;
+    /* Line 9: terrain and obstacles at the PZ, as a bitfield.
+   bit 0: slope
+   bit 1: rough
+   bit 2: loose
+   bit 3: trees
+   bit 4: wires
+   bit 5: other */
+    uint8_t terrain_flags;
+    /* Line 2: radio frequency / callsign metadata (e.g. "38.90 Mhz" or
+ "Victor 6"). Capped tight in options. */
+    char frequency[16];
+    /* Short title / MEDEVAC identifier (e.g. "EAGLE.15.181230"). Usually the
+ same as the envelope callsign but ATAK sometimes carries a distinct
+ ops-number here. */
+    pb_callback_t title;
+    /* Primary medline free-text — the single most clinically important line
+ on a MEDLINE form (e.g. "2 urgent litter patients, smoke on approach").
+ MUST be preserved under MTU pressure as long as any casevac is sent. */
+    pb_callback_t medline_remarks;
+    /* Line 3 (newer ATAK format): patient counts by precedence level.
+ Coexists with the enum-style `precedence` field (tag 1) — older ATAK
+ emits a single enum, newer ATAK emits these counts, and both can be
+ set simultaneously. Senders populate whichever style(s) the source
+ XML had; receivers prefer counts when non-zero. */
+    uint32_t urgent_count;
+    uint32_t urgent_surgical_count;
+    uint32_t priority_count;
+    uint32_t routine_count;
+    uint32_t convenience_count;
+    /* Line 4 supplementary: free-text description of non-standard equipment
+ (e.g. "Blood warmer"). Pairs with the `equipment_flags` bitfield. */
+    pb_callback_t equipment_detail;
+    /* Line 1 override: MGRS grid when distinct from the event anchor point
+ (e.g. "34T CQ 12345 67890"). Event lat/lon/hae still carries the
+ numeric location; this field preserves the exact MGRS string the
+ medic entered. */
+    pb_callback_t zone_protected_coord;
+    /* Line 9 supplementary: slope direction (e.g. "N", "NE", "SSW") when
+ `terrain_flags` bit 0 (slope) is set. */
+    pb_callback_t terrain_slope_dir;
+    /* Line 9 supplementary: free-text description of "other" terrain hazards
+ (e.g. "Loose debris on west edge") when `terrain_flags` bit 5 (other)
+ is set. Tier-2 strippable under MTU pressure. */
+    pb_callback_t terrain_other_detail;
+    /* Line 7 supplementary: how the zone is being marked right now
+ (e.g. "Orange smoke", "VS-17 panel"). Complements the structured
+ `hlz_marking` enum with a specific human-readable description. */
+    pb_callback_t marked_by;
+    /* Nearby obstacles on the approach (e.g. "Power lines north of HLZ"). */
+    pb_callback_t obstacles;
+    /* Wind direction and speed (e.g. "270 at 12 kts"). */
+    pb_callback_t winds_are_from;
+    /* Friendly forces posture near the pickup zone
+ (e.g. "Squad east of HLZ"). */
+    pb_callback_t friendlies;
+    /* Known or suspected enemy positions near the pickup zone
+ (e.g. "Possible enemy on south ridge"). */
+    pb_callback_t enemy;
+    /* Free-text description of the HLZ itself
+ (e.g. "Primary HLZ is soccer field"). */
+    pb_callback_t hlz_remarks;
+    /* Per-patient clinical records. Each entry is one patient's ZMIST card
+ (Zap number / Mechanism / Injuries / Signs / Treatment). Repeatable —
+ a mass-casualty event can carry 1-6 entries in practice, limited by
+ the 237 B LoRa MTU. */
+    pb_callback_t zmist;
+} meshtastic_CasevacReport;
+
+/* Per-patient clinical summary record — one entry per patient in a CASEVAC.
+ Maps directly to ATAK's <zMist> child element inside <zMistsMap>.
+ All fields are optional free-text; senders populate what they have. */
+typedef struct _meshtastic_ZMistEntry {
+    /* Patient identifier / sequence label (e.g. "ZMIST-1", "ZMIST-2"). */
+    pb_callback_t title;
+    /* Zap number — unique patient tracking ID (often a terse code like
+ "Gunshot" or a serial). */
+    pb_callback_t z;
+    /* Mechanism of injury (e.g. "Penetrating trauma", "Blast injury"). */
+    pb_callback_t m;
+    /* Injuries observed (e.g. "Left thigh", "Concussion"). */
+    pb_callback_t i;
+    /* Signs / vital stats (e.g. "Stable", "Priority", "BP 110/70"). */
+    pb_callback_t s;
+    /* Treatment given (e.g. "Tourniquet 1810Z", "O2 administered"). */
+    pb_callback_t t;
+} meshtastic_ZMistEntry;
+
+/* Emergency alert / 911 beacon (CoT types b-a-o-tbl, b-a-o-pan, b-a-o-opn,
+ b-a-o-can, b-a-o-c, b-a-g).
+
+ Small, high-priority structured record. The CoT type string is still set
+ on cot_type_id so receivers that ignore payload_variant can still display
+ the alert from the enum alone; the typed fields let modern receivers show
+ the authoring unit and handle cancel-referencing without XML parsing. */
+typedef struct _meshtastic_EmergencyAlert {
+    /* Alert discriminator. */
+    meshtastic_EmergencyAlert_Type type;
+    /* UID of the unit that raised the alert. Often the same as
+ TAKPacketV2.uid but can be a parent device uid when a tracker raises
+ an alert on behalf of a dismount. */
+    char authoring_uid[48];
+    /* For Type_Cancel: the uid of the alert being cancelled. Empty for
+ non-cancel alert types. */
+    char cancel_reference_uid[48];
+} meshtastic_EmergencyAlert;
+
+/* Task / engage request (CoT type t-s).
+
+ Mirrors ATAK's TaskCotReceiver / CotTaskBuilder workflow. The envelope
+ carries the task's originating uid (implicit requester), position, and
+ creation time; the fields below carry structured metadata the raw-detail
+ fallback currently loses.
+
+ Fields are deliberately lean — this variant is closer to the MTU ceiling
+ than the others, so every string is capped in options. */
+typedef struct _meshtastic_TaskRequest {
+    /* Short tag for the task category (e.g. "engage", "observe", "recon",
+ "rescue"). Free text on the wire so ATAK-specific task taxonomies
+ don't need proto coordination; capped tight in options. */
+    char task_type[12];
+    /* UID of the target / map item being tasked. */
+    char target_uid[32];
+    /* UID of the assigned unit. Empty = unassigned / broadcast task. */
+    char assignee_uid[32];
+    meshtastic_TaskRequest_Priority priority;
+    meshtastic_TaskRequest_Status status;
+    /* Optional short note (reason, constraints, grid reference). Capped
+ tight in options to keep the worst-case under the LoRa MTU. */
+    char note[48];
+} meshtastic_TaskRequest;
+
+/* Weather annotation from <environment> CoT detail element.
+
+ Attaches to any TAKPacketV2 regardless of payload_variant — an Aircraft,
+ PLI, or Marker can all carry observed conditions at the emitting station.
+ ATAK-CIV ships an XSD for <environment> but no dedicated handler, so the
+ element round-trips through the generic detail pipeline; this message
+ promotes it to a first-class structured field.
+
+ Target wire cost: ~6-8 bytes compressed with a fully populated instance.
+
+ Named `TAKEnvironment` (not just `Environment`) because the bare name
+ collides with `SwiftUI.Environment` — every SwiftUI view in a consuming
+ iOS app uses the `@Environment` property wrapper, and importing the
+ generated proto module would make `Environment` ambiguous in every one
+ of those files. The `TAK` prefix matches the convention used by the
+ outer `TAKPacketV2` wrapper and is unambiguous across all target
+ languages (Swift, Kotlin, Python, TypeScript, C#). */
+typedef struct _meshtastic_TAKEnvironment {
+    /* Temperature in deci-degrees Celsius. 225 = 22.5°C.
+ Range covers -50°C to +50°C (-500 to +500) which spans every realistic
+ outdoor TAK deployment. sint32 because negative temps are common in
+ cold-weather ops. */
+    int32_t temperature_c_x10;
+    /* Wind direction in whole degrees, 0-359. "Direction FROM" per
+ meteorological convention (matches CoT / ATAK). */
+    uint32_t wind_direction_deg;
+    /* Wind speed in cm/s. Matches the unit of TAKPacketV2.speed for
+ consistency. 1200 = 12.00 m/s = ~27 mph. */
+    uint32_t wind_speed_cm_s;
+} meshtastic_TAKEnvironment;
+
+/* Sensor field-of-view cone from <sensor> CoT detail element.
+
+ Encodes the 8 geometry attributes that ATAK-CIV's SensorDetailHandler
+ reads from the wire; drops the 9 visual-styling attributes that are
+ receiver-side render hints (fovAlpha, fovRed/Green/Blue, strokeColor,
+ strokeWeight, displayMagneticReference, hideFov, fovLabels, rangeLines).
+ The receiving ATAK client restores those from its own defaults, same as
+ every other CoT carried over Meshtastic today.
+
+ Attaches to any TAKPacketV2 — a PLI with a sensor on the operator's head,
+ an Aircraft with a FLIR turret, a Marker dropped on a UAV.
+ Target wire cost: ~7-14 bytes compressed (dominated by model string). */
+typedef struct _meshtastic_SensorFov {
+    meshtastic_SensorFov_SensorType type;
+    /* Azimuth in whole degrees, 0-359. "Pointing direction" of the cone axis,
+ measured clockwise from true north. Whole degrees match ATAK-CIV's
+ SensorDetailHandler default (270°) and save varint bytes over centi-deg. */
+    uint32_t azimuth_deg;
+    /* Maximum range of the cone in meters.
+ Optional — if unset, receivers should use the ATAK-CIV default of 100m. */
+    bool has_range_m;
+    uint32_t range_m;
+    /* Horizontal field of view in whole degrees (cone's angular width).
+ ATAK-CIV default is 45°. */
+    uint32_t fov_horizontal_deg;
+    /* Vertical field of view in whole degrees. ATAK-CIV default is 45°.
+ Optional — a value of 0 means "not set / use horizontal FOV". */
+    uint32_t fov_vertical_deg;
+    /* Elevation angle in whole degrees. Positive = up, negative = down.
+ Range -90 to +90. sint32 for varint efficiency on small negatives. */
+    int32_t elevation_deg;
+    /* Roll (camera tilt) in whole degrees, -180 to +180.
+ Optional — use 0 if the sensor doesn't track roll. */
+    int32_t roll_deg;
+    /* Free-form device model identifier, e.g. "FLIR-Boson-640", "SEEK".
+ Optional — empty string means "unknown model" (ATAK-CIV default). */
+    pb_callback_t model;
+} meshtastic_SensorFov;
+
+typedef PB_BYTES_ARRAY_T(220) meshtastic_TAKPacketV2_raw_detail_t;
+/* ATAK v2 packet with expanded CoT field support and zstd dictionary compression.
+ Sent on ATAK_PLUGIN_V2 port. The wire payload is:
+   [1 byte flags][zstd-compressed TAKPacketV2 protobuf]
+ Flags byte: bits 0-5 = dictionary ID, bits 6-7 = reserved. */
+typedef struct _meshtastic_TAKPacketV2 {
+    /* Well-known CoT event type enum.
+ Use CotType_Other with cot_type_str for unknown types. */
+    meshtastic_CotType cot_type_id;
+    /* How the coordinates were generated */
+    meshtastic_CotHow how;
+    /* Callsign */
+    char callsign[120];
+    /* Team color assignment */
+    meshtastic_Team team;
+    /* Role of the group member */
+    meshtastic_MemberRole role;
+    /* Latitude, multiply by 1e-7 to get degrees in floating point */
+    int32_t latitude_i;
+    /* Longitude, multiply by 1e-7 to get degrees in floating point */
+    int32_t longitude_i;
+    /* Altitude in meters (HAE) */
+    int32_t altitude;
+    /* Speed in cm/s */
+    uint32_t speed;
+    /* Course in degrees * 100 (0-36000) */
+    uint16_t course;
+    /* Battery level 0-100 */
+    uint8_t battery;
+    /* Geopoint source */
+    meshtastic_GeoPointSource geo_src;
+    /* Altitude source */
+    meshtastic_GeoPointSource alt_src;
+    /* Device UID (UUID string or device ID like "ANDROID-xxxx") */
+    char uid[48];
+    /* Device callsign */
+    char device_callsign[120];
+    /* Stale time as seconds offset from event time */
+    uint16_t stale_seconds;
+    /* TAK client version string */
+    char tak_version[64];
+    /* TAK device model */
+    char tak_device[32];
+    /* TAK platform (ATAK-CIV, WebTAK, etc.) */
+    char tak_platform[32];
+    /* TAK OS version */
+    char tak_os[16];
+    /* Connection endpoint */
+    char endpoint[32];
+    /* Phone number */
+    char phone[20];
+    /* CoT event type string, only populated when cot_type_id is CotType_Other */
+    char cot_type_str[32];
+    /* Optional remarks / free-text annotation from the <remarks> element.
+ Populated for non-GeoChat payload types (shapes, markers, routes, etc.)
+ when the original CoT event carried non-empty remarks text.
+ GeoChat messages carry their text in GeoChat.message instead.
+ Empty string (proto3 default) means no remarks were present. */
+    pb_callback_t remarks;
+    /* Observed weather conditions (temperature, wind). From <environment>.
+ Type is `TAKEnvironment`, not `Environment`, to avoid colliding with
+ SwiftUI's `@Environment` property wrapper in iOS consumers. */
+    bool has_environment;
+    meshtastic_TAKEnvironment environment;
+    /* Sensor field-of-view cone (camera, FLIR, laser, etc.). From <sensor>. */
+    bool has_sensor_fov;
+    meshtastic_SensorFov sensor_fov;
+    pb_size_t which_payload_variant;
+    union {
+        /* Position report (true = PLI, no extra fields beyond the common ones above) */
+        bool pli;
+        /* ATAK GeoChat message */
+        meshtastic_GeoChat chat;
+        /* Aircraft track data (ADS-B, military air) */
+        meshtastic_AircraftTrack aircraft;
+        /* Generic CoT detail XML for unmapped types. Kept as a fallback for CoT
+     types not yet promoted to a typed variant; drawings, markers, ranging
+     tools, and routes have dedicated variants below and should not land here. */
+        meshtastic_TAKPacketV2_raw_detail_t raw_detail;
+        /* User-drawn tactical graphic: circle, rectangle, polygon, polyline,
+     telestration, ranging circle, or bullseye. See DrawnShape. */
+        meshtastic_DrawnShape shape;
+        /* Fixed point of interest: spot marker, waypoint, checkpoint, 2525
+     symbol, or custom icon. See Marker. */
+        meshtastic_Marker marker;
+        /* Range and bearing measurement line. See RangeAndBearing. */
+        meshtastic_RangeAndBearing rab;
+        /* Named route with ordered waypoints and control points. See Route. */
+        meshtastic_Route route;
+        /* 9-line MEDEVAC request. See CasevacReport. */
+        meshtastic_CasevacReport casevac;
+        /* Emergency beacon / 911 alert. See EmergencyAlert. */
+        meshtastic_EmergencyAlert emergency;
+        /* Task / engage request. See TaskRequest. */
+        meshtastic_TaskRequest task;
+    } payload_variant;
+} meshtastic_TAKPacketV2;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -160,7 +1180,72 @@ extern "C" {
 #define _meshtastic_MemberRole_MAX meshtastic_MemberRole_K9
 #define _meshtastic_MemberRole_ARRAYSIZE ((meshtastic_MemberRole)(meshtastic_MemberRole_K9+1))
 
+#define _meshtastic_CotHow_MIN meshtastic_CotHow_CotHow_Unspecified
+#define _meshtastic_CotHow_MAX meshtastic_CotHow_CotHow_m_s
+#define _meshtastic_CotHow_ARRAYSIZE ((meshtastic_CotHow)(meshtastic_CotHow_CotHow_m_s+1))
 
+#define _meshtastic_CotType_MIN meshtastic_CotType_CotType_Other
+#define _meshtastic_CotType_MAX meshtastic_CotType_CotType_t_s
+#define _meshtastic_CotType_ARRAYSIZE ((meshtastic_CotType)(meshtastic_CotType_CotType_t_s+1))
+
+#define _meshtastic_GeoPointSource_MIN meshtastic_GeoPointSource_GeoPointSource_Unspecified
+#define _meshtastic_GeoPointSource_MAX meshtastic_GeoPointSource_GeoPointSource_NETWORK
+#define _meshtastic_GeoPointSource_ARRAYSIZE ((meshtastic_GeoPointSource)(meshtastic_GeoPointSource_GeoPointSource_NETWORK+1))
+
+#define _meshtastic_GeoChat_ReceiptType_MIN meshtastic_GeoChat_ReceiptType_ReceiptType_None
+#define _meshtastic_GeoChat_ReceiptType_MAX meshtastic_GeoChat_ReceiptType_ReceiptType_Read
+#define _meshtastic_GeoChat_ReceiptType_ARRAYSIZE ((meshtastic_GeoChat_ReceiptType)(meshtastic_GeoChat_ReceiptType_ReceiptType_Read+1))
+
+#define _meshtastic_DrawnShape_Kind_MIN meshtastic_DrawnShape_Kind_Kind_Unspecified
+#define _meshtastic_DrawnShape_Kind_MAX meshtastic_DrawnShape_Kind_Kind_Vehicle3D
+#define _meshtastic_DrawnShape_Kind_ARRAYSIZE ((meshtastic_DrawnShape_Kind)(meshtastic_DrawnShape_Kind_Kind_Vehicle3D+1))
+
+#define _meshtastic_DrawnShape_StyleMode_MIN meshtastic_DrawnShape_StyleMode_StyleMode_Unspecified
+#define _meshtastic_DrawnShape_StyleMode_MAX meshtastic_DrawnShape_StyleMode_StyleMode_StrokeAndFill
+#define _meshtastic_DrawnShape_StyleMode_ARRAYSIZE ((meshtastic_DrawnShape_StyleMode)(meshtastic_DrawnShape_StyleMode_StyleMode_StrokeAndFill+1))
+
+#define _meshtastic_Marker_Kind_MIN meshtastic_Marker_Kind_Kind_Unspecified
+#define _meshtastic_Marker_Kind_MAX meshtastic_Marker_Kind_Kind_ImageMarker
+#define _meshtastic_Marker_Kind_ARRAYSIZE ((meshtastic_Marker_Kind)(meshtastic_Marker_Kind_Kind_ImageMarker+1))
+
+#define _meshtastic_Route_Method_MIN meshtastic_Route_Method_Method_Unspecified
+#define _meshtastic_Route_Method_MAX meshtastic_Route_Method_Method_Watercraft
+#define _meshtastic_Route_Method_ARRAYSIZE ((meshtastic_Route_Method)(meshtastic_Route_Method_Method_Watercraft+1))
+
+#define _meshtastic_Route_Direction_MIN meshtastic_Route_Direction_Direction_Unspecified
+#define _meshtastic_Route_Direction_MAX meshtastic_Route_Direction_Direction_Exfil
+#define _meshtastic_Route_Direction_ARRAYSIZE ((meshtastic_Route_Direction)(meshtastic_Route_Direction_Direction_Exfil+1))
+
+#define _meshtastic_CasevacReport_Precedence_MIN meshtastic_CasevacReport_Precedence_Precedence_Unspecified
+#define _meshtastic_CasevacReport_Precedence_MAX meshtastic_CasevacReport_Precedence_Precedence_Convenience
+#define _meshtastic_CasevacReport_Precedence_ARRAYSIZE ((meshtastic_CasevacReport_Precedence)(meshtastic_CasevacReport_Precedence_Precedence_Convenience+1))
+
+#define _meshtastic_CasevacReport_HlzMarking_MIN meshtastic_CasevacReport_HlzMarking_HlzMarking_Unspecified
+#define _meshtastic_CasevacReport_HlzMarking_MAX meshtastic_CasevacReport_HlzMarking_HlzMarking_Other
+#define _meshtastic_CasevacReport_HlzMarking_ARRAYSIZE ((meshtastic_CasevacReport_HlzMarking)(meshtastic_CasevacReport_HlzMarking_HlzMarking_Other+1))
+
+#define _meshtastic_CasevacReport_Security_MIN meshtastic_CasevacReport_Security_Security_Unspecified
+#define _meshtastic_CasevacReport_Security_MAX meshtastic_CasevacReport_Security_Security_EnemyInArmedContact
+#define _meshtastic_CasevacReport_Security_ARRAYSIZE ((meshtastic_CasevacReport_Security)(meshtastic_CasevacReport_Security_Security_EnemyInArmedContact+1))
+
+#define _meshtastic_EmergencyAlert_Type_MIN meshtastic_EmergencyAlert_Type_Type_Unspecified
+#define _meshtastic_EmergencyAlert_Type_MAX meshtastic_EmergencyAlert_Type_Type_Cancel
+#define _meshtastic_EmergencyAlert_Type_ARRAYSIZE ((meshtastic_EmergencyAlert_Type)(meshtastic_EmergencyAlert_Type_Type_Cancel+1))
+
+#define _meshtastic_TaskRequest_Priority_MIN meshtastic_TaskRequest_Priority_Priority_Unspecified
+#define _meshtastic_TaskRequest_Priority_MAX meshtastic_TaskRequest_Priority_Priority_Critical
+#define _meshtastic_TaskRequest_Priority_ARRAYSIZE ((meshtastic_TaskRequest_Priority)(meshtastic_TaskRequest_Priority_Priority_Critical+1))
+
+#define _meshtastic_TaskRequest_Status_MIN meshtastic_TaskRequest_Status_Status_Unspecified
+#define _meshtastic_TaskRequest_Status_MAX meshtastic_TaskRequest_Status_Status_Cancelled
+#define _meshtastic_TaskRequest_Status_ARRAYSIZE ((meshtastic_TaskRequest_Status)(meshtastic_TaskRequest_Status_Status_Cancelled+1))
+
+#define _meshtastic_SensorFov_SensorType_MIN meshtastic_SensorFov_SensorType_SensorType_Unspecified
+#define _meshtastic_SensorFov_SensorType_MAX meshtastic_SensorFov_SensorType_SensorType_Other
+#define _meshtastic_SensorFov_SensorType_ARRAYSIZE ((meshtastic_SensorFov_SensorType)(meshtastic_SensorFov_SensorType_SensorType_Other+1))
+
+
+#define meshtastic_GeoChat_receipt_type_ENUMTYPE meshtastic_GeoChat_ReceiptType
 
 #define meshtastic_Group_role_ENUMTYPE meshtastic_MemberRole
 #define meshtastic_Group_team_ENUMTYPE meshtastic_Team
@@ -169,24 +1254,90 @@ extern "C" {
 
 
 
+
+#define meshtastic_DrawnShape_kind_ENUMTYPE meshtastic_DrawnShape_Kind
+#define meshtastic_DrawnShape_style_ENUMTYPE meshtastic_DrawnShape_StyleMode
+#define meshtastic_DrawnShape_stroke_color_ENUMTYPE meshtastic_Team
+#define meshtastic_DrawnShape_fill_color_ENUMTYPE meshtastic_Team
+
+#define meshtastic_Marker_kind_ENUMTYPE meshtastic_Marker_Kind
+#define meshtastic_Marker_color_ENUMTYPE meshtastic_Team
+
+#define meshtastic_RangeAndBearing_stroke_color_ENUMTYPE meshtastic_Team
+
+#define meshtastic_Route_method_ENUMTYPE meshtastic_Route_Method
+#define meshtastic_Route_direction_ENUMTYPE meshtastic_Route_Direction
+
+
+#define meshtastic_CasevacReport_precedence_ENUMTYPE meshtastic_CasevacReport_Precedence
+#define meshtastic_CasevacReport_security_ENUMTYPE meshtastic_CasevacReport_Security
+#define meshtastic_CasevacReport_hlz_marking_ENUMTYPE meshtastic_CasevacReport_HlzMarking
+
+
+#define meshtastic_EmergencyAlert_type_ENUMTYPE meshtastic_EmergencyAlert_Type
+
+#define meshtastic_TaskRequest_priority_ENUMTYPE meshtastic_TaskRequest_Priority
+#define meshtastic_TaskRequest_status_ENUMTYPE meshtastic_TaskRequest_Status
+
+
+#define meshtastic_SensorFov_type_ENUMTYPE meshtastic_SensorFov_SensorType
+
+#define meshtastic_TAKPacketV2_cot_type_id_ENUMTYPE meshtastic_CotType
+#define meshtastic_TAKPacketV2_how_ENUMTYPE meshtastic_CotHow
+#define meshtastic_TAKPacketV2_team_ENUMTYPE meshtastic_Team
+#define meshtastic_TAKPacketV2_role_ENUMTYPE meshtastic_MemberRole
+#define meshtastic_TAKPacketV2_geo_src_ENUMTYPE meshtastic_GeoPointSource
+#define meshtastic_TAKPacketV2_alt_src_ENUMTYPE meshtastic_GeoPointSource
+
+
 /* Initializer values for message structs */
 #define meshtastic_TAKPacket_init_default        {0, false, meshtastic_Contact_init_default, false, meshtastic_Group_init_default, false, meshtastic_Status_init_default, 0, {meshtastic_PLI_init_default}}
-#define meshtastic_GeoChat_init_default          {"", false, "", false, ""}
+#define meshtastic_GeoChat_init_default          {"", false, "", false, "", "", _meshtastic_GeoChat_ReceiptType_MIN}
 #define meshtastic_Group_init_default            {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_default           {0}
 #define meshtastic_Contact_init_default          {"", ""}
 #define meshtastic_PLI_init_default              {0, 0, 0, 0, 0}
+#define meshtastic_AircraftTrack_init_default    {"", "", "", "", 0, "", 0, 0, ""}
+#define meshtastic_CotGeoPoint_init_default      {0, 0}
+#define meshtastic_DrawnShape_init_default       {_meshtastic_DrawnShape_Kind_MIN, _meshtastic_DrawnShape_StyleMode_MIN, 0, 0, 0, _meshtastic_Team_MIN, 0, 0, _meshtastic_Team_MIN, 0, 0, 0, {meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default}, 0, 0, 0, 0, ""}
+#define meshtastic_Marker_init_default           {_meshtastic_Marker_Kind_MIN, _meshtastic_Team_MIN, 0, 0, "", "", "", ""}
+#define meshtastic_RangeAndBearing_init_default  {false, meshtastic_CotGeoPoint_init_default, "", 0, 0, _meshtastic_Team_MIN, 0, 0}
+#define meshtastic_Route_init_default            {_meshtastic_Route_Method_MIN, _meshtastic_Route_Direction_MIN, "", 0, 0, {meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default}, 0}
+#define meshtastic_Route_Link_init_default       {false, meshtastic_CotGeoPoint_init_default, "", "", 0}
+#define meshtastic_CasevacReport_init_default    {_meshtastic_CasevacReport_Precedence_MIN, 0, 0, 0, _meshtastic_CasevacReport_Security_MIN, _meshtastic_CasevacReport_HlzMarking_MIN, "", 0, 0, 0, 0, 0, 0, 0, "", {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_ZMistEntry_init_default       {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_EmergencyAlert_init_default   {_meshtastic_EmergencyAlert_Type_MIN, "", ""}
+#define meshtastic_TaskRequest_init_default      {"", "", "", _meshtastic_TaskRequest_Priority_MIN, _meshtastic_TaskRequest_Status_MIN, ""}
+#define meshtastic_TAKEnvironment_init_default   {0, 0, 0}
+#define meshtastic_SensorFov_init_default        {_meshtastic_SensorFov_SensorType_MIN, 0, false, 0, 0, 0, 0, 0, {{NULL}, NULL}}
+#define meshtastic_TAKPacketV2_init_default      {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_default, false, meshtastic_SensorFov_init_default, 0, {0}}
 #define meshtastic_TAKPacket_init_zero           {0, false, meshtastic_Contact_init_zero, false, meshtastic_Group_init_zero, false, meshtastic_Status_init_zero, 0, {meshtastic_PLI_init_zero}}
-#define meshtastic_GeoChat_init_zero             {"", false, "", false, ""}
+#define meshtastic_GeoChat_init_zero             {"", false, "", false, "", "", _meshtastic_GeoChat_ReceiptType_MIN}
 #define meshtastic_Group_init_zero               {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_zero              {0}
 #define meshtastic_Contact_init_zero             {"", ""}
 #define meshtastic_PLI_init_zero                 {0, 0, 0, 0, 0}
+#define meshtastic_AircraftTrack_init_zero       {"", "", "", "", 0, "", 0, 0, ""}
+#define meshtastic_CotGeoPoint_init_zero         {0, 0}
+#define meshtastic_DrawnShape_init_zero          {_meshtastic_DrawnShape_Kind_MIN, _meshtastic_DrawnShape_StyleMode_MIN, 0, 0, 0, _meshtastic_Team_MIN, 0, 0, _meshtastic_Team_MIN, 0, 0, 0, {meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero}, 0, 0, 0, 0, ""}
+#define meshtastic_Marker_init_zero              {_meshtastic_Marker_Kind_MIN, _meshtastic_Team_MIN, 0, 0, "", "", "", ""}
+#define meshtastic_RangeAndBearing_init_zero     {false, meshtastic_CotGeoPoint_init_zero, "", 0, 0, _meshtastic_Team_MIN, 0, 0}
+#define meshtastic_Route_init_zero               {_meshtastic_Route_Method_MIN, _meshtastic_Route_Direction_MIN, "", 0, 0, {meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero}, 0}
+#define meshtastic_Route_Link_init_zero          {false, meshtastic_CotGeoPoint_init_zero, "", "", 0}
+#define meshtastic_CasevacReport_init_zero       {_meshtastic_CasevacReport_Precedence_MIN, 0, 0, 0, _meshtastic_CasevacReport_Security_MIN, _meshtastic_CasevacReport_HlzMarking_MIN, "", 0, 0, 0, 0, 0, 0, 0, "", {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_ZMistEntry_init_zero          {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_EmergencyAlert_init_zero      {_meshtastic_EmergencyAlert_Type_MIN, "", ""}
+#define meshtastic_TaskRequest_init_zero         {"", "", "", _meshtastic_TaskRequest_Priority_MIN, _meshtastic_TaskRequest_Status_MIN, ""}
+#define meshtastic_TAKEnvironment_init_zero      {0, 0, 0}
+#define meshtastic_SensorFov_init_zero           {_meshtastic_SensorFov_SensorType_MIN, 0, false, 0, 0, 0, 0, 0, {{NULL}, NULL}}
+#define meshtastic_TAKPacketV2_init_zero         {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_zero, false, meshtastic_SensorFov_init_zero, 0, {0}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_GeoChat_message_tag           1
 #define meshtastic_GeoChat_to_tag                2
 #define meshtastic_GeoChat_to_callsign_tag       3
+#define meshtastic_GeoChat_receipt_for_uid_tag   4
+#define meshtastic_GeoChat_receipt_type_tag      5
 #define meshtastic_Group_role_tag                1
 #define meshtastic_Group_team_tag                2
 #define meshtastic_Status_battery_tag            1
@@ -204,6 +1355,155 @@ extern "C" {
 #define meshtastic_TAKPacket_pli_tag             5
 #define meshtastic_TAKPacket_chat_tag            6
 #define meshtastic_TAKPacket_detail_tag          7
+#define meshtastic_AircraftTrack_icao_tag        1
+#define meshtastic_AircraftTrack_registration_tag 2
+#define meshtastic_AircraftTrack_flight_tag      3
+#define meshtastic_AircraftTrack_aircraft_type_tag 4
+#define meshtastic_AircraftTrack_squawk_tag      5
+#define meshtastic_AircraftTrack_category_tag    6
+#define meshtastic_AircraftTrack_rssi_x10_tag    7
+#define meshtastic_AircraftTrack_gps_tag         8
+#define meshtastic_AircraftTrack_cot_host_id_tag 9
+#define meshtastic_CotGeoPoint_lat_delta_i_tag   1
+#define meshtastic_CotGeoPoint_lon_delta_i_tag   2
+#define meshtastic_DrawnShape_kind_tag           1
+#define meshtastic_DrawnShape_style_tag          2
+#define meshtastic_DrawnShape_major_cm_tag       3
+#define meshtastic_DrawnShape_minor_cm_tag       4
+#define meshtastic_DrawnShape_angle_deg_tag      5
+#define meshtastic_DrawnShape_stroke_color_tag   6
+#define meshtastic_DrawnShape_stroke_argb_tag    7
+#define meshtastic_DrawnShape_stroke_weight_x10_tag 8
+#define meshtastic_DrawnShape_fill_color_tag     9
+#define meshtastic_DrawnShape_fill_argb_tag      10
+#define meshtastic_DrawnShape_labels_on_tag      11
+#define meshtastic_DrawnShape_vertices_tag       12
+#define meshtastic_DrawnShape_truncated_tag      13
+#define meshtastic_DrawnShape_bullseye_distance_dm_tag 14
+#define meshtastic_DrawnShape_bullseye_bearing_ref_tag 15
+#define meshtastic_DrawnShape_bullseye_flags_tag 16
+#define meshtastic_DrawnShape_bullseye_uid_ref_tag 17
+#define meshtastic_Marker_kind_tag               1
+#define meshtastic_Marker_color_tag              2
+#define meshtastic_Marker_color_argb_tag         3
+#define meshtastic_Marker_readiness_tag          4
+#define meshtastic_Marker_parent_uid_tag         5
+#define meshtastic_Marker_parent_type_tag        6
+#define meshtastic_Marker_parent_callsign_tag    7
+#define meshtastic_Marker_iconset_tag            8
+#define meshtastic_RangeAndBearing_anchor_tag    1
+#define meshtastic_RangeAndBearing_anchor_uid_tag 2
+#define meshtastic_RangeAndBearing_range_cm_tag  3
+#define meshtastic_RangeAndBearing_bearing_cdeg_tag 4
+#define meshtastic_RangeAndBearing_stroke_color_tag 5
+#define meshtastic_RangeAndBearing_stroke_argb_tag 6
+#define meshtastic_RangeAndBearing_stroke_weight_x10_tag 7
+#define meshtastic_Route_Link_point_tag          1
+#define meshtastic_Route_Link_uid_tag            2
+#define meshtastic_Route_Link_callsign_tag       3
+#define meshtastic_Route_Link_link_type_tag      4
+#define meshtastic_Route_method_tag              1
+#define meshtastic_Route_direction_tag           2
+#define meshtastic_Route_prefix_tag              3
+#define meshtastic_Route_stroke_weight_x10_tag   4
+#define meshtastic_Route_links_tag               5
+#define meshtastic_Route_truncated_tag           6
+#define meshtastic_CasevacReport_precedence_tag  1
+#define meshtastic_CasevacReport_equipment_flags_tag 2
+#define meshtastic_CasevacReport_litter_patients_tag 3
+#define meshtastic_CasevacReport_ambulatory_patients_tag 4
+#define meshtastic_CasevacReport_security_tag    5
+#define meshtastic_CasevacReport_hlz_marking_tag 6
+#define meshtastic_CasevacReport_zone_marker_tag 7
+#define meshtastic_CasevacReport_us_military_tag 8
+#define meshtastic_CasevacReport_us_civilian_tag 9
+#define meshtastic_CasevacReport_non_us_military_tag 10
+#define meshtastic_CasevacReport_non_us_civilian_tag 11
+#define meshtastic_CasevacReport_epw_tag         12
+#define meshtastic_CasevacReport_child_tag       13
+#define meshtastic_CasevacReport_terrain_flags_tag 14
+#define meshtastic_CasevacReport_frequency_tag   15
+#define meshtastic_CasevacReport_title_tag       16
+#define meshtastic_CasevacReport_medline_remarks_tag 17
+#define meshtastic_CasevacReport_urgent_count_tag 18
+#define meshtastic_CasevacReport_urgent_surgical_count_tag 19
+#define meshtastic_CasevacReport_priority_count_tag 20
+#define meshtastic_CasevacReport_routine_count_tag 21
+#define meshtastic_CasevacReport_convenience_count_tag 22
+#define meshtastic_CasevacReport_equipment_detail_tag 23
+#define meshtastic_CasevacReport_zone_protected_coord_tag 24
+#define meshtastic_CasevacReport_terrain_slope_dir_tag 25
+#define meshtastic_CasevacReport_terrain_other_detail_tag 26
+#define meshtastic_CasevacReport_marked_by_tag   27
+#define meshtastic_CasevacReport_obstacles_tag   28
+#define meshtastic_CasevacReport_winds_are_from_tag 29
+#define meshtastic_CasevacReport_friendlies_tag  30
+#define meshtastic_CasevacReport_enemy_tag       31
+#define meshtastic_CasevacReport_hlz_remarks_tag 32
+#define meshtastic_CasevacReport_zmist_tag       33
+#define meshtastic_ZMistEntry_title_tag          1
+#define meshtastic_ZMistEntry_z_tag              2
+#define meshtastic_ZMistEntry_m_tag              3
+#define meshtastic_ZMistEntry_i_tag              4
+#define meshtastic_ZMistEntry_s_tag              5
+#define meshtastic_ZMistEntry_t_tag              6
+#define meshtastic_EmergencyAlert_type_tag       1
+#define meshtastic_EmergencyAlert_authoring_uid_tag 2
+#define meshtastic_EmergencyAlert_cancel_reference_uid_tag 3
+#define meshtastic_TaskRequest_task_type_tag     1
+#define meshtastic_TaskRequest_target_uid_tag    2
+#define meshtastic_TaskRequest_assignee_uid_tag  3
+#define meshtastic_TaskRequest_priority_tag      4
+#define meshtastic_TaskRequest_status_tag        5
+#define meshtastic_TaskRequest_note_tag          6
+#define meshtastic_TAKEnvironment_temperature_c_x10_tag 1
+#define meshtastic_TAKEnvironment_wind_direction_deg_tag 2
+#define meshtastic_TAKEnvironment_wind_speed_cm_s_tag 3
+#define meshtastic_SensorFov_type_tag            1
+#define meshtastic_SensorFov_azimuth_deg_tag     2
+#define meshtastic_SensorFov_range_m_tag         3
+#define meshtastic_SensorFov_fov_horizontal_deg_tag 4
+#define meshtastic_SensorFov_fov_vertical_deg_tag 5
+#define meshtastic_SensorFov_elevation_deg_tag   6
+#define meshtastic_SensorFov_roll_deg_tag        7
+#define meshtastic_SensorFov_model_tag           8
+#define meshtastic_TAKPacketV2_cot_type_id_tag   1
+#define meshtastic_TAKPacketV2_how_tag           2
+#define meshtastic_TAKPacketV2_callsign_tag      3
+#define meshtastic_TAKPacketV2_team_tag          4
+#define meshtastic_TAKPacketV2_role_tag          5
+#define meshtastic_TAKPacketV2_latitude_i_tag    6
+#define meshtastic_TAKPacketV2_longitude_i_tag   7
+#define meshtastic_TAKPacketV2_altitude_tag      8
+#define meshtastic_TAKPacketV2_speed_tag         9
+#define meshtastic_TAKPacketV2_course_tag        10
+#define meshtastic_TAKPacketV2_battery_tag       11
+#define meshtastic_TAKPacketV2_geo_src_tag       12
+#define meshtastic_TAKPacketV2_alt_src_tag       13
+#define meshtastic_TAKPacketV2_uid_tag           14
+#define meshtastic_TAKPacketV2_device_callsign_tag 15
+#define meshtastic_TAKPacketV2_stale_seconds_tag 16
+#define meshtastic_TAKPacketV2_tak_version_tag   17
+#define meshtastic_TAKPacketV2_tak_device_tag    18
+#define meshtastic_TAKPacketV2_tak_platform_tag  19
+#define meshtastic_TAKPacketV2_tak_os_tag        20
+#define meshtastic_TAKPacketV2_endpoint_tag      21
+#define meshtastic_TAKPacketV2_phone_tag         22
+#define meshtastic_TAKPacketV2_cot_type_str_tag  23
+#define meshtastic_TAKPacketV2_remarks_tag       24
+#define meshtastic_TAKPacketV2_environment_tag   25
+#define meshtastic_TAKPacketV2_sensor_fov_tag    26
+#define meshtastic_TAKPacketV2_pli_tag           30
+#define meshtastic_TAKPacketV2_chat_tag          31
+#define meshtastic_TAKPacketV2_aircraft_tag      32
+#define meshtastic_TAKPacketV2_raw_detail_tag    33
+#define meshtastic_TAKPacketV2_shape_tag         34
+#define meshtastic_TAKPacketV2_marker_tag        35
+#define meshtastic_TAKPacketV2_rab_tag           36
+#define meshtastic_TAKPacketV2_route_tag         37
+#define meshtastic_TAKPacketV2_casevac_tag       38
+#define meshtastic_TAKPacketV2_emergency_tag     39
+#define meshtastic_TAKPacketV2_task_tag          40
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_TAKPacket_FIELDLIST(X, a) \
@@ -225,7 +1525,9 @@ X(a, STATIC,   ONEOF,    BYTES,    (payload_variant,detail,payload_variant.detai
 #define meshtastic_GeoChat_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   message,           1) \
 X(a, STATIC,   OPTIONAL, STRING,   to,                2) \
-X(a, STATIC,   OPTIONAL, STRING,   to_callsign,       3)
+X(a, STATIC,   OPTIONAL, STRING,   to_callsign,       3) \
+X(a, STATIC,   SINGULAR, STRING,   receipt_for_uid,   4) \
+X(a, STATIC,   SINGULAR, UENUM,    receipt_type,      5)
 #define meshtastic_GeoChat_CALLBACK NULL
 #define meshtastic_GeoChat_DEFAULT NULL
 
@@ -255,12 +1557,247 @@ X(a, STATIC,   SINGULAR, UINT32,   course,            5)
 #define meshtastic_PLI_CALLBACK NULL
 #define meshtastic_PLI_DEFAULT NULL
 
+#define meshtastic_AircraftTrack_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   icao,              1) \
+X(a, STATIC,   SINGULAR, STRING,   registration,      2) \
+X(a, STATIC,   SINGULAR, STRING,   flight,            3) \
+X(a, STATIC,   SINGULAR, STRING,   aircraft_type,     4) \
+X(a, STATIC,   SINGULAR, UINT32,   squawk,            5) \
+X(a, STATIC,   SINGULAR, STRING,   category,          6) \
+X(a, STATIC,   SINGULAR, SINT32,   rssi_x10,          7) \
+X(a, STATIC,   SINGULAR, BOOL,     gps,               8) \
+X(a, STATIC,   SINGULAR, STRING,   cot_host_id,       9)
+#define meshtastic_AircraftTrack_CALLBACK NULL
+#define meshtastic_AircraftTrack_DEFAULT NULL
+
+#define meshtastic_CotGeoPoint_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, SINT32,   lat_delta_i,       1) \
+X(a, STATIC,   SINGULAR, SINT32,   lon_delta_i,       2)
+#define meshtastic_CotGeoPoint_CALLBACK NULL
+#define meshtastic_CotGeoPoint_DEFAULT NULL
+
+#define meshtastic_DrawnShape_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    kind,              1) \
+X(a, STATIC,   SINGULAR, UENUM,    style,             2) \
+X(a, STATIC,   SINGULAR, UINT32,   major_cm,          3) \
+X(a, STATIC,   SINGULAR, UINT32,   minor_cm,          4) \
+X(a, STATIC,   SINGULAR, UINT32,   angle_deg,         5) \
+X(a, STATIC,   SINGULAR, UENUM,    stroke_color,      6) \
+X(a, STATIC,   SINGULAR, FIXED32,  stroke_argb,       7) \
+X(a, STATIC,   SINGULAR, UINT32,   stroke_weight_x10,   8) \
+X(a, STATIC,   SINGULAR, UENUM,    fill_color,        9) \
+X(a, STATIC,   SINGULAR, FIXED32,  fill_argb,        10) \
+X(a, STATIC,   SINGULAR, BOOL,     labels_on,        11) \
+X(a, STATIC,   REPEATED, MESSAGE,  vertices,         12) \
+X(a, STATIC,   SINGULAR, BOOL,     truncated,        13) \
+X(a, STATIC,   SINGULAR, UINT32,   bullseye_distance_dm,  14) \
+X(a, STATIC,   SINGULAR, UINT32,   bullseye_bearing_ref,  15) \
+X(a, STATIC,   SINGULAR, UINT32,   bullseye_flags,   16) \
+X(a, STATIC,   SINGULAR, STRING,   bullseye_uid_ref,  17)
+#define meshtastic_DrawnShape_CALLBACK NULL
+#define meshtastic_DrawnShape_DEFAULT NULL
+#define meshtastic_DrawnShape_vertices_MSGTYPE meshtastic_CotGeoPoint
+
+#define meshtastic_Marker_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    kind,              1) \
+X(a, STATIC,   SINGULAR, UENUM,    color,             2) \
+X(a, STATIC,   SINGULAR, FIXED32,  color_argb,        3) \
+X(a, STATIC,   SINGULAR, BOOL,     readiness,         4) \
+X(a, STATIC,   SINGULAR, STRING,   parent_uid,        5) \
+X(a, STATIC,   SINGULAR, STRING,   parent_type,       6) \
+X(a, STATIC,   SINGULAR, STRING,   parent_callsign,   7) \
+X(a, STATIC,   SINGULAR, STRING,   iconset,           8)
+#define meshtastic_Marker_CALLBACK NULL
+#define meshtastic_Marker_DEFAULT NULL
+
+#define meshtastic_RangeAndBearing_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  anchor,            1) \
+X(a, STATIC,   SINGULAR, STRING,   anchor_uid,        2) \
+X(a, STATIC,   SINGULAR, UINT32,   range_cm,          3) \
+X(a, STATIC,   SINGULAR, UINT32,   bearing_cdeg,      4) \
+X(a, STATIC,   SINGULAR, UENUM,    stroke_color,      5) \
+X(a, STATIC,   SINGULAR, FIXED32,  stroke_argb,       6) \
+X(a, STATIC,   SINGULAR, UINT32,   stroke_weight_x10,   7)
+#define meshtastic_RangeAndBearing_CALLBACK NULL
+#define meshtastic_RangeAndBearing_DEFAULT NULL
+#define meshtastic_RangeAndBearing_anchor_MSGTYPE meshtastic_CotGeoPoint
+
+#define meshtastic_Route_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    method,            1) \
+X(a, STATIC,   SINGULAR, UENUM,    direction,         2) \
+X(a, STATIC,   SINGULAR, STRING,   prefix,            3) \
+X(a, STATIC,   SINGULAR, UINT32,   stroke_weight_x10,   4) \
+X(a, STATIC,   REPEATED, MESSAGE,  links,             5) \
+X(a, STATIC,   SINGULAR, BOOL,     truncated,         6)
+#define meshtastic_Route_CALLBACK NULL
+#define meshtastic_Route_DEFAULT NULL
+#define meshtastic_Route_links_MSGTYPE meshtastic_Route_Link
+
+#define meshtastic_Route_Link_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  point,             1) \
+X(a, STATIC,   SINGULAR, STRING,   uid,               2) \
+X(a, STATIC,   SINGULAR, STRING,   callsign,          3) \
+X(a, STATIC,   SINGULAR, UINT32,   link_type,         4)
+#define meshtastic_Route_Link_CALLBACK NULL
+#define meshtastic_Route_Link_DEFAULT NULL
+#define meshtastic_Route_Link_point_MSGTYPE meshtastic_CotGeoPoint
+
+#define meshtastic_CasevacReport_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    precedence,        1) \
+X(a, STATIC,   SINGULAR, UINT32,   equipment_flags,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   litter_patients,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   ambulatory_patients,   4) \
+X(a, STATIC,   SINGULAR, UENUM,    security,          5) \
+X(a, STATIC,   SINGULAR, UENUM,    hlz_marking,       6) \
+X(a, STATIC,   SINGULAR, STRING,   zone_marker,       7) \
+X(a, STATIC,   SINGULAR, UINT32,   us_military,       8) \
+X(a, STATIC,   SINGULAR, UINT32,   us_civilian,       9) \
+X(a, STATIC,   SINGULAR, UINT32,   non_us_military,  10) \
+X(a, STATIC,   SINGULAR, UINT32,   non_us_civilian,  11) \
+X(a, STATIC,   SINGULAR, UINT32,   epw,              12) \
+X(a, STATIC,   SINGULAR, UINT32,   child,            13) \
+X(a, STATIC,   SINGULAR, UINT32,   terrain_flags,    14) \
+X(a, STATIC,   SINGULAR, STRING,   frequency,        15) \
+X(a, CALLBACK, SINGULAR, STRING,   title,            16) \
+X(a, CALLBACK, SINGULAR, STRING,   medline_remarks,  17) \
+X(a, STATIC,   SINGULAR, UINT32,   urgent_count,     18) \
+X(a, STATIC,   SINGULAR, UINT32,   urgent_surgical_count,  19) \
+X(a, STATIC,   SINGULAR, UINT32,   priority_count,   20) \
+X(a, STATIC,   SINGULAR, UINT32,   routine_count,    21) \
+X(a, STATIC,   SINGULAR, UINT32,   convenience_count,  22) \
+X(a, CALLBACK, SINGULAR, STRING,   equipment_detail,  23) \
+X(a, CALLBACK, SINGULAR, STRING,   zone_protected_coord,  24) \
+X(a, CALLBACK, SINGULAR, STRING,   terrain_slope_dir,  25) \
+X(a, CALLBACK, SINGULAR, STRING,   terrain_other_detail,  26) \
+X(a, CALLBACK, SINGULAR, STRING,   marked_by,        27) \
+X(a, CALLBACK, SINGULAR, STRING,   obstacles,        28) \
+X(a, CALLBACK, SINGULAR, STRING,   winds_are_from,   29) \
+X(a, CALLBACK, SINGULAR, STRING,   friendlies,       30) \
+X(a, CALLBACK, SINGULAR, STRING,   enemy,            31) \
+X(a, CALLBACK, SINGULAR, STRING,   hlz_remarks,      32) \
+X(a, CALLBACK, REPEATED, MESSAGE,  zmist,            33)
+#define meshtastic_CasevacReport_CALLBACK pb_default_field_callback
+#define meshtastic_CasevacReport_DEFAULT NULL
+#define meshtastic_CasevacReport_zmist_MSGTYPE meshtastic_ZMistEntry
+
+#define meshtastic_ZMistEntry_FIELDLIST(X, a) \
+X(a, CALLBACK, SINGULAR, STRING,   title,             1) \
+X(a, CALLBACK, SINGULAR, STRING,   z,                 2) \
+X(a, CALLBACK, SINGULAR, STRING,   m,                 3) \
+X(a, CALLBACK, SINGULAR, STRING,   i,                 4) \
+X(a, CALLBACK, SINGULAR, STRING,   s,                 5) \
+X(a, CALLBACK, SINGULAR, STRING,   t,                 6)
+#define meshtastic_ZMistEntry_CALLBACK pb_default_field_callback
+#define meshtastic_ZMistEntry_DEFAULT NULL
+
+#define meshtastic_EmergencyAlert_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    type,              1) \
+X(a, STATIC,   SINGULAR, STRING,   authoring_uid,     2) \
+X(a, STATIC,   SINGULAR, STRING,   cancel_reference_uid,   3)
+#define meshtastic_EmergencyAlert_CALLBACK NULL
+#define meshtastic_EmergencyAlert_DEFAULT NULL
+
+#define meshtastic_TaskRequest_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   task_type,         1) \
+X(a, STATIC,   SINGULAR, STRING,   target_uid,        2) \
+X(a, STATIC,   SINGULAR, STRING,   assignee_uid,      3) \
+X(a, STATIC,   SINGULAR, UENUM,    priority,          4) \
+X(a, STATIC,   SINGULAR, UENUM,    status,            5) \
+X(a, STATIC,   SINGULAR, STRING,   note,              6)
+#define meshtastic_TaskRequest_CALLBACK NULL
+#define meshtastic_TaskRequest_DEFAULT NULL
+
+#define meshtastic_TAKEnvironment_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, SINT32,   temperature_c_x10,   1) \
+X(a, STATIC,   SINGULAR, UINT32,   wind_direction_deg,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   wind_speed_cm_s,   3)
+#define meshtastic_TAKEnvironment_CALLBACK NULL
+#define meshtastic_TAKEnvironment_DEFAULT NULL
+
+#define meshtastic_SensorFov_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    type,              1) \
+X(a, STATIC,   SINGULAR, UINT32,   azimuth_deg,       2) \
+X(a, STATIC,   OPTIONAL, UINT32,   range_m,           3) \
+X(a, STATIC,   SINGULAR, UINT32,   fov_horizontal_deg,   4) \
+X(a, STATIC,   SINGULAR, UINT32,   fov_vertical_deg,   5) \
+X(a, STATIC,   SINGULAR, SINT32,   elevation_deg,     6) \
+X(a, STATIC,   SINGULAR, SINT32,   roll_deg,          7) \
+X(a, CALLBACK, SINGULAR, STRING,   model,             8)
+#define meshtastic_SensorFov_CALLBACK pb_default_field_callback
+#define meshtastic_SensorFov_DEFAULT NULL
+
+#define meshtastic_TAKPacketV2_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    cot_type_id,       1) \
+X(a, STATIC,   SINGULAR, UENUM,    how,               2) \
+X(a, STATIC,   SINGULAR, STRING,   callsign,          3) \
+X(a, STATIC,   SINGULAR, UENUM,    team,              4) \
+X(a, STATIC,   SINGULAR, UENUM,    role,              5) \
+X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        6) \
+X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       7) \
+X(a, STATIC,   SINGULAR, SINT32,   altitude,          8) \
+X(a, STATIC,   SINGULAR, UINT32,   speed,             9) \
+X(a, STATIC,   SINGULAR, UINT32,   course,           10) \
+X(a, STATIC,   SINGULAR, UINT32,   battery,          11) \
+X(a, STATIC,   SINGULAR, UENUM,    geo_src,          12) \
+X(a, STATIC,   SINGULAR, UENUM,    alt_src,          13) \
+X(a, STATIC,   SINGULAR, STRING,   uid,              14) \
+X(a, STATIC,   SINGULAR, STRING,   device_callsign,  15) \
+X(a, STATIC,   SINGULAR, UINT32,   stale_seconds,    16) \
+X(a, STATIC,   SINGULAR, STRING,   tak_version,      17) \
+X(a, STATIC,   SINGULAR, STRING,   tak_device,       18) \
+X(a, STATIC,   SINGULAR, STRING,   tak_platform,     19) \
+X(a, STATIC,   SINGULAR, STRING,   tak_os,           20) \
+X(a, STATIC,   SINGULAR, STRING,   endpoint,         21) \
+X(a, STATIC,   SINGULAR, STRING,   phone,            22) \
+X(a, STATIC,   SINGULAR, STRING,   cot_type_str,     23) \
+X(a, CALLBACK, SINGULAR, STRING,   remarks,          24) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  environment,      25) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  sensor_fov,       26) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,pli,payload_variant.pli),  30) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,chat,payload_variant.chat),  31) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,aircraft,payload_variant.aircraft),  32) \
+X(a, STATIC,   ONEOF,    BYTES,    (payload_variant,raw_detail,payload_variant.raw_detail),  33) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,shape,payload_variant.shape),  34) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,marker,payload_variant.marker),  35) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,rab,payload_variant.rab),  36) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,route,payload_variant.route),  37) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,casevac,payload_variant.casevac),  38) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,emergency,payload_variant.emergency),  39) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,task,payload_variant.task),  40)
+#define meshtastic_TAKPacketV2_CALLBACK pb_default_field_callback
+#define meshtastic_TAKPacketV2_DEFAULT NULL
+#define meshtastic_TAKPacketV2_environment_MSGTYPE meshtastic_TAKEnvironment
+#define meshtastic_TAKPacketV2_sensor_fov_MSGTYPE meshtastic_SensorFov
+#define meshtastic_TAKPacketV2_payload_variant_chat_MSGTYPE meshtastic_GeoChat
+#define meshtastic_TAKPacketV2_payload_variant_aircraft_MSGTYPE meshtastic_AircraftTrack
+#define meshtastic_TAKPacketV2_payload_variant_shape_MSGTYPE meshtastic_DrawnShape
+#define meshtastic_TAKPacketV2_payload_variant_marker_MSGTYPE meshtastic_Marker
+#define meshtastic_TAKPacketV2_payload_variant_rab_MSGTYPE meshtastic_RangeAndBearing
+#define meshtastic_TAKPacketV2_payload_variant_route_MSGTYPE meshtastic_Route
+#define meshtastic_TAKPacketV2_payload_variant_casevac_MSGTYPE meshtastic_CasevacReport
+#define meshtastic_TAKPacketV2_payload_variant_emergency_MSGTYPE meshtastic_EmergencyAlert
+#define meshtastic_TAKPacketV2_payload_variant_task_MSGTYPE meshtastic_TaskRequest
+
 extern const pb_msgdesc_t meshtastic_TAKPacket_msg;
 extern const pb_msgdesc_t meshtastic_GeoChat_msg;
 extern const pb_msgdesc_t meshtastic_Group_msg;
 extern const pb_msgdesc_t meshtastic_Status_msg;
 extern const pb_msgdesc_t meshtastic_Contact_msg;
 extern const pb_msgdesc_t meshtastic_PLI_msg;
+extern const pb_msgdesc_t meshtastic_AircraftTrack_msg;
+extern const pb_msgdesc_t meshtastic_CotGeoPoint_msg;
+extern const pb_msgdesc_t meshtastic_DrawnShape_msg;
+extern const pb_msgdesc_t meshtastic_Marker_msg;
+extern const pb_msgdesc_t meshtastic_RangeAndBearing_msg;
+extern const pb_msgdesc_t meshtastic_Route_msg;
+extern const pb_msgdesc_t meshtastic_Route_Link_msg;
+extern const pb_msgdesc_t meshtastic_CasevacReport_msg;
+extern const pb_msgdesc_t meshtastic_ZMistEntry_msg;
+extern const pb_msgdesc_t meshtastic_EmergencyAlert_msg;
+extern const pb_msgdesc_t meshtastic_TaskRequest_msg;
+extern const pb_msgdesc_t meshtastic_TAKEnvironment_msg;
+extern const pb_msgdesc_t meshtastic_SensorFov_msg;
+extern const pb_msgdesc_t meshtastic_TAKPacketV2_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_TAKPacket_fields &meshtastic_TAKPacket_msg
@@ -269,15 +1806,43 @@ extern const pb_msgdesc_t meshtastic_PLI_msg;
 #define meshtastic_Status_fields &meshtastic_Status_msg
 #define meshtastic_Contact_fields &meshtastic_Contact_msg
 #define meshtastic_PLI_fields &meshtastic_PLI_msg
+#define meshtastic_AircraftTrack_fields &meshtastic_AircraftTrack_msg
+#define meshtastic_CotGeoPoint_fields &meshtastic_CotGeoPoint_msg
+#define meshtastic_DrawnShape_fields &meshtastic_DrawnShape_msg
+#define meshtastic_Marker_fields &meshtastic_Marker_msg
+#define meshtastic_RangeAndBearing_fields &meshtastic_RangeAndBearing_msg
+#define meshtastic_Route_fields &meshtastic_Route_msg
+#define meshtastic_Route_Link_fields &meshtastic_Route_Link_msg
+#define meshtastic_CasevacReport_fields &meshtastic_CasevacReport_msg
+#define meshtastic_ZMistEntry_fields &meshtastic_ZMistEntry_msg
+#define meshtastic_EmergencyAlert_fields &meshtastic_EmergencyAlert_msg
+#define meshtastic_TaskRequest_fields &meshtastic_TaskRequest_msg
+#define meshtastic_TAKEnvironment_fields &meshtastic_TAKEnvironment_msg
+#define meshtastic_SensorFov_fields &meshtastic_SensorFov_msg
+#define meshtastic_TAKPacketV2_fields &meshtastic_TAKPacketV2_msg
 
 /* Maximum encoded size of messages (where known) */
-#define MESHTASTIC_MESHTASTIC_ATAK_PB_H_MAX_SIZE meshtastic_TAKPacket_size
+/* meshtastic_CasevacReport_size depends on runtime parameters */
+/* meshtastic_ZMistEntry_size depends on runtime parameters */
+/* meshtastic_SensorFov_size depends on runtime parameters */
+/* meshtastic_TAKPacketV2_size depends on runtime parameters */
+#define MESHTASTIC_MESHTASTIC_ATAK_PB_H_MAX_SIZE meshtastic_Route_size
+#define meshtastic_AircraftTrack_size            134
 #define meshtastic_Contact_size                  242
-#define meshtastic_GeoChat_size                  444
+#define meshtastic_CotGeoPoint_size              12
+#define meshtastic_DrawnShape_size               553
+#define meshtastic_EmergencyAlert_size           100
+#define meshtastic_GeoChat_size                  495
 #define meshtastic_Group_size                    4
+#define meshtastic_Marker_size                   191
 #define meshtastic_PLI_size                      31
+#define meshtastic_RangeAndBearing_size          84
+#define meshtastic_Route_Link_size               83
+#define meshtastic_Route_size                    1379
 #define meshtastic_Status_size                   3
-#define meshtastic_TAKPacket_size                705
+#define meshtastic_TAKEnvironment_size           18
+#define meshtastic_TAKPacket_size                756
+#define meshtastic_TaskRequest_size              132
 
 #ifdef __cplusplus
 } /* extern "C" */

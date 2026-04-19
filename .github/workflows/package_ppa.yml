@@ -5,6 +5,8 @@ on:
     secrets:
       PPA_GPG_PRIVATE_KEY:
         required: true
+      PPA_SFTP_PRIVATE_KEY:
+        required: true
     inputs:
       ppa_repo:
         description: Meshtastic PPA to target
@@ -27,6 +29,7 @@ jobs:
       build_location: ppa
 
   package-ppa:
+    if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     needs: build-debian-src
     steps:
@@ -40,7 +43,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -y --fix-missing
-          sudo apt-get install -y dput
+          sudo apt-get install -y dput openssh-client
 
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@v7
@@ -65,8 +68,42 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -lah
 
-      - name: Publish with dput
-        if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        timeout-minutes: 15 # dput is terrible, sometimes runs 'forever'
+      - name: Trust Launchpad's SSH key
         run: |
-          dput ${{ inputs.ppa_repo }} meshtasticd_${{ steps.version.outputs.deb }}~${{ inputs.series }}_source.changes
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ppa.launchpad.net >> ~/.ssh/known_hosts
+
+      - name: Setup dput config
+        env:
+          ppa_login: meshtasticorg
+        run: |
+          sudo tee /etc/meshtastic-dput.cf >/dev/null <<EOF
+          [ppa]
+          fqdn                    = ppa.launchpad.net
+          method                  = ftp
+          incoming                = ~%(ppa)s
+          login                   = anonymous
+
+          [ssh-ppa]
+          fqdn                    = ppa.launchpad.net
+          method                  = sftp
+          incoming                = ~%(ssh-ppa)s
+          login                   = ${ppa_login}
+          EOF
+
+      - name: Import SSH key
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.PPA_SFTP_PRIVATE_KEY }}
+        id: ssh
+
+      - name: Publish with dput (sftp)
+        timeout-minutes: 30 # dput is terrible, sometimes runs 'forever'
+        env:
+          up_ppa_repo: ${{ inputs.ppa_repo }}
+          up_series: ${{ inputs.series }}
+          up_version: ${{ steps.version.outputs.deb }}
+        run: >
+          dput -c /etc/meshtastic-dput.cf
+          ssh-${up_ppa_repo}
+          meshtasticd_${up_version}~${up_series}_source.changes
