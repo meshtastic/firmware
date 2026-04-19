@@ -645,17 +645,17 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
                      m.variant.environment_metrics.soil_moisture);
 
-        if (m.variant.environment_metrics.has_adc_voltage_ch1 || m.variant.environment_metrics.has_adc_voltage_ch2 ||
-            m.variant.environment_metrics.has_adc_voltage_ch3 || m.variant.environment_metrics.has_adc_voltage_ch4)
-            LOG_INFO("Send: adc_ch1=%f, adc_ch2=%f, adc_ch3=%f, adc_ch4=%f", m.variant.environment_metrics.adc_voltage_ch1,
-                     m.variant.environment_metrics.adc_voltage_ch2, m.variant.environment_metrics.adc_voltage_ch3,
-                     m.variant.environment_metrics.adc_voltage_ch4);
+        if (m.variant.environment_metrics.has_adc_voltage_ch0 || m.variant.environment_metrics.has_adc_voltage_ch1 ||
+            m.variant.environment_metrics.has_adc_voltage_ch2 || m.variant.environment_metrics.has_adc_voltage_ch3)
+            LOG_INFO("Send: adc_ch0=%f, adc_ch1=%f, adc_ch2=%f, adc_ch3=%f", m.variant.environment_metrics.adc_voltage_ch0,
+                     m.variant.environment_metrics.adc_voltage_ch1, m.variant.environment_metrics.adc_voltage_ch2,
+                     m.variant.environment_metrics.adc_voltage_ch3);
 
-        if (m.variant.environment_metrics.has_adc_voltage_ch5 || m.variant.environment_metrics.has_adc_voltage_ch6 ||
-            m.variant.environment_metrics.has_adc_voltage_ch7 || m.variant.environment_metrics.has_adc_voltage_ch8)
-            LOG_INFO("Send: adc_ch5=%f, adc_ch6=%f, adc_ch7=%f, adc_ch8=%f", m.variant.environment_metrics.adc_voltage_ch5,
-                     m.variant.environment_metrics.adc_voltage_ch6, m.variant.environment_metrics.adc_voltage_ch7,
-                     m.variant.environment_metrics.adc_voltage_ch8);
+        if (m.variant.environment_metrics.has_adc_voltage_ch4 || m.variant.environment_metrics.has_adc_voltage_ch5 ||
+            m.variant.environment_metrics.has_adc_voltage_ch6 || m.variant.environment_metrics.has_adc_voltage_ch7)
+            LOG_INFO("Send: adc_ch4=%f, adc_ch5=%f, adc_ch6=%f, adc_ch7=%f", m.variant.environment_metrics.adc_voltage_ch4,
+                     m.variant.environment_metrics.adc_voltage_ch5, m.variant.environment_metrics.adc_voltage_ch6,
+                     m.variant.environment_metrics.adc_voltage_ch7);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;

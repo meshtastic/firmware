@@ -13,7 +13,7 @@ ADS1X15Sensor::ADS1X15Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_
 
 bool ADS1X15Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
-    LOG_INFO("Init sensor: %s (address: 0x%x", sensorName, dev->address.address);
+    LOG_INFO("Init sensor: %s (address: 0x%x)", sensorName, dev->address.address);
 
     _bus = bus;
     _address = dev->address.address;
@@ -130,56 +130,56 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     switch (_deviceType) {
     case ScanI2C::DeviceType::ADS1X15: {
+        measurement->variant.environment_metrics.has_adc_voltage_ch0 = true;
         measurement->variant.environment_metrics.has_adc_voltage_ch1 = true;
         measurement->variant.environment_metrics.has_adc_voltage_ch2 = true;
         measurement->variant.environment_metrics.has_adc_voltage_ch3 = true;
-        measurement->variant.environment_metrics.has_adc_voltage_ch4 = true;
 
-        measurement->variant.environment_metrics.adc_voltage_ch1 = m.measurements[0].voltage;
-        measurement->variant.environment_metrics.adc_voltage_ch2 = m.measurements[1].voltage;
-        measurement->variant.environment_metrics.adc_voltage_ch3 = m.measurements[2].voltage;
-        measurement->variant.environment_metrics.adc_voltage_ch4 = m.measurements[3].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch0 = m.measurements[0].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch1 = m.measurements[1].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch2 = m.measurements[2].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch3 = m.measurements[3].voltage;
 
         LOG_DEBUG(
-            "Got %s readings: adc_voltage_ch1=%f, adc_voltage_ch2=%f, adc_voltage_ch3=%f, adc_voltage_ch4=%f", sensorName,
-            measurement->variant.environment_metrics.adc_voltage_ch1, measurement->variant.environment_metrics.adc_voltage_ch2,
-            measurement->variant.environment_metrics.adc_voltage_ch3, measurement->variant.environment_metrics.adc_voltage_ch4);
+            "Got %s readings: adc_voltage_ch0=%f, adc_voltage_ch1=%f, adc_voltage_ch2=%f, adc_voltage_ch3=%f", sensorName,
+            measurement->variant.environment_metrics.adc_voltage_ch0, measurement->variant.environment_metrics.adc_voltage_ch1,
+            measurement->variant.environment_metrics.adc_voltage_ch2, measurement->variant.environment_metrics.adc_voltage_ch3);
 
         break;
     }
     case ScanI2C::DeviceType::ADS1X15_ALT: {
+        measurement->variant.environment_metrics.has_adc_voltage_ch4 = true;
         measurement->variant.environment_metrics.has_adc_voltage_ch5 = true;
         measurement->variant.environment_metrics.has_adc_voltage_ch6 = true;
         measurement->variant.environment_metrics.has_adc_voltage_ch7 = true;
-        measurement->variant.environment_metrics.has_adc_voltage_ch8 = true;
 
-        measurement->variant.environment_metrics.adc_voltage_ch5 = m.measurements[0].voltage;
-        measurement->variant.environment_metrics.adc_voltage_ch6 = m.measurements[1].voltage;
-        measurement->variant.environment_metrics.adc_voltage_ch7 = m.measurements[2].voltage;
-        measurement->variant.environment_metrics.adc_voltage_ch8 = m.measurements[3].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch4 = m.measurements[0].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch5 = m.measurements[1].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch6 = m.measurements[2].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch7 = m.measurements[3].voltage;
 
         LOG_DEBUG(
-            "Got %s readings: adc_voltage_ch5=%f, adc_voltage_ch6=%f, adc_voltage_ch7=%f, adc_voltage_ch8=%f", sensorName,
-            measurement->variant.environment_metrics.adc_voltage_ch5, measurement->variant.environment_metrics.adc_voltage_ch6,
-            measurement->variant.environment_metrics.adc_voltage_ch7, measurement->variant.environment_metrics.adc_voltage_ch8);
+            "Got %s readings: adc_voltage_ch4=%f, adc_voltage_ch5=%f, adc_voltage_ch6=%f, adc_voltage_ch7=%f", sensorName,
+            measurement->variant.environment_metrics.adc_voltage_ch4, measurement->variant.environment_metrics.adc_voltage_ch5,
+            measurement->variant.environment_metrics.adc_voltage_ch6, measurement->variant.environment_metrics.adc_voltage_ch7);
 
         break;
     }
     default: {
+        measurement->variant.environment_metrics.has_adc_voltage_ch0 = true;
         measurement->variant.environment_metrics.has_adc_voltage_ch1 = true;
         measurement->variant.environment_metrics.has_adc_voltage_ch2 = true;
         measurement->variant.environment_metrics.has_adc_voltage_ch3 = true;
-        measurement->variant.environment_metrics.has_adc_voltage_ch4 = true;
 
-        measurement->variant.environment_metrics.adc_voltage_ch1 = m.measurements[0].voltage;
-        measurement->variant.environment_metrics.adc_voltage_ch2 = m.measurements[1].voltage;
-        measurement->variant.environment_metrics.adc_voltage_ch3 = m.measurements[2].voltage;
-        measurement->variant.environment_metrics.adc_voltage_ch4 = m.measurements[3].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch0 = m.measurements[0].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch1 = m.measurements[1].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch2 = m.measurements[2].voltage;
+        measurement->variant.environment_metrics.adc_voltage_ch3 = m.measurements[3].voltage;
 
         LOG_DEBUG(
-            "Got %s readings: adc_voltage_ch1=%f, adc_voltage_ch2=%f, adc_voltage_ch3=%f, adc_voltage_ch4=%f", sensorName,
-            measurement->variant.environment_metrics.adc_voltage_ch1, measurement->variant.environment_metrics.adc_voltage_ch2,
-            measurement->variant.environment_metrics.adc_voltage_ch3, measurement->variant.environment_metrics.adc_voltage_ch4);
+            "Got %s readings: adc_voltage_ch0=%f, adc_voltage_ch1=%f, adc_voltage_ch2=%f, adc_voltage_ch3=%f", sensorName,
+            measurement->variant.environment_metrics.adc_voltage_ch0, measurement->variant.environment_metrics.adc_voltage_ch1,
+            measurement->variant.environment_metrics.adc_voltage_ch2, measurement->variant.environment_metrics.adc_voltage_ch3);
 
         break;
     }
