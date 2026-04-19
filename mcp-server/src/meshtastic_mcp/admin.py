@@ -356,6 +356,46 @@ def shutdown(
     return {"ok": True, "shutting_down_in_s": seconds}
 
 
+def send_input_event(
+    event_code: int | str,
+    kb_char: int = 0,
+    touch_x: int = 0,
+    touch_y: int = 0,
+    port: str | None = None,
+) -> dict[str, Any]:
+    """Inject an InputBroker event (button press / key / gesture) into the UI.
+
+    Wraps `AdminMessage.send_input_event` (handled in firmware at
+    src/modules/AdminModule.cpp::handleSendInputEvent). Local-only — no PKI
+    warmup needed since the admin message is addressed to `my_node_num`.
+
+    `event_code` accepts an int, a case-insensitive name
+    (`"RIGHT"` / `"input_broker_right"`), or an `InputEventCode`. The
+    firmware-side enum lives in src/input/InputBroker.h and is mirrored in
+    `meshtastic_mcp.input_events`.
+    """
+    from meshtastic.protobuf import admin_pb2  # type: ignore[import-untyped]
+
+    from .input_events import coerce_event_code
+
+    code = coerce_event_code(event_code)
+    if not 0 <= kb_char <= 255:
+        raise ValueError(f"kb_char out of u8 range: {kb_char}")
+    if not 0 <= touch_x <= 65535:
+        raise ValueError(f"touch_x out of u16 range: {touch_x}")
+    if not 0 <= touch_y <= 65535:
+        raise ValueError(f"touch_y out of u16 range: {touch_y}")
+
+    with connect(port=port) as iface:
+        msg = admin_pb2.AdminMessage()
+        msg.send_input_event.event_code = code
+        msg.send_input_event.kb_char = kb_char
+        msg.send_input_event.touch_x = touch_x
+        msg.send_input_event.touch_y = touch_y
+        iface.localNode._sendAdmin(msg)
+    return {"ok": True, "event_code": code, "kb_char": kb_char}
+
+
 def factory_reset(
     port: str | None = None, confirm: bool = False, full: bool = False
 ) -> dict[str, Any]:

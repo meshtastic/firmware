@@ -24,3 +24,6 @@ tests/.tui-runs
 tests/.history/
 # Reproducer bundles (TUI `x` export on failed tests).
 tests/reproducers/
+# UI-tier camera captures + per-test transcripts. Regenerated every run;
+# left on disk for human review between runs.
+tests/ui_captures/

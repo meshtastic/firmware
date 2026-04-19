@@ -44,7 +44,8 @@ Re-run a single pytest node ID N times in isolation, track pass rate, and surfac
    - **LoRa airtime collision** → pass rate improves with fewer concurrent transmitters; propose a `time.sleep` gap or retry bump in the test body.
    - **PKI key staleness** → fails on first attempt, passes after self-heal; existing retry loop in `test_direct_with_ack.py` handles this.
    - **NodeInfo cooldown** → `Skip send NodeInfo since we sent it <600s ago` in fail-only logs; needs `broadcast_nodeinfo_ping()` warmup.
-   - **Hardware-specific** (one direction fails, other passes; one device's firmware is older; driver wedged) → specific recovery pointer.
+   - **Hardware-specific** (one direction fails, other passes; one device's firmware is older; driver wedged) → specific recovery pointer. For a device that's wedged past `touch_1200bps`, the next escalation is `uhubctl_cycle(role=..., confirm=True)` to hard-power-cycle its hub port (requires `uhubctl` installed).
+   - **Device went dark mid-run** → fails from some attempt onward, never recovers, firmware log stops arriving. Almost always hardware: a Guru crash + frozen CDC. Hard-power-cycle via `uhubctl_cycle(role=..., confirm=True)` before the next iteration; if that also fails, escalate to replug.
    - **Genuinely unknown** → say so; don't invent a root cause.
 
 7. **Report back** with:
