@@ -65,3 +65,16 @@
 &spi00 {
     /delete-node/ mx25r6435f@0;
 };
+
+/*
+ * Grow storage_partition from 36 KB to 700 KB by reclaiming slot1_partition.
+ * slot1 (image-1) is the MCUboot secondary slot for dual-bank OTA, which we
+ * don't use (flashing is direct via J-Link). With only 9 blocks (36 KB / 4 KB)
+ * LittleFS ran out of space during COW writes of config.proto.
+ * New layout: storage_partition spans 0xb6000..0x165000 (700 KB, ~175 blocks).
+ */
+/delete-node/ &slot1_partition;
+
+&storage_partition {
+    reg = <0xb6000 0xaf000>;
+};
