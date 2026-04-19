@@ -127,7 +127,7 @@ int32_t ExternalNotificationModule::runOnce()
 #endif
 
 #ifdef HAS_DRV2605
-            drv.go();
+            hapticDriver.go();
 #endif
         }
 
@@ -222,9 +222,9 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 
 #ifdef HAS_DRV2605
     if (on) {
-        drv.go();
+        hapticDriver.go();
     } else {
-        drv.stop();
+        hapticDriver.stop();
     }
 #endif
 }
@@ -257,7 +257,7 @@ void ExternalNotificationModule::stopNow()
     }
     setIntervalFromNow(0);
 #ifdef HAS_DRV2605
-    drv.stop();
+    hapticDriver.stop();
 #endif
 
     // Prevent the state machine from immediately re-triggering outputs after a manual stop.
@@ -422,15 +422,15 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
 #ifdef HAS_DRV2605
-                    drv.setWaveform(0, 16); // Long buzzer 100%
-                    drv.setWaveform(1, 0);  // Pause
-                    drv.setWaveform(2, 16);
-                    drv.setWaveform(3, 0);
-                    drv.setWaveform(4, 16);
-                    drv.setWaveform(5, 0);
-                    drv.setWaveform(6, 16);
-                    drv.setWaveform(7, 0);
-                    drv.go();
+                    hapticDriver.setWaveform(0, 16); // Long buzzer 100%
+                    hapticDriver.setWaveform(1, 0);  // Pause
+                    hapticDriver.setWaveform(2, 16);
+                    hapticDriver.setWaveform(3, 0);
+                    hapticDriver.setWaveform(4, 16);
+                    hapticDriver.setWaveform(5, 0);
+                    hapticDriver.setWaveform(6, 16);
+                    hapticDriver.setWaveform(7, 0);
+                    hapticDriver.go();
 #endif
 
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {

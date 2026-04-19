@@ -1,119 +1,130 @@
+/*
+
+NicheGraphics setup for Heltec Vision Master E-213 (HSPI; runtime-detected 2.13" panel).
+
+Panel choice depends on detectEInk() output:
+  - LCMEN213EFC1 (V1, unmarked)
+  - E0213A367 (V1.1, V1.2)
+
+Both panels share the same SPI wiring; the difference is the controller/waveform.
+
+*/
+
 #pragma once
 
 #include "configuration.h"
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
-// InkHUD-specific components
-// ---------------------------
-#include "graphics/niche/InkHUD/InkHUD.h"
+#include "graphics/BaseUIEInkDisplay.h"
+#include "graphics/eink/Panels/E0213A367.h"
+#include "graphics/eink/Panels/LCMEN213EFC1.h"
 
-// Applets
-#include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "buzz.h"
+#include "einkDetect.h"
 
-// Shared NicheGraphics components
-// --------------------------------
-#include "graphics/niche/Drivers/EInk/E0213A367.h"
-#include "graphics/niche/Drivers/EInk/LCMEN2R13EFC1.h"
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#include "graphics/niche/Applets/User/AllMessage/AllMessageApplet.h"
+#include "graphics/niche/Applets/User/DM/DMApplet.h"
+#include "graphics/niche/Applets/User/FavoritesMap/FavoritesMapApplet.h"
+#include "graphics/niche/Applets/User/Heard/HeardApplet.h"
+#include "graphics/niche/Applets/User/Positions/PositionsApplet.h"
+#include "graphics/niche/Applets/User/RecentsList/RecentsListApplet.h"
+#include "graphics/niche/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "graphics/niche/InkHUD.h"
 #include "graphics/niche/Inputs/TwoButton.h"
+#endif
 
-#include "buzz.h"       // Button feedback
-#include "einkDetect.h" // Detect display model at runtime
+template <typename Base> class VMe213Panel : public Base
+{
+  protected:
+    SPIClass *beginSpi() override
+    {
+        auto *hspi = new SPIClass(HSPI);
+        hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
+        return hspi;
+    }
+};
 
+struct VMe213DetectedDriver {
+    NicheGraphics::Drivers::EInk *driver;
+    uint8_t fastPerFull;
+    float stress;
+    uint8_t rotation;
+};
+
+static VMe213DetectedDriver detectAndCreateVMe213Driver()
+{
+    EInkDetectionResult model = detectEInk();
+    VMe213DetectedDriver out{nullptr, 10, 1.5f, 3};
+    if (model == EInkDetectionResult::LCMEN213EFC1) {
+        auto *p = new VMe213Panel<NicheGraphics::Panels::LCMEN213EFC1>();
+        out.driver = p->create();
+        out.rotation = p->rotation();
+        out.fastPerFull = 10;
+        out.stress = 1.5f;
+    } else { // E0213A367 (V1.1, V1.2)
+        auto *p = new VMe213Panel<NicheGraphics::Panels::E0213A367>();
+        out.driver = p->create();
+        out.rotation = p->rotation();
+        out.fastPerFull = 15;
+        out.stress = 3.0f;
+    }
+    return out;
+}
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
 
-    // Detect E-Ink Model
-    // -------------------
-
-    EInkDetectionResult displayModel = detectEInk();
-
-    // SPI
-    // -----------------------------
-
-    // Display is connected to HSPI
-    SPIClass *hspi = new SPIClass(HSPI);
-    hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
-
-    // E-Ink Driver
-    // -----------------------------
-
-    Drivers::EInk *driver;
-
-    if (displayModel == EInkDetectionResult::LCMEN213EFC1) // V1 (unmarked)
-        driver = new Drivers::LCMEN213EFC1;
-    else if (displayModel == EInkDetectionResult::E0213A367) // V1.1
-        driver = new Drivers::E0213A367;
-
-    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
-
-    // InkHUD
-    // ----------------------------
+    VMe213DetectedDriver detected = detectAndCreateVMe213Driver();
 
     InkHUD::InkHUD *inkhud = InkHUD::InkHUD::getInstance();
+    inkhud->setDriver(detected.driver);
+    inkhud->setDisplayResilience(detected.fastPerFull, detected.stress);
 
-    // Set the E-Ink driver
-    inkhud->setDriver(driver);
-
-    // Set how many FAST updates per FULL update
-    // Set how unhealthy additional FAST updates beyond this number are
-
-    if (displayModel == EInkDetectionResult::LCMEN213EFC1) // V1 (unmarked)
-        inkhud->setDisplayResilience(10, 1.5);
-    else if (displayModel == EInkDetectionResult::E0213A367) // V1.1
-        inkhud->setDisplayResilience(15, 3);
-
-    // Select fonts
     InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
     InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
-    // Customize default settings
-    inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
-    inkhud->persistence->settings.rotation = 3;           // 270 degrees clockwise
-    inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
-    inkhud->persistence->settings.optionalMenuItems.nextTile = false; // Behavior handled by aux button instead
+    inkhud->persistence->settings.userTiles.maxCount = 2;
+    inkhud->persistence->settings.rotation = 3;
+    inkhud->persistence->settings.userTiles.count = 1;
+    inkhud->persistence->settings.optionalMenuItems.nextTile = false;
 
-    // Pick applets
-    // Note: order of applets determines priority of "auto-show" feature
-    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
-    inkhud->addApplet("DMs", new InkHUD::DMApplet);                              // -
-    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // -
-    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // -
-    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
-    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet);          // -
-    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
-    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, not autoshown, default on tile 0
+    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true);
+    inkhud->addApplet("DMs", new InkHUD::DMApplet);
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet);
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);
 
-    // Start running InkHUD
     inkhud->begin();
 
-    // Buttons
-    // --------------------------
-
-    Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
-
-    // #0: Main User Button
+    Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance();
     buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin());
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
-
-    // #1: Aux Button
     buttons->setWiring(1, PIN_BUTTON2);
     buttons->setHandlerShortPress(1, [inkhud]() {
         inkhud->nextTile();
         playChirp();
     });
-
-    // Begin handling button events
     buttons->start();
 }
+#else
+void setupNicheGraphics() {}
 
+NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI()
+{
+    VMe213DetectedDriver detected = detectAndCreateVMe213Driver();
+    auto *display = new NicheGraphics::BaseUIEInkDisplay(detected.driver, detected.rotation);
+    display->setDisplayResilience(detected.fastPerFull, detected.stress);
+    return display;
+}
 #endif
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

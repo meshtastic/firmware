@@ -203,7 +203,7 @@ ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE,
 ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
 
 #ifdef HAS_DRV2605
-Adafruit_DRV2605 drv;
+Adafruit_DRV2605 hapticDriver;
 #endif
 
 bool isVibrating = false;
@@ -758,10 +758,10 @@ void setup()
     digitalWrite(PIN_DRV_EN, HIGH);
     delay(10);
 #endif
-    drv.begin();
-    drv.selectLibrary(1);
+    hapticDriver.begin();
+    hapticDriver.selectLibrary(1);
     // I2C trigger by sending 'go' command
-    drv.setMode(DRV2605_MODE_INTTRIG);
+    hapticDriver.setMode(DRV2605_MODE_INTTRIG);
 #endif
 
     // Init our SPI controller (must be before screen and lora)

@@ -33,8 +33,8 @@ extern MessageStore messageStore;
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
-#if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
-#include "graphics/EInkDynamicDisplay.h" // To select between full and fast refresh on E-Ink displays
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#include "graphics/BaseUIEInkDisplay.h"
 #endif
 
 #ifndef INPUTBROKER_MATRIX_TYPE
@@ -1915,9 +1915,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     // Free Text Input Screen
     if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         requestFocus();
-#if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
-        EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
-        einkDisplay->enableUnlimitedFastMode();
+#if defined(USE_EINK) && defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+        static_cast<NicheGraphics::BaseUIEInkDisplay *>(display)->enableUnlimitedFastMode();
 #endif
 #if defined(USE_VIRTUAL_KEYBOARD)
         drawKeyboard(display, state, 0, 0);
