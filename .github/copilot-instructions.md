@@ -474,7 +474,7 @@ The repo registers the server via `.mcp.json` at the repo root — Claude Code p
 
 **One MCP call per port at a time.** `SerialInterface` holds an exclusive OS-level lock on the serial port for its lifetime. If a `serial_*` session is open on `/dev/cu.usbmodem101`, calling `device_info` on the same port will fail fast pointing at the active session. Sequence calls: open → read/mutate → close, then next device. Never parallelize tool calls on the same port.
 
-### MCP tool surface (~32 tools)
+### MCP tool surface (43 tools)
 
 Grouped by purpose. Full argument shapes in `mcp-server/README.md`; a few high-value signatures are called out here.
 
@@ -482,11 +482,13 @@ Grouped by purpose. Full argument shapes in `mcp-server/README.md`; a few high-v
 - **Build & flash**: `build`, `clean`, `pio_flash`, `erase_and_flash` (ESP32 only), `update_flash` (ESP32 OTA), `touch_1200bps`
 - **Serial sessions** (long-running, 10k-line ring buffer): `serial_open`, `serial_read`, `serial_list`, `serial_close`
 - **Device reads**: `device_info`, `list_nodes`
-- **Device writes** (all require `confirm=True`): `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `reboot`, `shutdown`, `factory_reset`, `set_debug_log_api`
+- **Device writes** (all require `confirm=True`): `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `send_input_event` (inject a button/key press via the firmware's InputBroker), `reboot`, `shutdown`, `factory_reset`, `set_debug_log_api`
 - **userPrefs admin** (build-time constants, not runtime config): `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
 - **Vendor escape hatches**: `esptool_chip_info`, `esptool_erase_flash`, `esptool_raw`, `nrfutil_dfu`, `nrfutil_raw`, `picotool_info`, `picotool_load`, `picotool_raw`
+- **USB power control** (via `uhubctl`, per-port PPPS toggle): `uhubctl_list` (read-only), `uhubctl_power(action='on'|'off', confirm=True)`, `uhubctl_cycle(delay_s, confirm=True)`. Target by raw `(location, port)` or by `role` (`"nrf52"`, `"esp32s3"`); role lookup checks `MESHTASTIC_UHUBCTL_LOCATION_<ROLE>` + `_PORT_<ROLE>` env vars first, falls back to VID auto-detection.
+- **Observability** (UI tier + operator ad-hoc): `capture_screen(role, ocr=True)` — grabs a USB-webcam frame of the device OLED and optionally OCRs it. Requires `mcp-server[ui]` extras (`opencv-python-headless`, `easyocr`) and `MESHTASTIC_UI_CAMERA_DEVICE_<ROLE>` env var; falls through to a 1×1 black PNG `NullBackend` when unconfigured.
 
-`confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve — it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `factory_reset` and `erase_and_flash`.
+`confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve — it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `factory_reset`, `erase_and_flash`, `uhubctl_power(action='off')`, and `uhubctl_cycle`.
 
 ### Hardware test suite (`mcp-server/run-tests.sh`)
 
@@ -494,14 +496,16 @@ The wrapper auto-detects connected devices (VID → role map: `0x239A` → `nrf5
 
 Suite tiers (collected + run in this order via `pytest_collection_modifyitems`):
 
-1. `tests/unit/` — pure Python (boards parse, pio wrapper, userPrefs parse, testing profile). No hardware.
+1. `tests/unit/` — pure Python (boards parse, pio wrapper, userPrefs parse, testing profile, uhubctl parser). No hardware.
 2. `tests/test_00_bake.py` — flashes each detected device with current `userPrefs.jsonc` merged with the session's test profile. Has its own skip-if-already-baked check comparing region + primary channel to the session profile; skips cheaply on warm devices.
-3. `tests/mesh/` — multi-device mesh: bidirectional send, broadcast delivery, direct-with-ACK, mesh formation within 60s. Parametrized `[nrf52->esp32s3]` and `[esp32s3->nrf52]`.
+3. `tests/mesh/` — multi-device mesh: bidirectional send, broadcast delivery, direct-with-ACK, mesh formation within 60s. Parametrized `[nrf52->esp32s3]` and `[esp32s3->nrf52]`. Includes `test_peer_offline_recovery` which uses uhubctl to physically power off one peer mid-conversation (requires uhubctl; skips without).
 4. `tests/telemetry/` — `DEVICE_METRICS_APP` broadcast timing.
 5. `tests/monitor/` — boot-log panic check.
-6. `tests/fleet/` — PSK seed session isolation.
-7. `tests/admin/` — channel URL roundtrip, owner persistence across reboot.
-8. `tests/provisioning/` — region + modem + slot bake, admin key presence, `UNSET` region blocks TX, userPrefs survive factory reset.
+6. `tests/recovery/` — `uhubctl` power-cycle round-trip + NVS persistence across hard reset. Requires `uhubctl` installed and a PPPS-capable hub; entire tier auto-skips otherwise.
+7. `tests/ui/` — input-broker-driven screen navigation with camera + OCR evidence.
+8. `tests/fleet/` — PSK seed session isolation.
+9. `tests/admin/` — channel URL roundtrip, owner persistence across reboot.
+10. `tests/provisioning/` — region + modem + slot bake, admin key presence, `UNSET` region blocks TX, userPrefs survive factory reset.
 
 Invocation patterns:
 
@@ -586,15 +590,19 @@ If you're modifying `StreamAPI`, `PhoneAPI`, `NodeInfoModule`, or `userPrefs` fl
 
 ### Recovery playbooks
 
-| Symptom                                                    | First check                                                   | Fix                                                                                                                                                                        |
-| ---------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `userPrefs.jsonc` dirty after test run                     | `git status --porcelain userPrefs.jsonc`                      | If non-empty, re-run `./mcp-server/run-tests.sh` once — the pre-flight self-heal restores from sidecar. If still dirty, `git checkout userPrefs.jsonc`.                    |
-| Port busy / wedged CP2102 on macOS                         | `lsof /dev/cu.usbserial-0001`                                 | Kill the holder. USB replug if the kernel still reports busy. Often a stale `pio device monitor` or zombie `meshtastic_mcp` process.                                       |
-| nRF52 appears unresponsive                                 | `list_devices` shows VID `0x239A` but `device_info` times out | `touch_1200bps(port=...)` drops it into the DFU bootloader → `pio_flash` re-installs.                                                                                      |
-| Multiple MCP server processes                              | `ps aux \| grep meshtastic_mcp` shows >1                      | Kill all but the one your MCP host spawned. Zombies hold ports and break tests.                                                                                            |
-| Mesh formation fails, one side sees peer but other doesn't | `/diagnose` (or `list_nodes` on both sides)                   | Asymmetric NodeInfo. `test_direct_with_ack` has a heal path; `/repro` it a few times. If persistent, both devices' clocks may be out of sync with their NodeInfo cooldown. |
-| "role not present on hub" in skip reasons                  | `list_devices`                                                | Expected if a device is unplugged. Reconnect before re-running the tier.                                                                                                   |
-| Tests fail only on first attempt then pass on rerun        | —                                                             | State leak from a prior session. Run with `--force-bake` to reset to a known state.                                                                                        |
+| Symptom                                                                           | First check                                                   | Fix                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `userPrefs.jsonc` dirty after test run                                            | `git status --porcelain userPrefs.jsonc`                      | If non-empty, re-run `./mcp-server/run-tests.sh` once — the pre-flight self-heal restores from sidecar. If still dirty, `git checkout userPrefs.jsonc`.                                                                          |
+| Port busy / wedged CP2102 on macOS                                                | `lsof /dev/cu.usbserial-0001`                                 | Kill the holder. USB replug if the kernel still reports busy. Often a stale `pio device monitor` or zombie `meshtastic_mcp` process.                                                                                             |
+| nRF52 appears unresponsive                                                        | `list_devices` shows VID `0x239A` but `device_info` times out | `touch_1200bps(port=...)` drops it into the DFU bootloader → `pio_flash` re-installs.                                                                                                                                            |
+| Device fully wedged (Guru Meditation, frozen CDC, no DFU)                         | `list_devices` shows the VID but every admin call times out   | `uhubctl_cycle(role="nrf52", confirm=True)` hard-power-cycles the port via USB hub PPPS. `baked_single`'s auto-recovery hook does this once automatically if uhubctl is installed. Falls back to physical replug if no PPPS hub. |
+| Multiple MCP server processes                                                     | `ps aux \| grep meshtastic_mcp` shows >1                      | Kill all but the one your MCP host spawned. Zombies hold ports and break tests.                                                                                                                                                  |
+| Mesh formation fails, one side sees peer but other doesn't                        | `/diagnose` (or `list_nodes` on both sides)                   | Asymmetric NodeInfo. `test_direct_with_ack` has a heal path; `/repro` it a few times. If persistent, both devices' clocks may be out of sync with their NodeInfo cooldown.                                                       |
+| "role not present on hub" in skip reasons                                         | `list_devices`                                                | Expected if a device is unplugged. Reconnect before re-running the tier.                                                                                                                                                         |
+| Entire `tests/recovery/` tier skipped                                             | `command -v uhubctl`                                          | Expected if `uhubctl` isn't on PATH. Install via `brew install uhubctl` (macOS) or `apt install uhubctl` (Debian/Ubuntu). Also skips if no hub advertises PPPS.                                                                  |
+| Entire `tests/ui/` tier skipped ("firmware not baked with USERPREFS_UI_TEST_LOG") | reportlog.jsonl for the skip reason                           | Re-run with `--force-bake` so the UI-log macro gets compiled into the fresh firmware. First run after the Round-3 landing always re-bakes.                                                                                       |
+| `tests/ui/` runs but captures are all 1×1 black PNGs                              | `MESHTASTIC_UI_CAMERA_DEVICE_ESP32S3`                         | Env var not set → `NullBackend`. Point a USB webcam at the heltec-v3 OLED and set the device index; `.venv/bin/python -c "import cv2; [print(i, cv2.VideoCapture(i).read()[0]) for i in range(5)]"` discovers it.                |
+| Tests fail only on first attempt then pass on rerun                               | —                                                             | State leak from a prior session. Run with `--force-bake` to reset to a known state.                                                                                                                                              |
 
 ### Never do these without asking
 
