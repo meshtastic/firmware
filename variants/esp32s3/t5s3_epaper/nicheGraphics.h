@@ -88,9 +88,9 @@ void setupNicheGraphics()
     // - is activated?
     // - is autoshown?
     // - is foreground on a specific tile (index)?
-    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
-    inkhud->addApplet("DMs", new InkHUD::DMApplet);
-    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
+    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true);      // Activated, autoshown
+    inkhud->addApplet("DMs", new InkHUD::DMApplet, true, false);                      // Activated, not autoshown
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, true); // Activated, autoshown
     inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true); // Activated
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);
@@ -104,6 +104,10 @@ void setupNicheGraphics()
 
     // Start running InkHUD
     inkhud->begin();
+
+    // Touch navigation requires joystick mode — enforce post-begin so flash cannot override.
+    inkhud->persistence->settings.joystick.enabled = true;
+    inkhud->persistence->settings.joystick.aligned = true;
 
     // Buttons
     // --------------------------
