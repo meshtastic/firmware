@@ -443,10 +443,10 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
                 bars = 3;
             } else if (snr > snrLimit + 2) {
                 qualityLabel = "Good";
-                bars = 3;
+                bars = 2;
             } else if (snr > snrLimit - 4) {
                 qualityLabel = "Fair";
-                bars = 2;
+                bars = 1;
             } else {
                 qualityLabel = "Bad";
                 bars = 1;
