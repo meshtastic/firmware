@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import time
+import warnings
 from pathlib import Path
 from typing import Protocol
 
@@ -217,10 +218,25 @@ def get_camera(role: str | None = None) -> CameraBackend:
     if backend == "opencv":
         try:
             return OpenCVBackend(device)
-        except CameraError:
-            raise
+        except CameraError as exc:
+            warnings.warn(
+                f"camera backend {backend!r} failed to initialize for device "
+                f"{device!r}: {exc}; falling back to null backend",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return NullBackend()
     if backend == "ffmpeg":
-        return FfmpegBackend(device)
+        try:
+            return FfmpegBackend(device)
+        except CameraError as exc:
+            warnings.warn(
+                f"camera backend {backend!r} failed to initialize for device "
+                f"{device!r}: {exc}; falling back to null backend",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return NullBackend()
     if backend == "null":
         return NullBackend()
 
