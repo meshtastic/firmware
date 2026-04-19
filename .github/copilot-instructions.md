@@ -482,7 +482,7 @@ Grouped by purpose. Full argument shapes in `mcp-server/README.md`; a few high-v
 - **Build & flash**: `build`, `clean`, `pio_flash`, `erase_and_flash` (ESP32 only), `update_flash` (ESP32 OTA), `touch_1200bps`
 - **Serial sessions** (long-running, 10k-line ring buffer): `serial_open`, `serial_read`, `serial_list`, `serial_close`
 - **Device reads**: `device_info`, `list_nodes`
-- **Device writes** (all require `confirm=True`): `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `send_input_event` (inject a button/key press via the firmware's InputBroker), `reboot`, `shutdown`, `factory_reset`, `set_debug_log_api`
+- **Device writes**: `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `send_input_event` (inject a button/key press via the firmware's InputBroker), `set_debug_log_api`; destructive/power-state writes require `confirm=True`: `reboot`, `shutdown`, `factory_reset`
 - **userPrefs admin** (build-time constants, not runtime config): `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
 - **Vendor escape hatches**: `esptool_chip_info`, `esptool_erase_flash`, `esptool_raw`, `nrfutil_dfu`, `nrfutil_raw`, `picotool_info`, `picotool_load`, `picotool_raw`
 - **USB power control** (via `uhubctl`, per-port PPPS toggle): `uhubctl_list` (read-only), `uhubctl_power(action='on'|'off', confirm=True)`, `uhubctl_cycle(delay_s, confirm=True)`. Target by raw `(location, port)` or by `role` (`"nrf52"`, `"esp32s3"`); role lookup checks `MESHTASTIC_UHUBCTL_LOCATION_<ROLE>` + `_PORT_<ROLE>` env vars first, falls back to VID auto-detection.
