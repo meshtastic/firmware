@@ -458,12 +458,14 @@ float HopScalingModule::selectPolitenessFactor(float activityWeight) const
  * adapts to small, medium and megameshes with varying turnover patterns by using heuristics based
  * on NodeDB capacity, eviction rates, and sampling-based mesh size estimation.
  *
- * @param snapshot         Current NodeDB age-bucketed snapshot.
- * @param statusMode       [out] Set to one of the StatusMode enum values indicating which estimation branch was taken.
- * @param sampledEstimate  [out] Set to the sampling-derived mesh size estimate (0 if unreliable).
- * @return                 Scale factor >= 1.0 to multiply per-hop counts by.
+ * @param snapshot          Current NodeDB age-bucketed snapshot.
+ * @param statusMode        [out] Set to one of the StatusMode enum values indicating which estimation branch was taken.
+ * @param sampledEstimate   [out] Set to the sampling-derived mesh size estimate (0 if unreliable).
+ * @param evictionEstimate  [out] Set to knownNodeCount × scaleFactor — the eviction-derived mesh size estimate.
+ * @return                  Scale factor >= 1.0 to multiply per-hop counts by.
  */
-float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &statusMode, uint16_t &sampledEstimate) const
+float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &statusMode, uint16_t &sampledEstimate,
+                                            uint16_t &evictionEstimate) const
 {
     float scale = 1.0f; // default (no scaling)
     const uint16_t knownNodeCount = MAX_NUM_NODES - snapshot.cumulative12h.unknownHopCount;
@@ -476,6 +478,7 @@ float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &s
     if (!nodeDB || (!nodeDB->isFull() && snapshot.cumulative12h.total < nearCapacity)) {
         statusMode = STATUS_SMALL_STABLE_MESH;
         scale = MAX_NUM_NODES / static_cast<float>(knownNodeCount);
+        evictionEstimate = static_cast<uint16_t>(std::min(knownNodeCount * scale, 65535.0f));
         LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (DB has headroom: %u/%d nodes, of which %.2f unknown hops)",
                   static_cast<double>(scale), snapshot.cumulative12h.total, MAX_NUM_NODES,
                   static_cast<double>(snapshot.cumulative12h.unknownHopCount));
@@ -488,6 +491,7 @@ float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &s
         // Low turnover: NodeDB is full but few evictions; modest scale-up.
         // Scale proportionally: at 0 evictions => 1.0, approaching threshold => 1.2^12
         scale = (1.0f + (rollingEvictionAvg12h / knownNodeCount));
+        evictionEstimate = static_cast<uint16_t>(std::min(knownNodeCount * scale, 65535.0f));
         LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (low turnover: evict/h=%.1f)", static_cast<double>(scale),
                   static_cast<double>(rollingEvictionAvg12h));
         return scale;
@@ -496,6 +500,7 @@ float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &s
     // High turnover: many evictions per hour, NodeDB is cycling rapidly.
     // Compute both sampling and eviction estimates, prefer whichever is larger.
     const float evictionScale = 1.1f + (rollingEvictionAvg12h / knownNodeCount);
+    evictionEstimate = static_cast<uint16_t>(std::min(knownNodeCount * evictionScale, 65535.0f));
     const float samplingScale =
         (sampledEstimate > 0) ? std::max(static_cast<float>(sampledEstimate) / knownNodeCount, 1.0f) : 0.0f;
 
@@ -532,12 +537,12 @@ void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyU
 {
     static const char *const modeNames[] = {"STARTUP", "STABLE", "EVICTION", "SAMPLED", "FALLBACK"};
     const char *modeName = (lastStatusMode < sizeof(modeNames) / sizeof(modeNames[0])) ? modeNames[lastStatusMode] : "?";
-    LOG_INFO("[HOPSCALE] status mode=%s hourly=%u hop=%u actWt=%.2f polite=%.2f scale=%.2f evict/h=%.1f sampledEst=%u sampling 1 "
-             "in %u n1=%u n2=%u n3=%u n12=%u",
+    LOG_INFO("[HOPSCALE] status mode=%s hourly=%u hop=%u actWt=%.2f polite=%.2f scale=%.2f evict/h=%.1f evictionEst=%u "
+             "sampledEst=%u sampling 1 in %u n1=%u n2=%u n3=%u n12=%u",
              modeName, didHourlyUpdate ? 1 : 0, lastRequiredHop, static_cast<double>(lastActivityWeight),
              static_cast<double>(lastPolitenessFactor), static_cast<double>(lastScaleFactor),
-             static_cast<double>(rollingEvictionAvg12h), lastSampledEstimate, SAMPLING_DENOMINATOR, snapshot.recent1h.total,
-             snapshot.recent1h.total + snapshot.old1hFrom2h.total,
+             static_cast<double>(rollingEvictionAvg12h), lastEvictionEstimate, lastSampledEstimate, SAMPLING_DENOMINATOR,
+             snapshot.recent1h.total, snapshot.recent1h.total + snapshot.old1hFrom2h.total,
              snapshot.recent1h.total + snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total, snapshot.cumulative12h.total);
 }
 
@@ -629,7 +634,7 @@ int32_t HopScalingModule::runOnce()
     if (didHourlyUpdate) {
         lastActivityWeight = computeActivityWeight(snapshot);
         lastPolitenessFactor = selectPolitenessFactor(lastActivityWeight);
-        lastScaleFactor = estimateScaleFactor(snapshot, lastStatusMode, lastSampledEstimate);
+        lastScaleFactor = estimateScaleFactor(snapshot, lastStatusMode, lastSampledEstimate, lastEvictionEstimate);
         if (!checkStableStatus(snapshot)) {
             lastStatusMode = STATUS_STARTUP_NOT_ENOUGH_DATA;
         }

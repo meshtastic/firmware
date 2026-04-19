@@ -99,7 +99,8 @@ class HopScalingModule : private concurrency::OSThread
     void buildSnapshot(Snapshot &snapshot) const;
     float computeActivityWeight(const Snapshot &snapshot) const;
     float selectPolitenessFactor(float activityWeight) const;
-    float estimateScaleFactor(const Snapshot &snapshot, uint8_t &statusMode, uint16_t &sampledEstimate) const;
+    float estimateScaleFactor(const Snapshot &snapshot, uint8_t &statusMode, uint16_t &sampledEstimate,
+                              uint16_t &evictionEstimate) const;
     uint16_t estimateSampledMeshSize() const;
     uint8_t computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const;
     bool checkStableStatus(const Snapshot &snapshot) const;
@@ -117,6 +118,7 @@ class HopScalingModule : private concurrency::OSThread
     float lastPolitenessFactor = 1.5f;
     uint8_t lastStatusMode = STATUS_STARTUP_NOT_ENOUGH_DATA;
     uint16_t lastSampledEstimate = 0;
+    uint16_t lastEvictionEstimate = 0;
 
     // Eviction tracking: smoothed average of hourly eviction counts
     uint16_t evictionsCurrentHour = 0;  // accumulates between rollovers
