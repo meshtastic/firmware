@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CompactHistogram.h"
 #include "MeshTypes.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
@@ -34,6 +35,10 @@ class HopScalingModule : private concurrency::OSThread
     /// Only nodes whose ID passes the modulo filter are tracked (1-in-SAMPLING_DENOMINATOR).
     void recordPacketSender(uint32_t nodeId);
 
+    /// Sample incoming packet into the CompactHistogram (bitwise hop scaling).
+    /// This is the new parallel sampling mechanism alongside recordPacketSender.
+    void samplePacketForHistogram(uint32_t nodeId, uint8_t hopCount);
+
     /// Enable or disable denominator jitter. Jitter is on by default; disable in unit tests
     /// to keep SAMPLING_DENOMINATOR on power-of-2 values so injectSampleTraffic() works.
     static void setSamplingJitter(bool enabled) { s_samplingJitter = enabled; }
@@ -58,6 +63,10 @@ class HopScalingModule : private concurrency::OSThread
     float getLastScaleFactor() const { return lastScaleFactor; }
     uint16_t getEvictionsCurrentHour() const { return evictionsCurrentHour; }
     float getRollingEvictionAverage() const { return rollingEvictionAvg12h; }
+    uint8_t getCompactHistogramEntryCount() const { return hopScalingHistogram.getEntryCount(); }
+    size_t getCompactHistogramRecentSampleCount() const { return hopScalingHistogram.getHopDistribution(true).sampleCount; }
+    size_t getCompactHistogramAllSampleCount() const { return hopScalingHistogram.getHopDistribution(false).sampleCount; }
+    uint8_t getCompactHistogramDenominator() const { return hopScalingHistogram.getSamplingDenominator(); }
 
   protected:
     int32_t runOnce() override;
@@ -111,6 +120,10 @@ class HopScalingModule : private concurrency::OSThread
     void rollHour();
     void loadState();
     void saveState() const;
+
+    // Bitwise hop scaling: compact histogram for tracking node hop distances
+    // This is a parallel implementation alongside the existing nodeDB-based approach
+    CompactHistogram hopScalingHistogram;
 
     // Hop recommendation state
     uint8_t lastRequiredHop = HOP_MAX;

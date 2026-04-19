@@ -56,3 +56,7 @@ CMakeLists.txt
 .python3
 .claude/scheduled_tasks.lock
 userPrefs.jsonc.mcp-session-bak
+src/modules/HopScalingModule_scenarios.md
+.gitignore
+src/modules/HopScalingModule_bitwise_transitionPlan.md
+.gitignore

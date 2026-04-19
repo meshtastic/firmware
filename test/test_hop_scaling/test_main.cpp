@@ -60,6 +60,7 @@ class HopScalingTestShim : public HopScalingModule
     using HopScalingModule::recordEviction;
     using HopScalingModule::recordPacketSender;
     using HopScalingModule::runOnce;
+    using HopScalingModule::samplePacketForHistogram;
 
     using HopScalingModule::getEvictionsCurrentHour;
     using HopScalingModule::getLastActivityWeight;
@@ -98,13 +99,23 @@ static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId, uint1
     for (uint8_t roll = 0; roll < numRolls; ++roll) {
         // Simulate a full one-hour window so alpha = 1/12 (no 0.25f floor needed)
         shim.setSampleWindowStartMs(millis() - 3600000UL);
-        for (uint16_t i = 0; i < meshSize; ++i)
-            shim.recordPacketSender(baseId + i);
+        for (uint16_t i = 0; i < meshSize; ++i) {
+            const uint32_t nodeId = baseId + i;
+            shim.recordPacketSender(nodeId);
+            // Exercise compact histogram path in parallel with old sampling logic.
+            shim.samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
+        }
         // Commit the window and trigger adaptive denominator adjustment.
         // For large meshes the first few rolls may cascade through early-roll triggers
         // as the denominator ramps up; subsequent rolls settle to a stable estimate.
         shim.rollSampleWindowTest(false);
     }
+}
+
+static void assertCompactHistogramActive(HopScalingTestShim &shim)
+{
+    TEST_ASSERT_GREATER_THAN_UINT8(0, shim.getCompactHistogramEntryCount());
+    TEST_ASSERT_TRUE(shim.getCompactHistogramAllSampleCount() > 0);
 }
 
 // Scenario A: Dense local mesh — 110 nodes with a heavy core at hops 0–2.
@@ -229,6 +240,7 @@ void test_dense_local_telemetry()
     TEST_MESSAGE("Assertion: 55 nodes are reachable by hop 1, so the result should remain tightly constrained.");
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= 3);
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() >= 1);
+    assertCompactHistogramActive(*shim);
 
     hopScalingModule = nullptr;
 }
@@ -255,6 +267,7 @@ void test_spread_sparse_position()
     TEST_MESSAGE("Assertion: hop should settle in the 3-5 range for this spread-out mesh.");
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() >= 3);
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= 5);
+    assertCompactHistogramActive(*shim);
 
     hopScalingModule = nullptr;
 }
@@ -280,6 +293,7 @@ void test_deep_chain_position()
 
     TEST_MESSAGE("Assertion: total active population is too small to reduce hop count.");
     TEST_ASSERT_EQUAL_UINT8(HOP_MAX, shim->getLastRequiredHop());
+    assertCompactHistogramActive(*shim);
 
     hopScalingModule = nullptr;
 }
@@ -306,6 +320,7 @@ void test_router_cluster_telemetry()
     TEST_MESSAGE("Assertion: result should stay in the 2-4 range for this router-backed topology.");
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() >= 2);
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= 4);
+    assertCompactHistogramActive(*shim);
 
     hopScalingModule = nullptr;
 }
@@ -346,8 +361,11 @@ void test_megamesh_eviction_scaling()
         // IDs from a per-hour unique base.  The denominator has already adapted to 64
         // during pre-warm, so ~31 IDs pass per roll giving est ≈ 1984.
         shim->setSampleWindowStartMs(millis() - 3600000UL);
-        for (uint32_t i = 0; i < 2000; i++)
-            shim->recordPacketSender(static_cast<uint32_t>(0x9C000000) + static_cast<uint32_t>(hour) * 0x10000 + i);
+        for (uint32_t i = 0; i < 2000; i++) {
+            const uint32_t nodeId = static_cast<uint32_t>(0x9C000000) + static_cast<uint32_t>(hour) * 0x10000 + i;
+            shim->recordPacketSender(nodeId);
+            shim->samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
+        }
         shim->rollSampleWindowTest(false);
 
         for (int run = 0; run < 7; run++)
@@ -360,6 +378,7 @@ void test_megamesh_eviction_scaling()
     TEST_MESSAGE("Assertion: sustained evictions should push scale above 1.0 and keep hop well below HOP_MAX.");
     TEST_ASSERT_TRUE(shim->getLastScaleFactor() > 1.0f);
     TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= 3);
+    assertCompactHistogramActive(*shim);
 
     hopScalingModule = nullptr;
 }
@@ -399,6 +418,7 @@ void test_sparse_to_dense_transition()
     TEST_MESSAGE("Assertion: added local nodes should reduce required hop below the sparse baseline.");
     TEST_ASSERT_TRUE(hopDense < hopSparse);
     TEST_ASSERT_TRUE(hopDense <= 3);
+    assertCompactHistogramActive(*shim);
 
     hopScalingModule = nullptr;
 }
@@ -460,13 +480,17 @@ void test_early_sample_flush()
     shim->runOnce();
 
     TEST_MESSAGE("Feeding 120 unique sampled node IDs (96 needed for flush)");
-    for (uint32_t i = 1; i <= 120; i++)
-        shim->recordPacketSender(i * 8);
+    for (uint32_t i = 1; i <= 120; i++) {
+        const uint32_t nodeId = i * 8;
+        shim->recordPacketSender(nodeId);
+        shim->samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
+    }
 
     TEST_MESSAGE("Running one more cycle after the forced flush to emit updated status.");
     shim->runOnce();
 
     TEST_MSG_FMT("After early flush: hop=%u scale=%.2f", shim->getLastRequiredHop(), (double)shim->getLastScaleFactor());
+    assertCompactHistogramActive(*shim);
 
     hopScalingModule = nullptr;
 }
@@ -488,8 +512,11 @@ void test_hourly_roll()
     for (int i = 0; i < 12; i++)
         shim->recordEviction();
 
-    for (uint32_t i = 1; i <= 30; i++)
-        shim->recordPacketSender(i * 8);
+    for (uint32_t i = 1; i <= 30; i++) {
+        const uint32_t nodeId = i * 8;
+        shim->recordPacketSender(nodeId);
+        shim->samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
+    }
 
     for (int run = 0; run < 7; run++) {
         int32_t interval = shim->runOnce();
@@ -501,6 +528,7 @@ void test_hourly_roll()
                  (double)shim->getRollingEvictionAverage());
 
     TEST_ASSERT_TRUE(shim->getRollingEvictionAverage() > 0.0f);
+    assertCompactHistogramActive(*shim);
 
     hopScalingModule = nullptr;
 }
