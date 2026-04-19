@@ -245,8 +245,10 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > SX126X_MAX_POWER) // This chip has lower power limits than some
-        power = SX126X_MAX_POWER;
+    limitPower(SX126X_MAX_POWER);
+    // Make sure we reach the minimum power supported to turn the chip on (-9dBm)
+    if (power < -9)
+        power = -9;
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE)
