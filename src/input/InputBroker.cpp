@@ -403,4 +403,8 @@ void InputBroker::Init()
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
     expressLRSFiveWayInput = new ExpressLRSFiveWay();
 #endif
+
+#if defined(ARDUINO_NESSO_N1)
+    i2cButton = new i2cButtonThread("i2cButtonThread");
+#endif
 }

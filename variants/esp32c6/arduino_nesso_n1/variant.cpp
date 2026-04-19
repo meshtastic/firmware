@@ -122,6 +122,6 @@ void gpio_ext_set(uint8_t address, uint8_t pin, bool value)
 uint8_t gpio_ext_get(uint8_t address, uint8_t pin)
 {
     uint8_t in_data;
-    i2c_read_byte(address, PI4IO_REG_OUT_SET, &in_data);
+    i2c_read_byte(address, PI4IO_REG_IN_STA, &in_data);
     return getbit(in_data, pin);
 }

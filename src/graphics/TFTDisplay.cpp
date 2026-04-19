@@ -411,11 +411,22 @@ class LGFX : public lgfx::LGFX_Device
             cfg.i2c_port = TOUCH_I2C_PORT;
             cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
 #ifdef SCREEN_TOUCH_USE_I2C1
+#ifdef ARDUINO_NESSO_N1
+            cfg.pin_sda = -1;
+            cfg.pin_scl = -1;
+#else
             cfg.pin_sda = I2C_SDA1;
             cfg.pin_scl = I2C_SCL1;
+#endif
+#else
+#ifdef ARDUINO_NESSO_N1
+            cfg.pin_sda = -1;
+            cfg.pin_scl = -1;
+            cfg.freq = 100000;
 #else
             cfg.pin_sda = I2C_SDA;
             cfg.pin_scl = I2C_SCL;
+#endif
 #endif
             // cfg.freq = 400000;
 
@@ -605,11 +616,23 @@ class LGFX : public lgfx::LGFX_Device
             cfg.i2c_port = TOUCH_I2C_PORT;
             cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
 #ifdef SCREEN_TOUCH_USE_I2C1
+#ifdef ARDUINO_NESSO_N1
+            cfg.pin_sda = -1;
+            cfg.pin_scl = -1;
+            cfg.freq = 100000;
+#else
             cfg.pin_sda = I2C_SDA1;
             cfg.pin_scl = I2C_SCL1;
+#endif
+#else
+#ifdef ARDUINO_NESSO_N1
+            cfg.pin_sda = -1;
+            cfg.pin_scl = -1;
+            cfg.freq = 100000;
 #else
             cfg.pin_sda = I2C_SDA;
             cfg.pin_scl = I2C_SCL;
+#endif
 #endif
             // cfg.freq = 400000;
 
