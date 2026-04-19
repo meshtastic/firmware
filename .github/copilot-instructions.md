@@ -70,6 +70,63 @@ PKI (Public Key Infrastructure) messages have special handling:
 - Accepted on a special "PKI" channel
 - Allow encrypted DMs between nodes that discovered each other on downlink-enabled channels
 
+## Encryption & Key Management
+
+Every Meshtastic packet on the air is encrypted in one of two ways: the **per-channel symmetric** layer (AES-CTR with a shared PSK) for broadcasts and channel traffic, and the **per-peer PKI** layer (X25519 ECDH → AES-256-CCM) for direct messages and remote admin. Both are implemented in `src/mesh/CryptoEngine.cpp`; the send/receive dispatch lives in `src/mesh/Router.cpp`; admin authorization lives in `src/modules/AdminModule.cpp`.
+
+### High-level model
+
+- **Channels** are symmetric rooms. Anyone with the PSK can read any message on the channel. Channel 0 ("primary") is the default-PSK "LongFast" room the whole public mesh shares.
+- **DMs** addressed to a single node prefer PKI so that other holders of the channel PSK can't read them. Falls back to channel-symmetric encryption if public keys haven't been exchanged yet.
+- **Remote admin** is a DM carrying an `AdminMessage`. The receiver only acts on it if the sender's public key is on its allowlist (`config.security.admin_key[0..2]`).
+- **Ham mode** (`user.is_licensed=true`) disables PKI entirely and sends cleartext — FCC Part 97 prohibits encryption on amateur bands.
+- **No ratchet, no session.** Every packet is encrypted from scratch — a stateless design that matches the high-loss, store-and-forward nature of LoRa.
+
+### Symmetric channel encryption (AES-CTR)
+
+`CryptoEngine::encryptPacket` / `decrypt` / `encryptAESCtr` in `src/mesh/CryptoEngine.cpp`.
+
+- **Cipher**: AES-CTR, AES-128 or AES-256 depending on key length. Same routine in both directions (CTR is a stream cipher, so encrypt == decrypt).
+- **Key**: `ChannelSettings.psk` bytes. Size semantics:
+  - **0 bytes** → no encryption, cleartext on the air
+  - **1 byte** → short-form index into the well-known `defaultpsk[]` in `src/mesh/Channels.h`. Index 0 = cleartext; 1 = defaultpsk unchanged; 2..255 = defaultpsk with its last byte incremented by (index − 1). This is what the CLI's `--ch-set psk default` produces.
+  - **16 bytes** → raw AES-128 key
+  - **32 bytes** → raw AES-256 key
+- **Nonce (128 bit)**: `packet_id` (u64 LE) ‖ `from_node` (u32 LE) ‖ `block_counter` (u32, starts at 0). Built in `CryptoEngine::initNonce`.
+- **No AEAD**: channel packets carry no MAC. Integrity is "soft" — receivers drop packets whose channel hash doesn't match one of their own channels. `Channels::getHash` = XOR of the channel name bytes and the PSK bytes. An active attacker with the PSK can still forge; an attacker without it can't produce a hash any receiver accepts.
+- **Channel 0 is special in one way only**: it's the channel the Router attempts PKI decryption on before falling through to AES-CTR. Non-zero channels always go straight to AES-CTR.
+
+### PKI encryption for DMs (X25519 ECDH + AES-256-CCM)
+
+`CryptoEngine::encryptCurve25519` / `decryptCurve25519` in `src/mesh/CryptoEngine.cpp`.
+
+- **Keypair**: Curve25519 (aka X25519), 32-byte public + 32-byte private. Stored in `config.security.public_key` / `private_key`; the public half is mirrored into `owner.public_key` so it rides along in NodeInfo broadcasts and propagates through the mesh like any other identity field.
+- **Key generation** (`generateKeyPair`): stirs `HardwareRNG::fill()` (64 B from platform TRNG when available), the 16-byte `myNodeInfo.device_id`, and a call to `random()` into the rweather/Crypto library's software RNG, then `Curve25519::dh1`. `regeneratePublicKey` recomputes the public half from a known private (used when restoring from backup). `ensurePkiKeys` is the boot-time and config-write gate that fills anything missing.
+- **Handshake**: `Curve25519::dh2(local_private, remote_public) → 32-byte shared secret → SHA-256 → 32-byte AES-256 key`. Recomputed per packet. The SHA-256 step is effectively a KDF over the raw ECDH output.
+- **Cipher**: AES-256-CCM via `aes_ccm_ae` / `aes_ccm_ad` (`src/mesh/aes-ccm.cpp`). MAC length (the `M` parameter) is **8 bytes**. No AAD — the MAC covers ciphertext only.
+- **Nonce (128 bit)**: same base layout as the channel nonce — `packet_id` ‖ `from_node` — but the block-counter slot is a fresh 32-bit `extraNonce = random()` per packet. The extraNonce is transmitted in the clear after the MAC so the receiver can reconstruct the nonce.
+- **Wire overhead**: 12 bytes on the ciphertext = 8-byte MAC ‖ 4-byte extraNonce. Defined as `MESHTASTIC_PKC_OVERHEAD = 12` in `src/mesh/RadioInterface.h`. The Router's send path checks this overhead against `MAX_LORA_PAYLOAD_LEN` before committing to PKI.
+- **Send selection** (`Router::send`): send PKI when **all** of the following hold — we are the originator AND not Ham mode AND not Portduino simradio AND not on the `serial`/`gpio` channels (unless already marked `pki_encrypted`) AND our `config.security.private_key.size == 32` AND destination is a single node (not broadcast) AND the destination has a public key in our NodeDB.
+- **Receive selection** (`Router::perhapsDecode`): try PKI decrypt first when `channel == 0` AND `isToUs(p)` AND not broadcast AND both peers have public keys in NodeDB AND `rawSize > MESHTASTIC_PKC_OVERHEAD`. On success the packet gets `pki_encrypted=true` stamped and the sender's public key copied into `p->public_key` for downstream authorization.
+
+### Remote admin authorization
+
+Implemented in `src/modules/AdminModule.cpp` (see the sender-check block near the top of `handleReceivedProtobuf`). Three acceptance paths, checked in this order:
+
+1. **Local admin** — the `AdminMessage` was sourced from the device itself (phone app over BLE, serial CLI, internal module). Always accepted, never travels over the air.
+2. **PKI admin (preferred for remote)** — `mp.pki_encrypted == true` AND `mp.public_key` matches one of `config.security.admin_key[0..2]` (up to three authorized 32-byte Curve25519 public keys). The admin keys are typically copied from the admin node's own `user.public_key`.
+3. **Legacy admin channel (deprecated)** — a packet on a channel named literally `"admin"`, gated by `config.security.admin_channel_enabled`. Kept for backward compatibility; new deployments should use PKI admin. The AdminModule returns `NOT_AUTHORIZED` if `admin_channel_enabled == false`.
+
+`config.security.is_managed = true` disables all local CLI config writes (forcing every admin action through PKI). The AdminModule refuses to persist `is_managed=true` unless at least one `admin_key` is populated — this is a deliberate guard against operators locking themselves out.
+
+### Key-rotation hazards (actions that invalidate peers)
+
+- **`factory_reset`** → regenerates the X25519 keypair. Every peer holds the old public key; DMs to this node silently fail PKI decrypt until every peer re-exchanges NodeInfo. Do not call without operator approval.
+- **`region=UNSET → valid region`** → `ensurePkiKeys` runs inside the same `handleSetConfig` path; missing keys get generated at that moment.
+- **Ham-mode transitions** → entering Ham mode stops key generation and PKI use; leaving Ham mode does not auto-regenerate — the operator has to blank `security.private_key` via admin to trigger regen.
+- **Channel 0 PSK change** → every peer must re-learn the channel hash; cached NodeInfo becomes temporarily unreachable until the next broadcast.
+- **`security.private_key` blanked via admin** → regenerates both halves (unless in Ham mode) and propagates the new public key via NodeInfo.
+
 ## Project Structure
 
 ```
@@ -80,7 +137,7 @@ firmware/
 │   │   ├── NodeDB.*       # Node database management
 │   │   ├── Router.*       # Packet routing
 │   │   ├── Channels.*     # Channel management
-│   │   ├── CryptoEngine.* # AES-CCM encryption
+│   │   ├── CryptoEngine.* # AES-CTR (channels) + X25519 ECDH→AES-256-CCM (PKI for DMs/admin)
 │   │   ├── *Interface.*   # Radio interface implementations
 │   │   ├── api/           # WiFi/Ethernet server APIs (ServerAPI, PacketAPI)
 │   │   ├── http/          # HTTP server (WebServer, ContentHandler)
