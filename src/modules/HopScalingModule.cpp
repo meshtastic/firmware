@@ -253,7 +253,8 @@ void HopScalingModule::rollSampleWindow(bool earlyTrigger)
     if (earlyTrigger) {
         windowFraction = std::max(windowFraction, 0.25f);
     }
-    const uint8_t effectiveRolls = std::max(static_cast<uint8_t>(1), std::min(rollingAvgRollCount, static_cast<uint8_t>(12)));
+    const uint8_t effectiveRolls = std::max(
+        static_cast<uint8_t>(1), static_cast<uint8_t>(std::min<uint16_t>(static_cast<uint16_t>(rollingAvgRollCount) + 1, 12)));
     const float alpha = windowFraction * (1.0f / effectiveRolls);
     rollingSampledAvg12h = rollingSampledAvg12h * (1.0f - alpha) + estimatedMeshThisWindow * alpha;
     if (rollingAvgRollCount < 12)
@@ -269,6 +270,9 @@ void HopScalingModule::rollSampleWindow(bool earlyTrigger)
         LOG_INFO("[HOPSCALE] %s: windowMs=%u unique=%u est=%.1f load=%.2f sampling 1 in %u", rollLabel,
                  static_cast<unsigned int>(windowMs), sampledNodesCurrentHour.uniqueCount,
                  static_cast<double>(estimatedMeshThisWindow), static_cast<double>(loadRatio), SAMPLING_DENOMINATOR);
+    } else {
+        LOG_INFO("[HOPSCALE] Sample roll: unique=%u est=%.1f load=%.2f sampling 1 in %u", sampledNodesCurrentHour.uniqueCount,
+                 static_cast<double>(estimatedMeshThisWindow), static_cast<double>(loadRatio), SAMPLING_DENOMINATOR);
     }
 
     sampledNodesCurrentHour.clear();
@@ -281,7 +285,8 @@ void HopScalingModule::rollHour()
 {
     // Warm-up alpha for eviction rolling average: same counter as sample average
     // ensures both converge at the same rate during the cold-start phase.
-    const uint8_t effectiveRolls = std::max(static_cast<uint8_t>(1), std::min(rollingAvgRollCount, static_cast<uint8_t>(12)));
+    const uint8_t effectiveRolls = std::max(
+        static_cast<uint8_t>(1), static_cast<uint8_t>(std::min<uint16_t>(static_cast<uint16_t>(rollingAvgRollCount) + 1, 12)));
     const float evictAlpha = 1.0f / effectiveRolls;
     rollingEvictionAvg12h = rollingEvictionAvg12h * (1.0f - evictAlpha) + evictionsCurrentHour * evictAlpha;
     evictionsCurrentHour = 0;
@@ -296,27 +301,6 @@ void HopScalingModule::loadState()
 {
 #ifdef FSCom
     concurrency::LockGuard g(spiLock);
-
-    // TODO: REMOVE BEFORE PR SUBMISSION - one-time migration from legacy SoI state filename.
-    if (!FSCom.exists(HOP_SCALING_STATE_FILE) && FSCom.exists(LEGACY_SOI_STATE_FILE)) {
-        auto legacyFile = FSCom.open(LEGACY_SOI_STATE_FILE, FILE_O_READ);
-        if (legacyFile) {
-            PersistedState legacyState{};
-            if (legacyFile.read((uint8_t *)&legacyState, sizeof(legacyState)) == sizeof(legacyState)) {
-                legacyState.magic = HOP_SCALING_STATE_MAGIC;
-                legacyState.version = HOP_SCALING_STATE_VERSION;
-
-                auto migratedFile = FSCom.open(HOP_SCALING_STATE_FILE, FILE_O_WRITE);
-                if (migratedFile) {
-                    migratedFile.write((uint8_t *)&legacyState, sizeof(legacyState));
-                    migratedFile.flush();
-                    migratedFile.close();
-                    LOG_INFO("[HOPSCALE] Migrated legacy state file %s -> %s", LEGACY_SOI_STATE_FILE, HOP_SCALING_STATE_FILE);
-                }
-            }
-            legacyFile.close();
-        }
-    }
 
     auto file = FSCom.open(HOP_SCALING_STATE_FILE, FILE_O_READ);
     if (file) {
@@ -468,7 +452,11 @@ float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &s
                                             uint16_t &evictionEstimate) const
 {
     float scale = 1.0f; // default (no scaling)
-    const uint16_t knownNodeCount = MAX_NUM_NODES - snapshot.cumulative12h.unknownHopCount;
+    const uint16_t knownNodeCount =
+        std::max(static_cast<uint16_t>(1),
+                 static_cast<uint16_t>(snapshot.cumulative12h.total > snapshot.cumulative12h.unknownHopCount
+                                           ? snapshot.cumulative12h.total - snapshot.cumulative12h.unknownHopCount
+                                           : 0));
     // Compute sampled estimate for status visibility in all modes.
     // It is only used for scaling decisions in the high-turnover branch below.
     sampledEstimate = estimateSampledMeshSize();
@@ -477,7 +465,7 @@ float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &s
     const float nearCapacity = NODEDB_NEAR_CAPACITY_RATIO * MAX_NUM_NODES;
     if (!nodeDB || (!nodeDB->isFull() && snapshot.cumulative12h.total < nearCapacity)) {
         statusMode = STATUS_SMALL_STABLE_MESH;
-        scale = MAX_NUM_NODES / static_cast<float>(knownNodeCount);
+        scale = static_cast<float>(snapshot.cumulative12h.total) / static_cast<float>(knownNodeCount);
         evictionEstimate = static_cast<uint16_t>(std::min(knownNodeCount * scale, 65535.0f));
         LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (DB has headroom: %u/%d nodes, of which %.2f unknown hops)",
                   static_cast<double>(scale), snapshot.cumulative12h.total, MAX_NUM_NODES,

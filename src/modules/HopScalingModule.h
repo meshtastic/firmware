@@ -4,6 +4,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
+#include "mesh/mesh-pb-constants.h"
 
 #if HAS_VARIABLE_HOPS
 
