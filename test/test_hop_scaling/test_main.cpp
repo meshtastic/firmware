@@ -66,6 +66,10 @@ class HopScalingTestShim : public HopScalingModule
     using HopScalingModule::getLastRequiredHop;
     using HopScalingModule::getLastScaleFactor;
     using HopScalingModule::getRollingEvictionAverage;
+
+    // Test-only clock and window helpers (require UNIT_TEST friend access)
+    void setSampleWindowStartMs(uint32_t ms) { sampleWindowStartMs = ms; }
+    void rollSampleWindowTest(bool earlyTrigger) { rollSampleWindow(earlyTrigger); }
 };
 
 static MockNodeDB *mockNodeDB = nullptr;
@@ -82,13 +86,24 @@ static void addNodesAtHop(uint32_t baseId, uint8_t hop, uint32_t count, uint32_t
         mockNodeDB->addTestNode(baseId + i, hop, true, ageSecs + i * stride);
 }
 
-// Feed enough unique sampled IDs to force at least one early sample-window roll
-// and seed rollingSampledAvg12h so sampledEst is visible in status logs.
-static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId = 0x90000000, uint16_t uniqueCount = 120)
+// Feed sampled traffic that produces a rollingSampledAvg12h commensurate with meshSize.
+// Simulates numRolls full one-hour windows: before each batch the sample-window start is
+// set to millis()-3600000 so windowFraction=1.0 and alpha=1/12.  Sequential IDs starting
+// at baseId are fed; exactly meshSize/DENOMINATOR pass the modulo filter per roll.
+// With adaptive adjustment enabled, the denominator self-tunes over the first few rolls
+// (e.g. 8→4→2→1 for a 22-node mesh, 8→16→32→64 for a 2000-node mesh) then stabilises.
+// With warm-up alpha (1/1, 1/2, ..., 1/12) the rolling average converges within 12-16 rolls.
+static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId, uint16_t meshSize, uint8_t numRolls = 16)
 {
-    for (uint16_t i = 1; i <= uniqueCount; ++i) {
-        // Use a stride divisible by all supported denominators (1..128) so IDs pass modulo filtering.
-        shim.recordPacketSender(baseId + static_cast<uint32_t>(i) * 128);
+    for (uint8_t roll = 0; roll < numRolls; ++roll) {
+        // Simulate a full one-hour window so alpha = 1/12 (no 0.25f floor needed)
+        shim.setSampleWindowStartMs(millis() - 3600000UL);
+        for (uint16_t i = 0; i < meshSize; ++i)
+            shim.recordPacketSender(baseId + i);
+        // Commit the window and trigger adaptive denominator adjustment.
+        // For large meshes the first few rolls may cascade through early-roll triggers
+        // as the denominator ramps up; subsequent rolls settle to a stable estimate.
+        shim.rollSampleWindowTest(false);
     }
 }
 
@@ -203,7 +218,7 @@ void test_dense_local_telemetry()
     hopScalingModule = shim.get();
     buildDenseLocalMesh();
     TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
-    injectSampleTraffic(*shim, 0x91000000);
+    injectSampleTraffic(*shim, 0x91000000, 110);
 
     shim->runOnce();
 
@@ -231,7 +246,7 @@ void test_spread_sparse_position()
     hopScalingModule = shim.get();
     buildSpreadSparseMesh();
     TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
-    injectSampleTraffic(*shim, 0x92000000);
+    injectSampleTraffic(*shim, 0x92000000, 76);
 
     shim->runOnce();
 
@@ -257,7 +272,7 @@ void test_deep_chain_position()
     hopScalingModule = shim.get();
     buildDeepLinearChain();
     TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
-    injectSampleTraffic(*shim, 0x93000000);
+    injectSampleTraffic(*shim, 0x93000000, 22);
 
     shim->runOnce();
 
@@ -282,7 +297,7 @@ void test_router_cluster_telemetry()
     hopScalingModule = shim.get();
     buildRouterCluster();
     TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
-    injectSampleTraffic(*shim, 0x94000000);
+    injectSampleTraffic(*shim, 0x94000000, 71);
 
     shim->runOnce();
 
@@ -296,18 +311,24 @@ void test_router_cluster_telemetry()
 }
 
 // Scenario E: Megamesh with evictions — telemetry broadcast.
-// 199 nodes (near capacity), then 3 hours of escalating evictions.
-// Scale factor should grow, concentrating estimated nodes at lower hops.
-// Hop limit should decrease as the mesh grows denser.
+// The NodeDB holds 199 nodes (near capacity) but the true mesh is ~2000 nodes;
+// the DB is a small window of a much larger network constantly churning.
+// Sustained evictions grow the scale factor; sampledEst (via packet sampling) reports ~2000.
+// Hop limit should compress as the full estimated mesh density is recognized.
 void test_megamesh_eviction_scaling()
 {
     TEST_MESSAGE("=== Megamesh with eviction scaling ===");
-    TEST_MESSAGE("Topology: 199-node near-capacity mesh spanning hops 0-7 with sustained eviction pressure.");
-    TEST_MESSAGE("Expectation: scale factor grows above 1.0 and required hop compresses toward the local core.");
+    TEST_MESSAGE("Topology: NodeDB at capacity (199 nodes) representing a ~2000-node mesh with sustained eviction pressure.");
+    TEST_MESSAGE("Expectation: sampledEst ~2000, scale factor grows above 1.0, required hop compresses toward the local core.");
 
     auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
     hopScalingModule = shim.get();
     buildMegamesh();
+
+    // Pre-warm the sampling estimate with 36 simulated hours of ~2000-node traffic.
+    // The adaptive denominator ramps 8→16→32→64 over the first ~4 rolls, then stabilises
+    // at est ≈ 1984 per roll.  The rolling average converges within 12-16 rolls.
+    injectSampleTraffic(*shim, 0x9B000000, 2000);
 
     TEST_MESSAGE("Phase 1: initial run without evictions.");
     shim->runOnce();
@@ -321,10 +342,13 @@ void test_megamesh_eviction_scaling()
         for (int i = 0; i < 15 * (hour + 1); i++)
             shim->recordEviction();
 
-        // Feed sampled nodes to build up the sampling estimate.
-        // Use IDs divisible by 128 so they pass modulo filtering for all denominators 1..128.
-        for (uint32_t i = 1; i <= 40; i++)
-            shim->recordPacketSender(i * 128 + hour * 10000);
+        // Feed sampled nodes: simulate a full one-hour window then inject 2000 sequential
+        // IDs from a per-hour unique base.  The denominator has already adapted to 64
+        // during pre-warm, so ~31 IDs pass per roll giving est ≈ 1984.
+        shim->setSampleWindowStartMs(millis() - 3600000UL);
+        for (uint32_t i = 0; i < 2000; i++)
+            shim->recordPacketSender(static_cast<uint32_t>(0x9C000000) + static_cast<uint32_t>(hour) * 0x10000 + i);
+        shim->rollSampleWindowTest(false);
 
         for (int run = 0; run < 7; run++)
             shim->runOnce();
@@ -355,7 +379,7 @@ void test_sparse_to_dense_transition()
     TEST_MESSAGE("Phase 1: sparse chain should hold at HOP_MAX.");
     buildDeepLinearChain();
     TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
-    injectSampleTraffic(*shim, 0x95000000);
+    injectSampleTraffic(*shim, 0x95000000, 22);
     shim->runOnce();
     uint8_t hopSparse = shim->getLastRequiredHop();
     TEST_MSG_FMT("Phase 1 sparse: hop=%u (expect %u)", hopSparse, HOP_MAX);
@@ -542,15 +566,15 @@ void test_startup_blank_state()
 void test_scenario_summary_output()
 {
     TEST_MESSAGE("=== Scenario summary ===");
-    TEST_MESSAGE("Scenario       | Nodes | Distribution                  | Scale | Hop    | Why");
-    TEST_MESSAGE("A: Dense local | 110   | 25/30/15/5/10/15/10 h0-6      | 1.0   | 1-2    | 55 nodes at h1 >> 40");
-    TEST_MESSAGE("B: Spread      | 76    | 5/8/12/15/10/6/10/10 h0-7     | 1.0   | 3-4    | Need h3 to reach 40");
-    TEST_MESSAGE("C: Deep chain  | 22    | 2/3/3/4/3/2/2/3 h0-7          | 1.0   | 7      | Never reaches 40");
-    TEST_MESSAGE("D: Router      | 71    | 3/5/45/8/3/2/2/3 h0-7         | 1.0   | 2-3    | 45-node hop-2 cluster");
-    TEST_MESSAGE("E: Megamesh    | 199   | 30/40/35/30/20/15/14/15 h0-7  | >1.0  | 0-1    | Scale inflates counts");
+    TEST_MESSAGE("Scenario       | Nodes  | Distribution                 | Scale | Hop    | Why");
+    TEST_MESSAGE("A: Dense local | 110    | 25/30/15/5/10/15/10 h0-6     | 1.0   | 1-2    | 55 nodes at h1 >> 40");
+    TEST_MESSAGE("B: Spread      | 76     | 5/8/12/15/10/6/10/10 h0-7    | 1.0   | 3-4    | Need h3 to reach 40");
+    TEST_MESSAGE("C: Deep chain  | 22     | 2/3/3/4/3/2/2/3 h0-7         | 1.0   | 7      | Never reaches 40");
+    TEST_MESSAGE("D: Router      | 71     | 3/5/45/8/3/2/2/3 h0-7        | 1.0   | 2-3    | 45-node hop-2 cluster");
+    TEST_MESSAGE("E: Megamesh    | 199    | 30/40/35/30/20/15/14/15 h0-7 | >1.0  | 0-1    | Scale inflates counts");
     TEST_MESSAGE("F: Transition  | 22->72 | Chain -> dense local         | 1.0   | 7-><=3 | Adapts to new neighbors");
-    TEST_MESSAGE("G: Persistence | --    | --                            | --    | --     | State survives reboot");
-    TEST_MESSAGE("H: Early flush | 199   | Near-capacity sampled mesh    | --    | --     | Sample tracker overflow");
+    TEST_MESSAGE("G: Persistence | --     | --                           | --    | --     | State survives reboot");
+    TEST_MESSAGE("H: Early flush | 199    | Near-capacity sampled mesh   | --    | --     | Sample tracker overflow");
 }
 
 // ---------------------------------------------------------------------------
@@ -568,9 +592,13 @@ void setUp(void)
     myNodeInfo.my_node_num = kLocalNode;
     nodeDB = mockNodeDB;
 
-    // Disable denominator jitter so SAMPLING_DENOMINATOR stays on power-of-2 values
-    // and injectSampleTraffic() IDs (stride 128) always pass the modulo filter.
+    // Disable denominator jitter so SAMPLING_DENOMINATOR stays on deterministic values
+    // and injectSampleTraffic() produces consistent results across runs.
     HopScalingModule::setSamplingJitter(false);
+    // Reset denominator to its initial value (8) so each test starts from a known state.
+    // Adaptive adjustment is left enabled — the denominator self-tunes during
+    // injectSampleTraffic() rolls and settles to a value commensurate with mesh size.
+    HopScalingModule::resetSamplingDenominator();
 }
 
 void tearDown(void)
