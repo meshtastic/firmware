@@ -134,7 +134,7 @@ NullSensor ina3221Sensor;
 
 #endif
 
-#if !MESHTASTIC_EXCLUDE_I2C
+#if !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 #include <utility>
 extern std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
@@ -1357,7 +1357,7 @@ bool Power::axpChipInit()
 #endif
 }
 
-#if !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_MAX1704X.h>)
+#if !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_MAX1704X.h>) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 /**
  * Wrapper class for an I2C MAX17048 Lipo battery sensor.
