@@ -332,15 +332,11 @@ class Screen : public concurrency::OSThread
 
     // Function to allow the AccelerometerThread to set the heading if a sensor provides it
     // Mutex needed?
-    void setHeading(long _heading)
-    {
-        hasCompass = true;
-        compassHeading = fmod(_heading, 360);
-    }
+    void setHeading(float heading);
 
     bool hasHeading() { return hasCompass; }
 
-    long getHeading() { return compassHeading; }
+    float getHeading() { return compassHeading; }
 
     void setEndCalibration(uint32_t _endCalibrationAt) { endCalibrationAt = _endCalibrationAt; }
     uint32_t getEndCalibration() { return endCalibrationAt; }

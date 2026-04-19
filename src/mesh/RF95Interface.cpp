@@ -240,8 +240,7 @@ bool RF95Interface::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
-        power = RF95_MAX_POWER;
+    limitPower(RF95_MAX_POWER);
 
 #ifdef USE_RF95_RFO
     err = lora->setOutputPower(power, true);

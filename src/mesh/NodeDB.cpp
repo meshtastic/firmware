@@ -17,6 +17,7 @@
 #include "Router.h"
 #include "SPILock.h"
 #include "SafeFile.h"
+#include "TransmitHistory.h"
 #include "TypeConversions.h"
 #include "error.h"
 #include "main.h"
@@ -509,6 +510,12 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     }
 #endif
     spiLock->unlock();
+
+    // rmDir above nuked the .dat file, but TransmitHistory's in-memory
+    // cache auto-flushes every 5 min and would resurrect it.
+    if (transmitHistory) {
+        transmitHistory->clear();
+    }
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultNodeDatabase();
     installDefaultDeviceState();
@@ -819,7 +826,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
-#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION)
+#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION) || defined(PCA_LED_NOTIFICATION)
     moduleConfig.external_notification.enabled = true;
 #endif
 #if defined(PIN_BUZZER)
