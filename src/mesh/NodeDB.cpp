@@ -863,6 +863,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 #endif
+#if ARCH_PORTDUINO
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+#endif
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.alert_message = true;

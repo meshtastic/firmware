@@ -408,6 +408,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             if (genericShouldAlert) {
                 LOG_INFO("externalNotificationModule - Generic alert");
                 setExternalState(0, true);
+#if ARCH_PORTDUINO
+                portduinoNotify(mp);
+#endif
             }
 
             if (vibraShouldAlert) {
@@ -521,3 +524,26 @@ int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
     }
     return 0;
 }
+
+#if ARCH_PORTDUINO
+void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp)
+{
+    std::string senderName;
+    const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
+    if (sender && sender->has_user) {
+        if (sender->user.long_name[0] != '\0') {
+            senderName = sender->user.long_name;
+        } else {
+            senderName = sender->user.short_name;
+        }
+    } else {
+        senderName = std::to_string(mp.from);
+    }
+    std::string notificationSummary = "From: " + senderName;
+    std::string notificationBody = std::string((char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
+    std::string command = "notify-send -a Meshtasticd -i org.meshtastic.meshtasticd.png ";
+    command += "\"" + notificationSummary + "\" \"" + notificationBody + "\"";
+    LOG_INFO("Executing command: %s", command.c_str());
+    exec(command.c_str());
+}
+#endif
