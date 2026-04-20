@@ -1,0 +1,29 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+
+# Test harness artifacts
+tests/report.html
+tests/junit.xml
+tests/reportlog.jsonl
+tests/fwlog.jsonl
+# Subprocess-output tee from pio/esptool/nrfutil/picotool (live flash
+# progress for the TUI; also a post-run diagnostic for plain CLI runs).
+tests/flash.log
+tests/tool_coverage.json
+tests/.coverage
+htmlcov/
+# Persistent run counter for meshtastic-mcp-test-tui header.
+tests/.tui-runs
+# Cross-run history (TUI duration sparkline).
+tests/.history/
+# Reproducer bundles (TUI `x` export on failed tests).
+tests/reproducers/
+# UI-tier camera captures + per-test transcripts. Regenerated every run;
+# left on disk for human review between runs.
+tests/ui_captures/
