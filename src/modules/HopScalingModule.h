@@ -64,9 +64,10 @@ class HopScalingModule : private concurrency::OSThread
     uint16_t getEvictionsCurrentHour() const { return evictionsCurrentHour; }
     float getRollingEvictionAverage() const { return rollingEvictionAvg12h; }
     uint8_t getCompactHistogramEntryCount() const { return hopScalingHistogram.getEntryCount(); }
-    size_t getCompactHistogramRecentSampleCount() const { return hopScalingHistogram.getHopDistribution(true).sampleCount; }
-    size_t getCompactHistogramAllSampleCount() const { return hopScalingHistogram.getHopDistribution(false).sampleCount; }
     uint8_t getCompactHistogramDenominator() const { return hopScalingHistogram.getSamplingDenominator(); }
+    uint8_t getCompactHistogramFilterDenominator() const { return hopScalingHistogram.getFilteringDenominator(); }
+    uint8_t getCompactHistogramSuggestedHop() const { return hopScalingHistogram.getLastSuggestedHop(); }
+    size_t getCompactHistogramAllSampleCount() const { return hopScalingHistogram.getEntryCount(); }
 
   protected:
     int32_t runOnce() override;

@@ -87,40 +87,6 @@ struct PersistedState {
     uint8_t rollingAvgRollCount; // v2: warm-up counter (0..12)
 };
 
-uint8_t suggestedHopFromCompactHistogram(const CompactHistogram::PerHopDistribution &recent,
-                                         const CompactHistogram::PerHopDistribution &all, uint8_t samplingDenominator,
-                                         float politenessFactor)
-{
-    // Prefer recent activity; fall back to all-time histogram if recent is empty.
-    const CompactHistogram::PerHopDistribution &src = (recent.totalSamples > 0) ? recent : all;
-    if (src.totalSamples == 0) {
-        return HOP_MAX;
-    }
-
-    uint16_t affectedNodesPerHop[HOP_MAX + 1];
-    uint32_t affectedNodes = 0;
-    uint8_t baseHop = HOP_MAX;
-
-    for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
-        const uint32_t expanded = static_cast<uint32_t>(src.perHop[hop]) * samplingDenominator;
-        affectedNodesPerHop[hop] = static_cast<uint16_t>(std::min<uint32_t>(expanded, UINT16_MAX));
-        affectedNodes += affectedNodesPerHop[hop];
-        if (affectedNodes >= TARGET_AFFECTED_NODES && baseHop == HOP_MAX) {
-            baseHop = hop;
-            break;
-        }
-    }
-
-    if (baseHop < HOP_MAX) {
-        const uint32_t affectedIfExtend = affectedNodes + affectedNodesPerHop[baseHop + 1];
-        const float politeLimit = TARGET_AFFECTED_NODES * politenessFactor;
-        if (affectedIfExtend <= politeLimit) {
-            baseHop++;
-        }
-    }
-
-    return baseHop;
-}
 } // namespace
 
 HopScalingModule *hopScalingModule;
@@ -212,24 +178,10 @@ void HopScalingModule::recordPacketSender(uint32_t nodeId)
     }
 }
 
-/// Sample incoming packet into the bitwise CompactHistogram.
-/// This is the new parallel sampling mechanism; it's independent of the nodeDB approach.
+/// Sample incoming packet into the CompactHistogram for bitwise hop tracking.
 void HopScalingModule::samplePacketForHistogram(uint32_t nodeId, uint8_t hopCount)
 {
     hopScalingHistogram.sampleRxPacket(nodeId, hopCount);
-
-    // Periodically check if window rolling is due
-    if (hopScalingHistogram.isWindowRollDue()) {
-        hopScalingHistogram.rollWindows();
-    }
-
-    // Periodically check if denominator scaling is needed
-    // For now, just track the events; actual scaling happens in runOnce()
-    if (hopScalingHistogram.shouldScaleUpDenominator()) {
-        hopScalingHistogram.recordStepUpEvent();
-    } else if (hopScalingHistogram.shouldScaleDownDenominator()) {
-        hopScalingHistogram.recordStepDownEvent();
-    }
 }
 
 /// Extrapolate total mesh size from the sampled unique node count.
@@ -335,7 +287,7 @@ void HopScalingModule::rollSampleWindow(bool earlyTrigger)
 }
 
 // Roll the hourly eviction count and sampled node count into their respective rolling averages, then reset the hourly
-// counters. Also performs adaptive adjustment of the sampling denominator to keep the sample tracker load within optimal bounds.
+// counters. Also triggers the CompactHistogram hourly rollover.
 void HopScalingModule::rollHour()
 {
     // Warm-up alpha for eviction rolling average: same counter as sample average
@@ -347,6 +299,11 @@ void HopScalingModule::rollHour()
     evictionsCurrentHour = 0;
 
     rollSampleWindow(false);
+
+    // Trigger the CompactHistogram's own hourly rollover (tallies per-hop counts,
+    // adjusts denominators, shifts seen bitmaps, logs its recommendation).
+    hopScalingHistogram.rollHour();
+
     saveState();
 }
 
@@ -588,42 +545,18 @@ void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyU
              snapshot.recent1h.total, snapshot.recent1h.total + snapshot.old1hFrom2h.total,
              snapshot.recent1h.total + snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total, snapshot.cumulative12h.total);
 
-    // Compact histogram comparison status emitted on the same 10-minute cadence as NodeDB hop-walk status.
-    // Get per-hop distribution from histogram (mirroring NodeDB format)
-    const auto histPerHopRecent = hopScalingHistogram.getPerHopDistribution(true);
-    const auto histPerHopAll = hopScalingHistogram.getPerHopDistribution(false);
-    const auto histEstimateRecent = hopScalingHistogram.estimateMeshSize(true);
-    const auto histEstimateAll = hopScalingHistogram.estimateMeshSize(false);
-
-    const uint8_t histSuggestedHop = suggestedHopFromCompactHistogram(
-        histPerHopRecent, histPerHopAll, hopScalingHistogram.getSamplingDenominator(), lastPolitenessFactor);
+    // CompactHistogram comparison: report the histogram's own suggestion alongside the NodeDB-derived hop.
+    const uint8_t histSuggestedHop = hopScalingHistogram.getLastSuggestedHop();
     const int8_t delta = static_cast<int8_t>(histSuggestedHop) - static_cast<int8_t>(lastRequiredHop);
+    const auto &histCounts = hopScalingHistogram.getLastPerHopCounts();
 
-    // Scale histogram per-hop arrays using 12-hour scale factor (same as NodeDB)
-    const float scale12h = std::max(1.0f + 12.0f * (lastScaleFactor - 1.0f), 1.0f);
-    uint16_t histHopsRecent[HOP_MAX + 1];
-    uint16_t histHopsAll[HOP_MAX + 1];
-    for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
-        const float scaledRecent = histPerHopRecent.perHop[hop] * scale12h;
-        const float scaledAll = histPerHopAll.perHop[hop] * scale12h;
-        histHopsRecent[hop] = static_cast<uint16_t>(std::min(scaledRecent, static_cast<float>(UINT16_MAX)));
-        histHopsAll[hop] = static_cast<uint16_t>(std::min(scaledAll, static_cast<float>(UINT16_MAX)));
-    }
+    LOG_INFO("[HOPSCALE] histogram hop=%u delta=%d fill=%u%% samp=1/%u filt=1/%u counted=%u", histSuggestedHop, delta,
+             hopScalingHistogram.getFillPercentage(), hopScalingHistogram.getSamplingDenominator(),
+             hopScalingHistogram.getFilteringDenominator(), histCounts.total);
 
-    LOG_INFO("[HOPSCALE] compare nodedbHop=%u histHop=%u delta=%d histRecent=%u histAll=%u "
-             "histEstRecent=%u histEstAll=%u histConfidence=%u%% histSaturated=%u histLowerBound=%u "
-             "histFill=%u%% histDeno=1/%u stepUp=%u stepDown=%u",
-             lastRequiredHop, histSuggestedHop, delta, static_cast<unsigned>(histPerHopRecent.totalSamples),
-             static_cast<unsigned>(histPerHopAll.totalSamples), histEstimateRecent.estimatedNodes, histEstimateAll.estimatedNodes,
-             histEstimateRecent.confidencePercent, histEstimateRecent.saturated ? 1 : 0,
-             histEstimateRecent.lowerBoundOnly ? 1 : 0, hopScalingHistogram.getFillPercentage(),
-             hopScalingHistogram.getSamplingDenominator(), hopScalingHistogram.getStepUpEvents(),
-             hopScalingHistogram.getStepDownEvents());
-
-    LOG_INFO("[HOPSCALE] histPerHop recent: [%u %u %u %u %u %u %u %u]", histHopsRecent[0], histHopsRecent[1], histHopsRecent[2],
-             histHopsRecent[3], histHopsRecent[4], histHopsRecent[5], histHopsRecent[6], histHopsRecent[7]);
-    LOG_INFO("[HOPSCALE] histPerHop all:     [%u %u %u %u %u %u %u %u]", histHopsAll[0], histHopsAll[1], histHopsAll[2],
-             histHopsAll[3], histHopsAll[4], histHopsAll[5], histHopsAll[6], histHopsAll[7]);
+    LOG_INFO("[HOPSCALE] hist perHop: [%u %u %u %u %u %u %u %u]", histCounts.perHop[0], histCounts.perHop[1],
+             histCounts.perHop[2], histCounts.perHop[3], histCounts.perHop[4], histCounts.perHop[5], histCounts.perHop[6],
+             histCounts.perHop[7]);
 }
 
 /**

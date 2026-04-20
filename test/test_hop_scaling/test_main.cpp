@@ -76,6 +76,15 @@ class HopScalingTestShim : public HopScalingModule
 
 static MockNodeDB *mockNodeDB = nullptr;
 
+// Create deterministic IDs whose low bits are well distributed across modulo/bitmask buckets.
+// This avoids aliasing to a single residue class and better exercises both samplers:
+// - HopScaling legacy sampler: nodeId % denominator == 0
+// - CompactHistogram sampler:   (nodeId & (denominator - 1)) == 0
+static uint32_t makeDistributedNodeId(uint32_t baseId, uint32_t ordinal, uint32_t salt = 0)
+{
+    return baseId + salt + (ordinal * 33u);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers — mesh topology builders
 // ---------------------------------------------------------------------------
@@ -84,8 +93,10 @@ static MockNodeDB *mockNodeDB = nullptr;
 // ageSecs is the base age; nodes get ageSecs + i*stride seconds old.
 static void addNodesAtHop(uint32_t baseId, uint8_t hop, uint32_t count, uint32_t ageSecs, uint32_t stride = 10)
 {
-    for (uint32_t i = 0; i < count; i++)
-        mockNodeDB->addTestNode(baseId + i, hop, true, ageSecs + i * stride);
+    for (uint32_t i = 0; i < count; i++) {
+        const uint32_t nodeId = makeDistributedNodeId(baseId, i, static_cast<uint32_t>(hop) << 8);
+        mockNodeDB->addTestNode(nodeId, hop, true, ageSecs + i * stride);
+    }
 }
 
 // Feed sampled traffic that produces a rollingSampledAvg12h commensurate with meshSize.
@@ -97,15 +108,16 @@ static void addNodesAtHop(uint32_t baseId, uint8_t hop, uint32_t count, uint32_t
 // With warm-up alpha (1/1, 1/2, ..., 1/12) the rolling average converges within 12-16 rolls.
 static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId, uint16_t meshSize, uint8_t numRolls = 16)
 {
-    // Set denominator to 1 to ensure all samples are captured in tests
-    HopScalingModule::setDenominatorForTest(1);
-    shim.setHistogramDenominator(1);
+    // Keep realistic filtering enabled for both samplers. ID generation below spreads
+    // low bits so each roll contains both sampled and filtered-out senders.
+    HopScalingModule::resetSamplingDenominator();
+    shim.setHistogramDenominator(CompactHistogram::DENOM_MIN);
 
     for (uint8_t roll = 0; roll < numRolls; ++roll) {
         // Simulate a full one-hour window so alpha = 1/12 (no 0.25f floor needed)
         shim.setSampleWindowStartMs(millis() - 3600000UL);
         for (uint16_t i = 0; i < meshSize; ++i) {
-            const uint32_t nodeId = baseId + i;
+            const uint32_t nodeId = makeDistributedNodeId(baseId, i, static_cast<uint32_t>(roll) << 16);
             shim.recordPacketSender(nodeId);
             // Exercise compact histogram path in parallel with old sampling logic.
             shim.samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
@@ -367,7 +379,8 @@ void test_megamesh_eviction_scaling()
         // during pre-warm, so ~31 IDs pass per roll giving est ≈ 1984.
         shim->setSampleWindowStartMs(millis() - 3600000UL);
         for (uint32_t i = 0; i < 2000; i++) {
-            const uint32_t nodeId = static_cast<uint32_t>(0x9C000000) + static_cast<uint32_t>(hour) * 0x10000 + i;
+            const uint32_t nodeId =
+                makeDistributedNodeId(static_cast<uint32_t>(0x9C000000), i, static_cast<uint32_t>(hour) * 0x10000);
             shim->recordPacketSender(nodeId);
             shim->samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
         }
@@ -490,7 +503,7 @@ void test_early_sample_flush()
 
     TEST_MESSAGE("Feeding 120 unique sampled node IDs (96 needed for flush)");
     for (uint32_t i = 1; i <= 120; i++) {
-        const uint32_t nodeId = i * 8;
+        const uint32_t nodeId = makeDistributedNodeId(0x96000000, i, 0x55u);
         shim->recordPacketSender(nodeId);
         shim->samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
     }
@@ -526,7 +539,7 @@ void test_hourly_roll()
         shim->recordEviction();
 
     for (uint32_t i = 1; i <= 30; i++) {
-        const uint32_t nodeId = i * 8;
+        const uint32_t nodeId = makeDistributedNodeId(0x97000000, i, 0xAAu);
         shim->recordPacketSender(nodeId);
         shim->samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
     }
