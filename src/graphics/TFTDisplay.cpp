@@ -403,6 +403,10 @@ class LGFX : public lgfx::LGFX_Device
 #ifdef SCREEN_TOUCH_RST
             cfg.pin_rst = SCREEN_TOUCH_RST;
 #endif
+#ifdef ARDUINO_NESSO_N1
+            // Nesso shares GPIO3 with the system IRQ line, so poll the touch controller instead.
+            cfg.pin_int = -1;
+#endif
             cfg.bus_shared = true;
             cfg.offset_rotation = TFT_OFFSET_ROTATION;
             // cfg.freq = 2500000;
@@ -443,9 +447,12 @@ static LGFX *tft = nullptr;
 
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
+#if defined(HELTEC_V4_TFT) || defined(ARDUINO_NESSO_N1)
+#include <Wire.h>
+#include "lgfx/v1/Touch.hpp"
+#endif
 #ifdef HELTEC_V4_TFT
 #include "chsc6x.h"
-#include "lgfx/v1/Touch.hpp"
 namespace lgfx
 {
 inline namespace v1
@@ -494,13 +501,120 @@ class TOUCH_CHSC6X : public ITouch
 } // namespace v1
 } // namespace lgfx
 #endif
+#ifdef ARDUINO_NESSO_N1
+namespace lgfx
+{
+inline namespace v1
+{
+class TOUCH_NESSO_FT5X06 : public ITouch
+{
+  public:
+    TOUCH_NESSO_FT5X06(void)
+    {
+        _cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
+        _cfg.x_min = 0;
+        _cfg.x_max = TFT_HEIGHT - 1;
+        _cfg.y_min = 0;
+        _cfg.y_max = TFT_WIDTH - 1;
+    };
+
+    bool init(void) override
+    {
+#ifdef SCREEN_TOUCH_RST
+        if (_cfg.pin_rst >= 0) {
+            ::pinMode(_cfg.pin_rst, OUTPUT);
+            ::digitalWrite(_cfg.pin_rst, LOW);
+            ::delay(1);
+            ::digitalWrite(_cfg.pin_rst, HIGH);
+        }
+#endif
+        if (_cfg.pin_int >= 0) {
+            ::pinMode(_cfg.pin_int, INPUT_PULLUP);
+        }
+        uint8_t info[6] = {0};
+        _inited = writeRegister8(0x00, 0x00) && readRegister(0xA3, info, sizeof(info)) && writeRegister8(0xA4, 0x00) && info[5];
+        return _inited;
+    };
+
+    uint_fast8_t getTouchRaw(touch_point_t *tp, uint_fast8_t count) override
+    {
+        if (!_inited || count == 0) {
+            return 0;
+        }
+        constexpr uint8_t maxTouchPoints = 5;
+        if (count > maxTouchPoints) {
+            count = maxTouchPoints;
+        }
+
+        uint8_t readbuf[29];
+        if (!readRegister(0x02, readbuf, sizeof(readbuf))) {
+            return 0;
+        }
+
+        uint_fast8_t points = std::min<uint_fast8_t>(count, readbuf[0] & 0x0F);
+        for (uint_fast8_t idx = 0; idx < points; ++idx) {
+            auto data = &readbuf[idx * 6];
+            tp[idx].size = 1;
+            tp[idx].x = (data[1] & 0x0F) << 8 | data[2];
+            tp[idx].y = (data[3] & 0x0F) << 8 | data[4];
+            tp[idx].id = data[3] >> 4;
+        }
+        return points;
+    };
+
+    void wakeup(void) override
+    {
+        if (_cfg.pin_int >= 0) {
+            ::pinMode(_cfg.pin_int, INPUT_PULLDOWN);
+            ::delayMicroseconds(512);
+            ::pinMode(_cfg.pin_int, INPUT_PULLUP);
+        }
+        writeRegister8(0xA5, 0x01);
+    };
+
+    void sleep(void) override { writeRegister8(0xA5, 0x03); };
+
+  private:
+    bool readRegister(uint8_t reg, uint8_t *data, size_t length)
+    {
+        Wire.beginTransmission(_cfg.i2c_addr);
+        Wire.write(reg);
+        if (Wire.endTransmission(false) != 0) {
+            return false;
+        }
+        size_t received = Wire.requestFrom((int)_cfg.i2c_addr, (int)length, (int)true);
+        if (received != length) {
+            while (Wire.available()) {
+                Wire.read();
+            }
+            return false;
+        }
+        for (size_t i = 0; i < length; ++i) {
+            data[i] = Wire.read();
+        }
+        return true;
+    }
+
+    bool writeRegister8(uint8_t reg, uint8_t value)
+    {
+        Wire.beginTransmission(_cfg.i2c_addr);
+        Wire.write(reg);
+        Wire.write(value);
+        return Wire.endTransmission(true) == 0;
+    }
+};
+} // namespace v1
+} // namespace lgfx
+#endif
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_ST7789 _panel_instance;
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
 #if HAS_TOUCHSCREEN
-#if defined(T_WATCH_S3) || defined(ELECROW) || defined(ARDUINO_NESSO_N1)
+#if defined(ARDUINO_NESSO_N1)
+    lgfx::TOUCH_NESSO_FT5X06 _touch_instance;
+#elif defined(T_WATCH_S3) || defined(ELECROW)
     lgfx::Touch_FT5x06 _touch_instance;
 #elif defined(HELTEC_V4_TFT)
     lgfx::TOUCH_CHSC6X _touch_instance;
@@ -608,6 +722,10 @@ class LGFX : public lgfx::LGFX_Device
 #ifdef SCREEN_TOUCH_RST
             cfg.pin_rst = SCREEN_TOUCH_RST;
 #endif
+#ifdef ARDUINO_NESSO_N1
+            // Nesso shares GPIO3 with the system IRQ line, so poll the touch controller instead.
+            cfg.pin_int = -1;
+#endif
             cfg.bus_shared = true;
             cfg.offset_rotation = TFT_OFFSET_ROTATION;
             // cfg.freq = 2500000;
@@ -617,18 +735,16 @@ class LGFX : public lgfx::LGFX_Device
             cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
 #ifdef SCREEN_TOUCH_USE_I2C1
 #ifdef ARDUINO_NESSO_N1
-            cfg.pin_sda = -1;
-            cfg.pin_scl = -1;
-            cfg.freq = 100000;
+            cfg.pin_sda = I2C_SDA1;
+            cfg.pin_scl = I2C_SCL1;
 #else
             cfg.pin_sda = I2C_SDA1;
             cfg.pin_scl = I2C_SCL1;
 #endif
 #else
 #ifdef ARDUINO_NESSO_N1
-            cfg.pin_sda = -1;
-            cfg.pin_scl = -1;
-            cfg.freq = 100000;
+            cfg.pin_sda = I2C_SDA;
+            cfg.pin_scl = I2C_SCL;
 #else
             cfg.pin_sda = I2C_SDA;
             cfg.pin_scl = I2C_SCL;
