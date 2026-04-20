@@ -67,35 +67,26 @@ void setupNicheGraphics()
     InkHUD::Applet::fontMedium = FREESANS_18PT_WIN1253;
     InkHUD::Applet::fontSmall = FREESANS_12PT_WIN1253;
 
-    // Load persisted settings. begin() calls loadSettings() internally, so we save after
-    // applying defaults to ensure begin() picks up our values from flash.
-    inkhud->persistence->loadSettings();
-    if (inkhud->persistence->settings.tips.firstBoot) {
-        inkhud->persistence->settings.rotation = 3;
-        inkhud->persistence->settings.userTiles.maxCount = 2;
-        inkhud->persistence->settings.userTiles.count = 1;
-        inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
-        inkhud->persistence->settings.optionalMenuItems.backlight = true;
-    }
+    // Customize default settings
+    inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
+    inkhud->persistence->settings.rotation = 3;           // 270 degrees clockwise
+    inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
+    inkhud->persistence->settings.optionalMenuItems.backlight = true;
+
     // Alignment must cancel rotation for visual-frame touch input: (rotation + alignment) % 4 == 0.
-    // Recomputed on every boot so it tracks persisted rotation. The bridge also updates it at runtime.
     inkhud->persistence->settings.joystick.alignment = (4 - inkhud->persistence->settings.rotation) % 4;
-    inkhud->persistence->saveSettings();
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
-    // Optional arguments for defaults:
-    // - is activated?
-    // - is autoshown?
-    // - is foreground on a specific tile (index)?
-    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true);      // Activated, autoshown
-    inkhud->addApplet("DMs", new InkHUD::DMApplet, true, false);                      // Activated, not autoshown
-    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, true); // Activated, autoshown
-    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
-    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true); // Activated
-    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);
-    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
-    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet);
+    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, false, false);      // Not Active, not autoshown
+    inkhud->addApplet("DMs", new InkHUD::DMApplet, true, true);                         // Activated, Autoshown
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, true);   // Activated, Autoshown
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1), false, false); // Not Active, not autoshown
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false);           // Activated, not autoshown
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false);      // Activated, not autoshown
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);                // Activated, not autoshown, default on tile 0
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false);   // Not Active, not autoshown
 
     // Backlight
     // ----------------------------
