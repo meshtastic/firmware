@@ -60,6 +60,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
+#include "mesh/Default.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
@@ -98,6 +99,7 @@ namespace graphics
 
 // This means the *visible* area (sh1106 can address 132, but shows 128 for example)
 #define IDLE_FRAMERATE 1 // in fps
+#define COMPASS_ACTIVE_FRAMERATE 20
 
 // DEBUG
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
@@ -134,6 +136,60 @@ static bool heartbeat = false;
 // End Functions to write date/time to the screen
 
 extern bool hasUnreadMessage;
+
+static inline float wrapHeading360(float heading)
+{
+    if (heading < 0.0f) {
+        heading += 360.0f;
+    } else if (heading >= 360.0f) {
+        heading -= 360.0f;
+    }
+    return heading;
+}
+
+void Screen::setHeading(float heading)
+{
+    const float wrappedHeading = wrapHeading360(heading);
+
+    if (!hasCompass) {
+        hasCompass = true;
+        compassHeading = wrappedHeading;
+        return;
+    }
+
+    // Interpolate using shortest-path angular delta to avoid jumps around 0/360.
+    float delta = wrappedHeading - compassHeading;
+    if (delta > 180.0f) {
+        delta -= 360.0f;
+    } else if (delta < -180.0f) {
+        delta += 360.0f;
+    }
+
+    // Adaptive filtering:
+    // - Strong damping for tiny deltas (jitter)
+    // - Faster response for larger turns
+    const float absDelta = (delta >= 0.0f) ? delta : -delta;
+    if (absDelta < 1.0f) {
+        return;
+    }
+
+    float alpha = 0.35f;
+    if (absDelta > 25.0f) {
+        alpha = 0.85f;
+    } else if (absDelta > 10.0f) {
+        alpha = 0.65f;
+    }
+
+    float step = delta * alpha;
+    const float maxStep = 12.0f;
+    if (step > maxStep) {
+        step = maxStep;
+    } else if (step < -maxStep) {
+        step = -maxStep;
+    }
+
+    compassHeading = wrapHeading360(compassHeading + step);
+}
 
 // ==============================
 // Overlay Alert Banner Renderer
@@ -272,10 +328,25 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
-    static float b;
+    static float b = -1.0f;
+    static uint32_t lastHeadingAtMs = 0;
+    const uint32_t now = millis();
+    const uint32_t gpsUpdateIntervalSecs =
+        Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
+    uint32_t effectiveUpdateIntervalSecs = gpsUpdateIntervalSecs;
+    if (config.position.position_broadcast_smart_enabled) {
+        const uint32_t smartMinIntervalSecs = Default::getConfiguredOrDefault(
+            config.position.broadcast_smart_minimum_interval_secs, default_broadcast_smart_minimum_interval_secs);
+        if (smartMinIntervalSecs > effectiveUpdateIntervalSecs) {
+            effectiveUpdateIntervalSecs = smartMinIntervalSecs;
+        }
+    }
+    // Two expected update windows; keep arithmetic 32-bit to avoid pulling in larger 64-bit helpers.
+    const uint32_t headingStaleMs =
+        (effectiveUpdateIntervalSecs > (UINT32_MAX / 2000U)) ? UINT32_MAX : (effectiveUpdateIntervalSecs * 2000U);
 
     if (oldLat == 0) {
-        // just prepare for next time
+        // Need at least two position points before we can infer heading.
         oldLat = lat;
         oldLon = lon;
 
@@ -283,12 +354,20 @@ float Screen::estimatedHeading(double lat, double lon)
     }
 
     float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
-    if (d < 10) // haven't moved enough, just keep current bearing
+    if (d < 10) { // haven't moved enough, keep previous heading (invalid until first real movement)
+        if (lastHeadingAtMs != 0 && (now - lastHeadingAtMs) >= headingStaleMs) {
+            // Heading is stale after prolonged no-movement; force reacquire.
+            b = -1.0f;
+            oldLat = lat;
+            oldLon = lon;
+        }
         return b;
+    }
 
     b = GeoCoord::bearing(oldLat, oldLon, lat, lon) * RAD_TO_DEG;
     oldLat = lat;
     oldLon = lon;
+    lastHeadingAtMs = now;
 
     return b;
 }
@@ -925,9 +1004,22 @@ int32_t Screen::runOnce()
     // but we should only call setTargetFPS when framestate changes, because
     // otherwise that breaks animations.
 
-    if (targetFramerate != IDLE_FRAMERATE && ui->getUiState()->frameState == FIXED) {
+    uint32_t desiredFramerate = IDLE_FRAMERATE;
+#if HAS_GPS && !defined(USE_EINK)
+    if (showingNormalScreen && hasCompass) {
+        const uint8_t currentFrame = ui->getUiState()->currentFrame;
+        if ((framesetInfo.positions.gps != 255 && currentFrame == framesetInfo.positions.gps) ||
+            (framesetInfo.positions.waypoint != 255 && currentFrame == framesetInfo.positions.waypoint) ||
+            (framesetInfo.positions.firstFavorite != 255 && currentFrame >= framesetInfo.positions.firstFavorite &&
+             currentFrame <= framesetInfo.positions.lastFavorite)) {
+            desiredFramerate = COMPASS_ACTIVE_FRAMERATE;
+        }
+    }
+#endif
+
+    if (targetFramerate != desiredFramerate && ui->getUiState()->frameState == FIXED) {
         // oldFrameState = ui->getUiState()->frameState;
-        targetFramerate = IDLE_FRAMERATE;
+        targetFramerate = desiredFramerate;
 
         ui->setTargetFPS(targetFramerate);
         forceDisplay();
@@ -1267,6 +1359,10 @@ void Screen::setFrames(FrameFocus focus)
     // Store the info about this frameset, for future setFrames calls
     this->framesetInfo = fsi;
 
+#ifdef USERPREFS_UI_TEST_LOG
+    logFrameChange("rebuild", ui->getUiState()->currentFrame);
+#endif
+
     setFastFramerate(); // Draw ASAP
 }
 
@@ -1421,10 +1517,76 @@ void Screen::handleOnPress()
     }
 }
 
+#ifdef USERPREFS_UI_TEST_LOG
+void Screen::logFrameChange(const char *reason, uint8_t targetIdx)
+{
+    // Reverse-map an index to a stable name string keyed off FramePositions
+    // field names — so the pytest harness can assert `name=nodelist_nodes`
+    // without caring about how the positions were ordered this boot.
+    const auto &p = framesetInfo.positions;
+    const char *name = "unknown";
+    if (targetIdx == p.home)
+        name = "home";
+    else if (targetIdx == p.deviceFocused)
+        name = "deviceFocused";
+    else if (targetIdx == p.textMessage)
+        name = "textMessage";
+    else if (targetIdx == p.nodelist_nodes)
+        name = "nodelist_nodes";
+    else if (targetIdx == p.nodelist_location)
+        name = "nodelist_location";
+    else if (targetIdx == p.nodelist_lastheard)
+        name = "nodelist_lastheard";
+    else if (targetIdx == p.nodelist_hopsignal)
+        name = "nodelist_hopsignal";
+    else if (targetIdx == p.nodelist_distance)
+        name = "nodelist_distance";
+    else if (targetIdx == p.nodelist_bearings)
+        name = "nodelist_bearings";
+    else if (targetIdx == p.system)
+        name = "system";
+    else if (targetIdx == p.gps)
+        name = "gps";
+    else if (targetIdx == p.lora)
+        name = "lora";
+    else if (targetIdx == p.clock)
+        name = "clock";
+    else if (targetIdx == p.chirpy)
+        name = "chirpy";
+    else if (targetIdx == p.fault)
+        name = "fault";
+    else if (targetIdx == p.waypoint)
+        name = "waypoint";
+    else if (targetIdx == p.focusedModule)
+        name = "focusedModule";
+    else if (targetIdx == p.log)
+        name = "log";
+    else if (targetIdx == p.settings)
+        name = "settings";
+    else if (targetIdx == p.wifi)
+        name = "wifi";
+    else if (p.firstFavorite != 255 && p.lastFavorite != 255 && targetIdx >= p.firstFavorite && targetIdx <= p.lastFavorite)
+        name = "favorite";
+    LOG_INFO("Screen: frame %u/%u name=%s reason=%s", (unsigned)targetIdx, (unsigned)framesetInfo.frameCount, name, reason);
+}
+#endif
+
 void Screen::showFrame(FrameDirection direction)
 {
     // Only advance frames when UI is stable
     if (ui->getUiState()->frameState == FIXED) {
+
+#ifdef USERPREFS_UI_TEST_LOG
+        // Log the *intended* target before the (async) transition fires, so
+        // tests see a deterministic record of what was requested.
+        if (framesetInfo.frameCount > 0) {
+            uint8_t curr = ui->getUiState()->currentFrame;
+            uint8_t target = (direction == FrameDirection::NEXT)
+                                 ? (uint8_t)((curr + 1) % framesetInfo.frameCount)
+                                 : (uint8_t)((curr + framesetInfo.frameCount - 1) % framesetInfo.frameCount);
+            logFrameChange(direction == FrameDirection::NEXT ? "next" : "prev", target);
+        }
+#endif
 
         if (direction == FrameDirection::NEXT) {
             ui->nextFrame();
@@ -1757,22 +1919,37 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showFrame(FrameDirection::NEXT);
             } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
                 this->ui->switchToFrame(0);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f1", 0);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F2) {
                 this->ui->switchToFrame(1);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f2", 1);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F3) {
                 this->ui->switchToFrame(2);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f3", 2);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F4) {
                 this->ui->switchToFrame(3);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f4", 3);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F5) {
                 this->ui->switchToFrame(4);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f5", 4);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_UP_LONG) {
