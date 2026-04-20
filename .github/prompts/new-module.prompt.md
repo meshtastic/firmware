@@ -118,7 +118,7 @@ CallbackObserver<MyModule, const meshtastic::Status *> statusObserver =
 
 Add test suite in `test/test_mymodule/`:
 
-```
+```text
 test/
 └── test_mymodule/
     └── test_main.cpp

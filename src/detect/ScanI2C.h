@@ -34,6 +34,7 @@ class ScanI2C
         SHT31,
         SHT4X,
         SHTC3,
+        SHTXX,
         LPS22HB,
         QMC6310U,
         QMC6310N,
