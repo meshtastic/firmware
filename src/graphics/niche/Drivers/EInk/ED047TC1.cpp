@@ -6,9 +6,9 @@
     FastEPD buffer format: 1bpp, horizontal bytes, MSB = leftmost pixel, 1 = white
 
     Both formats share the same pixel layout and polarity (1 = white, 0 = black).
-    The InkHUD safe-area buffer (944×532) is copied into the centre of the physical
+    The InkHUD safe-area buffer (944×523) is copied into the centre of the physical
     960×540 FastEPD buffer so content clears the panel's inactive edge border.
-    See ED047TC1.h for the H_OFFSET_BYTES / V_OFFSET_ROWS constants.
+    See ED047TC1.h for the H_OFFSET_BYTES / V_OFFSET_TOP / V_OFFSET_BOTTOM constants.
 
 */
 
@@ -115,9 +115,6 @@ void ED047TC1::update(uint8_t *imageData, UpdateTypes type)
         // signal (no visible effect). partialUpdate() updates pPrevious internally.
         epaper->partialUpdate(false, 0, dstTotalRows - 1);
     }
-
-    // Signal InkHUD that the (blocking) update is complete
-    beginPolling(1, 0);
 }
 
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

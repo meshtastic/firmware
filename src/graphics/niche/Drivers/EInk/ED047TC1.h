@@ -14,12 +14,13 @@
     pixels). DISPLAY_WIDTH / DISPLAY_HEIGHT expose a reduced "safe area" to InkHUD so
     that content is never drawn into this dead zone. The update() method copies the
     InkHUD frame buffer into the centre of the larger physical 960×540 buffer, using
-    H_OFFSET_BYTES (horizontal, whole bytes = 8 pixels per byte) and V_OFFSET_ROWS
-    (vertical, pixel rows) to position it.
+    H_OFFSET_BYTES (horizontal, whole bytes = 8 pixels per byte),
+    V_OFFSET_TOP and V_OFFSET_BOTTOM (vertical, pixel rows) to position it.
 
     Changing these constants shifts content inward from each physical edge:
-        H_OFFSET_BYTES = 1  →  8px left margin, 8px right margin  (960 – 2×8  = 944)
-        V_OFFSET_ROWS  = 4  →  4px top margin,  4px bottom margin (540 – 2×4  = 532)
+        H_OFFSET_BYTES = 1  →  8px left margin, 8px right margin   (960 – 8 – 8   = 944)
+        V_OFFSET_TOP   = 9  →  9px top margin  (asymmetric: top ≠ bottom)
+        V_OFFSET_BOTTOM = 8 →  8px bottom margin                    (540 – 9 – 8   = 523)
 
 */
 
