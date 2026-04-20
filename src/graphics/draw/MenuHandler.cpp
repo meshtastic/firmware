@@ -2580,7 +2580,7 @@ void menuHandler::themeMenu()
             if (visibleIdx < getVisibleThemeCount()) {
                 // Persist the theme's uniqueIdentifier so boot-time
                 // resolveThemeIndex() can restore this theme on next startup.
-                uiconfig.screen_rgb_color = getVisibleThemeByIndex(visibleIdx).uniqueIdentifier;
+                uiconfig.screen_rgb_color = COLOR565(255, 255, (getVisibleThemeByIndex(visibleIdx).uniqueIdentifier & 0x1F) << 3);
                 loadThemeDefaults();
                 saveUIConfig();
                 screen->runNow();

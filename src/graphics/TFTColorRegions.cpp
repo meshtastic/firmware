@@ -379,7 +379,7 @@ static constexpr size_t kInternalThemeCount = sizeof(kThemes) / sizeof(kThemes[0
 // which gracefully handles removed or retired themes.
 static inline size_t resolveThemeIndex()
 {
-    const uint32_t savedIdentifier = uiconfig.screen_rgb_color;
+    const uint32_t savedIdentifier = uiconfig.screen_rgb_color & 0x1F;
     for (size_t i = 0; i < kInternalThemeCount; i++) {
         if (kThemes[i].uniqueIdentifier == savedIdentifier)
             return i;
@@ -600,7 +600,7 @@ void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
         return;
     }
 
-    const uint32_t themeId = uiconfig.screen_rgb_color;
+    const uint32_t themeId = uiconfig.screen_rgb_color & 0x1F;
     const bool isHighlightRole = (role == TFTColorRole::FavoriteNode || role == TFTColorRole::BodyYellow);
     const bool isBodyRole = !isHighlightRole && isBodyColorRole(role);
 
