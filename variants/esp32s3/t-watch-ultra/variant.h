@@ -18,6 +18,8 @@
 #define TFT_OFFSET_ROTATION 0
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 #define USE_TFTDISPLAY 1
+#define HAS_SCREEN 1
+#define TFT_RESET_AFTER_SLEEP
 
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 12
@@ -42,7 +44,7 @@
 #define DAC_I2S_BCK 9
 #define DAC_I2S_WS 10
 #define DAC_I2S_DOUT 11
-#define DAC_I2S_MCLK 0 // TODO
+#define DAC_I2S_MCLK -1 // TODO
 
 #define HAS_AXP2101
 // #define PMU_IRQ 7
@@ -67,6 +69,7 @@
 
 #define USE_SX1262
 // #define USE_SX1280
+#define HW_SPI1_DEVICE
 
 #define LORA_SCK 35
 #define LORA_MISO 33

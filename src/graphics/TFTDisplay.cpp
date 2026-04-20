@@ -82,42 +82,19 @@ class LGFX : public lgfx::LGFX_Device
         setPanel(&_panel_instance);
     }
 
-    bool enableFrameBuffer(bool auto_display = false)
-    {
-        if (_panel_instance.initPanelFb()) {
-            auto fbPanel = _panel_instance.getPanelFb();
-            if (fbPanel) {
-                fbPanel->setBus(&_bus_instance);
-                fbPanel->setAutoDisplay(auto_display);
-                setPanel(fbPanel);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void disableFrameBuffer()
-    {
-        auto fbPanel = _panel_instance.getPanelFb();
-        if (fbPanel) {
-            _panel_instance.deinitPanelFb();
-            setPanel(&_panel_instance);
-        }
-    }
-
     bool init()
     {
 #ifdef CO5300_RESET
         LOG_DEBUG("LGFX_Panel_CO5300::init()");
         lgfx::pinMode(CO5300_RESET, lgfx::pin_mode_t::output);
         lgfx::gpio_hi(CO5300_RESET);
-        delay(200);
+        delay(20);
         lgfx::gpio_lo(CO5300_RESET);
-        delay(300);
+        delay(30);
         lgfx::gpio_hi(CO5300_RESET);
-        delay(200);
+        delay(20);
 #endif
-        return lgfx::LGFX_Device::init() && enableFrameBuffer(false);
+        return lgfx::LGFX_Device::init();
     }
 };
 
@@ -1385,13 +1362,41 @@ void TFTDisplay::display(bool fromBlank)
             if (x_LastPixelUpdate >= displayWidth) {
                 x_LastPixelUpdate = displayWidth - 1;
             }
+
+            int y_offset = 0;
+#if defined(CO5300_CS)
+            uint8_t lines_updated = 2;
+            if (y % 2 == 0) {
+                y_byteIndex = ((y + 1) / 8) * displayWidth;
+                y_byteMask = (1 << ((y + 1) & 7));
+                uint32_t bufferIndex = 1;
+                for (x = x_FirstPixelUpdate; x < x_LastPixelUpdate; x++) {
+                    isset = buffer[x + y_byteIndex] & y_byteMask;
+                    linePixelBuffer[bufferIndex++ + x_LastPixelUpdate] = isset ? colorTftMesh : colorTftBlack;
+                }
+            } else {
+                y_offset = -1;
+                memcpy(&linePixelBuffer[x_LastPixelUpdate + 1], &linePixelBuffer[x_FirstPixelUpdate],
+                       2 * (x_LastPixelUpdate - x_FirstPixelUpdate + 1));
+                y_byteIndex = ((y - 1) / 8) * displayWidth;
+                y_byteMask = (1 << ((y - 1) & 7));
+                uint32_t bufferIndex = 0;
+                for (x = x_FirstPixelUpdate; x < x_LastPixelUpdate; x++) {
+                    isset = buffer[x + y_byteIndex] & y_byteMask;
+                    linePixelBuffer[bufferIndex++ + x_FirstPixelUpdate] = isset ? colorTftMesh : colorTftBlack;
+                }
+            }
+#else
+            uint8_t lines_updated = 1;
+#endif
+
 #if defined(HACKADAY_COMMUNICATOR)
             tft->draw16bitBeRGBBitmap(x_FirstPixelUpdate, y, &linePixelBuffer[x_FirstPixelUpdate],
                                       (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1);
 #else
             // Step 4: Send the changed pixels on this line to the screen as a single block transfer.
             // This function accepts pixel data MSB first so it can dump the memory straight out the SPI port.
-            tft->pushRect(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
+            tft->pushRect(x_FirstPixelUpdate, y + y_offset, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), lines_updated,
                           &linePixelBuffer[x_FirstPixelUpdate]);
 #endif
             somethingChanged = true;
@@ -1617,7 +1622,11 @@ bool TFTDisplay::connect()
     tft->fillScreen(TFT_BLACK);
 
     if (this->linePixelBuffer == NULL) {
+#if defined(CO5300_CS)
+        this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * 2);
+#else
         this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth);
+#endif
 
         if (!this->linePixelBuffer) {
             LOG_ERROR("Not enough memory to create TFT line buffer\n");
