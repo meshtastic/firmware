@@ -56,7 +56,8 @@ template <typename T> bool LR11x0Interface<T>::init()
 
 #if ARCH_PORTDUINO
     float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
-// FIXME: correct logic to default to not using TCXO if no voltage is specified for LR11X0_TCXO_VOLTAGE
+    // FIXME: correct logic to default to not using TCXO if no Portduino DIO3 TCXO voltage is specified
+    // (uses portduino_config.dio3_tcxo_voltage from the Portduino YAML/config)
 #elif !defined(LR11X0_TCXO_VOLTAGE)
     float tcxoVoltage =
         0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
