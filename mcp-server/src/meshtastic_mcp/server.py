@@ -1,4 +1,4 @@
-"""FastMCP server wiring — 38 tools across 7 categories.
+"""FastMCP server wiring — 43 tools across 9 categories (adds uhubctl power control).
 
 Each tool handler is a thin delegation to a named module (pio.py, admin.py,
 etc.). Business logic does not live here.
@@ -511,6 +511,152 @@ def factory_reset(
     `full=True` also wipes device identity/keys (not just config).
     """
     return admin.factory_reset(port=port, confirm=confirm, full=full)
+
+
+@app.tool()
+def send_input_event(
+    event_code: int | str,
+    kb_char: int = 0,
+    touch_x: int = 0,
+    touch_y: int = 0,
+    port: str | None = None,
+) -> dict[str, Any]:
+    """Inject an InputBroker event (button / key / gesture) into the device UI.
+
+    Drives the same code path as a physical button press. Accepts a numeric
+    event code (0..255) or a name like `"RIGHT"`, `"SELECT"`, `"FN_F1"`.
+
+    Common codes: SELECT=10, UP=17, DOWN=18, LEFT=19, RIGHT=20, CANCEL=24,
+    BACK=27, FN_F1..F5=241..245.
+    """
+    return admin.send_input_event(
+        event_code=event_code,
+        kb_char=kb_char,
+        touch_x=touch_x,
+        touch_y=touch_y,
+        port=port,
+    )
+
+
+@app.tool()
+def capture_screen(role: str | None = None, ocr: bool = True) -> dict[str, Any]:
+    """Grab a frame from the USB webcam pointed at the device screen.
+
+    Returns PNG bytes (base64), optional OCR text, and backend metadata.
+    Requires the `[ui]` extras (opencv-python-headless) and a camera
+    configured via `MESHTASTIC_UI_CAMERA_DEVICE[_<ROLE>]`. Falls back to a
+    1×1 black PNG from the null backend when no camera is configured.
+    """
+    import base64
+
+    from . import camera as camera_mod
+
+    cam = camera_mod.get_camera(role)
+    try:
+        png = cam.capture()
+    finally:
+        cam.close()
+
+    result: dict[str, Any] = {
+        "backend": cam.name,
+        "bytes": len(png),
+        "image_base64": base64.b64encode(png).decode("ascii"),
+    }
+    if ocr:
+        from . import ocr as ocr_mod
+
+        result["ocr_backend"] = ocr_mod.backend_name()
+        result["ocr_text"] = ocr_mod.ocr_text(png)
+    return result
+
+
+# ---------- USB power control (uhubctl) -----------------------------------
+
+
+@app.tool()
+def uhubctl_list() -> list[dict[str, Any]]:
+    """List every USB hub + per-port device attachment as seen by `uhubctl`.
+
+    Read-only — no confirm required. Each hub entry includes its location
+    (`1-1.3`), descriptor, whether it supports Per-Port Power Switching,
+    and a list of populated ports with VID:PID of attached devices.
+    Useful for pre-flight checks before a destructive power-cycle call.
+    """
+    from . import uhubctl as uhubctl_mod
+
+    return uhubctl_mod.list_hubs()
+
+
+@app.tool()
+def uhubctl_power(
+    action: str,
+    location: str | None = None,
+    port: int | None = None,
+    role: str | None = None,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Power a USB hub port on or off via `uhubctl -a on|off`.
+
+    Target the port by either (`location`, `port`) — raw uhubctl syntax,
+    e.g. `location="1-1.3", port=2` — OR by `role` ("nrf52", "esp32s3").
+    Role lookup honors `MESHTASTIC_UHUBCTL_LOCATION_<ROLE>` +
+    `_PORT_<ROLE>` env vars first, falls back to VID auto-detection.
+
+    `action="off"` requires `confirm=True` (destructive — the attached
+    device will immediately disappear from the OS).
+    """
+    from . import uhubctl as uhubctl_mod
+
+    action_lower = action.lower()
+    if action_lower not in {"on", "off"}:
+        raise ValueError(f"action must be 'on' or 'off', got {action!r}")
+    if action_lower == "off" and not confirm:
+        raise uhubctl_mod.UhubctlError(
+            "uhubctl_power action='off' requires confirm=True"
+        )
+    loc, p = _resolve_uhubctl_target(location, port, role)
+    if action_lower == "on":
+        return uhubctl_mod.power_on(loc, p)
+    return uhubctl_mod.power_off(loc, p)
+
+
+@app.tool()
+def uhubctl_cycle(
+    location: str | None = None,
+    port: int | None = None,
+    role: str | None = None,
+    delay_s: int = 2,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Power a USB hub port off, wait `delay_s` seconds, then on.
+
+    The typical hard-reset sequence — shorter than off+on as two RPCs
+    because uhubctl handles the timing in-process. Target by (location,
+    port) or by role (see `uhubctl_power`). Requires `confirm=True`.
+    """
+    from . import uhubctl as uhubctl_mod
+
+    if not confirm:
+        raise uhubctl_mod.UhubctlError("uhubctl_cycle requires confirm=True")
+    if delay_s < 0 or delay_s > 60:
+        raise ValueError(f"delay_s must be 0..60, got {delay_s}")
+    loc, p = _resolve_uhubctl_target(location, port, role)
+    return uhubctl_mod.cycle(loc, p, delay_s=delay_s)
+
+
+def _resolve_uhubctl_target(
+    location: str | None, port: int | None, role: str | None
+) -> tuple[str, int]:
+    """Shared arg-resolution for uhubctl_power + uhubctl_cycle."""
+    from . import uhubctl as uhubctl_mod
+
+    if role is not None:
+        if location is not None or port is not None:
+            raise ValueError("pass either `role` OR (`location` + `port`), not both")
+        return uhubctl_mod.resolve_target(role)
+    if location is None or port is None:
+        raise ValueError("must pass `role` or both `location` and `port`")
+    return (location, int(port))
 
 
 # ---------- Direct hardware tools -----------------------------------------
