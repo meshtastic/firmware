@@ -52,7 +52,7 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {meshtas
 // Region profiles: bundle preset list + regulatory parameters shared across regions
 // presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle, override slot
 const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 0, 0, 0};
-const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 0, 0, 0};
+const RegionProfile PROFILE_EU868 = PROFILE_STD;
 const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 0, 0, 0};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr)                   \
@@ -89,7 +89,7 @@ const RegionInfo regions[] = {
        AFA) to avoid a duty cycle. (Please refer to line P page 22 of this document.)
        https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.01.01_60/en_30022002v030101p.pdf
      */
-    RDEF(EU_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_EU868),
+    RDEF(EU_868, 869.4f, 869.65f, 30, 30, false, false, PROFILE_EU868),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
