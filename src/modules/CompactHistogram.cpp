@@ -43,18 +43,19 @@ void CompactHistogram::clear()
     sessionStartTime = nowMs();
     lastWindowRollTime = nowMs();
     currentWindowIndex = 0;
+    replacementCursor = 0;
 
-    // On explicit clear, re-randomize jitter offset
-    jitterOffset = rand() % samplingDenominator;
-    jitterInitialized = true;
+    // // On explicit clear, re-randomize jitter offset
+    // jitterOffset = rand() % samplingDenominator;
+    // jitterInitialized = true;
 }
 
 void CompactHistogram::initializeJitter()
 {
-    if (!jitterInitialized) {
-        jitterOffset = rand() % samplingDenominator;
-        jitterInitialized = true;
-    }
+    // if (!jitterInitialized) {
+    //     jitterOffset = rand() % samplingDenominator;
+    jitterInitialized = true;
+}
 }
 
 void CompactHistogram::sampleRxPacket(uint32_t nodeId, uint8_t hopCount)
@@ -109,9 +110,10 @@ HistogramEntry *CompactHistogram::findOrCreateEntry(uint32_t nodeId)
         return entry;
     }
 
-    // Capacity exceeded: drop oldest entry (index 0)
-    // This is a simple LRU-like policy: new entries push out old ones
-    entry = &entries[0];
+    // Capacity exceeded: replace entries in a round-robin sweep.
+    // This avoids index-0 overwrite bias under sustained saturation.
+    entry = &entries[replacementCursor];
+    replacementCursor = static_cast<uint8_t>((replacementCursor + 1) % CAPACITY);
     entry->nodeIdAndHops = CompactHistogramOps::packNodeIdAndHops(nodeId, 0);
     entry->windowBitmap = 0;
     return entry;
@@ -231,6 +233,39 @@ CompactHistogram::PerHopDistribution CompactHistogram::getPerHopDistribution(boo
     }
 
     return dist;
+}
+
+CompactHistogram::MeshSizeEstimate CompactHistogram::estimateMeshSize(bool recentOnly) const
+{
+    MeshSizeEstimate estimate;
+    estimate.denominator = samplingDenominator;
+
+    const auto perHop = getPerHopDistribution(recentOnly);
+    estimate.sampledNodes = static_cast<uint16_t>(std::min<size_t>(perHop.totalSamples, UINT16_MAX));
+    if (estimate.sampledNodes == 0) {
+        return estimate;
+    }
+
+    const uint32_t expanded = static_cast<uint32_t>(estimate.sampledNodes) * samplingDenominator;
+    const uint16_t clampedExpanded = static_cast<uint16_t>(std::min<uint32_t>(expanded, UINT16_MAX));
+    estimate.lowerBoundNodes = clampedExpanded;
+
+    const bool saturatedNow = (count >= CAPACITY) || (getFillPercentage() >= 95);
+    estimate.saturated = saturatedNow;
+    estimate.lowerBoundOnly = saturatedNow;
+    estimate.estimatedNodes = clampedExpanded;
+
+    if (saturatedNow) {
+        estimate.confidencePercent = 35;
+    } else if (estimate.sampledNodes >= 48) {
+        estimate.confidencePercent = 90;
+    } else if (estimate.sampledNodes >= 16) {
+        estimate.confidencePercent = 70;
+    } else {
+        estimate.confidencePercent = 50;
+    }
+
+    return estimate;
 }
 
 void CompactHistogram::setSamplingDenominator(uint8_t denominator)

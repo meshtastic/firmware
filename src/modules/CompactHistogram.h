@@ -93,6 +93,16 @@ class CompactHistogram
         size_t totalSamples = 0;
     };
 
+    struct MeshSizeEstimate {
+        uint16_t estimatedNodes = 0;
+        uint16_t lowerBoundNodes = 0;
+        uint16_t sampledNodes = 0;
+        uint8_t denominator = SAMPLING_DENOMINATOR_INITIAL;
+        uint8_t confidencePercent = 0;
+        bool saturated = false;
+        bool lowerBoundOnly = false;
+    };
+
     /// Get hop distribution from histogram entries.
     /// If recentOnly=true, only count entries seen in the last 2 hours (short-term windows).
     HopDistribution getHopDistribution(bool recentOnly = false) const;
@@ -100,6 +110,10 @@ class CompactHistogram
     /// Get per-hop node counts from histogram entries.
     /// If recentOnly=true, only count entries seen in the last 2 hours (short-term windows).
     PerHopDistribution getPerHopDistribution(bool recentOnly = false) const;
+
+    /// Estimate total mesh size from sampled histogram population.
+    /// If saturated, this estimate is reported as a lower-bound with degraded confidence.
+    MeshSizeEstimate estimateMeshSize(bool recentOnly = true) const;
 
     // --- Adaptive Denominator Scaling ---
 
@@ -162,6 +176,7 @@ class CompactHistogram
     // --- Adaptive Scaling ---
     uint8_t stepUpEvents = 0;
     uint8_t stepDownEvents = 0;
+    uint8_t replacementCursor = 0;
 
     // --- Helper Methods ---
 

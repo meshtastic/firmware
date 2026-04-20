@@ -87,16 +87,39 @@ struct PersistedState {
     uint8_t rollingAvgRollCount; // v2: warm-up counter (0..12)
 };
 
-uint8_t suggestedHopFromCompactHistogram(const CompactHistogram::HopDistribution &recent,
-                                         const CompactHistogram::HopDistribution &all)
+uint8_t suggestedHopFromCompactHistogram(const CompactHistogram::PerHopDistribution &recent,
+                                         const CompactHistogram::PerHopDistribution &all, uint8_t samplingDenominator,
+                                         float politenessFactor)
 {
     // Prefer recent activity; fall back to all-time histogram if recent is empty.
-    const CompactHistogram::HopDistribution &src = (recent.sampleCount > 0) ? recent : all;
-    if (src.sampleCount == 0) {
+    const CompactHistogram::PerHopDistribution &src = (recent.totalSamples > 0) ? recent : all;
+    if (src.totalSamples == 0) {
         return HOP_MAX;
     }
-    const uint8_t suggested = static_cast<uint8_t>(std::min<uint16_t>(src.percentile75Hops + 1, HOP_MAX));
-    return suggested;
+
+    uint16_t affectedNodesPerHop[HOP_MAX + 1];
+    uint32_t affectedNodes = 0;
+    uint8_t baseHop = HOP_MAX;
+
+    for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
+        const uint32_t expanded = static_cast<uint32_t>(src.perHop[hop]) * samplingDenominator;
+        affectedNodesPerHop[hop] = static_cast<uint16_t>(std::min<uint32_t>(expanded, UINT16_MAX));
+        affectedNodes += affectedNodesPerHop[hop];
+        if (affectedNodes >= TARGET_AFFECTED_NODES && baseHop == HOP_MAX) {
+            baseHop = hop;
+            break;
+        }
+    }
+
+    if (baseHop < HOP_MAX) {
+        const uint32_t affectedIfExtend = affectedNodes + affectedNodesPerHop[baseHop + 1];
+        const float politeLimit = TARGET_AFFECTED_NODES * politenessFactor;
+        if (affectedIfExtend <= politeLimit) {
+            baseHop++;
+        }
+    }
+
+    return baseHop;
 }
 } // namespace
 
@@ -566,14 +589,15 @@ void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyU
              snapshot.recent1h.total + snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total, snapshot.cumulative12h.total);
 
     // Compact histogram comparison status emitted on the same 10-minute cadence as NodeDB hop-walk status.
-    const auto histRecent = hopScalingHistogram.getHopDistribution(true);
-    const auto histAll = hopScalingHistogram.getHopDistribution(false);
-    const uint8_t histSuggestedHop = suggestedHopFromCompactHistogram(histRecent, histAll);
-    const int8_t delta = static_cast<int8_t>(histSuggestedHop) - static_cast<int8_t>(lastRequiredHop);
-
     // Get per-hop distribution from histogram (mirroring NodeDB format)
     const auto histPerHopRecent = hopScalingHistogram.getPerHopDistribution(true);
     const auto histPerHopAll = hopScalingHistogram.getPerHopDistribution(false);
+    const auto histEstimateRecent = hopScalingHistogram.estimateMeshSize(true);
+    const auto histEstimateAll = hopScalingHistogram.estimateMeshSize(false);
+
+    const uint8_t histSuggestedHop = suggestedHopFromCompactHistogram(
+        histPerHopRecent, histPerHopAll, hopScalingHistogram.getSamplingDenominator(), lastPolitenessFactor);
+    const int8_t delta = static_cast<int8_t>(histSuggestedHop) - static_cast<int8_t>(lastRequiredHop);
 
     // Scale histogram per-hop arrays using 12-hour scale factor (same as NodeDB)
     const float scale12h = std::max(1.0f + 12.0f * (lastScaleFactor - 1.0f), 1.0f);
@@ -587,11 +611,14 @@ void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyU
     }
 
     LOG_INFO("[HOPSCALE] compare nodedbHop=%u histHop=%u delta=%d histRecent=%u histAll=%u "
-             "histP25/P50/P75=%u/%u/%u histFill=%u%% histDeno=1/%u stepUp=%u stepDown=%u",
-             lastRequiredHop, histSuggestedHop, delta, static_cast<unsigned>(histRecent.sampleCount),
-             static_cast<unsigned>(histAll.sampleCount), histRecent.percentile25Hops, histRecent.medianHops,
-             histRecent.percentile75Hops, hopScalingHistogram.getFillPercentage(), hopScalingHistogram.getSamplingDenominator(),
-             hopScalingHistogram.getStepUpEvents(), hopScalingHistogram.getStepDownEvents());
+             "histEstRecent=%u histEstAll=%u histConfidence=%u%% histSaturated=%u histLowerBound=%u "
+             "histFill=%u%% histDeno=1/%u stepUp=%u stepDown=%u",
+             lastRequiredHop, histSuggestedHop, delta, static_cast<unsigned>(histPerHopRecent.totalSamples),
+             static_cast<unsigned>(histPerHopAll.totalSamples), histEstimateRecent.estimatedNodes, histEstimateAll.estimatedNodes,
+             histEstimateRecent.confidencePercent, histEstimateRecent.saturated ? 1 : 0,
+             histEstimateRecent.lowerBoundOnly ? 1 : 0, hopScalingHistogram.getFillPercentage(),
+             hopScalingHistogram.getSamplingDenominator(), hopScalingHistogram.getStepUpEvents(),
+             hopScalingHistogram.getStepDownEvents());
 
     LOG_INFO("[HOPSCALE] histPerHop recent: [%u %u %u %u %u %u %u %u]", histHopsRecent[0], histHopsRecent[1], histHopsRecent[2],
              histHopsRecent[3], histHopsRecent[4], histHopsRecent[5], histHopsRecent[6], histHopsRecent[7]);
