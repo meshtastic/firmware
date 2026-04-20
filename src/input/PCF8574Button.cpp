@@ -37,7 +37,7 @@ static const input_broker_event buttonEventMap[8] = PCF8574_BUTTON_MAP;
 
 namespace {
 constexpr uint32_t PCF8574_IMMEDIATE_DEBOUNCE_MS = 50;
-constexpr uint32_t PCF8574_SELECT_LONG_PRESS_TIME_MS = 1000;
+constexpr uint32_t PCF8574_SELECT_LONG_PRESS_TIME_MS = 300;
 constexpr uint32_t PCF8574_UPDOWN_LONG_PRESS_TIME_MS = 300;
 constexpr uint32_t PCF8574_UPDOWN_LONG_REPEAT_INTERVAL_MS = 300;
 constexpr uint32_t PCF8574_NAV_REPEAT_DELAY_MS = 300;
