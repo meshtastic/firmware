@@ -8,7 +8,7 @@
     "flash_mode": "qio",
     "hwids": [["0x1A86", "0x7522"]],
     "mcu": "esp32p4",
-    "chip_variant": "esp32p4_es",
+    "chip_variant": "esp32p4",
     "variant": "esp32p4"
   },
   "arduino": {
