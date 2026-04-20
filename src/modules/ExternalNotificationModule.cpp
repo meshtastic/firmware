@@ -24,6 +24,10 @@
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
 
+#if HAS_LIBNOTIFY
+#include <libnotify/notify.h>
+#endif
+
 #if defined(HAS_RGB_LED)
 #include "AmbientLightingThread.h"
 uint8_t red = 0;
@@ -408,7 +412,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             if (genericShouldAlert) {
                 LOG_INFO("externalNotificationModule - Generic alert");
                 setExternalState(0, true);
-#if ARCH_PORTDUINO
+#if HAS_LIBNOTIFY
                 portduinoNotify(mp);
 #endif
             }
@@ -525,7 +529,7 @@ int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
     return 0;
 }
 
-#if ARCH_PORTDUINO
+#if HAS_LIBNOTIFY
 void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp)
 {
     std::string senderName;
@@ -541,9 +545,23 @@ void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp
     }
     std::string notificationSummary = "From: " + senderName;
     std::string notificationBody = std::string((char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
-    std::string command = "notify-send -a Meshtasticd -i org.meshtastic.meshtasticd.png ";
-    command += "\"" + notificationSummary + "\" \"" + notificationBody + "\"";
-    LOG_INFO("Executing command: %s", command.c_str());
-    exec(command.c_str());
+
+    if (!notify_is_initted()) {
+        if (!notify_init("Meshtasticd")) {
+            LOG_WARN("Failed to initialize libnotify");
+            return;
+        }
+    }
+    NotifyNotification *notification =
+        notify_notification_new(notificationSummary.c_str(), notificationBody.c_str(), "org.meshtastic.meshtasticd");
+    if (notification) {
+        GError *error = nullptr;
+        if (!notify_notification_show(notification, &error)) {
+            LOG_WARN("Failed to show notification: %s", error ? error->message : "unknown error");
+            if (error)
+                g_error_free(error);
+        }
+        g_object_unref(G_OBJECT(notification));
+    }
 }
 #endif
