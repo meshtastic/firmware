@@ -1,7 +1,34 @@
 #include "CompactHistogram.h"
+#include "FSCommon.h"
+#include "SPILock.h"
+#include "concurrency/LockGuard.h"
 #include "configuration.h"
 #include <algorithm>
 #include <cstring>
+
+// ---------------------------------------------------------------------------
+// Persistence constants and on-disk layout
+// ---------------------------------------------------------------------------
+
+namespace
+{
+constexpr uint32_t HISTOGRAM_STATE_MAGIC = 0x48535432; // 'HST2' — layout v2
+constexpr uint8_t HISTOGRAM_STATE_VERSION = 1;
+constexpr const char *HISTOGRAM_STATE_FILE = "/prefs/histogram.bin";
+
+// Packed to avoid any compiler-inserted padding between fields and the Record array.
+#pragma pack(push, 1)
+struct PersistedHistogram {
+    uint32_t magic;
+    uint8_t version;
+    uint8_t samplingDenominator;
+    uint8_t filteringDenominator;
+    uint32_t filterDenomRemainMs; // remaining hold duration; 0 when not elevated
+    uint16_t hashSeed;
+    Record entries[CompactHistogram::CAPACITY]; // full 512-byte array; count derived on load
+};
+#pragma pack(pop)
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -30,6 +57,86 @@ void CompactHistogram::clear()
     hashSeed = static_cast<uint16_t>(random());
 #else
     hashSeed = 0; // deterministic in unit tests
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------
+
+void CompactHistogram::saveToDisk() const
+{
+#ifdef FSCom
+    FSCom.mkdir("/prefs");
+    if (FSCom.exists(HISTOGRAM_STATE_FILE)) {
+        FSCom.remove(HISTOGRAM_STATE_FILE);
+    }
+    concurrency::LockGuard g(spiLock);
+    auto file = FSCom.open(HISTOGRAM_STATE_FILE, FILE_O_WRITE);
+    if (file) {
+        PersistedHistogram state{};
+        state.magic = HISTOGRAM_STATE_MAGIC;
+        state.version = HISTOGRAM_STATE_VERSION;
+        state.samplingDenominator = samplingDenominator;
+        state.filteringDenominator = filteringDenominator;
+        // Persist remaining hold time rather than the absolute timestamp so the value is
+        // still meaningful after a reboot (nowMs() resets to 0 on restart).
+        if (filteringDenominator > samplingDenominator) {
+            const uint32_t elapsed = nowMs() - filteringDenomElevatedAt;
+            state.filterDenomRemainMs = (elapsed < FILTER_DENOM_HOLD_MS) ? (FILTER_DENOM_HOLD_MS - elapsed) : 0u;
+        }
+        state.hashSeed = hashSeed;
+        // Save all CAPACITY slots; count is reconstructed on load by scanning seenHoursAgo.
+        memcpy(state.entries, entries, sizeof(state.entries));
+        file.write(reinterpret_cast<const uint8_t *>(&state), sizeof(state));
+        file.flush();
+        file.close();
+        LOG_DEBUG("[HISTOGRAM] Saved: count=%u samp=1/%u filt=1/%u holdRemainMs=%u", count, samplingDenominator,
+                  filteringDenominator, state.filterDenomRemainMs);
+    } else {
+        LOG_WARN("[HISTOGRAM] Failed to open %s for write", HISTOGRAM_STATE_FILE);
+    }
+#endif
+}
+
+void CompactHistogram::loadFromDisk()
+{
+#ifdef FSCom
+    concurrency::LockGuard g(spiLock);
+    auto file = FSCom.open(HISTOGRAM_STATE_FILE, FILE_O_READ);
+    if (!file)
+        return;
+    PersistedHistogram state{};
+    const bool readOk = (file.read(reinterpret_cast<uint8_t *>(&state), sizeof(state)) == sizeof(state));
+    file.close();
+    if (!readOk || state.magic != HISTOGRAM_STATE_MAGIC || state.version != HISTOGRAM_STATE_VERSION ||
+        state.samplingDenominator < DENOM_MIN || state.samplingDenominator > DENOM_MAX ||
+        state.filteringDenominator < state.samplingDenominator || state.filteringDenominator > DENOM_MAX) {
+        LOG_DEBUG("[HISTOGRAM] No valid persisted state (magic=%08x ver=%u), starting fresh", state.magic, state.version);
+        return;
+    }
+    // Derive count by scanning: active entries have seenHoursAgo != 0; pack them to the front.
+    uint8_t restored = 0;
+    for (uint8_t i = 0; i < CAPACITY && restored < CAPACITY; i++) {
+        if (state.entries[i].seenHoursAgo != 0u) {
+            entries[restored++] = state.entries[i];
+        }
+    }
+    count = restored;
+    samplingDenominator = state.samplingDenominator;
+    filteringDenominator = state.filteringDenominator;
+    // Back-date the elevation timestamp so the remaining hold duration is honoured.
+    if (state.filterDenomRemainMs > 0 && filteringDenominator > samplingDenominator) {
+        filteringDenomElevatedAt = nowMs() - (FILTER_DENOM_HOLD_MS - state.filterDenomRemainMs);
+    } else {
+        filteringDenomElevatedAt = 0;
+    }
+    // denominatorHistory can't be recovered; initialise all slots to filteringDenominator so
+    // the first few post-reboot scaledPerHour values use a safe (slightly conservative) multiplier.
+    memset(denominatorHistory, filteringDenominator, sizeof(denominatorHistory));
+    hashSeed = state.hashSeed;
+    LOG_INFO("[HISTOGRAM] Restored: count=%u samp=1/%u filt=1/%u holdRemainMs=%u", count, samplingDenominator,
+             filteringDenominator, state.filterDenomRemainMs);
 #endif
 }
 

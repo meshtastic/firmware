@@ -116,6 +116,9 @@ void HopScalingModule::HopBucket::add(const meshtastic_NodeInfoLite &node)
 HopScalingModule::HopScalingModule() : concurrency::OSThread("HopScaling")
 {
     loadState();
+    // Restore the histogram separately; its own file holds the 512-byte entry array which
+    // would bloat the HopScaling state file and is meaningless without per-entry data anyway.
+    hopScalingHistogram.loadFromDisk();
     sampleWindowStartMs = CompactHistogram::nowMs();
     setIntervalFromNow(INITIAL_DELAY_MS);
 }
@@ -303,6 +306,7 @@ void HopScalingModule::rollHour()
     // Trigger the CompactHistogram's own hourly rollover (tallies per-hop counts,
     // adjusts denominators, shifts seen bitmaps, logs its recommendation).
     hopScalingHistogram.rollHour();
+    hopScalingHistogram.saveToDisk();
 
     // Track how many histogram rollovers have occurred; used as a bootstrap gate to
     // defer switching to histogram-primary mode until at least one rollover has produced data.

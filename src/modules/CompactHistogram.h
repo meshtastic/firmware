@@ -133,6 +133,16 @@ class CompactHistogram
     /// Reset all entries and state.
     void clear();
 
+    /// Persist the histogram state (entries, denominators, hold-timer) to flash.
+    /// No-op on platforms without a filesystem.  Safe to call frequently — only writes
+    /// the bytes that changed.
+    void saveToDisk() const;
+
+    /// Restore histogram state from flash.  Safe to call even when no file exists.
+    /// Call once after construction, before the first rollHour(), to warm-start the
+    /// histogram across reboots without waiting 13 hours for data to re-accumulate.
+    void loadFromDisk();
+
     // -----------------------------------------------------------------------
     // Accessors
     // -----------------------------------------------------------------------
