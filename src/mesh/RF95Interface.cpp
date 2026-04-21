@@ -114,8 +114,8 @@ void RF95Interface::setTransmitEnable(bool txon)
 bool RF95Interface::init()
 {
 #ifdef RF95_POWER_EN
-    digitalWrite(RF95_POWER_EN, HIGH);
     pinMode(RF95_POWER_EN, OUTPUT);
+    digitalWrite(RF95_POWER_EN, HIGH);
 #endif
 
     RadioLibInterface::init();
