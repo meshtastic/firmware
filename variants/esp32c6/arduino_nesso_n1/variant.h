@@ -80,7 +80,9 @@ uint8_t gpio_ext_get(uint8_t address, uint8_t pin);
 #define BRIGHTNESS_DEFAULT 130
 #define TFT_MESH_OVERRIDE COLOR565(20, 240, 220)
 
+#ifndef HAS_TOUCHSCREEN
 #define HAS_TOUCHSCREEN 1
+#endif
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x38
 #define SCREEN_TOUCH_INT 3
