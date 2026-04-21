@@ -86,6 +86,25 @@ class CompactHistogram
         uint16_t total = 0;
     };
 
+    /// Mesh activity trend stats produced at each hourly rollover.
+    /// All counts are scaled by filteringDenominator (i.e. estimated full-mesh population).
+    ///
+    /// Bitmap interpretation (before the hourly shift): bit 0 = just-completed hour, bit 12 = 12 h ago.
+    struct MeshTrendStats {
+        /// Estimated node count per hour slot (h=0 is the just-completed hour, h=12 is 12 h ago).
+        uint16_t scaledPerHour[13] = {};
+        /// Nodes heard only this hour with no prior bitmap history — indicates new arrivals.
+        uint16_t newThisHour = 0;
+        /// Nodes heard this hour that also appeared in at least one older hour — stable regulars.
+        uint16_t returningThisHour = 0;
+        /// Nodes heard last hour but silent this hour — potential departures.
+        uint16_t lapsedSinceLastHour = 0;
+        /// Nodes absent from the last 4 hours but still present in some older hour (5–13 h) — quieting down.
+        uint16_t olderThan4h = 0;
+        /// Nodes whose only remaining history is the 13th hour (bit 12 only) — about to age out entirely.
+        uint16_t agingOut = 0;
+    };
+
     // -----------------------------------------------------------------------
     // Lifecycle
     // -----------------------------------------------------------------------
@@ -134,6 +153,7 @@ class CompactHistogram
     }
     const PerHopCounts &getLastPerHopCounts() const { return lastPerHopCounts; }
     uint8_t getLastSuggestedHop() const { return lastSuggestedHop; }
+    const MeshTrendStats &getLastTrendStats() const { return lastTrendStats; }
 
 #ifdef UNIT_TEST
     // Writable from the test file as CompactHistogram::s_testNowMs; drives nowMs() in UNIT_TEST builds.
@@ -158,6 +178,7 @@ class CompactHistogram
     uint8_t samplingDenominator = DENOM_MIN;  // Current ingest filter (can go up and down)
     uint8_t filteringDenominator = DENOM_MIN; // Current count filter (held high for 13 h)
     uint32_t filteringDenomElevatedAt = 0;    // nowMs() when filteringDenominator was last raised
+    uint8_t denominatorHistory[13] = {};      // filteringDenominator in effect h hours ago (h0=last rollHour)
     uint16_t hashSeed = 0;                    // Per-session seed XORed into hashNodeId(); randomised on clear()
 
     // -----------------------------------------------------------------------
@@ -166,6 +187,7 @@ class CompactHistogram
     PerHopCounts lastPerHopCounts = {};
     uint8_t lastSuggestedHop = MAX_HOP;
     float lastPoliteness = POLITENESS_DEFAULT;
+    MeshTrendStats lastTrendStats = {};
 
     // -----------------------------------------------------------------------
     // Internal helpers

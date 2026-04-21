@@ -22,6 +22,8 @@ void CompactHistogram::clear()
     lastPerHopCounts = {};
     lastSuggestedHop = MAX_HOP;
     lastPoliteness = POLITENESS_DEFAULT;
+    lastTrendStats = {};
+    memset(denominatorHistory, DENOM_MIN, sizeof(denominatorHistory));
 #ifndef UNIT_TEST
     // Pick a fresh random seed so each session (or post-clear state) samples a different
     // subset of node IDs, preventing systematic bias toward/against specific address ranges.
@@ -75,9 +77,15 @@ uint8_t CompactHistogram::rollHour()
 {
     // 1. Tally per-hop counts for entries that pass the filtering denominator
     //    AND have been seen in at least one of the past 13 hours.
-    //    Also tally per-hour seen counts across all 13 seen-bit slots (before the bitmap shift).
+    //    Also tally per-hour seen counts across all 13 seen-bit slots (before the bitmap shift),
+    //    and derive mesh trend counters from the same pass.
     PerHopCounts counts{};
     uint16_t hourlyRaw[13] = {};
+    uint16_t trendNewThisHour = 0;
+    uint16_t trendReturning = 0;
+    uint16_t trendLapsed = 0;
+    uint16_t trendOlderThan4h = 0;
+    uint16_t trendAgingOut = 0;
     for (uint8_t i = 0; i < count; i++) {
         if (!passesFilter(entries[i].nodeHash, filteringDenominator))
             continue;
@@ -90,6 +98,21 @@ uint8_t CompactHistogram::rollHour()
             counts.perHop[entries[i].hops_away]++;
             counts.total++;
         }
+        // Trend classification (bit 0 = this hour, bit 12 = 12 h ago, before the shift).
+        const bool heardThisHour = (seen & 1u) != 0u;
+        const bool heardLastHour = (seen & 2u) != 0u;
+        const bool hasOlderHistory = (seen >> 1u) != 0u; // any bit 1-12 set
+        const bool recentlySilent = (seen & 0xFu) == 0u; // bits 0-3 all clear
+        if (heardThisHour && !hasOlderHistory)
+            trendNewThisHour++;
+        else if (heardThisHour && hasOlderHistory)
+            trendReturning++;
+        if (!heardThisHour && heardLastHour)
+            trendLapsed++;
+        if (recentlySilent && (seen & 0x1FF0u) != 0u) // bits 4-12 any set
+            trendOlderThan4h++;
+        if (seen == (1u << 12u)) // only the oldest slot remains
+            trendAgingOut++;
     }
     lastPerHopCounts = counts;
 
@@ -111,6 +134,32 @@ uint8_t CompactHistogram::rollHour()
         } else {
             lastPoliteness = POLITENESS_DEFAULT;
         }
+    }
+
+    // 1c. Scale and cache trend stats.
+    //     Per-hour counts use per-hour denominators: the filteringDenominator that was in
+    //     effect when each hour's data was sampled.  This means a scale-down does not
+    //     retroactively undercount older hour slots, and a scale-up doesn't overcount them.
+    //     Shift the history ring now so denominatorHistory[h] corresponds to hourlyRaw[h].
+    {
+        for (uint8_t h = 12; h > 0; h--)
+            denominatorHistory[h] = denominatorHistory[h - 1];
+        denominatorHistory[0] = filteringDenominator;
+
+        MeshTrendStats t{};
+        for (uint8_t h = 0; h < 13; h++) {
+            const uint32_t s = static_cast<uint32_t>(hourlyRaw[h]) * denominatorHistory[h];
+            t.scaledPerHour[h] = static_cast<uint16_t>(std::min<uint32_t>(s, UINT16_MAX));
+        }
+        auto scale = [&](uint16_t raw) -> uint16_t {
+            return static_cast<uint16_t>(std::min<uint32_t>(static_cast<uint32_t>(raw) * filteringDenominator, UINT16_MAX));
+        };
+        t.newThisHour = scale(trendNewThisHour);
+        t.returningThisHour = scale(trendReturning);
+        t.lapsedSinceLastHour = scale(trendLapsed);
+        t.olderThan4h = scale(trendOlderThan4h);
+        t.agingOut = scale(trendAgingOut);
+        lastTrendStats = t;
     }
 
     // 2. Scale-down check: if fewer than FILL_LOW_PCT% of capacity are active (pass
@@ -153,15 +202,14 @@ uint8_t CompactHistogram::rollHour()
     LOG_INFO("[HISTOGRAM] scaled perHop: [%u %u %u %u %u %u %u %u]", scaled[0], scaled[1], scaled[2], scaled[3], scaled[4],
              scaled[5], scaled[6], scaled[7]);
 
-    // Per-hour node count matrix: h0 = current (just-completed) hour, h12 = 12 hours ago.
-    uint16_t hourlyScaled[13];
-    for (uint8_t h = 0; h < 13; h++) {
-        const uint32_t s = static_cast<uint32_t>(hourlyRaw[h]) * filteringDenominator;
-        hourlyScaled[h] = static_cast<uint16_t>(std::min<uint32_t>(s, UINT16_MAX));
-    }
-    LOG_INFO("[HISTOGRAM] scaledSeenPerHour (h0=now): [%u %u %u %u %u %u %u %u %u %u %u %u %u]", hourlyScaled[0], hourlyScaled[1],
-             hourlyScaled[2], hourlyScaled[3], hourlyScaled[4], hourlyScaled[5], hourlyScaled[6], hourlyScaled[7],
-             hourlyScaled[8], hourlyScaled[9], hourlyScaled[10], hourlyScaled[11], hourlyScaled[12]);
+    // Per-hour node count matrix and mesh trend — use the cached lastTrendStats values.
+    const auto &ts = lastTrendStats;
+    LOG_INFO("[HISTOGRAM] scaledSeenPerHour (h0=now): [%u %u %u %u %u %u %u %u %u %u %u %u %u]", ts.scaledPerHour[0],
+             ts.scaledPerHour[1], ts.scaledPerHour[2], ts.scaledPerHour[3], ts.scaledPerHour[4], ts.scaledPerHour[5],
+             ts.scaledPerHour[6], ts.scaledPerHour[7], ts.scaledPerHour[8], ts.scaledPerHour[9], ts.scaledPerHour[10],
+             ts.scaledPerHour[11], ts.scaledPerHour[12]);
+    LOG_INFO("[HISTOGRAM] trend: new=%u returning=%u lapsed=%u olderThan4h=%u agingOut=%u", ts.newThisHour, ts.returningThisHour,
+             ts.lapsedSinceLastHour, ts.olderThan4h, ts.agingOut);
 
     return suggested;
 }
