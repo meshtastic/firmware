@@ -112,6 +112,23 @@ class CompactHistogram
     CompactHistogram();
     ~CompactHistogram() = default;
 
+    /// Reset all entries and state.
+    void clear();
+
+    // -----------------------------------------------------------------------
+    // Persistence
+    // -----------------------------------------------------------------------
+
+    /// Persist the histogram state (entries, denominators, hold-timer) to flash.
+    /// No-op on platforms without a filesystem.  Safe to call frequently — only writes
+    /// the bytes that changed.
+    void saveToDisk() const;
+
+    /// Restore histogram state from flash.  Safe to call even when no file exists.
+    /// Call once after construction, before the first rollHour(), to warm-start the
+    /// histogram across reboots without waiting 13 hours for data to re-accumulate.
+    void loadFromDisk();
+
     // -----------------------------------------------------------------------
     // Core API
     // -----------------------------------------------------------------------
@@ -124,24 +141,12 @@ class CompactHistogram
 
     /// Perform hourly rollover.
     /// 1. Tallies per-hop counts for entries matching filteringDenominator and seen in 13 h.
-    /// 2. Checks for scale-down (< FILL_LOW_PCT of capacity pass filteringDenominator).
-    /// 3. Drops filteringDenominator to samplingDenominator if the 13-h hold has expired.
-    /// 4. Shifts all seen bitmaps left by one hour slot.
-    /// 5. Walks the scaled hop buckets and returns the recommended hop limit.
+    /// 2. Walks the scaled hop buckets and returns the recommended hop limit.
+    /// 3. Logs scaled per-hop counts and recommendation.
+    /// 4. Checks for scale-down (< FILL_LOW_PCT of capacity pass filteringDenominator).
+    /// 5. Drops filteringDenominator to samplingDenominator if the 13-h hold has expired.
+    /// 6. Shifts all seen bitmaps left by one hour slot.
     uint8_t rollHour();
-
-    /// Reset all entries and state.
-    void clear();
-
-    /// Persist the histogram state (entries, denominators, hold-timer) to flash.
-    /// No-op on platforms without a filesystem.  Safe to call frequently — only writes
-    /// the bytes that changed.
-    void saveToDisk() const;
-
-    /// Restore histogram state from flash.  Safe to call even when no file exists.
-    /// Call once after construction, before the first rollHour(), to warm-start the
-    /// histogram across reboots without waiting 13 hours for data to re-accumulate.
-    void loadFromDisk();
 
     // -----------------------------------------------------------------------
     // Accessors
@@ -206,15 +211,6 @@ class CompactHistogram
     /// Remove stale entries (seen-bits all zero) and, if the list is still crowded,
     /// double samplingDenominator and filteringDenominator and remove non-matching entries.
     void trimIfNeeded();
-
-    /// Count entries whose nodeId passes (nodeId & (filteringDenominator-1)) == 0.
-    uint8_t countPassingFilter() const;
-
-    /// Linear scan for an existing entry with this nodeId. Returns nullptr if absent.
-    Record *findEntry(uint16_t nodeHash);
-
-    /// Walk hop buckets scaled by filteringDenominator; return recommended hop limit.
-    uint8_t walkHopBuckets(const PerHopCounts &counts, float politeness) const;
 
     // -----------------------------------------------------------------------
     // Record helpers (all inline, no heap)
