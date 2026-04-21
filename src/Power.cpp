@@ -746,36 +746,16 @@ bool Power::setup()
         found = true;
 #endif
     }
-#ifdef EXT_PWR_DETECT
-    attachInterrupt(
-        EXT_PWR_DETECT,
-        []() {
-            power->setIntervalFromNow(0);
-            runASAP = true;
-        },
-        CHANGE);
-#endif
-#ifdef BATTERY_CHARGING_INV
-    attachInterrupt(
-        BATTERY_CHARGING_INV,
-        []() {
-            power->setIntervalFromNow(0);
-            runASAP = true;
-        },
-        CHANGE);
-#endif
-#ifdef EXT_CHRG_DETECT
-    attachInterrupt(
-        EXT_CHRG_DETECT,
-        []() {
-            power->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-        },
-        CHANGE);
-#endif
+    attachPowerInterrupts();
     enabled = found;
     low_voltage_counter = 0;
+
+#ifdef ARCH_ESP32
+    // Register callbacks for before and after lightsleep
+    // Used to detach and reattach interrupts
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
+#endif
 
     return found;
 }
@@ -1055,6 +1035,93 @@ int32_t Power::runOnce()
     return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
 }
 
+#ifdef ARCH_ESP32
+
+// Detach our class' interrupts before lightsleep
+// Allows sleep.cpp to configure its own interrupts, which wake the device on user-button press
+int Power::beforeLightSleep(void *unused)
+{
+    LOG_WARN("Detaching power interrupts for sleep");
+    detachPowerInterrupts();
+    return 0; // Indicates success
+}
+
+// Reconfigure our interrupts
+// Our class' interrupts were disconnected during sleep, to allow the user button to wake the device from sleep
+int Power::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachPowerInterrupts();
+    return 0; // Indicates success
+}
+
+#endif
+
+/*
+ * Attach (or re-attach) hardware interrupts for power management
+ * Public method. Used outside class when waking from MCU sleep
+ */
+void Power::attachPowerInterrupts()
+{
+#ifdef EXT_PWR_DETECT
+    attachInterrupt(
+        EXT_PWR_DETECT,
+        []() {
+            power->setIntervalFromNow(0);
+            runASAP = true;
+        },
+        CHANGE);
+#endif
+#ifdef BATTERY_CHARGING_INV
+    attachInterrupt(
+        BATTERY_CHARGING_INV,
+        []() {
+            power->setIntervalFromNow(0);
+            runASAP = true;
+        },
+        CHANGE);
+#endif
+#ifdef EXT_CHRG_DETECT
+    attachInterrupt(
+        EXT_CHRG_DETECT,
+        []() {
+            power->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+        },
+        CHANGE);
+#endif
+#ifdef PMU_IRQ
+    attachInterrupt(
+        PMU_IRQ,
+        [] {
+            pmu_irq = true;
+            power->setIntervalFromNow(0);
+            runASAP = true;
+        },
+        FALLING);
+#endif
+}
+
+/*
+ * Detach the "normal" button interrupts.
+ * Public method. Used before attaching a "wake-on-button" interrupt for MCU sleep
+ */
+void Power::detachPowerInterrupts()
+{
+#ifdef EXT_PWR_DETECT
+    detachInterrupt(EXT_PWR_DETECT);
+#endif
+#ifdef BATTERY_CHARGING_INV
+    detachInterrupt(BATTERY_CHARGING_INV);
+#endif
+#ifdef EXT_CHRG_DETECT
+    detachInterrupt(EXT_CHRG_DETECT);
+#endif
+#ifdef PMU_IRQ
+    detachInterrupt(PMU_IRQ);
+#endif
+}
+
 /**
  * Init the power manager chip
  *
@@ -1332,8 +1399,6 @@ bool Power::axpChipInit()
     }
 
     pinMode(PMU_IRQ, INPUT);
-    attachInterrupt(
-        PMU_IRQ, [] { pmu_irq = true; }, FALLING);
 
     // we do not look for AXPXXX_CHARGING_FINISHED_IRQ & AXPXXX_CHARGING_IRQ
     // because it occurs repeatedly while there is no battery also it could cause
