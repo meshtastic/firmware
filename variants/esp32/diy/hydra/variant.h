@@ -34,7 +34,7 @@
 
 #define SX126X_TXEN 13 // Schematic connects EBYTE module's TXEN pin to MCU
 
-#if defined(USE_EBYTE_E22P) // For Ebyte E22P-868M30S and E22P-915M30S modules - pin 14 always HIGH
+#if defined(EBYTE_E22P-868M30S) // For Ebyte E22P-868M30S and E22P-915M30S modules - pin 14 always HIGH
     #define SX126X_RXEN RADIOLIB_NC
     #define SX126X_POWER_EN 14
 #else
