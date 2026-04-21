@@ -1255,17 +1255,18 @@ void menuHandler::positionBaseMenu()
 
     static const PositionMenuOption baseOptions[] = {
         {"Back", OptionsAction::Back},
+        {"Radar View", OptionsAction::Select, static_cast<int>(PositionAction::RadarToggle)},
         {"On/Off Toggle", OptionsAction::Select, static_cast<int>(PositionAction::GpsToggle)},
         {"Format", OptionsAction::Select, static_cast<int>(PositionAction::GpsFormat)},
         {"Smart Position", OptionsAction::Select, static_cast<int>(PositionAction::GPSSmartPosition)},
         {"Update Interval", OptionsAction::Select, static_cast<int>(PositionAction::GPSUpdateInterval)},
         {"Broadcast Interval", OptionsAction::Select, static_cast<int>(PositionAction::GPSPositionBroadcast)},
         {"Compass", OptionsAction::Select, static_cast<int>(PositionAction::CompassMenu)},
-        {"Radar View", OptionsAction::Select, static_cast<int>(PositionAction::RadarToggle)},
     };
 
     static const PositionMenuOption calibrateOptions[] = {
         {"Back", OptionsAction::Back},
+        {"Radar View", OptionsAction::Select, static_cast<int>(PositionAction::RadarToggle)},
         {"On/Off Toggle", OptionsAction::Select, static_cast<int>(PositionAction::GpsToggle)},
         {"Format", OptionsAction::Select, static_cast<int>(PositionAction::GpsFormat)},
         {"Smart Position", OptionsAction::Select, static_cast<int>(PositionAction::GPSSmartPosition)},
@@ -1273,7 +1274,6 @@ void menuHandler::positionBaseMenu()
         {"Broadcast Interval", OptionsAction::Select, static_cast<int>(PositionAction::GPSPositionBroadcast)},
         {"Compass", OptionsAction::Select, static_cast<int>(PositionAction::CompassMenu)},
         {"Compass Calibrate", OptionsAction::Select, static_cast<int>(PositionAction::CompassCalibrate)},
-        {"Radar View", OptionsAction::Select, static_cast<int>(PositionAction::RadarToggle)},
     };
 
     constexpr size_t baseCount = sizeof(baseOptions) / sizeof(baseOptions[0]);
