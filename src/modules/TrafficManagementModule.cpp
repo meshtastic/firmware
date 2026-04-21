@@ -965,10 +965,14 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         // Rate Limiting
         // ---------------------------------------------------------------------
         // Throttle nodes sending too many packets within a time window.
-        // Excludes routing and admin packets which are essential for mesh operation.
+        // Excludes routing, admin, and traceroute packets which are essential for mesh
+        // operation and diagnostics.
 
         if (cfg.rate_limit_enabled && cfg.rate_limit_window_secs > 0 && cfg.rate_limit_max_packets > 0) {
-            if (mp.decoded.portnum != meshtastic_PortNum_ROUTING_APP && mp.decoded.portnum != meshtastic_PortNum_ADMIN_APP) {
+            const auto pn = mp.decoded.portnum;
+            const bool rateLimitExempt = (pn == meshtastic_PortNum_ROUTING_APP || pn == meshtastic_PortNum_ADMIN_APP ||
+                                          pn == meshtastic_PortNum_TRACEROUTE_APP);
+            if (!rateLimitExempt) {
                 if (isRateLimited(mp.from, nowMs)) {
                     logAction("drop", &mp, "rate-limit");
                     incrementStat(&stats.rate_limit_drops);
