@@ -275,28 +275,30 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->drawString(nx, ny - FONT_HEIGHT_SMALL / 2, "N");
     }
 
-    // Own-node marker: filled 4×4 square at centre.
-    display->fillRect(radarCX - 2, radarCY - 2, 4, 4);
+    // Own-node marker: single pixel at centre.
+    display->setPixel(radarCX, radarCY);
 
     // -----------------------------------------------------------------------
-    // Plot remote nodes.
+    // Plot remote nodes — cap at 5 to match the list panel.
     // -----------------------------------------------------------------------
-    for (const Entry &e : entries)
+    const int maxRows = 5;
+    const int count = (int)entries.size();
+    for (int i = 0; i < count && i < maxRows; i++) {
+        const Entry &e = entries[i];
         plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad,
                  std::min(e.distM / scale, 1.0f), nodeMarkerIndex(e.node->num));
+    }
 
     // -----------------------------------------------------------------------
-    // Node list (left panel) — up to 4 closest nodes.
+    // Node list (left panel) — up to 5 closest nodes.
     //
     // Each row: stable marker symbol | short name | distance (right-aligned).
     // The symbol matches the dot on the radar so the user can identify nodes.
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
 
-    const int maxRows = 4;
     const int rowPitch = contentH / maxRows;
 
-    const int count = (int)entries.size();
     for (int i = 0; i < count && i < maxRows; i++) {
         const Entry &e = entries[i];
         const int rowY = y + headerH + rowPitch * i;
