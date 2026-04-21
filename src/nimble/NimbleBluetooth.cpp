@@ -620,12 +620,18 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
 
         const uint16_t connHandle = desc->conn_handle;
 
+        // With Google Pixel 8 Android devices, this causes ESP32 device crash
+        // when phone reconnects. Disable this to make progress on the
+        // Arduino v3 migration while we investigate the Android compatibility
+        // issue.
+#if 0
         int dataLenResult = ble_gap_set_data_len(connHandle, kPreferredBleTxOctets, kPreferredBleTxTimeUs);
         if (dataLenResult == 0) {
             LOG_INFO("BLE conn %u requested data length %u bytes", connHandle, kPreferredBleTxOctets);
         } else {
             LOG_WARN("Failed to raise data length for conn %u, rc=%d", connHandle, dataLenResult);
         }
+#endif
 
         LOG_INFO("BLE conn %u peer MTU %u (target %u)", connHandle, pServer->getPeerMTU(connHandle), kPreferredBleMtu);
         pServer->updateConnParams(connHandle, 6, 12, 0, 200);
