@@ -81,7 +81,9 @@ meshtastic_UserLite TypeConversions::ConvertToUserLite(meshtastic_User user)
     meshtastic_UserLite lite = meshtastic_UserLite_init_default;
 
     strncpy(lite.long_name, user.long_name, sizeof(lite.long_name));
+    lite.long_name[sizeof(lite.long_name) - 1] = '\0';
     strncpy(lite.short_name, user.short_name, sizeof(lite.short_name));
+    lite.short_name[sizeof(lite.short_name) - 1] = '\0';
     lite.hw_model = user.hw_model;
     lite.role = user.role;
     lite.is_licensed = user.is_licensed;
@@ -99,7 +101,9 @@ meshtastic_User TypeConversions::ConvertToUser(uint32_t nodeNum, meshtastic_User
 
     snprintf(user.id, sizeof(user.id), "!%08x", nodeNum);
     strncpy(user.long_name, lite.long_name, sizeof(user.long_name));
+    user.long_name[sizeof(user.long_name) - 1] = '\0';
     strncpy(user.short_name, lite.short_name, sizeof(user.short_name));
+    user.short_name[sizeof(user.short_name) - 1] = '\0';
     user.hw_model = lite.hw_model;
     user.role = lite.role;
     user.is_licensed = lite.is_licensed;
