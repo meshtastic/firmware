@@ -702,7 +702,6 @@ class Screen : public concurrency::OSThread
             uint8_t nodelist_hopsignal = 255;
             uint8_t nodelist_distance = 255;
             uint8_t nodelist_bearings = 255;
-            uint8_t nodelist_radar = 255;
             uint8_t clock = 255;
             uint8_t chirpy = 255;
             uint8_t firstFavorite = 255;
@@ -732,9 +731,6 @@ class Screen : public concurrency::OSThread
 #if HAS_GPS
 #ifdef USE_EINK
         bool nodelist_bearings = false;
-#endif
-#ifndef USE_EINK
-        bool nodelist_radar = false;
 #endif
         bool gps = false;
 #endif

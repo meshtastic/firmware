@@ -38,7 +38,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/MessageRenderer.h"
 #include "draw/NodeListRenderer.h"
 #include "draw/NotificationRenderer.h"
-#include "draw/RadarRenderer.h"
 #include "draw/UIRenderer.h"
 #include "modules/CannedMessageModule.h"
 
@@ -1210,13 +1209,6 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_list);
     }
 #endif
-#ifndef USE_EINK
-    if (!hiddenFrames.nodelist_radar) {
-        fsi.positions.nodelist_radar = numframes;
-        normalFrames[numframes++] = graphics::RadarRenderer::drawRadarScreen;
-        indicatorIcons.push_back(icon_radar);
-    }
-#endif
     if (!hiddenFrames.gps) {
         fsi.positions.gps = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
@@ -1406,11 +1398,6 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
         hiddenFrames.nodelist_bearings = !hiddenFrames.nodelist_bearings;
     }
 #endif
-#ifndef USE_EINK
-    if (frameName == "nodelist_radar") {
-        hiddenFrames.nodelist_radar = !hiddenFrames.nodelist_radar;
-    }
-#endif
     if (frameName == "gps") {
         hiddenFrames.gps = !hiddenFrames.gps;
     }
@@ -1449,10 +1436,6 @@ bool Screen::isFrameHidden(const std::string &frameName) const
 #ifdef USE_EINK
     if (frameName == "nodelist_bearings")
         return hiddenFrames.nodelist_bearings;
-#endif
-#ifndef USE_EINK
-    if (frameName == "nodelist_radar")
-        return hiddenFrames.nodelist_radar;
 #endif
     if (frameName == "gps")
         return hiddenFrames.gps;
@@ -1983,7 +1966,11 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::systemBaseMenu();
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
-                    menuHandler::positionBaseMenu();
+                    if (uiconfig.radar_mode) {
+                        menuHandler::radarPositionMenu();
+                    } else {
+                        menuHandler::positionBaseMenu();
+                    }
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
                     menuHandler::clockMenu();
@@ -2003,8 +1990,6 @@ int Screen::handleInputEvent(const InputEvent *event)
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
                     menuHandler::favoriteBaseMenu();
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_radar) {
-                    menuHandler::radarMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_nodes ||
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_location ||
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||

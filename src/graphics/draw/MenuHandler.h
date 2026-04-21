@@ -91,7 +91,7 @@ class menuHandler
     static void switchToMUIMenu();
     static void TFTColorPickerMenu(OLEDDisplay *display);
     static void nodeListMenu();
-    static void radarMenu();
+    static void radarPositionMenu();
     static void resetNodeDBMenu();
     static void BrightnessPickerMenu();
     static void rebootMenu();
