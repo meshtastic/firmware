@@ -304,6 +304,11 @@ void HopScalingModule::rollHour()
     // adjusts denominators, shifts seen bitmaps, logs its recommendation).
     hopScalingHistogram.rollHour();
 
+    // Track how many histogram rollovers have occurred; used as a bootstrap gate to
+    // defer switching to histogram-primary mode until at least one rollover has produced data.
+    if (histogramRollCount < 255)
+        histogramRollCount++;
+
     saveState();
 }
 
@@ -545,12 +550,15 @@ void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyU
              snapshot.recent1h.total, snapshot.recent1h.total + snapshot.old1hFrom2h.total,
              snapshot.recent1h.total + snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total, snapshot.cumulative12h.total);
 
-    // CompactHistogram comparison: report the histogram's own suggestion alongside the NodeDB-derived hop.
+    // CompactHistogram is the primary decision-maker. Show whether it's active and compare
+    // against the NodeDB advisory (now secondary) for operational monitoring.
     const uint8_t histSuggestedHop = hopScalingHistogram.getLastSuggestedHop();
-    const int8_t delta = static_cast<int8_t>(histSuggestedHop) - static_cast<int8_t>(lastRequiredHop);
+    const bool histActive = (histogramRollCount > 0 && hopScalingHistogram.getEntryCount() > 0);
+    const int8_t advisoryDelta = static_cast<int8_t>(lastNodeDbAdvisoryHop) - static_cast<int8_t>(lastRequiredHop);
     const auto &histCounts = hopScalingHistogram.getLastPerHopCounts();
 
-    LOG_INFO("[HOPSCALE] histogram hop=%u delta=%d fill=%u%% samp=1/%u filt=1/%u counted=%u", histSuggestedHop, delta,
+    LOG_INFO("[HOPSCALE] histogram hop=%u active=%u nodedbAdvisory=%u advisoryDelta=%d fill=%u%% samp=1/%u filt=1/%u counted=%u",
+             histSuggestedHop, histActive ? 1u : 0u, lastNodeDbAdvisoryHop, advisoryDelta,
              hopScalingHistogram.getFillPercentage(), hopScalingHistogram.getSamplingDenominator(),
              hopScalingHistogram.getFilteringDenominator(), histCounts.total);
 
@@ -651,7 +659,15 @@ int32_t HopScalingModule::runOnce()
         if (!checkStableStatus(snapshot)) {
             lastStatusMode = STATUS_STARTUP_NOT_ENOUGH_DATA;
         }
-        lastRequiredHop = computeRequiredHop(snapshot, lastScaleFactor, lastPolitenessFactor);
+
+        // NodeDB-derived hop (advisory): always computed so eviction/sampling stats stay live.
+        lastNodeDbAdvisoryHop = computeRequiredHop(snapshot, lastScaleFactor, lastPolitenessFactor);
+
+        // Histogram is the primary hop decision-maker once it has processed at least one hourly
+        // rollover and holds tracked entries.  Before that point (bootstrap, blank device) fall
+        // back to the NodeDB advisory so the first few hours still make sensible decisions.
+        const uint8_t histHop = hopScalingHistogram.getLastSuggestedHop();
+        lastRequiredHop = (histogramRollCount > 0 && hopScalingHistogram.getEntryCount() > 0) ? histHop : lastNodeDbAdvisoryHop;
     }
 
     // Shared status report path for both periodic and hourly updates.

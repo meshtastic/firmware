@@ -449,6 +449,15 @@ void test_sparse_to_dense_transition()
     addNodesAtHop(0xA000, 0, 25, 120);
     addNodesAtHop(0xB000, 1, 25, 300);
 
+    // The histogram is now the primary hop decision-maker, so the 50 new neighbours must also
+    // be fed into it — exactly mirroring what the firmware does when it hears them on-air.
+    // Node IDs must match what addNodesAtHop() computed (same makeDistributedNodeId call).
+    TEST_MESSAGE("Feeding 50 new Phase 2 nodes into the histogram (simulating on-air reception).");
+    for (uint32_t i = 0; i < 25; ++i)
+        shim->samplePacketForHistogram(makeDistributedNodeId(0xA000, i, static_cast<uint32_t>(0) << 8), 0);
+    for (uint32_t i = 0; i < 25; ++i)
+        shim->samplePacketForHistogram(makeDistributedNodeId(0xB000, i, static_cast<uint32_t>(1) << 8), 1);
+
     TEST_MESSAGE("Running six more cycles to force the hourly recomputation.");
     for (int run = 0; run < 6; run++)
         shim->runOnce();
@@ -660,10 +669,10 @@ void test_scenario_summary_output()
 static void test_memory_layout()
 {
     TEST_MSG_FMT("%-35s  %6s  %s", "Type", "bytes", "Notes");
-    TEST_MSG_FMT("%-35s  %6zu  %s", "HistogramEntry", sizeof(HistogramEntry), "nodeId(4) + bitfield(2) + pad(2)");
+    TEST_MSG_FMT("%-35s  %6zu  %s", "Record", sizeof(Record), "nodeHash:16 + hops:3 + seen:13 (32-bit packed)");
     TEST_MSG_FMT("%-35s  %6zu  %s", "CompactHistogram::PerHopCounts", sizeof(CompactHistogram::PerHopCounts),
                  "perHop[8](16) + total(2) + pad");
-    TEST_MSG_FMT("%-35s  %6zu  %s", "CompactHistogram", HopScalingTestShim::sizeofHistogram(), "entries[128](1024) + state");
+    TEST_MSG_FMT("%-35s  %6zu  %s", "CompactHistogram", HopScalingTestShim::sizeofHistogram(), "entries[128](512) + state");
     TEST_MSG_FMT("%-35s  %6zu  %s", "SampleTracker", HopScalingTestShim::sizeofSampleTracker(),
                  "slots[128](512) + uniqueCount(2) + pad");
     TEST_MSG_FMT("%-35s  %6zu  %s", "HopBucket", HopScalingTestShim::sizeofHopBucket(),

@@ -127,7 +127,9 @@ class HopScalingModule : private concurrency::OSThread
     CompactHistogram hopScalingHistogram;
 
     // Hop recommendation state
-    uint8_t lastRequiredHop = HOP_MAX;
+    uint8_t lastRequiredHop = HOP_MAX;       // Active hop limit (histogram-primary, NodeDB advisory fallback)
+    uint8_t lastNodeDbAdvisoryHop = HOP_MAX; // NodeDB-derived hop recommendation (advisory when histogram active)
+    uint8_t histogramRollCount = 0;          // Number of CompactHistogram hourly rollovers (bootstrap gate)
     float lastActivityWeight = 1.0f;
     float lastScaleFactor = 1.0f;
     float lastPolitenessFactor = 1.5f;

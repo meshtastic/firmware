@@ -46,8 +46,8 @@ void test_clear_resets_state(void)
 
 void test_memory_layout(void)
 {
-    // ENTRY_BYTES is sizeof(HistogramEntry) — 8 bytes (uint32_t + uint16_t + 2-byte alignment pad)
-    TEST_ASSERT_EQUAL_size_t(sizeof(HistogramEntry), CompactHistogram::ENTRY_BYTES);
+    // ENTRY_BYTES is sizeof(Record) — 4 bytes (32-bit packed struct: nodeHash:16 + hops:3 + seen:13)
+    TEST_ASSERT_EQUAL_size_t(sizeof(Record), CompactHistogram::ENTRY_BYTES);
     TEST_ASSERT_EQUAL_size_t(128, CompactHistogram::CAPACITY);
     TEST_ASSERT_EQUAL_size_t(CompactHistogram::CAPACITY * CompactHistogram::ENTRY_BYTES, CompactHistogram::TOTAL_BYTES);
 }
@@ -94,17 +94,35 @@ void test_sampling_denom2_accepts_even_ids(void)
 
 void test_sampling_denom4_accepts_multiples_of_4(void)
 {
-    // Build a histogram with denom forced to 4 by triggering two trim/scale-up cycles.
-    // We only care about verifying the filter logic works correctly when checked externally.
-    // Verify using passesFilter logic: denom=4 → id & 3 == 0
-    // IDs 4, 8, 12 pass; 1, 2, 3, 5, 6, 7 do not.
-    auto passes = [](uint32_t id, uint8_t denom) -> bool { return (id & static_cast<uint32_t>(denom - 1u)) == 0u; };
-    TEST_ASSERT_TRUE(passes(4, 4));
-    TEST_ASSERT_TRUE(passes(8, 4));
-    TEST_ASSERT_FALSE(passes(2, 4));
-    TEST_ASSERT_FALSE(passes(6, 4));
-    TEST_ASSERT_TRUE(passes(1, 1));
-    TEST_ASSERT_TRUE(passes(3, 1));
+    // With the golden-ratio hash the filter selects by hash value, not raw ID.
+    // Verify using the histogram's own hashNodeId() so the test is hash-function-agnostic.
+    CompactHistogram hist;
+    hist.setSamplingDenominator(4);
+
+    // Scan for two IDs that pass denom=4 and two that fail.
+    uint32_t passIds[2] = {UINT32_MAX, UINT32_MAX};
+    uint32_t failIds[2] = {UINT32_MAX, UINT32_MAX};
+    for (uint32_t id = 1; id < 10000 && (passIds[1] == UINT32_MAX || failIds[1] == UINT32_MAX); id++) {
+        const bool passes = (hist.hashNodeId(id) & 3u) == 0u;
+        if (passes && passIds[0] == UINT32_MAX)
+            passIds[0] = id;
+        else if (passes && passIds[1] == UINT32_MAX)
+            passIds[1] = id;
+        else if (!passes && failIds[0] == UINT32_MAX)
+            failIds[0] = id;
+        else if (!passes && failIds[1] == UINT32_MAX)
+            failIds[1] = id;
+    }
+    TEST_ASSERT_NOT_EQUAL(UINT32_MAX, passIds[0]);
+    TEST_ASSERT_NOT_EQUAL(UINT32_MAX, passIds[1]);
+    TEST_ASSERT_NOT_EQUAL(UINT32_MAX, failIds[0]);
+    TEST_ASSERT_NOT_EQUAL(UINT32_MAX, failIds[1]);
+
+    hist.sampleRxPacket(failIds[0], 1);
+    hist.sampleRxPacket(passIds[0], 1);
+    hist.sampleRxPacket(failIds[1], 1);
+    hist.sampleRxPacket(passIds[1], 1);
+    TEST_ASSERT_EQUAL_UINT8(2, hist.getEntryCount());
 }
 
 // ============================================================================

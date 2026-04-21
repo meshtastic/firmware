@@ -138,6 +138,9 @@ class CompactHistogram
 #ifdef UNIT_TEST
     // Writable from the test file as CompactHistogram::s_testNowMs; drives nowMs() in UNIT_TEST builds.
     inline static uint32_t s_testNowMs = 0;
+    /// Override the per-session hash seed. Use in tests that need a specific sampling distribution.
+    void setHashSeed(uint16_t seed) { hashSeed = seed; }
+    uint16_t getHashSeed() const { return hashSeed; }
 #endif
 
   private:
@@ -153,6 +156,7 @@ class CompactHistogram
     uint8_t samplingDenominator = DENOM_MIN;  // Current ingest filter (can go up and down)
     uint8_t filteringDenominator = DENOM_MIN; // Current count filter (held high for 13 h)
     uint32_t filteringDenomElevatedAt = 0;    // nowMs() when filteringDenominator was last raised
+    uint16_t hashSeed = 0;                    // Per-session seed XORed into hashNodeId(); randomised on clear()
 
     // -----------------------------------------------------------------------
     // Cached hourly results
@@ -190,9 +194,11 @@ class CompactHistogram
     //                  bit 12 = seen 12 hours ago
     //                  Shifts left on each rollHour(); 0 means not seen in 13 h.
 
-    /// XOR-fold a 32-bit node ID to a 16-bit hash for compact storage.
-    /// For values < 65536 (typical in unit tests) the result is the identity, preserving filter behaviour.
-    static uint16_t hashNodeId(uint32_t nodeId) { return static_cast<uint16_t>(nodeId ^ (nodeId >> 16)); }
+    /// XOR-fold + golden-ratio hash of a 32-bit node ID to 16 bits, mixed with the session seed.
+    /// Multiplying by floor(2^32 / φ) gives uniform avalanche; XORing the seed ensures different
+    /// devices (or the same device after a clear()) sample a different subset of node IDs.
+    /// For seed=0 the function is deterministic, which is used in UNIT_TEST builds.
+    uint16_t hashNodeId(uint32_t nodeId) const { return static_cast<uint16_t>((nodeId * 2654435761u) >> 16) ^ hashSeed; }
 
     static bool seenInLast13h(const Record &r) { return r.seenHoursAgo != 0u; }
     static void markCurrentHour(Record &r) { r.seenHoursAgo |= 1u; }

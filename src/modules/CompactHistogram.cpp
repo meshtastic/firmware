@@ -22,6 +22,13 @@ void CompactHistogram::clear()
     lastPerHopCounts = {};
     lastSuggestedHop = MAX_HOP;
     lastPoliteness = POLITENESS_DEFAULT;
+#ifndef UNIT_TEST
+    // Pick a fresh random seed so each session (or post-clear state) samples a different
+    // subset of node IDs, preventing systematic bias toward/against specific address ranges.
+    hashSeed = static_cast<uint16_t>(random());
+#else
+    hashSeed = 0; // deterministic in unit tests
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -30,8 +37,11 @@ void CompactHistogram::clear()
 
 void CompactHistogram::sampleRxPacket(uint32_t nodeId, uint8_t hopCount)
 {
+    // Hash first; all sampling and storage decisions use the 16-bit hash.
+    const uint16_t hash = hashNodeId(nodeId);
+
     // Reject nodes that do not pass the current sampling denominator
-    if (!passesFilter(nodeId, samplingDenominator)) {
+    if (!passesFilter(hash, samplingDenominator)) {
         return;
     }
 
@@ -39,11 +49,11 @@ void CompactHistogram::sampleRxPacket(uint32_t nodeId, uint8_t hopCount)
     hopCount = std::min(hopCount, MAX_HOP);
 
     // Update an existing entry
-    HistogramEntry *entry = findEntry(nodeId);
+    Record *entry = findEntry(hash);
     if (entry) {
         // Update to the most-recently observed hop count
-        entry->bitfield = packBf(seenBits(entry->bitfield), hopCount);
-        markCurrentHour(entry->bitfield);
+        entry->hops_away = hopCount;
+        markCurrentHour(*entry);
         return;
     }
 
@@ -53,9 +63,9 @@ void CompactHistogram::sampleRxPacket(uint32_t nodeId, uint8_t hopCount)
     }
 
     if (count < CAPACITY) {
-        entries[count].nodeId = nodeId;
-        entries[count].bitfield = packBf(0u, hopCount);
-        markCurrentHour(entries[count].bitfield);
+        entries[count].nodeHash = hash;
+        entries[count].hops_away = hopCount;
+        entries[count].seenHoursAgo = 1u; // mark current hour
         count++;
     }
     // If still full after trimming, silently drop the new entry
@@ -69,16 +79,15 @@ uint8_t CompactHistogram::rollHour()
     PerHopCounts counts{};
     uint16_t hourlyRaw[13] = {};
     for (uint8_t i = 0; i < count; i++) {
-        if (!passesFilter(entries[i].nodeId, filteringDenominator))
+        if (!passesFilter(entries[i].nodeHash, filteringDenominator))
             continue;
-        const uint16_t seen = seenBits(entries[i].bitfield);
+        const uint32_t seen = entries[i].seenHoursAgo;
         for (uint8_t h = 0; h < 13; h++) {
             if (seen & (1u << h))
                 hourlyRaw[h]++;
         }
-        if (seenInLast13h(entries[i].bitfield)) {
-            const uint8_t hop = hopBits(entries[i].bitfield);
-            counts.perHop[hop]++;
+        if (seenInLast13h(entries[i])) {
+            counts.perHop[entries[i].hops_away]++;
             counts.total++;
         }
     }
@@ -124,7 +133,7 @@ uint8_t CompactHistogram::rollHour()
 
     // 4. Shift all seen bitmaps left by one slot (opens a fresh slot for the new hour).
     for (uint8_t i = 0; i < count; i++) {
-        entries[i].bitfield = rollSeenBits(entries[i].bitfield);
+        rollSeenBits(entries[i]);
     }
 
     // 5. Walk scaled hop buckets to produce a hop-limit recommendation.
@@ -166,7 +175,7 @@ void CompactHistogram::trimIfNeeded()
     // Step 1: evict stale entries (not seen in any of the past 13 hours).
     uint8_t newCount = 0;
     for (uint8_t i = 0; i < count; i++) {
-        if (seenInLast13h(entries[i].bitfield)) {
+        if (seenInLast13h(entries[i])) {
             if (i != newCount) {
                 entries[newCount] = entries[i];
             }
@@ -186,7 +195,7 @@ void CompactHistogram::trimIfNeeded()
 
         newCount = 0;
         for (uint8_t i = 0; i < count; i++) {
-            if (passesFilter(entries[i].nodeId, samplingDenominator)) {
+            if (passesFilter(entries[i].nodeHash, samplingDenominator)) {
                 if (i != newCount) {
                     entries[newCount] = entries[i];
                 }
@@ -204,17 +213,17 @@ uint8_t CompactHistogram::countPassingFilter() const
     // matching nodeId should not keep the denominator elevated.
     uint8_t n = 0;
     for (uint8_t i = 0; i < count; i++) {
-        if (passesFilter(entries[i].nodeId, filteringDenominator) && seenInLast13h(entries[i].bitfield)) {
+        if (passesFilter(entries[i].nodeHash, filteringDenominator) && seenInLast13h(entries[i])) {
             n++;
         }
     }
     return n;
 }
 
-HistogramEntry *CompactHistogram::findEntry(uint32_t nodeId)
+Record *CompactHistogram::findEntry(uint16_t nodeHash)
 {
     for (uint8_t i = 0; i < count; i++) {
-        if (entries[i].nodeId == nodeId) {
+        if (entries[i].nodeHash == nodeHash) {
             return &entries[i];
         }
     }
