@@ -100,9 +100,9 @@ class Power : private concurrency::OSThread
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
     const uint16_t OCV[11] = {OCV_ARRAY};
-    #ifdef T_WATCH_S3
+#ifdef T_WATCH_S3
     void triggerButtonWakeup(); // Used to wake the T-Watch S3 by pressing the power button
-    #endif
+#endif
 
   protected:
     meshtastic::PowerStatus *statusHandler;

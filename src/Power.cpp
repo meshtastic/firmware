@@ -721,30 +721,28 @@ bool Power::analogInit()
 
 #ifdef T_WATCH_S3
 #ifdef PMU_IRQ
-void Power::triggerButtonWakeup() {
-        power->setIntervalFromNow(0);
-        runASAP = true;
-    }
+void Power::triggerButtonWakeup()
+{
+    power->setIntervalFromNow(0);
+    runASAP = true;
+}
 
 // This function is secure and runs on the FreeRTOS Daemon Task, not in the interrupt.
-static void pmu_deferred_handler(void *arg1, uint32_t arg2) {
+static void pmu_deferred_handler(void *arg1, uint32_t arg2)
+{
     if (power) {
         power->triggerButtonWakeup();
     }
 }
 
 // High speed ISR, won't make the esp32s3 crash
-void IRAM_ATTR pmu_isr_handler() {
+void IRAM_ATTR pmu_isr_handler()
+{
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    
+
     // Delegate the work to the secure function pmu_deferred_handler
-    xTimerPendFunctionCallFromISR(
-        pmu_deferred_handler, 
-        NULL, 
-        0, 
-        &xHigherPriorityTaskWoken
-    );
-    
+    xTimerPendFunctionCallFromISR(pmu_deferred_handler, NULL, 0, &xHigherPriorityTaskWoken);
+
     if (xHigherPriorityTaskWoken) {
         portYIELD_FROM_ISR();
     }
@@ -780,7 +778,7 @@ bool Power::setup()
         found = true;
 #endif
     }
-#ifdef T_WATCH_S3 
+#ifdef T_WATCH_S3
 #ifdef PMU_IRQ
     // Attaching the button press interrupt to the function
     pinMode(PMU_IRQ, INPUT_PULLUP);
@@ -1064,7 +1062,7 @@ int32_t Power::runOnce()
             powerFSM.trigger(EVENT_POWER_CONNECTED);
         }
 
-        #ifdef T_WATCH_S3
+#ifdef T_WATCH_S3
         /*
             In the T-Watch S3 this code fragment reacts to the short press of the button by switching the
             display on and off
@@ -1078,11 +1076,11 @@ int32_t Power::runOnce()
                     screen->setOn(true);
                 } else {
                     LOG_DEBUG("Sleeping screen via Button");
-                    screen->setOn(false); 
+                    screen->setOn(false);
                 }
             }
         }
-        #endif
+#endif
         /*
         Other things we could check if we cared...
 
