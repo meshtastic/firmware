@@ -15,7 +15,7 @@ static const uint8_t SDA = 8;
 static const uint8_t SCL = 9;
 
 // Default SPI mapped to Radio/SD
-static const uint8_t SS = 15; // LoRa CS
+static const uint8_t SS = 1; // LoRa CS
 static const uint8_t MOSI = 11;
 static const uint8_t MISO = 13;
 static const uint8_t SCK = 12;
