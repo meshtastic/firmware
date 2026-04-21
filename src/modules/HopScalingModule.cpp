@@ -3,679 +3,427 @@
 #if HAS_VARIABLE_HOPS
 
 #include "FSCommon.h"
-#include "NodeDB.h"
 #include "SPILock.h"
 #include "concurrency/LockGuard.h"
 #include "mesh-pb-constants.h"
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
 #include <cstring>
 
 namespace
 {
-// Time windows for NodeDB age bucketing
-constexpr uint32_t ONE_HOUR_SECS = 60 * 60;
-constexpr uint32_t TWO_HOURS_SECS = 2 * ONE_HOUR_SECS;
-constexpr uint32_t THREE_HOURS_SECS = 3 * ONE_HOUR_SECS;
-constexpr uint32_t TWELVE_HOURS_SECS = 12 * ONE_HOUR_SECS;
-
 // Module scheduling
-constexpr uint32_t INITIAL_DELAY_MS = 30 * 1000UL;     // Startup grace period before first run
-constexpr uint32_t RUN_INTERVAL_MS = 10 * 60 * 1000UL; // Emit status report every 10 minutes
-constexpr uint8_t RUNS_PER_HOUR = 6;                   // 6 x 10-minute runs = 1 hour
-
-// Hop recommendation: cumulative node target before constraining hops
-constexpr uint16_t TARGET_AFFECTED_NODES = 40;
-
-// Politeness factors: multiplier applied to the 40-node floor when deciding one-hop extension.
-constexpr float POLITENESS_GENEROUS = 2.0f; // Quiet mesh: allow doubling
-constexpr float POLITENESS_DEFAULT = 1.5f;  // Stable mesh: allow 50% growth
-constexpr float POLITENESS_STRICT = 1.25f;  // Busy mesh: allow 25% growth
-
-// Activity weight thresholds for politeness regime selection
-constexpr float ACTIVITY_WEIGHT_GENEROUS_MAX = 0.9f; // Below this: GENEROUS
-constexpr float ACTIVITY_WEIGHT_STRICT_MIN = 1.2f;   // Above this: STRICT
-
-// NodeDB capacity thresholds for scale factor estimation
-constexpr float NODEDB_NEAR_CAPACITY_RATIO = 0.9f;    // 90% of MAX_NUM_NODES triggers scaling
-constexpr float TURNOVER_CAPACITY_LIMIT_RATIO = 0.2f; // Evictions below 20% of MAX = limit of turnover scaling
-
-// Modulo sampling: track 1-in-N unique node IDs from the packet stream
-// Dynamically adjusted to keep sample tracker load between 1/8 and 5/8 capacity
-constexpr uint8_t SAMPLING_DENOMINATOR_INITIAL = 8;
-uint8_t SAMPLING_DENOMINATOR = SAMPLING_DENOMINATOR_INITIAL; // mutable
-constexpr uint8_t SAMPLING_DENOMINATOR_MIN = 1;
-constexpr uint8_t SAMPLING_DENOMINATOR_MAX = 128;
-
-/**
- * Apply random jitter to a target denominator value.
- * The jittered result lies in [target/2 + 1, target*2 - 1], clamped to [MIN, MAX].
- * This prevents a bad actor from predicting which node IDs will pass the modulo filter.
- * When s_samplingJitter is false (e.g. in unit tests) the target is returned unchanged.
- *
- * @param target The canonical denominator value before jitter (e.g. 16, 32, 64).
- * @return       Jittered denominator within the target's neighbourhood, or target itself if jitter is disabled.
- */
-uint8_t jitterDenominator(uint8_t target)
-{
-    if (!HopScalingModule::s_samplingJitter)
-        return target;
-    const uint16_t lo = static_cast<uint16_t>(target / 2) + 1;
-    const uint16_t hi = static_cast<uint16_t>(target) * 2 - 1;
-    const uint16_t loC = std::max(lo, static_cast<uint16_t>(SAMPLING_DENOMINATOR_MIN));
-    const uint16_t hiC = std::min(hi, static_cast<uint16_t>(SAMPLING_DENOMINATOR_MAX));
-    if (loC >= hiC)
-        return static_cast<uint8_t>(loC);
-    return static_cast<uint8_t>(loC + static_cast<uint16_t>(rand()) % (hiC - loC + 1));
-}
-constexpr uint32_t ONE_HOUR_MS = ONE_HOUR_SECS * 1000UL;
+constexpr uint32_t INITIAL_DELAY_MS = 30 * 1000UL;    // Startup grace period before first run
+constexpr uint32_t RUN_INTERVAL_MS = 5 * 60 * 1000UL; // Emit micro-summary every 5 minutes
+constexpr uint8_t RUNS_PER_HOUR = 12;                 // 12 x 5-minute runs = 1 hour (full update)
 
 // Persistence
-constexpr const char *HOP_SCALING_STATE_FILE = "/prefs/hop_scaling.bin";
-constexpr const char *LEGACY_SOI_STATE_FILE = "/prefs/soi.bin";
-constexpr uint32_t HOP_SCALING_STATE_MAGIC = 0x48534331;        // 'HSC1' (Hop SCaling state)
-constexpr uint32_t LEGACY_HOP_SCALING_STATE_MAGIC = 0x534F4931; // 'SOI1' (legacy)
-constexpr uint8_t HOP_SCALING_STATE_VERSION = 2;
+constexpr uint32_t HISTOGRAM_STATE_MAGIC = 0x48535432; // 'HST2' — layout v2
+constexpr uint8_t HISTOGRAM_STATE_VERSION = 1;
+constexpr const char *HISTOGRAM_STATE_FILE = "/prefs/hopScalingState.bin";
 
-struct PersistedState {
+#pragma pack(push, 1)
+struct PersistedHistogram {
     uint32_t magic;
     uint8_t version;
     uint8_t samplingDenominator;
-    float rollingEvictionAvg12h;
-    float rollingSampledAvg12h;
-    uint8_t rollingAvgRollCount; // v2: warm-up counter (0..12)
+    uint8_t filteringDenominator;
+    uint32_t filterDenomRemainMs; // remaining hold duration; 0 when not elevated
+    uint16_t hashSeed;
+    Record entries[HopScalingModule::CAPACITY]; // full 512-byte array; count derived on load
 };
+#pragma pack(pop)
 
 } // namespace
 
 HopScalingModule *hopScalingModule;
 
-/// Reset all hop bucket counters to zero.
-void HopScalingModule::HopBucket::clear()
-{
-    memset(perHop, 0, sizeof(perHop));
-    unknownHopCount = 0;
-    total = 0;
-}
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
 
-/// Classify a node into its hop distance bucket.
-/// Nodes with a valid hops_away (0..HOP_MAX) increment the per-hop histogram;
-/// nodes without hop info are counted separately so they don't skew the distribution.
-void HopScalingModule::HopBucket::add(const meshtastic_NodeInfoLite &node)
-{
-    total++;
-    if (node.has_hops_away && node.hops_away <= HOP_MAX) {
-        perHop[node.hops_away]++;
-    } else {
-        unknownHopCount++;
-    }
-}
-
-/// Initialise the module, restore persisted state, and schedule the first run after a startup grace period.
 HopScalingModule::HopScalingModule() : concurrency::OSThread("HopScaling")
 {
-    loadState();
-    // Restore the histogram separately; its own file holds the 512-byte entry array which
-    // would bloat the HopScaling state file and is meaningless without per-entry data anyway.
-    hopScalingHistogram.loadFromDisk();
-    sampleWindowStartMs = CompactHistogram::nowMs();
+    clear();
+    loadFromDisk();
     setIntervalFromNow(INITIAL_DELAY_MS);
 }
 
-/// Called by NodeDB each time a node is evicted to make room for a new one.
-/// The count is rolled into a 12h rolling average once per hour by rollHour().
-void HopScalingModule::recordEviction()
+void HopScalingModule::clear()
 {
-    evictionsCurrentHour++;
-}
-
-/// Clear all slots and reset the unique count.
-void HopScalingModule::SampleTracker::clear()
-{
-    memset(slots, 0, sizeof(slots));
-    uniqueCount = 0;
-}
-
-/**
- * Insert a node ID into the hash set.
- * Uses open-addressing with linear probing; slot 0 value 0 is reserved as "empty".
- *
- * @param nodeId The node ID to record (must be non-zero).
- * @return       true if the ID was newly inserted, false if already present, zero, or table full.
- */
-bool HopScalingModule::SampleTracker::record(uint32_t nodeId)
-{
-    if (nodeId == 0)
-        return false; // 0 is the empty sentinel
-    if (uniqueCount >= SAMPLE_TRACKER_LOAD_CAP)
-        return false; // load factor > 75%, stop inserting to avoid long probe chains
-
-    uint16_t idx = static_cast<uint16_t>(nodeId) & (SAMPLE_TRACKER_SLOTS - 1);
-    for (uint16_t probe = 0; probe < SAMPLE_TRACKER_SLOTS; ++probe) {
-        if (slots[idx] == 0) {
-            slots[idx] = nodeId;
-            uniqueCount++;
-            return true;
-        }
-        if (slots[idx] == nodeId)
-            return false; // already recorded
-        idx = (idx + 1) & (SAMPLE_TRACKER_SLOTS - 1);
-    }
-    return false; // table full (shouldn't happen with load factor check)
-}
-
-/// Record a packet sender for sampling-based mesh size estimation.
-/// Only 1-in-SAMPLING_DENOMINATOR nodes are tracked (deterministic by node ID).
-void HopScalingModule::recordPacketSender(uint32_t nodeId)
-{
-    if (nodeId % SAMPLING_DENOMINATOR != 0)
-        return;
-
-    sampledNodesCurrentHour.record(nodeId);
-
-    // Trigger an early sample-window roll exactly at the 75% load cap to avoid
-    // dropping new IDs and retune sampling while traffic is active.
-    if (sampledNodesCurrentHour.uniqueCount >= SAMPLE_TRACKER_LOAD_CAP) {
-        rollSampleWindow(true);
-    }
-}
-
-/// Sample incoming packet into the CompactHistogram for bitwise hop tracking.
-void HopScalingModule::samplePacketForHistogram(uint32_t nodeId, uint8_t hopCount)
-{
-    hopScalingHistogram.sampleRxPacket(nodeId, hopCount);
-}
-
-/// Extrapolate total mesh size from the sampled unique node count.
-/// Returns 0 if too few samples to be reliable (caller should fall back to NodeDB count).
-uint16_t HopScalingModule::estimateSampledMeshSize() const
-{
-    if (rollingSampledAvg12h < 2.0f)
-        return 0; // Smoothed estimate too low to be reliable
-    return static_cast<uint16_t>(std::min(rollingSampledAvg12h, 65535.0f));
-}
-
-bool HopScalingModule::s_samplingJitter = true;
-bool HopScalingModule::s_samplingAdaptationEnabled = true;
-
-/// Reset SAMPLING_DENOMINATOR to its compiled-in initial value.
-void HopScalingModule::resetSamplingDenominator()
-{
-    SAMPLING_DENOMINATOR = SAMPLING_DENOMINATOR_INITIAL;
-}
-
-/// Override SAMPLING_DENOMINATOR to an explicit value (test-only).
-void HopScalingModule::setDenominatorForTest(uint8_t d)
-{
-    SAMPLING_DENOMINATOR = d;
-}
-
-/**
- * Double or halve the sampling denominator if the tracker load ratio is outside the 1/8–5/8 target band.
- *
- * @param loadRatio Current sample tracker utilisation (uniqueCount / capacity), in [0.0, 1.0].
- */
-void HopScalingModule::adjustSamplingDenominatorForLoad(float loadRatio)
-{
-    if (!s_samplingAdaptationEnabled)
-        return;
-    const char *direction = nullptr;
-    if (loadRatio > 5.0f / 8.0f && SAMPLING_DENOMINATOR < SAMPLING_DENOMINATOR_MAX) {
-        const uint8_t doubled = static_cast<uint8_t>(
-            std::min(static_cast<uint16_t>(SAMPLING_DENOMINATOR * 2), static_cast<uint16_t>(SAMPLING_DENOMINATOR_MAX)));
-        SAMPLING_DENOMINATOR = jitterDenominator(doubled);
-        direction = "increased";
-    } else if (loadRatio < 1.0f / 8.0f && SAMPLING_DENOMINATOR > SAMPLING_DENOMINATOR_MIN) {
-        const uint8_t halved = static_cast<uint8_t>(
-            std::max(static_cast<uint16_t>(SAMPLING_DENOMINATOR / 2), static_cast<uint16_t>(SAMPLING_DENOMINATOR_MIN)));
-        SAMPLING_DENOMINATOR = jitterDenominator(halved);
-        direction = "decreased";
-    }
-    if (direction) {
-        LOG_INFO("[HOPSCALE] Adaptive sampling: denominator %s to %u (load ratio=%.2f)", direction, SAMPLING_DENOMINATOR,
-                 static_cast<double>(loadRatio));
-    }
-}
-
-/**
- * Commit the current sample window into the rolling average and reset the tracker.
- * For early triggers (tracker overflow) a floor is applied to avoid zero-weight integration.
- *
- * @param earlyTrigger true when called from recordPacketSender() at the 75% load cap;
- *                     false for the normal hourly roll from rollHour().
- */
-void HopScalingModule::rollSampleWindow(bool earlyTrigger)
-{
-    const uint32_t nowMs = CompactHistogram::nowMs();
-    const uint32_t windowMs = sampleWindowStartMs ? (nowMs - sampleWindowStartMs) : ONE_HOUR_MS;
-
-    const float samplesThisWindow = static_cast<float>(sampledNodesCurrentHour.uniqueCount);
-    const float estimatedMeshThisWindow = samplesThisWindow * SAMPLING_DENOMINATOR;
-
-    // Integrate by the fraction of an hour represented by this window,
-    // using warm-up alpha: 1/min(rollCount,12) during the first 12 rolls,
-    // settling to 1/12 for the steady-state 12-hour rolling average.
-    float windowFraction = std::max(0.0f, std::min(1.0f, static_cast<float>(windowMs) / static_cast<float>(ONE_HOUR_MS)));
-    // In unit tests and bursty real traffic, early rolls can occur in the same millisecond
-    // as window start (windowMs==0). Apply a small floor so meaningful samples still
-    // contribute to the rolling estimate instead of being multiplied by zero.
-    if (earlyTrigger) {
-        windowFraction = std::max(windowFraction, 0.25f);
-    }
-    const uint8_t effectiveRolls = std::max(
-        static_cast<uint8_t>(1), static_cast<uint8_t>(std::min<uint16_t>(static_cast<uint16_t>(rollingAvgRollCount) + 1, 12)));
-    const float alpha = windowFraction * (1.0f / effectiveRolls);
-    rollingSampledAvg12h = rollingSampledAvg12h * (1.0f - alpha) + estimatedMeshThisWindow * alpha;
-    if (rollingAvgRollCount < 12)
-        rollingAvgRollCount++;
-
-    const float maxUseful = static_cast<float>(SAMPLE_TRACKER_SLOTS) * (3.0f / 4.0f); // 75% load factor cap
-    const float loadRatio = samplesThisWindow / maxUseful;
-    adjustSamplingDenominatorForLoad(loadRatio);
-
-    if (earlyTrigger) {
-        const bool isOneHourWindow = (windowMs >= ONE_HOUR_MS);
-        const char *rollLabel = isOneHourWindow ? "Hourly sample roll" : "Early sample roll";
-        LOG_INFO("[HOPSCALE] %s: windowMs=%u unique=%u est=%.1f load=%.2f sampling 1 in %u", rollLabel,
-                 static_cast<unsigned int>(windowMs), sampledNodesCurrentHour.uniqueCount,
-                 static_cast<double>(estimatedMeshThisWindow), static_cast<double>(loadRatio), SAMPLING_DENOMINATOR);
-    } else {
-        LOG_INFO("[HOPSCALE] Sample roll: unique=%u est=%.1f load=%.2f sampling 1 in %u", sampledNodesCurrentHour.uniqueCount,
-                 static_cast<double>(estimatedMeshThisWindow), static_cast<double>(loadRatio), SAMPLING_DENOMINATOR);
-    }
-
-    sampledNodesCurrentHour.clear();
-    sampleWindowStartMs = nowMs;
-}
-
-// Roll the hourly eviction count and sampled node count into their respective rolling averages, then reset the hourly
-// counters. Also triggers the CompactHistogram hourly rollover.
-void HopScalingModule::rollHour()
-{
-    // Warm-up alpha for eviction rolling average: same counter as sample average
-    // ensures both converge at the same rate during the cold-start phase.
-    const uint8_t effectiveRolls = std::max(
-        static_cast<uint8_t>(1), static_cast<uint8_t>(std::min<uint16_t>(static_cast<uint16_t>(rollingAvgRollCount) + 1, 12)));
-    const float evictAlpha = 1.0f / effectiveRolls;
-    rollingEvictionAvg12h = rollingEvictionAvg12h * (1.0f - evictAlpha) + evictionsCurrentHour * evictAlpha;
-    evictionsCurrentHour = 0;
-
-    rollSampleWindow(false);
-
-    // Trigger the CompactHistogram's own hourly rollover (tallies per-hop counts,
-    // adjusts denominators, shifts seen bitmaps, logs its recommendation).
-    hopScalingHistogram.rollHour();
-    hopScalingHistogram.saveToDisk();
-
-    // Track how many histogram rollovers have occurred; used as a bootstrap gate to
-    // defer switching to histogram-primary mode until at least one rollover has produced data.
-    if (histogramRollCount < 255)
-        histogramRollCount++;
-
-    saveState();
-}
-
-// Load persisted state from storage to maintain continuity across reboots. Validates magic, version, and sampling denominator
-// before applying.
-void HopScalingModule::loadState()
-{
-#ifdef FSCom
-    concurrency::LockGuard g(spiLock);
-
-    auto file = FSCom.open(HOP_SCALING_STATE_FILE, FILE_O_READ);
-    if (file) {
-        PersistedState state{};
-        const bool readOk = (file.read((uint8_t *)&state, sizeof(state)) == sizeof(state));
-        const bool magicOk = (state.magic == HOP_SCALING_STATE_MAGIC || state.magic == LEGACY_HOP_SCALING_STATE_MAGIC);
-        if (readOk && magicOk && (state.version == HOP_SCALING_STATE_VERSION || state.version == 1) &&
-            state.samplingDenominator >= SAMPLING_DENOMINATOR_MIN && state.samplingDenominator <= SAMPLING_DENOMINATOR_MAX) {
-            rollingEvictionAvg12h = state.rollingEvictionAvg12h;
-            rollingSampledAvg12h = state.rollingSampledAvg12h;
-            SAMPLING_DENOMINATOR = state.samplingDenominator;
-            // v1 state files lack rollingAvgRollCount; treat as fully converged.
-            rollingAvgRollCount = (state.version >= 2 && state.rollingAvgRollCount <= 12) ? state.rollingAvgRollCount : 12;
-            LOG_INFO("[HOPSCALE] Restored state: evict/h=%.1f sampledAvg=%.1f  sampling 1 in %u rollCount=%u",
-                     static_cast<double>(rollingEvictionAvg12h), static_cast<double>(rollingSampledAvg12h), SAMPLING_DENOMINATOR,
-                     rollingAvgRollCount);
-        } else {
-            LOG_DEBUG("[HOPSCALE] No valid persisted state, starting fresh");
-        }
-        file.close();
-    }
+    memset(entries, 0, sizeof(entries));
+    count = 0;
+    samplingDenominator = DENOM_MIN;
+    filteringDenominator = DENOM_MIN;
+    filteringDenomElevatedAt = 0;
+    lastPerHopCounts = {};
+    lastSuggestedHop = MAX_HOP;
+    lastPoliteness = POLITENESS_DEFAULT;
+    lastTrendStats = {};
+    memset(denominatorHistory, DENOM_MIN, sizeof(denominatorHistory));
+#ifndef UNIT_TEST
+    hashSeed = static_cast<uint16_t>(random());
+#else
+    hashSeed = 0; // deterministic in unit tests
 #endif
 }
 
-// Store the current state to allow continuity across reboots.
-void HopScalingModule::saveState() const
+// ---------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------
+
+void HopScalingModule::saveToDisk() const
 {
 #ifdef FSCom
     FSCom.mkdir("/prefs");
-    if (FSCom.exists(HOP_SCALING_STATE_FILE)) {
-        FSCom.remove(HOP_SCALING_STATE_FILE);
+    if (FSCom.exists(HISTOGRAM_STATE_FILE)) {
+        FSCom.remove(HISTOGRAM_STATE_FILE);
     }
     concurrency::LockGuard g(spiLock);
-    auto file = FSCom.open(HOP_SCALING_STATE_FILE, FILE_O_WRITE);
+    auto file = FSCom.open(HISTOGRAM_STATE_FILE, FILE_O_WRITE);
     if (file) {
-        PersistedState state{};
-        state.magic = HOP_SCALING_STATE_MAGIC;
-        state.version = HOP_SCALING_STATE_VERSION;
-        state.samplingDenominator = SAMPLING_DENOMINATOR;
-        state.rollingEvictionAvg12h = rollingEvictionAvg12h;
-        state.rollingSampledAvg12h = rollingSampledAvg12h;
-        state.rollingAvgRollCount = rollingAvgRollCount;
-        file.write((uint8_t *)&state, sizeof(state));
+        PersistedHistogram state{};
+        state.magic = HISTOGRAM_STATE_MAGIC;
+        state.version = HISTOGRAM_STATE_VERSION;
+        state.samplingDenominator = samplingDenominator;
+        state.filteringDenominator = filteringDenominator;
+        // Persist remaining hold time rather than the absolute timestamp so the value is
+        // still meaningful after a reboot (nowMs() resets to 0 on restart).
+        if (filteringDenominator > samplingDenominator) {
+            const uint32_t elapsed = nowMs() - filteringDenomElevatedAt;
+            state.filterDenomRemainMs = (elapsed < FILTER_DENOM_HOLD_MS) ? (FILTER_DENOM_HOLD_MS - elapsed) : 0u;
+        }
+        state.hashSeed = hashSeed;
+        // Save all CAPACITY slots; count is reconstructed on load by scanning seenHoursAgo.
+        memcpy(state.entries, entries, sizeof(state.entries));
+        file.write(reinterpret_cast<const uint8_t *>(&state), sizeof(state));
         file.flush();
         file.close();
-        LOG_DEBUG("[HOPSCALE] Saved state: evict/h=%.1f sampledAvg=%.1f  sampling 1 in %u",
-                  static_cast<double>(rollingEvictionAvg12h), static_cast<double>(rollingSampledAvg12h), SAMPLING_DENOMINATOR);
+        LOG_DEBUG("[HOPSCALE] Saved: count=%u samp=1/%u filt=1/%u holdRemainMs=%u", count, samplingDenominator,
+                  filteringDenominator, state.filterDenomRemainMs);
     } else {
-        LOG_WARN("[HOPSCALE] Failed to open %s for write", HOP_SCALING_STATE_FILE);
+        LOG_WARN("[HOPSCALE] Failed to open %s for write", HISTOGRAM_STATE_FILE);
     }
 #endif
 }
 
-// Iterate through NodeDB to build a snapshot of recent activity, classifying nodes into hop buckets and age buckets for analysis.
-void HopScalingModule::buildSnapshot(Snapshot &snapshot) const
+void HopScalingModule::loadFromDisk()
 {
-    snapshot.recent1h.clear();
-    snapshot.old1hFrom2h.clear();
-    snapshot.old1hFrom3h.clear();
-    snapshot.cumulative12h.clear();
+#ifdef FSCom
+    concurrency::LockGuard g(spiLock);
+    auto file = FSCom.open(HISTOGRAM_STATE_FILE, FILE_O_READ);
+    if (!file)
+        return;
+    PersistedHistogram state{};
+    const bool readOk = (file.read(reinterpret_cast<uint8_t *>(&state), sizeof(state)) == sizeof(state));
+    file.close();
+    if (!readOk || state.magic != HISTOGRAM_STATE_MAGIC || state.version != HISTOGRAM_STATE_VERSION ||
+        state.samplingDenominator < DENOM_MIN || state.samplingDenominator > DENOM_MAX ||
+        state.filteringDenominator < state.samplingDenominator || state.filteringDenominator > DENOM_MAX) {
+        LOG_DEBUG("[HOPSCALE] No valid persisted state (magic=%08x ver=%u), starting fresh", state.magic, state.version);
+        return;
+    }
+    // Derive count by scanning: active entries have seenHoursAgo != 0; pack them to the front.
 
-    if (!nodeDB) {
+    uint8_t restored = 0;
+    for (uint8_t i = 0; i < CAPACITY && restored < CAPACITY; i++) {
+        if (state.entries[i].seenHoursAgo != 0u) {
+            entries[restored++] = state.entries[i];
+        }
+    }
+    count = restored;
+    samplingDenominator = state.samplingDenominator;
+    filteringDenominator = state.filteringDenominator;
+    // Back-date the elevation timestamp so the remaining hold duration is honoured.
+    if (state.filterDenomRemainMs > 0 && filteringDenominator > samplingDenominator) {
+        filteringDenomElevatedAt = nowMs() - (FILTER_DENOM_HOLD_MS - state.filterDenomRemainMs);
+    } else {
+        filteringDenomElevatedAt = 0;
+    }
+    // denominatorHistory can't be recovered; initialise all slots to filteringDenominator so
+    // the first few post-reboot scaledPerHour values use a safe (slightly conservative) multiplier.
+    memset(denominatorHistory, filteringDenominator, sizeof(denominatorHistory));
+    hashSeed = state.hashSeed;
+    LOG_INFO("[HOPSCALE] Restored: count=%u samp=1/%u filt=1/%u holdRemainMs=%u", count, samplingDenominator,
+             filteringDenominator, state.filterDenomRemainMs);
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Core API
+// ---------------------------------------------------------------------------
+
+void HopScalingModule::samplePacketForHistogram(uint32_t nodeId, uint8_t hopCount)
+{
+    const uint16_t hash = hashNodeId(nodeId);
+
+    if (!passesFilter(hash, samplingDenominator))
+        return;
+
+    hopCount = std::min(hopCount, MAX_HOP);
+
+    // Update an existing entry
+    Record *entry = nullptr;
+    for (uint8_t i = 0; i < count; i++) {
+        if (entries[i].nodeHash == hash) {
+            entry = &entries[i];
+            break;
+        }
+    }
+    if (entry) {
+        entry->hops_away = hopCount;
+        markCurrentHour(*entry);
         return;
     }
 
-    const size_t nodeCount = nodeDB->getNumMeshNodes();
-    for (size_t i = 0; i < nodeCount; ++i) {
-        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node || node->via_mqtt) {
+    // New node: trim if necessary before allocating a slot
+    if (getFillPercentage() >= FILL_HIGH_PCT) {
+        trimIfNeeded();
+    }
+
+    if (count < CAPACITY) {
+        entries[count].nodeHash = hash;
+        entries[count].hops_away = hopCount;
+        entries[count].seenHoursAgo = 1u; // mark current hour
+        count++;
+    }
+    // If still full after trimming, silently drop the new entry
+}
+
+void HopScalingModule::rollHour()
+{
+    // 1. Tally per-hop counts for entries that pass the filtering denominator
+    //    AND have been seen in at least one of the past 13 hours.
+    //    Also tally per-hour seen counts across all 13 seen-bit slots (before the bitmap shift),
+    //    and derive mesh trend counters from the same pass.
+    PerHopCounts counts{};
+    uint16_t hourlyRaw[13] = {};
+    uint16_t trendNewThisHour = 0;
+    uint16_t trendReturning = 0;
+    uint16_t trendLapsed = 0;
+    uint16_t trendOlderThan4h = 0;
+    uint16_t trendAgingOut = 0;
+    for (uint8_t i = 0; i < count; i++) {
+        if (!passesFilter(entries[i].nodeHash, filteringDenominator))
             continue;
+        const uint32_t seen = entries[i].seenHoursAgo;
+        for (uint8_t h = 0; h < 13; h++) {
+            if (seen & (1u << h))
+                hourlyRaw[h]++;
         }
-
-        const uint32_t ageSecs = sinceLastSeen(node);
-
-        if (ageSecs < ONE_HOUR_SECS) {
-            snapshot.recent1h.add(*node);
-        } else if (ageSecs < TWO_HOURS_SECS) {
-            snapshot.old1hFrom2h.add(*node);
-        } else if (ageSecs < THREE_HOURS_SECS) {
-            snapshot.old1hFrom3h.add(*node);
+        if (seenInLast13h(entries[i])) {
+            counts.perHop[entries[i].hops_away]++;
+            counts.total++;
         }
+        const bool heardThisHour = (seen & 1u) != 0u;
+        const bool heardLastHour = (seen & 2u) != 0u;
+        const bool hasOlderHistory = (seen >> 1u) != 0u;
+        const bool recentlySilent = (seen & 0xFu) == 0u;
+        if (heardThisHour && !hasOlderHistory)
+            trendNewThisHour++;
+        else if (heardThisHour && hasOlderHistory)
+            trendReturning++;
+        if (!heardThisHour && heardLastHour)
+            trendLapsed++;
+        if (recentlySilent && (seen & 0x1FF0u) != 0u)
+            trendOlderThan4h++;
+        if (seen == (1u << 12u))
+            trendAgingOut++;
+    }
+    lastPerHopCounts = counts;
 
-        if (ageSecs < TWELVE_HOURS_SECS) {
-            snapshot.cumulative12h.add(*node);
+    // 1b. Compute politeness factor from the 0-2 h vs 1-3 h activity ratio.
+    {
+        const uint32_t recent = static_cast<uint32_t>(hourlyRaw[0]) + hourlyRaw[1];
+        const uint32_t older = static_cast<uint32_t>(hourlyRaw[1]) + hourlyRaw[2];
+        float activityWeight = 1.0f;
+        if (older > 1 && recent > 1) {
+            activityWeight = static_cast<float>(recent) / static_cast<float>(older);
+        }
+        if (activityWeight < ACTIVITY_WEIGHT_GENEROUS_MAX) {
+            lastPoliteness = POLITENESS_GENEROUS;
+        } else if (activityWeight > ACTIVITY_WEIGHT_STRICT_MIN) {
+            lastPoliteness = POLITENESS_STRICT;
+        } else {
+            lastPoliteness = POLITENESS_DEFAULT;
         }
     }
+
+    // 1c. Scale and cache trend stats using per-hour denominator history.
+    {
+        for (uint8_t h = 12; h > 0; h--)
+            denominatorHistory[h] = denominatorHistory[h - 1];
+        denominatorHistory[0] = filteringDenominator;
+
+        MeshTrendStats t{};
+        for (uint8_t h = 0; h < 13; h++) {
+            const uint32_t s = static_cast<uint32_t>(hourlyRaw[h]) * denominatorHistory[h];
+            t.scaledPerHour[h] = static_cast<uint16_t>(std::min<uint32_t>(s, UINT16_MAX));
+        }
+        auto scale = [&](uint16_t raw) -> uint16_t {
+            return static_cast<uint16_t>(std::min<uint32_t>(static_cast<uint32_t>(raw) * filteringDenominator, UINT16_MAX));
+        };
+        t.newThisHour = scale(trendNewThisHour);
+        t.returningThisHour = scale(trendReturning);
+        t.lapsedSinceLastHour = scale(trendLapsed);
+        t.olderThan4h = scale(trendOlderThan4h);
+        t.agingOut = scale(trendAgingOut);
+        lastTrendStats = t;
+    }
+
+    // 2. Walk scaled hop buckets to produce a hop-limit recommendation.
+    uint8_t suggested = MAX_HOP;
+    if (counts.total > 0) {
+        uint32_t cumulative = 0;
+        for (uint8_t hop = 0; hop <= MAX_HOP; hop++) {
+            cumulative += static_cast<uint32_t>(counts.perHop[hop]) * filteringDenominator;
+            if (cumulative >= TARGET_AFFECTED_NODES) {
+                suggested = hop;
+                break;
+            }
+        }
+        if (suggested < MAX_HOP) {
+            const uint32_t atNext = static_cast<uint32_t>(counts.perHop[suggested + 1]) * filteringDenominator;
+            const float politeLimit = static_cast<float>(TARGET_AFFECTED_NODES) * lastPoliteness;
+            if (static_cast<float>(cumulative + atNext) <= politeLimit) {
+                suggested++;
+            }
+        }
+    }
+    lastSuggestedHop = suggested;
+
+    // 3. Log scaled per-hop counts and recommendation.
+    {
+        uint16_t scaled[MAX_HOP + 1];
+        for (uint8_t h = 0; h <= MAX_HOP; h++) {
+            const uint32_t s = static_cast<uint32_t>(counts.perHop[h]) * filteringDenominator;
+            scaled[h] = static_cast<uint16_t>(std::min<uint32_t>(s, UINT16_MAX));
+        }
+        const uint32_t scaledTotal = static_cast<uint32_t>(counts.total) * filteringDenominator;
+        LOG_INFO("[HOPSCALE] rollHour: entries=%u/128 samp=1/%u filt=1/%u counted=%u est=%u suggestedHop=%u polite=%.2f", count,
+                 samplingDenominator, filteringDenominator, counts.total, static_cast<unsigned>(scaledTotal), suggested,
+                 static_cast<double>(lastPoliteness));
+        LOG_INFO("[HOPSCALE] scaled perHop: [%u %u %u %u %u %u %u %u]", scaled[0], scaled[1], scaled[2], scaled[3], scaled[4],
+                 scaled[5], scaled[6], scaled[7]);
+
+        const auto &ts = lastTrendStats;
+        LOG_INFO("[HOPSCALE] scaledSeenPerHour (h0=now): [%u %u %u %u %u %u %u %u %u %u %u %u %u]", ts.scaledPerHour[0],
+                 ts.scaledPerHour[1], ts.scaledPerHour[2], ts.scaledPerHour[3], ts.scaledPerHour[4], ts.scaledPerHour[5],
+                 ts.scaledPerHour[6], ts.scaledPerHour[7], ts.scaledPerHour[8], ts.scaledPerHour[9], ts.scaledPerHour[10],
+                 ts.scaledPerHour[11], ts.scaledPerHour[12]);
+        LOG_INFO("[HOPSCALE] trend: new=%u returning=%u lapsed=%u olderThan4h=%u agingOut=%u", ts.newThisHour,
+                 ts.returningThisHour, ts.lapsedSinceLastHour, ts.olderThan4h, ts.agingOut);
+    }
+
+    // 4. Scale-down check: if fewer than FILL_LOW_PCT% of capacity are active, halve samplingDenominator.
+    if (counts.total * 100u < static_cast<uint32_t>(CAPACITY) * FILL_LOW_PCT) {
+        if (samplingDenominator > DENOM_MIN) {
+            samplingDenominator = static_cast<uint8_t>(samplingDenominator / 2u);
+            LOG_INFO("[HOPSCALE] Scale-down: sampling denom halved to %u (filter denom=%u)", samplingDenominator,
+                     filteringDenominator);
+        }
+    }
+
+    // 5. Drop filteringDenominator back to samplingDenominator once the 13-h hold has expired.
+    if (filteringDenominator > samplingDenominator) {
+        if ((nowMs() - filteringDenomElevatedAt) >= FILTER_DENOM_HOLD_MS) {
+            filteringDenominator = samplingDenominator;
+            LOG_INFO("[HOPSCALE] Filter denom dropped to %u after 13-h hold", filteringDenominator);
+        }
+    }
+
+    // 6. Shift all seen bitmaps left by one slot (opens a fresh slot for the new hour).
+    for (uint8_t i = 0; i < count; i++) {
+        rollSeenBits(entries[i]);
+    }
+
+    if (histogramRollCount < 255)
+        histogramRollCount++;
+
+    saveToDisk();
 }
 
-/**
- * Compute an activity weight from the ratio of recent (0–2h) to older (1–3h) node counts.
- * Returns 1.0 as a neutral fallback when not enough data exists for a meaningful comparison.
- *
- * @param snapshot Current NodeDB age-bucketed snapshot.
- * @return         Activity weight: >1.0 means more recent activity, <1.0 means activity is aging out.
- */
-float HopScalingModule::computeActivityWeight(const Snapshot &snapshot) const
-{
-    // Ratio of overlapping activity windows: nodes seen within the last 0-2h
-    // versus nodes seen within 1-3h. Using the shared 1-2h bucket smooths the
-    // comparison across hourly boundaries while still indicating whether activity
-    // is skewing more recent or older. High ratio => relatively more recent
-    // activity; low => activity is aging out.
-    const uint32_t recentActiveNodes = snapshot.recent1h.total + snapshot.old1hFrom2h.total;
-    const uint32_t olderActiveNodes = snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total;
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
 
-    // Not enough historical data to compute a meaningful ratio. Use a neutral
-    // fallback so hop selection remains stable instead of dividing by zero or
-    // treating a non-positive denominator as valid.
-    if (olderActiveNodes <= 1 || recentActiveNodes <= 1) {
-        return 1.0f;
+void HopScalingModule::trimIfNeeded()
+{
+    // Step 1: evict stale entries (not seen in any of the past 13 hours).
+    uint8_t newCount = 0;
+    for (uint8_t i = 0; i < count; i++) {
+        if (seenInLast13h(entries[i])) {
+            if (i != newCount) {
+                entries[newCount] = entries[i];
+            }
+            newCount++;
+        }
     }
-    const float activityWeight = static_cast<float>(recentActiveNodes) / static_cast<float>(olderActiveNodes);
-    return activityWeight;
+    count = newCount;
+
+    // Step 2: if still too full, double the sampling denominator and remove non-matching entries.
+    if (getFillPercentage() >= FILL_HIGH_PCT && samplingDenominator < DENOM_MAX) {
+        samplingDenominator = static_cast<uint8_t>(
+            std::min<uint16_t>(static_cast<uint16_t>(samplingDenominator) * 2u, static_cast<uint16_t>(DENOM_MAX)));
+        filteringDenominator = samplingDenominator;
+        filteringDenomElevatedAt = nowMs();
+        LOG_INFO("[HOPSCALE] Scale-up: denom doubled to %u", samplingDenominator);
+
+        newCount = 0;
+        for (uint8_t i = 0; i < count; i++) {
+            if (passesFilter(entries[i].nodeHash, samplingDenominator)) {
+                if (i != newCount) {
+                    entries[newCount] = entries[i];
+                }
+                newCount++;
+            }
+        }
+        count = newCount;
+    }
 }
 
-/**
- * Select a politeness factor based on the activity weight. More recent activity (higher weight) =>
- * stricter politeness to avoid overloading the mesh; older activity (lower weight) => more generous
- * to allow faster propagation and recovery. The default mid-range politeness applies when the
- * activity weight is close to 1, indicating a stable mesh with balanced recent/older traffic.
- *
- * @param activityWeight Ratio from computeActivityWeight().
- * @return               One of POLITENESS_GENEROUS, POLITENESS_DEFAULT, or POLITENESS_STRICT.
- */
-float HopScalingModule::selectPolitenessFactor(float activityWeight) const
+void HopScalingModule::logStatusReport(bool didHourlyUpdate) const
 {
-    if (activityWeight < ACTIVITY_WEIGHT_GENEROUS_MAX) {
-        return POLITENESS_GENEROUS;
-    }
-    if (activityWeight > ACTIVITY_WEIGHT_STRICT_MIN) {
-        return POLITENESS_STRICT;
-    }
-    return POLITENESS_DEFAULT;
-}
+    const bool histActive = (histogramRollCount > 0 && count > 0);
+    const auto &histCounts = lastPerHopCounts;
+    const uint8_t runsRemaining = didHourlyUpdate ? RUNS_PER_HOUR : (RUNS_PER_HOUR - runsSinceLastHourlyUpdate);
+    const uint8_t minsUntilRollover = runsRemaining * (RUN_INTERVAL_MS / (60 * 1000UL));
 
-/**
- * Estimate a scale factor to apply to the raw NodeDB counts when computing the required hop.
- * This compensates for the NodeDB being an incomplete sample of the whole mesh. Estimation logic
- * adapts to small, medium and megameshes with varying turnover patterns by using heuristics based
- * on NodeDB capacity, eviction rates, and sampling-based mesh size estimation.
- *
- * @param snapshot          Current NodeDB age-bucketed snapshot.
- * @param statusMode        [out] Set to one of the StatusMode enum values indicating which estimation branch was taken.
- * @param sampledEstimate   [out] Set to the sampling-derived mesh size estimate (0 if unreliable).
- * @param evictionEstimate  [out] Set to knownNodeCount × scaleFactor — the eviction-derived mesh size estimate.
- * @return                  Scale factor >= 1.0 to multiply per-hop counts by.
- */
-float HopScalingModule::estimateScaleFactor(const Snapshot &snapshot, uint8_t &statusMode, uint16_t &sampledEstimate,
-                                            uint16_t &evictionEstimate) const
-{
-    float scale = 1.0f; // default (no scaling)
-    const uint16_t knownNodeCount =
-        std::max(static_cast<uint16_t>(1),
-                 static_cast<uint16_t>(snapshot.cumulative12h.total > snapshot.cumulative12h.unknownHopCount
-                                           ? snapshot.cumulative12h.total - snapshot.cumulative12h.unknownHopCount
-                                           : 0));
-    // Compute sampled estimate for status visibility in all modes.
-    // It is only used for scaling decisions in the high-turnover branch below.
-    sampledEstimate = estimateSampledMeshSize();
-
-    // Not-full NodeDB with headroom: direct counts are accurate, scaling only for unknown hops needed.
-    const float nearCapacity = NODEDB_NEAR_CAPACITY_RATIO * MAX_NUM_NODES;
-    if (!nodeDB || (!nodeDB->isFull() && snapshot.cumulative12h.total < nearCapacity)) {
-        statusMode = STATUS_SMALL_STABLE_MESH;
-        scale = static_cast<float>(snapshot.cumulative12h.total) / static_cast<float>(knownNodeCount);
-        evictionEstimate = static_cast<uint16_t>(std::min(knownNodeCount * scale, 65535.0f));
-        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (DB has headroom: %u/%d nodes, of which %.2f unknown hops)",
-                  static_cast<double>(scale), snapshot.cumulative12h.total, MAX_NUM_NODES,
-                  static_cast<double>(snapshot.cumulative12h.unknownHopCount));
-        return scale;
-    }
-
-    // NodeDB at or near capacity — use rolling 12h eviction average to decide scale.
-    if (rollingEvictionAvg12h < (TURNOVER_CAPACITY_LIMIT_RATIO * MAX_NUM_NODES)) {
-        statusMode = STATUS_SCALED_FROM_EVICTION;
-        // Low turnover: NodeDB is full but few evictions; modest scale-up.
-        // Scale proportionally: at 0 evictions => 1.0, approaching threshold => 1.2^12
-        scale = (1.0f + (rollingEvictionAvg12h / knownNodeCount));
-        evictionEstimate = static_cast<uint16_t>(std::min(knownNodeCount * scale, 65535.0f));
-        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (low turnover: evict/h=%.1f)", static_cast<double>(scale),
-                  static_cast<double>(rollingEvictionAvg12h));
-        return scale;
-    }
-
-    // High turnover: many evictions per hour, NodeDB is cycling rapidly.
-    // Compute both sampling and eviction estimates, prefer whichever is larger.
-    const float evictionScale = 1.1f + (rollingEvictionAvg12h / knownNodeCount);
-    evictionEstimate = static_cast<uint16_t>(std::min(knownNodeCount * evictionScale, 65535.0f));
-    const float samplingScale =
-        (sampledEstimate > 0) ? std::max(static_cast<float>(sampledEstimate) / knownNodeCount, 1.0f) : 0.0f;
-
-    if (samplingScale > evictionScale) {
-        statusMode = STATUS_SCALED_FROM_MESH_ESTIMATE;
-        scale = samplingScale;
-        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (sampled: est=%u > eviction=%.2f)", static_cast<double>(scale), sampledEstimate,
-                  static_cast<double>(evictionScale));
-    } else {
-        statusMode = STATUS_FALLBACK_EVICTION_SCALE;
-        scale = evictionScale;
-        LOG_DEBUG("[HOPSCALE] scaleFactor=%.2f (eviction: evict/h=%.1f, sampled=%u scale=%.2f)", static_cast<double>(scale),
-                  static_cast<double>(rollingEvictionAvg12h), sampledEstimate, static_cast<double>(samplingScale));
-    }
-    return scale;
-}
-
-/// Return true if the snapshot has enough temporal spread across age buckets for a meaningful activity ratio.
-bool HopScalingModule::checkStableStatus(const Snapshot &snapshot) const
-{
-    // Require at least a minimal amount of temporal spread before classifying status mode as stable.
-    const uint32_t recentActiveNodes = snapshot.recent1h.total + snapshot.old1hFrom2h.total;
-    const uint32_t olderActiveNodes = snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total;
-    return snapshot.cumulative12h.total > 1 && recentActiveNodes > 1 && olderActiveNodes > 1;
-}
-
-/**
- * Emit a single-line LOG_INFO with all current module state for periodic monitoring.
- *
- * @param snapshot        Current NodeDB snapshot (used for age-bucket node counts).
- * @param didHourlyUpdate true if this run performed a full hourly recomputation.
- */
-void HopScalingModule::logStatusReport(const Snapshot &snapshot, bool didHourlyUpdate) const
-{
-    static const char *const modeNames[] = {"STARTUP", "STABLE", "EVICTION", "SAMPLED", "FALLBACK"};
-    const char *modeName = (lastStatusMode < sizeof(modeNames) / sizeof(modeNames[0])) ? modeNames[lastStatusMode] : "?";
-    LOG_INFO("[HOPSCALE] status mode=%s hourly=%u hop=%u actWt=%.2f polite=%.2f scale=%.2f evict/h=%.1f evictionEst=%u "
-             "sampledEst=%u sampling 1 in %u n1=%u n2=%u n3=%u n12=%u",
-             modeName, didHourlyUpdate ? 1 : 0, lastRequiredHop, static_cast<double>(lastActivityWeight),
-             static_cast<double>(lastPolitenessFactor), static_cast<double>(lastScaleFactor),
-             static_cast<double>(rollingEvictionAvg12h), lastEvictionEstimate, lastSampledEstimate, SAMPLING_DENOMINATOR,
-             snapshot.recent1h.total, snapshot.recent1h.total + snapshot.old1hFrom2h.total,
-             snapshot.recent1h.total + snapshot.old1hFrom2h.total + snapshot.old1hFrom3h.total, snapshot.cumulative12h.total);
-
-    // CompactHistogram is the primary decision-maker. Show whether it's active and compare
-    // against the NodeDB advisory (now secondary) for operational monitoring.
-    const uint8_t histSuggestedHop = hopScalingHistogram.getLastSuggestedHop();
-    const bool histActive = (histogramRollCount > 0 && hopScalingHistogram.getEntryCount() > 0);
-    const int8_t advisoryDelta = static_cast<int8_t>(lastNodeDbAdvisoryHop) - static_cast<int8_t>(lastRequiredHop);
-    const auto &histCounts = hopScalingHistogram.getLastPerHopCounts();
-
-    LOG_INFO("[HOPSCALE] histogram hop=%u active=%u nodedbAdvisory=%u advisoryDelta=%d fill=%u%% samp=1/%u filt=1/%u counted=%u",
-             histSuggestedHop, histActive ? 1u : 0u, lastNodeDbAdvisoryHop, advisoryDelta,
-             hopScalingHistogram.getFillPercentage(), hopScalingHistogram.getSamplingDenominator(),
-             hopScalingHistogram.getFilteringDenominator(), histCounts.total);
+    LOG_INFO("[HOPSCALE] hop=%u hourly=%u histActive=%u fill=%u%% samp=1/%u filt=1/%u counted=%u polite=%.2f nextRoll=%umin",
+             lastRequiredHop, didHourlyUpdate ? 1u : 0u, histActive ? 1u : 0u, getFillPercentage(), samplingDenominator,
+             filteringDenominator, histCounts.total, static_cast<double>(lastPoliteness), minsUntilRollover);
 
     LOG_INFO("[HOPSCALE] hist perHop: [%u %u %u %u %u %u %u %u]", histCounts.perHop[0], histCounts.perHop[1],
              histCounts.perHop[2], histCounts.perHop[3], histCounts.perHop[4], histCounts.perHop[5], histCounts.perHop[6],
              histCounts.perHop[7]);
 }
 
-/**
- * Compute the required hop distance to reach the target number of affected nodes, applying
- * scaling and politeness adjustments. The base hop is the minimum hop at which the cumulative
- * affected nodes meets or exceeds TARGET_AFFECTED_NODES. If extending to the next hop would
- * still keep the total under the politeness limit, extend by one more hop.
- *
- * @param snapshot         Current NodeDB age-bucketed snapshot.
- * @param scaleFactor      Multiplier from estimateScaleFactor() to inflate per-hop counts.
- * @param politenessFactor Multiplier from selectPolitenessFactor() for the one-hop extension check.
- * @return                 Required hop count in [0, HOP_MAX].
- */
-uint8_t HopScalingModule::computeRequiredHop(const Snapshot &snapshot, float scaleFactor, float politenessFactor) const
-{
-    uint16_t affectedNodesPerHop[HOP_MAX + 1];
-    memset(affectedNodesPerHop, 0, sizeof(affectedNodesPerHop));
-
-    // Linear extrapolation: scaleFactor is a per-hour additive turnover fraction,
-    // so over 12 hours the total scale is 1 + 12*(scaleFactor - 1), not scaleFactor^12.
-    const float scale12h = std::max(1.0f + 12.0f * (scaleFactor - 1.0f), 1.0f);
-
-    for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
-        // 12h cumulative is the best population estimate; scale12h compensates for eviction undercount or megamesh that
-        // exceeds NodeDB capacity using linear extrapolation over the 12h window.
-        const float scaled12h = snapshot.cumulative12h.perHop[hop] * scale12h;
-        affectedNodesPerHop[hop] = static_cast<uint16_t>(std::min(scaled12h, static_cast<float>(UINT16_MAX)));
-    }
-    LOG_INFO("[HOPSCALE] perHop 1h:     [%u %u %u %u %u %u %u %u]", snapshot.recent1h.perHop[0], snapshot.recent1h.perHop[1],
-             snapshot.recent1h.perHop[2], snapshot.recent1h.perHop[3], snapshot.recent1h.perHop[4], snapshot.recent1h.perHop[5],
-             snapshot.recent1h.perHop[6], snapshot.recent1h.perHop[7]);
-    LOG_INFO("[HOPSCALE] perHop 12h:    [%u %u %u %u %u %u %u %u]", snapshot.cumulative12h.perHop[0],
-             snapshot.cumulative12h.perHop[1], snapshot.cumulative12h.perHop[2], snapshot.cumulative12h.perHop[3],
-             snapshot.cumulative12h.perHop[4], snapshot.cumulative12h.perHop[5], snapshot.cumulative12h.perHop[6],
-             snapshot.cumulative12h.perHop[7]);
-    LOG_INFO("[HOPSCALE] perHop scaled: [%u %u %u %u %u %u %u %u]", affectedNodesPerHop[0], affectedNodesPerHop[1],
-             affectedNodesPerHop[2], affectedNodesPerHop[3], affectedNodesPerHop[4], affectedNodesPerHop[5],
-             affectedNodesPerHop[6], affectedNodesPerHop[7]);
-
-    uint8_t baseHop = HOP_MAX;
-    uint32_t affectedNodes = 0;
-    for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
-        affectedNodes += affectedNodesPerHop[hop];
-        if (affectedNodes >= TARGET_AFFECTED_NODES) {
-            baseHop = hop;
-            break;
-        }
-    }
-
-    if (baseHop < HOP_MAX) {
-        const uint32_t affectedIfExtend = affectedNodes + affectedNodesPerHop[baseHop + 1];
-        const float politeLimit = TARGET_AFFECTED_NODES * politenessFactor;
-        if (affectedIfExtend <= politeLimit) {
-            baseHop++;
-        }
-    }
-
-    return baseHop;
-}
-
-// Main scheduled task: run every 10 minutes for status reporting,
-// and perform full recomputation once per hour.
 int32_t HopScalingModule::runOnce()
 {
-    const bool isFirstRun = !this->hasCompletedInitialRun;
+    const bool isFirstRun = !hasCompletedInitialRun;
     bool didHourlyUpdate = false;
 
     if (isFirstRun) {
-        this->hasCompletedInitialRun = true;
-        this->runsSinceLastHourlyUpdate = 0;
+        hasCompletedInitialRun = true;
+        runsSinceLastHourlyUpdate = 0;
         didHourlyUpdate = true;
     } else {
-        this->runsSinceLastHourlyUpdate++;
-        if (this->runsSinceLastHourlyUpdate >= RUNS_PER_HOUR) {
-            this->runsSinceLastHourlyUpdate = 0;
+        runsSinceLastHourlyUpdate++;
+        if (runsSinceLastHourlyUpdate >= RUNS_PER_HOUR) {
+            runsSinceLastHourlyUpdate = 0;
             didHourlyUpdate = true;
         }
     }
 
-    // The first run happens shortly after boot and should not roll the hourly bucket.
     if (didHourlyUpdate && !isFirstRun) {
         rollHour();
     }
 
-    Snapshot snapshot{};
-    buildSnapshot(snapshot);
-
     if (didHourlyUpdate) {
-        lastActivityWeight = computeActivityWeight(snapshot);
-        lastPolitenessFactor = selectPolitenessFactor(lastActivityWeight);
-        lastScaleFactor = estimateScaleFactor(snapshot, lastStatusMode, lastSampledEstimate, lastEvictionEstimate);
-        if (!checkStableStatus(snapshot)) {
-            lastStatusMode = STATUS_STARTUP_NOT_ENOUGH_DATA;
-        }
-
-        // NodeDB-derived hop (advisory): always computed so eviction/sampling stats stay live.
-        lastNodeDbAdvisoryHop = computeRequiredHop(snapshot, lastScaleFactor, lastPolitenessFactor);
-
-        // Histogram is the primary hop decision-maker once it has processed at least one hourly
-        // rollover and holds tracked entries.  Before that point (bootstrap, blank device) fall
-        // back to the NodeDB advisory so the first few hours still make sensible decisions.
-        const uint8_t histHop = hopScalingHistogram.getLastSuggestedHop();
-        lastRequiredHop = (histogramRollCount > 0 && hopScalingHistogram.getEntryCount() > 0) ? histHop : lastNodeDbAdvisoryHop;
+        lastRequiredHop = (histogramRollCount > 0 && count > 0) ? lastSuggestedHop : HOP_MAX;
     }
 
-    // Shared status report path for both periodic and hourly updates.
-    logStatusReport(snapshot, didHourlyUpdate);
+    logStatusReport(didHourlyUpdate);
 
     return RUN_INTERVAL_MS;
 }

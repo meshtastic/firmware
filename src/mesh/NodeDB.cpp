@@ -1964,10 +1964,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
 
 #if HAS_VARIABLE_HOPS
-        // Feed sampling-based mesh size estimator (skip MQTT-forwarded packets)
         if (!mp.via_mqtt && hopScalingModule) {
-            hopScalingModule->recordPacketSender(mp.from);
-            // Also feed the bitwise histogram sampler (parallel system)
             uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
             hopScalingModule->samplePacketForHistogram(mp.from, hopCount);
         }
@@ -2155,12 +2152,6 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             }
 
             if (oldestIndex != -1) {
-                // Notify HopScaling module about the eviction for tracking
-#if HAS_VARIABLE_HOPS
-                if (hopScalingModule) {
-                    hopScalingModule->recordEviction();
-                }
-#endif
                 // Shove the remaining nodes down the chain
                 for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
                     meshNodes->at(i) = meshNodes->at(i + 1);
