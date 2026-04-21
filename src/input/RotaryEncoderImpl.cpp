@@ -1,4 +1,4 @@
- #ifdef T_LORA_PAGER
+#ifdef T_LORA_PAGER
 
 #include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
