@@ -291,8 +291,10 @@ int32_t NextHopRouter::doRetransmissions()
 
         bool stillValid = true; // assume we'll keep this record around
 
-        // FIXME, handle 51 day rolloever here!!!
-        if (p.nextTxMsec <= now) {
+        // Use signed-difference comparison so retransmission timing stays correct across the
+        // ~49.7 day millis() wraparound (previously this FIXME would stall all retx for the
+        // duration of the wrap or fire them all at once immediately after).
+        if ((int32_t)(p.nextTxMsec - now) <= 0) {
             if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
                     LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
