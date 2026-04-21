@@ -4,9 +4,9 @@
 
 #if !MESHTASTIC_EXCLUDE_I2C
 
+#include <Wire.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <Wire.h>
 
 namespace se050
 {
@@ -62,8 +62,8 @@ struct Scp03 {
     uint8_t sMac[16];
     uint8_t sRmac[16];
     uint8_t sDek[16];
-    uint8_t mcv[16];      // C-MAC chaining value
-    uint32_t encCounter;  // 3-byte counter; increments after each C-APDU
+    uint8_t mcv[16];     // C-MAC chaining value
+    uint32_t encCounter; // 3-byte counter; increments after each C-APDU
 };
 
 class Transport
@@ -161,16 +161,14 @@ class Transport
      * is 32 bytes (X coordinate only). Writes the actual length to `*pubLenOut`.
      * Does not require SCP03.
      */
-    bool readECPub(uint32_t objectId, uint8_t *pubOut, size_t pubCapacity, size_t *pubLenOut,
-                   uint32_t timeout_ms = 1000);
+    bool readECPub(uint32_t objectId, uint8_t *pubOut, size_t pubCapacity, size_t *pubLenOut, uint32_t timeout_ms = 1000);
 
     /**
      * Compute X25519 ECDH: `shared = ECDH(priv-at-objectId, peerPub)`.
      * `peerPub` is the 32-byte Curve25519 X coordinate. `shared` is 32 raw bytes.
      * Requires SCP03.
      */
-    bool ecdhX25519(uint32_t privObjectId, const uint8_t peerPub[32], uint8_t shared[32],
-                    uint32_t timeout_ms = 1000);
+    bool ecdhX25519(uint32_t privObjectId, const uint8_t peerPub[32], uint8_t shared[32], uint32_t timeout_ms = 1000);
 
     bool isReady() const { return ready; }
 

@@ -279,8 +279,8 @@ int Transport::rxFrame(uint8_t *infOut, size_t infMax, uint8_t *pcbOut, uint32_t
         return -1; // short / timeout
     }
     if (buf[0] != NAD_SE_TO_HOST) {
-        LOG_DEBUG("SE050 rxFrame: bad NAD=0x%02x (expected 0xA5), got=%u first5=%02x %02x %02x %02x %02x",
-                  buf[0], (unsigned)got, buf[0], buf[1], buf[2], buf[3], buf[4]);
+        LOG_DEBUG("SE050 rxFrame: bad NAD=0x%02x (expected 0xA5), got=%u first5=%02x %02x %02x %02x %02x", buf[0], (unsigned)got,
+                  buf[0], buf[1], buf[2], buf[3], buf[4]);
         return -2; // bad NAD
     }
 
@@ -517,9 +517,16 @@ bool Transport::getRandom(uint8_t *out, size_t n, uint32_t timeout_ms)
         int headerLen = 0;
         int innerLen = -1;
         uint8_t l0 = p[1];
-        if (l0 < 0x80) { innerLen = l0; headerLen = 2; }
-        else if (l0 == 0x81 && remaining >= 3) { innerLen = p[2]; headerLen = 3; }
-        else if (l0 == 0x82 && remaining >= 4) { innerLen = ((int)p[2] << 8) | p[3]; headerLen = 4; }
+        if (l0 < 0x80) {
+            innerLen = l0;
+            headerLen = 2;
+        } else if (l0 == 0x81 && remaining >= 3) {
+            innerLen = p[2];
+            headerLen = 3;
+        } else if (l0 == 0x82 && remaining >= 4) {
+            innerLen = ((int)p[2] << 8) | p[3];
+            headerLen = 4;
+        }
         if (innerLen >= 0 && headerLen + innerLen <= remaining) {
             p += headerLen;
             remaining = innerLen;
@@ -544,9 +551,9 @@ bool Transport::openPlatformScp03(const uint8_t encKey[16], const uint8_t macKey
     // for SCP03. Fail fast with a clear log line if the CMAC is broken.
     {
         const uint8_t nistKey[16] = {0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
-                                      0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
+                                     0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
         const uint8_t nistExpectedEmpty[16] = {0xbb, 0x1d, 0x69, 0x29, 0xe9, 0x59, 0x37, 0x28,
-                                                 0x7f, 0xa3, 0x7d, 0x12, 0x9b, 0x75, 0x67, 0x46};
+                                               0x7f, 0xa3, 0x7d, 0x12, 0x9b, 0x75, 0x67, 0x46};
         uint8_t mac[16];
         aes128_cmac(nistKey, nullptr, 0, mac);
         if (memcmp(mac, nistExpectedEmpty, 16) != 0) {
@@ -601,9 +608,8 @@ bool Transport::openPlatformScp03(const uint8_t encKey[16], const uint8_t macKey
         for (int i = 0; i < 29; i++)
             snprintf(&hex[i * 2], 3, "%02x", rsp[i]);
         LOG_DEBUG("SCP03 INIT UPDATE rsp (29 B): %s", hex);
-        LOG_DEBUG("SCP03 KDD[10]: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x  keyInfo: %02x %02x %02x",
-                  kdd[0], kdd[1], kdd[2], kdd[3], kdd[4], kdd[5], kdd[6], kdd[7], kdd[8], kdd[9],
-                  keyInfo[0], keyInfo[1], keyInfo[2]);
+        LOG_DEBUG("SCP03 KDD[10]: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x  keyInfo: %02x %02x %02x", kdd[0], kdd[1], kdd[2],
+                  kdd[3], kdd[4], kdd[5], kdd[6], kdd[7], kdd[8], kdd[9], keyInfo[0], keyInfo[1], keyInfo[2]);
     }
 
     // 3. Build derivation context = host_challenge || card_challenge (16 bytes).
@@ -922,7 +928,7 @@ bool Transport::writeECKeyGen(uint32_t objectId, uint8_t curveId, uint32_t timeo
     apdu[1] = 0x01;
     apdu[2] = 0x01 | 0x60; // P1_EC | P1_KEY_PAIR
     apdu[3] = 0x00;        // P2_DEFAULT
-    apdu[4] = 0x09; // Lc = 9
+    apdu[4] = 0x09;        // Lc = 9
     apdu[5] = 0x41;
     apdu[6] = 0x04;
     apdu[7] = (uint8_t)(objectId >> 24);
@@ -1035,9 +1041,16 @@ bool Transport::readECPub(uint32_t objectId, uint8_t *pubOut, size_t pubCapacity
         int headerLen = 0;
         int innerLen = -1;
         uint8_t l0 = p[1];
-        if (l0 < 0x80) { innerLen = l0; headerLen = 2; }
-        else if (l0 == 0x81 && remaining >= 3) { innerLen = p[2]; headerLen = 3; }
-        else if (l0 == 0x82 && remaining >= 4) { innerLen = ((int)p[2] << 8) | p[3]; headerLen = 4; }
+        if (l0 < 0x80) {
+            innerLen = l0;
+            headerLen = 2;
+        } else if (l0 == 0x81 && remaining >= 3) {
+            innerLen = p[2];
+            headerLen = 3;
+        } else if (l0 == 0x82 && remaining >= 4) {
+            innerLen = ((int)p[2] << 8) | p[3];
+            headerLen = 4;
+        }
         if (innerLen >= 0 && headerLen + innerLen <= remaining) {
             p += headerLen;
             remaining = innerLen;
@@ -1100,9 +1113,16 @@ bool Transport::ecdhX25519(uint32_t privObjectId, const uint8_t peerPub[32], uin
         int headerLen = 0;
         int innerLen = -1;
         uint8_t l0 = p[1];
-        if (l0 < 0x80) { innerLen = l0; headerLen = 2; }
-        else if (l0 == 0x81 && remaining >= 3) { innerLen = p[2]; headerLen = 3; }
-        else if (l0 == 0x82 && remaining >= 4) { innerLen = ((int)p[2] << 8) | p[3]; headerLen = 4; }
+        if (l0 < 0x80) {
+            innerLen = l0;
+            headerLen = 2;
+        } else if (l0 == 0x81 && remaining >= 3) {
+            innerLen = p[2];
+            headerLen = 3;
+        } else if (l0 == 0x82 && remaining >= 4) {
+            innerLen = ((int)p[2] << 8) | p[3];
+            headerLen = 4;
+        }
         if (innerLen >= 0 && headerLen + innerLen <= remaining) {
             p += headerLen;
             remaining = innerLen;
