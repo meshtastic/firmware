@@ -1,14 +1,15 @@
 // LilyGo T-Beam-BPF variant.h
 // Configuration based on LilyGO utilities.h and RF documentation
 
-// TODO Lock to 2M (144mhz) ham "region"
-// #define REGULATORY_LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_HAM_2M
+// Hardware is restricted to the amateur 2m band (144-148 MHz).
+#define HAS_HAM_2M_ONLY 1
 
 // I2C for OLED display (SH1106 at 0x3C)
 #define I2C_SDA 8
 #define I2C_SCL 9
 
-// GPS - Quectel L76K
+// GPS - Quectel L76K. Per schematic sheet 7:
+
 #define GPS_RX_PIN 5
 #define GPS_TX_PIN 6
 #define GPS_1PPS_PIN 7
