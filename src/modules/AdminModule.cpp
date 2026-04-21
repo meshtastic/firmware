@@ -40,7 +40,7 @@
 #include "modules/PositionModule.h"
 #endif
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 #endif
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
@@ -480,7 +480,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if HAS_SCREEN
         IF_SCREEN(screen->showSimpleBanner("Device is rebooting\ninto DFU mode.", 0));
 #endif
-#if defined(ARCH_NRF52) || defined(ARCH_RP2040)
+#if defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
         enterDfuMode();
 #endif
         break;
@@ -664,7 +664,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_device_tag:
         LOG_INFO("Set config: Device");
         config.has_device = true;
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
+    !MESHTASTIC_EXCLUDE_ACCELEROMETER
         if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
             accelerometerThread->enabled == false) {
             config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
@@ -766,7 +767,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                    c.payload_variant.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             config.bluetooth.enabled = false;
         }
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
+    !MESHTASTIC_EXCLUDE_ACCELEROMETER
         if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
             accelerometerThread->enabled == false) {
             config.display.wake_on_tap_or_motion = c.payload_variant.display.wake_on_tap_or_motion;
@@ -1517,8 +1519,15 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
     LOG_DEBUG("Processing input event: event_code=%u, kb_char=%u, touch_x=%u, touch_y=%u", inputEvent.event_code,
               inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y);
 
-    // Create InputEvent for injection
-    InputEvent event = {.inputEvent = (input_broker_event)inputEvent.event_code,
+    // Create InputEvent for injection.
+    //
+    // `.source` MUST be a non-null C string: the LOG_INFO below formats it
+    // with %s, and passing NULL to the esp-log formatter crashes with
+    // Guru Meditation LoadProhibited at strlen(NULL). Other InputBroker
+    // sources (buttons, rotary) always set this; the admin path was the
+    // only one leaving it default-null.
+    InputEvent event = {.source = "admin",
+                        .inputEvent = (input_broker_event)inputEvent.event_code,
                         .kbchar = (unsigned char)inputEvent.kb_char,
                         .touchX = inputEvent.touch_x,
                         .touchY = inputEvent.touch_y};

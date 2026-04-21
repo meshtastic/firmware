@@ -54,3 +54,5 @@ CMakeLists.txt
 
 # PYTHONPATH used by the Nix shell
 .python3
+.claude/scheduled_tasks.lock
+userPrefs.jsonc.mcp-session-bak
