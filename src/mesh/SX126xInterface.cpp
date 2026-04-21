@@ -245,8 +245,10 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > SX126X_MAX_POWER) // This chip has lower power limits than some
-        power = SX126X_MAX_POWER;
+    limitPower(SX126X_MAX_POWER);
+    // Make sure we reach the minimum power supported to turn the chip on (-9dBm)
+    if (power < -9)
+        power = -9;
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE)
@@ -452,6 +454,15 @@ template <typename T> void SX126xInterface<T>::resetAGC()
 
     // RX boosted gain mode
     lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+
+    // Re-apply the undocumented 0x8B5 RX sensitivity patch that was set in init().
+    // The CALIBRATE_ALL (0x7F) command above clears bit 0 of register 0x8B5, which
+    // silently removes the RX sensitivity improvement introduced in #9571 / #9777.
+    // Without this re-apply, every SX1262 node loses its RX boost ~60s after boot
+    // and never recovers until reboot. See empirical evidence in the PR description.
+    if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) != RADIOLIB_ERR_NONE) {
+        LOG_WARN("SX126x resetAGC: failed to re-apply 0x8B5 RX sensitivity patch");
+    }
 
     // 6. Resume receiving
     startReceive();
