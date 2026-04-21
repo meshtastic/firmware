@@ -73,7 +73,7 @@ ProcessMessage InkHUD::FavoritesMapApplet::handleReceived(const meshtastic_MeshP
         }
     } else {
         // For non-local packets, this applet only reacts to favorited nodes.
-        meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
+        const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
         if (!sender || !sender->is_favorite)
             return ProcessMessage::CONTINUE;
 

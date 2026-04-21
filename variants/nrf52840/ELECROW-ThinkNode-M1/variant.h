@@ -42,15 +42,17 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LED
-#define PIN_LED1 (32 + 6) // red
-#define LED_POWER (32 + 4)
+// #define PIN_LED1 (32 + 6)
+#define LED_POWER (32 + 4)        // red
 #define LED_NOTIFICATION (0 + 13) // green
+#define POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING
+
 // USB_CHECK
 #define EXT_PWR_DETECT (32 + 3)
 #define ADC_V (0 + 8)
 
-#define LED_BLUE PIN_LED1
-#define LED_STATE_ON 0 // State when LED is lit  // LED灯亮时的状态
+// #define LED_BLUE PIN_LED1
+#define LED_STATE_ON 1 // State when LED is lit  // LED灯亮时的状态
 #define PIN_BUZZER (0 + 6)
 /*
  * Buttons

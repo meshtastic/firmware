@@ -9,6 +9,7 @@
 #include "PowerMon.h"
 #include "RadioLibInterface.h"
 #include "ReliableRouter.h"
+#include "TransmitHistory.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "power/PowerHAL.h"
@@ -246,7 +247,6 @@ uint32_t timeLastPowered = 0;
 static OSThread *powerFSMthread;
 OSThread *ambientLightingThread;
 
-RadioInterface *rIf = NULL;
 RadioLibHal *RadioLibHAL = NULL;
 
 /**
@@ -389,8 +389,8 @@ void setup()
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
 #ifndef SENSECAP_INDICATOR
-    // use PSRAM for malloc calls > 256 bytes
-    heap_caps_malloc_extmem_enable(256);
+    // use PSRAM for malloc calls > 2048 bytes
+    heap_caps_malloc_extmem_enable(2048);
 #endif
 #endif
 
@@ -704,6 +704,9 @@ void setup()
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
+
+    // Initialize transmit history to persist broadcast throttle timers across reboots
+    TransmitHistory::getInstance()->loadFromDisk();
 #if HAS_TFT
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         tftSetup();
@@ -1118,6 +1121,21 @@ void loop()
     nrf52Loop();
 #endif
     power->powerCommandsCheck();
+
+    if (RadioLibInterface::instance != nullptr) {
+        static uint32_t lastRadioMissedIrqPoll;
+        if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
+            lastRadioMissedIrqPoll = millis();
+            RadioLibInterface::instance->pollMissedIrqs();
+        }
+
+        // Periodic AGC reset — warm sleep + recalibrate to prevent stuck AGC gain
+        static uint32_t lastAgcReset;
+        if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
+            lastAgcReset = millis();
+            RadioLibInterface::instance->resetAGC();
+        }
+    }
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;

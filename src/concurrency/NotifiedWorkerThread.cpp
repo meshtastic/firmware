@@ -76,8 +76,10 @@ bool NotifiedWorkerThread::notifyLater(uint32_t delay, uint32_t v, bool overwrit
 
 void NotifiedWorkerThread::checkNotification()
 {
-    auto n = notification;
-    notification = 0; // clear notification
+    // Atomically read and clear. (This avoids a potential race condition where an interrupt handler could set a new notification
+    // after checkNotification reads but before it clears, which would cause us to miss that notification until the next one comes
+    // in.)
+    auto n = notification.exchange(0); // read+clear atomically: like `n = notification; notification = 0;` but interrupt-safe
     if (n) {
         onNotify(n);
     }
