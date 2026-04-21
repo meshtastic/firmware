@@ -94,8 +94,8 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
         LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo");
         //  ignore our request for its NodeInfo
-    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
-               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
+    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && nodeDB->getMeshNode(mp->from) != nullptr &&
+               !nodeDB->getMeshNode(mp->from)->has_user && nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
         if (airTime->isTxAllowedChannelUtil(true)) {
             const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
             if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
