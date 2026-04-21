@@ -108,7 +108,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     // Only populate voltage when we actually have a battery reading. Previously this assigned
     // -0.001 (from -1 mV / 1000) whenever the ADC returned -1, leaking a sentinel onto the wire
     // that clients then displayed as a real negative voltage. See GH #7958.
-    uint16_t batteryMv = powerStatus->getBatteryVoltageMv();
+    int32_t batteryMv = powerStatus->getBatteryVoltageMv();
     if (powerStatus->getHasBattery() && batteryMv > 0) {
         t.variant.device_metrics.has_voltage = true;
         t.variant.device_metrics.voltage = batteryMv / 1000.0f;
