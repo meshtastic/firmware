@@ -21,6 +21,7 @@ void CompactHistogram::clear()
     filteringDenomElevatedAt = 0;
     lastPerHopCounts = {};
     lastSuggestedHop = MAX_HOP;
+    lastPoliteness = POLITENESS_DEFAULT;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,10 +41,8 @@ void CompactHistogram::sampleRxPacket(uint32_t nodeId, uint8_t hopCount)
     // Update an existing entry
     HistogramEntry *entry = findEntry(nodeId);
     if (entry) {
-        // Keep the minimum observed hop count
-        if (hopCount < hopBits(entry->bitfield)) {
-            entry->bitfield = packBf(seenBits(entry->bitfield), hopCount);
-        }
+        // Update to the most-recently observed hop count
+        entry->bitfield = packBf(seenBits(entry->bitfield), hopCount);
         markCurrentHour(entry->bitfield);
         return;
     }
@@ -65,10 +64,19 @@ void CompactHistogram::sampleRxPacket(uint32_t nodeId, uint8_t hopCount)
 uint8_t CompactHistogram::rollHour()
 {
     // 1. Tally per-hop counts for entries that pass the filtering denominator
-    //    AND have been seen in at least one of the past 12 hours.
+    //    AND have been seen in at least one of the past 13 hours.
+    //    Also tally per-hour seen counts across all 13 seen-bit slots (before the bitmap shift).
     PerHopCounts counts{};
+    uint16_t hourlyRaw[13] = {};
     for (uint8_t i = 0; i < count; i++) {
-        if (passesFilter(entries[i].nodeId, filteringDenominator) && seenInLast12h(entries[i].bitfield)) {
+        if (!passesFilter(entries[i].nodeId, filteringDenominator))
+            continue;
+        const uint16_t seen = seenBits(entries[i].bitfield);
+        for (uint8_t h = 0; h < 13; h++) {
+            if (seen & (1u << h))
+                hourlyRaw[h]++;
+        }
+        if (seenInLast13h(entries[i].bitfield)) {
             const uint8_t hop = hopBits(entries[i].bitfield);
             counts.perHop[hop]++;
             counts.total++;
@@ -76,8 +84,28 @@ uint8_t CompactHistogram::rollHour()
     }
     lastPerHopCounts = counts;
 
+    // 1b. Compute politeness factor from the 0-2 h vs 1-3 h activity ratio.
+    //     hourlyRaw[0] = nodes heard in the just-completed hour (h=0).
+    //     hourlyRaw[1] = h=1 (1-2 h ago), hourlyRaw[2] = h=2 (2-3 h ago).
+    //     Overlapping windows share the h=1 bucket, smoothing boundary effects.
+    {
+        const uint32_t recent = static_cast<uint32_t>(hourlyRaw[0]) + hourlyRaw[1]; // 0-2 h
+        const uint32_t older = static_cast<uint32_t>(hourlyRaw[1]) + hourlyRaw[2];  // 1-3 h
+        float activityWeight = 1.0f;                                                // neutral fallback
+        if (older > 1 && recent > 1) {
+            activityWeight = static_cast<float>(recent) / static_cast<float>(older);
+        }
+        if (activityWeight < ACTIVITY_WEIGHT_GENEROUS_MAX) {
+            lastPoliteness = POLITENESS_GENEROUS;
+        } else if (activityWeight > ACTIVITY_WEIGHT_STRICT_MIN) {
+            lastPoliteness = POLITENESS_STRICT;
+        } else {
+            lastPoliteness = POLITENESS_DEFAULT;
+        }
+    }
+
     // 2. Scale-down check: if fewer than FILL_LOW_PCT% of capacity are active (pass
-    //    filteringDenominator AND seen in the last 12 h), halve samplingDenominator.
+    //    filteringDenominator AND seen in the last 13 h), halve samplingDenominator.
     if (counts.total * 100u < static_cast<uint32_t>(CAPACITY) * FILL_LOW_PCT) {
         if (samplingDenominator > DENOM_MIN) {
             samplingDenominator = static_cast<uint8_t>(samplingDenominator / 2u);
@@ -86,11 +114,11 @@ uint8_t CompactHistogram::rollHour()
         }
     }
 
-    // 3. Drop filteringDenominator back to samplingDenominator once the 12-h hold has expired.
+    // 3. Drop filteringDenominator back to samplingDenominator once the 13-h hold has expired.
     if (filteringDenominator > samplingDenominator) {
         if ((nowMs() - filteringDenomElevatedAt) >= FILTER_DENOM_HOLD_MS) {
             filteringDenominator = samplingDenominator;
-            LOG_INFO("[HISTOGRAM] Filter denom dropped to %u after 12-h hold", filteringDenominator);
+            LOG_INFO("[HISTOGRAM] Filter denom dropped to %u after 13-h hold", filteringDenominator);
         }
     }
 
@@ -100,7 +128,7 @@ uint8_t CompactHistogram::rollHour()
     }
 
     // 5. Walk scaled hop buckets to produce a hop-limit recommendation.
-    const uint8_t suggested = walkHopBuckets(counts);
+    const uint8_t suggested = walkHopBuckets(counts, lastPoliteness);
     lastSuggestedHop = suggested;
 
     // 6. Log scaled per-hop counts and recommendation.
@@ -109,10 +137,22 @@ uint8_t CompactHistogram::rollHour()
         const uint32_t s = static_cast<uint32_t>(counts.perHop[h]) * filteringDenominator;
         scaled[h] = static_cast<uint16_t>(std::min<uint32_t>(s, UINT16_MAX));
     }
-    LOG_INFO("[HISTOGRAM] rollHour: entries=%u samp=1/%u filt=1/%u counted=%u suggestedHop=%u", count, samplingDenominator,
-             filteringDenominator, counts.total, suggested);
+    const uint32_t scaledTotal = static_cast<uint32_t>(counts.total) * filteringDenominator;
+    LOG_INFO("[HISTOGRAM] rollHour: entries=%u/128 samp=1/%u filt=1/%u counted=%u est=%u suggestedHop=%u polite=%.2f", count,
+             samplingDenominator, filteringDenominator, counts.total, static_cast<unsigned>(scaledTotal), suggested,
+             lastPoliteness);
     LOG_INFO("[HISTOGRAM] scaled perHop: [%u %u %u %u %u %u %u %u]", scaled[0], scaled[1], scaled[2], scaled[3], scaled[4],
              scaled[5], scaled[6], scaled[7]);
+
+    // Per-hour node count matrix: h0 = current (just-completed) hour, h12 = 12 hours ago.
+    uint16_t hourlyScaled[13];
+    for (uint8_t h = 0; h < 13; h++) {
+        const uint32_t s = static_cast<uint32_t>(hourlyRaw[h]) * filteringDenominator;
+        hourlyScaled[h] = static_cast<uint16_t>(std::min<uint32_t>(s, UINT16_MAX));
+    }
+    LOG_INFO("[HISTOGRAM] scaledSeenPerHour (h0=now): [%u %u %u %u %u %u %u %u %u %u %u %u %u]", hourlyScaled[0], hourlyScaled[1],
+             hourlyScaled[2], hourlyScaled[3], hourlyScaled[4], hourlyScaled[5], hourlyScaled[6], hourlyScaled[7],
+             hourlyScaled[8], hourlyScaled[9], hourlyScaled[10], hourlyScaled[11], hourlyScaled[12]);
 
     return suggested;
 }
@@ -123,10 +163,10 @@ uint8_t CompactHistogram::rollHour()
 
 void CompactHistogram::trimIfNeeded()
 {
-    // Step 1: evict stale entries (not seen in any of the past 12 hours).
+    // Step 1: evict stale entries (not seen in any of the past 13 hours).
     uint8_t newCount = 0;
     for (uint8_t i = 0; i < count; i++) {
-        if (seenInLast12h(entries[i].bitfield)) {
+        if (seenInLast13h(entries[i].bitfield)) {
             if (i != newCount) {
                 entries[newCount] = entries[i];
             }
@@ -160,11 +200,11 @@ void CompactHistogram::trimIfNeeded()
 uint8_t CompactHistogram::countPassingFilter() const
 {
     // Count only entries that pass the filtering denominator AND have been seen
-    // in at least one of the past 12 hours.  Stale entries that merely have a
+    // in at least one of the past 13 hours.  Stale entries that merely have a
     // matching nodeId should not keep the denominator elevated.
     uint8_t n = 0;
     for (uint8_t i = 0; i < count; i++) {
-        if (passesFilter(entries[i].nodeId, filteringDenominator) && seenInLast12h(entries[i].bitfield)) {
+        if (passesFilter(entries[i].nodeId, filteringDenominator) && seenInLast13h(entries[i].bitfield)) {
             n++;
         }
     }
@@ -181,7 +221,7 @@ HistogramEntry *CompactHistogram::findEntry(uint32_t nodeId)
     return nullptr;
 }
 
-uint8_t CompactHistogram::walkHopBuckets(const PerHopCounts &counts) const
+uint8_t CompactHistogram::walkHopBuckets(const PerHopCounts &counts, float politeness) const
 {
     if (counts.total == 0) {
         return MAX_HOP;
@@ -201,11 +241,11 @@ uint8_t CompactHistogram::walkHopBuckets(const PerHopCounts &counts) const
     }
 
     // Politeness extension: extend by one hop if the cumulative count stays within
-    // POLITENESS_FACTOR × TARGET_AFFECTED_NODES.  The next hop's sampled count may be
+    // politeness × TARGET_AFFECTED_NODES.  The next hop's sampled count may be
     // zero due to sparse sampling even when real nodes exist there, so we do not gate on it.
     if (baseHop < MAX_HOP) {
         const uint32_t atNext = static_cast<uint32_t>(counts.perHop[baseHop + 1]) * filteringDenominator;
-        const float politeLimit = static_cast<float>(TARGET_AFFECTED_NODES) * POLITENESS_FACTOR;
+        const float politeLimit = static_cast<float>(TARGET_AFFECTED_NODES) * politeness;
         if (static_cast<float>(cumulative + atNext) <= politeLimit) {
             baseHop++;
         }

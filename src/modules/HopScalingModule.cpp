@@ -116,7 +116,7 @@ void HopScalingModule::HopBucket::add(const meshtastic_NodeInfoLite &node)
 HopScalingModule::HopScalingModule() : concurrency::OSThread("HopScaling")
 {
     loadState();
-    sampleWindowStartMs = millis();
+    sampleWindowStartMs = CompactHistogram::nowMs();
     setIntervalFromNow(INITIAL_DELAY_MS);
 }
 
@@ -244,7 +244,7 @@ void HopScalingModule::adjustSamplingDenominatorForLoad(float loadRatio)
  */
 void HopScalingModule::rollSampleWindow(bool earlyTrigger)
 {
-    const uint32_t nowMs = millis();
+    const uint32_t nowMs = CompactHistogram::nowMs();
     const uint32_t windowMs = sampleWindowStartMs ? (nowMs - sampleWindowStartMs) : ONE_HOUR_MS;
 
     const float samplesThisWindow = static_cast<float>(sampledNodesCurrentHour.uniqueCount);

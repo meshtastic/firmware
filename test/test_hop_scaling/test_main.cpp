@@ -23,6 +23,10 @@
 
 static constexpr NodeNum kLocalNode = 0x11111111;
 
+// Shared mock clock — drives CompactHistogram::nowMs() and HopScalingModule's rollSampleWindow()
+static uint32_t &mockTime = CompactHistogram::s_testNowMs;
+static constexpr uint32_t ONE_HOUR_MS = 3600UL * 1000UL;
+
 // ---------------------------------------------------------------------------
 // MockNodeDB — lets tests inject nodes with controlled hop and age values
 // ---------------------------------------------------------------------------
@@ -71,7 +75,15 @@ class HopScalingTestShim : public HopScalingModule
     // Test-only clock and window helpers (require UNIT_TEST friend access)
     void setSampleWindowStartMs(uint32_t ms) { sampleWindowStartMs = ms; }
     void rollSampleWindowTest(bool earlyTrigger) { rollSampleWindow(earlyTrigger); }
+    void rollHourTest() { rollHour(); }
     void setHistogramDenominator(uint8_t d) { hopScalingHistogram.setSamplingDenominator(d); }
+
+    // Size introspection for test_memory_layout
+    static constexpr size_t sizeofSelf() { return sizeof(HopScalingModule); }
+    static constexpr size_t sizeofHistogram() { return sizeof(CompactHistogram); }
+    static constexpr size_t sizeofSampleTracker() { return sizeof(SampleTracker); }
+    static constexpr size_t sizeofHopBucket() { return sizeof(HopBucket); }
+    static constexpr size_t sizeofSnapshot() { return sizeof(Snapshot); }
 };
 
 static MockNodeDB *mockNodeDB = nullptr;
@@ -100,32 +112,32 @@ static void addNodesAtHop(uint32_t baseId, uint8_t hop, uint32_t count, uint32_t
 }
 
 // Feed sampled traffic that produces a rollingSampledAvg12h commensurate with meshSize.
-// Simulates numRolls full one-hour windows: before each batch the sample-window start is
-// set to millis()-3600000 so windowFraction=1.0 and alpha=1/12.  Sequential IDs starting
-// at baseId are fed; exactly meshSize/DENOMINATOR pass the modulo filter per roll.
-// With adaptive adjustment enabled, the denominator self-tunes over the first few rolls
-// (e.g. 8→4→2→1 for a 22-node mesh, 8→16→32→64 for a 2000-node mesh) then stabilises.
-// With warm-up alpha (1/1, 1/2, ..., 1/12) the rolling average converges within 12-16 rolls.
-static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId, uint16_t meshSize, uint8_t numRolls = 16)
+// Uses the mock clock to advance time by one hour per roll so windowFraction=1.0.
+// hopDist[] gives the number of nodes at each hop (indexed 0..HOP_MAX); nodes are
+// injected per-hop-bucket so the histogram receives a realistic hop distribution.
+static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId, uint16_t meshSize, const uint16_t hopDist[HOP_MAX + 1],
+                                uint8_t numRolls = 16)
 {
-    // Keep realistic filtering enabled for both samplers. ID generation below spreads
-    // low bits so each roll contains both sampled and filtered-out senders.
     HopScalingModule::resetSamplingDenominator();
     shim.setHistogramDenominator(CompactHistogram::DENOM_MIN);
 
     for (uint8_t roll = 0; roll < numRolls; ++roll) {
-        // Simulate a full one-hour window so alpha = 1/12 (no 0.25f floor needed)
-        shim.setSampleWindowStartMs(millis() - 3600000UL);
-        for (uint16_t i = 0; i < meshSize; ++i) {
-            const uint32_t nodeId = makeDistributedNodeId(baseId, i, static_cast<uint32_t>(roll) << 16);
-            shim.recordPacketSender(nodeId);
-            // Exercise compact histogram path in parallel with old sampling logic.
-            shim.samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
+        // Advance mock clock by one hour so the sample window covers a full hour
+        mockTime += ONE_HOUR_MS;
+
+        uint16_t ordinal = 0;
+        for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
+            for (uint16_t n = 0; n < hopDist[hop]; ++n) {
+                // No per-roll salt: same node IDs appear each hour, modelling a stable mesh
+                // topology where the same neighbours are heard repeatedly.
+                const uint32_t nodeId = makeDistributedNodeId(baseId, ordinal);
+                shim.recordPacketSender(nodeId);
+                shim.samplePacketForHistogram(nodeId, hop);
+                ++ordinal;
+            }
         }
-        // Commit the window and trigger adaptive denominator adjustment.
-        // For large meshes the first few rolls may cascade through early-roll triggers
-        // as the denominator ramps up; subsequent rolls settle to a stable estimate.
         shim.rollSampleWindowTest(false);
+        shim.rollHourTest();
     }
 }
 
@@ -246,7 +258,8 @@ void test_dense_local_telemetry()
     hopScalingModule = shim.get();
     buildDenseLocalMesh();
     TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
-    injectSampleTraffic(*shim, 0x91000000, 110);
+    const uint16_t distA[HOP_MAX + 1] = {25, 30, 15, 5, 10, 15, 10, 0};
+    injectSampleTraffic(*shim, 0x91000000, 110, distA);
 
     shim->runOnce();
 
@@ -275,7 +288,8 @@ void test_spread_sparse_position()
     hopScalingModule = shim.get();
     buildSpreadSparseMesh();
     TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
-    injectSampleTraffic(*shim, 0x92000000, 76);
+    const uint16_t distB[HOP_MAX + 1] = {5, 8, 12, 15, 10, 6, 10, 10};
+    injectSampleTraffic(*shim, 0x92000000, 76, distB);
 
     shim->runOnce();
 
@@ -302,7 +316,8 @@ void test_deep_chain_position()
     hopScalingModule = shim.get();
     buildDeepLinearChain();
     TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
-    injectSampleTraffic(*shim, 0x93000000, 22);
+    const uint16_t distC[HOP_MAX + 1] = {2, 3, 3, 4, 3, 2, 2, 3};
+    injectSampleTraffic(*shim, 0x93000000, 22, distC);
 
     shim->runOnce();
 
@@ -328,7 +343,8 @@ void test_router_cluster_telemetry()
     hopScalingModule = shim.get();
     buildRouterCluster();
     TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
-    injectSampleTraffic(*shim, 0x94000000, 71);
+    const uint16_t distD[HOP_MAX + 1] = {3, 5, 45, 8, 3, 2, 2, 3};
+    injectSampleTraffic(*shim, 0x94000000, 71, distD);
 
     shim->runOnce();
 
@@ -357,10 +373,10 @@ void test_megamesh_eviction_scaling()
     hopScalingModule = shim.get();
     buildMegamesh();
 
-    // Pre-warm the sampling estimate with 36 simulated hours of ~2000-node traffic.
-    // The adaptive denominator ramps 8→16→32→64 over the first ~4 rolls, then stabilises
-    // at est ≈ 1984 per roll.  The rolling average converges within 12-16 rolls.
-    injectSampleTraffic(*shim, 0x9B000000, 2000);
+    // Pre-warm the sampling estimate with 16 simulated hours of ~2000-node traffic.
+    // Hop distribution proportional to the 199-node DB topology.
+    const uint16_t distE[HOP_MAX + 1] = {301, 402, 352, 301, 201, 151, 141, 151};
+    injectSampleTraffic(*shim, 0x9B000000, 2000, distE);
 
     TEST_MESSAGE("Phase 1: initial run without evictions.");
     shim->runOnce();
@@ -374,15 +390,21 @@ void test_megamesh_eviction_scaling()
         for (int i = 0; i < 15 * (hour + 1); i++)
             shim->recordEviction();
 
-        // Feed sampled nodes: simulate a full one-hour window then inject 2000 sequential
-        // IDs from a per-hour unique base.  The denominator has already adapted to 64
-        // during pre-warm, so ~31 IDs pass per roll giving est ≈ 1984.
-        shim->setSampleWindowStartMs(millis() - 3600000UL);
-        for (uint32_t i = 0; i < 2000; i++) {
-            const uint32_t nodeId =
-                makeDistributedNodeId(static_cast<uint32_t>(0x9C000000), i, static_cast<uint32_t>(hour) * 0x10000);
-            shim->recordPacketSender(nodeId);
-            shim->samplePacketForHistogram(nodeId, static_cast<uint8_t>(i % (HOP_MAX + 1)));
+        // Feed sampled nodes: advance mock clock one hour and inject 2000 IDs
+        // with hop distribution matching the megamesh topology.
+        mockTime += ONE_HOUR_MS;
+        {
+            // Megamesh hop distribution scaled up to ~2000 nodes (proportional to 199-node DB)
+            const uint16_t megaDist[HOP_MAX + 1] = {301, 402, 352, 301, 201, 151, 141, 151};
+            uint16_t ordinal = 0;
+            for (uint8_t hop = 0; hop <= HOP_MAX; ++hop) {
+                for (uint16_t n = 0; n < megaDist[hop]; ++n) {
+                    const uint32_t nodeId = makeDistributedNodeId(0x9C000000u, ordinal, static_cast<uint32_t>(hour) * 0x10000u);
+                    shim->recordPacketSender(nodeId);
+                    shim->samplePacketForHistogram(nodeId, hop);
+                    ++ordinal;
+                }
+            }
         }
         shim->rollSampleWindowTest(false);
 
@@ -416,7 +438,8 @@ void test_sparse_to_dense_transition()
     TEST_MESSAGE("Phase 1: sparse chain should hold at HOP_MAX.");
     buildDeepLinearChain();
     TEST_MESSAGE("Injecting sampled traffic to seed sampledEst.");
-    injectSampleTraffic(*shim, 0x95000000, 22);
+    const uint16_t distC2[HOP_MAX + 1] = {2, 3, 3, 4, 3, 2, 2, 3};
+    injectSampleTraffic(*shim, 0x95000000, 22, distC2);
     shim->runOnce();
     uint8_t hopSparse = shim->getLastRequiredHop();
     TEST_MSG_FMT("Phase 1 sparse: hop=%u (expect %u)", hopSparse, HOP_MAX);
@@ -632,6 +655,31 @@ void test_scenario_summary_output()
     TEST_MESSAGE("H: Early flush | 199    | Near-capacity sampled mesh   | --    | --     | Sample tracker overflow");
 }
 
+// Print exact sizeof() for every major type in the hop-scaling subsystem.
+// Always passes — fails only if the build breaks, which the compile step catches first.
+static void test_memory_layout()
+{
+    TEST_MSG_FMT("%-35s  %6s  %s", "Type", "bytes", "Notes");
+    TEST_MSG_FMT("%-35s  %6zu  %s", "HistogramEntry", sizeof(HistogramEntry), "nodeId(4) + bitfield(2) + pad(2)");
+    TEST_MSG_FMT("%-35s  %6zu  %s", "CompactHistogram::PerHopCounts", sizeof(CompactHistogram::PerHopCounts),
+                 "perHop[8](16) + total(2) + pad");
+    TEST_MSG_FMT("%-35s  %6zu  %s", "CompactHistogram", HopScalingTestShim::sizeofHistogram(), "entries[128](1024) + state");
+    TEST_MSG_FMT("%-35s  %6zu  %s", "SampleTracker", HopScalingTestShim::sizeofSampleTracker(),
+                 "slots[128](512) + uniqueCount(2) + pad");
+    TEST_MSG_FMT("%-35s  %6zu  %s", "HopBucket", HopScalingTestShim::sizeofHopBucket(),
+                 "perHop[8](16) + unknownHop(2) + total(2)");
+    TEST_MSG_FMT("%-35s  %6zu  %s", "Snapshot", HopScalingTestShim::sizeofSnapshot(), "4x HopBucket");
+    TEST_MSG_FMT("%-35s  %6zu  %s", "HopScalingModule (instance)", HopScalingTestShim::sizeofSelf(),
+                 "everything above + base class overhead");
+
+    const size_t histogram = HopScalingTestShim::sizeofHistogram();
+    const size_t tracker = HopScalingTestShim::sizeofSampleTracker();
+    const size_t total = HopScalingTestShim::sizeofSelf();
+    const size_t other = total - histogram - tracker;
+    TEST_MSG_FMT("  histogram: %zu B  tracker: %zu B  other: %zu B  total: %zu B", histogram, tracker, other, total);
+    TEST_PASS();
+}
+
 // ---------------------------------------------------------------------------
 // Unity setup / teardown / main
 // ---------------------------------------------------------------------------
@@ -654,6 +702,9 @@ void setUp(void)
     FSCom.remove("/prefs/hop_scaling.bin");
     FSCom.remove("/prefs/soi.bin");
 #endif
+
+    // Reset mock clock to a known base (1 hour in so subtraction never underflows)
+    mockTime = ONE_HOUR_MS;
 
     // Disable denominator jitter so SAMPLING_DENOMINATOR stays on deterministic values
     // and injectSampleTraffic() produces consistent results across runs.
@@ -690,6 +741,7 @@ void setup()
     RUN_TEST(test_intermediate_status);
     RUN_TEST(test_startup_blank_state);
     RUN_TEST(test_scenario_summary_output);
+    RUN_TEST(test_memory_layout);
     exit(UNITY_END());
 }
 

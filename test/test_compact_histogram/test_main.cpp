@@ -121,17 +121,18 @@ void test_duplicate_nodeId_not_added_twice(void)
 
 void test_hop_count_stored_as_minimum(void)
 {
-    // The histogram keeps the smallest hop count observed for each node.
+    // The histogram stores the most-recently observed hop count for each node.
     CompactHistogram hist;
     hist.sampleRxPacket(100, 5);
-    hist.sampleRxPacket(100, 2); // lower: should replace
-    hist.sampleRxPacket(100, 4); // higher: should be ignored
+    hist.sampleRxPacket(100, 2); // more recent: should replace
+    hist.sampleRxPacket(100, 4); // most recent: should replace
 
-    // After rollHour, the per-hop count at hop=2 should be 1
+    // After rollHour, the per-hop count at hop=4 should be 1 (last seen)
     const uint8_t hop = hist.rollHour();
     const auto &counts = hist.getLastPerHopCounts();
-    TEST_ASSERT_EQUAL_UINT16(1, counts.perHop[2]);
+    TEST_ASSERT_EQUAL_UINT16(1, counts.perHop[4]);
     TEST_ASSERT_EQUAL_UINT16(0, counts.perHop[5]);
+    TEST_ASSERT_EQUAL_UINT16(0, counts.perHop[2]);
     (void)hop;
 }
 
@@ -159,15 +160,15 @@ void test_seen_bit_set_on_sample(void)
 
 void test_node_not_seen_after_12_rollovers(void)
 {
-    // Node seen once, then 12 hours pass without being seen again.
+    // Node seen once, then 13 hours pass without being seen again.
     CompactHistogram hist;
     hist.sampleRxPacket(4, 2);
 
-    // Roll 12 times; each roll shifts the seen bitmap left — after 12 rolls the bit is gone.
-    for (int i = 0; i < 12; i++) {
+    // Roll 13 times; each roll shifts the seen bitmap left — after 13 rolls the bit is gone.
+    for (int i = 0; i < 13; i++) {
         hist.rollHour();
     }
-    // 13th rollover: node should not be counted (seen bits are all zero)
+    // 14th rollover: node should not be counted (seen bits are all zero)
     hist.rollHour();
     TEST_ASSERT_EQUAL_UINT16(0, hist.getLastPerHopCounts().total);
 }
@@ -176,13 +177,13 @@ void test_node_seen_again_resets_seen_bit(void)
 {
     CompactHistogram hist;
     hist.sampleRxPacket(4, 2);
-    // Roll 11 times (node still in range)
-    for (int i = 0; i < 11; i++) {
+    // Roll 12 times (node still in range)
+    for (int i = 0; i < 12; i++) {
         hist.rollHour();
     }
-    // Re-sample the node in the 12th hour
+    // Re-sample the node in the 13th hour
     hist.sampleRxPacket(4, 2);
-    hist.rollHour(); // 12th roll — node freshly seen, should be counted
+    hist.rollHour(); // 13th roll — node freshly seen, should be counted
     TEST_ASSERT_EQUAL_UINT16(1, hist.getLastPerHopCounts().total);
 }
 
@@ -202,11 +203,11 @@ void test_stale_entries_removed_when_over_80pct(void)
     }
     TEST_ASSERT_EQUAL_UINT8(103, hist.getEntryCount());
 
-    // Roll the hour so those seen bits shift to bit 5 (not bit 4 anymore, but still non-zero)
+    // Roll the hour so those seen bits shift to bit 4 (not bit 3 anymore, but still non-zero)
     hist.rollHour();
 
-    // Roll 11 more times to expire all seen bits
-    for (int i = 0; i < 11; i++) {
+    // Roll 12 more times to expire all seen bits
+    for (int i = 0; i < 12; i++) {
         hist.rollHour();
     }
     // Now all 103 entries have zero seen bits (stale)
@@ -238,7 +239,7 @@ void test_denom_doubles_when_still_over_80pct_after_stale_removal(void)
 // FILTERING DENOMINATOR HOLD
 // ============================================================================
 
-void test_filter_denom_held_for_12_hours(void)
+void test_filter_denom_held_for_13_hours(void)
 {
     // Trigger a scale-up so filteringDenominator doubles.
     CompactHistogram hist;
@@ -249,16 +250,16 @@ void test_filter_denom_held_for_12_hours(void)
     TEST_ASSERT_EQUAL_UINT8(2, hist.getFilteringDenominator());
 
     // Roll enough hours to trigger scale-down (list fills below 20% with denom=2 entries),
-    // but without advancing simulated time past 12h.
+    // but without advancing simulated time past 13h.
     // samplingDenominator should drop but filteringDenominator should NOT.
     for (int i = 0; i < 6; i++) {
         hist.rollHour(); // drains seen bits; eventually count of denom=2 entries falls below 20%
     }
-    // filteringDenominator must still be 2 (12h hold not expired)
+    // filteringDenominator must still be 2 (13h hold not expired)
     TEST_ASSERT_EQUAL_UINT8(2, hist.getFilteringDenominator());
 }
 
-void test_filter_denom_drops_after_12h_hold(void)
+void test_filter_denom_drops_after_13h_hold(void)
 {
     CompactHistogram hist;
     for (uint32_t id = 0; id < CompactHistogram::CAPACITY; id++) {
@@ -267,7 +268,7 @@ void test_filter_denom_drops_after_12h_hold(void)
     hist.sampleRxPacket(200000, 1); // scale-up: both denoms → 2
     TEST_ASSERT_EQUAL_UINT8(2, hist.getFilteringDenominator());
 
-    // Advance clock past 12 h, then roll to trigger the drop check
+    // Advance clock past 13 h, then roll to trigger the drop check
     advanceTime(CompactHistogram::FILTER_DENOM_HOLD_MS + 1);
     hist.rollHour();
 
@@ -291,10 +292,10 @@ void test_scale_down_when_too_few_filtering_entries(void)
     const uint8_t sampAfterUp = hist.getSamplingDenominator();
     TEST_ASSERT_EQUAL_UINT8(2, sampAfterUp);
 
-    // Roll 13 hours to expire all seen bits (entries become stale / count falls below 20%)
-    // and also pass the 12h filter-denom hold.
+    // Roll 14 hours to expire all seen bits (entries become stale / count falls below 20%)
+    // and also pass the 13h filter-denom hold.
     advanceTime(CompactHistogram::FILTER_DENOM_HOLD_MS + 1);
-    for (int i = 0; i < 13; i++) {
+    for (int i = 0; i < 14; i++) {
         hist.rollHour();
     }
 
@@ -380,6 +381,59 @@ void test_rollhour_scaled_hop_walk_with_denom(void)
 }
 
 // ============================================================================
+// POLITENESS REGIMES
+// ============================================================================
+
+void test_politeness_strict_when_recent_activity_exceeds_older(void)
+{
+    // STRICT: recent 0-2h window >> older 1-3h window (growing/busy mesh).
+    // Sample 5 nodes, roll, sample 20 NEW nodes, roll.
+    //   h0=20, h1=5  → recent=25, older=5, weight=5.0 > STRICT_MIN(1.2) → POLITENESS_STRICT
+    CompactHistogram hist;
+    for (uint32_t id = 1; id <= 5; id++) {
+        hist.sampleRxPacket(id, 1);
+    }
+    hist.rollHour();
+    for (uint32_t id = 101; id <= 120; id++) {
+        hist.sampleRxPacket(id, 1);
+    }
+    hist.rollHour();
+    TEST_ASSERT_EQUAL_FLOAT(CompactHistogram::POLITENESS_STRICT, hist.getPoliteness());
+}
+
+void test_politeness_default_when_activity_is_stable(void)
+{
+    // DEFAULT: recent 0-2h ≈ older 1-3h (stable mesh).
+    // Sample 10 nodes, roll, roll (no new samples).
+    //   h0=0, h1=10  → recent=10, older=10, weight=1.0, 0.9≤1.0≤1.2 → POLITENESS_DEFAULT
+    CompactHistogram hist;
+    for (uint32_t id = 1; id <= 10; id++) {
+        hist.sampleRxPacket(id, 1);
+    }
+    hist.rollHour();
+    hist.rollHour();
+    TEST_ASSERT_EQUAL_FLOAT(CompactHistogram::POLITENESS_DEFAULT, hist.getPoliteness());
+}
+
+void test_politeness_generous_when_recent_activity_is_low(void)
+{
+    // GENEROUS: recent 0-2h << older 1-3h (shrinking/quieter mesh).
+    // Sample 20 nodes, roll, sample 2 NEW nodes, roll, roll (no new samples).
+    //   After 3rd roll: h0=0, h1=2, h2=20 → recent=2, older=22, weight≈0.09 < GENEROUS_MAX(0.9)
+    CompactHistogram hist;
+    for (uint32_t id = 1; id <= 20; id++) {
+        hist.sampleRxPacket(id, 1);
+    }
+    hist.rollHour();
+    for (uint32_t id = 101; id <= 102; id++) {
+        hist.sampleRxPacket(id, 1);
+    }
+    hist.rollHour();
+    hist.rollHour();
+    TEST_ASSERT_EQUAL_FLOAT(CompactHistogram::POLITENESS_GENEROUS, hist.getPoliteness());
+}
+
+// ============================================================================
 // CAPACITY / FILL
 // ============================================================================
 
@@ -436,8 +490,8 @@ void setup()
     RUN_TEST(test_denom_doubles_when_still_over_80pct_after_stale_removal);
 
     // Filtering denominator hold
-    RUN_TEST(test_filter_denom_held_for_12_hours);
-    RUN_TEST(test_filter_denom_drops_after_12h_hold);
+    RUN_TEST(test_filter_denom_held_for_13_hours);
+    RUN_TEST(test_filter_denom_drops_after_13h_hold);
 
     // Scale-down
     RUN_TEST(test_scale_down_when_too_few_filtering_entries);
@@ -448,6 +502,11 @@ void setup()
     RUN_TEST(test_rollhour_hop_walk_requires_more_hops_for_small_mesh);
     RUN_TEST(test_rollhour_counts_only_filtering_denom_entries);
     RUN_TEST(test_rollhour_scaled_hop_walk_with_denom);
+
+    // Politeness regimes
+    RUN_TEST(test_politeness_strict_when_recent_activity_exceeds_older);
+    RUN_TEST(test_politeness_default_when_activity_is_stable);
+    RUN_TEST(test_politeness_generous_when_recent_activity_is_low);
 
     // Capacity / fill
     RUN_TEST(test_fill_percentage_calculation);
