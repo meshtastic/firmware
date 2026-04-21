@@ -15,7 +15,7 @@ namespace
 // Module scheduling
 constexpr uint32_t INITIAL_DELAY_MS = 30 * 1000UL;    // Startup grace period before first run
 constexpr uint32_t RUN_INTERVAL_MS = 5 * 60 * 1000UL; // Emit micro-summary every 5 minutes
-constexpr uint8_t RUNS_PER_HOUR = 12;                 // 12 x 5-minute runs = 1 hour (full update)
+// RUNS_PER_HOUR is a public class constant in HopScalingModule.h
 
 // Persistence
 constexpr uint32_t HISTOGRAM_STATE_MAGIC = 0x48535432; // 'HST2' — layout v2
@@ -300,11 +300,10 @@ void HopScalingModule::rollHour()
             scaled[h] = static_cast<uint16_t>(std::min<uint32_t>(s, UINT16_MAX));
         }
         const uint32_t scaledTotal = static_cast<uint32_t>(counts.total) * filteringDenominator;
+        memcpy(lastScaledPerHop, scaled, sizeof(lastScaledPerHop));
         LOG_INFO("[HOPSCALE] rollHour: entries=%u/128 samp=1/%u filt=1/%u counted=%u est=%u suggestedHop=%u polite=%.2f", count,
                  samplingDenominator, filteringDenominator, counts.total, static_cast<unsigned>(scaledTotal), suggested,
                  static_cast<double>(lastPoliteness));
-        LOG_INFO("[HOPSCALE] scaled perHop: [%u %u %u %u %u %u %u %u]", scaled[0], scaled[1], scaled[2], scaled[3], scaled[4],
-                 scaled[5], scaled[6], scaled[7]);
 
         const auto &ts = lastTrendStats;
         LOG_INFO("[HOPSCALE] scaledSeenPerHour (h0=now): [%u %u %u %u %u %u %u %u %u %u %u %u %u]", ts.scaledPerHour[0],
@@ -389,13 +388,17 @@ void HopScalingModule::logStatusReport(bool didHourlyUpdate) const
     const uint8_t runsRemaining = didHourlyUpdate ? RUNS_PER_HOUR : (RUNS_PER_HOUR - runsSinceLastHourlyUpdate);
     const uint8_t minsUntilRollover = runsRemaining * (RUN_INTERVAL_MS / (60 * 1000UL));
 
-    LOG_INFO("[HOPSCALE] hop=%u hourly=%u histActive=%u fill=%u%% samp=1/%u filt=1/%u counted=%u polite=%.2f nextRoll=%umin",
+    LOG_INFO("[HOPSCALE] hop=%u hourly=%u histActive=%u fill=%u%% samp=1/%u filt=1/%u entries=%u lastCounted=%u polite=%.2f "
+             "nextRoll=%umin",
              lastRequiredHop, didHourlyUpdate ? 1u : 0u, histActive ? 1u : 0u, getFillPercentage(), samplingDenominator,
-             filteringDenominator, histCounts.total, static_cast<double>(lastPoliteness), minsUntilRollover);
+             filteringDenominator, count, histCounts.total, static_cast<double>(lastPoliteness), minsUntilRollover);
 
-    LOG_INFO("[HOPSCALE] hist perHop: [%u %u %u %u %u %u %u %u]", histCounts.perHop[0], histCounts.perHop[1],
+    LOG_INFO("[HOPSCALE] nodes perHop: [%u %u %u %u %u %u %u %u]", histCounts.perHop[0], histCounts.perHop[1],
              histCounts.perHop[2], histCounts.perHop[3], histCounts.perHop[4], histCounts.perHop[5], histCounts.perHop[6],
              histCounts.perHop[7]);
+    LOG_INFO("[HOPSCALE] last scaled perHop: [%u %u %u %u %u %u %u %u]", lastScaledPerHop[0], lastScaledPerHop[1],
+             lastScaledPerHop[2], lastScaledPerHop[3], lastScaledPerHop[4], lastScaledPerHop[5], lastScaledPerHop[6],
+             lastScaledPerHop[7]);
 }
 
 int32_t HopScalingModule::runOnce()

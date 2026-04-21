@@ -83,6 +83,9 @@ class HopScalingModule : private concurrency::OSThread
     static constexpr float ACTIVITY_WEIGHT_GENEROUS_MAX = 0.9f; // Below this: GENEROUS
     static constexpr float ACTIVITY_WEIGHT_STRICT_MIN = 1.2f;   // Above this: STRICT
 
+    // Scheduling: number of 5-minute runOnce() ticks that make up one hourly rollover
+    static constexpr uint8_t RUNS_PER_HOUR = 12;
+
     // -----------------------------------------------------------------------
     // Types
     // -----------------------------------------------------------------------
@@ -227,6 +230,7 @@ class HopScalingModule : private concurrency::OSThread
     // Cached hourly results
     // -----------------------------------------------------------------------
     PerHopCounts lastPerHopCounts = {};
+    uint16_t lastScaledPerHop[MAX_HOP + 1] = {};
     uint8_t lastSuggestedHop = MAX_HOP;
     float lastPoliteness = POLITENESS_DEFAULT;
     MeshTrendStats lastTrendStats = {};
