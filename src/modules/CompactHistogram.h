@@ -141,6 +141,8 @@ class CompactHistogram
     /// Override the per-session hash seed. Use in tests that need a specific sampling distribution.
     void setHashSeed(uint16_t seed) { hashSeed = seed; }
     uint16_t getHashSeed() const { return hashSeed; }
+    /// Expose hashNodeId for tests that need to compute which node IDs pass a given denominator.
+    uint16_t hashNodeIdPublic(uint32_t nodeId) const { return hashNodeId(nodeId); }
 #endif
 
   private:

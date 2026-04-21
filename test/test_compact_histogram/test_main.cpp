@@ -103,7 +103,7 @@ void test_sampling_denom4_accepts_multiples_of_4(void)
     uint32_t passIds[2] = {UINT32_MAX, UINT32_MAX};
     uint32_t failIds[2] = {UINT32_MAX, UINT32_MAX};
     for (uint32_t id = 1; id < 10000 && (passIds[1] == UINT32_MAX || failIds[1] == UINT32_MAX); id++) {
-        const bool passes = (hist.hashNodeId(id) & 3u) == 0u;
+        const bool passes = (hist.hashNodeIdPublic(id) & 3u) == 0u;
         if (passes && passIds[0] == UINT32_MAX)
             passIds[0] = id;
         else if (passes && passIds[1] == UINT32_MAX)
