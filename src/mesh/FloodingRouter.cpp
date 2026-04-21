@@ -53,6 +53,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             if (!findInTxQueue(p->from, p->id)) {
                 reprocessPacket(p);
                 perhapsRebroadcast(p);
+                perhapsSendToFavoritedNodes(p);
             }
         } else {
             perhapsCancelDupe(p);
@@ -62,6 +63,33 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     }
 
     return Router::shouldFilterReceived(p);
+}
+
+bool FloodingRouter::perhapsSendToFavoritedNodes(const meshtastic_MeshPacket *p)
+{
+    bool lastLeg = config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && isBroadcast(p->to) && p->hop_start == p->hop_limit && !isFromUs(p) && nodeDB && nodeDB->isFromOrToFavoritedNode(*p);
+
+    if (!lastLeg) {
+        return false;
+    }
+
+    LOG_INFO("MXN LastLeg: Packet from %x is broadcast to favorited nodes in CLIENT_BASE role", getFrom(p));
+
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+            meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+            bool isValidTarget = n && n->is_favorite && n->num != nodeDB->getNodeNum() && 
+                    n->has_hops_away && n->hops_away == 0 &&
+                    n->has_user && (n->user.role == meshtastic_Config_DeviceConfig_Role_CLIENT || n->user.role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE);
+            if (isValidTarget) {
+                // Send a direct message to this favorited node with the same payload, to make sure it gets it even if it missed the broadcast
+                meshtastic_MeshPacket *copy = packetPool.allocCopy(*p);
+                copy->to = n->num;
+                copy->hop_limit = 0;
+                copy->want_ack = false;
+                this->send(copy);
+            }
+        }
+    return true;
 }
 
 bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)

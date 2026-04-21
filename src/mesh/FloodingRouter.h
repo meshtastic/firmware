@@ -58,6 +58,8 @@ class FloodingRouter : public Router
     /* Check if we should rebroadcast this packet, and do so if needed */
     virtual bool perhapsRebroadcast(const meshtastic_MeshPacket *p) = 0;
 
+    bool perhapsSendToFavoritedNodes(const meshtastic_MeshPacket *p);
+
     /* Check if we should handle an upgraded packet (with higher hop_limit)
      * @return true if we handled it (so stop processing)
      */
