@@ -487,21 +487,38 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
             // Try to use this hash/channel pair
             if (channels.decryptForHash(chIndex, p->channel)) {
-                // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf. Create a
-                // fresh copy for each decrypt attempt.
-                memcpy(bytes, p->encrypted.bytes, rawSize);
-                // Try to decrypt the packet if we can
-                crypto->decrypt(p->from, p->id, rawSize, bytes);
-
-                // printBytes("plaintext", bytes, p->encrypted.size);
-
-                // Take those raw bytes and convert them back into a well structured protobuf we can understand
                 meshtastic_Data decodedtmp;
-                memset(&decodedtmp, 0, sizeof(decodedtmp));
-                if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
+                bool channelDecoded = false;
+                size_t decryptedSize = rawSize;
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+                // Try AES-CCM (authenticated) decryption first
+                if (rawSize > MESHTASTIC_CCM_TAG_SIZE) {
+                    if (crypto->decryptPacketCCM(p->from, p->id, rawSize, p->encrypted.bytes, bytes)) {
+                        decryptedSize = rawSize - MESHTASTIC_CCM_TAG_SIZE;
+                        memset(&decodedtmp, 0, sizeof(decodedtmp));
+                        if (pb_decode_from_bytes(bytes, decryptedSize, &meshtastic_Data_msg, &decodedtmp) &&
+                            decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                            channelDecoded = true;
+                        }
+                    }
+                }
+#endif
+
+                // Fall back to AES-CTR (unauthenticated, legacy) if CCM didn't succeed
+                if (!channelDecoded) {
+                    memcpy(bytes, p->encrypted.bytes, rawSize);
+                    crypto->decrypt(p->from, p->id, rawSize, bytes);
+                    decryptedSize = rawSize;
+                    memset(&decodedtmp, 0, sizeof(decodedtmp));
+                    if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
+                        decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                        channelDecoded = true;
+                    }
+                }
+
+                if (!channelDecoded) {
                     LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!", p->id);
-                } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
-                    LOG_ERROR("Invalid portnum (bad psk?)!");
 #if !(MESHTASTIC_EXCLUDE_PKI)
                 } else if (!owner.is_licensed && isToUs(p) && decodedtmp.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
                     LOG_WARN("Rejecting legacy DM");
@@ -693,8 +710,15 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 // No suitable channel could be found for
                 return meshtastic_Routing_Error_NO_CHANNEL;
             }
-            crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
-            memcpy(p->encrypted.bytes, bytes, numbytes);
+            // Use AES-CCM (authenticated) if the auth tag fits in the LoRa frame
+            if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_CCM_TAG_SIZE <= MAX_LORA_PAYLOAD_LEN &&
+                crypto->encryptPacketCCM(getFrom(p), p->id, numbytes, bytes, p->encrypted.bytes) == 0) {
+                numbytes += MESHTASTIC_CCM_TAG_SIZE;
+            } else {
+                // Fall back to unauthenticated AES-CTR for oversized packets
+                crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
+                memcpy(p->encrypted.bytes, bytes, numbytes);
+            }
         }
 #else
         if (p->pki_encrypted == true) {
