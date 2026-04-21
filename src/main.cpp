@@ -21,6 +21,7 @@
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
+#include "detect/Se050Transport.h"
 #include "error.h"
 #include "power.h"
 
@@ -679,6 +680,45 @@ void setup()
 #ifdef SENSOR_GPS_CONFLICT
         sensor_detected = true;
 #endif
+    }
+
+    // Secure element boot banner + first useful APDU (SELECT + GetUID).
+    // If SELECT succeeds the Transport is promoted to a function-static object and
+    // exposed via se050::globalTransport so any module loaded later can reach the chip.
+    {
+        auto seFound = i2cScanner->find(ScanI2C::NXP_SE050);
+        if (seFound.type == ScanI2C::NXP_SE050) {
+            const bool onWire1 = (seFound.address.port == ScanI2C::I2CPort::WIRE1);
+            LOG_INFO("Secure element: NXP SE050 @%s 0x%02x", onWire1 ? "Wire1" : "Wire", seFound.address.address);
+#if WIRE_INTERFACES_COUNT > 1
+            TwoWire *seBus = onWire1 ? &Wire1 : &Wire;
+#else
+            TwoWire *seBus = &Wire;
+#endif
+            // Static so the Transport object outlives setup() and remains valid for any module that reads globalTransport.
+            static se050::Transport se(seBus, seFound.address.address);
+            se050::globalTransport = &se;
+
+            uint8_t aMaj = 0, aMin = 0, aPatch = 0;
+            uint16_t aCfg = 0;
+            if (se.begin(&aMaj, &aMin, &aPatch, &aCfg)) {
+                LOG_INFO("SE050 applet v%u.%u.%u  cfg=0x%04x", aMaj, aMin, aPatch, aCfg);
+
+                uint8_t uid[18] = {0};
+                if (se.getUID(uid)) {
+                    char hex[18 * 2 + 1];
+                    for (int i = 0; i < 18; i++)
+                        snprintf(&hex[i * 2], 3, "%02x", uid[i]);
+                    hex[36] = '\0';
+                    LOG_INFO("SE050 UID: %s", hex);
+                } else {
+                    LOG_WARN("SE050 UID: read failed");
+                }
+            } else {
+                LOG_WARN("SE050: begin() failed, skipping");
+                se050::globalTransport = nullptr;
+            }
+        }
     }
 #ifdef ARCH_ESP32
 #ifdef DEBUG_PARTITION_TABLE
