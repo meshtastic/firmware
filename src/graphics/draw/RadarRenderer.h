@@ -10,26 +10,26 @@ namespace graphics
 class Screen;
 
 /**
- * @brief Radar/minimap screen showing nearby nodes by bearing and distance.
+ * @brief Radar overlay for the compass/position screen.
  *
- * Renders a circular radar with three labelled range rings.  The user's node
- * sits at the centre; other nodes with valid GPS positions are plotted as
- * 3×3 squares at their true bearing and proportional distance.
+ * Draws a node list on the left and a circular radar minimap on the right,
+ * replacing the GPS text shown in compass mode.  The user's node sits at the
+ * centre; remote nodes with valid positions are plotted as small markers at
+ * their true bearing and proportional distance.
  *
- * When the BMX160 (RAK12034) is connected the display is heading-up: the
- * direction the device faces is always at the top.  A "N" label rotates to
- * show true north.  Without IMU the display is north-up.
+ * When the BMX160 (RAK12034) is connected the radar is heading-up (the
+ * direction the device faces is at the top).  A "N" label rotates to show
+ * true north.  Without IMU the display is north-up.
  *
- * The heading mode and zoom level can be overridden at runtime via the
- * long-press menu (radarMenu in MenuHandler).
+ * Heading mode and zoom level are toggled via the long-press radar menu.
  */
 namespace RadarRenderer
 {
 
-// ---- Frame callback ---------------------------------------------------------
-void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+// ---- Content-area renderer (called from drawCompassAndLocationScreen) -------
+void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y);
 
-// ---- Runtime state (controlled by radarMenu) --------------------------------
+// ---- Runtime state (controlled by radarPositionMenu) ------------------------
 
 /** Returns true when forced north-up is active (overriding IMU). */
 bool isNorthUp();
@@ -40,10 +40,10 @@ void toggleNorthUp();
 /**
  * Zoom level relative to the auto-calculated scale.
  *  0  = auto (default)
- * -1  = zoom in  (scale halved)
- * -2  = zoom in  (scale quartered)
- *  +1 = zoom out (scale doubled)
- *  +2 = zoom out (scale quadrupled)
+ * -1  = zoom in
+ * -2  = zoom in (further)
+ *  +1 = zoom out
+ *  +2 = zoom out (further)
  * Clamped to [-2, +2].
  */
 void zoomIn();

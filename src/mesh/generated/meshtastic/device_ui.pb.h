@@ -193,6 +193,8 @@ typedef struct _meshtastic_DeviceUIConfig {
     bool is_clockface_analog;
     /* How the GPS coordinates are formatted on the OLED screen. */
     meshtastic_DeviceUIConfig_GpsCoordinateFormat gps_format;
+    /* Show radar overlay on the compass/position screen instead of GPS text. */
+    bool radar_mode;
 } meshtastic_DeviceUIConfig;
 
 
@@ -298,7 +300,8 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  map_data,         15) \
 X(a, STATIC,   SINGULAR, UENUM,    compass_mode,     16) \
 X(a, STATIC,   SINGULAR, UINT32,   screen_rgb_color,  17) \
 X(a, STATIC,   SINGULAR, BOOL,     is_clockface_analog,  18) \
-X(a, STATIC,   SINGULAR, UENUM,    gps_format,       19)
+X(a, STATIC,   SINGULAR, UENUM,    gps_format,       19) \
+X(a, STATIC,   SINGULAR, BOOL,     radar_mode,       20)
 #define meshtastic_DeviceUIConfig_CALLBACK NULL
 #define meshtastic_DeviceUIConfig_DEFAULT NULL
 #define meshtastic_DeviceUIConfig_node_filter_MSGTYPE meshtastic_NodeFilter

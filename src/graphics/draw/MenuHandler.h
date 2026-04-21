@@ -90,7 +90,7 @@ class menuHandler
     static void BuzzerModeMenu();
     static void switchToMUIMenu();
     static void nodeListMenu();
-    static void radarMenu();
+    static void radarPositionMenu();
     static void resetNodeDBMenu();
     static void BrightnessPickerMenu();
     static void rebootMenu();

@@ -18,7 +18,7 @@ namespace RadarRenderer
 {
 
 // ---------------------------------------------------------------------------
-// Runtime state (toggled by radarMenu)
+// Runtime state (toggled by radarPositionMenu)
 // ---------------------------------------------------------------------------
 
 static bool s_forceNorthUp = false; // override IMU → fixed north-up
@@ -57,7 +57,6 @@ void zoomOut()
  */
 static float niceScaleMeters(float maxDistM, int zoomLevel)
 {
-    // Every entry is divisible by 3 → ring labels are always integers.
     static const float scales[] = {
         30,    60,    90,    150,   300,   600,   900,
         1500,  3000,  6000,  9000,  15000, 30000, 90000,
@@ -65,12 +64,10 @@ static float niceScaleMeters(float maxDistM, int zoomLevel)
     };
     constexpr int N = sizeof(scales) / sizeof(scales[0]);
 
-    // Find the base auto-scale index.
     int idx = 0;
     while (idx < N - 1 && maxDistM > scales[idx])
         idx++;
 
-    // Apply zoom offset (clamp to valid range).
     idx = std::max(0, std::min(N - 1, idx + zoomLevel));
     return scales[idx];
 }
@@ -161,33 +158,39 @@ static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bea
 }
 
 // ---------------------------------------------------------------------------
-// Main draw function
+// Overlay renderer
 // ---------------------------------------------------------------------------
 
-void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+/**
+ * Draw the radar overlay into the content area of the compass/position screen.
+ *
+ * Layout (128×64 OLED example):
+ *   - Header row already drawn by the caller (FONT_HEIGHT_SMALL - 1 px)
+ *   - Right side: circular radar with 2 px padding on all sides
+ *   - Left side: node list (up to 4 closest nodes, marker + name + distance)
+ *
+ * Called from UIRenderer::drawCompassAndLocationScreen when uiconfig.radar_mode
+ * is true.  The caller draws the header and footer; this function handles the
+ * content area only.
+ */
+void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 {
-    display->clear();
-    graphics::drawCommonHeader(display, x, y, "Radar");
-
     const int headerH = FONT_HEIGHT_SMALL - 1;
     const int sw = SCREEN_WIDTH;
     const int sh = SCREEN_HEIGHT;
     const int contentH = sh - headerH;
+    const int pad = 2; // px padding around the radar circle
 
     // -----------------------------------------------------------------------
-    // Layout: radar circle on the left, info panel on the right.
-    //
-    // The radar is a square area equal to the content height, leaving a panel
-    // of (sw - radarDiam) pixels on the right for labels.
-    //
-    // On 128×64 OLED (contentH=57):
-    //   radarDiam = 55  radarRadius = 27  infoPanelX = 92 (36 px panel)
+    // Radar circle — right side, 2 px padding on all sides.
     // -----------------------------------------------------------------------
-    const int radarDiam = contentH - 2;      // 1 px margin top + bottom
+    const int radarDiam = contentH - 2 * pad;
     const int radarRadius = radarDiam / 2;
-    const int radarCX = x + radarRadius + 1; // left-aligned with 1px margin
-    const int radarCY = y + headerH + 1 + radarRadius;
-    const int infoPanelX = x + radarDiam + 4;
+    const int radarCX = x + sw - pad - radarRadius;
+    const int radarCY = y + headerH + pad + radarRadius;
+
+    // Node list panel fills the space to the left of the radar circle.
+    const int listRight = radarCX - radarRadius - 4; // 4 px gap between list and circle
 
     // -----------------------------------------------------------------------
     // GPS — bail gracefully if unavailable.
@@ -207,7 +210,7 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // Heading.
     //
     // Priority:
-    //  1. BMX160/RAK12034 tilt-compensated heading via screen->setHeading()
+    //  1. BMX160/RAK12034 tilt-compensated heading (screen->hasHeading())
     //  2. GPS movement track (estimatedHeading)
     //  3. North-up fallback (0)
     //
@@ -248,10 +251,10 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
             maxDistM = dist;
     }
 
-    // -----------------------------------------------------------------------
-    // Scale (respects zoom level set by long-press menu).
-    // -----------------------------------------------------------------------
     const float scale = niceScaleMeters(maxDistM, s_zoomLevel);
+
+    // Sort by distance so entries[0] is always the closest node.
+    std::sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) { return a.distM < b.distM; });
 
     // -----------------------------------------------------------------------
     // Draw radar chrome: three concentric range rings.
@@ -276,36 +279,28 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->fillRect(radarCX - 2, radarCY - 2, 4, 4);
 
     // -----------------------------------------------------------------------
-    // Sort by distance so entries[0] is always the closest node.
-    // -----------------------------------------------------------------------
-    std::sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) { return a.distM < b.distM; });
-
-    // -----------------------------------------------------------------------
-    // Plot remote nodes — each with its stable symbol.
+    // Plot remote nodes.
     // -----------------------------------------------------------------------
     for (const Entry &e : entries)
         plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad,
                  std::min(e.distM / scale, 1.0f), nodeMarkerIndex(e.node->num));
 
     // -----------------------------------------------------------------------
-    // Info panel (right of radar).  All available height used for node list.
+    // Node list (left panel) — up to 4 closest nodes.
     //
-    // Up to 5 closest nodes — [symbol] name (left)  dist (right-aligned).
-    // Row pitch is tightened to contentH/5 so 5 rows fit without clipping
-    // (glyph height ≈10px < FONT_HEIGHT_SMALL ≈13px, so rows stay readable).
-    //
-    // Each node carries a stable symbol (nodeNum % 5) that matches its dot
-    // on the radar, so the user can identify any dot by reading the list.
+    // Each row: stable marker symbol | short name | distance (right-aligned).
+    // The symbol matches the dot on the radar so the user can identify nodes.
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
 
-    const int maxRows  = 5;
-    const int rowPitch = contentH / maxRows; // ≈10px on a 128×64 OLED
+    const int maxRows = 4;
+    const int rowPitch = contentH / maxRows;
 
-    // Draw one node row: symbol (left) | name | distance (right-aligned).
-    auto drawNodeRow = [&](const Entry &e, int row) {
-        const int rowY  = y + headerH + rowPitch * row;
-        const int symCX = infoPanelX + 3;
+    const int count = (int)entries.size();
+    for (int i = 0; i < count && i < maxRows; i++) {
+        const Entry &e = entries[i];
+        const int rowY = y + headerH + rowPitch * i;
+        const int symCX = x + 3;
         const int symCY = rowY + rowPitch / 2;
 
         drawMarker(display, symCX, symCY, nodeMarkerIndex(e.node->num));
@@ -320,15 +315,11 @@ void drawRadarScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         formatDistM(dist, sizeof(dist), e.distM);
 
         display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->drawString(infoPanelX + 7, rowY, name);
+        display->drawString(x + 7, rowY, name);
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(x + sw - 1, rowY, dist);
+        display->drawString(x + listRight, rowY, dist);
         display->setTextAlignment(TEXT_ALIGN_LEFT);
-    };
-
-    const int count = (int)entries.size();
-    for (int i = 0; i < count && i < maxRows; i++)
-        drawNodeRow(entries[i], i);
+    }
 }
 
 } // namespace RadarRenderer

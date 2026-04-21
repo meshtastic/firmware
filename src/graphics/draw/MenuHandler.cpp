@@ -1249,7 +1249,8 @@ void menuHandler::positionBaseMenu()
         CompassCalibrate,
         GPSSmartPosition,
         GPSUpdateInterval,
-        GPSPositionBroadcast
+        GPSPositionBroadcast,
+        RadarToggle,
     };
 
     static const PositionMenuOption baseOptions[] = {
@@ -1260,6 +1261,7 @@ void menuHandler::positionBaseMenu()
         {"Update Interval", OptionsAction::Select, static_cast<int>(PositionAction::GPSUpdateInterval)},
         {"Broadcast Interval", OptionsAction::Select, static_cast<int>(PositionAction::GPSPositionBroadcast)},
         {"Compass", OptionsAction::Select, static_cast<int>(PositionAction::CompassMenu)},
+        {"Radar View", OptionsAction::Select, static_cast<int>(PositionAction::RadarToggle)},
     };
 
     static const PositionMenuOption calibrateOptions[] = {
@@ -1271,6 +1273,7 @@ void menuHandler::positionBaseMenu()
         {"Broadcast Interval", OptionsAction::Select, static_cast<int>(PositionAction::GPSPositionBroadcast)},
         {"Compass", OptionsAction::Select, static_cast<int>(PositionAction::CompassMenu)},
         {"Compass Calibrate", OptionsAction::Select, static_cast<int>(PositionAction::CompassCalibrate)},
+        {"Radar View", OptionsAction::Select, static_cast<int>(PositionAction::RadarToggle)},
     };
 
     constexpr size_t baseCount = sizeof(baseOptions) / sizeof(baseOptions[0]);
@@ -1322,6 +1325,11 @@ void menuHandler::positionBaseMenu()
             menuQueue = GpsPositionBroadcastMenu;
             screen->runNow();
             break;
+        case PositionAction::RadarToggle:
+            uiconfig.radar_mode = true;
+            menuHandler::saveUIConfig();
+            screen->runNow();
+            break;
         }
     };
 
@@ -1336,6 +1344,51 @@ void menuHandler::positionBaseMenu()
     bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
 #endif
 
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::radarPositionMenu()
+{
+    enum optionsNumbers { Back, CompassView, ToggleHeading, ZoomIn, ZoomOut };
+    static const char *optionsArray[] = {
+        "Back",
+        "Compass View",
+        nullptr, // filled dynamically
+        "Zoom In",
+        "Zoom Out",
+    };
+    static int optionsEnumArray[] = {Back, CompassView, ToggleHeading, ZoomIn, ZoomOut};
+
+    optionsArray[ToggleHeading] = graphics::RadarRenderer::isNorthUp() ? "Switch to HDG-UP" : "Switch to N-UP";
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Radar Options";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 5;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+        } else if (selected == CompassView) {
+            uiconfig.radar_mode = false;
+            menuHandler::saveUIConfig();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ToggleHeading) {
+            graphics::RadarRenderer::toggleNorthUp();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ZoomIn) {
+            graphics::RadarRenderer::zoomIn();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ZoomOut) {
+            graphics::RadarRenderer::zoomOut();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        }
+    };
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -2402,7 +2455,6 @@ void menuHandler::frameTogglesMenu()
         nodelist_hopsignal,
         nodelist_distance,
         nodelist_bearings,
-        nodelist_radar,
         gps_position,
         lora,
         clock,
@@ -2438,11 +2490,6 @@ void menuHandler::frameTogglesMenu()
     optionsEnumArray[options++] = nodelist_distance;
     optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? "Show NL - Bearings" : "Hide NL - Bearings";
     optionsEnumArray[options++] = nodelist_bearings;
-#endif
-
-#ifndef USE_EINK
-    optionsArray[options] = screen->isFrameHidden("nodelist_radar") ? "Show Radar" : "Hide Radar";
-    optionsEnumArray[options++] = nodelist_radar;
 #endif
 
     optionsArray[options] = screen->isFrameHidden("gps") ? "Show Position" : "Hide Position";
@@ -2507,10 +2554,6 @@ void menuHandler::frameTogglesMenu()
             screen->runNow();
         } else if (selected == nodelist_bearings) {
             screen->toggleFrameVisibility("nodelist_bearings");
-            menuHandler::menuQueue = menuHandler::FrameToggles;
-            screen->runNow();
-        } else if (selected == nodelist_radar) {
-            screen->toggleFrameVisibility("nodelist_radar");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == gps_position) {
@@ -2805,45 +2848,6 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 void menuHandler::saveUIConfig()
 {
     nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
-}
-
-void menuHandler::radarMenu()
-{
-    enum optionsNumbers { Back, ToggleHeading, ZoomIn, ZoomOut };
-    static const char *optionsArray[] = {
-        "Back",
-        nullptr, // filled dynamically based on current mode
-        "Zoom In",
-        "Zoom Out",
-    };
-    static int optionsEnumArray[] = {Back, ToggleHeading, ZoomIn, ZoomOut};
-
-    optionsArray[ToggleHeading] = graphics::RadarRenderer::isNorthUp() ? "Switch to HDG-UP" : "Switch to N-UP";
-
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Radar Options";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
-    bannerOptions.optionsEnumPtr = optionsEnumArray;
-
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Back) {
-            screen->setFrames(Screen::FOCUS_PRESERVE);
-        } else if (selected == ToggleHeading) {
-            graphics::RadarRenderer::toggleNorthUp();
-            screen->setFrames(Screen::FOCUS_PRESERVE);
-            screen->runNow();
-        } else if (selected == ZoomIn) {
-            graphics::RadarRenderer::zoomIn();
-            screen->setFrames(Screen::FOCUS_PRESERVE);
-            screen->runNow();
-        } else if (selected == ZoomOut) {
-            graphics::RadarRenderer::zoomOut();
-            screen->setFrames(Screen::FOCUS_PRESERVE);
-            screen->runNow();
-        }
-    };
-    screen->showOverlayBanner(bannerOptions);
 }
 
 } // namespace graphics
