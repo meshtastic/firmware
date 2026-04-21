@@ -353,7 +353,7 @@ void test_sparse_to_dense_transition()
     for (uint32_t i = 0; i < 25; ++i)
         shim->samplePacketForHistogram(makeDistributedNodeId(0xB000, i, static_cast<uint32_t>(1) << 8), 1);
 
-    for (int run = 0; run < 6; run++)
+    for (int run = 0; run < 13; run++)
         shim->runOnce();
 
     uint8_t hopDense = shim->getLastRequiredHop();
