@@ -2,9 +2,9 @@
 
 #if !MESHTASTIC_EXCLUDE_I2C
 
+#include "mesh/HardwareRNG.h"
 #include <AES.h>
 #include <Arduino.h>
-#include <RNG.h>
 #include <Wire.h>
 #include <stdio.h>
 #include <string.h>
@@ -170,6 +170,18 @@ void aes128_cmac(const uint8_t key[16], const uint8_t *data, size_t len, uint8_t
     uint8_t K1[16], K2[16];
     cmac_dbl(K1, L);
     cmac_dbl(K2, K1);
+
+    // Empty-message fast-path per NIST SP 800-38B. Skips all reads from `data`, which
+    // lets aes128_cmac(..., nullptr, 0, ...) be a legal self-test call without
+    // triggering static-analysis warnings about null dereference or out-of-bounds.
+    if (len == 0) {
+        uint8_t state[16] = {0x80};
+        for (int j = 0; j < 16; j++)
+            state[j] ^= K2[j];
+        cipher.encryptBlock(state, state);
+        memcpy(out, state, 16);
+        return;
+    }
 
     // Pick the last block's mask: K1 if message ends on a full block and len > 0,
     // K2 otherwise (empty message or last block is partial, needs 0x80... padding).
@@ -560,9 +572,24 @@ bool Client::openPlatformScp03(const uint8_t encKey[16], const uint8_t macKey[16
         }
     }
 
-    // 1. Generate 8-byte host challenge via the firmware RNG.
-    uint8_t hostChal[8];
-    RNG.rand(hostChal, sizeof(hostChal));
+    // 1. Generate 8-byte host challenge from hardware entropy.
+    // We use HardwareRNG::fill() to access the native TRNG per-platform (ESP32, nRF52, etc)
+    // without invoking the Arduino software PRNG. To protect against platforms where
+    // HardwareRNG silently falls back to a deterministic std::random_device, we XOR the
+    // host entropy with bytes from the SE050's own certified TRNG.
+    uint8_t hostChal[8] = {0};
+    if (!HardwareRNG::fill(hostChal, sizeof(hostChal), true)) {
+        LOG_WARN("SE050 SCP03: HardwareRNG::fill failed, relying solely on chip TRNG");
+    }
+
+    uint8_t seRand[8];
+    if (getRandom(seRand, sizeof(seRand))) {
+        for (size_t i = 0; i < sizeof(hostChal); i++) {
+            hostChal[i] ^= seRand[i];
+        }
+    } else {
+        LOG_WARN("SE050 SCP03: chip TRNG unavailable, relying solely on host RNG");
+    }
 
     // 2. INITIALIZE UPDATE APDU: 80 50 00 00 08 <hostChal[8]> 00
     uint8_t initUpd[14];
