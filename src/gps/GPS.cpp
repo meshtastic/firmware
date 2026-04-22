@@ -505,6 +505,7 @@ bool GPS::setup()
         int msglen = 0;
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             if (probeTries < GPS_PROBETRIES) {
+                bootString = "Probing GPS...";
                 gnssModel = probe(serialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
                     if (currentStep == 0 && ++speedSelect == array_count(serialSpeeds)) {
