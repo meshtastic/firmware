@@ -307,9 +307,12 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     int nameMaxWidth = getNodeNameMaxWidth(columnWidth, columnWidth - 25);
     int barsOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 20 : 24) : (isLeftCol ? 15 : 19);
-    int hopOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 21 : 29) : (isLeftCol ? 13 : 17);
+    constexpr int kBarCount = 4;
+    constexpr int kBarWidth = 2;
+    constexpr int kBarGap = 1;
 
     int barsXOffset = columnWidth - barsOffset;
+    int barsRightEdge = x + barsXOffset + ((kBarCount - 1) * (kBarWidth + kBarGap)) + kBarWidth;
 
     const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
     char nodeName[96];
@@ -339,42 +342,48 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
         }
     }
 
-    // Draw signal strength bars
-    int bars = (node->snr > 5) ? 4 : (node->snr > 0) ? 3 : (node->snr > -5) ? 2 : (node->snr > -10) ? 1 : 0;
-    int barWidth = 2;
-    int barStartX = x + barsXOffset;
-    int barStartY = y + 1 + (FONT_HEIGHT_SMALL / 2) + 2;
-    const int barGap = 1;
+    const bool isZeroHop = node->has_hops_away && node->hops_away == 0;
 
-    if (bars > 0) {
-        uint16_t signalBarsColor = TFTPalette::Bad;
-        if (bars >= 3) {
-            signalBarsColor = TFTPalette::Good;
-        } else if (bars == 2) {
-            signalBarsColor = TFTPalette::Medium;
+    // Show signal only for direct neighbors (0 hops)
+    if (isZeroHop) {
+        int bars = (node->snr > 5) ? 4 : (node->snr > 0) ? 3 : (node->snr > -5) ? 2 : (node->snr > -10) ? 1 : 0;
+        int barStartX = x + barsXOffset;
+        int barStartY = y + 1 + (FONT_HEIGHT_SMALL / 2) + 2;
+
+        if (bars > 0) {
+            uint16_t signalBarsColor = TFTPalette::Bad;
+            if (bars >= 3) {
+                signalBarsColor = TFTPalette::Good;
+            } else if (bars == 2) {
+                signalBarsColor = TFTPalette::Medium;
+            }
+
+            // Highest bar reaches 6 px in this renderer.
+            setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, barStartX, barStartY - 6,
+                                       (kBarCount * kBarWidth) + ((kBarCount - 1) * kBarGap), 6);
         }
 
-        // Highest bar reaches 6 px in this renderer.
-        setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, barStartX, barStartY - 6,
-                                   (4 * barWidth) + (3 * barGap), 6);
-    }
-
-    for (int b = 0; b < 4; b++) {
-        if (b < bars) {
-            int height = (b * 2);
-            display->fillRect(barStartX + (b * (barWidth + barGap)), barStartY - height, barWidth, height);
+        for (int b = 0; b < kBarCount; b++) {
+            if (b < bars) {
+                int height = (b * 2);
+                display->fillRect(barStartX + (b * (kBarWidth + kBarGap)), barStartY - height, kBarWidth, height);
+            }
         }
     }
 
-    // Draw hop count
-    char hopStr[6] = "";
-    if (node->has_hops_away && node->hops_away > 0)
-        snprintf(hopStr, sizeof(hopStr), "[%d]", node->hops_away);
+    // Draw hop count + hop icon
+    if (node->has_hops_away && node->hops_away > 0) {
+        char hopCount[6];
+        snprintf(hopCount, sizeof(hopCount), "%d", node->hops_away);
 
-    if (hopStr[0] != '\0') {
-        int rightEdge = x + columnWidth - hopOffset;
-        int textWidth = display->getStringWidth(hopStr);
-        display->drawString(rightEdge - textWidth, y, hopStr);
+        const int hopCountWidth = display->getStringWidth(hopCount);
+        const int gap = 1;
+        const int totalWidth = hopCountWidth + gap + hop_width;
+        const int hopX = barsRightEdge - totalWidth;
+        const int iconY = y + (FONT_HEIGHT_SMALL - hop_height) / 2;
+
+        display->drawString(hopX, y, hopCount);
+        display->drawXbm(hopX + hopCountWidth + gap, iconY, hop_width, hop_height, hop);
     }
 }
 

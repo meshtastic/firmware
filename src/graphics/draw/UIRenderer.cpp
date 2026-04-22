@@ -818,138 +818,137 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 #endif
 
-    // === 2. Signal and Hops (combined on one line, if available) ===
-    char signalText[24] = "";
+    // === 2. Signal/Hops line (if available) ===
     bool haveSignal = false;
     int bars = 0;
-
-    // Calculate signal grade using modem preset and SNR only
-    float snrLimit = -6.0f;
-    switch (config.lora.modem_preset) {
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-        snrLimit = -5.5f;
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
-        snrLimit = -4.5f;
-        break;
-    default:
-        break;
-    }
-    float snr = node->snr;
-
-    // Determine signal quality label and bars using SNR-only grading
     const char *qualityLabel = nullptr;
 
-    if (snr > snrLimit + 10) {
-        qualityLabel = "Good";
-        bars = 4;
-    } else if (snr > snrLimit + 6) {
-        qualityLabel = "Good";
-        bars = 3;
-    } else if (snr > snrLimit + 2) {
-        qualityLabel = "Good";
-        bars = 2;
-    } else if (snr > snrLimit - 4) {
-        qualityLabel = "Fair";
-        bars = 2;
-    } else {
-        qualityLabel = "Bad";
-        bars = 1;
-    }
+    // Helper to get SNR limit based on modem preset
+    auto getSnrLimit = [](meshtastic_Config_LoRaConfig_ModemPreset preset) -> float {
+        switch (preset) {
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+            return -6.0f;
+        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+            return -5.5f;
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+            return -4.5f;
+        default:
+            return -6.0f;
+        }
+    };
 
     // Add extra spacing on the left if we have an API connection to account for the common footer icons
     const char *leftSideSpacing =
         graphics::isAPIConnected(service->api_state) ? (currentResolution == ScreenResolution::High ? "     " : "   ") : " ";
+    const bool isZeroHop = node->has_hops_away && node->hops_away == 0;
 
-    // --- Build the Signal/Hops line ---
-    // Only show signal if we have valid SNR
-    if (snr > -100 && snr != 0) {
-        snprintf(signalText, sizeof(signalText), "%sSig:%s", leftSideSpacing, qualityLabel);
-        haveSignal = true;
+    // Signal text/bars are only for direct (zero-hop) nodes with valid SNR.
+    if (isZeroHop) {
+        float snr = node->snr;
+        if (snr > -100 && snr != 0) {
+            float snrLimit = getSnrLimit(config.lora.modem_preset);
+            // Determine signal quality label and bars using SNR-only grading.
+            if (snr > snrLimit + 10) {
+                qualityLabel = "Good";
+                bars = 4;
+            } else if (snr > snrLimit + 6) {
+                qualityLabel = "Good";
+                bars = 3;
+            } else if (snr > snrLimit + 2) {
+                qualityLabel = "Good";
+                bars = 2;
+            } else if (snr > snrLimit - 4) {
+                qualityLabel = "Fair";
+                bars = 1;
+            } else {
+                qualityLabel = "Bad";
+                bars = 1;
+            }
+
+            haveSignal = true;
+        }
     }
 
-    if (haveSignal || node->hops_away > 0) {
-        // Render signal text/bars and hops on one pass without building/parsing a combined temp string.
+    const bool showHops = node->has_hops_away && node->hops_away > 0;
+
+    if (haveSignal || showHops) {
         int yPos = getTextPositions(display)[line++];
-        int curX = x;
+        int curX = x + display->getStringWidth(leftSideSpacing);
 
-        if (haveSignal) {
-            // Draw signal quality text
-            display->drawString(curX, yPos, signalText);
-            curX += display->getStringWidth(signalText) + 4;
-
-            // Draw signal bars (skip on UltraLow, text only)
-            if (currentResolution != ScreenResolution::UltraLow && bars > 0) {
-                const int kMaxBars = 4;
-                if (bars < 1)
-                    bars = 1;
-                if (bars > kMaxBars)
-                    bars = kMaxBars;
-
-                int barX = curX;
-
-                const bool hi = (currentResolution == ScreenResolution::High);
-                int barWidth = hi ? 2 : 1;
-                int barGap = hi ? 2 : 1;
-                int maxBarHeight = FONT_HEIGHT_SMALL - 7;
-                if (!hi)
-                    maxBarHeight -= 1;
-                int barY = yPos + (FONT_HEIGHT_SMALL - maxBarHeight) / 2;
-                int totalBarsWidth = (kMaxBars * barWidth) + ((kMaxBars - 1) * barGap);
-
-                uint16_t signalBarsColor = TFTPalette::Good;
-                if (qualityLabel && strcmp(qualityLabel, "Fair") == 0) {
-                    signalBarsColor = TFTPalette::Medium;
-                } else if (qualityLabel && strcmp(qualityLabel, "Bad") == 0) {
-                    signalBarsColor = TFTPalette::Bad;
-                }
-
-                setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, barX, barY,
-                                           totalBarsWidth, maxBarHeight);
-
-                for (int bi = 0; bi < kMaxBars; bi++) {
-                    int barHeight = maxBarHeight * (bi + 1) / kMaxBars;
-                    if (barHeight < 2)
-                        barHeight = 2;
-
-                    int bx = barX + bi * (barWidth + barGap);
-                    int by = barY + maxBarHeight - barHeight;
-
-                    if (bi < bars) {
-                        display->fillRect(bx, by, barWidth, barHeight);
-                    } else {
-                        int baseY = barY + maxBarHeight - 1;
-                        display->drawHorizontalLine(bx, baseY, barWidth);
-                    }
-                }
-
-                curX += totalBarsWidth + 2;
-            }
+        // Draw signal quality text for zero-hop nodes when present.
+        if (haveSignal && qualityLabel) {
+            char signalLabel[20];
+            snprintf(signalLabel, sizeof(signalLabel), "Sig:%s", qualityLabel);
+            display->drawString(curX, yPos, signalLabel);
+            curX += display->getStringWidth(signalLabel) + 4;
         }
 
-        // Draw hops AFTER the bars as: [ number + hop icon ]
-        if (node->hops_away > 0) {
+        // Draw signal bars (skip on UltraLow, text only)
+        if (currentResolution != ScreenResolution::UltraLow && haveSignal && bars > 0) {
+            const int kMaxBars = 4;
+            if (bars < 1)
+                bars = 1;
+            if (bars > kMaxBars)
+                bars = kMaxBars;
 
-            // open bracket
-            display->drawString(curX, yPos, "[");
-            curX += display->getStringWidth("[") + 1;
+            int barX = curX;
 
-            // hop count
+            const bool hi = (currentResolution == ScreenResolution::High);
+            int barWidth = hi ? 2 : 1;
+            int barGap = hi ? 2 : 1;
+            int maxBarHeight = FONT_HEIGHT_SMALL - 7;
+            if (!hi)
+                maxBarHeight -= 1;
+            int barY = yPos + (FONT_HEIGHT_SMALL - maxBarHeight) / 2;
+            int totalBarsWidth = (kMaxBars * barWidth) + ((kMaxBars - 1) * barGap);
+
+            uint16_t signalBarsColor = TFTPalette::Good;
+            if (qualityLabel && strcmp(qualityLabel, "Fair") == 0) {
+                signalBarsColor = TFTPalette::Medium;
+            } else if (qualityLabel && strcmp(qualityLabel, "Bad") == 0) {
+                signalBarsColor = TFTPalette::Bad;
+            }
+            setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, barX, barY, totalBarsWidth,
+                                       maxBarHeight);
+
+            for (int bi = 0; bi < kMaxBars; bi++) {
+                int barHeight = maxBarHeight * (bi + 1) / kMaxBars;
+                if (barHeight < 2)
+                    barHeight = 2;
+
+                int bx = barX + bi * (barWidth + barGap);
+                int by = barY + maxBarHeight - barHeight;
+
+                if (bi < bars) {
+                    display->fillRect(bx, by, barWidth, barHeight);
+                } else {
+                    int baseY = barY + maxBarHeight - 1;
+                    display->drawHorizontalLine(bx, baseY, barWidth);
+                }
+            }
+
+            curX += totalBarsWidth + 2;
+        }
+
+        // Draw hops for non-zero-hop nodes as: number + hop icon.
+        // This path is mutually exclusive with the zero-hop signal-bars path above.
+        if (showHops) {
+            display->drawString(curX, yPos, "Hop:");
+            curX += display->getStringWidth("Hop:") + 2;
+
             char hopCount[6];
             snprintf(hopCount, sizeof(hopCount), "%d", node->hops_away);
             display->drawString(curX, yPos, hopCount);
             curX += display->getStringWidth(hopCount) + 2;
 
-            // hop icon
             const int iconY = yPos + (FONT_HEIGHT_SMALL - hop_height) / 2;
             display->drawXbm(curX, iconY, hop_width, hop_height, hop);
             curX += hop_width + 1;
-
-            // closing bracket
-            display->drawString(curX, yPos, "]");
         }
     }
 
