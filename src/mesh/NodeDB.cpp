@@ -1964,7 +1964,8 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
 
 #if HAS_VARIABLE_HOPS
-        if (!mp.via_mqtt && hopScalingModule) {
+        // Only sample packets that arrived over LoRa.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && hopScalingModule) {
             uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
             hopScalingModule->samplePacketForHistogram(mp.from, hopCount);
         }
