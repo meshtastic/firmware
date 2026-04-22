@@ -47,6 +47,22 @@
 #include "concurrency/LockGuard.h"
 #endif
 
+#if defined(ARCH_STM32WL) && defined(BATTERY_PIN)
+#include "stm32yyxx_ll_adc.h"
+
+/* Analog read resolution */
+#if defined(LL_ADC_RESOLUTION_12B)
+#define LL_ADC_RESOLUTION LL_ADC_RESOLUTION_12B
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+#elif defined(LL_ADC_DS_DATA_WIDTH_12_BIT)
+#define LL_ADC_RESOLUTION LL_ADC_DS_DATA_WIDTH_12_BIT
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+#else
+#error "ADC resolution could not be defined!"
+#endif
+#define ADC_RANGE (1 << BATTERY_SENSE_RESOLUTION_BITS)
+#endif
+
 #if defined(DEBUG_HEAP_MQTT) && !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
@@ -399,7 +415,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
             float scaled = 0;
 
             battery_adcEnable();
-#ifdef ARCH_ESP32 // ADC block for espressif platforms
+#ifdef ARCH_STM32WL
+            // STM32 ADC with VREFINT runtime calibration
+            Vref = __LL_ADC_CALC_VREFANALOG_VOLTAGE(analogRead(AVREF), LL_ADC_RESOLUTION);
+            raw = analogRead(BATTERY_PIN);
+            scaled = __LL_ADC_CALC_DATA_TO_VOLTAGE(Vref, raw, LL_ADC_RESOLUTION);
+            scaled *= operativeAdcMultiplier;
+#elif defined(ARCH_ESP32) // ADC block for espressif platforms
             raw = espAdcRead();
             int voltage_mv = 0;
             if (adc_calibrated && adc_cali_handle) {
@@ -584,6 +606,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
     bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
+#ifdef ARCH_STM32WL
+    // 3300mV placeholder for STM32 errata where VREFINT factory calibration may be missing
+    // (e.g. STM32U0, see DS14756 Rev 3 §2.4.1 "VREFINT offset")
+    uint32_t Vref = 3300;
+#endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
 
@@ -693,7 +720,9 @@ bool Power::analogInit()
 #define BATTERY_SENSE_RESOLUTION_BITS 10
 #endif
 
-#ifdef ARCH_ESP32 // ESP32 needs special analog stuff
+#ifdef ARCH_STM32WL
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+#elif defined(ARCH_ESP32) // ESP32 needs special analog stuff
     adc_oneshot_unit_init_cfg_t init_config = {
         .unit_id = unit,
     };
@@ -722,7 +751,7 @@ bool Power::analogInit()
 
     // NRF52 ADC init moved to powerHAL_init in nrf52 platform
 
-#ifndef ARCH_ESP32
+#if !defined(ARCH_ESP32) && !defined(ARCH_STM32WL)
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 #endif
 

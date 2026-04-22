@@ -53,10 +53,11 @@ void InkHUD::MessageStore::saveToFlash()
         f.write(reinterpret_cast<const uint8_t *>(&m.timestamp), sizeof(m.timestamp));       // Write timestamp. 4 bytes
         f.write(reinterpret_cast<const uint8_t *>(&m.sender), sizeof(m.sender));             // Write sender NodeId. 4 Bytes
         f.write(reinterpret_cast<const uint8_t *>(&m.channelIndex), sizeof(m.channelIndex)); // Write channel index. 1 Byte
-        f.write(reinterpret_cast<const uint8_t *>(m.text.c_str()), min(MAX_MESSAGE_SIZE, m.text.size())); // Write message text
-        f.write('\0');                                                                                    // Append null term
-        LOG_DEBUG("Wrote message %u, length %u, text \"%s\"", static_cast<uint32_t>(i), min(MAX_MESSAGE_SIZE, m.text.size()),
-                  m.text.c_str());
+        f.write(reinterpret_cast<const uint8_t *>(m.text.c_str()),
+                min((size_t)MAX_MESSAGE_SIZE, m.text.size())); // Write message text
+        f.write('\0');                                         // Append null term
+        LOG_DEBUG("Wrote message %u, length %u, text \"%s\"", static_cast<uint32_t>(i),
+                  min((size_t)MAX_MESSAGE_SIZE, m.text.size()), m.text.c_str());
     }
 
     // Release firmware's SPI lock, because SafeFile::close needs it
