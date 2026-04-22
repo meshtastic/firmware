@@ -143,6 +143,10 @@ int32_t ButtonThread::runOnce()
         leadUpSequenceActive = false;
         resetLeadUpSequence();
     }
+#ifdef INPUT_DEBUG
+    if (buttonCurrentlyPressed)
+        LOG_WARN("Button held for %u ms", millis() - buttonPressStartTime);
+#endif
 
     // Progressive lead-up sound system
     if (!_suppressLeadUp && buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS) {
@@ -311,7 +315,8 @@ int32_t ButtonThread::runOnce()
 void ButtonThread::attachButtonInterrupts()
 {
     // Interrupt for user button, during normal use. Improves responsiveness.
-    attachInterrupt(_pinNum, _intRoutine, CHANGE);
+    if (_intRoutine != nullptr)
+        attachInterrupt(_pinNum, _intRoutine, CHANGE);
 }
 
 /*
@@ -320,7 +325,8 @@ void ButtonThread::attachButtonInterrupts()
  */
 void ButtonThread::detachButtonInterrupts()
 {
-    detachInterrupt(_pinNum);
+    if (_intRoutine != nullptr)
+        detachInterrupt(_pinNum);
 }
 
 #ifdef ARCH_ESP32
