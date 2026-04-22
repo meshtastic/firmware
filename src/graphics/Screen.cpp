@@ -889,7 +889,7 @@ int32_t Screen::runOnce()
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
+    if (showingBootScreen && (!gps || gps->initFinished()) && (millis() > (logo_timeout + serialSinceMsec))) {
         LOG_INFO("Done with boot screen");
         stopBootScreen();
         showingBootScreen = false;

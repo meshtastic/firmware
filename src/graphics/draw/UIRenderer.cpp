@@ -1150,7 +1150,22 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
     display->setFont(FONT_SMALL);
     if (bootString != nullptr) {
-        display->drawString(x + getStringCenteredX(bootString), y + SCREEN_HEIGHT - 2 * FONT_HEIGHT_MEDIUM, bootString);
+        static uint8_t bootStringStep = 0;
+        char stringCharacter = '.';
+        uint32_t stringWidth = getStringCenteredX(bootString);
+        if (bootStringStep == 0) {
+            stringCharacter = '.';
+            bootStringStep++;
+        } else if (bootStringStep == 1) {
+            stringCharacter = 'o';
+            bootStringStep++;
+        } else if (bootStringStep == 2) {
+            stringCharacter = 'O';
+            bootStringStep = 0;
+        }
+        char tmpBootString[40];
+        snprintf(tmpBootString, sizeof(tmpBootString), "%s %c", bootString, stringCharacter);
+        display->drawString(x + stringWidth, y + SCREEN_HEIGHT - 2 * FONT_HEIGHT_MEDIUM, tmpBootString);
     }
     // Draw region in upper left
     if (upperMsg)
