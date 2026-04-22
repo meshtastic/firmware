@@ -70,6 +70,28 @@ class HopScalingTestShim : public HopScalingModule
     void rollHourTest() { rollHour(); }
     void setHistogramDenominator(uint8_t d) { setSamplingDenominator(d); }
 
+    /// Directly set denominator state, bypassing any scale-up/down logic.
+    /// Used by tests that need a specific pre-condition without triggering trim.
+    void forceFilterDenomState(uint8_t samp, uint8_t filt, uint8_t holdRolls)
+    {
+        samplingDenominator = samp;
+        filteringDenominator = filt;
+        filteringDenomHoldRollsRemaining = holdRolls;
+    }
+    uint8_t getFilteringDenomHoldRollsRemaining() const { return filteringDenomHoldRollsRemaining; }
+
+    /// Insert an entry with an explicit hash, bypassing the sampling filter.
+    /// Used to fill the histogram to a known state without depending on hashNodeId distribution.
+    void forceInsertEntry(uint16_t hash, uint8_t hops)
+    {
+        if (count < CAPACITY) {
+            entries[count].nodeHash = hash;
+            entries[count].hops_away = hops;
+            entries[count].seenHoursAgo = 1u;
+            count++;
+        }
+    }
+
     // Size introspection for test_memory_layout
     static constexpr size_t sizeofSelf() { return sizeof(HopScalingModule); }
 };
@@ -467,6 +489,140 @@ void test_startup_blank_state()
     hopScalingModule = nullptr;
 }
 
+// ---------------------------------------------------------------------------
+// Tests — Denominator state machine
+// ---------------------------------------------------------------------------
+
+void test_denominator_rises_on_overflow()
+{
+    TEST_MESSAGE("=== samplingDenominator doubles when histogram overflows ===");
+    TEST_MESSAGE("Fill to > FILL_HIGH_PCT with forceInsertEntry, then trigger via samplePacketForHistogram.");
+    TEST_MESSAGE("Expectation: samp/filt both double to 2, hold set to FILTER_DENOM_HOLD_ROLLS.");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+
+    // Insert 103 entries with hashes 1..103 (all distinct, no sampling-filter skew).
+    // 103 / 128 = 80.4% fill, which meets FILL_HIGH_PCT=80.
+    // Odd hashes (1,3,...,103) will be evicted when denom doubles to 2; even ones survive.
+    static constexpr uint8_t FILL_COUNT = 103u;
+    for (uint8_t i = 1; i <= FILL_COUNT; i++)
+        shim->forceInsertEntry(i, 2u);
+
+    TEST_ASSERT_EQUAL_UINT8(HopScalingModule::DENOM_MIN, shim->getSamplingDenominator());
+    TEST_ASSERT_EQUAL_UINT8(HopScalingModule::DENOM_MIN, shim->getFilteringDenominator());
+    TEST_ASSERT_EQUAL_UINT8(0u, shim->getFilteringDenomHoldRollsRemaining());
+    TEST_ASSERT_EQUAL_UINT8(FILL_COUNT, shim->getEntryCount());
+
+    // A new node passes the denom=1 admission gate; fill ≥ 80% triggers trimIfNeeded → doubling.
+    shim->samplePacketForHistogram(0xB0000000u, 1u);
+
+    TEST_MSG_FMT("After scale-up: samp=1/%u filt=1/%u holdRolls=%u entries=%u", shim->getSamplingDenominator(),
+                 shim->getFilteringDenominator(), shim->getFilteringDenomHoldRollsRemaining(), shim->getEntryCount());
+
+    TEST_ASSERT_EQUAL_UINT8(2u, shim->getSamplingDenominator());
+    TEST_ASSERT_EQUAL_UINT8(2u, shim->getFilteringDenominator());
+    TEST_ASSERT_EQUAL_UINT8(HopScalingModule::FILTER_DENOM_HOLD_ROLLS, shim->getFilteringDenomHoldRollsRemaining());
+    // After evicting entries with (hash & 1) != 0, roughly half the entries remain.
+    TEST_ASSERT_LESS_THAN_UINT8(FILL_COUNT, shim->getEntryCount());
+
+    hopScalingModule = nullptr;
+}
+
+void test_filtering_denom_hold_counts_down()
+{
+    TEST_MESSAGE("=== filteringDenominator held while hold counter > 0 ===");
+    TEST_MESSAGE("Force filt=4 samp=1 hold=3; verify no step for 2 rolls, then step fires on roll 3.");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+
+    // samp=DENOM_MIN so scale-down in step 4 can't go lower; hold=3 for a short, fast test.
+    shim->forceFilterDenomState(HopScalingModule::DENOM_MIN, 4u, 3u);
+
+    shim->rollHourTest(); // hold 3→2, no step
+    TEST_ASSERT_EQUAL_UINT8(4u, shim->getFilteringDenominator());
+    TEST_ASSERT_EQUAL_UINT8(2u, shim->getFilteringDenomHoldRollsRemaining());
+
+    shim->rollHourTest(); // hold 2→1, no step
+    TEST_ASSERT_EQUAL_UINT8(4u, shim->getFilteringDenominator());
+    TEST_ASSERT_EQUAL_UINT8(1u, shim->getFilteringDenomHoldRollsRemaining());
+
+    // Roll 3: hold 1→0, step fires — filteringDenominator halves to max(2, samp=1) = 2.
+    shim->rollHourTest();
+    TEST_MSG_FMT("After hold expires: filt=1/%u samp=1/%u holdRolls=%u", shim->getFilteringDenominator(),
+                 shim->getSamplingDenominator(), shim->getFilteringDenomHoldRollsRemaining());
+    TEST_ASSERT_EQUAL_UINT8(2u, shim->getFilteringDenominator());
+    TEST_ASSERT_EQUAL_UINT8(0u, shim->getFilteringDenomHoldRollsRemaining());
+
+    hopScalingModule = nullptr;
+}
+
+void test_filtering_denom_steps_down_gradually()
+{
+    TEST_MESSAGE("=== filteringDenominator descends one halving per rollHour() after hold expires ===");
+    TEST_MESSAGE("Force filt=8 samp=1 hold=1; expect 8→4→2→1 over 3 rolls, then stable.");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+
+    shim->forceFilterDenomState(HopScalingModule::DENOM_MIN, 8u, 1u);
+
+    shim->rollHourTest(); // hold 1→0, step: 8/2=4 > 1, filt=4
+    TEST_ASSERT_EQUAL_UINT8(4u, shim->getFilteringDenominator());
+
+    shim->rollHourTest(); // hold=0 (no decrement), step: 4/2=2 > 1, filt=2
+    TEST_ASSERT_EQUAL_UINT8(2u, shim->getFilteringDenominator());
+
+    shim->rollHourTest(); // step: 2/2=1, not > samp=1, filt=samp=1 — converged
+    TEST_ASSERT_EQUAL_UINT8(1u, shim->getFilteringDenominator());
+
+    shim->rollHourTest(); // filt==samp, outer if is false — no further change
+    TEST_ASSERT_EQUAL_UINT8(1u, shim->getFilteringDenominator());
+    TEST_ASSERT_EQUAL_UINT8(HopScalingModule::DENOM_MIN, shim->getSamplingDenominator());
+
+    hopScalingModule = nullptr;
+}
+
+void test_full_at_denom_max_drops_entry()
+{
+    TEST_MESSAGE("=== Full histogram at DENOM_MAX drops new entries ===");
+    TEST_MESSAGE("Fill CAPACITY entries, force samp=DENOM_MAX, sample admissible node.");
+    TEST_MESSAGE("Expectation: entry count stays at CAPACITY (LOG_WARN fires; visible in test output).");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+    shim->setHashSeed(0); // deterministic hash for admissible-ID search
+
+    shim->forceFilterDenomState(HopScalingModule::DENOM_MAX, HopScalingModule::DENOM_MAX, 0u);
+
+    // Fill with odd hashes 1,3,5,...,(2*CAPACITY-1). None are multiples of 128, so none
+    // collide with the admissible node's hash (which must be a multiple of 128).
+    for (uint16_t i = 0; i < HopScalingModule::CAPACITY; i++)
+        shim->forceInsertEntry(static_cast<uint16_t>(2u * i + 1u), 1u);
+
+    TEST_ASSERT_EQUAL_UINT8(HopScalingModule::CAPACITY, shim->getEntryCount());
+
+    // Find a node ID whose hash passes DENOM_MAX, i.e. (hash & 127) == 0.
+    uint32_t admissibleId = 0;
+    for (uint32_t id = 1u; id < 0x10000u; id++) {
+        if ((shim->hashNodeIdPublic(id) & (HopScalingModule::DENOM_MAX - 1u)) == 0u) {
+            admissibleId = id;
+            break;
+        }
+    }
+    TEST_ASSERT_NOT_EQUAL(0u, admissibleId); // sanity: the hash space is dense enough to find one quickly
+
+    shim->samplePacketForHistogram(admissibleId, 3u);
+
+    TEST_MSG_FMT("After drop attempt: entries=%u CAPACITY=%u admissibleId=0x%08x hash=0x%04x", shim->getEntryCount(),
+                 static_cast<unsigned>(HopScalingModule::CAPACITY), admissibleId,
+                 static_cast<unsigned>(shim->hashNodeIdPublic(admissibleId)));
+    TEST_ASSERT_EQUAL_UINT8(HopScalingModule::CAPACITY, shim->getEntryCount());
+
+    hopScalingModule = nullptr;
+}
+
 void test_scenario_summary_output()
 {
     TEST_MESSAGE("=== Scenario summary ===");
@@ -478,6 +634,14 @@ void test_scenario_summary_output()
     TEST_MESSAGE("E: Megamesh    | 199    | 30/40/35/30/20/15/14/15 h0-7 | 0-1    | Dense low-hop histogram");
     TEST_MESSAGE("F: Transition  | 22->72 | Chain -> dense local         | 7-><=3 | Adapts to new neighbors");
     TEST_MESSAGE("G: Persistence | --     | --                           | --     | Eviction avg survives reboot");
+    TEST_MESSAGE("");
+    TEST_MESSAGE("=== Denominator state machine summary ===");
+    TEST_MESSAGE("Test                              | Pre-condition                  | Expectation");
+    TEST_MESSAGE("H: Rises on overflow              | 103 entries forced, denom=1    | samp/filt→2, holdRolls=13");
+    TEST_MESSAGE(
+        "I: Hold counts down               | filt=4 samp=1 hold=3           | no step for 2 rolls, step on roll 3: filt→2");
+    TEST_MESSAGE("J: Steps down gradually           | filt=8 samp=1 hold=1           | 8→4→2→1 over 3 rolls, stable on 4th");
+    TEST_MESSAGE("K: Full at DENOM_MAX drops entry  | 128 entries, samp=filt=128     | count stays 128, LOG_WARN emitted");
 }
 
 static void test_memory_layout()
@@ -538,6 +702,10 @@ void setup()
     RUN_TEST(test_startup_blank_state);
     RUN_TEST(test_scenario_summary_output);
     RUN_TEST(test_memory_layout);
+    RUN_TEST(test_denominator_rises_on_overflow);
+    RUN_TEST(test_filtering_denom_hold_counts_down);
+    RUN_TEST(test_filtering_denom_steps_down_gradually);
+    RUN_TEST(test_full_at_denom_max_drops_entry);
     exit(UNITY_END());
 }
 

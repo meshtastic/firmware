@@ -18,6 +18,8 @@ constexpr uint32_t RUN_INTERVAL_MS = 5 * 60 * 1000UL; // Emit micro-summary ever
 // RUNS_PER_HOUR is a public class constant in HopScalingModule.h
 
 // Persistence
+// Note: this only needs incrementing if the published arrangement changes. For testing purposes, or prior to widespread release,
+// it can stay the same even if the internal layout changes.
 constexpr uint32_t HISTOGRAM_STATE_MAGIC = 0x48535432; // 'HST2' — layout v2
 constexpr uint8_t HISTOGRAM_STATE_VERSION = 1;
 constexpr const char *HISTOGRAM_STATE_FILE = "/prefs/hopScalingState.bin";
@@ -28,7 +30,7 @@ struct PersistedHistogram {
     uint8_t version;
     uint8_t samplingDenominator;
     uint8_t filteringDenominator;
-    uint32_t filterDenomRemainMs; // remaining hold duration; 0 when not elevated
+    uint8_t filterDenomHoldRollsRemaining; // rollHour() calls remaining in the hold; 0 when expired/not active
     uint16_t hashSeed;
     Record entries[HopScalingModule::CAPACITY]; // full 512-byte array; count derived on load
 };
@@ -55,7 +57,7 @@ void HopScalingModule::clear()
     count = 0;
     samplingDenominator = DENOM_MIN;
     filteringDenominator = DENOM_MIN;
-    filteringDenomElevatedAt = 0;
+    filteringDenomHoldRollsRemaining = 0;
     lastPerHopCounts = {};
     lastSuggestedHop = MAX_HOP;
     lastPoliteness = POLITENESS_DEFAULT;
@@ -87,20 +89,15 @@ void HopScalingModule::saveToDisk() const
         state.version = HISTOGRAM_STATE_VERSION;
         state.samplingDenominator = samplingDenominator;
         state.filteringDenominator = filteringDenominator;
-        // Persist remaining hold time rather than the absolute timestamp so the value is
-        // still meaningful after a reboot (nowMs() resets to 0 on restart).
-        if (filteringDenominator > samplingDenominator) {
-            const uint32_t elapsed = nowMs() - filteringDenomElevatedAt;
-            state.filterDenomRemainMs = (elapsed < FILTER_DENOM_HOLD_MS) ? (FILTER_DENOM_HOLD_MS - elapsed) : 0u;
-        }
+        state.filterDenomHoldRollsRemaining = filteringDenomHoldRollsRemaining;
         state.hashSeed = hashSeed;
         // Save all CAPACITY slots; count is reconstructed on load by scanning seenHoursAgo.
         memcpy(state.entries, entries, sizeof(state.entries));
         file.write(reinterpret_cast<const uint8_t *>(&state), sizeof(state));
         file.flush();
         file.close();
-        LOG_DEBUG("[HOPSCALE] Saved: count=%u samp=1/%u filt=1/%u holdRemainMs=%u", count, samplingDenominator,
-                  filteringDenominator, state.filterDenomRemainMs);
+        LOG_DEBUG("[HOPSCALE] Saved: count=%u samp=1/%u filt=1/%u holdRollsRemaining=%u", count, samplingDenominator,
+                  filteringDenominator, state.filterDenomHoldRollsRemaining);
     } else {
         LOG_WARN("[HOPSCALE] Failed to open %s for write", HISTOGRAM_STATE_FILE);
     }
@@ -134,18 +131,13 @@ void HopScalingModule::loadFromDisk()
     count = restored;
     samplingDenominator = state.samplingDenominator;
     filteringDenominator = state.filteringDenominator;
-    // Back-date the elevation timestamp so the remaining hold duration is honoured.
-    if (state.filterDenomRemainMs > 0 && filteringDenominator > samplingDenominator) {
-        filteringDenomElevatedAt = nowMs() - (FILTER_DENOM_HOLD_MS - state.filterDenomRemainMs);
-    } else {
-        filteringDenomElevatedAt = 0;
-    }
+    filteringDenomHoldRollsRemaining = state.filterDenomHoldRollsRemaining;
     // denominatorHistory can't be recovered; initialise all slots to filteringDenominator so
     // the first few post-reboot scaledPerHour values use a safe (slightly conservative) multiplier.
     memset(denominatorHistory, filteringDenominator, sizeof(denominatorHistory));
     hashSeed = state.hashSeed;
-    LOG_INFO("[HOPSCALE] Restored: count=%u samp=1/%u filt=1/%u holdRemainMs=%u", count, samplingDenominator,
-             filteringDenominator, state.filterDenomRemainMs);
+    LOG_INFO("[HOPSCALE] Restored: count=%u samp=1/%u filt=1/%u holdRollsRemaining=%u", count, samplingDenominator,
+             filteringDenominator, state.filterDenomHoldRollsRemaining);
 #endif
 }
 
@@ -186,16 +178,29 @@ void HopScalingModule::samplePacketForHistogram(uint32_t nodeId, uint8_t hopCoun
         entries[count].hops_away = hopCount;
         entries[count].seenHoursAgo = 1u; // mark current hour
         count++;
+    } else {
+        LOG_WARN("[HOPSCALE] Histogram full at samp=1/%u (DENOM_MAX=%u); dropping node hash=0x%04x; hop recommendation may be "
+                 "skewed!!!",
+                 samplingDenominator, DENOM_MAX, hash);
     }
-    // If still full after trimming, silently drop the new entry
 }
 
 void HopScalingModule::rollHour()
 {
-    // 1. Tally per-hop counts for entries that pass the filtering denominator
-    //    AND have been seen in at least one of the past 13 hours.
-    //    Also tally per-hour seen counts across all 13 seen-bit slots (before the bitmap shift),
-    //    and derive mesh trend counters from the same pass.
+    // Advance denominatorHistory before the tally so each slot h holds the filteringDenominator
+    // that was active when seenHoursAgo bit h was set.  hourlyRaw[h] is then gated per-slot by
+    // denominatorHistory[h], giving a correct population estimate for each historical hour even
+    // when filteringDenominator changes between rolls.  Scale-up backfills the entire array so
+    // the invariant holds retroactively (see trimIfNeeded()).
+    for (uint8_t h = 12; h > 0; h--)
+        denominatorHistory[h] = denominatorHistory[h - 1];
+    denominatorHistory[0] = filteringDenominator;
+
+    // 1. Tally per-hop counts and per-slot hourly activity in one pass.
+    //    hourlyRaw[h]: gated per-slot by denominatorHistory[h] so the raw count and its
+    //      multiplier are always consistent, even across filteringDenominator transitions.
+    //    counts.*: gated uniformly by the current filteringDenominator for a consistent
+    //      population estimate used by the hop-walk recommendation (step 2).
     PerHopCounts counts{};
     uint16_t hourlyRaw[13] = {};
     uint16_t trendNewThisHour = 0;
@@ -204,13 +209,19 @@ void HopScalingModule::rollHour()
     uint16_t trendOlderThan4h = 0;
     uint16_t trendAgingOut = 0;
     for (uint8_t i = 0; i < count; i++) {
-        if (!passesFilter(entries[i].nodeHash, filteringDenominator))
-            continue;
+        const uint16_t hash = entries[i].nodeHash;
         const uint32_t seen = entries[i].seenHoursAgo;
+
+        // Per-slot hourly activity: gate each slot by its own denominator.
         for (uint8_t h = 0; h < 13; h++) {
-            if (seen & (1u << h))
+            if ((seen & (1u << h)) && passesFilter(hash, denominatorHistory[h]))
                 hourlyRaw[h]++;
         }
+
+        // Hop counts and trend stats: uniform current-denominator gate.
+        if (!passesFilter(hash, filteringDenominator))
+            continue;
+
         if (seenInLast13h(entries[i])) {
             counts.perHop[entries[i].hops_away]++;
             counts.total++;
@@ -249,12 +260,8 @@ void HopScalingModule::rollHour()
         }
     }
 
-    // 1c. Scale and cache trend stats using per-hour denominator history.
+    // 1c. Scale and cache trend stats (denominatorHistory already advanced above).
     {
-        for (uint8_t h = 12; h > 0; h--)
-            denominatorHistory[h] = denominatorHistory[h - 1];
-        denominatorHistory[0] = filteringDenominator;
-
         MeshTrendStats t{};
         for (uint8_t h = 0; h < 13; h++) {
             const uint32_t s = static_cast<uint32_t>(hourlyRaw[h]) * denominatorHistory[h];
@@ -314,7 +321,15 @@ void HopScalingModule::rollHour()
                  ts.returningThisHour, ts.lapsedSinceLastHour, ts.olderThan4h, ts.agingOut);
     }
 
-    // 4. Scale-down check: if fewer than FILL_LOW_PCT% of capacity are active, halve samplingDenominator.
+    // 4. Scale-down check: if fewer than FILL_LOW_PCT% of capacity pass the filteringDenominator
+    //    gate and are active, halve samplingDenominator to admit more nodes.
+    //    Note: during a filteringDenominator hold period, lowering samplingDenominator does not
+    //    immediately improve counts.total (new admissions don't pass the elevated
+    //    filteringDenominator).  On a genuinely quieting mesh this check can therefore fire on
+    //    consecutive hours, cascading samplingDenominator toward DENOM_MIN.  This is intentional:
+    //    rapid re-admission allows quick recovery if the mesh returns.  The hop recommendation
+    //    stays conservative (MAX_HOP) throughout because filteringDenominator remains elevated;
+    //    step 5 below re-synchronises the denominators once the hold expires.
     if (counts.total * 100u < static_cast<uint32_t>(CAPACITY) * FILL_LOW_PCT) {
         if (samplingDenominator > DENOM_MIN) {
             samplingDenominator = static_cast<uint8_t>(samplingDenominator / 2u);
@@ -323,11 +338,20 @@ void HopScalingModule::rollHour()
         }
     }
 
-    // 5. Drop filteringDenominator back to samplingDenominator once the 13-h hold has expired.
+    // 5. Tick down the hold counter; once it reaches zero, halve filteringDenominator toward
+    //    samplingDenominator once per rollHour() (= once per hour) rather than a single jump:
+    //    avoids a sudden large change in the hop-walk count when samplingDenominator cascaded
+    //    down significantly during the hold period.  No new hold is placed on each step — the
+    //    13-roll hold already guaranteed that re-admitted nodes have full seenHoursAgo history;
+    //    further pacing is provided naturally by the 1-step-per-hour rate.  denominatorHistory
+    //    is updated automatically by the shift at the top of rollHour(), so no backfill here.
     if (filteringDenominator > samplingDenominator) {
-        if ((nowMs() - filteringDenomElevatedAt) >= FILTER_DENOM_HOLD_MS) {
-            filteringDenominator = samplingDenominator;
-            LOG_INFO("[HOPSCALE] Filter denom dropped to %u after 13-h hold", filteringDenominator);
+        if (filteringDenomHoldRollsRemaining > 0)
+            filteringDenomHoldRollsRemaining--;
+        if (filteringDenomHoldRollsRemaining == 0) {
+            const uint8_t stepped = static_cast<uint8_t>(filteringDenominator / 2u);
+            filteringDenominator = (stepped > samplingDenominator) ? stepped : samplingDenominator;
+            LOG_INFO("[HOPSCALE] Filter denom stepped to %u (samp=1/%u)", filteringDenominator, samplingDenominator);
         }
     }
 
@@ -364,9 +388,18 @@ void HopScalingModule::trimIfNeeded()
     if (getFillPercentage() >= FILL_HIGH_PCT && samplingDenominator < DENOM_MAX) {
         samplingDenominator = static_cast<uint8_t>(
             std::min<uint16_t>(static_cast<uint16_t>(samplingDenominator) * 2u, static_cast<uint16_t>(DENOM_MAX)));
-        filteringDenominator = samplingDenominator;
-        filteringDenomElevatedAt = nowMs();
-        LOG_INFO("[HOPSCALE] Scale-up: denom doubled to %u", samplingDenominator);
+        filteringDenominator = std::max(filteringDenominator, samplingDenominator);
+        filteringDenomHoldRollsRemaining = FILTER_DENOM_HOLD_ROLLS;
+        // Raise any denominatorHistory slot that is below the new filteringDenominator.
+        // Slots already above it (recorded during a prior scale-up that hasn't fully stepped
+        // down yet) are left untouched: eviction at samplingDenominator retains exactly those
+        // entries, so the old higher gate remains accurate for those historical hours.
+        // Slots below the new value must be raised because the eviction removed entries that
+        // had been admitted at the looser old gate — the remaining entries represent a 1/N
+        // subsample where N is the new filteringDenominator, not the old smaller value.
+        for (uint8_t h = 0; h < 13; h++)
+            denominatorHistory[h] = std::max(denominatorHistory[h], filteringDenominator);
+        LOG_INFO("[HOPSCALE] Scale-up: samp denom doubled to %u (filt=%u)", samplingDenominator, filteringDenominator);
 
         newCount = 0;
         for (uint8_t i = 0; i < count; i++) {
@@ -388,10 +421,10 @@ void HopScalingModule::logStatusReport(bool didHourlyUpdate) const
     const uint8_t runsRemaining = didHourlyUpdate ? RUNS_PER_HOUR : (RUNS_PER_HOUR - runsSinceLastHourlyUpdate);
     const uint8_t minsUntilRollover = runsRemaining * (RUN_INTERVAL_MS / (60 * 1000UL));
 
-    LOG_INFO("[HOPSCALE] hop=%u hourly=%u histActive=%u fill=%u%% samp=1/%u filt=1/%u entries=%u lastCounted=%u polite=%.2f "
+    LOG_INFO("[HOPSCALE] hop=%u histActive=%u fill=%u%% samp=1/%u filt=1/%u entries=%u lastCounted=%u polite=%.2f "
              "nextRoll=%umin",
-             lastRequiredHop, didHourlyUpdate ? 1u : 0u, histActive ? 1u : 0u, getFillPercentage(), samplingDenominator,
-             filteringDenominator, count, histCounts.total, static_cast<double>(lastPoliteness), minsUntilRollover);
+             lastRequiredHop, histActive ? 1u : 0u, getFillPercentage(), samplingDenominator, filteringDenominator, count,
+             histCounts.total, static_cast<double>(lastPoliteness), minsUntilRollover);
 
     LOG_INFO("[HOPSCALE] nodes perHop: [%u %u %u %u %u %u %u %u]", histCounts.perHop[0], histCounts.perHop[1],
              histCounts.perHop[2], histCounts.perHop[3], histCounts.perHop[4], histCounts.perHop[5], histCounts.perHop[6],

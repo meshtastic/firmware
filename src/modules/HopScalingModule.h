@@ -65,21 +65,36 @@ class HopScalingModule : private concurrency::OSThread
     static constexpr uint8_t FILL_HIGH_PCT = 80;
     static constexpr uint8_t FILL_LOW_PCT = 20;
 
-    // How long filteringDenominator is held at an elevated level before it may drop
-
-    static constexpr uint32_t FILTER_DENOM_HOLD_MS = 13UL * 60UL * 60UL * 1000UL; // 13 h
+    // How long filteringDenominator is held at an elevated level before it may drop.
+    //
+    // This value is deliberately equal to the seenHoursAgo window (13 hours / 13 bits).
+    // Invariant: every entry that existed when a scale-up fired had seenHoursAgo != 0 at
+    // that moment (trimIfNeeded() evicts stale entries before doubling the denominator),
+    // so it remains seenInLast13h for at most 13 more rollHour() calls — exactly the
+    // hold duration.  That means entries from the scale-up event keep counts.total above
+    // the scale-down threshold for the entire hold period under normal (active) mesh
+    // conditions.  On a genuinely quieting mesh the scale-down CAN fire before the hold
+    // expires — each firing halves samplingDenominator but filteringDenominator stays
+    // elevated, so the hop recommendation correctly stays conservative (MAX_HOP) while
+    // the cascade runs.  The cascade is bounded at DENOM_MIN (7 halvings from DENOM_MAX);
+    //    when the hold finally expires, step 5 of rollHour() halves filteringDenominator
+    //    once per hour (rather than jumping directly to samplingDenominator) until the two
+    //    converge, giving the hop-walk a gradual, 1-step-per-hour descent.
+    static constexpr uint32_t FILTER_DENOM_HOLD_MS = 13UL * 60UL * 60UL * 1000UL; // 13 h (documentation only)
+    // Number of rollHour() calls the hold spans — equals the seenHoursAgo window width.
+    // filteringDenomHoldRollsRemaining is initialised to this value on scale-up and
+    // decremented once per rollHour(); step-down begins when it reaches zero.
+    static constexpr uint8_t FILTER_DENOM_HOLD_ROLLS = 13u;
 
     // Hop-walk: target cumulative affected-node count when choosing a hop limit
     static constexpr uint16_t TARGET_AFFECTED_NODES = 40;
 
     // Politeness factors for the one-hop extension check in the hop walk
-
     static constexpr float POLITENESS_GENEROUS = 2.0f; // Quiet mesh: allow doubling
     static constexpr float POLITENESS_DEFAULT = 1.5f;  // Stable mesh: allow 50% growth
     static constexpr float POLITENESS_STRICT = 1.25f;  // Busy mesh: allow 25% growth
 
     // Activity weight thresholds (ratio of 0-2 h window vs 1-3 h window)
-
     static constexpr float ACTIVITY_WEIGHT_GENEROUS_MAX = 0.9f; // Below this: GENEROUS
     static constexpr float ACTIVITY_WEIGHT_STRICT_MIN = 1.2f;   // Above this: STRICT
 
@@ -162,7 +177,7 @@ class HopScalingModule : private concurrency::OSThread
     {
         samplingDenominator = (d < DENOM_MIN) ? DENOM_MIN : (d > DENOM_MAX ? DENOM_MAX : d);
         filteringDenominator = samplingDenominator;
-        filteringDenomElevatedAt = 0;
+        filteringDenomHoldRollsRemaining = 0;
     }
 
 #ifdef UNIT_TEST
@@ -188,7 +203,8 @@ class HopScalingModule : private concurrency::OSThread
     /// 2. Walks the scaled hop buckets and returns the recommended hop limit.
     /// 3. Logs scaled per-hop counts and recommendation.
     /// 4. Checks for scale-down (< FILL_LOW_PCT of capacity pass filteringDenominator).
-    /// 5. Drops filteringDenominator to samplingDenominator if the 13-h hold has expired.
+    /// 5. Decrements filteringDenomHoldRollsRemaining (if > 0); once it reaches zero, halves
+    ///    filteringDenominator once toward samplingDenominator per rollHour() call.
     /// 6. Shifts all seen bitmaps left by one hour slot.
     void rollHour();
     // -----------------------------------------------------------------------
@@ -219,10 +235,43 @@ class HopScalingModule : private concurrency::OSThread
 
     // -----------------------------------------------------------------------
     // Denominator state
+    //
+    // Two separate denominators control two distinct gates:
+    //
+    //   samplingDenominator  — admission gate.  A node is added/updated only when
+    //     passesFilter(hash, samplingDenominator).  Lower value = more permissive =
+    //     more nodes enter = represents recent mesh state.
+    //
+    //   filteringDenominator — counting gate.  The hop-walk tally in rollHour() only
+    //     counts entries that pass passesFilter(hash, filteringDenominator).  It moves
+    //     up with samplingDenominator immediately (scale-up) but is held at the
+    //     elevated value for FILTER_DENOM_HOLD_MS (13 h) after any scale-up before it
+    //     may drop back down (scale-down).
+    //
+    // Why the estimate is invariant: passesFilter uses a hash-based uniform subsample.
+    // For any two powers-of-two denominators D ≤ F, the fraction of D-sampled entries
+    // that also pass F is exactly D/F.  Therefore:
+    //   raw_count × F  =  (total × D/F) × F  =  total × D
+    // The population estimate is the same whether we count with D or with F.
+    // The hold period is not about accuracy — it is about stability: it prevents the
+    // hop recommendation from reacting to recently-admitted nodes that have not yet
+    // accumulated enough seenHoursAgo history to be statistically reliable.
+    //
+    //   denominatorHistory[h]  — the filteringDenominator used to both gate and scale
+    //     hourlyRaw[h].  Invariant: denominatorHistory[h] always equals the
+    //     filteringDenominator that was active when seenHoursAgo bit h was set.
+    //     rollHour() advances the array at the very start (before the tally loop), then
+    //     gates hourlyRaw[h] per-slot by denominatorHistory[h] — each slot's raw count
+    //     and multiplier are therefore always consistent, even when filteringDenominator
+    //     changes between rolls (e.g. hold expiry).  On scale-up (trimIfNeeded()), the
+    //     entire array is backfilled uniformly with the new filteringDenominator to
+    //     preserve the invariant retroactively for all 13 slots.  Initialised to
+    //     DENOM_MIN (1); scaledPerHour slots that draw from a 1 entry are unscaled —
+    //     correct for a fresh instance with no prior history.
     // -----------------------------------------------------------------------
     uint8_t samplingDenominator = DENOM_MIN;
     uint8_t filteringDenominator = DENOM_MIN;
-    uint32_t filteringDenomElevatedAt = 0;
+    uint8_t filteringDenomHoldRollsRemaining = 0; // counts down from FILTER_DENOM_HOLD_ROLLS to 0; step-down fires at 0
     uint8_t denominatorHistory[13] = {};
     uint16_t hashSeed = 0;
 
