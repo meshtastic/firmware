@@ -171,9 +171,10 @@ void aes128_cmac(const uint8_t key[16], const uint8_t *data, size_t len, uint8_t
     cmac_dbl(K1, L);
     cmac_dbl(K2, K1);
 
-    // Empty-message fast-path per NIST SP 800-38B. Skips all reads from `data`, which
-    // lets aes128_cmac(..., nullptr, 0, ...) be a legal self-test call without
-    // triggering static-analysis warnings about null dereference or out-of-bounds.
+    // Empty-message case per NIST SP 800-38B:
+    //   CMAC("") = AES(K, (0x80 || 0^15) XOR K2)
+    // Handled as an early return so the non-empty path below need not special-case len=0,
+    // and so `data` may legally be nullptr when callers pass an empty message.
     if (len == 0) {
         uint8_t state[16] = {0x80};
         for (int j = 0; j < 16; j++)
@@ -501,12 +502,8 @@ bool Client::getRandom(uint8_t *out, size_t n, uint32_t timeout_ms)
     //   CLA=0x80, INS=INS_MGMT=0x04, P1=P1_DEFAULT=0x00, P2=P2_RANDOM=0x49
     //   Body: TLV(TAG_1=0x41, 2-byte size big-endian)
     //   Case 4 (Le=0x00) -- response returns TLV(0x41, <n> random bytes) + SW.
-    //
-    // Every SE050 command under INS_MGMT (deleteObject uses P2=0x28 etc.) is
-    // distinguished by P2; GetRandom is P2=0x49. An earlier version had the byte
-    // layout wrong (INS=0x49, P1=0x04, P2=0x00, Lc=0x05) and failed with SW=6D00
-    // ("INS not supported") or SW=6A80 ("wrong data") depending on which bug
-    // you hit first.
+    // As with other INS_MGMT commands (e.g. deleteObject with P2=0x28), the specific
+    // operation is selected by P2 rather than INS.
     uint8_t apdu[10];
     apdu[0] = 0x80;
     apdu[1] = 0x04; // INS_MGMT
@@ -581,11 +578,11 @@ bool Client::openPlatformScp03(const uint8_t encKey[16], const uint8_t macKey[16
         }
     }
 
-    // 1. Generate 8-byte host challenge from hardware entropy.
-    // We use HardwareRNG::fill() to access the native TRNG per-platform (ESP32, nRF52, etc)
-    // without invoking the Arduino software PRNG. To protect against platforms where
-    // HardwareRNG silently falls back to a deterministic std::random_device, we XOR the
-    // host entropy with bytes from the SE050's own certified TRNG.
+    // 1. Generate 8-byte host challenge from hybrid entropy:
+    //    HardwareRNG::fill() (platform TRNG) XOR'd with the SE050's certified TRNG.
+    // XOR of two independent entropy sources is unpredictable as long as at least one
+    // is, so the challenge stays safe on any platform where HardwareRNG::fill falls
+    // back to std::random_device.
     uint8_t hostChal[8] = {0};
     if (!HardwareRNG::fill(hostChal, sizeof(hostChal), true)) {
         LOG_WARN("SE050 SCP03: HardwareRNG::fill failed, relying solely on chip TRNG");
