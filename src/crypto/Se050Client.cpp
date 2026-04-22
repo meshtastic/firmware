@@ -497,16 +497,25 @@ bool Client::getRandom(uint8_t *out, size_t n, uint32_t timeout_ms)
     if (out == nullptr || n == 0 || n > 255)
         return false;
 
-    // APDU: 80 49 04 00 Lc 41 02 <len_hi> <len_lo> Le=00
-    uint8_t apdu[11];
+    // GetRandom per NXP Plug & Trust Se05x_API_GetRandom:
+    //   CLA=0x80, INS=INS_MGMT=0x04, P1=P1_DEFAULT=0x00, P2=P2_RANDOM=0x49
+    //   Body: TLV(TAG_1=0x41, 2-byte size big-endian)
+    //   Case 4 (Le=0x00) -- response returns TLV(0x41, <n> random bytes) + SW.
+    //
+    // Every SE050 command under INS_MGMT (deleteObject uses P2=0x28 etc.) is
+    // distinguished by P2; GetRandom is P2=0x49. An earlier version had the byte
+    // layout wrong (INS=0x49, P1=0x04, P2=0x00, Lc=0x05) and failed with SW=6D00
+    // ("INS not supported") or SW=6A80 ("wrong data") depending on which bug
+    // you hit first.
+    uint8_t apdu[10];
     apdu[0] = 0x80;
-    apdu[1] = 0x49; // INS_MGMT (Crypto) -- actually INS_CRYPTO
-    apdu[2] = 0x04; // P1_DEFAULT = RANDOM
-    apdu[3] = 0x00;
-    apdu[4] = 0x05; // Lc
+    apdu[1] = 0x04; // INS_MGMT
+    apdu[2] = 0x00; // P1_DEFAULT
+    apdu[3] = 0x49; // P2_RANDOM
+    apdu[4] = 0x04; // Lc = length of TLV body only (not including Le)
     apdu[5] = 0x41; // TAG_1
-    apdu[6] = 0x02;
-    apdu[7] = 0x00;
+    apdu[6] = 0x02; // length of value field (2 bytes, big-endian size)
+    apdu[7] = 0x00; // size high byte (we never ask for > 255 bytes)
     apdu[8] = (uint8_t)(n & 0xFF);
     apdu[9] = 0x00; // Le
 
