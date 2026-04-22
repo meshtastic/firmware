@@ -77,6 +77,10 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,
                                                                  meshtastic_AdminMessage *response) override;
+
+#if HAS_LIBNOTIFY
+    void portduinoNotify(const meshtastic_MeshPacket &mp);
+#endif
 };
 
 extern ExternalNotificationModule *externalNotificationModule;

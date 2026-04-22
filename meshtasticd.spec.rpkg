@@ -50,6 +50,7 @@ BuildRequires: pkgconfig(x11)
 BuildRequires: pkgconfig(libinput)
 BuildRequires: pkgconfig(xkbcommon-x11)
 BuildRequires: pkgconfig(sdl2)
+BuildRequires: pkgconfig(libnotify)
 
 # libbsd is needed on older Fedora/RHEL to provide 'strlcpy'
 %if 0%{?fedora} >= 39 || 0%{?rhel} >= 10
@@ -112,6 +113,10 @@ cp -r web/* %{buildroot}%{_datadir}/meshtasticd/web
 # Install default SSL storage directory (for web)
 mkdir -p %{buildroot}%{_sysconfdir}/meshtasticd/ssl
 
+# Install desktop icon
+mkdir -p %{buildroot}%{_datadir}/icons/hicolor/scalable/apps
+install -m 0644 bin/org.meshtastic.meshtasticd.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/org.meshtastic.meshtasticd.svg
+
 %pre
 # create spi group (for udev rules)
 getent group spi > /dev/null || groupadd -r spi
@@ -171,6 +176,7 @@ fi
 %dir %{_datadir}/meshtasticd/web
 %{_datadir}/meshtasticd/web/*
 %dir %{_sysconfdir}/meshtasticd/ssl
+%{_datadir}/icons/hicolor/scalable/apps/org.meshtastic.meshtasticd.svg
 
 %changelog
 %autochangelog
