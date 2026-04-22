@@ -20,8 +20,8 @@
 #include "Throttle.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
+#include "crypto/Se050Client.h"
 #include "detect/ScanI2C.h"
-#include "detect/Se050Transport.h"
 #include "error.h"
 #include "power.h"
 
@@ -683,8 +683,8 @@ void setup()
     }
 
     // Secure element boot banner + first useful APDU (SELECT + GetUID).
-    // If SELECT succeeds the Transport is promoted to a function-static object and
-    // exposed via se050::globalTransport so any module loaded later can reach the chip.
+    // If SELECT succeeds the Client is promoted to a function-static object and
+    // exposed via se050::client so any module loaded later can reach the chip.
     {
         auto seFound = i2cScanner->find(ScanI2C::NXP_SE050);
         if (seFound.type == ScanI2C::NXP_SE050) {
@@ -695,9 +695,9 @@ void setup()
 #else
             TwoWire *seBus = &Wire;
 #endif
-            // Static so the Transport object outlives setup() and remains valid for any module that reads globalTransport.
-            static se050::Transport se(seBus, seFound.address.address);
-            se050::globalTransport = &se;
+            // Static so the Client outlives setup() and remains valid for any module that reads se050::client.
+            static se050::Client se(seBus, seFound.address.address);
+            se050::client = &se;
 
             uint8_t aMaj = 0, aMin = 0, aPatch = 0;
             uint16_t aCfg = 0;
@@ -716,7 +716,7 @@ void setup()
                 }
             } else {
                 LOG_WARN("SE050: begin() failed, skipping");
-                se050::globalTransport = nullptr;
+                se050::client = nullptr;
             }
         }
     }

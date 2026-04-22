@@ -11,22 +11,23 @@
 namespace se050
 {
 
-class Transport;
+class Client;
 
 /**
- * Process-wide SE050 transport, initialized by main.cpp after the I2C scan if an SE is
+ * Process-wide SE050 client, initialized by main.cpp after the I2C scan if an SE is
  * present and SELECT succeeds. Null if no chip is detected or applet SELECT failed.
  * Other firmware modules may read this pointer to reach the chip.
  * Lifetime: static object inside main.cpp's setup scope, stable for the duration of runtime.
  */
-extern Transport *globalTransport;
+extern Client *client;
 
 /**
- * Lightweight T=1-over-I2C transport for the NXP SE050 secure element, sufficient
- * for small APDUs (<= ~250 byte request / response, no chaining). Blocking, single-threaded.
+ * Host-side client for the NXP SE050 IoT Applet. Speaks T=1-over-I2C to the chip and
+ * layers SCP03 secure messaging + applet-level crypto commands on top. Sufficient for
+ * small APDUs (<= ~250 byte request / response, no chaining). Blocking, single-threaded.
  *
  * Usage:
- *   se050::Transport se(&Wire1, 0x48);
+ *   se050::Client se(&Wire1, 0x48);
  *   if (se.begin()) {
  *       uint8_t uid[18];
  *       if (se.getUID(uid)) { ... }
@@ -66,10 +67,10 @@ struct Scp03 {
     uint32_t encCounter; // 3-byte counter; increments after each C-APDU
 };
 
-class Transport
+class Client
 {
   public:
-    Transport(TwoWire *bus, uint8_t address);
+    Client(TwoWire *bus, uint8_t address);
 
     /**
      * Reset T=1 sequence state via S(RESYNC) then SELECT the IoT Applet.
@@ -99,7 +100,7 @@ class Transport
     /**
      * Read the 18-byte pre-provisioned chip UID (NXP object 0x7FFF0206) into uidOut.
      * Returns true if SW=9000 and exactly 18 bytes of UID were returned.
-     * On success the UID is also cached inside the Transport so later callers can
+     * On success the UID is also cached inside the Client so later callers can
      * fetch it cheaply via getCachedUID() without another round-trip.
      */
     bool getUID(uint8_t uidOut[18], uint32_t timeout_ms = 500);
@@ -179,7 +180,7 @@ class Transport
     bool ready;
     Scp03 scp;
 
-    // Populated by getUID() on SW=9000. Survives for the lifetime of the Transport
+    // Populated by getUID() on SW=9000. Survives for the lifetime of the Client
     // so any downstream module can surface it without hitting the I2C bus again.
     // Never exposed when cachedUidValid==false.
     uint8_t cachedUid[18];

@@ -1,4 +1,4 @@
-#include "Se050Transport.h"
+#include "Se050Client.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 
@@ -122,16 +122,15 @@ size_t pollRead(TwoWire *bus, uint8_t addr, uint8_t *out, size_t maxLen, uint32_
 namespace se050
 {
 
-Transport *globalTransport = nullptr;
+Client *client = nullptr;
 
-Transport::Transport(TwoWire *bus_, uint8_t address_)
-    : bus(bus_), address(address_), hostNS(0), ready(false), cachedUidValid(false)
+Client::Client(TwoWire *bus_, uint8_t address_) : bus(bus_), address(address_), hostNS(0), ready(false), cachedUidValid(false)
 {
     memset(&scp, 0, sizeof(scp));
     memset(cachedUid, 0, sizeof(cachedUid));
 }
 
-bool Transport::getCachedUID(uint8_t uidOut[18]) const
+bool Client::getCachedUID(uint8_t uidOut[18]) const
 {
     if (!cachedUidValid)
         return false;
@@ -241,7 +240,7 @@ void gp_kdf(const uint8_t key[16], uint8_t derivConst, const uint8_t *context, s
 
 } // namespace
 
-bool Transport::txFrame(uint8_t pcb, const uint8_t *inf, size_t infLen)
+bool Client::txFrame(uint8_t pcb, const uint8_t *inf, size_t infLen)
 {
     if (bus == nullptr || infLen > 250)
         return false;
@@ -261,7 +260,7 @@ bool Transport::txFrame(uint8_t pcb, const uint8_t *inf, size_t infLen)
     return bus->endTransmission() == 0;
 }
 
-int Transport::rxFrame(uint8_t *infOut, size_t infMax, uint8_t *pcbOut, uint32_t timeout_ms)
+int Client::rxFrame(uint8_t *infOut, size_t infMax, uint8_t *pcbOut, uint32_t timeout_ms)
 {
     uint8_t buf[260];
     // Read generously; SE050 pads the tail with 0xFF when its frame is shorter.
@@ -303,7 +302,7 @@ int Transport::rxFrame(uint8_t *infOut, size_t infMax, uint8_t *pcbOut, uint32_t
     return (int)infLen;
 }
 
-bool Transport::resync(uint32_t timeout_ms)
+bool Client::resync(uint32_t timeout_ms)
 {
     if (!txFrame(PCB_SBLOCK_RESYNC_REQ, nullptr, 0)) {
         LOG_WARN("SE050 RESYNC: I2C write failed");
@@ -324,7 +323,7 @@ bool Transport::resync(uint32_t timeout_ms)
     return true;
 }
 
-int Transport::transceive(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t rspCapacity, uint32_t timeout_ms)
+int Client::transceive(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t rspCapacity, uint32_t timeout_ms)
 {
     if (!ready || bus == nullptr)
         return -100;
@@ -350,7 +349,7 @@ int Transport::transceive(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, siz
     return n;
 }
 
-bool Transport::begin(uint8_t *majorOut, uint8_t *minorOut, uint8_t *patchOut, uint16_t *configOut, uint32_t timeout_ms)
+bool Client::begin(uint8_t *majorOut, uint8_t *minorOut, uint8_t *patchOut, uint16_t *configOut, uint32_t timeout_ms)
 {
     ready = false;
     hostNS = 0;
@@ -400,7 +399,7 @@ bool Transport::begin(uint8_t *majorOut, uint8_t *minorOut, uint8_t *patchOut, u
     return true;
 }
 
-bool Transport::getUID(uint8_t uidOut[18], uint32_t timeout_ms)
+bool Client::getUID(uint8_t uidOut[18], uint32_t timeout_ms)
 {
     if (!ready)
         return false;
@@ -481,7 +480,7 @@ bool Transport::getUID(uint8_t uidOut[18], uint32_t timeout_ms)
 // ============================================================================
 //  Random from SE050 TRNG -- Se05x_API_GetRandom
 // ============================================================================
-bool Transport::getRandom(uint8_t *out, size_t n, uint32_t timeout_ms)
+bool Client::getRandom(uint8_t *out, size_t n, uint32_t timeout_ms)
 {
     if (out == nullptr || n == 0 || n > 255)
         return false;
@@ -541,8 +540,7 @@ bool Transport::getRandom(uint8_t *out, size_t n, uint32_t timeout_ms)
 // ============================================================================
 //  SCP03 Platform session -- INITIALIZE UPDATE + EXTERNAL AUTHENTICATE
 // ============================================================================
-bool Transport::openPlatformScp03(const uint8_t encKey[16], const uint8_t macKey[16], const uint8_t dekKey[16],
-                                  uint32_t timeout_ms)
+bool Client::openPlatformScp03(const uint8_t encKey[16], const uint8_t macKey[16], const uint8_t dekKey[16], uint32_t timeout_ms)
 {
     if (!ready || bus == nullptr)
         return false;
@@ -697,7 +695,7 @@ bool Transport::openPlatformScp03(const uint8_t encKey[16], const uint8_t macKey
 // ============================================================================
 //  Secure send -- SCP03 security level 0x33 (C-DEC+C-MAC+R-ENC+R-MAC)
 // ============================================================================
-int Transport::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t rspCap, uint32_t timeout_ms)
+int Client::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t rspCap, uint32_t timeout_ms)
 {
     if (!scp.active)
         return transceive(apdu, apduLen, rsp, rspCap, timeout_ms);
@@ -884,7 +882,7 @@ int Transport::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, siz
 //  Applet-level operations (EC curve / key / ECDH)
 // ============================================================================
 
-bool Transport::createECCurve(uint8_t curveId, uint32_t timeout_ms)
+bool Client::createECCurve(uint8_t curveId, uint32_t timeout_ms)
 {
     // CreateECCurve per NXP Plug & Trust Se05x_API_CreateECCurve:
     //   CLA=0x80, INS=INS_WRITE=0x01, P1=P1_CURVE=0x0B, P2=P2_CREATE=0x04
@@ -912,7 +910,7 @@ bool Transport::createECCurve(uint8_t curveId, uint32_t timeout_ms)
     return false;
 }
 
-bool Transport::writeECKeyGen(uint32_t objectId, uint8_t curveId, uint32_t timeout_ms)
+bool Client::writeECKeyGen(uint32_t objectId, uint8_t curveId, uint32_t timeout_ms)
 {
     // WriteECKey (on-chip keygen) per NXP Plug & Trust Se05x_API_WriteECKey:
     //   CLA=0x80, INS=INS_WRITE=0x01,
@@ -955,7 +953,7 @@ bool Transport::writeECKeyGen(uint32_t objectId, uint8_t curveId, uint32_t timeo
     return true;
 }
 
-bool Transport::deleteObject(uint32_t objectId, uint32_t timeout_ms)
+bool Client::deleteObject(uint32_t objectId, uint32_t timeout_ms)
 {
     // DeleteSecureObject per NXP Plug & Trust Se05x_API_DeleteSecureObject:
     //   CLA=0x80, INS=INS_MGMT=0x04, P1=P1_DEFAULT=0x00, P2=P2_DELETE_OBJECT=0x28
@@ -993,7 +991,7 @@ bool Transport::deleteObject(uint32_t objectId, uint32_t timeout_ms)
     return false;
 }
 
-bool Transport::readECPub(uint32_t objectId, uint8_t *pubOut, size_t pubCapacity, size_t *pubLenOut, uint32_t timeout_ms)
+bool Client::readECPub(uint32_t objectId, uint8_t *pubOut, size_t pubCapacity, size_t *pubLenOut, uint32_t timeout_ms)
 {
     if (pubOut == nullptr || pubLenOut == nullptr)
         return false;
@@ -1067,7 +1065,7 @@ bool Transport::readECPub(uint32_t objectId, uint8_t *pubOut, size_t pubCapacity
     return true;
 }
 
-bool Transport::ecdhX25519(uint32_t privObjectId, const uint8_t peerPub[32], uint8_t shared[32], uint32_t timeout_ms)
+bool Client::ecdhX25519(uint32_t privObjectId, const uint8_t peerPub[32], uint8_t shared[32], uint32_t timeout_ms)
 {
     // ECDHGenerateSharedSecret per NXP Plug & Trust Se05x_API_ECDHGenerateSharedSecret:
     //   CLA=0x80, INS=INS_CRYPTO=0x03, P1=P1_EC=0x01, P2=P2_DH=0x0F
