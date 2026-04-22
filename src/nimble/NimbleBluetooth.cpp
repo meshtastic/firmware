@@ -989,11 +989,4 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 #endif
 }
 
-void clearNVS()
-{
-    NimBLEDevice::deleteAllBonds();
-#ifdef ARCH_ESP32
-    ESP.restart();
-#endif
-}
 #endif
