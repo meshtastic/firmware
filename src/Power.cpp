@@ -437,7 +437,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
                 voltage_mv = (int)((raw / max_code) * DEFAULT_VREF);
             }
             scaled = voltage_mv * operativeAdcMultiplier;
-#else // block for all other platforms
+#else                     // block for all other platforms
 #ifdef ARCH_NRF52
             concurrency::LockGuard saadcGuard(concurrency::nrf52SaadcLock);
 #endif
@@ -735,19 +735,19 @@ bool Power::analogInit()
         }
     }
 
-    adc_oneshot_chan_cfg_t config = {
+    adc_oneshot_chan_cfg_t chan_cfg = {
         .atten = atten,
         .bitwidth = adc_width,
     };
 
-    esp_err_t err = adc_oneshot_config_channel(adc_handle, adc_channel, &config);
+    esp_err_t err = adc_oneshot_config_channel(adc_handle, adc_channel, &chan_cfg);
     if (err != ESP_OK) {
         LOG_ERROR("ADC channel config failed: %s", esp_err_to_name(err));
         return false;
     }
 
     adc_calibrated = initAdcCalibration();
-#endif // ARCH_ESP32
+#endif                    // ARCH_ESP32
 
     // NRF52 ADC init moved to powerHAL_init in nrf52 platform
 
