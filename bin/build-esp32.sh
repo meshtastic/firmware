@@ -33,9 +33,9 @@ echo "Copying ESP32 update bin file"
 cp $BUILDDIR/$basename.bin $OUTDIR/$basename.bin
 
 echo "Copying Filesystem for ESP32 targets"
-cp $BUILDDIR/littlefs-$1-$VERSION.bin $OUTDIR/littlefs-$1-$VERSION.bin || true
+cp $BUILDDIR/littlefs-$1-$VERSION.bin $OUTDIR/littlefs-$1-$VERSION.bin
 cp bin/device-install.* $OUTDIR/
 cp bin/device-update.* $OUTDIR/
 
 echo "Copying manifest"
-cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json || true
+cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json
