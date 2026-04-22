@@ -407,9 +407,11 @@ static inline bool normalizeRegion(int16_t &x, int16_t &y, int16_t &width, int16
 
 static inline void appendColorRegion(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t onColorBe, uint16_t offColorBe)
 {
-    if (colorRegionCount >= MAX_TFT_COLOR_REGIONS) {
-        memmove(&colorRegions[0], &colorRegions[1], sizeof(TFTColorRegion) * (MAX_TFT_COLOR_REGIONS - 1));
-        colorRegionCount = MAX_TFT_COLOR_REGIONS - 1;
+    // Keep the last slot permanently disabled as a sentinel for ST7789 scans.
+    // This leaves MAX_TFT_COLOR_REGIONS - 1 usable entries.
+    if (colorRegionCount >= MAX_TFT_COLOR_REGIONS - 1) {
+        memmove(&colorRegions[0], &colorRegions[1], sizeof(TFTColorRegion) * (MAX_TFT_COLOR_REGIONS - 2));
+        colorRegionCount = MAX_TFT_COLOR_REGIONS - 2;
     }
 
     TFTColorRegion &region = colorRegions[colorRegionCount++];
@@ -425,6 +427,7 @@ static inline void appendColorRegion(int16_t x, int16_t y, int16_t width, int16_
     if (colorRegionCount < MAX_TFT_COLOR_REGIONS) {
         colorRegions[colorRegionCount].enabled = false;
     }
+    colorRegions[MAX_TFT_COLOR_REGIONS - 1].enabled = false;
 }
 
 // Current working role colors (big-endian).  Initialised to Dark defaults;
