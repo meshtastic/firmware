@@ -45,6 +45,10 @@ void ED047TC1::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_
         epaper->ioPinMode(i, OUTPUT);
         epaper->ioWrite(i, HIGH);
     }
+    // On this board, PCA9535 IO12 is the user side key input (bit 2 on port-1).
+    // FastEPD's generic V7 init drives 8..13 as outputs; force IO12 back to input
+    // so variant touch-control polling can read the key reliably.
+    epaper->ioPinMode(10, INPUT);
 #else
 #error "ED047TC1 driver: unsupported variant — define T5_S3_EPAPER_PRO_V1 or T5_S3_EPAPER_PRO_V2"
 #endif

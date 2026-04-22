@@ -3,6 +3,12 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "modules/ExternalNotificationModule.h"
+#include <cstring>
+
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#include "graphics/niche/InkHUD/InkHUD.h"
+#include "graphics/niche/InkHUD/SystemApplet.h"
+#endif
 
 #if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -37,6 +43,31 @@ void TouchScreenImpl1::init()
 bool TouchScreenImpl1::getTouch(int16_t &x, int16_t &y)
 {
     return _getTouch(&x, &y);
+}
+
+bool TouchScreenImpl1::fastTapModeEnabled() const
+{
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+    auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
+    if (!inkhud) {
+        return false;
+    }
+
+    for (auto *sa : inkhud->systemApplets) {
+        if (!sa || !sa->name) {
+            continue;
+        }
+        if (strcmp(sa->name, "Keyboard") == 0) {
+            return sa->isForeground();
+        }
+    }
+#endif
+    return false;
+}
+
+bool TouchScreenImpl1::longPressEnabled() const
+{
+    return !fastTapModeEnabled();
 }
 
 /**
