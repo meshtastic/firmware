@@ -98,8 +98,9 @@ class HopScalingTestShim : public HopScalingModule
 
 static MockNodeDB *mockNodeDB = nullptr;
 
-// Create deterministic IDs whose low bits are well distributed across the hash filter.
-// HopScalingModule sampler: (nodeId & (denominator - 1)) == 0
+// Create deterministic IDs that produce a broad spread of 16-bit hashes.
+// HopScalingModule admission uses passesFilter(hashNodeId(nodeId), denom), NOT a raw nodeId
+// modulo check — do not assume (nodeId & (denom-1)) == 0 determines whether a node is admitted.
 static uint32_t makeDistributedNodeId(uint32_t baseId, uint32_t ordinal, uint32_t salt = 0)
 {
     return baseId + salt + (ordinal * 33u);

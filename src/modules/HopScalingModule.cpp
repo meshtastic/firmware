@@ -1,4 +1,6 @@
 #include "HopScalingModule.h"
+#include "SafeFile.h"
+#include "meshUtils.h"
 
 #if HAS_VARIABLE_HOPS
 
@@ -78,28 +80,23 @@ void HopScalingModule::saveToDisk() const
 {
 #ifdef FSCom
     FSCom.mkdir("/prefs");
-    if (FSCom.exists(HISTOGRAM_STATE_FILE)) {
-        FSCom.remove(HISTOGRAM_STATE_FILE);
-    }
-    concurrency::LockGuard g(spiLock);
-    auto file = FSCom.open(HISTOGRAM_STATE_FILE, FILE_O_WRITE);
-    if (file) {
-        PersistedHistogram state{};
-        state.magic = HISTOGRAM_STATE_MAGIC;
-        state.version = HISTOGRAM_STATE_VERSION;
-        state.samplingDenominator = samplingDenominator;
-        state.filteringDenominator = filteringDenominator;
-        state.filterDenomHoldRollsRemaining = filteringDenomHoldRollsRemaining;
-        state.hashSeed = hashSeed;
-        // Save all CAPACITY slots; count is reconstructed on load by scanning seenHoursAgo.
-        memcpy(state.entries, entries, sizeof(state.entries));
-        file.write(reinterpret_cast<const uint8_t *>(&state), sizeof(state));
-        file.flush();
-        file.close();
+    PersistedHistogram state{};
+    state.magic = HISTOGRAM_STATE_MAGIC;
+    state.version = HISTOGRAM_STATE_VERSION;
+    state.samplingDenominator = samplingDenominator;
+    state.filteringDenominator = filteringDenominator;
+    state.filterDenomHoldRollsRemaining = filteringDenomHoldRollsRemaining;
+    state.hashSeed = hashSeed;
+    // Save all CAPACITY slots; count is reconstructed on load by scanning seenHoursAgo.
+    memcpy(state.entries, entries, sizeof(state.entries));
+    auto file = SafeFile(HISTOGRAM_STATE_FILE, true);
+    const size_t written = file.write(reinterpret_cast<const uint8_t *>(&state), sizeof(state));
+    if (file.close() && written == sizeof(state)) {
         LOG_DEBUG("[HOPSCALE] Saved: count=%u samp=1/%u filt=1/%u holdRollsRemaining=%u", count, samplingDenominator,
                   filteringDenominator, state.filterDenomHoldRollsRemaining);
     } else {
-        LOG_WARN("[HOPSCALE] Failed to open %s for write", HISTOGRAM_STATE_FILE);
+        LOG_WARN("[HOPSCALE] Failed to write %s (%u of %u bytes)", HISTOGRAM_STATE_FILE, static_cast<unsigned>(written),
+                 static_cast<unsigned>(sizeof(state)));
     }
 #endif
 }
@@ -114,10 +111,14 @@ void HopScalingModule::loadFromDisk()
     PersistedHistogram state{};
     const bool readOk = (file.read(reinterpret_cast<uint8_t *>(&state), sizeof(state)) == sizeof(state));
     file.close();
+    // Validate magic, version, denom range, denom power-of-two invariant, and hold counter.
     if (!readOk || state.magic != HISTOGRAM_STATE_MAGIC || state.version != HISTOGRAM_STATE_VERSION ||
         state.samplingDenominator < DENOM_MIN || state.samplingDenominator > DENOM_MAX ||
-        state.filteringDenominator < state.samplingDenominator || state.filteringDenominator > DENOM_MAX) {
-        LOG_DEBUG("[HOPSCALE] No valid persisted state (magic=%08x ver=%u), starting fresh", state.magic, state.version);
+        state.filteringDenominator < state.samplingDenominator || state.filteringDenominator > DENOM_MAX ||
+        !is_pow_of_2(state.samplingDenominator) || !is_pow_of_2(state.filteringDenominator) ||
+        state.filterDenomHoldRollsRemaining > FILTER_DENOM_HOLD_ROLLS) {
+        LOG_DEBUG("[HOPSCALE] No valid persisted state (magic=%08x ver=%u samp=%u filt=%u hold=%u), starting fresh", state.magic,
+                  state.version, state.samplingDenominator, state.filteringDenominator, state.filterDenomHoldRollsRemaining);
         return;
     }
     // Derive count by scanning: active entries have seenHoursAgo != 0; pack them to the front.

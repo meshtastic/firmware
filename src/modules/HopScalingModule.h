@@ -20,7 +20,8 @@
  *   All three fields are packed into a single 32-bit Record; sizeof(Record) == 4.
  *
  * Sampling:
- *   - A node is added only when (nodeId & (samplingDenominator – 1)) == 0
+ *   - A node is added only when passesFilter(hashNodeId(nodeId), samplingDenominator),
+ *     i.e. (hash16(nodeId) & (samplingDenominator – 1)) == 0  (hash-space subsample, not raw ID)
  *   - samplingDenominator starts at 1 (sample all), doubles when the list exceeds FILL_HIGH_PCT
  *   - filteringDenominator tracks samplingDenominator upward immediately but does not drop back
  *     down until FILTER_DENOM_HOLD_MS (13 h) have elapsed since the last scale-up
@@ -145,7 +146,9 @@ class HopScalingModule : private concurrency::OSThread
     // -----------------------------------------------------------------------
 
     /// Record a received packet.
-    /// Adds or updates an entry when (nodeId & (samplingDenominator – 1)) == 0.
+    /// Adds or updates an entry when passesFilter(hashNodeId(nodeId), samplingDenominator),
+    /// i.e. when the 16-bit XOR-fold hash of the node ID falls in the 1/samplingDenominator
+    /// subsample of the hash space.  This is NOT a raw nodeId modulo check.
     /// Marks the current hour as seen and updates the stored hop count to the last observed value.
     /// Triggers a trim pass if the list exceeds FILL_HIGH_PCT after the insertion.
     void samplePacketForHistogram(uint32_t nodeId, uint8_t hopCount);
@@ -212,13 +215,16 @@ class HopScalingModule : private concurrency::OSThread
     // -----------------------------------------------------------------------
 
     /// Persist the histogram state (entries, denominators, hold-timer) to flash.
-    /// No-op on platforms without a filesystem.  Safe to call frequently — only writes
-    /// the bytes that changed.
+    /// No-op on platforms without a filesystem.  Performs a full delete-and-rewrite of
+    /// the state file on each call; avoid calling more frequently than once per rollHour().
     void saveToDisk() const;
 
     /// Restore histogram state from flash.  Safe to call even when no file exists.
     /// Call once after construction, before the first rollHour(), to warm-start the
     /// histogram across reboots without waiting 13 hours for data to re-accumulate.
+    /// The restored entries are available immediately for sampling, but the first
+    /// rollHour() (triggered by the second runOnce() tick) is needed before a warm-start
+    /// recommendation replaces the HOP_MAX boot default.
     void loadFromDisk();
 
     /// Remove stale entries (seen-bits all zero) and, if the list is still crowded,
