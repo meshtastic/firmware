@@ -416,29 +416,40 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case INA_ADDR: // Same as SHT2X
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
-                LOG_DEBUG("Register MFG_UID: 0x%x", registerValue);
-                if (registerValue == 0x5449) {
-                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2);
-                    LOG_DEBUG("Register DIE_UID: 0x%x", registerValue);
+            {
+                uint16_t mfg = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
+                uint16_t die = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2);
 
-                    if (registerValue == 0x2260) {
-                        logFoundDevice("INA226", (uint8_t)addr.address);
-                        type = INA226;
-                    } else {
-                        logFoundDevice("INA260", (uint8_t)addr.address);
-                        type = INA260;
-                    }
+                LOG_DEBUG("Register MFG_UID: 0x%x", mfg);
+                LOG_DEBUG("Register DIE_UID: 0x%x", die);
+
+                // TI INA226 or fully compatible clones (e.g. TPA626)
+                if (mfg == 0x5449 && die == 0x2260) {
+                    logFoundDevice("INA226", (uint8_t)addr.address);
+                    type = INA226;
+                }
+                // Silergy SQ52201 (INA226-compatible with different IDs)
+                else if (mfg == 0x190F && die == 0x0000) {
+                    logFoundDevice("INA226 (SQ52201)", (uint8_t)addr.address);
+                    type = INA226;
+                }
+                // TI INA260
+                else if (mfg == 0x5449) {
+                    logFoundDevice("INA260", (uint8_t)addr.address);
+                    type = INA260;
+                }
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-                } else if (detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
+                else if (detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
                     logFoundDevice("SHTXX (SHT2X)", (uint8_t)addr.address);
                     type = SHTXX;
+                }
 #endif
-                } else { // Assume INA219 if none of the above ones are found
+                else { // Assume INA219 if none of the above ones are found
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
                 }
                 break;
+            }
             case INA3221_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID FE: 0x%x", registerValue);
