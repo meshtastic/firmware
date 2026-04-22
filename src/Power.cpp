@@ -1091,14 +1091,16 @@ void Power::attachPowerInterrupts()
         CHANGE);
 #endif
 #ifdef PMU_IRQ
-    attachInterrupt(
-        PMU_IRQ,
-        [] {
-            pmu_irq = true;
-            power->setIntervalFromNow(0);
-            runASAP = true;
-        },
-        FALLING);
+    if (PMU) {
+        attachInterrupt(
+            PMU_IRQ,
+            [] {
+                pmu_irq = true;
+                power->setIntervalFromNow(0);
+                runASAP = true;
+            },
+            FALLING);
+    }
 #endif
 }
 
@@ -1118,7 +1120,9 @@ void Power::detachPowerInterrupts()
     detachInterrupt(EXT_CHRG_DETECT);
 #endif
 #ifdef PMU_IRQ
-    detachInterrupt(PMU_IRQ);
+    if (PMU) {
+        detachInterrupt(PMU_IRQ);
+    }
 #endif
 }
 
