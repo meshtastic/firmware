@@ -1545,10 +1545,12 @@ void UIRenderer::drawBootIconScreen(const char *upperMsg, OLEDDisplay *display, 
     // Meshtastic brand green background with black foreground text/icon on TFT startup screen.
     static constexpr uint16_t kMeshtasticGreen = TFTPalette::rgb565(103, 234, 145);
     setAndRegisterTFTColorRole(TFTColorRole::BootSplash, TFTPalette::Black, kMeshtasticGreen, x, y, SCREEN_WIDTH, SCREEN_HEIGHT);
-#endif
     gBootSplashBoldPass = true;
+#endif
     drawIconScreen(upperMsg, display, state, x, y);
+#if GRAPHICS_TFT_COLORING_ENABLED
     gBootSplashBoldPass = false;
+#endif
 }
 
 // ****************************
