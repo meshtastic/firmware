@@ -471,7 +471,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     // we pass `graphics::colorRegions` through a type cast below.
     static_assert(sizeof(graphics::TFTColorRegion) == sizeof(::TFTColorRegion),
                   "graphics::TFTColorRegion layout must match ST7789 TFTColorRegion");
-    dispdev->setRGB(TFTPalette::White, (::TFTColorRegion *)colorRegions);
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFTPalette::White, (::TFTColorRegion *)colorRegions);
 #elif defined(USE_ST7796)
     static_cast<ST7796Spi *>(dispdev)->setRGB(TFTPalette::White);
 #endif
