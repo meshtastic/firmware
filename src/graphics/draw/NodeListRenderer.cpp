@@ -215,7 +215,7 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
     }
 }
 
-static inline void applyFavoriteNodeNameColor(OLEDDisplay *display, meshtastic_NodeInfoLite *node, const char *nodeName,
+static inline void applyFavoriteNodeNameColor(OLEDDisplay *display, const meshtastic_NodeInfoLite *node, const char *nodeName,
                                               int16_t nameX, int16_t y, int nameMaxWidth)
 {
     if (!display || !node || !node->is_favorite || !isTFTColoringEnabled() || !nodeName) {

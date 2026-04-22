@@ -441,9 +441,8 @@ static bool computeLandscapeCompassPlacement(OLEDDisplay *display, int16_t xOffs
     return true;
 }
 
-static bool computeBottomCompassPlacement(OLEDDisplay *display, int16_t xOffset, int16_t yBelowContent,
-                                          int16_t bottomReserved, int16_t margin, int16_t *compassX, int16_t *compassY,
-                                          int16_t *compassRadius)
+static bool computeBottomCompassPlacement(OLEDDisplay *display, int16_t xOffset, int16_t yBelowContent, int16_t bottomReserved,
+                                          int16_t margin, int16_t *compassX, int16_t *compassY, int16_t *compassRadius)
 {
     // Return false when content leaves no room for a readable compass.
     int availableHeight = SCREEN_HEIGHT - yBelowContent - bottomReserved - margin;
@@ -988,8 +987,9 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node)) {
         // Use shared meter conversion, then format display units with lightweight integer rounding.
-        const float distanceMeters = GeoCoord::latLongToMeter(DegD(node->position.latitude_i), DegD(node->position.longitude_i),
-                                                               DegD(ourNode->position.latitude_i), DegD(ourNode->position.longitude_i));
+        const float distanceMeters =
+            GeoCoord::latLongToMeter(DegD(node->position.latitude_i), DegD(node->position.longitude_i),
+                                     DegD(ourNode->position.latitude_i), DegD(ourNode->position.longitude_i));
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             const int feet = static_cast<int>((distanceMeters * METERS_TO_FEET) + 0.5f);
             if (feet > 0 && feet < 1000) {
@@ -1683,7 +1683,8 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             // Center vertically and nudge down slightly to keep "N" clear of header
             const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
 
-            drawDetailedCompassOrStatus(display, compassX, compassY, compassRadius, validHeading, heading, statusLine1, statusLine2);
+            drawDetailedCompassOrStatus(display, compassX, compassY, compassRadius, validHeading, heading, statusLine1,
+                                        statusLine2);
         } else {
             // Portrait or square: put compass at the bottom and centered, scaled to fit available space
             // For E-Ink screens, account for navigation bar at the bottom!
@@ -1708,7 +1709,8 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             int compassX = x + SCREEN_WIDTH / 2;
             int compassY = yBelowContent + availableHeight / 2;
 
-            drawDetailedCompassOrStatus(display, compassX, compassY, compassRadius, validHeading, heading, statusLine1, statusLine2);
+            drawDetailedCompassOrStatus(display, compassX, compassY, compassRadius, validHeading, heading, statusLine1,
+                                        statusLine2);
         }
     }
 #endif

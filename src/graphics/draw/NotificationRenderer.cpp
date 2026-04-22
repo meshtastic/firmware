@@ -642,7 +642,8 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             if (alertBannerOptions > 0) {
                 const uint16_t titleTextColor =
                     (getActiveTheme().id == ThemeID::DefaultLight) ? TFTPalette::Black : getThemeHeaderText();
-                // Keep title role away from border/corner pixels so rounded-corner masks are not remapped to the title text color.
+                // Keep title role away from border/corner pixels so rounded-corner masks are not remapped to the title text
+                // color.
                 if (boxWidth > 2 && titleBarHeight > 0) {
                     setAndRegisterTFTColorRole(TFTColorRole::ActionMenuTitle, getThemeHeaderBg(), titleTextColor, boxLeft + 1,
                                                titleBarY, boxWidth - 2, titleBarHeight);
