@@ -15,9 +15,9 @@
 
 // Bridges touch events from TouchScreenImpl1 directly into InkHUD,
 // bypassing the InputBroker (which is excluded in InkHUD builds).
-// Routing mirrors the mini-epaper-s3 two-way rocker pattern:
-//   - Nav left/right: prevApplet/nextApplet when idle, navUp/Down when a system applet has focus (e.g. menu)
-//   - Nav up/down:    navUp/navDown always (menu scroll)
+//   - Swipe up/down:  navUp/navDown  (menu scroll, keyboard row navigation)
+//   - Swipe left:     prevApplet when idle, navLeft when system applet active (menu: back, keyboard: left)
+//   - Swipe right:    nextApplet when idle, navRight when system applet active (menu: confirm, keyboard: right)
 //   - Tap:            shortpress (cycle applets / confirm in menu)
 //   - Long press:     longpress (open menu / back)
 class TouchInkHUDBridge : public Observer<const InputEvent *>
@@ -26,8 +26,9 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
     {
         auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
 
-        // Keep alignment in sync with the current rotation so that visual-frame gestures
-        // always pass through nav functions without remapping: (rotation + alignment) % 4 == 0.
+        // Keep alignment in sync with rotation: (rotation + alignment) % 4 == 0 ensures
+        // InkHUD's internal nav remapping is identity, leaving readTouch() as sole authority.
+        // Must run per-touch so rotation changes via the menu self-heal immediately.
         inkhud->persistence->settings.joystick.alignment = (4 - inkhud->persistence->settings.rotation) % 4;
 
         // Check whether a system applet (e.g. menu) is currently handling input
@@ -48,13 +49,13 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
             break;
         case INPUT_BROKER_LEFT:
             if (systemHandlingInput)
-                inkhud->navUp();
+                inkhud->navLeft();
             else
                 inkhud->prevApplet();
             break;
         case INPUT_BROKER_RIGHT:
             if (systemHandlingInput)
-                inkhud->navDown();
+                inkhud->navRight();
             else
                 inkhud->nextApplet();
             break;

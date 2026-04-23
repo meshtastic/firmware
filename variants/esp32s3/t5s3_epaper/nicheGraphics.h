@@ -74,9 +74,6 @@ void setupNicheGraphics()
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
     inkhud->persistence->settings.optionalMenuItems.backlight = true;
 
-    // Alignment must cancel rotation for visual-frame touch input: (rotation + alignment) % 4 == 0.
-    inkhud->persistence->settings.joystick.alignment = (4 - inkhud->persistence->settings.rotation) % 4;
-
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
     inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, false, false);      // Not Active, not autoshown
@@ -96,9 +93,12 @@ void setupNicheGraphics()
     // Start running InkHUD
     inkhud->begin();
 
-    // Touch navigation requires joystick mode — enforce post-begin so flash cannot override.
+    // Touchscreen navigation uses joystick mode. Enforce post-begin so flash cannot override.
+    // alignment cancels out InkHUD's internal nav remapping ((rotation + alignment) % 4 == 0),
+    // leaving readTouch() as the sole authority on coordinate-to-direction mapping.
     inkhud->persistence->settings.joystick.enabled = true;
     inkhud->persistence->settings.joystick.aligned = true;
+    inkhud->persistence->settings.joystick.alignment = (4 - inkhud->persistence->settings.rotation) % 4;
 
     // Buttons
     // --------------------------
