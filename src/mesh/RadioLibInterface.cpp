@@ -516,8 +516,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             // Packet pool exhaustion: drop this packet on the floor rather than deref NULL.
             // Happens under sustained heap pressure (e.g., config dump mid-RX, dense mesh bursts).
             if (!mp) {
-                LOG_ERROR("Packet pool exhausted in RX handler — dropping packet id=0x%08x",
-                          radioBuffer.header.id);
+                rxBad++;
                 airTime->logAirtime(RX_ALL_LOG, rxMsec);
                 return;
             }
