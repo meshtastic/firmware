@@ -118,8 +118,10 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
     File root = FSCom.open(dirname, FILE_O_READ);
     if (!root)
         return filenames;
-    if (!root.isDirectory())
+    if (!root.isDirectory()) {
+        root.close();
         return filenames;
+    }
 
     File file = root.openNextFile();
     while (file) {
@@ -131,8 +133,8 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
                 std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.name(), levels - 1);
 #endif
                 filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
-                file.close();
             }
+            file.close();
         } else {
             meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
 #ifdef ARCH_ESP32
@@ -171,6 +173,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
         return;
     }
     if (!root.isDirectory()) {
+        root.close();
         return;
     }
 
@@ -205,6 +208,8 @@ void listDir(const char *dirname, uint8_t levels, bool del)
                 listDir(file.name(), levels - 1, del);
                 file.close();
 #endif
+            } else {
+                file.close();
             }
         } else {
 #ifdef ARCH_ESP32
