@@ -69,6 +69,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     MenuPage previousPage = MenuPage::EXIT;
     uint8_t cursor = 0;       // Which menu item is currently highlighted
     bool cursorShown = false; // Is *any* item highlighted? (Root menu: no initial selection)
+    bool hideTouchSelectionHighlight = false; // Touch scrolling keeps cursor for paging math, but can hide highlight
     bool freeTextMode = false;
     uint16_t systemInfoPanelHeight = 0; // Need to know before we render
     uint16_t menuTextLimit = 200;

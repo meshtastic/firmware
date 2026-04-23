@@ -1594,8 +1594,17 @@ void InkHUD::MenuApplet::onRender(bool full)
             drawLine(itemL + X(padding), underlineY, itemR - X(padding), underlineY, BLACK);
         } else {
             // Box, if currently selected
-            if (cursorShown && i == cursor && !touchFriendlyLayout)
-                drawRect(itemL, itemT + selectInsetY, itemW, itemH - (selectInsetY * 2), BLACK);
+            if (cursorShown && i == cursor && (!touchFriendlyLayout || !hideTouchSelectionHighlight)) {
+                const int16_t selTop = itemT + selectInsetY;
+                const int16_t selH = itemH - (selectInsetY * 2);
+                drawRect(itemL, selTop, itemW, selH, BLACK);
+                // Touch layouts need a stronger visual cue than a thin outline.
+                if (touchFriendlyLayout) {
+                    const int16_t markerInset = 3;
+                    const int16_t markerW = 4;
+                    fillRect(itemL + markerInset, selTop + markerInset, markerW, max(1, selH - (markerInset * 2)), BLACK);
+                }
+            }
 
             // Indented normal item text
             printAt(itemL + X(padding * 2), center, item.label, LEFT, MIDDLE);
@@ -1656,6 +1665,13 @@ bool InkHUD::MenuApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
 
     // Direct touch controls should act as activity and keep the menu open.
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+    // If button-driven selection is active on touch-first layouts, clear it as soon as
+    // touch interaction resumes so touch behavior remains direct/tap-first.
+    if (useTouchFriendlyMenuLayout(inkhud)) {
+        cursorShown = false;
+        hideTouchSelectionHighlight = true;
+    }
 
     const int16_t localY = (int16_t)y - (int16_t)tileT;
 
@@ -1719,7 +1735,10 @@ void InkHUD::MenuApplet::onButtonShortPress()
         // Push the auto-close timer back
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-        if (!settings->joystick.enabled) {
+        // Touch-first nodes keep user-button short-press as "advance selection" in menus.
+        // Any button-driven navigation should restore visible highlight.
+        hideTouchSelectionHighlight = false;
+        if (!settings->joystick.enabled || useTouchFriendlyMenuLayout(inkhud)) {
             if (!cursorShown) {
                 cursorShown = true;
                 // Select the first item that isn't a header
@@ -1783,6 +1802,7 @@ void InkHUD::MenuApplet::onNavUp()
         // Touch-first menus: swipe up/down should scroll only.
         // Keep cursor movement for scroll math, but selection box is hidden in onRender().
         if (useTouchFriendlyMenuLayout(inkhud)) {
+            hideTouchSelectionHighlight = true;
             if (!cursorShown) {
                 cursorShown = true;
                 cursor = items.size() - 1;
@@ -1837,6 +1857,7 @@ void InkHUD::MenuApplet::onNavDown()
         // Touch-first menus: swipe up/down should scroll only.
         // Keep cursor movement for scroll math, but selection box is hidden in onRender().
         if (useTouchFriendlyMenuLayout(inkhud)) {
+            hideTouchSelectionHighlight = true;
             if (!cursorShown) {
                 cursorShown = true;
                 cursor = 0;

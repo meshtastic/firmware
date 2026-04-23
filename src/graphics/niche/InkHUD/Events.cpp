@@ -152,6 +152,12 @@ void InkHUD::Events::onExitShort()
         return;
     }
 
+    // Touch-capable InkHUD nodes use EXIT/HOME as a quick app switcher launcher.
+    if (!dismissedExt && inkhud->hasTouchEnabledProvider()) {
+        inkhud->openAppSwitcher();
+        return;
+    }
+
     if (!dismissedExt) {
         Applet *userConsumer = inkhud->getActiveApplet();
 

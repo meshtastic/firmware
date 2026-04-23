@@ -327,6 +327,12 @@ void InkHUD::InkHUD::openMenu()
     windowManager->openMenu();
 }
 
+// Show touch-friendly app switcher (on the focused tile)
+void InkHUD::InkHUD::openAppSwitcher()
+{
+    windowManager->openAppSwitcher();
+}
+
 // Bring AlignStick applet to the foreground
 void InkHUD::InkHUD::openAlignStick()
 {
@@ -357,6 +363,11 @@ void InkHUD::InkHUD::nextTile()
 void InkHUD::InkHUD::prevTile()
 {
     windowManager->prevTile();
+}
+
+bool InkHUD::InkHUD::showApplet(uint8_t appletIndex)
+{
+    return windowManager->showApplet(appletIndex);
 }
 
 bool InkHUD::InkHUD::selectTileAt(uint16_t x, uint16_t y)

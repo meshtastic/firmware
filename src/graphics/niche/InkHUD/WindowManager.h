@@ -33,10 +33,12 @@ class WindowManager
     Applet *getActiveApplet();
     void openMenu();
     void openAlignStick();
+    void openAppSwitcher();
     void openKeyboard();
     void closeKeyboard();
     void nextApplet();
     void prevApplet();
+    bool showApplet(uint8_t appletIndex);
     void rotate();
     void toggleBatteryIcon();
 

@@ -7,6 +7,7 @@
 #include "./Applets/System/Keyboard/KeyboardApplet.h"
 #include "./Applets/System/Logo/LogoApplet.h"
 #include "./Applets/System/Menu/MenuApplet.h"
+#include "./Applets/System/AppSwitcher/AppSwitcherApplet.h"
 #include "./Applets/System/Notification/NotificationApplet.h"
 #include "./Applets/System/Pairing/PairingApplet.h"
 #include "./Applets/System/Placeholder/PlaceholderApplet.h"
@@ -181,6 +182,18 @@ void InkHUD::WindowManager::openMenu()
     menu->show(userTiles.at(settings->userTiles.focused));
 }
 
+// Show touch-only app switcher on the focused tile
+void InkHUD::WindowManager::openAppSwitcher()
+{
+    if (!inkhud->hasTouchEnabledProvider())
+        return;
+
+    AppSwitcherApplet *switcher = static_cast<AppSwitcherApplet *>(inkhud->getSystemApplet("AppSwitcher"));
+    if (switcher) {
+        switcher->show(userTiles.at(settings->userTiles.focused));
+    }
+}
+
 // Bring the AlignStick applet to the foreground
 void InkHUD::WindowManager::openAlignStick()
 {
@@ -318,6 +331,41 @@ void InkHUD::WindowManager::prevApplet()
     t->assignApplet(prevValidApplet);
     prevValidApplet->bringToForeground();
     inkhud->forceUpdate(EInk::UpdateTypes::FAST); // bringToForeground already requested, but we're manually forcing FAST
+}
+
+// Show a specific applet on the focused tile, or focus the tile where it is already shown.
+bool InkHUD::WindowManager::showApplet(uint8_t appletIndex)
+{
+    if (appletIndex >= inkhud->userApplets.size())
+        return false;
+
+    Applet *target = inkhud->userApplets.at(appletIndex);
+    if (!target || !target->isActive())
+        return false;
+
+    // If target is already visible on another tile, just focus that tile.
+    for (uint8_t i = 0; i < userTiles.size(); i++) {
+        if (userTiles.at(i)->getAssignedApplet() == target) {
+            settings->userTiles.focused = i;
+            refocusTile();
+            if (!settings->optionalMenuItems.nextTile)
+                userTiles.at(settings->userTiles.focused)->requestHighlight();
+            inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+            return true;
+        }
+    }
+
+    // Otherwise replace the focused tile's applet.
+    Tile *focused = userTiles.at(settings->userTiles.focused);
+    Applet *current = focused->getAssignedApplet();
+    if (current && current != target)
+        current->sendToBackground();
+
+    focused->assignApplet(target);
+    target->bringToForeground();
+    settings->userTiles.displayedUserApplet[settings->userTiles.focused] = appletIndex;
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+    return true;
 }
 
 // Returns active applet
@@ -529,6 +577,9 @@ void InkHUD::WindowManager::createSystemApplets()
     }
     if (supportsOnScreenKeyboard(inkhud, settings)) {
         addSystemApplet("Keyboard", new KeyboardApplet, new Tile);
+    }
+    if (inkhud->hasTouchEnabledProvider()) {
+        addSystemApplet("AppSwitcher", new AppSwitcherApplet, nullptr);
     }
 
     addSystemApplet("Menu", new MenuApplet, nullptr);
