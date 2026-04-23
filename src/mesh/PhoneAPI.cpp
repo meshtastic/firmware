@@ -47,7 +47,7 @@ PhoneAPI::~PhoneAPI()
     close();
 }
 
-uint32_t PhoneAPI::lastStartConfigMs = 0;
+std::atomic<uint32_t> PhoneAPI::lastStartConfigMs{0};
 
 // Minimum interval between full config-dump handshakes, shared across all PhoneAPI
 // transports (BLE, WiFi/TCP, Serial, HTTP, Ethernet). Chosen to be just longer than
@@ -56,19 +56,35 @@ uint32_t PhoneAPI::lastStartConfigMs = 0;
 // can't drive one handshake per second and exhaust internal SRAM.
 static constexpr uint32_t MIN_CONFIG_HANDSHAKE_INTERVAL_MS = 2000;
 
-void PhoneAPI::handleStartConfig()
+void PhoneAPI::handleStartConfig(uint32_t newConfigNonce)
 {
     // Rate-limit full config dumps. Each dump exercises the protobuf encode path for
     // all channels, configs, the entire NodeDB, and a full filesystem walk — back-to-back
     // dumps fragment the internal SRAM heap and can wedge the device on static-pool
     // allocators. Well-behaved clients only issue one want_config_id per reconnect.
+    //
+    // Use atomic load/compare_exchange so concurrent handshakes across transports (BLE
+    // callback task vs WiFi/Eth OSThread vs serial-console task) can't both pass the check.
+    //
+    // The new nonce is only committed to config_nonce AFTER the throttle check passes — so
+    // an in-flight dump (triggered by an earlier accepted handshake) keeps its nonce and
+    // sendConfigComplete matches what the client asked for.
     const uint32_t now = millis();
-    if (lastStartConfigMs != 0 && (now - lastStartConfigMs) < MIN_CONFIG_HANDSHAKE_INTERVAL_MS) {
-        LOG_WARN("Config handshake throttled (last one %u ms ago, min interval %u ms)",
-                 (unsigned)(now - lastStartConfigMs), (unsigned)MIN_CONFIG_HANDSHAKE_INTERVAL_MS);
-        return;
+    uint32_t last = lastStartConfigMs.load(std::memory_order_relaxed);
+    while (true) {
+        if (last != 0 && (now - last) < MIN_CONFIG_HANDSHAKE_INTERVAL_MS) {
+            LOG_WARN("Config handshake throttled (last one %u ms ago, min interval %u ms)",
+                     (unsigned)(now - last), (unsigned)MIN_CONFIG_HANDSHAKE_INTERVAL_MS);
+            return;
+        }
+        if (lastStartConfigMs.compare_exchange_weak(last, now, std::memory_order_acq_rel, std::memory_order_relaxed))
+            break;
+        // another task raced us — re-check the (possibly updated) `last` value
     }
-    lastStartConfigMs = now;
+
+    // Throttle passed — safe to advance state. Commit the new nonce so sendConfigComplete
+    // returns it back to the client that asked for it.
+    config_nonce = newConfigNonce;
 
     // Must be before setting state (because state is how we know !connected)
     if (!isConnected()) {
@@ -181,9 +197,8 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         case meshtastic_ToRadio_packet_tag:
             return handleToRadioPacket(toRadioScratch.packet);
         case meshtastic_ToRadio_want_config_id_tag:
-            config_nonce = toRadioScratch.want_config_id;
-            LOG_INFO("Client wants config, nonce=%u", config_nonce);
-            handleStartConfig();
+            LOG_INFO("Client wants config, nonce=%u", toRadioScratch.want_config_id);
+            handleStartConfig(toRadioScratch.want_config_id);
             break;
         case meshtastic_ToRadio_disconnect_tag:
             LOG_INFO("Disconnect from phone");
