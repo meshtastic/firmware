@@ -719,38 +719,6 @@ bool Power::analogInit()
 #endif
 }
 
-#ifdef T_WATCH_S3
-#ifdef PMU_IRQ
-void Power::triggerButtonWakeup()
-{
-    power->setIntervalFromNow(0);
-    runASAP = true;
-}
-
-// This function is secure and runs on the FreeRTOS Daemon Task, not in the interrupt.
-static void pmu_deferred_handler(void *arg1, uint32_t arg2)
-{
-    if (power) {
-        power->triggerButtonWakeup();
-    }
-}
-
-// High speed ISR, won't make the esp32s3 crash
-void IRAM_ATTR pmu_isr_handler()
-{
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
-    // Delegate the work to the secure function pmu_deferred_handler
-    xTimerPendFunctionCallFromISR(pmu_deferred_handler, NULL, 0, &xHigherPriorityTaskWoken);
-
-    if (xHigherPriorityTaskWoken) {
-        portYIELD_FROM_ISR();
-    }
-}
-
-#endif
-#endif
-
 /**
  * Initializes the Power class.
  *
@@ -1042,16 +1010,8 @@ int32_t Power::runOnce()
         */
         if (PMU->isPekeyShortPressIrq()) {
             LOG_INFO("Input: Corona Button Click");
-
-            if (screen) {
-                if (!screen->isScreenOn()) {
-                    LOG_DEBUG("Waking screen via Button");
-                    screen->setOn(true);
-                } else {
-                    LOG_DEBUG("Sleeping screen via Button");
-                    screen->setOn(false);
-                }
-            }
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_CANCEL, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
         }
 #endif
         /*
