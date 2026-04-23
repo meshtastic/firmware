@@ -455,9 +455,10 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     meshtastic_NodeInfoLite *fromNode = (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to))
                                             ? nodeDB->getMeshNode(p->from)
                                             : nullptr;
-    meshtastic_NodeInfoLite *toNode = fromNode ? nodeDB->getMeshNode(p->to) : nullptr;
-    if (fromNode != nullptr && fromNode->user.public_key.size > 0 && toNode != nullptr &&
-        toNode->user.public_key.size > 0 && rawSize > MESHTASTIC_PKC_OVERHEAD) {
+    meshtastic_NodeInfoLite *toNode = nullptr;
+    if (fromNode != nullptr && fromNode->user.public_key.size > 0 &&
+        (toNode = nodeDB->getMeshNode(p->to)) != nullptr && toNode->user.public_key.size > 0 &&
+        rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
         if (crypto->decryptCurve25519(p->from, fromNode->user.public_key, p->id, rawSize, p->encrypted.bytes, bytes)) {
