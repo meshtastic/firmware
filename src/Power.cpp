@@ -68,11 +68,7 @@
 #define ETH ETH2
 #endif // HAS_ETHERNET
 
-#endif
-
-#ifndef DELAY_FOREVER
-#define DELAY_FOREVER portMAX_DELAY
-#endif
+#endif // MQTT
 
 #if defined(BATTERY_PIN) && defined(ARCH_ESP32)
 
@@ -93,34 +89,6 @@ static const adc_atten_t atten = ADC_ATTEN_DB_12;
 static const adc_atten_t atten = ADC_ATTENUATION;
 #endif
 #endif // BATTERY_PIN && ARCH_ESP32
-
-#ifdef EXT_PWR_DETECT
-#ifndef EXT_PWR_DETECT_MODE
-#define EXT_PWR_DETECT_MODE INPUT
-// If using internal pull resistors, we can infer EXT_PWR_DETECT_VALUE
-#elif EXT_PWR_DETECT_MODE == INPUT_PULLUP
-#define EXT_PWR_DETECT_VALUE LOW
-#elif EXT_PWR_DETECT_MODE == INPUT_PULLDOWN
-#define EXT_PWR_DETECT_VALUE HIGH
-#endif
-#ifndef EXT_PWR_DETECT_VALUE
-#define EXT_PWR_DETECT_VALUE HIGH
-#endif
-#endif
-
-#ifdef EXT_CHRG_DETECT
-#ifndef EXT_CHRG_DETECT_MODE
-#define EXT_CHRG_DETECT_MODE INPUT
-// If using internal pull resistors, we can infer EXT_CHRG_DETECT_VALUE
-#elif EXT_CHRG_DETECT_MODE == INPUT_PULLUP
-#define EXT_CHRG_DETECT_VALUE LOW
-#elif EXT_CHRG_DETECT_MODE == INPUT_PULLDOWN
-#define EXT_CHRG_DETECT_VALUE HIGH
-#endif
-#ifndef EXT_CHRG_DETECT_VALUE
-#define EXT_CHRG_DETECT_VALUE HIGH
-#endif
-#endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #if __has_include(<Adafruit_INA219.h>)
@@ -160,7 +128,7 @@ MAX17048Sensor max17048Sensor;
 NullSensor max17048Sensor;
 #endif
 #endif
-#endif
+#endif // !MESHTASTIC_EXCLUDE_I2C
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
 RAK9154Sensor rak9154Sensor;
@@ -178,45 +146,11 @@ XPowersPPM *PPM = NULL;
 
 #ifdef HAS_PMU
 XPowersLibInterface *PMU = NULL;
-#else
-
-// Copy of the base class defined in axp20x.h.
-// I'd rather not include axp20x.h as it brings Wire dependency.
-class HasBatteryLevel
-{
-  public:
-    /**
-     * Battery state of charge, from 0 to 100 or -1 for unknown
-     */
-    virtual int getBatteryPercent() { return -1; }
-
-    /**
-     * The raw voltage of the battery or NAN if unknown
-     */
-    virtual uint16_t getBattVoltage() { return 0; }
-
-    /**
-     * return true if there is a battery installed in this unit
-     */
-    virtual bool isBatteryConnect() { return false; }
-
-    virtual bool isVbusIn() { return false; }
-    virtual bool isCharging() { return false; }
-};
 #endif
-
-bool pmu_irq = false;
 
 Power *power;
 
 using namespace meshtastic;
-
-// NRF52 has AREF_VOLTAGE defined in architecture.h but
-// make sure it's included. If something is wrong with NRF52
-// definition - compilation will fail on missing definition
-#if !defined(AREF_VOLTAGE) && !defined(ARCH_NRF52)
-#define AREF_VOLTAGE 3.3
-#endif
 
 /**
  * If this board has a battery level sensor, set this to a valid implementation
@@ -260,7 +194,7 @@ static void battery_adcDisable()
 #endif
 }
 
-#endif
+#endif // BATTERY_PIN
 
 /**
  * A simple battery level sensor that assumes the battery voltage is attached
@@ -319,7 +253,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     }
 
     /**
-     * The raw voltage of the batteryin millivolts or NAN if unknown
+     * The raw voltage of the battery in millivolts or NAN if unknown
      */
     virtual uint16_t getBattVoltage() override
     {
@@ -334,16 +268,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (hasINA()) {
             return getINAVoltage();
         }
-#endif
-
-#ifndef ADC_MULTIPLIER
-#define ADC_MULTIPLIER 2.0
-#endif
-
-#ifndef BATTERY_SENSE_SAMPLES
-#define BATTERY_SENSE_SAMPLES                                                                                                    \
-    15 // Set the number of samples, it has an effect of increasing sensitivity in
-       // complex electromagnetic environment.
 #endif
 
 #ifdef BATTERY_PIN
@@ -1714,7 +1638,7 @@ bool Power::lipoChargerInit()
     return true;
 }
 
-#else
+#else  // HAS_PPM
 /**
  * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
  */
@@ -1722,7 +1646,7 @@ bool Power::lipoChargerInit()
 {
     return false;
 }
-#endif
+#endif // HAS_PPM
 
 #ifdef HELTEC_MESH_SOLAR
 #include "meshSolarApp.h"
@@ -1784,7 +1708,7 @@ bool Power::meshSolarInit()
     return true;
 }
 
-#else
+#else  // HELTEC_MESH_SOLAR
 /**
  * The meshSolar battery level sensor is unavailable - default to
  * AnalogBatteryLevel
@@ -1793,7 +1717,7 @@ bool Power::meshSolarInit()
 {
     return false;
 }
-#endif
+#endif // HELTEC_MESH_SOLAR
 
 #ifdef HAS_SERIAL_BATTERY_LEVEL
 #include <SoftwareSerial.h>
@@ -1801,7 +1725,7 @@ bool Power::meshSolarInit()
 /**
  * SerialBatteryLevel class for pulling battery information from a secondary MCU over serial.
  */
-class SerialBatteryLevel : public HasBatteryLevel
+class SerialBatteryLevel : public AnalogBatteryLevel
 {
 
   public:
@@ -1865,29 +1789,6 @@ class SerialBatteryLevel : public HasBatteryLevel
         return true;
     }
 
-    /**
-     * return true if there is an external power source detected
-     */
-    virtual bool isVbusIn() override
-    {
-#if defined(EXT_CHRG_DETECT)
-
-        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
-
-#endif
-        return false;
-    }
-
-    virtual bool isCharging() override
-    {
-#ifdef EXT_CHRG_DETECT
-        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
-
-#endif
-        // by default, we check the battery voltage only
-        return isVbusIn();
-    }
-
   private:
     SoftwareSerial BatterySerial = SoftwareSerial(SERIAL_BATTERY_RX, SERIAL_BATTERY_TX);
     uint8_t Data[6] = {0};
@@ -1917,7 +1818,7 @@ bool Power::serialBatteryInit()
     return true;
 }
 
-#else
+#else  // HAS_SERIAL_BATTERY_LEVEL
 /**
  * If this device has no serial battery level sensor, don't try to use it.
  */
@@ -1925,4 +1826,4 @@ bool Power::serialBatteryInit()
 {
     return false;
 }
-#endif
+#endif // HAS_SERIAL_BATTERY_LEVEL
