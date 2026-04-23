@@ -47,8 +47,28 @@ PhoneAPI::~PhoneAPI()
     close();
 }
 
+uint32_t PhoneAPI::lastStartConfigMs = 0;
+
+// Minimum interval between full config-dump handshakes, shared across all PhoneAPI
+// transports (BLE, WiFi/TCP, Serial, HTTP, Ethernet). Chosen to be just longer than
+// a nominal config dump takes to complete (~1.5-2 seconds on a 250-node DB), so
+// legitimate reconnect-after-disconnect flows still work but a flapping client
+// can't drive one handshake per second and exhaust internal SRAM.
+static constexpr uint32_t MIN_CONFIG_HANDSHAKE_INTERVAL_MS = 2000;
+
 void PhoneAPI::handleStartConfig()
 {
+    // Rate-limit full config dumps. Each dump exercises the protobuf encode path for
+    // all channels, configs, the entire NodeDB, and a full filesystem walk — back-to-back
+    // dumps fragment the internal SRAM heap and can wedge the device on static-pool
+    // allocators. Well-behaved clients only issue one want_config_id per reconnect.
+    if (lastStartConfigMs != 0 && (millis() - lastStartConfigMs) < MIN_CONFIG_HANDSHAKE_INTERVAL_MS) {
+        LOG_WARN("Config handshake throttled (last one %u ms ago, min interval %u ms)",
+                 (unsigned)(millis() - lastStartConfigMs), (unsigned)MIN_CONFIG_HANDSHAKE_INTERVAL_MS);
+        return;
+    }
+    lastStartConfigMs = millis();
+
     // Must be before setting state (because state is how we know !connected)
     if (!isConnected()) {
         onConnectionChanged(true);

@@ -145,6 +145,15 @@ class PhoneAPI
     /** the last msec we heard from the client on the other side of this link */
     uint32_t lastContactMsec = 0;
 
+    /**
+     * Shared across all PhoneAPI instances — prevents a misbehaving client (or flapping TCP
+     * reconnect loop) from driving back-to-back full config handshakes. Every handshake
+     * exercises the protobuf encode path for MY_INFO, OWN_NODEINFO, METADATA, all channels,
+     * all configs, the entire NodeDB, and a filesystem walk — each cycle costs heap that
+     * takes time to recover, and high-rate repetition fragments the internal SRAM heap.
+     */
+    static uint32_t lastStartConfigMs;
+
     /// Hookable to find out when connection changes
     virtual void onConnectionChanged(bool connected) {}
 
