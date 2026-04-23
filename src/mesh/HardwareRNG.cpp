@@ -48,7 +48,9 @@ bool mixWithLoRaEntropy(uint8_t *buffer, size_t length)
     // and return false so callers know no extra mixing occurred.
     RadioLibInterface *radio = RadioLibInterface::instance;
     if (!radio) {
+#ifndef PIO_UNIT_TESTING
         LOG_ERROR("No radio instance available to provide entropy");
+#endif
         return false;
     }
 
