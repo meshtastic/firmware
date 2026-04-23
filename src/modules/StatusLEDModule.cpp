@@ -42,7 +42,6 @@ static inline void writeStatusPixel(Adafruit_NeoPixel &pixel, uint32_t color, bo
 
 int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
 {
-    LOG_DEBUG("StatusLEDModule::handleStatusUpdate type=%d", arg->getStatusType());
     switch (arg->getStatusType()) {
     case STATUS_TYPE_POWER: {
         if (powerStatus->getHasUSB() || powerStatus->getIsCharging()) {
