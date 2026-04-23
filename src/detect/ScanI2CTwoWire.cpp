@@ -511,7 +511,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 break;
 
-                SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTXX, "SHTXX", (uint8_t)addr.address)
+            case SHTC3_ADDR: {
+                auto foundSHTXX = deviceAddresses.find(SHTXX);
+                if (foundSHTXX != deviceAddresses.end() &&
+                    (foundSHTXX->second.address == SHTXX_ADDR || foundSHTXX->second.address == SHTXX_ADDR_ALT)) {
+                    LOG_DEBUG("Ignore SHTXX at address 0x%x because SHTXX was already found at 0x%x", (uint8_t)addr.address,
+                              foundSHTXX->second.address);
+                } else {
+                    logFoundDevice("SHTXX", (uint8_t)addr.address);
+                    type = SHTXX;
+                }
+                break;
+            }
             case RCWL9620_ADDR:
                 // get MAX30102 PARTID
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 1);
