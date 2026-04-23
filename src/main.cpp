@@ -909,11 +909,13 @@ void setup()
     if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
         LOG_WARN(LOW_ENTROPY_WARNING);
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_WARNING;
-        cn->time = getValidTime(RTCQualityFromNet);
-        sprintf(cn->message, LOW_ENTROPY_WARNING);
-        service->sendClientNotification(cn);
-        nodeDB->hasWarned = true;
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->time = getValidTime(RTCQualityFromNet);
+            sprintf(cn->message, LOW_ENTROPY_WARNING);
+            service->sendClientNotification(cn);
+            nodeDB->hasWarned = true;
+        }
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER

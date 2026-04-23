@@ -644,13 +644,15 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
-                notification->level = meshtastic_LogRecord_Level_INFO;
-                notification->time = getValidTime(RTCQualityFromNet);
-                sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
-                        Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
-                                                          default_telemetry_broadcast_interval_secs) /
-                            1000U);
-                service->sendClientNotification(notification);
+                if (notification) {
+                    notification->level = meshtastic_LogRecord_Level_INFO;
+                    notification->time = getValidTime(RTCQualityFromNet);
+                    sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
+                            Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
+                                                              default_telemetry_broadcast_interval_secs) /
+                                1000U);
+                    service->sendClientNotification(notification);
+                }
                 sleepOnNextExecution = true;
                 LOG_DEBUG("Start next execution in 5s, then sleep");
                 setIntervalFromNow(FIVE_SECONDS_MS);
