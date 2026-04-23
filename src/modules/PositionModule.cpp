@@ -498,12 +498,14 @@ void PositionModule::sendLostAndFoundText()
     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     p->want_ack = false;
     if (written < 0) {
+        // snprintf encoding error — send an empty payload rather than uninitialized bytes.
         p->decoded.payload.size = 0;
     } else {
-        p->decoded.payload.size =
-            (written < static_cast<int>(sizeof(message) - 1)) ? written : static_cast<int>(sizeof(message) - 1);
-        if (p->decoded.payload.size > 0) {
-            memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+        // Clamp to buffer capacity (snprintf returns "would-have-written" which can exceed the buffer).
+        const size_t msg_len = std::min(static_cast<size_t>(written), sizeof(message) - 1);
+        p->decoded.payload.size = msg_len;
+        if (msg_len > 0) {
+            memcpy(p->decoded.payload.bytes, message, msg_len);
         }
     }
 
