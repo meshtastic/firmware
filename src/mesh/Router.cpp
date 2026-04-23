@@ -208,6 +208,10 @@ PacketId generatePacketId()
 meshtastic_MeshPacket *Router::allocForSending()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    if (!p) {
+        LOG_ERROR("allocForSending: packet pool exhausted");
+        return nullptr;
+    }
 
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB->getNodeNum();
