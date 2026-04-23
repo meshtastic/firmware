@@ -415,8 +415,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #if !defined(M5STACK_UNITC6L)
             case INA_ADDR: // Same as SHT2X
             case INA_ADDR_ALTERNATE:
-            case INA_ADDR_WAVESHARE_UPS:
-            {
+            case INA_ADDR_WAVESHARE_UPS: {
                 uint16_t mfg = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
 
                 LOG_DEBUG("Register MFG_UID: 0x%x", mfg);
