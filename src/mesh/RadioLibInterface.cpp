@@ -253,8 +253,10 @@ bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
     }
 
     // Older RadioLib versions only expose random(min, max), so fill the buffer byte-by-byte.
+    // Note: random(min, max) is half-open [min, max) per RadioLib — (0, 256) yields 0-255, which
+    // is the correct byte range. The previous (0, 255) could never produce the value 255.
     for (size_t i = 0; i < length; ++i) {
-        int32_t value = iface->random(0, 255);
+        int32_t value = iface->random(0, 256);
         if (value < 0) {
             return false;
         }
@@ -471,11 +473,17 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 #endif
     if (state != RADIOLIB_ERR_NONE) {
-        // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
-        LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
-                  "nextHop=0x%x relay=0x%x)",
-                  state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
-                  iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+        // CRC errors are normal noise in RF-congested areas — drop to DEBUG so we don't flood logs.
+        if (state == RADIOLIB_ERR_CRC_MISMATCH) {
+            LOG_DEBUG("RX CRC mismatch (noise?) fr=0x%08x rxSNR=%g rxRSSI=%i",
+                      radioBuffer.header.from, iface->getSNR(), lround(iface->getRSSI()));
+        } else {
+            // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
+            LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
+                      "nextHop=0x%x relay=0x%x)",
+                      state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
+                      iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+        }
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
@@ -490,17 +498,29 @@ void RadioLibInterface::handleReceiveInterrupt()
             rxBad++;
             airTime->logAirtime(RX_ALL_LOG, rxMsec);
         } else {
-            rxGood++;
             // altered packet with "from == 0" can do Remote Node Administration without permission
             if (radioBuffer.header.from == 0) {
                 LOG_WARN("Ignore received packet without sender");
+                rxBad++;
+                airTime->logAirtime(RX_ALL_LOG, rxMsec);
                 return;
             }
+
+            rxGood++;
 
             // Note: we deliver _all_ packets to our router (i.e. our interface is intentionally promiscuous).
             // This allows the router and other apps on our node to sniff packets (usually routing) between other
             // nodes.
             meshtastic_MeshPacket *mp = packetPool.allocZeroed();
+
+            // Packet pool exhaustion: drop this packet on the floor rather than deref NULL.
+            // Happens under sustained heap pressure (e.g., config dump mid-RX, dense mesh bursts).
+            if (!mp) {
+                LOG_ERROR("Packet pool exhausted in RX handler — dropping packet id=0x%08x",
+                          radioBuffer.header.id);
+                airTime->logAirtime(RX_ALL_LOG, rxMsec);
+                return;
+            }
 
             // Keep the assigned fields in sync with src/mqtt/MQTT.cpp:onReceiveProto
             mp->from = radioBuffer.header.from;
