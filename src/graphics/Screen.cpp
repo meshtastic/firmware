@@ -1622,25 +1622,18 @@ void Screen::setFastFramerate()
 
 int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 {
-    LOG_DEBUG("Screen::handleStatusUpdate type=%d", arg->getStatusType());
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
         if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
-            LOG_DEBUG("Screen::handleStatusUpdate calling setFrames");
             setFrames(FOCUS_PRESERVE); // Regen the list of screen frames (returning to same frame, if possible)
-            LOG_DEBUG("Screen::handleStatusUpdate setFrames returned");
         }
         nodeDB->updateGUI = false;
         break;
     case STATUS_TYPE_POWER: {
-        LOG_DEBUG("Screen::handleStatusUpdate POWER begin, powerStatus=%p", powerStatus);
         bool currentUSB = powerStatus->getHasUSB();
-        LOG_DEBUG("Screen::handleStatusUpdate POWER currentUSB=%d lastPowerUSBState=%d", currentUSB, lastPowerUSBState);
         if (currentUSB != lastPowerUSBState) {
             lastPowerUSBState = currentUSB;
-            LOG_DEBUG("Screen::handleStatusUpdate POWER calling forceDisplay");
             forceDisplay(true);
-            LOG_DEBUG("Screen::handleStatusUpdate POWER forceDisplay returned");
         }
         break;
     }
