@@ -29,7 +29,8 @@ void TouchScreenImpl1::init()
     return;
 #else
     TouchScreenBase::init(true);
-    inputBroker->registerSource(this);
+    if (inputBroker)
+        inputBroker->registerSource(this);
 #endif
 }
 
