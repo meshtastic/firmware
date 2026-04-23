@@ -408,8 +408,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 #ifndef HAS_NCP5623
             case AHT10_ADDR:
+#if defined(ARDUINO_NESSO_N1) && defined(TOUCH_SLAVE_ADDRESS) && TOUCH_SLAVE_ADDRESS == AHT10_ADDR
+                LOG_DEBUG("Ignore address 0x%x as AHT10 because it is the Nesso touchscreen", (uint8_t)addr.address);
+#else
                 logFoundDevice("AHT10", (uint8_t)addr.address);
                 type = AHT10;
+#endif
                 break;
 #endif
 #if !defined(M5STACK_UNITC6L) && !defined(ARDUINO_NESSO_N1)
