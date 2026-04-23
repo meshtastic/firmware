@@ -96,14 +96,15 @@ static const adc_atten_t atten = ADC_ATTENUATION;
 
 #ifdef EXT_CHRG_DETECT
 #ifndef EXT_CHRG_DETECT_MODE
-static const uint8_t ext_chrg_detect_mode = INPUT;
-#else
-static const uint8_t ext_chrg_detect_mode = EXT_CHRG_DETECT_MODE;
+#define EXT_CHRG_DETECT_MODE INPUT
+// If using internal pull resistors, we can infer EXT_CHRG_DETECT_VALUE
+#elif EXT_CHRG_DETECT_MODE == INPUT_PULLUP
+#define EXT_CHRG_DETECT_VALUE LOW
+#elif EXT_CHRG_DETECT_MODE == INPUT_PULLDOWN
+#define EXT_CHRG_DETECT_VALUE HIGH
 #endif
 #ifndef EXT_CHRG_DETECT_VALUE
-static const uint8_t ext_chrg_detect_value = HIGH;
-#else
-static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
+#define EXT_CHRG_DETECT_VALUE HIGH
 #endif
 #endif
 
@@ -511,9 +512,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
 #endif
 #if defined(ELECROW_ThinkNode_M6)
-        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value || isVbusIn();
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE || isVbusIn();
 #elif EXT_CHRG_DETECT
-        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
 #elif defined(BATTERY_CHARGING_INV)
         return !digitalRead(BATTERY_CHARGING_INV);
 #else
@@ -653,7 +654,7 @@ bool Power::analogInit()
 #endif
 #endif
 #ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
+    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
 #endif
 
 #ifdef BATTERY_PIN
@@ -1886,7 +1887,7 @@ class SerialBatteryLevel : public HasBatteryLevel
     {
 #if defined(EXT_CHRG_DETECT)
 
-        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
 
 #endif
         return false;
@@ -1895,7 +1896,7 @@ class SerialBatteryLevel : public HasBatteryLevel
     virtual bool isCharging() override
     {
 #ifdef EXT_CHRG_DETECT
-        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
 
 #endif
         // by default, we check the battery voltage only
@@ -1920,7 +1921,7 @@ bool Power::serialBatteryInit()
     pinMode(EXT_PWR_DETECT, INPUT);
 #endif
 #ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
+    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
 #endif
 
     bool result = serialBatteryLevel.runOnce();
