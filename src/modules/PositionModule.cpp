@@ -493,8 +493,8 @@ void PositionModule::sendLostAndFoundText()
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = NODENUM_BROADCAST;
     char message[128];
-    int written =
-        snprintf(message, sizeof(message), "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7), (lastGpsLongitude * 1e-7));
+    int written = snprintf(message, sizeof(message), "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7),
+                           (lastGpsLongitude * 1e-7));
     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     p->want_ack = false;
     if (written < 0) {
