@@ -291,10 +291,16 @@ int32_t NextHopRouter::doRetransmissions()
 
         bool stillValid = true; // assume we'll keep this record around
 
-        // Use signed-difference comparison so retransmission timing stays correct across the
+        // Use unsigned half-range comparison so retransmission timing stays correct across the
         // ~49.7 day millis() wraparound (previously this FIXME would stall all retx for the
         // duration of the wrap or fire them all at once immediately after).
-        if ((int32_t)(p.nextTxMsec - now) <= 0) {
+        //
+        // Casting an unsigned difference to int32_t for a "time passed" test is
+        // implementation-defined in C++ when the value exceeds INT32_MAX. The unsigned
+        // half-range form below is fully well-defined: nextTxMsec is in the past (or is now)
+        // iff (now - nextTxMsec) has not wrapped past 2^31 ms. Anything further in the
+        // future wraps into the top half and reads as "not yet."
+        if ((uint32_t)(now - p.nextTxMsec) < 0x80000000u) {
             if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
                     LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
