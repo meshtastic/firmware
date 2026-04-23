@@ -270,7 +270,7 @@ void PacketHistory::hashRemove(NodeNum sender, PacketId id)
                 uint16_t displaced = hashIndex[next];
                 hashIndex[next] = HASH_EMPTY;
                 if (displaced < recentPacketsCapacity) {
-                    auto &rec = recentPackets[displaced];
+                    const auto &rec = recentPackets[displaced];
                     hashInsert(rec.sender, rec.id, displaced);
                 }
                 next = (next + 1) & hashMask;
