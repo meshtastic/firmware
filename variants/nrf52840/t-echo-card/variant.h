@@ -141,9 +141,9 @@ static const uint8_t A0 = PIN_A0;
 #define GPS_EN_ACTIVE 1
 #define PIN_GPS_STANDBY (0 + 25) // GPS_WAKE_UP: P0.25 - wakeup pin
 #define PIN_GPS_PPS (0 + 23)     // GPS_1PPS: P0.23
-#define GPS_RX_PIN (0 + 19)    // MCU RX ← GPS's TX (vendor GPS_UART_TX / P0.19)
-#define GPS_TX_PIN (0 + 21)    // MCU TX → GPS's RX (vendor GPS_UART_RX / P0.21)
-#define PIN_GPS_RESET (0 + 29) // GPS_RF_EN: GPS RF enable / reset
+#define GPS_RX_PIN (0 + 19)      // MCU RX ← GPS's TX (vendor GPS_UART_TX / P0.19)
+#define GPS_TX_PIN (0 + 21)      // MCU TX → GPS's RX (vendor GPS_UART_RX / P0.21)
+#define PIN_GPS_RESET (0 + 29)   // GPS_RF_EN: GPS RF enable / reset
 
 #define GPS_THREAD_INTERVAL 50
 
