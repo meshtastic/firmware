@@ -6,7 +6,7 @@
     FastEPD buffer format: 1bpp, horizontal bytes, MSB = leftmost pixel, 1 = white
 
     Both formats share the same pixel layout and polarity (1 = white, 0 = black).
-    The InkHUD safe-area buffer (944×523) is copied into the centre of the physical
+    The InkHUD safe-area buffer (928×508) is copied into the centre of the physical
     960×540 FastEPD buffer so content clears the panel's inactive edge border.
     See ED047TC1.h for the H_OFFSET_BYTES / V_OFFSET_TOP / V_OFFSET_BOTTOM constants.
 
