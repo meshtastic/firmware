@@ -283,7 +283,7 @@ bool QMP6988Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.has_temperature = true;
     measurement->variant.environment_metrics.has_barometric_pressure = true;
     measurement->variant.environment_metrics.temperature = (float)compensatedTemperature / 256.0f;
-    measurement->variant.environment_metrics.barometric_pressure = (float)compensatedPressure / 16.0f;
+    measurement->variant.environment_metrics.barometric_pressure = (float)compensatedPressure / 1600.0f;
 
     LOG_INFO("%s: Got temp:%fdegC pressure:%fhPa", sensorName, measurement->variant.environment_metrics.temperature,
              measurement->variant.environment_metrics.barometric_pressure);
