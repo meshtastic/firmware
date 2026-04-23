@@ -1,5 +1,8 @@
-#include "AudioBoard.h"
 #include "configuration.h"
+
+#ifdef M5STACK_CARDPUTER_ADV
+
+#include "AudioBoard.h"
 
 DriverPins PinsAudioBoardES8311;
 AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
@@ -38,3 +41,5 @@ void lateInitVariant()
     es8311_write_reg(0x32, 0xBF); // DAC volume (0dB)
     es8311_write_reg(0x37, 0x08); // EQ bypass
 }
+
+#endif
