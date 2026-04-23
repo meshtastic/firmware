@@ -493,11 +493,19 @@ void PositionModule::sendLostAndFoundText()
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = NODENUM_BROADCAST;
     char message[128];
-    snprintf(message, sizeof(message), "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7), (lastGpsLongitude * 1e-7));
+    int written =
+        snprintf(message, sizeof(message), "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7), (lastGpsLongitude * 1e-7));
     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     p->want_ack = false;
-    p->decoded.payload.size = strlen(message);
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+    if (written < 0) {
+        p->decoded.payload.size = 0;
+    } else {
+        p->decoded.payload.size =
+            (written < static_cast<int>(sizeof(message) - 1)) ? written : static_cast<int>(sizeof(message) - 1);
+        if (p->decoded.payload.size > 0) {
+            memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+        }
+    }
 
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
