@@ -79,7 +79,9 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         cn->payload_variant.key_verification_number_request.nonce = currentNonce;
         strncpy(cn->payload_variant.key_verification_number_request.remote_longname,
                 remoteNodePtr != nullptr ? remoteNodePtr->user.long_name : "",
-                sizeof(cn->payload_variant.key_verification_number_request.remote_longname));
+                sizeof(cn->payload_variant.key_verification_number_request.remote_longname) - 1);
+        cn->payload_variant.key_verification_number_request
+            .remote_longname[sizeof(cn->payload_variant.key_verification_number_request.remote_longname) - 1] = '\0';
         service->sendClientNotification(cn);
         LOG_INFO("Received hash2");
         currentState = KEY_VERIFICATION_SENDER_AWAITING_NUMBER;
@@ -114,7 +116,9 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             cn->payload_variant.key_verification_final.nonce = currentNonce;
             strncpy(cn->payload_variant.key_verification_final.remote_longname,
                     remoteNodePtr != nullptr ? remoteNodePtr->user.long_name : "",
-                    sizeof(cn->payload_variant.key_verification_final.remote_longname));
+                    sizeof(cn->payload_variant.key_verification_final.remote_longname) - 1);
+            cn->payload_variant.key_verification_final
+                .remote_longname[sizeof(cn->payload_variant.key_verification_final.remote_longname) - 1] = '\0';
             cn->payload_variant.key_verification_final.isSender = false;
             service->sendClientNotification(cn);
 
@@ -213,7 +217,9 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     cn->payload_variant.key_verification_number_inform.nonce = currentNonce;
     strncpy(cn->payload_variant.key_verification_number_inform.remote_longname,
             remoteNodePtr != nullptr ? remoteNodePtr->user.long_name : "",
-            sizeof(cn->payload_variant.key_verification_number_inform.remote_longname));
+            sizeof(cn->payload_variant.key_verification_number_inform.remote_longname) - 1);
+    cn->payload_variant.key_verification_number_inform
+        .remote_longname[sizeof(cn->payload_variant.key_verification_number_inform.remote_longname) - 1] = '\0';
     cn->payload_variant.key_verification_number_inform.security_number = currentSecurityNumber;
     service->sendClientNotification(cn);
     LOG_WARN("Security Number %04u, nonce %llu", currentSecurityNumber, currentNonce);
@@ -275,7 +281,9 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
     cn->payload_variant.key_verification_final.nonce = currentNonce;
     strncpy(cn->payload_variant.key_verification_final.remote_longname, remoteNodePtr->user.long_name,
-            sizeof(cn->payload_variant.key_verification_final.remote_longname));
+            sizeof(cn->payload_variant.key_verification_final.remote_longname) - 1);
+    cn->payload_variant.key_verification_final
+        .remote_longname[sizeof(cn->payload_variant.key_verification_final.remote_longname) - 1] = '\0';
     cn->payload_variant.key_verification_final.isSender = true;
     service->sendClientNotification(cn);
     LOG_INFO(message);
