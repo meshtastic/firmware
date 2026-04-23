@@ -369,24 +369,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         case meshtastic_PortNum_NEIGHBORINFO_APP: {
             uint8_t variableHopLimit = hopScalingModule->getLastRequiredHop();
 
-#if VARIABLE_HOP_ROLE_FLOOR
-            // Role-based hop floor: ensure minimum reach for mobile/sensor roles
-            uint8_t roleFloor = 0;
-            switch (config.device.role) {
-            case meshtastic_Config_DeviceConfig_Role_TRACKER:
-            case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:
-                roleFloor = 2;
-                break;
-            case meshtastic_Config_DeviceConfig_Role_SENSOR:
-                roleFloor = 1;
-                break;
-            default:
-                break;
-            }
-            if (variableHopLimit < roleFloor)
-                variableHopLimit = roleFloor;
-#endif
-
             // Never exceed user-configured hop_limit
             if (variableHopLimit < p->hop_limit) {
                 LOG_DEBUG("[HOPSCALE] hop_limit %u -> %u for portnum %u", p->hop_limit, variableHopLimit, p->decoded.portnum);

@@ -79,16 +79,9 @@ static inline int get_max_num_nodes()
 // Enable per-variant by defining HAS_VARIABLE_HOPS=1 in variant.h
 #ifdef ARCH_STM32WL
 #define HAS_VARIABLE_HOPS 0
-#define VARIABLE_HOP_ROLE_FLOOR 0
 #endif
 #ifndef HAS_VARIABLE_HOPS
 #define HAS_VARIABLE_HOPS 1
-#endif
-
-// SoI role-based hop floor: TRACKER/TAK_TRACKER get min 2 hops, SENSOR get min 1
-// Enable per-variant by defining VARIABLE_HOP_ROLE_FLOOR=1 in variant.h
-#ifndef VARIABLE_HOP_ROLE_FLOOR
-#define VARIABLE_HOP_ROLE_FLOOR 1
 #endif
 
 // Cache size for traffic management (number of nodes to track)

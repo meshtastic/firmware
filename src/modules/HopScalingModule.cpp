@@ -5,6 +5,7 @@
 #if HAS_VARIABLE_HOPS
 
 #include "FSCommon.h"
+#include "NodeDB.h"
 #include "SPILock.h"
 #include "concurrency/LockGuard.h"
 #include "mesh-pb-constants.h"
@@ -457,7 +458,23 @@ int32_t HopScalingModule::runOnce()
     }
 
     if (didHourlyUpdate) {
-        lastRequiredHop = (histogramRollCount > 0 && count > 0) ? lastSuggestedHop : HOP_MAX;
+        uint8_t suggested = (histogramRollCount > 0 && count > 0) ? lastSuggestedHop : HOP_MAX;
+        // Role-based hop floor: TRACKER/TAK_TRACKER always reach at least 2 hops,
+        // SENSOR reaches at least 1, so these reporting roles remain reachable even
+        // on a dense mesh where the histogram recommends a lower hop count.
+        uint8_t roleFloor = 0;
+        switch (config.device.role) {
+        case meshtastic_Config_DeviceConfig_Role_TRACKER:
+        case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:
+            roleFloor = 2;
+            break;
+        case meshtastic_Config_DeviceConfig_Role_SENSOR:
+            roleFloor = 1;
+            break;
+        default:
+            break;
+        }
+        lastRequiredHop = std::max(suggested, roleFloor);
     }
 
     logStatusReport(didHourlyUpdate);
