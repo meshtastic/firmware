@@ -1395,6 +1395,10 @@ void Screen::setFrames(FrameFocus focus)
     // Store the info about this frameset, for future setFrames calls
     this->framesetInfo = fsi;
 
+#ifdef USERPREFS_UI_TEST_LOG
+    logFrameChange("rebuild", ui->getUiState()->currentFrame);
+#endif
+
     setFastFramerate(); // Draw ASAP
 }
 
@@ -1549,10 +1553,76 @@ void Screen::handleOnPress()
     }
 }
 
+#ifdef USERPREFS_UI_TEST_LOG
+void Screen::logFrameChange(const char *reason, uint8_t targetIdx)
+{
+    // Reverse-map an index to a stable name string keyed off FramePositions
+    // field names — so the pytest harness can assert `name=nodelist_nodes`
+    // without caring about how the positions were ordered this boot.
+    const auto &p = framesetInfo.positions;
+    const char *name = "unknown";
+    if (targetIdx == p.home)
+        name = "home";
+    else if (targetIdx == p.deviceFocused)
+        name = "deviceFocused";
+    else if (targetIdx == p.textMessage)
+        name = "textMessage";
+    else if (targetIdx == p.nodelist_nodes)
+        name = "nodelist_nodes";
+    else if (targetIdx == p.nodelist_location)
+        name = "nodelist_location";
+    else if (targetIdx == p.nodelist_lastheard)
+        name = "nodelist_lastheard";
+    else if (targetIdx == p.nodelist_hopsignal)
+        name = "nodelist_hopsignal";
+    else if (targetIdx == p.nodelist_distance)
+        name = "nodelist_distance";
+    else if (targetIdx == p.nodelist_bearings)
+        name = "nodelist_bearings";
+    else if (targetIdx == p.system)
+        name = "system";
+    else if (targetIdx == p.gps)
+        name = "gps";
+    else if (targetIdx == p.lora)
+        name = "lora";
+    else if (targetIdx == p.clock)
+        name = "clock";
+    else if (targetIdx == p.chirpy)
+        name = "chirpy";
+    else if (targetIdx == p.fault)
+        name = "fault";
+    else if (targetIdx == p.waypoint)
+        name = "waypoint";
+    else if (targetIdx == p.focusedModule)
+        name = "focusedModule";
+    else if (targetIdx == p.log)
+        name = "log";
+    else if (targetIdx == p.settings)
+        name = "settings";
+    else if (targetIdx == p.wifi)
+        name = "wifi";
+    else if (p.firstFavorite != 255 && p.lastFavorite != 255 && targetIdx >= p.firstFavorite && targetIdx <= p.lastFavorite)
+        name = "favorite";
+    LOG_INFO("Screen: frame %u/%u name=%s reason=%s", (unsigned)targetIdx, (unsigned)framesetInfo.frameCount, name, reason);
+}
+#endif
+
 void Screen::showFrame(FrameDirection direction)
 {
     // Only advance frames when UI is stable
     if (ui->getUiState()->frameState == FIXED) {
+
+#ifdef USERPREFS_UI_TEST_LOG
+        // Log the *intended* target before the (async) transition fires, so
+        // tests see a deterministic record of what was requested.
+        if (framesetInfo.frameCount > 0) {
+            uint8_t curr = ui->getUiState()->currentFrame;
+            uint8_t target = (direction == FrameDirection::NEXT)
+                                 ? (uint8_t)((curr + 1) % framesetInfo.frameCount)
+                                 : (uint8_t)((curr + framesetInfo.frameCount - 1) % framesetInfo.frameCount);
+            logFrameChange(direction == FrameDirection::NEXT ? "next" : "prev", target);
+        }
+#endif
 
         if (direction == FrameDirection::NEXT) {
             ui->nextFrame();
@@ -1885,22 +1955,37 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showFrame(FrameDirection::NEXT);
             } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
                 this->ui->switchToFrame(0);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f1", 0);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F2) {
                 this->ui->switchToFrame(1);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f2", 1);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F3) {
                 this->ui->switchToFrame(2);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f3", 2);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F4) {
                 this->ui->switchToFrame(3);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f4", 3);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F5) {
                 this->ui->switchToFrame(4);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f5", 4);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_UP_LONG) {

@@ -285,7 +285,11 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     /* Nepal 865MHz */
     meshtastic_Config_LoRaConfig_RegionCode_NP_865 = 25,
     /* Brazil 902MHz */
-    meshtastic_Config_LoRaConfig_RegionCode_BR_902 = 26
+    meshtastic_Config_LoRaConfig_RegionCode_BR_902 = 26,
+    /* ITU Region 1 Amateur Radio 2m band (144-146 MHz) */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M = 27,
+    /* ITU Region 2 / 3 Amateur Radio 2m band (144-148 MHz) */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M = 28
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -702,8 +706,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_CompassOrientation_ARRAYSIZE ((meshtastic_Config_DisplayConfig_CompassOrientation)(meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_BR_902
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_BR_902+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO

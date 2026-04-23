@@ -19,16 +19,21 @@ Run `mcp-server/run-tests.sh` and make sense of the output so the operator doesn
 
 2. **Read the pre-flight header.** First ~6 lines print the detected hub (role → port → env). If that line reads `detected hub : (none)`, the wrapper will narrow to `tests/unit` only — say so explicitly in your summary so the operator knows hardware tiers were skipped.
 
-3. **On pass**: one-line summary of the form `N passed, M skipped in <duration>`. Don't enumerate the 52 test names — the user can read those. Do mention if any test was SKIPPED for a NON-placeholder reason (e.g. "role not present on hub" is worth flagging).
+3. **On pass**: one-line summary of the form `N passed, M skipped in <duration>`. Don't enumerate the test names — the user can read those. Do mention any SKIPPED tests and name the cause:
+   - `"role not present on hub"` → device unplugged; operator knows to reconnect.
+   - `"firmware not baked with USERPREFS_UI_TEST_LOG"` → tests/ui skipped because the macro isn't in firmware yet; suggest `--force-bake`.
+   - `"uhubctl not installed"` → tests/recovery + peer-offline skipped; suggest `brew install uhubctl` / `apt install uhubctl`.
+   - `"no PPPS-capable hubs detected"` → tests/recovery skipped because the hub doesn't support per-port power; the tier will never run on that setup.
+   - `"opencv-python-headless is not installed"` → tests/ui auto-deselected by run-tests.sh; suggest `pip install -e 'mcp-server/.[ui]'`.
 
-4. **On failure**: for every FAILED test, open `mcp-server/tests/report.html` and extract the `Meshtastic debug` section for that test. pytest-html embeds the firmware log stream + device state dump there; the 200-line firmware log tail is usually enough to explain the failure. Summarise: which test, one-line assertion message, the firmware log lines that matter (things like `PKI_UNKNOWN_PUBKEY`, `Skip send NodeInfo`, `Error=`, `Guru Meditation`, `assertion failed`).
+4. **On failure**: for every FAILED test, open `mcp-server/tests/report.html` and extract the `Meshtastic debug` section for that test. pytest-html embeds the firmware log stream + device state dump there; the 200-line firmware log tail is usually enough to explain the failure. Summarise: which test, one-line assertion message, the firmware log lines that matter (things like `PKI_UNKNOWN_PUBKEY`, `Skip send NodeInfo`, `Error=`, `Guru Meditation`, `assertion failed`). For UI-tier failures also glance at `mcp-server/tests/ui_captures/<session>/<test>/transcript.md` — it records each step's frame + OCR.
 
 5. **Classify the failure** as one of:
    - **Transient/flake**: LoRa collision, timing-sensitive assertion, first-attempt NAK + successful retry pattern. Propose `/repro <test_node_id>` to confirm.
-   - **Environmental**: device unreachable, port busy, CP2102 driver wedged. Suggest the specific recovery (replug USB, `touch_1200bps`, check `git status userPrefs.jsonc`).
+   - **Environmental**: device unreachable, port busy, CP2102 driver wedged. Suggest the specific recovery in escalation order: (a) replug USB, (b) `touch_1200bps(port=...)` + `pio_flash` for nRF52 DFU, (c) `uhubctl_cycle(role="nrf52", confirm=True)` when a device is fully wedged past DFU (needs `uhubctl` installed — `baked_single`'s auto-recovery hook does this once automatically). Also check `git status userPrefs.jsonc`.
    - **Regression**: same assertion fails repeatedly, firmware log shows a new/unusual error. Surface the diff between expected and observed, identify the module likely responsible.
 
-6. **Never run destructive recovery automatically.** If a failure looks like it needs a reflash, factory*reset, or USB replug, \_describe what to do* — don't execute. The operator decides.
+6. **Never run destructive recovery automatically.** If a failure looks like it needs a reflash, factory*reset, `uhubctl_cycle`, or USB replug, \_describe what to do* — don't execute. The operator decides.
 
 ## Arguments handling
 
