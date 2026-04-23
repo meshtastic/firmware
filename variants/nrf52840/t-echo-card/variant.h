@@ -1,11 +1,4 @@
-/*
-  Variant definition for LilyGo T-Echo-Card (nRF52840)
-
-  Pin mapping derived from the upstream vendor header:
-    https://github.com/Xinyuan-LilyGO/T-Echo-Card/blob/main/libraries/private_library/t_echo_card_config.h
-
-  This variant is flagged PRIVATE_HW while upstream hardware-model allocation is pending.
-*/
+// Variant definition for LilyGo T-Echo-Card (nRF52840)
 
 #ifndef _VARIANT_T_ECHO_CARD_
 #define _VARIANT_T_ECHO_CARD_
@@ -38,16 +31,14 @@ extern "C" {
 
 // Three independent WS2812 data lines (one LED per line, not a daisy chain).
 // Each is driven as a 1-pixel NeoPixel by StatusLEDModule / ExternalNotification,
-// mirroring how the ELECROW ThinkNode M1 assigns LED_POWER (red) and
-// LED_NOTIFICATION (green) to plain GPIOs.
+// assigns LED_POWER (red) and LED_NOTIFICATION (green).
 #define WS2812_DATA_1 (32 + 7)  // P1.7  - charge/heartbeat (red)
 #define WS2812_DATA_2 (32 + 12) // P1.12 - external notification (green)
 #define WS2812_DATA_3 (0 + 28)  // P0.28 - BLE pairing (blue)
 
 // Wire each WS2812 to a status role. Colour defaults are scaled to 25%
 // brightness (0x40) — the bare-die WS2812s on this board are very bright at
-// full intensity in a close-range enclosure. Override here if the final
-// enclosure needs a different tint or intensity.
+// full intensity in a close-range enclosure.
 #define NEOPIXEL_STATUS_POWER_PIN WS2812_DATA_1
 #define NEOPIXEL_STATUS_NOTIFICATION_PIN WS2812_DATA_2
 #define NEOPIXEL_STATUS_PAIRING_PIN WS2812_DATA_3
@@ -56,7 +47,7 @@ extern "C" {
 #define NEOPIXEL_STATUS_PAIRING_COLOR 0x000040      // blue  @ 25%
 
 // The charger IC does not blink on its own; let StatusLEDModule do the
-// software blink while charging (same semantics as not defining this on M1).
+// software blink while charging
 // If left defined: hardware would be expected to handle the charging pulse.
 // #define POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING
 
@@ -78,7 +69,7 @@ static const uint8_t A0 = PIN_A0;
 #define ADC_CTRL (0 + 31)
 #define ADC_CTRL_ENABLED HIGH
 
-// NFC
+// NFC placeholders, not used
 #define PIN_NFC1 (9)
 #define PIN_NFC2 (10)
 
@@ -126,25 +117,11 @@ static const uint8_t A0 = PIN_A0;
 //   * calling SSD1306Wire::setYOffset(3) in Screen.cpp when
 //     OLED_Y_OFFSET_PAGES is defined — this shifts every PAGEADDR write by
 //     three pages (24 rows) so data lands on the visible rows.
-//
-// Precedent in the tree: variants/esp32c6/m5stack_unitc6l uses the same
-// pattern but on SPI (USE_SPISSD1306 + GEOMETRY_64_48 + setHorizontalOffset).
-// That layout happens to have its visible window on pages 0..5 of a 64×48
-// OLED module, so no vertical shift is needed. Here we need +3 pages.
-//
-// ⚠ BUILD PREREQUISITE: GEOMETRY_72_40 and SSD1306Wire::setYOffset() are
-//   not in the upstream library yet. Apply the diff at
-//     variants/nrf52840/t-echo-card/oled_72x40_viewport.patch
-//   to the lib_deps copy of meshtastic/esp8266-oled-ssd1306 before
-//   building, or update the pinned commit in the root platformio.ini to a
-//   fork/branch that contains it.
 // ───────────────────────────────────────────────────────────────────────────
 #define HAS_SCREEN 1
 #define USE_SSD1306
-#define OLED_GEOMETRY_OVERRIDE GEOMETRY_72_40 // read by main.cpp → Screen ctor
-#define OLED_Y_OFFSET_PAGES 3                 // panel occupies pages 3..7
-// Tiny OLED panel — opts into compile-time layout/font/feature substitutions
-// gated on OLED_TINY across the graphics stack.
+#define OLED_GEOMETRY_OVERRIDE GEOMETRY_72_40
+#define OLED_Y_OFFSET_PAGES 3
 #define OLED_TINY
 
 // Controls power 3V3 for all peripherals (GPS + LoRa + Sensor)
@@ -164,10 +141,6 @@ static const uint8_t A0 = PIN_A0;
 #define GPS_EN_ACTIVE 1
 #define PIN_GPS_STANDBY (0 + 25) // GPS_WAKE_UP: P0.25 - wakeup pin
 #define PIN_GPS_PPS (0 + 23)     // GPS_1PPS: P0.23
-// GPS_{T,R}X_PIN follow Meshtastic's MCU-side convention (set via Uart::setPins
-// in GPS.cpp), NOT the GPS chip's pin names. The vendor header labels these
-// from the GPS's perspective: its TX output is on P0.19 and its RX input is on
-// P0.21 — so the MCU must read from P0.19 and write to P0.21.
 #define GPS_RX_PIN (0 + 19)    // MCU RX ← GPS's TX (vendor GPS_UART_TX / P0.19)
 #define GPS_TX_PIN (0 + 21)    // MCU TX → GPS's RX (vendor GPS_UART_RX / P0.21)
 #define PIN_GPS_RESET (0 + 29) // GPS_RF_EN: GPS RF enable / reset
@@ -198,40 +171,8 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_BUZZER (32 + 6) // BUZZER_DATA: P1.6
 
 // ───────────────────────────────────────────────────────────────────────────
-// IMU: InvenSense ICM-20948 on IIC_1 @ 0x68 (SDA/SCL shared with display).
-// Meshtastic auto-detects this in ScanI2CTwoWire and instantiates
-// ICM20948Sensor. Nothing to declare here — it is picked up by the I²C scan
-// (address 0x68 is already handled via ICM20948_ADDR_ALT in configuration.h)
-// as long as HAS_SENSOR is on (nrf52 default) and the 3V3 rail
-// (PIN_POWER_EN) is enabled before the scan runs.
-// ───────────────────────────────────────────────────────────────────────────
-
-// ───────────────────────────────────────────────────────────────────────────
-// Magnetometer (optional external add-on): QMC5883P. Only referenced in the
-// vendor's debug/examples. Not part of the main pin header, probably meant
-// to be attached via the exposed I²C lines.
-// ⚠ Meshtastic currently only supports QMC5883*L* (addr 0x0D) via
-//    mprograms/QMC5883LCompass. QMC5883P is a different chip at 0x2C with
-//    different registers — Adafruit_QMC5883P is the Arduino driver, but
-//    Meshtastic has no detection entry or telemetry mapping for it yet.
-// TODO: if the production board ships with a QMC5883P, add a ScanI2C
-//       DeviceType + telemetry sensor and swap the library dependency.
-// ───────────────────────────────────────────────────────────────────────────
-// #define QMC5883P_ADDR 0x2C
-
-// ───────────────────────────────────────────────────────────────────────────
 // I²S speaker (MAX98357 Class-D amp). Stereo I²S data path.
-// ⚠ Meshtastic's audio stack (AudioThread / AudioModule / codec2
-//    walkie-talkie) is gated on ARCH_ESP32 + HAS_I2S and uses
-//    ESP8266Audio / esp-idf I²S drivers. There is no nRF52 I²S backend.
-// TODO to enable audio out on this board:
-//   1. Add an nRF52-I²S driver wrapper around nrf_i2s (the Adafruit core
-//      does not expose a clean Arduino API; the vendor uses a custom
-//      Cpp_Bus_Driver::Hardware_Iis — see examples/play_music).
-//   2. Port AudioThread to be architecture-agnostic (currently assumes the
-//      ESP8266Audio library set).
-//   3. Toggle SPEAKER_EN high, then SPEAKER_EN_2 if dual-rail is needed.
-// Until then these defines exist for out-of-tree code only.
+// Not supported on nrf52. These defines exist for out-of-tree code only.
 // ───────────────────────────────────────────────────────────────────────────
 #define SPEAKER_EN (32 + 11)     // P1.11 - amp main enable
 #define SPEAKER_EN_2 (0 + 3)     // P0.3  - secondary enable (vendor firmware toggles both)
@@ -241,25 +182,12 @@ static const uint8_t A0 = PIN_A0;
 
 // ───────────────────────────────────────────────────────────────────────────
 // PDM microphone (ST MP34DT05).
-// ⚠ No Meshtastic consumer for PDM input exists on any architecture.
-//    The vendor's walkie-talkie demo does PDM → Codec2 → LoRa using its
-//    own Cpp_Bus_Driver::Hardware_Pdm; that pipeline is not ported.
 // TODO to enable a mic path:
-//   1. Decide on a consumer (codec2 voice TX? voice announcements?).
-//   2. Use Adafruit nRF52 core's built-in PDM.h wrapper (Arduino-compatible
-//      API exists on nRF52840). Clock on MIC_SCLK, data on MIC_DATA.
+// Use Adafruit nRF52 core's built-in PDM.h wrapper (Arduino-compatible
+// API exists on nRF52840). Clock on MIC_SCLK, data on MIC_DATA.
 // ───────────────────────────────────────────────────────────────────────────
 #define MIC_SCLK (32 + 3) // P1.3 - PDM clock (MIC_SCLK on vendor header)
 #define MIC_DATA (32 + 5) // P1.5 - PDM data (MIC_DATA on vendor header)
-
-// ───────────────────────────────────────────────────────────────────────────
-// NFC (NFC-A tag emulation via Nordic NFCT peripheral, pins P0.9/P0.10).
-// ⚠ The Adafruit nRF52 Arduino core only exposes these pins as plain GPIO.
-//    The vendor FAQ is explicit: NFC requires Nordic's SoftDevice SDK and
-//    is not supported on the nRF52 Arduino platform. There is also no
-//    NFC consumer anywhere in Meshtastic.
-// PIN_NFC1 / PIN_NFC2 are already declared above for the core's pin table.
-// ───────────────────────────────────────────────────────────────────────────
 
 #define SERIAL_PRINT_PORT 0
 
