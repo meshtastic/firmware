@@ -25,8 +25,8 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs - board only exposes 3x WS2812 addressable LEDs. No plain GPIO LEDs.
-// Define a dummy PIN_LED1 so core code that unconditionally touches it stays happy.
-#define PIN_LED1 (-1)
+// Intentionally do not define PIN_LED1 on this variant, so nRF52 platform
+// code does not auto-enable a nonexistent GPIO power/status LED.
 #define LED_STATE_ON 1
 
 // Three independent WS2812 data lines (one LED per line, not a daisy chain).
