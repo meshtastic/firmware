@@ -209,7 +209,6 @@ meshtastic_MeshPacket *Router::allocForSending()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
     if (!p) {
-        LOG_ERROR("allocForSending: packet pool exhausted");
         return nullptr;
     }
 
