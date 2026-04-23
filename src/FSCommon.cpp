@@ -53,6 +53,7 @@ bool copyFile(const char *from, const char *to)
     File f2 = FSCom.open(to, FILE_O_WRITE);
     if (!f2) {
         LOG_ERROR("Failed to open destination file %s", to);
+        f1.close();
         return false;
     }
 
