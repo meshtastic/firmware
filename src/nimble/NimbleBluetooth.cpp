@@ -50,7 +50,6 @@ NimBLECharacteristic *logRadioCharacteristic;
 NimBLEServer *bleServer;
 
 static bool passkeyShowing;
-static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
 
 static void clearPairingDisplay()
 {
@@ -193,10 +192,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         // Prefer high throughput during config/setup, at the cost of high power consumption (for a few seconds)
         if (bleServer && isConnected()) {
-            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
-            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
-                requestHighThroughputConnection(conn_handle);
-            }
+            requestHighThroughputConnection(bleServer->getPeerDevices().front());
         }
     }
 
@@ -206,10 +202,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         // Switch to lower power consumption BLE connection params for steady-state use after config/setup is complete
         if (bleServer && isConnected()) {
-            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
-            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
-                requestLowerPowerConnection(conn_handle);
-            }
+            requestLowerPowerConnection(bleServer->getPeerDevices().front());
         }
     }
 
@@ -645,13 +638,6 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
         clearPairingDisplay();
-
-        // Store the connection handle for future use
-#ifdef NIMBLE_TWO
-        nimbleBluetoothConnHandle = connInfo.getConnHandle();
-#else
-        nimbleBluetoothConnHandle = desc->conn_handle;
-#endif
     }
 
 #ifdef NIMBLE_TWO
@@ -725,8 +711,6 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
         memset(lastToRadio, 0, sizeof(lastToRadio));
 
-        nimbleBluetoothConnHandle = BLE_HS_CONN_HANDLE_NONE; // BLE_HS_CONN_HANDLE_NONE means "no connection"
-
 #ifdef NIMBLE_TWO
         // Restart Advertising
         ble->startAdvertising();
@@ -792,22 +776,13 @@ int NimbleBluetooth::getRssi()
         return 0; // No active BLE connection
     }
 
-    uint16_t connHandle = nimbleBluetoothConnHandle.load();
-
-    if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
-        const auto peers = bleServer->getPeerDevices();
-        if (!peers.empty()) {
-            connHandle = peers.front();
-            nimbleBluetoothConnHandle = connHandle;
-        }
-    }
-
-    if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
-        return 0; // Connection handle not available yet
+    const auto peers = bleServer->getPeerDevices();
+    if (peers.empty()) {
+        return 0;
     }
 
     int8_t rssi = 0;
-    const int rc = ble_gap_conn_rssi(connHandle, &rssi);
+    const int rc = ble_gap_conn_rssi(peers.front(), &rssi);
 
     if (rc == 0) {
         return rssi;
