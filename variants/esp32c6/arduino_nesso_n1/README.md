@@ -50,11 +50,12 @@ other mesh nodes can look like successful local TX with no network join.
 M5Stack Unit ENV and Unit ENV Pro can work through existing Meshtastic sensor
 drivers when their onboard sensors are supported.
 
-M5Stack Unit ENV III contains an SHT30 temperature/humidity sensor and a QMP6988
-pressure sensor. SHT30 support exists through the generic `SHTXXSensor`, but ENV
-III may still fail today because the unsupported QMP6988 at address `0x70` can
-be detected as `SHTXX` and overwrite the SHT30 detected at `0x44`. Treat that as
-a separate generic I2C sensor detection issue, not a Nesso-only issue.
+M5Stack Unit ENV III is not compatible with the Nesso N1 over the Qwiic/Grove
+port. The board's onboard E1 expander already uses I2C address `0x44`, and ENV
+III's SHT30 temperature/humidity sensor also uses `0x44`, so both devices cannot
+share the same bus. This matches the limitation documented by Arduino for the
+Nesso N1 user manual.
 
-QMP6988 pressure readings are not currently supported unless a QMP6988 driver is
-added.
+QMP6988 pressure readings are also not currently supported unless a QMP6988
+driver is added, so ENV III would still be incomplete even without the `0x44`
+address conflict.
