@@ -207,6 +207,10 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
         io.digitalWrite(PCA_LED_NOTIFICATION, on);
 
 #endif
+#ifdef NEOPIXEL_STATUS_NOTIFICATION_PIN
+        notificationPixel.setPixelColor(0, on ? NEOPIXEL_STATUS_NOTIFICATION_COLOR : 0);
+        notificationPixel.show();
+#endif
         break;
     }
 
@@ -324,6 +328,12 @@ ExternalNotificationModule::ExternalNotificationModule()
             LOG_INFO("Use Pin %i in digital mode", output);
             pinMode(output, OUTPUT);
         }
+#ifdef NEOPIXEL_STATUS_NOTIFICATION_PIN
+        LOG_INFO("Use WS2812 on GPIO %d as notification LED", NEOPIXEL_STATUS_NOTIFICATION_PIN);
+        notificationPixel.begin();
+        notificationPixel.clear();
+        notificationPixel.show();
+#endif
         setExternalState(0, false);
         externalTurnedOn[0] = 0;
         if (moduleConfig.external_notification.output_vibra) {

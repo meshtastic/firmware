@@ -23,7 +23,7 @@
 
 // External variables
 extern graphics::Screen *screen;
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
 static uint32_t lastSwitchTime = 0;
 #endif
 namespace graphics
@@ -316,7 +316,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (!node || node->num == nodeDB->getNodeNum() || !node->is_favorite)
         return;
     display->clear();
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     uint32_t now = millis();
     if (now - lastSwitchTime >= 10000) // 10000 ms = 10 秒
     {
@@ -549,7 +549,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (seenStr[0]) {
         display->drawString(x, getTextPositions(display)[line++], seenStr);
     }
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
     if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
@@ -817,7 +817,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 #endif
 
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     line += 1;
 
     // === Node Identity ===
@@ -1114,7 +1114,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     // needs to be drawn relative to x and y
 
     // draw centered icon left to right and centered above the one line of app text
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     display->drawXbm(x + (SCREEN_WIDTH - 50) / 2, y + (SCREEN_HEIGHT - 28) / 2, icon_width, icon_height, icon_bits);
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1284,7 +1284,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         }
         display->drawString(x, textPos[line++], altitudeLine);
     }
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
     // === Draw Compass ===
     if (validHeading || statusLine1) {
         // --- Compass Rendering: landscape (wide) screens use original side-aligned logic ---

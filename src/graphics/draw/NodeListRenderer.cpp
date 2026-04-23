@@ -24,7 +24,7 @@ extern bool haveGlyphs(const char *str);
 // Global screen instance
 extern graphics::Screen *screen;
 
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
 static uint32_t lastSwitchTime = 0;
 #endif
 namespace graphics
@@ -730,7 +730,7 @@ void drawDynamicListScreen_Nodes(OLEDDisplay *display, OLEDDisplayUiState *state
 
     unsigned long now = millis();
 
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     display->clear();
     if (now - lastSwitchTime >= 3000) {
         display->display();
@@ -766,7 +766,7 @@ void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *st
 
     unsigned long now = millis();
 
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     display->clear();
     if (now - lastSwitchTime >= 3000) {
         display->display();
@@ -835,7 +835,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     double lat = DegD(ourNode->position.latitude_i);
     double lon = DegD(ourNode->position.longitude_i);
 
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     display->clear();
     uint32_t now = millis();
     if (now - lastSwitchTime >= 2000) {
