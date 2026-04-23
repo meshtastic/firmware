@@ -37,7 +37,11 @@ AdminMessageHandleResult KeyVerificationModule::handleAdminMessageForModule(cons
         } else if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_VERIFY &&
                    request->key_verification.nonce == currentNonce) {
             auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
-            remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+            if (remoteNodePtr != nullptr) {
+                remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+            } else {
+                LOG_WARN("Key verification DO_VERIFY: remote node 0x%x no longer in NodeDB", currentRemoteNode);
+            }
             resetToIdle();
         } else if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_NOT_VERIFY) {
             resetToIdle();
@@ -67,13 +71,14 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             keyVerificationModule->processSecurityNumber(number_picked);
         });)
 
+        auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_WARNING;
         sprintf(cn->message, "Enter Security Number for Key Verification");
         cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_request_tag;
         cn->payload_variant.key_verification_number_request.nonce = currentNonce;
-        strncpy(cn->payload_variant.key_verification_number_request.remote_longname, // should really check for nulls, etc
-                nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+        strncpy(cn->payload_variant.key_verification_number_request.remote_longname,
+                remoteNodePtr != nullptr ? remoteNodePtr->user.long_name : "",
                 sizeof(cn->payload_variant.key_verification_number_request.remote_longname));
         service->sendClientNotification(cn);
         LOG_INFO("Received hash2");
@@ -95,17 +100,20 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                           [=](int selected) {
                               if (selected == 1) {
                                   auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
-                                  remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                                  if (remoteNodePtr != nullptr) {
+                                      remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                                  }
                               }
                           };
                       screen->showOverlayBanner(options);)
+            auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->level = meshtastic_LogRecord_Level_WARNING;
             sprintf(cn->message, "Final confirmation for incoming manual key verification %s", message);
             cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
             cn->payload_variant.key_verification_final.nonce = currentNonce;
-            strncpy(cn->payload_variant.key_verification_final.remote_longname, // should really check for nulls, etc
-                    nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+            strncpy(cn->payload_variant.key_verification_final.remote_longname,
+                    remoteNodePtr != nullptr ? remoteNodePtr->user.long_name : "",
                     sizeof(cn->payload_variant.key_verification_final.remote_longname));
             cn->payload_variant.key_verification_final.isSender = false;
             service->sendClientNotification(cn);
@@ -196,14 +204,15 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     responsePacket->pki_encrypted = true;
     IF_SCREEN(snprintf(message, 25, "Security Number \n%03u %03u", currentSecurityNumber / 1000, currentSecurityNumber % 1000);
               screen->showSimpleBanner(message, 30000); LOG_WARN("%s", message);)
+    auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     cn->level = meshtastic_LogRecord_Level_WARNING;
     sprintf(cn->message, "Incoming Key Verification.\nSecurity Number\n%03u %03u", currentSecurityNumber / 1000,
             currentSecurityNumber % 1000);
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_inform_tag;
     cn->payload_variant.key_verification_number_inform.nonce = currentNonce;
-    strncpy(cn->payload_variant.key_verification_number_inform.remote_longname, // should really check for nulls, etc
-            nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+    strncpy(cn->payload_variant.key_verification_number_inform.remote_longname,
+            remoteNodePtr != nullptr ? remoteNodePtr->user.long_name : "",
             sizeof(cn->payload_variant.key_verification_number_inform.remote_longname));
     cn->payload_variant.key_verification_number_inform.security_number = currentSecurityNumber;
     service->sendClientNotification(cn);
@@ -265,8 +274,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     sprintf(cn->message, "Final confirmation for outgoing manual key verification %s", message);
     cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
     cn->payload_variant.key_verification_final.nonce = currentNonce;
-    strncpy(cn->payload_variant.key_verification_final.remote_longname, // should really check for nulls, etc
-            nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+    strncpy(cn->payload_variant.key_verification_final.remote_longname, remoteNodePtr->user.long_name,
             sizeof(cn->payload_variant.key_verification_final.remote_longname));
     cn->payload_variant.key_verification_final.isSender = true;
     service->sendClientNotification(cn);
