@@ -94,7 +94,21 @@ int32_t StatusLEDModule::runOnce()
         }
 
     } else {
+#ifdef ELECROW_ThinkNode_M6
+        if (!config.device.led_heartbeat_disabled) {
+            if (doing_fast_blink) {
+                CHARGE_LED_state = LED_STATE_OFF;
+                doing_fast_blink = false;
+                my_interval = 999;
+            } else {
+                CHARGE_LED_state = LED_STATE_ON;
+                doing_fast_blink = true;
+                my_interval = 1;
+            }
+        }
+#else
         CHARGE_LED_state = LED_STATE_OFF;
+#endif
     }
 
     if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < millis() || doing_fast_blink) {
