@@ -159,7 +159,7 @@ class HasBatteryLevel
 };
 #endif
 
-class Power : private concurrency::OSThread
+class Power : public concurrency::OSThread
 {
 
   public:
