@@ -62,12 +62,13 @@ void PhoneAPI::handleStartConfig()
     // all channels, configs, the entire NodeDB, and a full filesystem walk — back-to-back
     // dumps fragment the internal SRAM heap and can wedge the device on static-pool
     // allocators. Well-behaved clients only issue one want_config_id per reconnect.
-    if (lastStartConfigMs != 0 && (millis() - lastStartConfigMs) < MIN_CONFIG_HANDSHAKE_INTERVAL_MS) {
+    const uint32_t now = millis();
+    if (lastStartConfigMs != 0 && (now - lastStartConfigMs) < MIN_CONFIG_HANDSHAKE_INTERVAL_MS) {
         LOG_WARN("Config handshake throttled (last one %u ms ago, min interval %u ms)",
-                 (unsigned)(millis() - lastStartConfigMs), (unsigned)MIN_CONFIG_HANDSHAKE_INTERVAL_MS);
+                 (unsigned)(now - lastStartConfigMs), (unsigned)MIN_CONFIG_HANDSHAKE_INTERVAL_MS);
         return;
     }
-    lastStartConfigMs = millis();
+    lastStartConfigMs = now;
 
     // Must be before setting state (because state is how we know !connected)
     if (!isConnected()) {
