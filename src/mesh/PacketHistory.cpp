@@ -175,7 +175,9 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                     r.relayed_by[i + startIdx] = found->relayed_by[i];
                 }
             }
-            r.next_hop = found->next_hop; // keep the original next_hop (such that we check whether we were originally asked)
+            // Preserve the originally requested next hop across duplicate updates. Other code uses this to answer
+            // "were we the chosen directed relay?" even if a later copy arrived as flood fallback.
+            r.next_hop = found->next_hop;
 #if VERBOSE_PACKET_HISTORY
             LOG_DEBUG("Packet History - Was Seen Recently: s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d wUpd AFTER", r.sender,
                       r.id, r.next_hop, r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], millis() - r.rxTimeMsec);
