@@ -483,12 +483,15 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 #endif
     if (state != RADIOLIB_ERR_NONE) {
-        // CRC errors are normal noise in RF-congested areas — drop to DEBUG so we don't flood logs.
+        // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
+        // CRC mismatches are routine in RF-congested areas (noise mis-demodulating to a syncword hit) — not an error class worth
+        // ERROR severity, but still valuable info for operators looking at the log. Everything else stays at LOG_ERROR.
         if (state == RADIOLIB_ERR_CRC_MISMATCH) {
-            LOG_DEBUG("RX CRC mismatch (noise?) fr=0x%08x rxSNR=%g rxRSSI=%i",
-                      radioBuffer.header.from, iface->getSNR(), lround(iface->getRSSI()));
+            LOG_INFO("Ignore received packet due to CRC mismatch (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g "
+                     "rxRSSI=%i nextHop=0x%x relay=0x%x)",
+                     radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
+                     iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
         } else {
-            // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
             LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
                       "nextHop=0x%x relay=0x%x)",
                       state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
@@ -505,28 +508,24 @@ void RadioLibInterface::handleReceiveInterrupt()
         // check for short packets
         if (payloadLen < 0) {
             LOG_WARN("Ignore received packet too short");
-            rxBad++;
-            airTime->logAirtime(RX_ALL_LOG, rxMsec);
         } else {
-            // altered packet with "from == 0" can do Remote Node Administration without permission
+            rxGood++;
+            // altered packet with "from == 0" can do Remote Node Administration without permission.
+            // Still counted as a "good" OTA reception above — we just refuse to process it.
             if (radioBuffer.header.from == 0) {
                 LOG_WARN("Ignore received packet without sender");
-                rxBad++;
-                airTime->logAirtime(RX_ALL_LOG, rxMsec);
                 return;
             }
-
-            rxGood++;
 
             // Note: we deliver _all_ packets to our router (i.e. our interface is intentionally promiscuous).
             // This allows the router and other apps on our node to sniff packets (usually routing) between other
             // nodes.
             meshtastic_MeshPacket *mp = packetPool.allocZeroed();
 
-            // Packet pool exhaustion: drop this packet on the floor rather than deref NULL.
-            // Happens under sustained heap pressure (e.g., config dump mid-RX, dense mesh bursts).
+            // Packet pool exhaustion: drop this packet rather than deref NULL. Can happen under
+            // sustained heap pressure (e.g. config dump mid-RX, dense mesh bursts). The allocator
+            // already emits a WARN on failure, so don't duplicate it here.
             if (!mp) {
-                rxBad++;
                 airTime->logAirtime(RX_ALL_LOG, rxMsec);
                 return;
             }
