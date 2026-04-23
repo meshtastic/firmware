@@ -435,7 +435,6 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #if defined(OLED_Y_OFFSET_PAGES)
     // Panels whose active window does not start at GDDRAM row 0 (e.g. 72x40
     // modules on pages 3..7) need a fixed vertical page shift on every write.
-    // Requires the setYOffset() patch in variants/nrf52840/t-echo-card/oled_72x40_viewport.patch.
     static_cast<SSD1306Wire *>(dispdev)->setYOffset(OLED_Y_OFFSET_PAGES);
 #endif
 #elif defined(USE_SPISSD1306)
