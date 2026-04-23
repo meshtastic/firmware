@@ -406,10 +406,10 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 #endif
 
-    // === 2. Signal and Hops (combined on one line, if available) ===
-    char signalHopsStr[32] = "";
+    // === 2. Signal/Hops line (if available) ===
     bool haveSignal = false;
     int bars = 0;
+    const char *qualityLabel = nullptr;
 
     // Helper to get SNR limit based on modem preset
     auto getSnrLimit = [](meshtastic_Config_LoRaConfig_ModemPreset preset) -> float {
@@ -430,80 +430,51 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
         }
     };
 
-    // Calculate signal grade using modem preset and SNR only
-    float snrLimit = getSnrLimit(config.lora.modem_preset);
-    float snr = node->snr;
-
-    // Determine signal quality label and bars using SNR-only grading
-    const char *qualityLabel = nullptr;
-
-    if (snr > snrLimit + 10) {
-        qualityLabel = "Good";
-        bars = 4;
-    } else if (snr > snrLimit + 6) {
-        qualityLabel = "Good";
-        bars = 3;
-    } else if (snr > snrLimit + 2) {
-        qualityLabel = "Good";
-        bars = 2;
-    } else if (snr > snrLimit - 4) {
-        qualityLabel = "Fair";
-        bars = 1;
-    } else {
-        qualityLabel = "Bad";
-        bars = 1;
-    }
-
     // Add extra spacing on the left if we have an API connection to account for the common footer icons
     const char *leftSideSpacing =
         graphics::isAPIConnected(service->api_state) ? (currentResolution == ScreenResolution::High ? "     " : "   ") : " ";
+    const bool isZeroHop = node->has_hops_away && node->hops_away == 0;
 
-    // --- Build the Signal/Hops line ---
-    // Only show signal if we have valid SNR
-    if (snr > -100 && snr != 0) {
-        snprintf(signalHopsStr, sizeof(signalHopsStr), "%sSig:%s", leftSideSpacing, qualityLabel);
-        haveSignal = true;
-    }
-
-    if (node->hops_away > 0) {
-        size_t len = strlen(signalHopsStr);
-        if (haveSignal) {
-            snprintf(signalHopsStr + len, sizeof(signalHopsStr) - len, " [#]");
-        } else {
-            snprintf(signalHopsStr, sizeof(signalHopsStr), "[#]");
-        }
-    }
-
-    if (signalHopsStr[0]) {
-        int yPos = getTextPositions(display)[line++];
-        int curX = x;
-
-        // Split combined string into signal text and hop suffix
-        char sigPart[20] = "";
-        const char *hopPart = nullptr;
-
-        char *bracket = strchr(signalHopsStr, '[');
-        if (bracket) {
-            size_t n = (size_t)(bracket - signalHopsStr);
-            if (n >= sizeof(sigPart))
-                n = sizeof(sigPart) - 1;
-            memcpy(sigPart, signalHopsStr, n);
-            sigPart[n] = '\0';
-
-            // Trim trailing spaces
-            while (strlen(sigPart) && sigPart[strlen(sigPart) - 1] == ' ') {
-                sigPart[strlen(sigPart) - 1] = '\0';
+    // Signal text/bars are only for direct (zero-hop) nodes with valid SNR.
+    if (isZeroHop) {
+        float snr = node->snr;
+        if (snr > -100 && snr != 0) {
+            float snrLimit = getSnrLimit(config.lora.modem_preset);
+            // Determine signal quality label and bars using SNR-only grading.
+            if (snr > snrLimit + 10) {
+                qualityLabel = "Good";
+                bars = 4;
+            } else if (snr > snrLimit + 6) {
+                qualityLabel = "Good";
+                bars = 3;
+            } else if (snr > snrLimit + 2) {
+                qualityLabel = "Good";
+                bars = 2;
+            } else if (snr > snrLimit - 4) {
+                qualityLabel = "Fair";
+                bars = 1;
+            } else {
+                qualityLabel = "Bad";
+                bars = 1;
             }
 
-            hopPart = bracket; // "[n Hop(s)]"
-        } else {
-            strncpy(sigPart, signalHopsStr, sizeof(sigPart) - 1);
-            sigPart[sizeof(sigPart) - 1] = '\0';
+            haveSignal = true;
         }
+    }
 
-        // Draw signal quality text
-        display->drawString(curX, yPos, sigPart);
-        curX += display->getStringWidth(sigPart) + 4;
+    const bool showHops = node->has_hops_away && node->hops_away > 0;
+
+    if (haveSignal || showHops) {
+        int yPos = getTextPositions(display)[line++];
+        int curX = x + display->getStringWidth(leftSideSpacing);
+
+        // Draw signal quality text for zero-hop nodes when present.
+        if (haveSignal && qualityLabel) {
+            char signalLabel[20];
+            snprintf(signalLabel, sizeof(signalLabel), "Sig:%s", qualityLabel);
+            display->drawString(curX, yPos, signalLabel);
+            curX += display->getStringWidth(signalLabel) + 4;
+        }
 
         // Draw signal bars (skip on UltraLow, text only)
         if (currentResolution != ScreenResolution::UltraLow && haveSignal && bars > 0) {
@@ -542,12 +513,12 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
             curX += (kMaxBars * barWidth) + ((kMaxBars - 1) * barGap) + 2;
         }
 
-        // Draw hops AFTER the bars as: [ number + hop icon ]
-        if (hopPart && node->hops_away > 0) {
-
-            // open bracket
-            display->drawString(curX, yPos, "[");
-            curX += display->getStringWidth("[") + 1;
+        // Draw hops for non-zero-hop nodes as: number + hop icon.
+        // This path is mutually exclusive with the zero-hop signal-bars path above.
+        if (showHops) {
+            // hop label
+            display->drawString(curX, yPos, "Hop:");
+            curX += display->getStringWidth("Hop:") + 2;
 
             // hop count
             char hopCount[6];
@@ -559,9 +530,6 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
             const int iconY = yPos + (FONT_HEIGHT_SMALL - hop_height) / 2;
             display->drawXbm(curX, iconY, hop_width, hop_height, hop);
             curX += hop_width + 1;
-
-            // closing bracket
-            display->drawString(curX, yPos, "]");
         }
     }
 

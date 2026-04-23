@@ -26,9 +26,9 @@
 #define GT911_PIN_RST 9
 #endif
 
-#define PCF85063_RTC 0x51
+#define PCF8563_RTC 0x51
 #define HAS_RTC 1
-#define PCF85063_INT 2
+#define PCF8563_INT 2
 
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
