@@ -470,8 +470,18 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             fromRadioScratch.moduleConfig.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
+        case meshtastic_ModuleConfig_tak_tag:
+            LOG_DEBUG("Send module config: tak");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_tak_tag;
+            fromRadioScratch.moduleConfig.payload_variant.tak = moduleConfig.tak;
+            break;
+        case 14:
+            // Reserved gap in ModuleConfig oneof tag numbering — no payload_variant
+            // member exists at tag 14. Silently skip so we don't hit the default
+            // "unknown type" path on every phone reconnect.
+            break;
         default:
-            LOG_ERROR("Unknown module config type %d", config_state);
+            LOG_DEBUG("Unhandled module config type %d", config_state);
         }
 
         config_state++;
