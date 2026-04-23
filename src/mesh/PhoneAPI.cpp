@@ -17,6 +17,7 @@
 #include "TypeConversions.h"
 #include "concurrency/LockGuard.h"
 #include "main.h"
+#include "modules/NodeInfoModule.h"
 #include "xmodem.h"
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -190,8 +191,23 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
 #endif
         case meshtastic_ToRadio_heartbeat_tag:
-            LOG_DEBUG("Got client heartbeat");
-            heartbeatReceived = true;
+            // nonce==1 is a special "nodeinfo ping" trigger: force a fresh
+            // NodeInfo broadcast on the 60-second shorterTimeout path so
+            // peers can re-learn our public key after a reboot or
+            // factory_reset without waiting out the normal 10-minute
+            // NodeInfo send cooldown. Mirrors the TCP/UDP path in
+            // `src/mesh/api/PacketAPI.cpp:74-79` for serial clients.
+            // Default nonce (0) remains a plain keepalive that triggers
+            // a queue-status reply.
+            if (toRadioScratch.heartbeat.nonce == 1) {
+                if (nodeInfoModule) {
+                    LOG_INFO("Broadcasting nodeinfo ping (serial)");
+                    nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true);
+                }
+            } else {
+                LOG_DEBUG("Got client heartbeat");
+                heartbeatReceived = true;
+            }
             break;
         default:
             // Ignore nop messages
@@ -454,8 +470,13 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             fromRadioScratch.moduleConfig.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
+        case meshtastic_ModuleConfig_tak_tag:
+            LOG_DEBUG("Send module config: tak");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_tak_tag;
+            fromRadioScratch.moduleConfig.payload_variant.tak = moduleConfig.tak;
+            break;
         default:
-            LOG_ERROR("Unknown module config type %d", config_state);
+            LOG_DEBUG("Unhandled module config type %d", config_state);
         }
 
         config_state++;
