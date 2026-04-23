@@ -179,6 +179,9 @@ String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+constexpr uint8_t QMP6988_DETECT_CHIP_ID = 0x5C;
+constexpr uint8_t QMP6988_DETECT_CHIP_ID_REG = 0xD1;
+
 bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
 {
 
@@ -214,6 +217,19 @@ bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
 
     // Assume we detect the SHT21 if something came back from the request
     return true;
+}
+
+bool detectQMP6988ChipId(TwoWire *i2cBus, uint8_t address)
+{
+    i2cBus->beginTransmission(address);
+    i2cBus->write(QMP6988_DETECT_CHIP_ID_REG);
+    if (i2cBus->endTransmission() != 0)
+        return false;
+
+    if (i2cBus->requestFrom((int)address, 1) != 1)
+        return false;
+
+    return i2cBus->available() && i2cBus->read() == QMP6988_DETECT_CHIP_ID;
 }
 #endif
 
@@ -510,8 +526,21 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
 
                 break;
-
-                SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTXX, "SHTXX", (uint8_t)addr.address)
+            case QMP6988_ADDR_ALT:
+                if (detectQMP6988ChipId(i2cBus, (uint8_t)addr.address)) {
+                    type = QMP6988;
+                    logFoundDevice("QMP6988", (uint8_t)addr.address);
+                }
+                break;
+            case SHTC3_ADDR:
+                if (detectQMP6988ChipId(i2cBus, (uint8_t)addr.address)) {
+                    type = QMP6988;
+                    logFoundDevice("QMP6988", (uint8_t)addr.address);
+                } else {
+                    type = SHTXX;
+                    logFoundDevice("SHTXX", (uint8_t)addr.address);
+                }
+                break;
             case RCWL9620_ADDR:
                 // get MAX30102 PARTID
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 1);
