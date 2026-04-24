@@ -58,7 +58,9 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     // auto p = allocDataProtobuf(c);
     meshtastic_MeshPacket *p = router->allocForSending();
     if (!p) {
-        LOG_WARN("allocAckNak: packet pool exhausted, dropping ack/nak");
+        // Router::allocForSending / MemoryPool::alloc already LOG_WARN on exhaustion;
+        // don't double-log. An unthrottled WARN here would spam during an ACK/NAK storm
+        // — which is exactly the scenario that drives the pool to empty in the first place.
         return nullptr;
     }
     p->decoded.portnum = meshtastic_PortNum_ROUTING_APP;

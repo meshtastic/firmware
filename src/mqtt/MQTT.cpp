@@ -206,7 +206,11 @@ inline void onReceiveJson(byte *payload, size_t length)
             p->decoded.payload.size = jsonPayloadStr.length();
             service->sendToMesh(p, RX_SRC_LOCAL);
         } else {
+            // Release the allocated packet back to the pool — `p` would otherwise leak,
+            // permanently reducing the number of available slots for every future
+            // send attempt.
             LOG_WARN("Received MQTT json payload too long, drop");
+            packetPool.release(p);
         }
     } else if (json["type"]->AsString().compare("sendposition") == 0 && json["payload"]->IsObject()) {
         // invent the "sendposition" type for a valid envelope
