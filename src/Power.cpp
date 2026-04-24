@@ -948,13 +948,6 @@ int32_t Power::runOnce()
             LOG_DEBUG("Battery removed");
         }
         */
-#ifndef T_WATCH_S3 // FIXME - why is this triggering on the T-Watch S3?
-        if (PMU->isPekeyLongPressIrq()) {
-            LOG_DEBUG("PEK long button press");
-            if (screen)
-                screen->setOn(false);
-        }
-#endif
 
         PMU->clearIrqStatus();
     }
