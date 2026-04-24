@@ -48,7 +48,7 @@ bool TouchScreenImpl1::getTouch(int16_t &x, int16_t &y)
 bool TouchScreenImpl1::fastTapModeEnabled() const
 {
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-    auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
+    const auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
     if (!inkhud) {
         return false;
     }
