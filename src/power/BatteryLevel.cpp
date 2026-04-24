@@ -1,6 +1,7 @@
 #include "power/BatteryLevel.h"
 
 #include "Throttle.h"
+#include "meshUtils.h"
 #include "power/PowerHAL.h"
 
 #if defined(ARCH_NRF52)
