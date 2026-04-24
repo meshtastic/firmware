@@ -56,6 +56,39 @@ static bool isConnected = false;
 static uint32_t lastPositionUnavailableWarning = 0;
 static const uint32_t POSITION_UNAVAILABLE_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
+uint32_t getPublicMqttPositionPrecision()
+{
+    // Public MQTT map reports currently accept precision bits up to 15.
+    // Forwarded LoRa positions use that most precise public value rather than
+    // the user's own map-report setting, which may be more coarse.
+    return 15;
+}
+
+bool makePublicMqttPositionPacket(meshtastic_MeshPacket &mqttPacket, const meshtastic_MeshPacket &sourcePacket)
+{
+    if (sourcePacket.which_payload_variant != meshtastic_MeshPacket_decoded_tag ||
+        sourcePacket.decoded.portnum != meshtastic_PortNum_POSITION_APP)
+        return false;
+
+    meshtastic_Position position = meshtastic_Position_init_default;
+    if (!pb_decode_from_bytes(sourcePacket.decoded.payload.bytes, sourcePacket.decoded.payload.size, &meshtastic_Position_msg,
+                              &position))
+        return false;
+
+    const uint32_t precision = getPublicMqttPositionPrecision();
+    position.latitude_i = position.latitude_i & (UINT32_MAX << (32 - precision));
+    position.longitude_i = position.longitude_i & (UINT32_MAX << (32 - precision));
+    position.latitude_i += (1 << (31 - precision));
+    position.longitude_i += (1 << (31 - precision));
+    position.precision_bits = precision;
+
+    mqttPacket = sourcePacket;
+    mqttPacket.decoded.payload.size =
+        pb_encode_to_bytes(mqttPacket.decoded.payload.bytes, sizeof(mqttPacket.decoded.payload.bytes), &meshtastic_Position_msg,
+                           &position);
+    return mqttPacket.decoded.payload.size > 0;
+}
+
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
     const DecodedServiceEnvelope e(payload, length);
@@ -794,12 +827,17 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
     const char *channelId = isPKIEncrypted ? "PKI" : channels.getGlobalId(chIndex);
 
     LOG_DEBUG("MQTT onSend - Publish ");
+    meshtastic_MeshPacket mqttPositionPacket = meshtastic_MeshPacket_init_default;
+    const meshtastic_MeshPacket *publicMqttPositionPacket = nullptr;
     const meshtastic_MeshPacket *p;
     if (moduleConfig.mqtt.encryption_enabled) {
         p = &mp_encrypted;
         LOG_DEBUG("encrypted message");
     } else if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         p = &mp_decoded;
+        if (isConfiguredForDefaultServer && !isMqttServerAddressPrivate &&
+            makePublicMqttPositionPacket(mqttPositionPacket, mp_decoded))
+            publicMqttPositionPacket = &mqttPositionPacket;
         LOG_DEBUG("portnum %i message", mp_decoded.decoded.portnum);
     } else {
         LOG_DEBUG("nothing, pkt not decrypted");
@@ -808,47 +846,51 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
     // Generate node ID from nodenum for service envelope
     std::string nodeId = nodeDB->getNodeId();
-
-    const meshtastic_ServiceEnvelope env = {.packet = const_cast<meshtastic_MeshPacket *>(p),
-                                            .channel_id = const_cast<char *>(channelId),
-                                            .gateway_id = const_cast<char *>(nodeId.c_str())};
-    size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
     std::string topic = cryptTopic + channelId + "/" + nodeId;
+    auto publishPacket = [&](const meshtastic_MeshPacket *packet) {
+        const meshtastic_ServiceEnvelope env = {.packet = const_cast<meshtastic_MeshPacket *>(packet),
+                                                .channel_id = const_cast<char *>(channelId),
+                                                .gateway_id = const_cast<char *>(nodeId.c_str())};
+        size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
 
-    if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
-        LOG_DEBUG("MQTT Publish %s, %u bytes", topic.c_str(), numBytes);
-        publish(topic.c_str(), bytes, numBytes, false);
+        if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
+            LOG_DEBUG("MQTT Publish %s, %u bytes", topic.c_str(), numBytes);
+            publish(topic.c_str(), bytes, numBytes, false);
 
 #if !defined(ARCH_NRF52) ||                                                                                                      \
     defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
-        if (!moduleConfig.mqtt.json_enabled)
-            return;
-        // handle json topic
-        auto jsonString = MeshPacketSerializer::JsonSerialize(&mp_decoded);
-        if (jsonString.length() == 0)
-            return;
-        // Generate node ID from nodenum for JSON topic
-        std::string nodeIdForJson = nodeDB->getNodeId();
-        std::string topicJson = jsonTopic + channelId + "/" + nodeIdForJson;
-        LOG_INFO("JSON publish message to %s, %u bytes: %s", topicJson.c_str(), jsonString.length(), jsonString.c_str());
-        publish(topicJson.c_str(), jsonString.c_str(), false);
+            if (moduleConfig.mqtt.json_enabled) {
+                auto jsonString = MeshPacketSerializer::JsonSerialize(packet);
+                if (jsonString.length() != 0) {
+                    std::string topicJson = jsonTopic + channelId + "/" + nodeId;
+                    LOG_INFO("JSON publish message to %s, %u bytes: %s", topicJson.c_str(), jsonString.length(), jsonString.c_str());
+                    publish(topicJson.c_str(), jsonString.c_str(), false);
+                }
+            }
 #endif // ARCH_NRF52 NRF52_USE_JSON
-    } else {
-        LOG_INFO("MQTT not connected, queue packet");
-        QueueEntry *entry;
-        if (mqttQueue.numFree() == 0) {
-            LOG_WARN("MQTT queue is full, discard oldest");
-            entry = mqttQueue.dequeuePtr(0);
         } else {
-            entry = new QueueEntry;
+            LOG_INFO("MQTT not connected, queue packet");
+            QueueEntry *entry;
+            if (mqttQueue.numFree() == 0) {
+                LOG_WARN("MQTT queue is full, discard oldest");
+                entry = mqttQueue.dequeuePtr(0);
+            } else {
+                entry = new QueueEntry;
+            }
+            entry->topic = topic;
+            entry->envBytes.assign(bytes, numBytes);
+            if (mqttQueue.enqueue(entry, 0) == false) {
+                LOG_CRIT("Failed to add a message to mqttQueue!");
+                abort();
+            }
         }
-        entry->topic = std::move(topic);
-        entry->envBytes.assign(bytes, numBytes);
-        if (mqttQueue.enqueue(entry, 0) == false) {
-            LOG_CRIT("Failed to add a message to mqttQueue!");
-            abort();
-        }
-    }
+    };
+
+    // The public broker currently filters precise POSITION_APP packets. Publish a generated imprecise packet first so the
+    // current filter accepts a location update, then preserve the original packet for brokers that accept it.
+    if (publicMqttPositionPacket != nullptr)
+        publishPacket(publicMqttPositionPacket);
+    publishPacket(p);
 }
 
 void MQTT::perhapsReportToMap()
