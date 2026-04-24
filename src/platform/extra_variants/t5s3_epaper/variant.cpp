@@ -137,6 +137,16 @@ void lateInitVariant(void)
         touchScreenImpl1->init();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
         touchBridge.observe(touchScreenImpl1);
+        touch.setHomeButtonCallback(
+            [](void *) {
+                static uint32_t lastFireMs = 0;
+                uint32_t now = millis();
+                if (now - lastFireMs < 400)
+                    return;
+                lastFireMs = now;
+                NicheGraphics::InkHUD::InkHUD::getInstance()->longpress();
+            },
+            nullptr);
 #endif
     } else {
         LOG_ERROR("Failed to find touch controller!");
