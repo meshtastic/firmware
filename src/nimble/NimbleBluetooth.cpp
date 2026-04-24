@@ -720,6 +720,8 @@ void NimbleBluetooth::deinit()
 #ifdef BLE_LED
     digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
+
+    BLEDevice::deinit(true);
 #endif
 }
 
