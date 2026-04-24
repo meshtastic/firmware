@@ -1787,6 +1787,19 @@ class SerialBatteryLevel : public AnalogBatteryLevel
         return true;
     }
 
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override
+    {
+#if defined(EXT_CHRG_DETECT)
+
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
+
+#endif
+        return false;
+    }
+
   private:
     SoftwareSerial BatterySerial = SoftwareSerial(SERIAL_BATTERY_RX, SERIAL_BATTERY_TX);
     uint8_t Data[6] = {0};
