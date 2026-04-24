@@ -1,4 +1,5 @@
 #define EXT_PWR_DETECT 20
+#define EXT_PWR_DETECT_MODE INPUT_PULLUP
 
 #define BUTTON_PIN 17
 #define BUTTON_ACTIVE_LOW false

@@ -318,7 +318,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
-    virtual void onNowHasData(uint32_t fromRadioNum)
+    virtual void onNowHasData(uint32_t fromRadioNum) override
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
@@ -337,7 +337,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() { return bleServer && bleServer->getConnectedCount() > 0; }
+    virtual bool checkIsConnected() override { return bleServer && bleServer->getConnectedCount() > 0; }
 
     void requestHighThroughputConnection(uint16_t conn_handle)
     {

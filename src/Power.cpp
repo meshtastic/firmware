@@ -165,16 +165,31 @@ static bool initAdcCalibration()
 
 #endif // BATTERY_PIN && ARCH_ESP32
 
+#ifdef EXT_PWR_DETECT
+#ifndef EXT_PWR_DETECT_MODE
+#define EXT_PWR_DETECT_MODE INPUT
+// If using internal pull resistors, we can infer EXT_PWR_DETECT_VALUE
+#elif EXT_PWR_DETECT_MODE == INPUT_PULLUP
+#define EXT_PWR_DETECT_VALUE LOW
+#elif EXT_PWR_DETECT_MODE == INPUT_PULLDOWN
+#define EXT_PWR_DETECT_VALUE HIGH
+#endif
+#ifndef EXT_PWR_DETECT_VALUE
+#define EXT_PWR_DETECT_VALUE HIGH
+#endif
+#endif
+
 #ifdef EXT_CHRG_DETECT
 #ifndef EXT_CHRG_DETECT_MODE
-static const uint8_t ext_chrg_detect_mode = INPUT;
-#else
-static const uint8_t ext_chrg_detect_mode = EXT_CHRG_DETECT_MODE;
+#define EXT_CHRG_DETECT_MODE INPUT
+// If using internal pull resistors, we can infer EXT_CHRG_DETECT_VALUE
+#elif EXT_CHRG_DETECT_MODE == INPUT_PULLUP
+#define EXT_CHRG_DETECT_VALUE LOW
+#elif EXT_CHRG_DETECT_MODE == INPUT_PULLDOWN
+#define EXT_CHRG_DETECT_VALUE HIGH
 #endif
 #ifndef EXT_CHRG_DETECT_VALUE
-static const uint8_t ext_chrg_detect_value = HIGH;
-#else
-static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
+#define EXT_CHRG_DETECT_VALUE HIGH
 #endif
 #endif
 
@@ -523,28 +538,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
 #endif
 
-    /// If we see a battery voltage higher than physics allows - assume charger is
-    /// pumping in power On some boards we don't have the power management chip
-    /// (like AXPxxxx) so we use EXT_PWR_DETECT GPIO pin to detect external power
-    /// source
+    // Detect if an external power source is connected if we don’t have a PMIC;
+    // Firstly prefer EXT_PWR_DETECT GPIO if available,
+    // secondly try an nRF52-specific routine on some variants,
+    // lastly provide a fallback to indicate external power when fully charged.
     virtual bool isVbusIn() override
     {
 #ifdef EXT_PWR_DETECT
-#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
-        // if external powered that pin will be pulled down
-        if (digitalRead(EXT_PWR_DETECT) == LOW) {
-            return true;
-        }
-        // if it's not LOW - check the battery
-#else
-        // if external powered that pin will be pulled up
-        if (digitalRead(EXT_PWR_DETECT) == HIGH) {
-            return true;
-        }
-        // if it's not HIGH - check the battery
-#endif
-        // If we have an EXT_PWR_DETECT pin and it indicates no external power, believe it.
-        return false;
+        return digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE;
 
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
@@ -565,9 +566,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
 #endif
 #if defined(ELECROW_ThinkNode_M6)
-        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value || isVbusIn();
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE || isVbusIn();
 #elif EXT_CHRG_DETECT
-        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
 #elif defined(BATTERY_CHARGING_INV)
         return !digitalRead(BATTERY_CHARGING_INV);
 #else
@@ -700,14 +701,10 @@ Power::Power() : OSThread("Power")
 bool Power::analogInit()
 {
 #ifdef EXT_PWR_DETECT
-#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
-    pinMode(EXT_PWR_DETECT, INPUT_PULLUP);
-#else
-    pinMode(EXT_PWR_DETECT, INPUT);
-#endif
+    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
 #endif
 #ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
+    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
 #endif
 
 #ifdef BATTERY_PIN
@@ -789,36 +786,16 @@ bool Power::setup()
         found = true;
 #endif
     }
-#ifdef EXT_PWR_DETECT
-    attachInterrupt(
-        EXT_PWR_DETECT,
-        []() {
-            power->setIntervalFromNow(0);
-            runASAP = true;
-        },
-        CHANGE);
-#endif
-#ifdef BATTERY_CHARGING_INV
-    attachInterrupt(
-        BATTERY_CHARGING_INV,
-        []() {
-            power->setIntervalFromNow(0);
-            runASAP = true;
-        },
-        CHANGE);
-#endif
-#ifdef EXT_CHRG_DETECT
-    attachInterrupt(
-        EXT_CHRG_DETECT,
-        []() {
-            power->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-        },
-        CHANGE);
-#endif
+    attachPowerInterrupts();
     enabled = found;
     low_voltage_counter = 0;
+
+#ifdef ARCH_ESP32
+    // Register callbacks for before and after lightsleep
+    // Used to detach and reattach interrupts
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
+#endif
 
     return found;
 }
@@ -1066,6 +1043,17 @@ int32_t Power::runOnce()
             powerFSM.trigger(EVENT_POWER_CONNECTED);
         }
 
+#ifdef T_WATCH_S3
+        /*
+            In the T-Watch S3 this code fragment reacts to the short press of the button by switching the
+            display on and off
+        */
+        if (PMU->isPekeyShortPressIrq()) {
+            LOG_INFO("Input: Corona Button Click");
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_CANCEL, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        }
+#endif
         /*
         Other things we could check if we cared...
 
@@ -1096,6 +1084,97 @@ int32_t Power::runOnce()
     // Only read once every 20 seconds once the power status for the app has been
     // initialized
     return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
+}
+
+#ifdef ARCH_ESP32
+
+// Detach our class' interrupts before lightsleep
+// Allows sleep.cpp to configure its own interrupts, which wake the device on user-button press
+int Power::beforeLightSleep(void *unused)
+{
+    LOG_WARN("Detaching power interrupts for sleep");
+    detachPowerInterrupts();
+    return 0; // Indicates success
+}
+
+// Reconfigure our interrupts
+// Our class' interrupts were disconnected during sleep, to allow the user button to wake the device from sleep
+int Power::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachPowerInterrupts();
+    return 0; // Indicates success
+}
+
+#endif
+
+/*
+ * Attach (or re-attach) hardware interrupts for power management
+ * Public method. Used outside class when waking from MCU sleep
+ */
+void Power::attachPowerInterrupts()
+{
+#ifdef EXT_PWR_DETECT
+    attachInterrupt(
+        EXT_PWR_DETECT,
+        []() {
+            power->setIntervalFromNow(0);
+            runASAP = true;
+        },
+        CHANGE);
+#endif
+#ifdef BATTERY_CHARGING_INV
+    attachInterrupt(
+        BATTERY_CHARGING_INV,
+        []() {
+            power->setIntervalFromNow(0);
+            runASAP = true;
+        },
+        CHANGE);
+#endif
+#ifdef EXT_CHRG_DETECT
+    attachInterrupt(
+        EXT_CHRG_DETECT,
+        []() {
+            power->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+        },
+        CHANGE);
+#endif
+#ifdef PMU_IRQ
+    if (PMU) {
+        attachInterrupt(
+            PMU_IRQ,
+            [] {
+                pmu_irq = true;
+                power->setIntervalFromNow(0);
+                runASAP = true;
+            },
+            FALLING);
+    }
+#endif
+}
+
+/*
+ * Detach the "normal" button interrupts.
+ * Public method. Used before attaching a "wake-on-button" interrupt for MCU sleep
+ */
+void Power::detachPowerInterrupts()
+{
+#ifdef EXT_PWR_DETECT
+    detachInterrupt(EXT_PWR_DETECT);
+#endif
+#ifdef BATTERY_CHARGING_INV
+    detachInterrupt(BATTERY_CHARGING_INV);
+#endif
+#ifdef EXT_CHRG_DETECT
+    detachInterrupt(EXT_CHRG_DETECT);
+#endif
+#ifdef PMU_IRQ
+    if (PMU) {
+        detachInterrupt(PMU_IRQ);
+    }
+#endif
 }
 
 /**
@@ -1375,8 +1454,6 @@ bool Power::axpChipInit()
     }
 
     pinMode(PMU_IRQ, INPUT);
-    attachInterrupt(
-        PMU_IRQ, [] { pmu_irq = true; }, FALLING);
 
     // we do not look for AXPXXX_CHARGING_FINISHED_IRQ & AXPXXX_CHARGING_IRQ
     // because it occurs repeatedly while there is no battery also it could cause
@@ -1849,7 +1926,7 @@ class SerialBatteryLevel : public HasBatteryLevel
     {
 #if defined(EXT_CHRG_DETECT)
 
-        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
 
 #endif
         return false;
@@ -1858,7 +1935,7 @@ class SerialBatteryLevel : public HasBatteryLevel
     virtual bool isCharging() override
     {
 #ifdef EXT_CHRG_DETECT
-        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
 
 #endif
         // by default, we check the battery voltage only
@@ -1880,10 +1957,10 @@ SerialBatteryLevel serialBatteryLevel;
 bool Power::serialBatteryInit()
 {
 #ifdef EXT_PWR_DETECT
-    pinMode(EXT_PWR_DETECT, INPUT);
+    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
 #endif
 #ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
+    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
 #endif
 
     bool result = serialBatteryLevel.runOnce();
