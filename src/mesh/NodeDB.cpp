@@ -59,6 +59,9 @@
 #include <MeshtasticOTA.h>
 #endif
 
+// Cross-platform header — must live outside the per-arch include blocks above.
+#include "mesh/HWIdentity.h"
+
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
@@ -278,8 +281,20 @@ NodeDB::NodeDB()
                 keygenSuccess = true;
             }
         } else {
-            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-            keygenSuccess = true;
+            // Try hardware-bound deterministic key derivation first (Tier A,
+            // no eFuse burn). This produces a keypair tied to the chip's
+            // per-die UID plus an NVS-stored salt; the derivation is stable
+            // across factory reset (NVS survives LittleFS /prefs wipe) and
+            // across firmware flashes, so identity persists where pure random
+            // keygen would have lost it (see #8211). On first boot or if HW
+            // derivation is unavailable (bare native build, UID read failed),
+            // fall back to random keygen as before.
+            if (HWIdentity::deriveKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                keygenSuccess = true;
+            } else {
+                crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+                keygenSuccess = true;
+            }
         }
         if (keygenSuccess) {
             config.security.public_key.size = 32;
