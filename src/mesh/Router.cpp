@@ -499,7 +499,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 meshtastic_Data decodedtmp;
                 memset(&decodedtmp, 0, sizeof(decodedtmp));
                 if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
-                    LOG_DEBUG("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)", p->id);
+                    LOG_WARN("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)", p->id);
                 } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
                     LOG_DEBUG("Invalid portnum (bad psk?)");
 #if !(MESHTASTIC_EXCLUDE_PKI)
