@@ -6,6 +6,22 @@
 #include <SoftwareSerial.h>
 #endif
 
+#if defined(ARCH_STM32WL) && defined(BATTERY_PIN)
+#include "stm32yyxx_ll_adc.h"
+
+/* Analog read resolution */
+#if defined(LL_ADC_RESOLUTION_12B)
+#define LL_ADC_RESOLUTION LL_ADC_RESOLUTION_12B
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+#elif defined(LL_ADC_DS_DATA_WIDTH_12_BIT)
+#define LL_ADC_RESOLUTION LL_ADC_DS_DATA_WIDTH_12_BIT
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+#else
+#error "ADC resolution could not be defined!"
+#endif
+#define ADC_RANGE (1 << BATTERY_SENSE_RESOLUTION_BITS)
+#endif
+
 #ifdef EXT_PWR_DETECT
 #ifndef EXT_PWR_DETECT_MODE
 #define EXT_PWR_DETECT_MODE INPUT

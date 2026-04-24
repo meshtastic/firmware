@@ -1,5 +1,6 @@
 #include "power/BatteryLevel.h"
 
+#include "NodeDB.h"
 #include "Throttle.h"
 #include "meshUtils.h"
 #include "power/PowerHAL.h"
