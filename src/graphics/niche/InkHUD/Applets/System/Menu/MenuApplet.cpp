@@ -8,10 +8,10 @@
 #include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
+#include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "power.h"
-#include "graphics/niche/Utils/FlashData.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
 #if defined(ARCH_ESP32) && HAS_WIFI
@@ -34,7 +34,7 @@ struct DisplayTimeoutOption {
 };
 
 static constexpr DisplayTimeoutOption DISPLAY_TIMEOUT_OPTIONS[] = {
-    {0, "Forever"}, {30, "30 secs"}, {60, "1 min"}, {5 * 60, "5 min"},
+    {0, "Forever"},      {30, "30 secs"},     {60, "1 min"},     {5 * 60, "5 min"},
     {15 * 60, "15 min"}, {30 * 60, "30 min"}, {60 * 60, "1 hr"},
 };
 
@@ -427,12 +427,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             inkhud->openKeyboard();
         break;
 
-    case STORE_CANNEDMESSAGE_SELECTION:
-        {
-            const uint8_t prefixItems = supportsFreeTextKeyboard(inkhud, settings) ? 2 : 1;
-            cm.selectedMessageItem = &cm.messageItems.at(cursor - prefixItems);
-        }
-        break;
+    case STORE_CANNEDMESSAGE_SELECTION: {
+        const uint8_t prefixItems = supportsFreeTextKeyboard(inkhud, settings) ? 2 : 1;
+        cm.selectedMessageItem = &cm.messageItems.at(cursor - prefixItems);
+    } break;
 
     case SEND_CANNEDMESSAGE:
         cm.selectedRecipientItem = &cm.recipientItems.at(cursor);
@@ -514,13 +512,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         // Note: backlight is already on in this situation.
         // This toggle controls whether it should remain on when menu closes.
 #if defined(T5_S3_EPAPER_PRO)
-        {
-            const bool keepOn = !t5BacklightIsUserEnabled();
-            t5BacklightSetUserEnabled(keepOn);
-            saveT5BacklightKeepOn(keepOn);
-            if (item.checkState)
-                *(item.checkState) = keepOn;
-        }
+    {
+        const bool keepOn = !t5BacklightIsUserEnabled();
+        t5BacklightSetUserEnabled(keepOn);
+        saveT5BacklightKeepOn(keepOn);
+        if (item.checkState)
+            *(item.checkState) = keepOn;
+    }
 #else
         if (!backlight)
             backlight = Drivers::LatchingBacklight::getInstance();
@@ -531,7 +529,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         if (item.checkState)
             *(item.checkState) = backlight->isLatched();
 #endif
-        break;
+    break;
 
     case TOGGLE_12H_CLOCK:
         config.display.use_12h_clock = !config.display.use_12h_clock;
@@ -1613,8 +1611,8 @@ void InkHUD::MenuApplet::onRender(bool full)
         // Checkbox, if relevant
         if (item.checkState) {
             const uint16_t cbWH = menuItemFont.lineHeight(); // Checkbox: width / height
-            const int16_t cbL = itemR - X(padding) - cbWH; // Checkbox: left
-            const int16_t cbT = center - (cbWH / 2);       // Checkbox : top
+            const int16_t cbL = itemR - X(padding) - cbWH;   // Checkbox: left
+            const int16_t cbT = center - (cbWH / 2);         // Checkbox : top
             // Checkbox ticked
             if (*(item.checkState)) {
                 drawRect(cbL, cbT, cbWH, cbWH, BLACK);

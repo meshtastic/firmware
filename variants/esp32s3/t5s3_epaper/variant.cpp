@@ -80,7 +80,8 @@ static TouchInkHUDBridge touchBridge;
 
 TouchDrvGT911 touch;
 
-namespace {
+namespace
+{
 constexpr uint8_t BACKLIGHT_ON_LEVEL = HIGH;
 constexpr uint8_t BACKLIGHT_OFF_LEVEL = LOW;
 volatile bool backlightUserEnabled = true;
@@ -335,7 +336,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
 
     CallbackObserver<SideKeyInterruptThread, void *> lsObserver{this, &SideKeyInterruptThread::onLightSleep};
     CallbackObserver<SideKeyInterruptThread, esp_sleep_wakeup_cause_t> lsEndObserver{this,
-                                                                                      &SideKeyInterruptThread::onLightSleepEnd};
+                                                                                     &SideKeyInterruptThread::onLightSleepEnd};
 #endif
 
     volatile State state = State::REST;
@@ -560,7 +561,7 @@ struct TouchLightSleepEndObserver {
     }
 
     CallbackObserver<TouchLightSleepEndObserver, esp_sleep_wakeup_cause_t> observer{this,
-                                                                                     &TouchLightSleepEndObserver::onLightSleepEnd};
+                                                                                    &TouchLightSleepEndObserver::onLightSleepEnd};
 } static touchLightSleepEndObserver;
 #endif
 
@@ -709,8 +710,7 @@ void lateInitVariant(void)
                 (void)user_data;
 #endif
             },
-            nullptr
-        );
+            nullptr);
         touchControllerReady = true;
         touchInputEnabled = true;
         touchForcedByTimeout = false;

@@ -31,16 +31,16 @@ class Events
     void onButtonShort(); // User button: short press
     void onButtonLong();  // User button: long press
     void applyingChanges();
-    void onExitShort(); // Exit button: short press
-    void onExitLong();  // Exit button: long press
-    void onNavUp();     // Navigate up
-    void onNavDown();   // Navigate down
-    void onNavLeft();   // Navigate left
-    void onNavRight();  // Navigate right
-    void onTouchNavUp();    // Navigate up from touch input
-    void onTouchNavDown();  // Navigate down from touch input
-    void onTouchNavLeft();  // Navigate left from touch input
-    void onTouchNavRight(); // Navigate right from touch input
+    void onExitShort();                                      // Exit button: short press
+    void onExitLong();                                       // Exit button: long press
+    void onNavUp();                                          // Navigate up
+    void onNavDown();                                        // Navigate down
+    void onNavLeft();                                        // Navigate left
+    void onNavRight();                                       // Navigate right
+    void onTouchNavUp();                                     // Navigate up from touch input
+    void onTouchNavDown();                                   // Navigate down from touch input
+    void onTouchNavLeft();                                   // Navigate left from touch input
+    void onTouchNavRight();                                  // Navigate right from touch input
     void onTouchTap(uint16_t x, uint16_t y, bool longPress); // Touch tap/long-press with coordinates
 
     // Free text typing events

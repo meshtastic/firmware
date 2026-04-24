@@ -27,16 +27,7 @@ static constexpr uint8_t GRID_ROWS = 4;
 static constexpr uint8_t ICON_NATIVE_SIZE = 48;
 static constexpr uint8_t ICON_OUTLINE_STROKE = 1;
 
-enum class IconKind : uint8_t {
-    GENERIC,
-    ALL_MESSAGES,
-    DMS,
-    CHANNEL,
-    POSITIONS,
-    RECENTS,
-    HEARD,
-    FAVORITES
-};
+enum class IconKind : uint8_t { GENERIC, ALL_MESSAGES, DMS, CHANNEL, POSITIONS, RECENTS, HEARD, FAVORITES };
 
 struct GridLayout {
     uint16_t footerH = 0;

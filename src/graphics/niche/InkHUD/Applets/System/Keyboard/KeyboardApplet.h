@@ -72,9 +72,8 @@ class KeyboardApplet : public SystemApplet
     static const uint8_t KBD_ROWS = 5;
     static const uint8_t KBD_KEY_COUNT = KBD_COLS * KBD_ROWS;
     static const uint8_t EMOTE_SLOT_COUNT = KBD_COLS * (KBD_ROWS - 1); // top 4 rows
-    static constexpr uint8_t fontEmotes[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x09, 0x0B,
-                                             0x0C, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15,
-                                             0x16, 0x17, 0x18, 0x19, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F};
+    static constexpr uint8_t fontEmotes[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x09, 0x0B, 0x0C, 0x0E, 0x0F, 0x10, 0x11,
+                                             0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F};
     static constexpr uint8_t fontEmoteCount = sizeof(fontEmotes) / sizeof(fontEmotes[0]);
 
     // Text keyboard (requested layout):
@@ -108,29 +107,27 @@ class KeyboardApplet : public SystemApplet
         // row 4
         KEY_ALPHA_TOGGLE, ',', ' ', '.', KEY_SEND, KEY_NONE, KEY_NONE, KEY_NONE, KEY_NONE, KEY_NONE, KEY_NONE};
 
-    const uint16_t typingKeyWidths[KBD_KEY_COUNT] = {
-        // row 0
-        12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 0,
-        // row 1
-        12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 0,
-        // row 2
-        12, 12, 12, 12, 12, 12, 12, 12, 12, 0, 0,
-        // row 3
-        18, 12, 12, 12, 12, 12, 12, 12, 20, 0, 0,
-        // row 4
-        20, 12, 56, 12, 24, 0, 0, 0, 0, 0, 0};
+    const uint16_t typingKeyWidths[KBD_KEY_COUNT] = {// row 0
+                                                     12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 0,
+                                                     // row 1
+                                                     12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 0,
+                                                     // row 2
+                                                     12, 12, 12, 12, 12, 12, 12, 12, 12, 0, 0,
+                                                     // row 3
+                                                     18, 12, 12, 12, 12, 12, 12, 12, 20, 0, 0,
+                                                     // row 4
+                                                     20, 12, 56, 12, 24, 0, 0, 0, 0, 0, 0};
 
-    const uint16_t emoteKeyWidths[KBD_KEY_COUNT] = {
-        // row 0
-        12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-        // row 1
-        12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-        // row 2
-        12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-        // row 3
-        12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-        // row 4 controls
-        14, 14, 18, 12, 40, 12, 20, 18, 0, 0, 0};
+    const uint16_t emoteKeyWidths[KBD_KEY_COUNT] = {// row 0
+                                                    12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+                                                    // row 1
+                                                    12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+                                                    // row 2
+                                                    12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+                                                    // row 3
+                                                    12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+                                                    // row 4 controls
+                                                    14, 14, 18, 12, 40, 12, 20, 18, 0, 0, 0};
 
     uint8_t selectedKey = 0;
     uint8_t prevSelectedKey = 0;

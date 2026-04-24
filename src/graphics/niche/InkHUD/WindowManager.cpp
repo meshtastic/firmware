@@ -3,15 +3,15 @@
 #include "./WindowManager.h"
 
 #include "./Applets/System/AlignStick/AlignStickApplet.h"
+#include "./Applets/System/AppSwitcher/AppSwitcherApplet.h"
 #include "./Applets/System/BatteryIcon/BatteryIconApplet.h"
 #include "./Applets/System/Keyboard/KeyboardApplet.h"
 #include "./Applets/System/Logo/LogoApplet.h"
 #include "./Applets/System/Menu/MenuApplet.h"
-#include "./Applets/System/AppSwitcher/AppSwitcherApplet.h"
 #include "./Applets/System/Notification/NotificationApplet.h"
+#include "./Applets/System/Notification/TouchStatusApplet.h"
 #include "./Applets/System/Pairing/PairingApplet.h"
 #include "./Applets/System/Placeholder/PlaceholderApplet.h"
-#include "./Applets/System/Notification/TouchStatusApplet.h"
 #include "./Applets/System/Tips/TipsApplet.h"
 #include "./SystemApplet.h"
 

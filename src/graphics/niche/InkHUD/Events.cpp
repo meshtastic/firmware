@@ -2,9 +2,9 @@
 
 #include "./Events.h"
 
+#include "PowerFSM.h"
 #include "RTC.h"
 #include "buzz.h"
-#include "PowerFSM.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"

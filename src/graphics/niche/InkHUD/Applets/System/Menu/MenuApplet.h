@@ -49,11 +49,11 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void execute(MenuItem item);  // Perform the MenuAction associated with a MenuItem, if any
     void showPage(MenuPage page); // Load and display a MenuPage
 
-    void populateSendPage();      // Dynamically create MenuItems including canned messages
-    void populateRecipientPage(); // Dynamically create a page of possible destinations for a canned message
-    void populateAppletPage();    // Dynamically create MenuItems for toggling loaded applets
-    void populateAutoshowPage();  // Dynamically create MenuItems for selecting which applets can autoshow
-    void populateRecentsPage();   // Create menu items: a choice of values for settings.recentlyActiveSeconds
+    void populateSendPage();           // Dynamically create MenuItems including canned messages
+    void populateRecipientPage();      // Dynamically create a page of possible destinations for a canned message
+    void populateAppletPage();         // Dynamically create MenuItems for toggling loaded applets
+    void populateAutoshowPage();       // Dynamically create MenuItems for selecting which applets can autoshow
+    void populateRecentsPage();        // Create menu items: a choice of values for settings.recentlyActiveSeconds
     void populateDisplayTimeoutPage(); // Create menu items for config.display.screen_on_secs
 
     void drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height,
@@ -67,8 +67,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     MenuPage startPageOverride = MenuPage::ROOT;
     MenuPage currentPage = MenuPage::ROOT;
     MenuPage previousPage = MenuPage::EXIT;
-    uint8_t cursor = 0;       // Which menu item is currently highlighted
-    bool cursorShown = false; // Is *any* item highlighted? (Root menu: no initial selection)
+    uint8_t cursor = 0;                       // Which menu item is currently highlighted
+    bool cursorShown = false;                 // Is *any* item highlighted? (Root menu: no initial selection)
     bool hideTouchSelectionHighlight = false; // Touch scrolling keeps cursor for paging math, but can hide highlight
     bool freeTextMode = false;
     uint16_t systemInfoPanelHeight = 0; // Need to know before we render
@@ -121,7 +121,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
 
     Applet *borrowedTileOwner = nullptr; // Which applet we have temporarily replaced while displaying menu
 
-    bool invertedColors = false; // Helper to display current state of config.display.displaymode in InkHUD options
+    bool invertedColors = false;  // Helper to display current state of config.display.displaymode in InkHUD options
     bool keepBacklightOn = false; // Helper to display current backlight latch state in InkHUD options
 };
 
