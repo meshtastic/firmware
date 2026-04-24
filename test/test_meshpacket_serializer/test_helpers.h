@@ -1,14 +1,27 @@
 #pragma once
 
-#include "serialization/JSON.h"
 #include "serialization/MeshPacketSerializer.h"
 #include <Arduino.h>
+#include <json/json.h>
+#include <memory>
 #include <meshtastic/mesh.pb.h>
 #include <meshtastic/mqtt.pb.h>
 #include <meshtastic/telemetry.pb.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <unity.h>
+
+// Parse a JSON string into a Json::Value; returns Json::nullValue on failure.
+static inline Json::Value parse_json(const std::string &s)
+{
+    Json::CharReaderBuilder b;
+    Json::Value root;
+    std::string errs;
+    std::unique_ptr<Json::CharReader> reader(b.newCharReader());
+    if (!reader->parse(s.c_str(), s.c_str() + s.size(), &root, &errs))
+        return Json::Value();
+    return root;
+}
 
 // Helper function to create a test packet with the given port and payload
 static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const uint8_t *payload, size_t payload_size,
@@ -36,7 +49,8 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
         packet.encrypted.size = payload_size;
         memcpy(packet.encrypted.bytes, payload, packet.encrypted.size);
     }
-    memcpy(packet.decoded.payload.bytes, payload, payload_size);
+    if (payload && payload_size)
+        memcpy(packet.decoded.payload.bytes, payload, payload_size);
     packet.decoded.payload.size = payload_size;
     packet.decoded.want_response = false;
     packet.decoded.dest = 0x55667788;
