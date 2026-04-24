@@ -510,7 +510,11 @@ class LGFX : public lgfx::LGFX_Device
             cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
                                             // 80MHz by an integer)
             cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
+#ifdef SPI_3_WIRE
             cfg.spi_3wire = SPI_3_WIRE;
+#else
+            cfg.spi_3wire = true;                      // Set to true if reception is done on the MOSI pin
+#endif
             cfg.use_lock = true;               // Set to true to use transaction locking
             cfg.dma_channel = SPI_DMA_CH_AUTO; // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
                                                // SPI_DMA_CH_AUTO=auto setting)
