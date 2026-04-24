@@ -1000,6 +1000,17 @@ int32_t Power::runOnce()
             powerFSM.trigger(EVENT_POWER_CONNECTED);
         }
 
+#ifdef T_WATCH_S3
+        /*
+            In the T-Watch S3 this code fragment reacts to the short press of the button by switching the
+            display on and off
+        */
+        if (PMU->isPekeyShortPressIrq()) {
+            LOG_INFO("Input: Corona Button Click");
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_CANCEL, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        }
+#endif
         /*
         Other things we could check if we cared...
 
