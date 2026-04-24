@@ -455,10 +455,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
         // if it's not LOW - check the battery
 #else
         // if external powered that pin will be pulled up
-        if (digitalRead(EXT_PWR_DETECT) == HIGH) {
-            return true;
-        }
-        // if it's not HIGH - check the battery
+        return digitalRead(EXT_PWR_DETECT) == HIGH;
+        // don't check the battery.
+        // very narrow backport from later 2.7 releases
+
 #endif
 #elif defined(MUZI_BASE)
         return NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
