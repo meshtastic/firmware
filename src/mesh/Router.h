@@ -92,6 +92,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
 
+    /* Count of OTA-received packets dropped because they claimed `from` equal
+       to our own nodeNum. These are physically impossible for legitimate
+       traffic (a radio cannot receive its own transmission) and therefore
+       indicate a spoof attempt by someone on the shared channel PSK. */
+    uint32_t spoofSelfRxDrop = 0;
+
     // pointer to the encrypted packet
     meshtastic_MeshPacket *p_encrypted = nullptr;
 

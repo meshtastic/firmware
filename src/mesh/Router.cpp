@@ -849,6 +849,26 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
     }
 #endif
+    // A packet received over the air that claims `from == our own nodeNum`
+    // is physically impossible for legitimate traffic: a radio cannot hear
+    // its own transmission. Such a packet must therefore be a forgery by
+    // someone who holds the channel PSK. Drop it with zero false positives
+    // (the only way to reach this path with isFromUs(p) is OTA reception
+    // — Router::sendLocal's broadcast loopback calls handleReceived, not
+    // perhapsHandleReceived, so locally-originated packets never arrive here).
+    //
+    // Can be disabled via -DMESHTASTIC_DISABLE_SPOOF_SELF_RX_DROP=1 for
+    // research / debug builds. Default ON.
+#if !defined(MESHTASTIC_DISABLE_SPOOF_SELF_RX_DROP)
+    if (isFromUs(p)) {
+        spoofSelfRxDrop++;
+        LOG_WARN("SPOOF: dropped OTA packet claiming from=0x%08x (=our nodeNum); id=0x%x rssi=%d snr=%f",
+                 p->from, p->id, p->rx_rssi, p->rx_snr);
+        packetPool.release(p);
+        return;
+    }
+#endif
+
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
         LOG_DEBUG("Ignore msg, 0x%x is in our ignore list", p->from);
