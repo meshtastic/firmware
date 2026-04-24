@@ -200,7 +200,7 @@ class Power : public concurrency::OSThread
     /// Setup a serial battery sensor
     bool serialBatteryInit();
 
-    bool pmu_irq = false;
+    volatile bool pmu_irq = false;
 
   private:
     void shutdown();
