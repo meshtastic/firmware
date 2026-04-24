@@ -263,8 +263,10 @@ bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
     }
 
     // Older RadioLib versions only expose random(min, max), so fill the buffer byte-by-byte.
+    // Note: random(min, max) is half-open [min, max) per RadioLib — (0, 256) yields 0-255, which
+    // is the correct byte range. The previous (0, 255) could never produce the value 255.
     for (size_t i = 0; i < length; ++i) {
-        int32_t value = iface->random(0, 255);
+        int32_t value = iface->random(0, 256);
         if (value < 0) {
             return false;
         }
@@ -482,10 +484,19 @@ void RadioLibInterface::handleReceiveInterrupt()
 #endif
     if (state != RADIOLIB_ERR_NONE) {
         // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
-        LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
-                  "nextHop=0x%x relay=0x%x)",
-                  state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
-                  iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+        // CRC mismatches are routine in RF-congested areas (noise mis-demodulating to a syncword hit) — not an error class worth
+        // ERROR severity, but still valuable info for operators looking at the log. Everything else stays at LOG_ERROR.
+        if (state == RADIOLIB_ERR_CRC_MISMATCH) {
+            LOG_INFO("Ignore received packet due to CRC mismatch (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g "
+                     "rxRSSI=%i nextHop=0x%x relay=0x%x)",
+                     radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
+                     iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+        } else {
+            LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
+                      "nextHop=0x%x relay=0x%x)",
+                      state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
+                      iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+        }
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
@@ -497,11 +508,10 @@ void RadioLibInterface::handleReceiveInterrupt()
         // check for short packets
         if (payloadLen < 0) {
             LOG_WARN("Ignore received packet too short");
-            rxBad++;
-            airTime->logAirtime(RX_ALL_LOG, rxMsec);
         } else {
             rxGood++;
-            // altered packet with "from == 0" can do Remote Node Administration without permission
+            // altered packet with "from == 0" can do Remote Node Administration without permission.
+            // Still counted as a "good" OTA reception above — we just refuse to process it.
             if (radioBuffer.header.from == 0) {
                 LOG_WARN("Ignore received packet without sender");
                 return;
@@ -511,6 +521,14 @@ void RadioLibInterface::handleReceiveInterrupt()
             // This allows the router and other apps on our node to sniff packets (usually routing) between other
             // nodes.
             meshtastic_MeshPacket *mp = packetPool.allocZeroed();
+
+            // Packet pool exhaustion: drop this packet rather than deref NULL. Can happen under
+            // sustained heap pressure (e.g. config dump mid-RX, dense mesh bursts). The allocator
+            // already emits a WARN on failure, so don't duplicate it here.
+            if (!mp) {
+                airTime->logAirtime(RX_ALL_LOG, rxMsec);
+                return;
+            }
 
             // Keep the assigned fields in sync with src/mqtt/MQTT.cpp:onReceiveProto
             mp->from = radioBuffer.header.from;
