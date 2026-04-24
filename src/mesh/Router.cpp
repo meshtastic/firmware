@@ -869,6 +869,31 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 #endif
 
+    // Correctly-constructed origination packets have hop_start==hop_limit
+    // (stamped at the sender via isFromUs() in Router::send()). A spoofer
+    // who writes p->from to another node's nodeNum bypasses that stamp
+    // because isFromUs() returns false at the attacker's Router::send(),
+    // leaving hop_start==0. Empirical validation against the local
+    // meshlogger corpus (670 legit OTA packets, hop_start range 1..7)
+    // showed hop_start==0 was produced only by forged packets.
+    //
+    // Dropping these packets at every receiving node stops forgery from
+    // propagating across the mesh — the check is cross-node, not limited
+    // to the impersonated victim.
+    //
+    // Can be disabled via -DMESHTASTIC_DISABLE_SPOOF_HOPSTART_DROP=1 for
+    // research / debug builds or for compatibility with any hypothetical
+    // legacy firmware that does not stamp hop_start. Default ON.
+#if !defined(MESHTASTIC_DISABLE_SPOOF_HOPSTART_DROP)
+    if (p->hop_start == 0 && p->hop_limit > 0) {
+        spoofHopStartDrop++;
+        LOG_WARN("SPOOF: dropped hop_start=0 packet from=0x%08x id=0x%x hop_limit=%d rssi=%d",
+                 p->from, p->id, p->hop_limit, p->rx_rssi);
+        packetPool.release(p);
+        return;
+    }
+#endif
+
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
         LOG_DEBUG("Ignore msg, 0x%x is in our ignore list", p->from);

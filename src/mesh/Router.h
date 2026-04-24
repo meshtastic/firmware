@@ -98,6 +98,15 @@ class Router : protected concurrency::OSThread, protected PacketHistory
        indicate a spoof attempt by someone on the shared channel PSK. */
     uint32_t spoofSelfRxDrop = 0;
 
+    /* Count of OTA-received packets dropped because they arrived with
+       hop_start==0 but hop_limit>0 — a shape that correctly-constructed
+       origination packets cannot have. Router::send() stamps hop_start
+       with hop_limit only when isFromUs(p), so a spoofer who forges
+       p->from leaves hop_start==0. This signal is cross-node: every
+       receiver can detect it, which blocks mesh-wide propagation of the
+       forgery even if the impersonated node is not online. */
+    uint32_t spoofHopStartDrop = 0;
+
     // pointer to the encrypted packet
     meshtastic_MeshPacket *p_encrypted = nullptr;
 
