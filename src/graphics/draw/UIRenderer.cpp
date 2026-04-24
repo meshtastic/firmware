@@ -790,7 +790,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (username) {
 #if GRAPHICS_TFT_COLORING_ENABLED
         const int usernameWidth = UIRenderer::measureStringWithEmotes(display, username);
-        setAndRegisterTFTColorRole(TFTColorRole::BodyYellow, TFTPalette::Yellow, TFTPalette::Black, x,
+        setAndRegisterTFTColorRole(TFTColorRole::FavoriteNodeBGHighlight, TFTPalette::Yellow, TFTPalette::Black, x,
                                    getTextPositions(display)[line], usernameWidth, FONT_HEIGHT_SMALL);
 #endif
         UIRenderer::drawStringWithEmotes(display, x, getTextPositions(display)[line++], username, FONT_HEIGHT_SMALL, 1, false);

@@ -38,7 +38,7 @@ static constexpr bool kRoleIsBody[static_cast<size_t>(TFTColorRole::Count)] = {
     true,  // ActionMenuTitle
     true,  // FrameMono
     false, // BootSplash
-    true,  // BodyYellow
+    true,  // FavoriteNodeBGHighlight
     false, // NavigationBar
     false  // NavigationArrow
 };
@@ -123,7 +123,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::DarkGray, TFTPalette::White}, // ActionMenuTitle
             {TFTPalette::Black, TFTPalette::White},    // FrameMono
             {TFTPalette::White, TFTPalette::Black},    // BootSplash
-            {TFTPalette::Yellow, TFTPalette::Black},   // BodyYellow
+            {TFTPalette::Yellow, TFTPalette::Black},   // FavoriteNodeBGHighlight
             {kStatusColor, kHeaderBackground},         // NavigationBar  (icon fg, bar bg)
             {kTitleColor, TFTPalette::Black},          // NavigationArrow (arrow fg, body bg)
         },
@@ -152,7 +152,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::DarkGray, TFTPalette::Black},  // ActionMenuTitle
             {TFTPalette::Black, TFTPalette::White},     // FrameMono
             {TFTPalette::White, TFTPalette::Black},     // BootSplash
-            {TFTPalette::Black, TFTPalette::Yellow},    // BodyYellow
+            {TFTPalette::Black, TFTPalette::Yellow},    // FavoriteNodeBGHighlight
             {TFTPalette::Black, TFTPalette::LightGray}, // NavigationBar  (icon fg, bar bg)
             {TFTPalette::Black, TFTPalette::White},     // NavigationArrow (arrow fg, body bg)
         },
@@ -181,7 +181,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::ChristmasRed, TFTPalette::White},  // ActionMenuTitle
             {TFTPalette::Pine, TFTPalette::White},          // FrameMono
             {TFTPalette::White, TFTPalette::ChristmasRed},  // BootSplash
-            {TFTPalette::Gold, TFTPalette::Pine},           // BodyYellow
+            {TFTPalette::Gold, TFTPalette::Pine},           // FavoriteNodeBGHighlight
             {TFTPalette::Gold, TFTPalette::ChristmasRed},   // NavigationBar  (icon fg, bar bg)
             {TFTPalette::Gold, TFTPalette::Pine},           // NavigationArrow (arrow fg, body bg)
         },
@@ -210,7 +210,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::HotPink, TFTPalette::White},     // ActionMenuTitle
             {TFTPalette::Black, TFTPalette::White},       // FrameMono
             {TFTPalette::White, TFTPalette::HotPink},     // BootSplash
-            {TFTPalette::Black, TFTPalette::HotPink},     // BodyYellow
+            {TFTPalette::Black, TFTPalette::HotPink},     // FavoriteNodeBGHighlight
             {TFTPalette::White, TFTPalette::HotPink},     // NavigationBar  (icon fg, bar bg)
             {TFTPalette::HotPink, TFTPalette::PalePink},  // NavigationArrow (arrow fg, body bg)
         },
@@ -239,7 +239,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::DeepBlue, TFTPalette::White},   // ActionMenuTitle
             {TFTPalette::Navy, TFTPalette::White},       // FrameMono
             {TFTPalette::White, TFTPalette::DeepBlue},   // BootSplash
-            {TFTPalette::SkyBlue, TFTPalette::Navy},     // BodyYellow
+            {TFTPalette::SkyBlue, TFTPalette::Navy},     // FavoriteNodeBGHighlight
             {TFTPalette::SkyBlue, TFTPalette::DeepBlue}, // NavigationBar  (icon fg, bar bg)
             {TFTPalette::SkyBlue, TFTPalette::Black},    // NavigationArrow (arrow fg, body bg)
         },
@@ -268,7 +268,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::CreamOrange, TFTPalette::White}, // ActionMenuTitle
             {TFTPalette::Black, TFTPalette::White},       // FrameMono
             {TFTPalette::White, TFTPalette::CreamOrange}, // BootSplash
-            {TFTPalette::Black, TFTPalette::CreamOrange}, // BodyYellow
+            {TFTPalette::Black, TFTPalette::CreamOrange}, // FavoriteNodeBGHighlight
             {TFTPalette::White, TFTPalette::CreamOrange}, // NavigationBar  (icon fg, bar bg)
             {TFTPalette::CreamOrange, TFTPalette::White}, // NavigationArrow (arrow fg, body bg)
         },
@@ -299,7 +299,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // ActionMenuTitle
             {TFTPalette::Black, TFTPalette::MeshtasticGreen}, // FrameMono (bodyBg, bodyFg)
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // BootSplash
-            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // BodyYellow
+            {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // FavoriteNodeBGHighlight
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // NavigationBar
             {TFTPalette::MeshtasticGreen, TFTPalette::Black}, // NavigationArrow
         },
@@ -328,7 +328,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::ClassicRed, TFTPalette::Black}, // ActionMenuTitle
             {TFTPalette::Black, TFTPalette::ClassicRed}, // FrameMono (bodyBg, bodyFg)
             {TFTPalette::ClassicRed, TFTPalette::Black}, // BootSplash
-            {TFTPalette::ClassicRed, TFTPalette::Black}, // BodyYellow
+            {TFTPalette::ClassicRed, TFTPalette::Black}, // FavoriteNodeBGHighlight
             {TFTPalette::ClassicRed, TFTPalette::Black}, // NavigationBar
             {TFTPalette::ClassicRed, TFTPalette::Black}, // NavigationArrow
         },
@@ -357,7 +357,7 @@ static const TFTThemeDef kThemes[] = {
             {TFTPalette::White, TFTPalette::Black}, // ActionMenuTitle
             {TFTPalette::Black, TFTPalette::White}, // FrameMono (bodyBg, bodyFg)
             {TFTPalette::White, TFTPalette::Black}, // BootSplash
-            {TFTPalette::White, TFTPalette::Black}, // BodyYellow
+            {TFTPalette::White, TFTPalette::Black}, // FavoriteNodeBGHighlight
             {TFTPalette::White, TFTPalette::Black}, // NavigationBar
             {TFTPalette::White, TFTPalette::Black}, // NavigationArrow
         },
@@ -445,7 +445,7 @@ static TFTRoleColorsBe roleColors[static_cast<size_t>(TFTColorRole::Count)] = {
     {toBe565(TFTPalette::DarkGray), toBe565(TFTPalette::White)}, // ActionMenuTitle
     {toBe565(TFTPalette::Black), toBe565(TFTPalette::White)},    // FrameMono
     {toBe565(TFTPalette::White), toBe565(TFTPalette::Black)},    // BootSplash
-    {toBe565(TFTPalette::Yellow), toBe565(TFTPalette::Black)},   // BodyYellow
+    {toBe565(TFTPalette::Yellow), toBe565(TFTPalette::Black)},   // FavoriteNodeBGHighlight
     {toBe565(kStatusColor), toBe565(kHeaderBackground)},         // NavigationBar
     {toBe565(kTitleColor), toBe565(TFTPalette::Black)}           // NavigationArrow
 };
@@ -604,7 +604,7 @@ void setTFTColorRole(TFTColorRole role, uint16_t onColor, uint16_t offColor)
     }
 
     const uint32_t themeId = uiconfig.screen_rgb_color & 0x1F;
-    const bool isHighlightRole = (role == TFTColorRole::FavoriteNode || role == TFTColorRole::BodyYellow);
+    const bool isHighlightRole = (role == TFTColorRole::FavoriteNode || role == TFTColorRole::FavoriteNodeBGHighlight);
     const bool isBodyRole = !isHighlightRole && isBodyColorRole(role);
 
     // Classic monochrome themes collapse all non-black accents into one tone.

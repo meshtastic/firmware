@@ -33,7 +33,7 @@ enum class TFTColorRole : uint8_t {
     ActionMenuTitle,
     FrameMono,
     BootSplash,
-    BodyYellow,
+    FavoriteNodeBGHighlight,
     NavigationBar,
     NavigationArrow,
     Count
