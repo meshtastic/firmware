@@ -55,6 +55,9 @@ std::atomic<uint32_t> PhoneAPI::lastStartConfigMs{0};
 // legitimate reconnect-after-disconnect flows still work but a flapping client
 // can't drive one handshake per second and exhaust internal SRAM.
 static constexpr uint32_t MIN_CONFIG_HANDSHAKE_INTERVAL_MS = 2000;
+// Rate-limit the throttled-handshake WARN itself so a flapping client can't turn this
+// defensive code into its own log-flood problem.
+static constexpr uint32_t HANDSHAKE_THROTTLE_LOG_INTERVAL_MS = 5000;
 
 void PhoneAPI::handleStartConfig(uint32_t newConfigNonce)
 {
@@ -69,17 +72,26 @@ void PhoneAPI::handleStartConfig(uint32_t newConfigNonce)
     // The new nonce is only committed to config_nonce AFTER the throttle check passes — so
     // an in-flight dump (triggered by an earlier accepted handshake) keeps its nonce and
     // sendConfigComplete matches what the client asked for.
-    const uint32_t now = millis();
     uint32_t last = lastStartConfigMs.load(std::memory_order_relaxed);
     while (true) {
+        // Re-read `now` on every iteration. If a concurrent task CASed lastStartConfigMs
+        // between our load and our CAS, the weak-CAS failure path updates `last` to the
+        // newer timestamp — if we then reused a stale `now` (captured before the race)
+        // our next CAS could commit a backwards-in-time value, breaking the rate limit
+        // for the next arriving handshake.
+        const uint32_t now = millis();
         if (last != 0 && (now - last) < MIN_CONFIG_HANDSHAKE_INTERVAL_MS) {
-            LOG_WARN("Config handshake throttled (last one %u ms ago, min interval %u ms)",
-                     (unsigned)(now - last), (unsigned)MIN_CONFIG_HANDSHAKE_INTERVAL_MS);
+            static uint32_t lastThrottleLogMs = 0;
+            if (!Throttle::isWithinTimespanMs(lastThrottleLogMs, HANDSHAKE_THROTTLE_LOG_INTERVAL_MS)) {
+                lastThrottleLogMs = now;
+                LOG_WARN("Config handshake throttled (last one %u ms ago, min interval %u ms)",
+                         (unsigned)(now - last), (unsigned)MIN_CONFIG_HANDSHAKE_INTERVAL_MS);
+            }
             return;
         }
         if (lastStartConfigMs.compare_exchange_weak(last, now, std::memory_order_acq_rel, std::memory_order_relaxed))
             break;
-        // another task raced us — re-check the (possibly updated) `last` value
+        // another task raced us — loop re-reads `now` and re-checks the updated `last`
     }
 
     // Throttle passed — safe to advance state. Commit the new nonce so sendConfigComplete
