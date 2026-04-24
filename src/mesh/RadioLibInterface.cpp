@@ -505,11 +505,15 @@ void RadioLibInterface::handleReceiveInterrupt()
         // Skip the 4 headers that are at the beginning of the rxBuf
         int32_t payloadLen = length - sizeof(PacketHeader);
 
+        // CRC-good OTA reception — count as rxGood regardless of whether we process
+        // it further. Short/from==0/pool-exhausted packets still represent successful
+        // airtime usage and shouldn't silently vanish from the stats.
+        rxGood++;
+
         // check for short packets
         if (payloadLen < 0) {
             LOG_WARN("Ignore received packet too short");
         } else {
-            rxGood++;
             // altered packet with "from == 0" can do Remote Node Administration without permission.
             // Still counted as a "good" OTA reception above — we just refuse to process it.
             if (radioBuffer.header.from == 0) {
