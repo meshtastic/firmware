@@ -183,6 +183,8 @@ class Power : public concurrency::OSThread
     void attachPowerInterrupts();
     void detachPowerInterrupts();
 
+    volatile bool pmu_irq = false;
+
   protected:
     meshtastic::PowerStatus *statusHandler;
 
@@ -200,8 +202,6 @@ class Power : public concurrency::OSThread
     bool meshSolarInit();
     /// Setup a serial battery sensor
     bool serialBatteryInit();
-
-    volatile bool pmu_irq = false;
 
   private:
     void shutdown();
