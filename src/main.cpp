@@ -909,8 +909,8 @@ void setup()
     if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
         LOG_WARN(LOW_ENTROPY_WARNING);
         // Mark as warned unconditionally — the LOG_WARN above has already fired the user-visible
-        // notice; if the ClientNotification pool is exhausted we'd otherwise spin every tick
-        // retrying + spamming LOG_WARN.
+        // notice. `hasWarned` persists in NodeDB, so this also suppresses the same warning on
+        // subsequent boots regardless of whether the ClientNotification pool had room this time.
         nodeDB->hasWarned = true;
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
