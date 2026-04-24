@@ -681,8 +681,7 @@ void variant_shutdown()
     t5BacklightSetForcedBySleep(true);
 }
 
-// T5-S3-ePaper Pro specific (late-) init
-void lateInitVariant(void)
+void lateInitVariant()
 {
     touch.setPins(GT911_PIN_RST, GT911_PIN_INT);
     if (touch.begin(Wire, GT911_SLAVE_ADDRESS_H, GT911_PIN_SDA, GT911_PIN_SCL)) {
