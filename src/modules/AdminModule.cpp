@@ -668,7 +668,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     bool requiresReboot = true;
 
     switch (c.which_payload_variant) {
-    case meshtastic_Config_device_tag:
+    case meshtastic_Config_device_tag: {
         LOG_INFO("Set config: Device");
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
@@ -741,6 +741,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
         break;
+    }
     case meshtastic_Config_position_tag:
         LOG_INFO("Set config: Position");
         config.has_position = true;
