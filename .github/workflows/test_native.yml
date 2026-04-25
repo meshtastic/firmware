@@ -86,7 +86,13 @@ jobs:
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
       - name: PlatformIO Tests
-        run: platformio test -e coverage -v --junit-output-path testreport.xml
+        run: |
+          set -o pipefail
+          # Filter out SKIPPED summary rows for hardware variants that can't run on the
+          # native host. They flood the log and make it harder to spot real failures.
+          # The JUnit XML is written directly to testreport.xml before the pipe, so
+          # the test artifact is unaffected.
+          platformio test -e coverage -v --junit-output-path testreport.xml 2>&1 | grep -v "[[:space:]]SKIPPED$"
 
       - name: Save test results
         if: always() # run this step even if previous step failed

@@ -19,8 +19,8 @@
 
   TX_LOG + RX_LOG = Total air time for a particular meshtastic channel.
 
-  TX_LOG + RX_LOG = Total air time for a particular meshtastic channel, including
-                    other lora radios.
+  TX_LOG + RX_ALL_LOG = Total air time for a particular meshtastic channel, including
+                        other lora radios.
 
   RX_ALL_LOG - RX_LOG = Other lora radios on our frequency channel.
 */

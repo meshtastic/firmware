@@ -8,6 +8,7 @@
 #include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
+#include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "power.h"
@@ -27,6 +28,16 @@ static constexpr uint8_t MENU_TIMEOUT_SEC = 60; // How many seconds before menu 
 // These are offered to users as possible values for settings.recentlyActiveSeconds
 static constexpr uint8_t RECENTS_OPTIONS_MINUTES[] = {2, 5, 10, 30, 60, 120};
 
+struct DisplayTimeoutOption {
+    uint32_t seconds;
+    const char *label;
+};
+
+static constexpr DisplayTimeoutOption DISPLAY_TIMEOUT_OPTIONS[] = {
+    {0, "Forever"},      {30, "30 secs"},     {60, "1 min"},     {5 * 60, "5 min"},
+    {15 * 60, "15 min"}, {30 * 60, "30 min"}, {60 * 60, "1 hr"},
+};
+
 struct PositionPrecisionOption {
     uint8_t value; // proto value
     const char *metric;
@@ -39,6 +50,77 @@ static constexpr PositionPrecisionOption POSITION_PRECISION_OPTIONS[] = {
     {12, "5.8 km", "3.6 mi"},   {11, "12 km", "7.3 mi"}, {10, "23 km", "15 mi"},
 };
 
+static const char *getDisplayTimeoutLabel(uint32_t timeoutSeconds)
+{
+    constexpr uint8_t optionCount = sizeof(DISPLAY_TIMEOUT_OPTIONS) / sizeof(DISPLAY_TIMEOUT_OPTIONS[0]);
+    for (uint8_t i = 0; i < optionCount; i++) {
+        if (DISPLAY_TIMEOUT_OPTIONS[i].seconds == timeoutSeconds) {
+            return DISPLAY_TIMEOUT_OPTIONS[i].label;
+        }
+    }
+
+    return "Custom";
+}
+
+static bool supportsFreeTextKeyboard(const InkHUD::InkHUD *inkhud, const InkHUD::Persistence::Settings *settings)
+{
+    return !inkhud->twoWayRocker && (settings->joystick.enabled || inkhud->hasTouchEnabledProvider());
+}
+
+static bool useTouchFriendlyMenuLayout(const InkHUD::InkHUD *inkhud)
+{
+    return inkhud != nullptr && inkhud->hasTouchEnabledProvider();
+}
+
+static uint16_t getMenuItemHeightPx(const InkHUD::InkHUD *inkhud)
+{
+    const bool touchFriendly = useTouchFriendlyMenuLayout(inkhud);
+    const uint16_t lineH = touchFriendly ? InkHUD::Applet::fontMedium.lineHeight() : InkHUD::Applet::fontSmall.lineHeight();
+    const float rowScale = touchFriendly ? 1.9f : 1.6f;
+    uint16_t itemH = (uint16_t)(lineH * rowScale);
+    if (itemH == 0) {
+        itemH = 1;
+    }
+    return itemH;
+}
+
+#if defined(T5_S3_EPAPER_PRO)
+namespace
+{
+static constexpr uint32_t T5_BACKLIGHT_PREFS_VERSION = 1;
+
+struct T5BacklightPrefs {
+    uint32_t version = T5_BACKLIGHT_PREFS_VERSION;
+    bool keepOn = true;
+};
+
+T5BacklightPrefs t5BacklightPrefs;
+bool t5BacklightPrefsLoaded = false;
+
+bool loadT5BacklightKeepOn()
+{
+    if (!t5BacklightPrefsLoaded) {
+        T5BacklightPrefs loaded;
+        const bool ok = FlashData<T5BacklightPrefs>::load(&loaded, "t5_backlight");
+        if (ok && loaded.version == T5_BACKLIGHT_PREFS_VERSION) {
+            t5BacklightPrefs = loaded;
+        }
+        t5BacklightPrefsLoaded = true;
+    }
+
+    return t5BacklightPrefs.keepOn;
+}
+
+void saveT5BacklightKeepOn(bool keepOn)
+{
+    loadT5BacklightKeepOn();
+    t5BacklightPrefs.version = T5_BACKLIGHT_PREFS_VERSION;
+    t5BacklightPrefs.keepOn = keepOn;
+    FlashData<T5BacklightPrefs>::save(&t5BacklightPrefs, "t5_backlight");
+}
+} // namespace
+#endif
+
 InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
 {
     // No timer tasks at boot
@@ -47,7 +129,11 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
     // Note: don't get instance if we're not actually using the backlight,
     // or else you will unintentionally instantiate it
     if (settings->optionalMenuItems.backlight) {
+#if defined(T5_S3_EPAPER_PRO)
+        t5BacklightSetUserEnabled(loadT5BacklightKeepOn());
+#else
         backlight = Drivers::LatchingBacklight::getInstance();
+#endif
     }
 
     // Initialize the Canned Message store
@@ -76,9 +162,11 @@ void InkHUD::MenuApplet::onForeground()
     // backlight on always when menu opens.
     // Courtesy to T-Echo users who removed the capacitive touch button
     if (settings->optionalMenuItems.backlight) {
+#if !defined(T5_S3_EPAPER_PRO)
         assert(backlight);
         if (!backlight->isOn())
             backlight->peek();
+#endif
     }
 
     // Prevent user applets requesting update while menu is open
@@ -106,9 +194,11 @@ void InkHUD::MenuApplet::onBackground()
     // Item in options submenu allows keeping backlight on after menu is closed
     // If this item is deselected we will turn backlight off again, now that menu is closing
     if (settings->optionalMenuItems.backlight) {
+#if !defined(T5_S3_EPAPER_PRO)
         assert(backlight);
         if (!backlight->isLatched())
             backlight->off();
+#endif
     }
 
     // Stop the auto-timeout
@@ -333,17 +423,14 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         handleFreeText = true;
         cm.freeTextItem.rawText.erase(); // clear the previous freetext message
         freeTextMode = true;             // render input field instead of normal menu
-        // Open the on-screen keyboard only for full joystick devices
-        if (settings->joystick.enabled && !inkhud->twoWayRocker)
+        if (supportsFreeTextKeyboard(inkhud, settings))
             inkhud->openKeyboard();
         break;
 
-    case STORE_CANNEDMESSAGE_SELECTION:
-        if (!settings->joystick.enabled || inkhud->twoWayRocker)
-            cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
-        else
-            cm.selectedMessageItem = &cm.messageItems.at(cursor - 2); // Minus two: offset for the "Send Ping" and free text entry
-        break;
+    case STORE_CANNEDMESSAGE_SELECTION: {
+        const uint8_t prefixItems = supportsFreeTextKeyboard(inkhud, settings) ? 2 : 1;
+        cm.selectedMessageItem = &cm.messageItems.at(cursor - prefixItems);
+    } break;
 
     case SEND_CANNEDMESSAGE:
         cm.selectedRecipientItem = &cm.recipientItems.at(cursor);
@@ -422,14 +509,27 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case TOGGLE_BACKLIGHT:
-        // Note: backlight is already on in this situation
-        // We're marking that it should *remain* on once menu closes
-        assert(backlight);
+        // Note: backlight is already on in this situation.
+        // This toggle controls whether it should remain on when menu closes.
+#if defined(T5_S3_EPAPER_PRO)
+    {
+        const bool keepOn = !t5BacklightIsUserEnabled();
+        t5BacklightSetUserEnabled(keepOn);
+        saveT5BacklightKeepOn(keepOn);
+        if (item.checkState)
+            *(item.checkState) = keepOn;
+    }
+#else
+        if (!backlight)
+            backlight = Drivers::LatchingBacklight::getInstance();
         if (backlight->isLatched())
             backlight->off();
         else
             backlight->latch();
-        break;
+        if (item.checkState)
+            *(item.checkState) = backlight->isLatched();
+#endif
+    break;
 
     case TOGGLE_12H_CLOCK:
         config.display.use_12h_clock = !config.display.use_12h_clock;
@@ -527,6 +627,17 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     }
 
     // Display
+    case SET_DISPLAY_TIMEOUT: {
+        // cursor - 1 because index 0 is "Back"
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(DISPLAY_TIMEOUT_OPTIONS) / sizeof(DISPLAY_TIMEOUT_OPTIONS[0]);
+        if (index < optionCount) {
+            config.display.screen_on_secs = DISPLAY_TIMEOUT_OPTIONS[index].seconds;
+            nodeDB->saveToDisk(SEGMENT_CONFIG);
+        }
+        break;
+    }
+
     case TOGGLE_DISPLAY_UNITS:
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
             config.display.units = meshtastic_Config_DisplayConfig_DisplayUnits_METRIC;
@@ -893,11 +1004,16 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         previousPage = MenuPage::ROOT;
         items.push_back(MenuItem("Back", previousPage));
         // Optional: backlight
-        if (settings->optionalMenuItems.backlight)
-            items.push_back(MenuItem(backlight->isLatched() ? "Backlight Off" : "Keep Backlight On", // Label
-                                     MenuAction::TOGGLE_BACKLIGHT,                                   // Action
-                                     MenuPage::EXIT                                                  // Exit once complete
-                                     ));
+        if (settings->optionalMenuItems.backlight) {
+#if defined(T5_S3_EPAPER_PRO)
+            keepBacklightOn = t5BacklightIsUserEnabled();
+#else
+            if (!backlight)
+                backlight = Drivers::LatchingBacklight::getInstance();
+            keepBacklightOn = backlight->isLatched();
+#endif
+            items.push_back(MenuItem("Keep Backlight On", MenuAction::TOGGLE_BACKLIGHT, MenuPage::OPTIONS, &keepBacklightOn));
+        }
 
         // Options Toggles
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
@@ -1109,6 +1225,9 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::NODE_CONFIG_DISPLAY,
                                  &config.display.use_12h_clock));
 
+        nodeConfigLabels.emplace_back("Screen Timeout: " + std::string(getDisplayTimeoutLabel(config.display.screen_on_secs)));
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_DISPLAY_TIMEOUT));
+
         const char *unitsLabel =
             (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) ? "Units: Imperial" : "Units: Metric";
 
@@ -1117,6 +1236,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
+
+    case NODE_CONFIG_DISPLAY_TIMEOUT:
+        previousPage = MenuPage::NODE_CONFIG_DISPLAY;
+        items.push_back(MenuItem("Back", previousPage));
+        populateDisplayTimeoutPage();
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
 
     case NODE_CONFIG_BLUETOOTH: {
         previousPage = MenuPage::NODE_CONFIG;
@@ -1386,10 +1512,14 @@ void InkHUD::MenuApplet::onRender(bool full)
     if (items.size() == 0)
         LOG_ERROR("Empty Menu");
 
+    const bool touchFriendlyLayout = useTouchFriendlyMenuLayout(inkhud);
+    AppletFont menuItemFont = touchFriendlyLayout ? fontMedium : fontSmall;
+    setFont(menuItemFont);
+
     // Dimensions for the slots where we will draw menuItems
     const float padding = 0.05;
-    const uint16_t itemH = fontSmall.lineHeight() * 1.6;
-    const int16_t selectInsetY = 2;
+    const uint16_t itemH = getMenuItemHeightPx(inkhud);
+    const int16_t selectInsetY = touchFriendlyLayout ? 3 : 2;
     const int16_t itemW = width() - X(padding) - X(padding);
     const int16_t itemL = X(padding);
     const int16_t itemR = X(1 - padding);
@@ -1422,6 +1552,11 @@ void InkHUD::MenuApplet::onRender(bool full)
         itemT = max(siT + siH, 0);            // Offset the first menu entry, so menu starts below the system info panel
     }
 
+    // drawSystemInfoPanel() changes font state (clock/info text).
+    // Restore the active menu font so ROOT page item text matches other menu pages,
+    // including touch-friendly layouts.
+    setFont(menuItemFont);
+
     // Draw menu items
     // ===================
 
@@ -1449,8 +1584,6 @@ void InkHUD::MenuApplet::onRender(bool full)
 
         // Header (non-selectable section label)
         if (item.isHeader) {
-            setFont(fontSmall);
-
             // Header text (flush left)
             printAt(itemL + X(padding), center, item.label, LEFT, MIDDLE);
 
@@ -1459,8 +1592,17 @@ void InkHUD::MenuApplet::onRender(bool full)
             drawLine(itemL + X(padding), underlineY, itemR - X(padding), underlineY, BLACK);
         } else {
             // Box, if currently selected
-            if (cursorShown && i == cursor)
-                drawRect(itemL, itemT + selectInsetY, itemW, itemH - (selectInsetY * 2), BLACK);
+            if (cursorShown && i == cursor && (!touchFriendlyLayout || !hideTouchSelectionHighlight)) {
+                const int16_t selTop = itemT + selectInsetY;
+                const int16_t selH = itemH - (selectInsetY * 2);
+                drawRect(itemL, selTop, itemW, selH, BLACK);
+                // Touch layouts need a stronger visual cue than a thin outline.
+                if (touchFriendlyLayout) {
+                    const int16_t markerInset = 3;
+                    const int16_t markerW = 4;
+                    fillRect(itemL + markerInset, selTop + markerInset, markerW, max(1, selH - (markerInset * 2)), BLACK);
+                }
+            }
 
             // Indented normal item text
             printAt(itemL + X(padding * 2), center, item.label, LEFT, MIDDLE);
@@ -1468,9 +1610,9 @@ void InkHUD::MenuApplet::onRender(bool full)
 
         // Checkbox, if relevant
         if (item.checkState) {
-            const uint16_t cbWH = fontSmall.lineHeight();  // Checkbox: width / height
-            const int16_t cbL = itemR - X(padding) - cbWH; // Checkbox: left
-            const int16_t cbT = center - (cbWH / 2);       // Checkbox : top
+            const uint16_t cbWH = menuItemFont.lineHeight(); // Checkbox: width / height
+            const int16_t cbL = itemR - X(padding) - cbWH;   // Checkbox: left
+            const int16_t cbT = center - (cbWH / 2);         // Checkbox : top
             // Checkbox ticked
             if (*(item.checkState)) {
                 drawRect(cbL, cbT, cbWH, cbWH, BLACK);
@@ -1499,13 +1641,102 @@ void InkHUD::MenuApplet::onRender(bool full)
     }
 }
 
+bool InkHUD::MenuApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
+{
+    (void)longPress;
+
+    if (freeTextMode || !getTile()) {
+        return false;
+    }
+
+    const uint16_t tileL = getTile()->getLeft();
+    const uint16_t tileT = getTile()->getTop();
+    const uint16_t tileR = tileL + getTile()->getWidth();
+    const uint16_t tileB = tileT + getTile()->getHeight();
+    if (x < tileL || x >= tileR || y < tileT || y >= tileB) {
+        return false;
+    }
+
+    if (items.empty()) {
+        return true;
+    }
+
+    // Direct touch controls should act as activity and keep the menu open.
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+    // If button-driven selection is active on touch-first layouts, clear it as soon as
+    // touch interaction resumes so touch behavior remains direct/tap-first.
+    if (useTouchFriendlyMenuLayout(inkhud)) {
+        cursorShown = false;
+        hideTouchSelectionHighlight = true;
+    }
+
+    const int16_t localY = (int16_t)y - (int16_t)tileT;
+
+    // Keep geometry in sync with onRender() so touch hit-testing matches what users see.
+    const uint16_t itemH = getMenuItemHeightPx(inkhud);
+    int16_t itemT = 0;
+    uint8_t slotCount = (height() - itemT) / itemH;
+    if (slotCount == 0) {
+        slotCount = 1;
+    }
+    const uint16_t &siH = systemInfoPanelHeight;
+    const uint8_t slotsObscured = ceilf(siH / (float)itemH);
+
+    if (currentPage == ROOT) {
+        int16_t siT = 0;
+        const int16_t scrollThreshold = (int16_t)slotCount - (int16_t)slotsObscured - 1;
+        if (scrollThreshold >= 0 && (int16_t)cursor >= scrollThreshold) {
+            siT = 0 - ((cursor - scrollThreshold) * itemH);
+        }
+        itemT = max((int16_t)(siT + siH), (int16_t)0);
+    }
+
+    const uint8_t firstItem = (cursor < slotCount) ? 0 : (cursor - (slotCount - 1));
+    uint16_t visibleEnd = (uint16_t)firstItem + (uint16_t)slotCount;
+    const uint8_t maxIndex = (uint8_t)items.size() - 1;
+    if (visibleEnd > maxIndex) {
+        visibleEnd = maxIndex;
+    }
+    const uint8_t lastItem = (uint8_t)visibleEnd;
+
+    for (uint8_t i = firstItem; i <= lastItem; i++) {
+        const int16_t rowTop = itemT;
+        const int16_t rowBottom = itemT + itemH;
+
+        if (localY >= rowTop && localY < rowBottom) {
+            if (items.at(i).isHeader) {
+                // Consume taps on headers so they don't fall back to button semantics.
+                return true;
+            }
+
+            cursor = i;
+            cursorShown = true;
+            execute(items.at(cursor));
+
+            if (!wantsToRender()) {
+                requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+            }
+            return true;
+        }
+
+        itemT += itemH;
+    }
+
+    // Consume taps on menu whitespace so we don't trigger button-like fallback behavior.
+    return true;
+}
+
 void InkHUD::MenuApplet::onButtonShortPress()
 {
     if (!freeTextMode) {
         // Push the auto-close timer back
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-        if (!settings->joystick.enabled) {
+        // Touch-first nodes keep user-button short-press as "advance selection" in menus.
+        // Any button-driven navigation should restore visible highlight.
+        hideTouchSelectionHighlight = false;
+        if (!settings->joystick.enabled || useTouchFriendlyMenuLayout(inkhud)) {
             if (!cursorShown) {
                 cursorShown = true;
                 // Select the first item that isn't a header
@@ -1566,6 +1797,32 @@ void InkHUD::MenuApplet::onNavUp()
     if (!freeTextMode) {
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
+        // Touch-first menus: swipe up/down should scroll only.
+        // Keep cursor movement for scroll math, but selection box is hidden in onRender().
+        if (useTouchFriendlyMenuLayout(inkhud)) {
+            hideTouchSelectionHighlight = true;
+            if (!cursorShown) {
+                cursorShown = true;
+                cursor = items.size() - 1;
+                while (items.at(cursor).isHeader) {
+                    if (cursor == 0) {
+                        cursorShown = false;
+                        break;
+                    }
+                    cursor--;
+                }
+            } else {
+                do {
+                    if (cursor == 0)
+                        cursor = items.size() - 1;
+                    else
+                        cursor--;
+                } while (items.at(cursor).isHeader);
+            }
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+            return;
+        }
+
         if (!cursorShown) {
             cursorShown = true;
             // Select the last item that isn't a header
@@ -1594,6 +1851,29 @@ void InkHUD::MenuApplet::onNavDown()
 {
     if (!freeTextMode) {
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+        // Touch-first menus: swipe up/down should scroll only.
+        // Keep cursor movement for scroll math, but selection box is hidden in onRender().
+        if (useTouchFriendlyMenuLayout(inkhud)) {
+            hideTouchSelectionHighlight = true;
+            if (!cursorShown) {
+                cursorShown = true;
+                cursor = 0;
+                while (cursor < items.size() && items.at(cursor).isHeader) {
+                    cursor++;
+                }
+                if (cursor >= items.size()) {
+                    cursorShown = false;
+                    cursor = 0;
+                }
+            } else {
+                do {
+                    cursor = (cursor + 1) % items.size();
+                } while (items.at(cursor).isHeader);
+            }
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+            return;
+        }
 
         if (!cursorShown) {
             cursorShown = true;
@@ -1727,6 +2007,17 @@ void InkHUD::MenuApplet::populateRecentsPage()
     }
 }
 
+void InkHUD::MenuApplet::populateDisplayTimeoutPage()
+{
+    constexpr uint8_t optionCount = sizeof(DISPLAY_TIMEOUT_OPTIONS) / sizeof(DISPLAY_TIMEOUT_OPTIONS[0]);
+    for (uint8_t i = 0; i < optionCount; i++) {
+        displayTimeoutSelected[i] = (config.display.screen_on_secs == DISPLAY_TIMEOUT_OPTIONS[i].seconds);
+        nodeConfigLabels.emplace_back(DISPLAY_TIMEOUT_OPTIONS[i].label);
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_DISPLAY_TIMEOUT, MenuPage::NODE_CONFIG_DISPLAY,
+                                 &displayTimeoutSelected[i]));
+    }
+}
+
 // MenuItem entries for the "send" page
 // Dynamically creates menu items based on available canned messages
 void InkHUD::MenuApplet::populateSendPage()
@@ -1734,8 +2025,8 @@ void InkHUD::MenuApplet::populateSendPage()
     // Position / NodeInfo packet
     items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
 
-    // If joystick is available, include the Free Text option
-    if (settings->joystick.enabled && !inkhud->twoWayRocker)
+    // Show the Free Text option on any node that supports the on-screen keyboard.
+    if (supportsFreeTextKeyboard(inkhud, settings))
         items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::SEND));
 
     // One menu item for each canned message

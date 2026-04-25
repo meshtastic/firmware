@@ -1,6 +1,7 @@
 #include "NRF52Bluetooth.h"
 #include "BLEDfuSecure.h"
 #include "BluetoothCommon.h"
+#include "HardwareRNG.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
@@ -272,9 +273,13 @@ void NRF52Bluetooth::setup()
     Bluefruit.setTxPower(NRF52_BLE_TX_POWER);
 #endif
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
-        configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN
-                                ? config.bluetooth.fixed_pin
-                                : random(100000, 999999);
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
+            configuredPasskey = config.bluetooth.fixed_pin;
+        } else {
+            uint32_t hwrand = 0;
+            HardwareRNG::fill(reinterpret_cast<uint8_t *>(&hwrand), sizeof(hwrand));
+            configuredPasskey = hwrand % 900000u + 100000u;
+        }
         auto pinString = std::to_string(configuredPasskey);
         LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
         Bluefruit.Security.setPIN(pinString.c_str());

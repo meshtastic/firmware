@@ -43,8 +43,8 @@ void InkHUD::MapApplet::onRender(bool full)
 
         // Add white halo outline first
         constexpr int outlinePad = 1;
-        int boxSize = 11;
-        int radius = 2; // rounded corner radius
+        int boxSize = fontSmall.lineHeight() + 2; // scale with font so digit fits
+        int radius = max(2, boxSize / 6);
 
         // White halo background
         fillRoundedRect(x, y, boxSize + (outlinePad * 2), boxSize + (outlinePad * 2), radius + 1, WHITE);
@@ -143,17 +143,19 @@ void InkHUD::MapApplet::onRender(bool full)
         int16_t centerX = X(0.5) + (self.eastMeters * metersToPx);
         int16_t centerY = Y(0.5) - (self.northMeters * metersToPx);
 
+        int16_t r = fontSmall.lineHeight() / 2; // scale marker with font
+
         // White fill background + halo
-        fillCircle(centerX, centerY, 8, WHITE); // big white base
-        drawCircle(centerX, centerY, 8, WHITE); // crisp edge
+        fillCircle(centerX, centerY, r + 2, WHITE);
+        drawCircle(centerX, centerY, r + 2, WHITE);
 
         // Black bullseye on top
-        drawCircle(centerX, centerY, 6, BLACK);
-        fillCircle(centerX, centerY, 2, BLACK);
+        drawCircle(centerX, centerY, r, BLACK);
+        fillCircle(centerX, centerY, max(2, r / 4), BLACK);
 
         // Crosshairs
-        drawLine(centerX - 8, centerY, centerX + 8, centerY, BLACK);
-        drawLine(centerX, centerY - 8, centerX, centerY + 8, BLACK);
+        drawLine(centerX - r - 2, centerY, centerX + r + 2, centerY, BLACK);
+        drawLine(centerX, centerY - r - 2, centerX, centerY + r + 2, BLACK);
     }
 }
 
@@ -382,9 +384,9 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
 
     constexpr uint16_t paddingH = 2;
     constexpr uint16_t paddingW = 4;
-    uint16_t paddingInnerW = 2;            // Zero'd out if no text
-    constexpr uint16_t markerSizeMax = 12; // Size of cross (if marker uses a cross)
-    constexpr uint16_t markerSizeMin = 5;
+    uint16_t paddingInnerW = 2;                      // Zero'd out if no text
+    uint16_t markerSizeMax = fontSmall.lineHeight(); // Scale cross with font
+    uint16_t markerSizeMin = max(5, fontSmall.lineHeight() / 3);
 
     int16_t textX;
     int16_t textY;

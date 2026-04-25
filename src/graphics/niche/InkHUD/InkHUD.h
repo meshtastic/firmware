@@ -39,6 +39,8 @@ class WindowManager;
 class InkHUD
 {
   public:
+    using TouchEnabledProvider = bool (*)();
+
     static InkHUD *getInstance(); // Access to this singleton class
 
     // Configuration
@@ -51,6 +53,11 @@ class InkHUD
 
     void begin();
 
+    // Optional touch-state provider for reusable touch status indicators.
+    void setTouchEnabledProvider(TouchEnabledProvider provider);
+    bool hasTouchEnabledProvider() const;
+    bool isTouchEnabled() const;
+
     // Handle user-button press
     // - connected to an input source, in variant nicheGraphics.h
 
@@ -62,6 +69,12 @@ class InkHUD
     void navDown();
     void navLeft();
     void navRight();
+    void touchNavUp();
+    void touchNavDown();
+    void touchNavLeft();
+    void touchNavRight();
+    void touchTap(uint16_t x, uint16_t y);
+    void touchLongPress(uint16_t x, uint16_t y);
 
     // Freetext handlers
     void freeText(char c);
@@ -76,11 +89,14 @@ class InkHUD
     void prevApplet();
     NicheGraphics::InkHUD::Applet *getActiveApplet();
     void openMenu();
+    void openAppSwitcher();
     void openAlignStick();
     void openKeyboard();
     void closeKeyboard();
     void nextTile();
     void prevTile();
+    bool showApplet(uint8_t appletIndex);
+    bool selectTileAt(uint16_t x, uint16_t y);
     void rotate();
     void rotateJoystick(uint8_t angle = 1); // rotate 90 deg by default
     void toggleBatteryIcon();
@@ -129,6 +145,7 @@ class InkHUD
     Events *events = nullptr;               // Handle non-specific firmware events
     Renderer *renderer = nullptr;           // Co-ordinate display updates
     WindowManager *windowManager = nullptr; // Multiplexing of applets
+    TouchEnabledProvider touchEnabledProvider = nullptr;
 };
 
 } // namespace NicheGraphics::InkHUD

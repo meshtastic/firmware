@@ -217,6 +217,40 @@ if [[ $# -eq 0 ]]; then
 		-v --tb=short
 fi
 
+# UI tier requires opencv-python-headless (and ideally easyocr). If it's
+# not installed, auto-deselect tests/ui so operators without the [ui]
+# extra still get a green run. Printed in yellow; silent when cv2 is
+# present.
+_cv2_ok=0
+if "$VENV_PY" -c "import cv2" >/dev/null 2>&1; then
+	_cv2_ok=1
+fi
+_running_ui=0
+for _arg in "$@"; do
+	case "$_arg" in
+	*tests/ui* | tests/) _running_ui=1 ;;
+	*) ;;
+	esac
+done
+if [[ $_running_ui -eq 1 && $_cv2_ok -eq 0 ]]; then
+	printf '\033[33m[pre-flight] tests/ui tier detected, but opencv-python-headless is not installed — deselecting.\033[0m\n'
+	printf '             install with: .venv/bin/pip install -e "mcp-server/.[ui]"\n'
+	echo
+	set -- "$@" --ignore=tests/ui
+fi
+
+# Recovery tier needs `uhubctl` on PATH — it power-cycles devices via USB
+# hub PPPS. The tier's conftest already skips cleanly, so this is just a
+# friendly heads-up before the skip happens. `baked_single`'s auto-
+# recovery hook also benefits from having uhubctl available across the
+# whole suite.
+if ! command -v uhubctl >/dev/null 2>&1; then
+	printf "\033[33m[pre-flight] uhubctl not found on PATH — recovery tier will skip, and\n"
+	printf "             wedged-device auto-recovery is disabled.\033[0m\n"
+	printf "             install with: brew install uhubctl (macOS) or apt install uhubctl (Debian/Ubuntu).\n"
+	echo
+fi
+
 # Always emit `tests/reportlog.jsonl` (unless the operator explicitly passed
 # their own `--report-log=...`). Consumers — notably the
 # `meshtastic-mcp-test-tui` TUI — tail the reportlog for live per-test state.

@@ -48,6 +48,15 @@ Three test-and-diagnose workflows exist as slash commands:
 
 Bodies live in `.claude/commands/` and `.github/prompts/` respectively. `.claude/commands/README.md` is the index.
 
+## Encryption at a glance
+
+Two layers, both in `src/mesh/CryptoEngine.cpp`:
+
+- **Channel (symmetric)** — **AES-CTR** with a channel-wide PSK (AES-128 or AES-256). Nonce = packet_id ‖ from_node ‖ block_counter. No AEAD; integrity is soft (channel-hash filter). The well-known default PSK lives in `src/mesh/Channels.h`; a 1-byte PSK is a short-form index into it.
+- **Per-peer PKI** — **X25519 ECDH** (Curve25519, 32-byte keys) → SHA-256 → **AES-256-CCM** with an 8-byte MAC. Fresh 32-bit `extraNonce` per packet, sent in the clear alongside the MAC. 12-byte wire overhead (`MESHTASTIC_PKC_OVERHEAD`). Used for DMs. Also used for remote admin (`src/modules/AdminModule.cpp`), where AdminMessage authorization is gated by `config.security.admin_key[0..2]`. Disabled entirely in Ham mode (`user.is_licensed=true`).
+
+Key rotation to never trigger casually: only the **full** factory reset (`factory_reset_device`, `eraseBleBonds=true`) wipes `security.private_key` and regenerates the keypair — every peer holds the old public key, so DMs silently fail PKI decrypt until NodeInfo re-exchanges. The **partial** config reset (`factory_reset_config`) preserves the private key and doesn't invalidate peer relationships. Explicitly blanking `security.private_key` via admin also triggers regen. See the **Encryption & Key Management** section of `.github/copilot-instructions.md` for the full spec (nonce layout, send/receive selection logic including infrastructure-portnum exceptions, admin-key + session-passkey authorization, `is_managed` scope, key-rotation hazards).
+
 ## House rules
 
 - **No destructive device operations without operator approval.** `factory_reset`, `erase_and_flash`, `reboot`, `shutdown`, history-rewriting git ops — describe the action and stop. Operator authorizes.
@@ -89,25 +98,42 @@ Sequence these; don't parallelize on the same port.
 
 ## Where to look
 
-| Path                              | What's there                                                                                         |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `src/`                            | Firmware C++ source (`mesh/`, `modules/`, `platform/`, `graphics/`, `gps/`, `motion/`, `mqtt/`, …)   |
-| `src/mesh/`                       | Core: NodeDB, Router, Channels, CryptoEngine, radio interfaces, StreamAPI, PhoneAPI                  |
-| `src/modules/`                    | Feature modules; `Telemetry/Sensor/` has 50+ I2C sensor drivers                                      |
-| `variants/`                       | 200+ hardware variant definitions (`variant.h` + `platformio.ini` per board)                         |
-| `protobufs/`                      | `.proto` definitions; regenerate with `bin/regen-protos.sh`                                          |
-| `test/`                           | Firmware unit tests (12 suites; `pio test -e native`)                                                |
-| `mcp-server/`                     | Python MCP server + pytest hardware integration tests                                                |
-| `mcp-server/tests/`               | Tiered pytest suite: `unit/`, `mesh/`, `telemetry/`, `monitor/`, `fleet/`, `admin/`, `provisioning/` |
-| `.claude/commands/`               | Claude Code slash command bodies                                                                     |
-| `.github/prompts/`                | Copilot prompt bodies (mirrors of the Claude Code ones)                                              |
-| `.github/copilot-instructions.md` | **Primary agent instructions — read this**                                                           |
-| `.github/workflows/`              | CI pipelines                                                                                         |
-| `.mcp.json`                       | MCP server registration for Claude Code                                                              |
+| Path                              | What's there                                                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `src/`                            | Firmware C++ source (`mesh/`, `modules/`, `platform/`, `graphics/`, `gps/`, `motion/`, `mqtt/`, …)                       |
+| `src/mesh/`                       | Core: NodeDB, Router, Channels, CryptoEngine, radio interfaces, StreamAPI, PhoneAPI                                      |
+| `src/modules/`                    | Feature modules; `Telemetry/Sensor/` has 50+ I2C sensor drivers                                                          |
+| `variants/`                       | 200+ hardware variant definitions (`variant.h` + `platformio.ini` per board)                                             |
+| `protobufs/`                      | `.proto` definitions; regenerate with `bin/regen-protos.sh`                                                              |
+| `test/`                           | Firmware unit tests (12 suites; `pio test -e native`)                                                                    |
+| `mcp-server/`                     | Python MCP server + pytest hardware integration tests                                                                    |
+| `mcp-server/tests/`               | Tiered pytest suite: `unit/`, `mesh/`, `telemetry/`, `monitor/`, `recovery/`, `ui/`, `fleet/`, `admin/`, `provisioning/` |
+| `.claude/commands/`               | Claude Code slash command bodies                                                                                         |
+| `.github/prompts/`                | Copilot prompt bodies (mirrors of the Claude Code ones)                                                                  |
+| `.github/copilot-instructions.md` | **Primary agent instructions — read this**                                                                               |
+| `.github/workflows/`              | CI pipelines                                                                                                             |
+| `.mcp.json`                       | MCP server registration for Claude Code                                                                                  |
 
 ## Recovery one-liners
 
 - **`userPrefs.jsonc` dirty after a test run?** Re-run `./mcp-server/run-tests.sh` once (pre-flight self-heals from the sidecar). If still dirty: `git checkout userPrefs.jsonc`.
 - **nRF52 not responding?** `mcp__meshtastic__touch_1200bps(port=...)` drops it into the DFU bootloader, then `pio_flash` re-installs.
+- **Device fully wedged (no DFU)?** `mcp__meshtastic__uhubctl_cycle(role="nrf52", confirm=True)` hard-power-cycles it via USB hub PPPS. Needs `uhubctl` installed (`brew install uhubctl` / `apt install uhubctl`); on Linux without udev rules, permission errors fail fast, so use `sudo uhubctl` yourself or configure udev access.
 - **Port busy?** `lsof <port>` to find the holder. Usually a stale `pio device monitor` or zombie `meshtastic_mcp` process. Kill it.
 - **Multiple MCP servers running?** `ps aux | grep meshtastic_mcp` — zombies hold ports. Kill all but the one your host spawned.
+
+## Environment variables (test harness)
+
+| Var                                  | Purpose                                                                                                                                        |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MESHTASTIC_MCP_ENV_<ROLE>`          | Override PlatformIO env for a role (e.g. `MESHTASTIC_MCP_ENV_NRF52=rak4631-dap`). Default map: `nrf52→rak4631`, `esp32s3→heltec-v3`.           |
+| `MESHTASTIC_MCP_SEED`                | PSK seed for the session test profile. Defaults to `mcp-<user>-<host>`.                                                                        |
+| `MESHTASTIC_MCP_FLASH_LOG`           | File path to tee pio/esptool/nrfutil/picotool output. `run-tests.sh` sets this to `tests/flash.log` so the TUI can stream live flash progress. |
+| `MESHTASTIC_UHUBCTL_BIN`             | Absolute path to `uhubctl` binary. Default: PATH lookup.                                                                                       |
+| `MESHTASTIC_UHUBCTL_LOCATION_<ROLE>` | Pin a role to a specific uhubctl hub location (e.g. `1-1.3`). Wins over VID auto-detection — use when multiple devices share a VID.            |
+| `MESHTASTIC_UHUBCTL_PORT_<ROLE>`     | Pin a role to a specific hub port number. Required alongside `LOCATION_<ROLE>`.                                                                |
+| `MESHTASTIC_UI_CAMERA_BACKEND`       | Camera backend for UI tier + `capture_screen` tool: `opencv` / `ffmpeg` / `null` / `auto` (default).                                           |
+| `MESHTASTIC_UI_CAMERA_DEVICE`        | Generic camera device (index or path). Used by the UI tier when no per-role var is set.                                                        |
+| `MESHTASTIC_UI_CAMERA_DEVICE_<ROLE>` | Per-role camera pinning (e.g. `MESHTASTIC_UI_CAMERA_DEVICE_ESP32S3=0` for the OLED-bearing heltec-v3).                                         |
+| `MESHTASTIC_UI_OCR_BACKEND`          | OCR engine selection: `easyocr` / `pytesseract` / `null` / `auto` (default).                                                                   |
+| `MESHTASTIC_UI_TUI_CAMERA`           | Set to `1` to mount the live camera-feed panel in `meshtastic-mcp-test-tui`.                                                                   |

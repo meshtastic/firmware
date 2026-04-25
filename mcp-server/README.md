@@ -61,7 +61,7 @@ Replace `<firmware-repo>` with the absolute path, e.g. `/Users/you/GitHub/firmwa
 
 Same `mcpServers` block, but in `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 
-## Tools (38)
+## Tools (43)
 
 ### Discovery & metadata
 
@@ -130,6 +130,34 @@ _The tool tables below document 38 currently registered MCP server tools._
 | `picotool_load`       | Load a UF2                                                |
 | `picotool_raw`        | Pass-through                                              |
 
+### USB power control (uhubctl)
+
+| Tool            | What it does                                                |
+| --------------- | ----------------------------------------------------------- |
+| `uhubctl_list`  | Enumerate USB hubs + attached-device VID/PID (read-only)    |
+| `uhubctl_power` | Drive a hub port `on` or `off`; `off` requires confirm=True |
+| `uhubctl_cycle` | Off → wait `delay_s` → on; confirm=True required            |
+
+Target a port by explicit `(location, port)` (raw uhubctl syntax like
+`location="1-1.3", port=2`) or by `role` (`"nrf52"`, `"esp32s3"`). Role
+lookup checks `MESHTASTIC_UHUBCTL_LOCATION_<ROLE>` +
+`MESHTASTIC_UHUBCTL_PORT_<ROLE>` env vars first, then auto-detects via VID
+against `uhubctl`'s output.
+
+Requires [`uhubctl`](https://github.com/mvp/uhubctl) on PATH:
+
+```bash
+brew install uhubctl        # macOS
+apt install uhubctl         # Debian/Ubuntu
+```
+
+Modern macOS + PPPS-capable hubs generally work without root. On Linux
+without udev rules, or on old macOS with driver quirks, you may need
+`sudo`. If uhubctl returns a permission error the MCP tool raises a
+clear `UhubctlError` pointing at the
+[udev-rules / sudo fallback](https://github.com/mvp/uhubctl#linux-usb-permissions)
+rather than auto-`sudo`'ing mid-run.
+
 ## Safety
 
 - **All destructive flash/admin tools require `confirm=True`** as a tool-level gate, on top of any permission prompt from Claude.
@@ -182,16 +210,64 @@ in the pre-flight header.
 - **`unit`** — pure Python, no hardware. boards / PIO wrapper /
   userPrefs-parse / testing-profile fixtures.
 - **`mesh`** — 2-device mesh: formation, broadcast delivery, direct+ACK,
-  traceroute, bidirectional. Parametrized over both directions.
+  traceroute, bidirectional. Parametrized over both directions. Includes
+  `test_peer_offline_recovery` which uses uhubctl to power-cycle one peer
+  mid-conversation and verifies the mesh recovers (skips without uhubctl).
 - **`telemetry`** — periodic telemetry broadcast + on-demand request/reply
   (`TELEMETRY_APP` with `wantResponse=True`).
 - **`monitor`** — boot log has no panic markers within 60 s of reboot.
+- **`recovery`** — `uhubctl` power-cycle round-trip: verifies the hub port
+  can be toggled off/on, the device re-enumerates with the same
+  `my_node_num`, and NVS-resident config (region, channel, modem preset)
+  survives a hard reset. Requires `uhubctl` on PATH; skips cleanly otherwise.
+- **`ui`** — input-broker-driven screen navigation (`AdminMessage.send_input_event`
+  injection → `Screen::handleInputEvent` → frame transition). Parametrized
+  on the screen-bearing role (heltec-v3 OLED). Captures images via USB
+  webcam + OCRs them for HTML-report evidence. Requires `pip install -e '.[ui]'`
+  and `MESHTASTIC_UI_CAMERA_DEVICE_ESP32S3=<index>`; tier is auto-deselected
+  if `cv2` isn't importable.
 - **`fleet`** — PSK-seed isolation: two labs with different seeds never
   overlap.
 - **`admin`** — owner persistence across reboot, channel URL round-trip,
   `lora.hop_limit` persistence.
 - **`provisioning`** — region/channel baking, userPrefs survive
   `factory_reset(full=False)`.
+
+#### UI tier setup
+
+The `tests/ui/` tier drives the on-device OLED via the firmware's existing
+`AdminMessage.send_input_event` RPC (no firmware changes required) and
+verifies transitions via a macro-gated log line + camera + OCR. Summary:
+
+1. Install extras: `pip install -e 'mcp-server/.[ui]'` — pulls in
+   `opencv-python-headless`, `numpy`, `easyocr`, `Pillow`. First easyocr
+   run downloads ~100 MB of models to `~/.EasyOCR/`; an autouse session
+   fixture pre-warms the reader so per-test OCR is <100 ms after that.
+2. Point a USB webcam at the heltec-v3 OLED. Discover its index:
+   ```bash
+   .venv/bin/python -c "import cv2; [print(i, cv2.VideoCapture(i).read()[0]) for i in range(5)]"
+   ```
+3. Export the per-role device env var:
+   ```bash
+   export MESHTASTIC_UI_CAMERA_DEVICE_ESP32S3=0
+   ```
+4. Run:
+   ```bash
+   ./run-tests.sh tests/ui -v
+   ```
+   Captures land under `tests/ui_captures/<session_seed>/<test_id>/`, one
+   PNG + `.ocr.txt` per `frame_capture()` call, with a per-test
+   `transcript.md` stepping through event → frame → OCR. The HTML report
+   embeds the full image strip inline (pass or fail).
+
+On macOS, `cv2.VideoCapture(0)` triggers the TCC Camera permission prompt
+on first use. Pre-grant Terminal (or your IDE's terminal) before running.
+The `OpenCVBackend` fails fast on 10 consecutive black frames so a silent
+permission denial surfaces as a clear error, not an empty PNG strip.
+
+No camera? Set `MESHTASTIC_UI_CAMERA_BACKEND=null` (or leave the device var
+unset). Tests still exercise the event-injection path and log assertions;
+captures just become 1×1 black PNGs.
 
 ### Artifacts (regenerated every run, under `tests/`)
 
@@ -216,6 +292,14 @@ counters, pytest output pane, firmware-log pane, and a device-status strip.
 Key bindings: `r` re-run focused, `f` filter, `d` failure detail, `g` open
 `report.html`, `x` export reproducer bundle, `l` cycle fw-log filter, `q`
 quit (SIGINT → SIGTERM → SIGKILL escalation).
+
+Set `MESHTASTIC_UI_TUI_CAMERA=1` to mount a bottom-of-screen **UI camera**
+panel. Left side: the latest capture PNG rendered as Unicode half-blocks
+(via `rich-pixels`, works in any terminal — no kitty/sixel required).
+Right side: live transcript tail ("step 3 — frame 4/8 name=nodelist_nodes
+— OCR: Nodes 2/2") so you can see every event-injection and its result
+as each UI test runs. Requires the `[ui]` extras for image rendering; the
+transcript alone works without them.
 
 ### Slash commands
 

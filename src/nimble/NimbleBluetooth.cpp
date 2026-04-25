@@ -323,7 +323,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
-    virtual void onNowHasData(uint32_t fromRadioNum)
+    virtual void onNowHasData(uint32_t fromRadioNum) override
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
@@ -350,7 +350,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() { return bleServer && bleServer->getConnectedCount() > 0; }
+    virtual bool checkIsConnected() override { return bleServer && bleServer->getConnectedCount() > 0; }
 
     void requestHighThroughputConnection(uint16_t conn_handle)
     {
@@ -412,9 +412,9 @@ static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
 #ifdef NIMBLE_TWO
-    virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
+    virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
 #else
-    virtual void onWrite(NimBLECharacteristic *pCharacteristic)
+    virtual void onWrite(NimBLECharacteristic *pCharacteristic) override
 
 #endif
     {
@@ -464,9 +464,9 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
 #ifdef NIMBLE_TWO
-    virtual void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
+    virtual void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
 #else
-    virtual void onRead(NimBLECharacteristic *pCharacteristic)
+    virtual void onRead(NimBLECharacteristic *pCharacteristic) override
 #endif
     {
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
@@ -582,9 +582,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
   private:
     NimbleBluetooth *ble;
 
-    virtual uint32_t onPassKeyDisplay()
+    virtual uint32_t onPassKeyDisplay() override
 #else
-    virtual uint32_t onPassKeyRequest()
+    virtual uint32_t onPassKeyRequest() override
 #endif
     {
         uint32_t passkey = config.bluetooth.fixed_pin;
@@ -635,9 +635,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     }
 
 #ifdef NIMBLE_TWO
-    virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo)
+    virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo) override
 #else
-    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc)
+    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc) override
 #endif
     {
         LOG_INFO("BLE authentication complete");
@@ -655,7 +655,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     }
 
 #ifdef NIMBLE_TWO
-    virtual void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo)
+    virtual void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
     {
         LOG_INFO("BLE incoming connection %s", connInfo.getAddress().toString().c_str());
 
@@ -683,11 +683,11 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #endif
 
 #ifdef NIMBLE_TWO
-    virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
+    virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override
     {
         LOG_INFO("BLE disconnect reason: %d", reason);
 #else
-    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc) override
     {
         LOG_INFO("BLE disconnect");
 #endif
@@ -989,11 +989,4 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 #endif
 }
 
-void clearNVS()
-{
-    NimBLEDevice::deleteAllBonds();
-#ifdef ARCH_ESP32
-    ESP.restart();
-#endif
-}
 #endif

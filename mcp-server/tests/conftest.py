@@ -123,15 +123,24 @@ def pytest_collection_modifyitems(
             return (2, item.nodeid)
         if "/monitor/" in path or "tests/monitor" in path:
             return (3, item.nodeid)
-        if "/fleet/" in path or "tests/fleet" in path:
+        # Recovery tier: explicitly cycles device power via uhubctl. Slots
+        # between monitor (read-only) and ui (state-preserving) so any tier
+        # after it starts from a known re-enumerated + re-verified state.
+        if "/recovery/" in path or "tests/recovery" in path:
             return (4, item.nodeid)
+        # UI tier slots here — read-only w.r.t. mesh state, only mutates
+        # the on-screen UI (BACK×5 guard restores home before each test).
+        if "/ui/" in path or "tests/ui" in path:
+            return (5, item.nodeid)
+        if "/fleet/" in path or "tests/fleet" in path:
+            return (6, item.nodeid)
         # State-mutating tiers run last.
         if "/admin/" in path or "tests/admin" in path:
-            return (5, item.nodeid)
+            return (7, item.nodeid)
         if "/provisioning/" in path or "tests/provisioning" in path:
-            return (6, item.nodeid)
+            return (8, item.nodeid)
         # Top-level + anything else falls between.
-        return (7, item.nodeid)
+        return (9, item.nodeid)
 
     items.sort(key=sort_key)
 
@@ -156,13 +165,20 @@ def session_seed(request: pytest.FixtureRequest) -> str:
 
 @pytest.fixture(scope="session")
 def test_profile(session_seed: str) -> dict[str, Any]:
-    """The canonical isolated-mesh test profile for this session."""
+    """The canonical isolated-mesh test profile for this session.
+
+    `enable_ui_log=True` stamps `USERPREFS_UI_TEST_LOG` so the firmware
+    emits `Screen: frame N/M name=... reason=...` log lines per UI
+    transition — consumed by the `tests/ui/` tier. Harmless on boards
+    without a screen (the `#ifdef` sits behind `HAS_SCREEN`).
+    """
     return userprefs.build_testing_profile(
         psk_seed=session_seed,
         channel_name="McpTest",
         channel_num=88,
         region="US",
         modem_preset="LONG_FAST",
+        enable_ui_log=True,
     )
 
 
@@ -654,6 +670,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 def baked_single(
     baked_mesh: dict[str, Any],
     baked_single_role: str,
+    hub_devices: dict[str, str],
 ) -> dict[str, Any]:
     """Function-scoped: a single verified baked device.
 
@@ -662,10 +679,75 @@ def baked_single(
     (e.g. `test_owner_survives_reboot[nrf52]` +
     `test_owner_survives_reboot[esp32s3]`). Tests never hardcode a role
     and never skip a device that happens to be connected.
+
+    Auto-recovery: if the baked device fails a pre-test `device_info` probe
+    AND uhubctl is available, power-cycle the port once and retry. Without
+    uhubctl, surface the wedge as a clear skip. This catches "device got
+    stuck between tests" without masking persistent regressions (a second
+    wedge after cycling still skips).
     """
     if baked_single_role not in baked_mesh:
         pytest.skip(f"role {baked_single_role!r} not present on the hub")
-    return {"role": baked_single_role, **baked_mesh[baked_single_role]}
+
+    entry = baked_mesh[baked_single_role]
+    port = entry.get("port")
+    if port:
+        try:
+            _run_with_timeout(lambda: info.device_info(port=port, timeout_s=3.0), 5.0)
+        except Exception:
+            # Device didn't respond. Try a power-cycle recovery if uhubctl
+            # is installed; otherwise surface a skip that names the root
+            # cause clearly.
+            from tests import _power
+
+            if not _power.is_uhubctl_available():
+                pytest.skip(
+                    f"device {baked_single_role!r} unresponsive on {port}; "
+                    "install uhubctl (`brew install uhubctl` / `apt install "
+                    "uhubctl`) for auto power-cycle recovery"
+                )
+            try:
+                new_port = _power.power_cycle(baked_single_role, delay_s=2)
+            except Exception as exc:  # noqa: BLE001
+                pytest.skip(
+                    f"device {baked_single_role!r} wedged and power-cycle "
+                    f"failed: {exc}"
+                )
+            # Mutate both the session-scoped `hub_devices` map AND the
+            # baked_mesh entry so downstream fixtures see the recovered port.
+            hub_devices[baked_single_role] = new_port
+            baked_mesh[baked_single_role]["port"] = new_port
+            entry = baked_mesh[baked_single_role]
+    return {"role": baked_single_role, **entry}
+
+
+@pytest.fixture
+def power_cycle(
+    hub_devices: dict[str, str],
+) -> Callable[..., str]:
+    """Return a callable `(role, delay_s=2) -> new_port` that hard-resets the
+    hub port hosting `role`. Skips the test cleanly when uhubctl isn't
+    installed — never want "no uhubctl" to look like a test failure.
+
+    The callable mutates `hub_devices[role]` in place so subsequent fixture
+    lookups pick up the post-cycle port (mirrors the pattern in
+    provisioning/test_userprefs_survive_factory_reset.py).
+    """
+    from tests import _power
+
+    if not _power.is_uhubctl_available():
+        pytest.skip(
+            "uhubctl not installed; this test needs it for power control. "
+            "Install via `brew install uhubctl` (macOS) or `apt install "
+            "uhubctl` (Debian/Ubuntu)."
+        )
+
+    def _cycle(role: str, delay_s: int = 2) -> str:
+        new_port = _power.power_cycle(role, delay_s=delay_s)
+        hub_devices[role] = new_port
+        return new_port
+
+    return _cycle
 
 
 _DEFAULT_ROLE_ENVS = {
@@ -960,6 +1042,45 @@ def _run_with_timeout(fn: Callable[[], Any], timeout: float) -> Any:
             raise TimeoutError(f"operation did not complete within {timeout}s") from exc
 
 
+def _attach_ui_captures(item: pytest.Item, report: Any) -> None:
+    """Embed per-step UI captures (PNG + OCR) into the pytest-html extras.
+
+    Runs for every UI-tier test on BOTH pass and fail so the HTML report
+    always shows the image strip + OCR transcript. Silently no-ops if
+    pytest-html isn't installed or the test didn't use `frame_capture`.
+    """
+    captures = getattr(item, "_ui_captures", None)
+    if not captures:
+        return
+    try:
+        from pytest_html import extras as html_extras  # type: ignore[import-untyped]
+    except ImportError:
+        return
+
+    existing = getattr(report, "extras", None) or []
+    extras_list = list(existing)
+    for cap in captures:
+        png_path = cap.get("png_path")
+        label = f"{cap.get('step', '?')}: {cap.get('label', '')}"
+        frame = cap.get("frame") or {}
+        frame_str = (
+            f" — frame {frame.get('idx')} {frame.get('name')!r}" if frame else ""
+        )
+        if png_path:
+            try:
+                with open(png_path, "rb") as fh:
+                    import base64
+
+                    b64 = base64.b64encode(fh.read()).decode("ascii")
+                extras_list.append(html_extras.png(b64, name=f"{label}{frame_str}"))
+            except OSError:
+                pass
+        ocr = (cap.get("ocr_text") or "").strip()
+        if ocr:
+            extras_list.append(html_extras.text(ocr, name=f"OCR: {label}{frame_str}"))
+    report.extras = extras_list  # type: ignore[attr-defined]
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> Any:
     """On test failure, attach serial capture + device state as report artifacts.
@@ -967,9 +1088,19 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
     Hard-bounded by `_run_with_timeout` — if the device is unreachable (stuck
     port, unbaked firmware, dead board), the dump is skipped rather than
     hanging the session.
+
+    For UI-tier tests, also embeds per-step camera captures + OCR on every
+    test (pass or fail) so the HTML report shows visual evidence of what
+    the device did.
     """
     outcome = yield
     report = outcome.get_result()
+
+    # Attach UI captures on any outcome (pass + fail) — these are the whole
+    # point of the UI tier. Do this before the failure-only branch below so
+    # passing tests still get their image strip.
+    if report.when == "call":
+        _attach_ui_captures(item, report)
 
     if report.when != "call" or report.outcome != "failed":
         return

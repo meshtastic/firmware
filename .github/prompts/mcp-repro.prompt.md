@@ -46,7 +46,8 @@ Equivalent of `.claude/commands/repro.md`. Use when the operator says "that one 
    - **LoRa airtime collision** — pass rate improves with fewer concurrent transmitters. Suggest a `time.sleep` gap or retry bump in the test body.
    - **PKI key staleness** — first attempt fails, subsequent ones pass; existing retry-loop pattern in `test_direct_with_ack.py` is the fix.
    - **NodeInfo cooldown** — `Skip send NodeInfo since we sent it <600s ago` in fail-only logs; needs a `broadcast_nodeinfo_ping()` warmup.
-   - **Hardware-specific** — one direction consistently fails, firmware versions differ, CP2102 driver wedged, etc.
+   - **Hardware-specific** — one direction consistently fails, firmware versions differ, CP2102 driver wedged, etc. For a device wedged past `touch_1200bps`, recommend `uhubctl_cycle(role=..., confirm=True)` to hard-power-cycle its hub port (requires `uhubctl` installed).
+   - **Device went dark mid-run** — fails from some iteration onward and never recovers; firmware log stops arriving. Almost always a Guru crash with frozen CDC. Recommend `uhubctl_cycle` before the next iteration; escalate to replug if that also fails.
    - **Unknown** — say so. Don't invent a root cause.
 
 7. **Report back** with:

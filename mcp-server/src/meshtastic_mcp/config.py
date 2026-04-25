@@ -135,3 +135,14 @@ def picotool_bin() -> Path:
         ("picotool",),
         "Install via `brew install picotool` or build from https://github.com/raspberrypi/picotool.",
     )
+
+
+def uhubctl_bin() -> Path:
+    return _hw_tool(
+        "MESHTASTIC_UHUBCTL_BIN",
+        ("uhubctl",),
+        "Install via `brew install uhubctl` (macOS) or `apt install uhubctl` "
+        "(Debian/Ubuntu). On Linux without the udev rules, or on older macOS "
+        "with certain hubs, you may need to run via `sudo`: "
+        "https://github.com/mvp/uhubctl#linux-usb-permissions",
+    )

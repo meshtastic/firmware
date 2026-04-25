@@ -23,6 +23,21 @@ test = [
   # consumers; revisit if install cost pushes back.
   "textual>=0.50",
 ]
+# UI test tier + `capture_screen` MCP tool. Optional because the ML OCR
+# model alone is ~100 MB and camera hardware is user-supplied.
+#   pip install -e '.[ui]'     — full (OpenCV + easyocr)
+#   pip install -e '.[ui-min]' — image capture only, no OCR
+ui = [
+  "opencv-python-headless>=4.9",
+  "numpy>=1.26",
+  "easyocr>=1.7",
+  "Pillow>=10.0",
+  # Renders the latest camera capture as Unicode half-blocks in the TUI
+  # (MESHTASTIC_UI_TUI_CAMERA=1). Terminal-agnostic — no kitty / sixel
+  # dependency. Pure Python, tiny.
+  "rich-pixels>=3.0",
+]
+ui-min = ["opencv-python-headless>=4.9", "numpy>=1.26"]
 
 [project.scripts]
 meshtastic-mcp = "meshtastic_mcp.__main__:main"
