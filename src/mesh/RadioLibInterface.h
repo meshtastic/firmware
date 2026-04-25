@@ -143,6 +143,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
 
+    /**
+     * Clear the static `instance` pointer if it still points at us, so callers
+     * that check `RadioLibInterface::instance != nullptr` don't dereference a
+     * freed object after a failed init() + unique_ptr reset.
+     */
+    virtual ~RadioLibInterface();
+
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
     /**
