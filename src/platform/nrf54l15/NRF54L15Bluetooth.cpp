@@ -233,24 +233,31 @@ static ssize_t write_toradio(struct bt_conn *conn, const struct bt_gatt_attr *at
 //   [9]  logRadio value           ← notify target (LOGRADIO_ATTR_IDX)
 //   [10] logRadio CCC descriptor
 
+// All user characteristics require authenticated encryption (MITM passkey)
+// before the client can read/write. This mirrors the nrf52 SECMODE_ENC_WITH_MITM
+// service permission. The stack returns "Insufficient Authentication" on the
+// first access attempt, prompting the client to pair with the configured PIN.
+#define MESH_PERM_READ  (BT_GATT_PERM_READ | BT_GATT_PERM_READ_AUTHEN)
+#define MESH_PERM_WRITE (BT_GATT_PERM_WRITE | BT_GATT_PERM_WRITE_AUTHEN)
+
 BT_GATT_SERVICE_DEFINE(
     mesh_svc, BT_GATT_PRIMARY_SERVICE(&mesh_svc_uuid.uuid),
 
     // fromNum: READ | NOTIFY — packet-counter triggers phone to read fromRadio
-    BT_GATT_CHARACTERISTIC(&fromnum_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, read_fromnum, NULL,
+    BT_GATT_CHARACTERISTIC(&fromnum_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, MESH_PERM_READ, read_fromnum, NULL,
                            &fromNumValue),
-    BT_GATT_CCC(fromnum_ccc_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(fromnum_ccc_changed, MESH_PERM_READ | MESH_PERM_WRITE),
 
     // fromRadio: READ — phone polls this after receiving a fromNum notification
-    BT_GATT_CHARACTERISTIC(&fromradio_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, read_fromradio, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(&fromradio_uuid.uuid, BT_GATT_CHRC_READ, MESH_PERM_READ, read_fromradio, NULL, NULL),
 
     // toRadio: WRITE — phone sends protobuf packets to the device
-    BT_GATT_CHARACTERISTIC(&toradio_uuid.uuid, BT_GATT_CHRC_WRITE, BT_GATT_PERM_WRITE, NULL, write_toradio, NULL),
+    BT_GATT_CHARACTERISTIC(&toradio_uuid.uuid, BT_GATT_CHRC_WRITE, MESH_PERM_WRITE, NULL, write_toradio, NULL),
 
     // logRadio: READ | NOTIFY | INDICATE — log stream to phone when connected
     BT_GATT_CHARACTERISTIC(&logradio_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY | BT_GATT_CHRC_INDICATE,
-                           BT_GATT_PERM_READ, read_logradio, NULL, NULL),
-    BT_GATT_CCC(logradio_ccc_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), );
+                           MESH_PERM_READ, read_logradio, NULL, NULL),
+    BT_GATT_CCC(logradio_ccc_changed, MESH_PERM_READ | MESH_PERM_WRITE), );
 
 // ── Advertising ───────────────────────────────────────────────────────────────
 //
@@ -509,7 +516,7 @@ class BleDeferredThread : public concurrency::OSThread
 {
     static constexpr uint32_t IDLE_BEFORE_PROBE_MS = 30000; //  30 s: start probing
     static constexpr uint32_t PROBE_INTERVAL_MS = 5000;     //   5 s: between probes
-    static constexpr uint32_t HARD_WATCHDOG_MS = 180000;    //   3 min: last resort
+    static constexpr uint32_t HARD_WATCHDOG_MS = 60000;     //   1 min: last resort
 
     uint32_t last_probe_ms = 0;
 
@@ -629,6 +636,22 @@ static bool nrf54l15_bt_init_common()
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         bt_conn_auth_cb_register(&auth_cb);
         bt_conn_auth_info_cb_register(&auth_info_cb);
+
+        // FIXED_PIN — register the configured passkey so the mobile app prompts
+        // the user for that specific number instead of a random display-only PIN.
+        // RANDOM_PIN keeps the default behavior: Zephyr generates a fresh passkey
+        // on each pairing attempt and fires auth_passkey_display with it.
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
+            configuredPasskey = config.bluetooth.fixed_pin;
+            int rc = bt_passkey_set(configuredPasskey);
+            if (rc) {
+                LOG_WARN("bt_passkey_set(%u) failed: %d", configuredPasskey, rc);
+            } else {
+                LOG_INFO("BLE fixed PIN: %06u", configuredPasskey);
+            }
+        } else {
+            bt_passkey_set(BT_PASSKEY_INVALID); // random per-pair
+        }
     }
 #endif /* CONFIG_BT_SMP */
 
