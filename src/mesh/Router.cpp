@@ -14,6 +14,9 @@
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
+#if HAS_BLE_MESH_ADVERTISING
+#include "mesh/ble/BleAdvertisementMesh.h"
+#endif
 #include "Default.h"
 #if ARCH_PORTDUINO
 #include "Throttle.h"
@@ -378,6 +381,13 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 #if HAS_UDP_MULTICAST
     if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
         udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
+    }
+#endif
+
+#if HAS_BLE_MESH_ADVERTISING
+    if (bleAdvertisementMesh &&
+        config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_ADVERTISEMENT_BROADCAST) {
+        bleAdvertisementMesh->onSend(p);
     }
 #endif
 
