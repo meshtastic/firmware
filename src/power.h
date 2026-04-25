@@ -110,14 +110,6 @@ class Power : public concurrency::OSThread
     void attachPowerInterrupts();
     void detachPowerInterrupts();
 
-#ifdef ARCH_ESP32
-    int beforeLightSleep(void *unused);
-    int afterLightSleep(esp_sleep_wakeup_cause_t cause);
-#endif
-
-    void attachPowerInterrupts();
-    void detachPowerInterrupts();
-
   protected:
     meshtastic::PowerStatus *statusHandler;
 
