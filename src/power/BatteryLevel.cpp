@@ -359,7 +359,7 @@ bool AnalogBatteryLevel::isCharging()
 #endif
 #if defined(ELECROW_ThinkNode_M6)
     return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE || isVbusIn();
-#elif EXT_CHRG_DETECT
+#elif defined(EXT_CHRG_DETECT)
     return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
 #elif defined(BATTERY_CHARGING_INV)
     return !digitalRead(BATTERY_CHARGING_INV);
