@@ -2020,7 +2020,14 @@ void menuHandler::switchToMUIMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+#if !defined(BOARD_HAS_PSRAM)
+            // Boards without PSRAM can't fit the LVGL framebuffer (240x320x2 = ~150KB)
+            // alongside NimBLE's GATT mempool in internal SRAM. Auto-disable BT here so
+            // entering MUI doesn't push the device into memory-pressure crashes.
+            // PSRAM boards (Heltec V4 / Station G2 / etc) have enough headroom for both;
+            // we leave BT alone there so users don't lose phone connectivity on toggle.
             config.bluetooth.enabled = false;
+#endif
             service->reloadConfig(SEGMENT_CONFIG);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
