@@ -81,6 +81,10 @@ bool GPSUpdateScheduling::searchedTooLong()
     else if (elapsedSearchMs() > maxSearchMs)
         return true;
 
+    // Anything over 15 minutes is too long. TODO: Make a smarter algorithm that backs off the search dwell time when not getting a lock.
+    else if (elapsedSearchMs() > 1000 * 60 * 15)
+        return true;
+
     // Otherwise, not too long yet!
     else
         return false;
