@@ -22,4 +22,3 @@ class NimbleBluetooth : public BluetoothApi
 };
 
 void setBluetoothEnable(bool enable);
-void clearNVS();

@@ -318,7 +318,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
-    virtual void onNowHasData(uint32_t fromRadioNum)
+    virtual void onNowHasData(uint32_t fromRadioNum) override
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
@@ -337,7 +337,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() { return bleServer && bleServer->getConnectedCount() > 0; }
+    virtual bool checkIsConnected() override { return bleServer && bleServer->getConnectedCount() > 0; }
 
     void requestHighThroughputConnection(uint16_t conn_handle)
     {
@@ -720,6 +720,8 @@ void NimbleBluetooth::deinit()
 #ifdef BLE_LED
     digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
+
+    BLEDevice::deinit(true);
 #endif
 }
 
@@ -816,7 +818,7 @@ void NimbleBluetooth::setup()
     // name to default, so set it again.
     int nameRc = ble_svc_gap_device_name_set(BLEDevice::getDeviceName().c_str());
     if (nameRc != 0) {
-      LOG_ERROR("ble_svc_gap_device_name_set: rc=%d %s", nameRc, BLEUtils::returnCodeToString(nameRc));
+        LOG_ERROR("ble_svc_gap_device_name_set: rc=%d %s", nameRc, BLEUtils::returnCodeToString(nameRc));
     }
 
     bleServer->setCallbacks(new NimbleBluetoothServerCallback(this));

@@ -83,7 +83,7 @@ extern RAK9154Sensor rak9154Sensor;
 extern XPowersLibInterface *PMU;
 #endif
 
-class Power : private concurrency::OSThread
+class Power : public concurrency::OSThread
 {
 
   public:
@@ -97,6 +97,15 @@ class Power : private concurrency::OSThread
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
     const uint16_t OCV[11] = {OCV_ARRAY};
+    bool isLowBattery() { return low_voltage_counter >= 10; };
+
+#ifdef ARCH_ESP32
+    int beforeLightSleep(void *unused);
+    int afterLightSleep(esp_sleep_wakeup_cause_t cause);
+#endif
+
+    void attachPowerInterrupts();
+    void detachPowerInterrupts();
 
   protected:
     meshtastic::PowerStatus *statusHandler;
@@ -122,6 +131,14 @@ class Power : private concurrency::OSThread
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
     uint32_t lastLogTime = 0;
+
+#ifdef ARCH_ESP32
+    // Get notified when lightsleep begins and ends
+    CallbackObserver<Power, void *> lsObserver = CallbackObserver<Power, void *>(this, &Power::beforeLightSleep);
+    CallbackObserver<Power, esp_sleep_wakeup_cause_t> lsEndObserver =
+        CallbackObserver<Power, esp_sleep_wakeup_cause_t>(this, &Power::afterLightSleep);
+#endif
+
 #ifdef DEBUG_HEAP
     uint32_t lastheap;
 #endif
