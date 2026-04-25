@@ -611,7 +611,9 @@ typedef enum _meshtastic_MeshPacket_TransportMechanism {
     /* Arrived via Multicast UDP */
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP = 6,
     /* Arrived via API connection */
-    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API = 7
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API = 7,
+    /* Arrived via Bluetooth LE advertisements */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADVERTISEMENT = 8
 } meshtastic_MeshPacket_TransportMechanism;
 
 /* Log levels, chosen to match python logging conventions. */
@@ -1449,8 +1451,8 @@ extern "C" {
 #define _meshtastic_MeshPacket_Delayed_ARRAYSIZE ((meshtastic_MeshPacket_Delayed)(meshtastic_MeshPacket_Delayed_DELAYED_DIRECT+1))
 
 #define _meshtastic_MeshPacket_TransportMechanism_MIN meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL
-#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API
-#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API+1))
+#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADVERTISEMENT
+#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADVERTISEMENT+1))
 
 #define _meshtastic_LogRecord_Level_MIN meshtastic_LogRecord_Level_UNSET
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
