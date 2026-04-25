@@ -83,10 +83,6 @@ bool GPSUpdateScheduling::searchedTooLong()
         Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, default_broadcast_interval_secs);
     uint32_t maxSearchMs = Default::getConfiguredOrDefaultMs(minimumOrConfiguredSecs, default_broadcast_interval_secs);
 
-    // If broadcast interval set to max, no such thing as "too long"
-    if (maxSearchMs == UINT32_MAX)
-        return false;
-
     // If we've been searching longer than our position broadcast interval: that's too long
     if (elapsed > maxSearchMs)
         return true;
