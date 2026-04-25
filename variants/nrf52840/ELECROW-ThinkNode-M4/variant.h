@@ -85,7 +85,6 @@ static const uint8_t A0 = PIN_A0;
 
 // charger status
 #define EXT_CHRG_DETECT (32 + 6)
-#define EXT_CHRG_DETECT_VALUE HIGH
 
 // SPI
 #define SPI_INTERFACES_COUNT 1
