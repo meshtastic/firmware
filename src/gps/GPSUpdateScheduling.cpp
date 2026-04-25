@@ -70,7 +70,8 @@ bool GPSUpdateScheduling::isUpdateDue()
 // Have we been searching for a GPS position for too long?
 bool GPSUpdateScheduling::searchedTooLong()
 {
-    constexpr uint32_t maxSearchClampMs = 1000UL * 60 * 15; // Hard cap: 15 minutes is always too long
+    constexpr uint32_t oneMinuteMs = 60UL * 1000UL;
+    constexpr uint32_t maxSearchClampMs = 15UL * oneMinuteMs; // Hard cap: 15 minutes is always too long
     uint32_t elapsed = elapsedSearchMs();
 
     // Anything over 15 minutes is too long, regardless of the broadcast interval.
