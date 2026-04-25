@@ -83,6 +83,8 @@ bool renameFile(const char *pathFrom, const char *pathTo)
     bool result = FSCom.rename(pathFrom, pathTo);
     spiLock->unlock();
     return result;
+#else
+    return false;
 #endif
 }
 
