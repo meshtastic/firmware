@@ -769,7 +769,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             requiresReboot = false;
         } else if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR &&
                    c.payload_variant.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+#if !defined(BOARD_HAS_PSRAM)
+            // Boards without PSRAM can't fit LVGL framebuffer + NimBLE GATT pool simultaneously
+            // in internal SRAM, so we auto-disable BT to prevent memory-pressure crashes when
+            // the phone-app pushes a switch to MUI/COLOR mode. PSRAM boards (V4, Station G2, etc)
+            // have headroom for both and shouldn't lose phone connectivity on a UI mode toggle.
+            // (Pairs with the same gate in src/graphics/draw/MenuHandler.cpp switchToMUIMenu().)
             config.bluetooth.enabled = false;
+#endif
         }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
