@@ -42,8 +42,9 @@
  *
  * FLASH_END_ADDR is computed from FLASH_SIZE (read from the chip at link time).
  */
-#define LFS_FLASH_TOTAL_SIZE (10 * STM32WL_PAGE_SIZE) /* 20 KiB — last 10 physical pages */
-#define LFS_BLOCK_SIZE (256)                          /* virtual block size (FORMAT BREAK if changed) */
+#define LFS_FLASH_TOTAL_SIZE                                                                                                     \
+    (7 * STM32WL_PAGE_SIZE)  /* 14 KiB — last 7 physical pages (FORMAT BREAK: reduced from 10 pages / 20 KiB) */
+#define LFS_BLOCK_SIZE (256) /* virtual block size (FORMAT BREAK if changed) */
 
 #define LFS_FLASH_ADDR_END (FLASH_END_ADDR)
 #define LFS_FLASH_ADDR_BASE (LFS_FLASH_ADDR_END - LFS_FLASH_TOTAL_SIZE + 1)
