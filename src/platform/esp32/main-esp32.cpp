@@ -4,10 +4,11 @@
 #include "esp_task_wdt.h"
 #include "main.h"
 
-#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-#include "nimble/NimbleBluetooth.h"
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
 #include "bluetooth/HostedBluetooth.h"
+#elif !defined(CONFIG_IDF_TARGET_ESP32S2)
+#include "nimble/NimbleBluetooth.h"
 #endif
 #endif
 
