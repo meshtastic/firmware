@@ -48,8 +48,11 @@ bool mixWithLoRaEntropy(uint8_t *buffer, size_t length)
     // and return false so callers know no extra mixing occurred.
     RadioLibInterface *radio = RadioLibInterface::instance;
     if (!radio) {
-        // Intentionally silent: this path runs during portduinoSetup() before the
-        // console/SerialConsole is initialized, so LOG_* here would dereference a null pointer.
+        // This path can run during portduinoSetup() before the console is initialized,
+        // both for unit-test binaries and the simulator's meshtasticd; LOG_* dereferences `console`.
+        if (console) {
+            LOG_ERROR("No radio instance available to provide entropy");
+        }
         return false;
     }
 

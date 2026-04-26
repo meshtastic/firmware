@@ -60,6 +60,8 @@
 
 #define BUTTON_PIN 0 // only for Plus version
 
+#define PMU_IRQ 21 // Interrupt pin for the PMU
+
 #define USE_SX1262
 #define USE_SX1268
 
