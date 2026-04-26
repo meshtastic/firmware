@@ -9,13 +9,10 @@
 #include "PortduinoGlue.h"
 #include "SHA256.h"
 #include "api/ServerAPI.h"
-#include "linux/gpio/LinuxGPIOPin.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
 #include <assert.h>
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -24,6 +21,12 @@
 #include <stdexcept>
 #include <sys/ioctl.h>
 #include <unistd.h>
+
+#ifdef PORTDUINO_LINUX_HARDWARE
+#include "linux/gpio/LinuxGPIOPin.h"
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/hci.h>
+#endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
@@ -132,7 +135,7 @@ void getMacAddr(uint8_t *dmac)
         MAC_from_string(portduino_config.mac_address, dmac);
         exit;
     } else {
-
+#ifdef PORTDUINO_LINUX_HARDWARE
         struct hci_dev_info di = {0};
         di.dev_id = 0;
         bdaddr_t bdaddr;
@@ -152,6 +155,11 @@ void getMacAddr(uint8_t *dmac)
         dmac[3] = di.bdaddr.b[2];
         dmac[4] = di.bdaddr.b[1];
         dmac[5] = di.bdaddr.b[0];
+#else
+        // No BlueZ on non-Linux hosts (e.g. macOS). Leave dmac at its default;
+        // the caller can override via the --hwid CLI flag or the YAML config.
+        (void)dmac;
+#endif
     }
 }
 

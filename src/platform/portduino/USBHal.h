@@ -5,6 +5,7 @@
 #include "platform/portduino/PortduinoGlue.h"
 #include <RadioLib.h>
 #include <csignal>
+#include <cstring>
 #include <iostream>
 #include <libpinedio-usb.h>
 #include <unistd.h>
@@ -34,7 +35,7 @@ class Ch341Hal : public RadioLibHal
         : RadioLibHal(PI_INPUT, PI_OUTPUT, PI_LOW, PI_HIGH, PI_RISING, PI_FALLING)
     {
         if (serial != "") {
-            strncpy(pinedio.serial_number, serial.c_str(), 8);
+            std::strncpy(pinedio.serial_number, serial.c_str(), 8);
             pinedio_set_option(&pinedio, PINEDIO_OPTION_SEARCH_SERIAL, 1);
         }
         // LOG_INFO("USB Serial: %s", pinedio.serial_number);
@@ -60,7 +61,7 @@ class Ch341Hal : public RadioLibHal
     void getSerialString(char *_serial, size_t len)
     {
         len = len > 8 ? 8 : len;
-        strncpy(_serial, pinedio.serial_number, len);
+        std::strncpy(_serial, pinedio.serial_number, len);
     }
 
     void getProductString(char *_product_string, size_t len)
