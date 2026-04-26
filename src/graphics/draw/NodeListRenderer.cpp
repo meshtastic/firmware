@@ -11,6 +11,8 @@
 #include "gps/RTC.h" // for getTime() function
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "meshUtils.h"
 #include <algorithm>
@@ -213,6 +215,33 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
     }
 }
 
+static inline void applyFavoriteNodeNameColor(OLEDDisplay *display, const meshtastic_NodeInfoLite *node, const char *nodeName,
+                                              int16_t nameX, int16_t y, int nameMaxWidth)
+{
+    if (!display || !node || !node->is_favorite || !isTFTColoringEnabled() || !nodeName) {
+        return;
+    }
+
+    const int textWidth = UIRenderer::measureStringWithEmotes(display, nodeName);
+    const int regionWidth = min(textWidth, max(0, nameMaxWidth));
+    if (regionWidth <= 0) {
+        return;
+    }
+
+    // Node list rows can begin a couple of pixels inside header space.
+    // Clamp favorite-name color region below the header to avoid black overlap there.
+    const int16_t minContentY = static_cast<int16_t>(FONT_HEIGHT_SMALL + 1);
+    const int16_t regionY = max(y, minContentY);
+    const int16_t yClip = regionY - y;
+    const int16_t regionHeight = static_cast<int16_t>(FONT_HEIGHT_SMALL - yClip);
+    if (regionHeight <= 0) {
+        return;
+    }
+
+    setAndRegisterTFTColorRole(TFTColorRole::FavoriteNode, TFTPalette::Yellow, TFTPalette::Black, nameX, regionY, regionWidth,
+                               regionHeight);
+}
+
 // =============================
 // Entry Renderers
 // =============================
@@ -227,6 +256,9 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     char timeStr[10];
@@ -286,6 +318,9 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -314,6 +349,19 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
         int bars = (node->snr > 5) ? 4 : (node->snr > 0) ? 3 : (node->snr > -5) ? 2 : (node->snr > -10) ? 1 : 0;
         int barStartX = x + barsXOffset;
         int barStartY = y + 1 + (FONT_HEIGHT_SMALL / 2) + 2;
+
+        if (bars > 0) {
+            uint16_t signalBarsColor = TFTPalette::Bad;
+            if (bars >= 3) {
+                signalBarsColor = TFTPalette::Good;
+            } else if (bars == 2) {
+                signalBarsColor = TFTPalette::Medium;
+            }
+
+            // Highest bar reaches 6 px in this renderer.
+            setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, barStartX, barStartY - 6,
+                                       (kBarCount * kBarWidth) + ((kBarCount - 1) * kBarGap), 6);
+        }
 
         for (int b = 0; b < kBarCount; b++) {
             if (b < bars) {
@@ -350,6 +398,9 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
     char distStr[10] = "";
 
@@ -455,6 +506,9 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
     bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -710,6 +764,9 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
         display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
         display->setColor(WHITE);
+#if GRAPHICS_TFT_COLORING_ENABLED
+        registerTFTActionMenuRegions(boxLeft, boxTop, boxWidth, boxHeight);
+#endif
 
         // Text
         display->drawString(boxLeft + padding, boxTop + padding, buf);
