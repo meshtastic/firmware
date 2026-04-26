@@ -30,6 +30,21 @@
 
 namespace
 {
+/*
+ * Maintainer note: HostedBluetooth intentionally stays close to NimbleBluetooth
+ * but is not a strict drop-in equivalent.
+ *
+ * Intentional differences from NimbleBluetooth include:
+ * - ESP-Hosted transport lifecycle handling (event callbacks + CP reset GPIO control).
+ * - Data-length update behavior (Hosted currently requests ble_gap_set_data_len on connect).
+ * - No Battery Service exposure here.
+ *
+ * If you modify common BLE flow in one class, review and likely mirror in both:
+ * - PhoneAPI queueing/synchronization between BLE callbacks and runOnce().
+ * - Security/pairing config and passkey UX/status updates.
+ * - Mesh GATT characteristics, permissions, and advertising setup.
+ * - Connection parameter tuning and reconnect/disconnect cleanup paths.
+ */
 constexpr uint16_t kPreferredBleMtu = 517;
 constexpr uint16_t kPreferredBleTxOctets = 251;
 constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;

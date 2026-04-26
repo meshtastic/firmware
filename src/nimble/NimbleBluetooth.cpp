@@ -25,6 +25,9 @@
 
 namespace
 {
+// Maintainer note: this backend intentionally diverges from HostedBluetooth in a few platform-specific areas.
+// If you change shared BLE flow here (PhoneAPI queue/sync, security/pairing, mesh GATT/advertising,
+// connect/disconnect handling), review and update HostedBluetooth.cpp as needed.
 constexpr uint16_t kPreferredBleMtu = 517;
 constexpr uint16_t kPreferredBleTxOctets = 251;
 constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
