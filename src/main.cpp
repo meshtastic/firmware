@@ -575,12 +575,10 @@ void setup()
             if (se.begin(&aMaj, &aMin, &aPatch, &aCfg)) {
                 LOG_INFO("SE050 applet v%u.%u.%u  cfg=0x%04x", aMaj, aMin, aPatch, aCfg);
 
-                uint8_t uid[18] = {0};
+                uint8_t uid[se050::UID_SIZE] = {0};
                 if (se.getUID(uid)) {
-                    char hex[18 * 2 + 1];
-                    for (int i = 0; i < 18; i++)
-                        snprintf(&hex[i * 2], 3, "%02x", uid[i]);
-                    hex[36] = '\0';
+                    char hex[se050::UID_HEX_SIZE];
+                    se050::formatUIDHex(uid, hex);
                     LOG_INFO("SE050 UID: %s", hex);
                 } else {
                     LOG_WARN("SE050 UID: read failed");

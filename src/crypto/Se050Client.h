@@ -11,6 +11,9 @@
 namespace se050
 {
 
+constexpr size_t UID_SIZE = 18;
+constexpr size_t UID_HEX_SIZE = UID_SIZE * 2 + 1;
+
 class Client;
 
 /**
@@ -22,6 +25,11 @@ class Client;
 extern Client *client;
 
 /**
+ * Format an SE050 UID as lowercase hex. hexOut must be UID_HEX_SIZE bytes.
+ */
+void formatUIDHex(const uint8_t uid[UID_SIZE], char hexOut[UID_HEX_SIZE]);
+
+/**
  * Host-side client for the NXP SE050 IoT Applet. Speaks T=1-over-I2C to the chip and
  * layers SCP03 secure messaging + applet-level crypto commands on top. Sufficient for
  * small APDUs (<= ~250 byte request / response, no chaining). Blocking, single-threaded.
@@ -29,7 +37,7 @@ extern Client *client;
  * Usage:
  *   se050::Client se(&Wire1, 0x48);
  *   if (se.begin()) {
- *       uint8_t uid[18];
+ *       uint8_t uid[se050::UID_SIZE];
  *       if (se.getUID(uid)) { ... }
  *   }
  */
@@ -103,7 +111,7 @@ class Client
      * On success the UID is also cached inside the Client so later callers can
      * fetch it cheaply via getCachedUID() without another round-trip.
      */
-    bool getUID(uint8_t uidOut[18], uint32_t timeout_ms = 500);
+    bool getUID(uint8_t uidOut[UID_SIZE], uint32_t timeout_ms = 500);
 
     /**
      * Non-blocking read of the UID cached by the most recent successful getUID()
@@ -113,7 +121,7 @@ class Client
      * Other modules can call this to surface the UID without issuing a redundant
      * APDU or racing against other SE050 traffic on the bus.
      */
-    bool getCachedUID(uint8_t uidOut[18]) const;
+    bool getCachedUID(uint8_t uidOut[UID_SIZE]) const;
 
     // --- Random --------------------------------------------------------------
     /**
@@ -183,7 +191,7 @@ class Client
     // Populated by getUID() on SW=9000. Survives for the lifetime of the Client
     // so any downstream module can surface it without hitting the I2C bus again.
     // Never exposed when cachedUidValid==false.
-    uint8_t cachedUid[18];
+    uint8_t cachedUid[UID_SIZE];
     bool cachedUidValid;
 
     // Returns true if the write was ACKed at the I2C layer.

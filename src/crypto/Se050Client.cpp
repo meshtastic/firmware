@@ -124,17 +124,24 @@ namespace se050
 
 Client *client = nullptr;
 
+void formatUIDHex(const uint8_t uid[UID_SIZE], char hexOut[UID_HEX_SIZE])
+{
+    for (size_t i = 0; i < UID_SIZE; i++)
+        snprintf(&hexOut[i * 2], 3, "%02x", uid[i]);
+    hexOut[UID_HEX_SIZE - 1] = '\0';
+}
+
 Client::Client(TwoWire *bus_, uint8_t address_) : bus(bus_), address(address_), hostNS(0), ready(false), cachedUidValid(false)
 {
     memset(&scp, 0, sizeof(scp));
     memset(cachedUid, 0, sizeof(cachedUid));
 }
 
-bool Client::getCachedUID(uint8_t uidOut[18]) const
+bool Client::getCachedUID(uint8_t uidOut[UID_SIZE]) const
 {
     if (!cachedUidValid)
         return false;
-    memcpy(uidOut, cachedUid, 18);
+    memcpy(uidOut, cachedUid, UID_SIZE);
     return true;
 }
 
@@ -412,7 +419,7 @@ bool Client::begin(uint8_t *majorOut, uint8_t *minorOut, uint8_t *patchOut, uint
     return true;
 }
 
-bool Client::getUID(uint8_t uidOut[18], uint32_t timeout_ms)
+bool Client::getUID(uint8_t uidOut[UID_SIZE], uint32_t timeout_ms)
 {
     if (!ready)
         return false;
@@ -474,18 +481,18 @@ bool Client::getUID(uint8_t uidOut[18], uint32_t timeout_ms)
         }
     }
 
-    if (contentLen < 18) {
-        LOG_WARN("SE050 GetUID: unwrapped payload too short (%d bytes, need >= 18)", contentLen);
+    if (contentLen < UID_SIZE) {
+        LOG_WARN("SE050 GetUID: unwrapped payload too short (%d bytes, need >= %u)", contentLen, (unsigned)UID_SIZE);
         return false;
     }
-    if (contentLen != 18) {
-        LOG_DEBUG("SE050 GetUID: payload %d B, taking last 18", contentLen);
+    if (contentLen != UID_SIZE) {
+        LOG_DEBUG("SE050 GetUID: payload %d B, taking last %u", contentLen, (unsigned)UID_SIZE);
     }
     // Chip UID is always the trailing 18 bytes of the object content.
-    memcpy(uidOut, contentPtr + (contentLen - 18), 18);
+    memcpy(uidOut, contentPtr + (contentLen - UID_SIZE), UID_SIZE);
 
     // Cache for cheap re-reads by other modules without hitting the I2C bus.
-    memcpy(cachedUid, uidOut, 18);
+    memcpy(cachedUid, uidOut, UID_SIZE);
     cachedUidValid = true;
     return true;
 }
