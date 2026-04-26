@@ -73,6 +73,24 @@ void InkHUD::InkHUD::begin()
     // LogoApplet shows boot screen here
 }
 
+void InkHUD::InkHUD::setTouchEnabledProvider(TouchEnabledProvider provider)
+{
+    touchEnabledProvider = provider;
+}
+
+bool InkHUD::InkHUD::hasTouchEnabledProvider() const
+{
+    return touchEnabledProvider != nullptr;
+}
+
+bool InkHUD::InkHUD::isTouchEnabled() const
+{
+    if (!touchEnabledProvider)
+        return true;
+
+    return touchEnabledProvider();
+}
+
 // Call this when your user button gets a short press
 // Should be connected to an input source in nicheGraphics.h (NicheGraphics::Inputs::TwoButton?)
 void InkHUD::InkHUD::shortpress()
@@ -175,6 +193,92 @@ void InkHUD::InkHUD::navRight()
     }
 }
 
+// Call this when touch input needs joystick-like up navigation independent of joystick-enabled mode
+void InkHUD::InkHUD::touchNavUp()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onTouchNavLeft();
+        break;
+    case 2: // 180 deg
+        events->onTouchNavDown();
+        break;
+    case 3: // 270 deg
+        events->onTouchNavRight();
+        break;
+    default: // 0 deg
+        events->onTouchNavUp();
+        break;
+    }
+}
+
+// Call this when touch input needs joystick-like down navigation independent of joystick-enabled mode
+void InkHUD::InkHUD::touchNavDown()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onTouchNavRight();
+        break;
+    case 2: // 180 deg
+        events->onTouchNavUp();
+        break;
+    case 3: // 270 deg
+        events->onTouchNavLeft();
+        break;
+    default: // 0 deg
+        events->onTouchNavDown();
+        break;
+    }
+}
+
+// Call this when touch input needs joystick-like left navigation independent of joystick-enabled mode
+void InkHUD::InkHUD::touchNavLeft()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onTouchNavDown();
+        break;
+    case 2: // 180 deg
+        events->onTouchNavRight();
+        break;
+    case 3: // 270 deg
+        events->onTouchNavUp();
+        break;
+    default: // 0 deg
+        events->onTouchNavLeft();
+        break;
+    }
+}
+
+// Call this when touch input needs joystick-like right navigation independent of joystick-enabled mode
+void InkHUD::InkHUD::touchNavRight()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onTouchNavUp();
+        break;
+    case 2: // 180 deg
+        events->onTouchNavLeft();
+        break;
+    case 3: // 270 deg
+        events->onTouchNavDown();
+        break;
+    default: // 0 deg
+        events->onTouchNavRight();
+        break;
+    }
+}
+
+void InkHUD::InkHUD::touchTap(uint16_t x, uint16_t y)
+{
+    events->onTouchTap(x, y, false);
+}
+
+void InkHUD::InkHUD::touchLongPress(uint16_t x, uint16_t y)
+{
+    events->onTouchTap(x, y, true);
+}
+
 // Call this for keyboard input
 // The Keyboard Applet also calls this
 void InkHUD::InkHUD::freeText(char c)
@@ -223,6 +327,12 @@ void InkHUD::InkHUD::openMenu()
     windowManager->openMenu();
 }
 
+// Show touch-friendly app switcher (on the focused tile)
+void InkHUD::InkHUD::openAppSwitcher()
+{
+    windowManager->openAppSwitcher();
+}
+
 // Bring AlignStick applet to the foreground
 void InkHUD::InkHUD::openAlignStick()
 {
@@ -253,6 +363,16 @@ void InkHUD::InkHUD::nextTile()
 void InkHUD::InkHUD::prevTile()
 {
     windowManager->prevTile();
+}
+
+bool InkHUD::InkHUD::showApplet(uint8_t appletIndex)
+{
+    return windowManager->showApplet(appletIndex);
+}
+
+bool InkHUD::InkHUD::selectTileAt(uint16_t x, uint16_t y)
+{
+    return windowManager->selectTileAt(x, y);
 }
 
 // Rotate the display image by 90 degrees
