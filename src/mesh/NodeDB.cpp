@@ -1209,7 +1209,7 @@ void NodeDB::loadFromDisk()
     spiLock->lock();
     if (!FSCom.exists("/prefs/" xstr(BUILD_EPOCH))) {
         LOG_WARN("Factory Install Reset!");
-        FSCom.format();
+        fsFormat();
         FSCom.mkdir("/prefs");
         File f2 = FSCom.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
         if (f2) {
@@ -1611,12 +1611,10 @@ bool NodeDB::saveToDisk(int saveWhat)
 
     if (!success) {
         LOG_ERROR("Failed to save to disk, retrying");
-#ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
         spiLock->lock();
-        FSCom.format();
+        fsFormat();
         spiLock->unlock();
 
-#endif
         success = saveToDiskNoRetry(saveWhat);
 
         RECORD_CRITICALERROR(success ? meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE

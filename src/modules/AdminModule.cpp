@@ -1412,7 +1412,9 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 
 void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg)
 {
+#if HAS_SCREEN
     nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uicfg);
+#endif
 }
 
 void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
