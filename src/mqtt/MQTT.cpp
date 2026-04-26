@@ -9,6 +9,7 @@
 #include "mesh/Router.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
+#include "modules/RoutingHintModule.h"
 #include "modules/RoutingModule.h"
 #if defined(ARCH_ESP32)
 #include "../mesh/generated/meshtastic/paxcount.pb.h"
@@ -382,6 +383,18 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
         return;
     }
 
+    // External routing recommendation channel — bypass mesh entirely, hand to RoutingHintModule.
+    // After applying, publish a small ACK on routing/applied/<myNodeId> so the ML side
+    // and UI can confirm the recommendation landed.
+    static constexpr const char *kRoutingHintTopicPrefix = "routing/recommendation/";
+    if (strncmp(topic, kRoutingHintTopicPrefix, strlen(kRoutingHintTopicPrefix)) == 0) {
+        bool applied = RoutingHintModule::handleRecommendation(payload, length);
+        std::string ackTopic = std::string("routing/applied/") + nodeDB->getNodeId();
+        std::string ackBody = std::string("{\"status\":\"") + (applied ? "applied" : "skipped") + "\"}";
+        publish(ackTopic.c_str(), ackBody.c_str(), false);
+        return;
+    }
+
     // check if this is a json payload message by comparing the topic start
     if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
 #if !defined(ARCH_NRF52) || NRF52_USE_JSON
@@ -599,6 +612,13 @@ void MQTT::sendSubscriptions()
         pubSub.subscribe(topic.c_str(), 1);
     }
 #endif
+
+    // External routing-hint subscription. Each node listens only to its own ID.
+    {
+        std::string topic = std::string("routing/recommendation/") + nodeDB->getNodeId();
+        LOG_INFO("Subscribe to %s", topic.c_str());
+        pubSub.subscribe(topic.c_str(), 1);
+    }
 #endif
 }
 
@@ -816,8 +836,14 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
     std::string topic = cryptTopic + channelId + "/" + nodeId;
 
     if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
-        LOG_DEBUG("MQTT Publish %s, %u bytes", topic.c_str(), numBytes);
-        publish(topic.c_str(), bytes, numBytes, false);
+        // Retain NodeInfo broadcasts on the broker so a freshly-connected
+        // subscriber (UI / ML server) immediately sees the current node map
+        // without waiting for the next periodic broadcast.
+        const bool retainOnBroker =
+            mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            mp_decoded.decoded.portnum == meshtastic_PortNum_NODEINFO_APP;
+        LOG_DEBUG("MQTT Publish %s, %u bytes%s", topic.c_str(), numBytes, retainOnBroker ? " (retained)" : "");
+        publish(topic.c_str(), bytes, numBytes, retainOnBroker);
 
 #if !defined(ARCH_NRF52) ||                                                                                                      \
     defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
@@ -831,7 +857,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         std::string nodeIdForJson = nodeDB->getNodeId();
         std::string topicJson = jsonTopic + channelId + "/" + nodeIdForJson;
         LOG_INFO("JSON publish message to %s, %u bytes: %s", topicJson.c_str(), jsonString.length(), jsonString.c_str());
-        publish(topicJson.c_str(), jsonString.c_str(), false);
+        publish(topicJson.c_str(), jsonString.c_str(), retainOnBroker);
 #endif // ARCH_NRF52 NRF52_USE_JSON
     } else {
         LOG_INFO("MQTT not connected, queue packet");

@@ -1,0 +1,13 @@
+Lora:
+  Module: sim
+
+Logging:
+  LogLevel: info
+
+General:
+  MaxNodes: 200
+  MaxMessageQueue: 100
+  ConfigDirectory: /etc/meshtasticd/config.d/
+  AvailableDirectory: /etc/meshtasticd/available.d/
+  APIPort: 4403
+  MACAddress: AA:BB:CC:DD:E0:01    # nodeA — last octet 01

@@ -1,0 +1,76 @@
+# Single compose file with three profiles:
+#
+#   single-host : everything in one box (broker + 2 nodes). Quickest "try it".
+#                 Used by `python scripts/run.py`.
+#
+#   host        : broker only. For distributed mode, runs on the laptop.
+#                 Used by `python scripts/start_host.py`.
+#
+#   node        : one meshtasticd, parameterized via env. For distributed mode,
+#                 runs on each RPi. Used by `python scripts/start_node.py`.
+#
+# Env variables (only relevant for `node` profile):
+#   NODE_HWID    — unique numeric id (1001, 1002, …) — REQUIRED, must differ per node
+#   BROKER_HOST  — hostname/IP of the laptop running the broker (e.g. 192.168.1.10)
+
+services:
+  mosquitto:
+    profiles: [single-host, host]
+    image: eclipse-mosquitto:2
+    container_name: mesh-mosquitto
+    ports:
+      - "1883:1883"   # MQTT TCP
+      - "9001:9001"   # MQTT WebSocket (for the browser UI)
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  nodeA:
+    profiles: [single-host]
+    build:
+      context: ../../../..
+      dockerfile: Dockerfile
+    image: meshtastic-routing-hint:local
+    container_name: mesh-nodeA
+    depends_on: [mosquitto]
+    command: ["meshtasticd", "--fsdir=/var/lib/meshtasticd", "--sim", "--hwid=1001"]
+    ports:
+      - "4403:4403"
+    volumes:
+      - ./nodeA/config.yaml:/etc/meshtasticd/config.yaml:ro
+      - nodeA_data:/var/lib/meshtasticd
+    restart: unless-stopped
+
+  nodeB:
+    profiles: [single-host]
+    image: meshtastic-routing-hint:local
+    container_name: mesh-nodeB
+    depends_on: [mosquitto, nodeA]    # nodeA build runs first, nodeB reuses image
+    command: ["meshtasticd", "--fsdir=/var/lib/meshtasticd", "--sim", "--hwid=1002"]
+    ports:
+      - "4404:4403"
+    volumes:
+      - ./nodeB/config.yaml:/etc/meshtasticd/config.yaml:ro
+      - nodeB_data:/var/lib/meshtasticd
+    restart: unless-stopped
+
+  node:
+    profiles: [node]
+    build:
+      context: ../../../..
+      dockerfile: Dockerfile
+    image: meshtastic-routing-hint:local
+    # NODE_HWID is required when actually starting `node` profile;
+    # default values keep compose from refusing to parse for OTHER profiles.
+    container_name: mesh-node-${NODE_HWID:-undefined}
+    command: ["meshtasticd", "--fsdir=/var/lib/meshtasticd", "--sim", "--hwid=${NODE_HWID:-0}"]
+    network_mode: host    # binds local 4403 directly so 'meshtastic' CLI hits it from the same RPi
+    volumes:
+      - ./nodeA/config.yaml:/etc/meshtasticd/config.yaml:ro
+      - node_data:/var/lib/meshtasticd
+    restart: unless-stopped
+
+volumes:
+  nodeA_data:
+  nodeB_data:
+  node_data:
