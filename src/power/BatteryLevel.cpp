@@ -14,6 +14,10 @@
 #include "bq27220.h"
 #endif
 
+#if defined(HAS_PPM) && HAS_PPM
+#include <XPowersLib.h>
+#endif
+
 #ifdef HELTEC_MESH_SOLAR
 #include "meshSolarApp.h"
 #endif
