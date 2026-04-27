@@ -6,6 +6,33 @@
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
 
+// Sentinel marking the end of a modem preset array. Declared `const` rather
+// than `constexpr` because the cast from 0xFF to the enum is out-of-range and
+// therefore not a valid constant expression on Clang 16+ (Apple Clang on
+// macOS). The value is only ever compared at runtime, so static-init is fine.
+static const meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
+    static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(0xFF);
+
+// Region profile: bundles the preset list with regulatory parameters shared across regions
+struct RegionProfile {
+    const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated; first entry is the default
+    float spacing;                                           // gaps between radio channels
+    float padding;                                           // padding at each side of the "operating channel"
+    bool audioPermitted;
+    bool licensedOnly;        // a region profile for licensed operators only
+    int8_t textThrottle;      // throttle for text - future expansion
+    int8_t positionThrottle;  // throttle for location data - future expansion
+    int8_t telemetryThrottle; // throttle for telemetry - future expansion
+    uint8_t overrideSlot;     // a per-region override slot for if we need to fix it in place
+};
+
+extern const RegionProfile PROFILE_STD;
+extern const RegionProfile PROFILE_EU868;
+extern const RegionProfile PROFILE_UNDEF;
+// extern const RegionProfile  PROFILE_LITE;
+// extern const RegionProfile  PROFILE_NARROW;
+// extern const RegionProfile  PROFILE_HAM;
+
 // Map from old region names to new region enums
 struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
