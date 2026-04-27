@@ -1,0 +1,51 @@
+name: Build MacOS Binary
+
+on:
+  workflow_call:
+    inputs:
+      macos_ver:
+        required: false
+        default: "26" # ARM64
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-MacOS:
+    runs-on: macos-${{ inputs.macos_ver }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install deps
+        shell: bash
+        run: |
+          brew update
+          brew install platformio yaml-cpp libuv openssl@3 libusb argp-standalone pkg-config
+
+      - name: Get release version string
+        run: |
+          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Build for MacOS
+        run: |
+          platformio run -e native-macos
+        env:
+          PKG_VERSION: ${{ steps.version.outputs.long }}
+        # Errors in this step should not fail the entire workflow while MacOS support is in development.
+        continue-on-error: true
+
+      - name: List output files
+        run: ls -lah .pio/build/native-macos/
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: firmware-macos-${{ inputs.macos_ver }}-${{ steps.version.outputs.long }}
+          overwrite: true
+          path: |
+            .pio/build/native-macos/meshtasticd
