@@ -1,0 +1,241 @@
+name: Build CJK + Japanese IME firmware
+
+# When this runs:
+#   - on push / PR to your default branch         (verify your changes build)
+#   - daily at 06:00 UTC                          ("auto build upon latest firmware")
+#   - manually from the Actions tab               (workflow_dispatch)
+#
+# The build SOURCE is ssp97/meshtastic_fw/develop, which already has the
+# Chinese pinyin IME and CJK display layer. On top of that the workflow:
+#   1. Applies the JP IME patch from .github/cjk/patches/
+#   2. Applies any of YOUR custom patches from .github/cjk/extra-patches/
+#      (this is where you commit your spoof-id work as a .patch file)
+#   3. Generates a CJK font that covers GB2312 + JP kana + KR Hangul
+#   4. Overlays the seeed_wio_tracker_L1 variant's platformio.ini
+#   5. Injects -DJP_IME=1 into the gat562 base flags
+#   6. Builds both targets in parallel
+#   7. Uploads UF2 + HEX + ELF firmware artifacts
+
+on:
+  push:
+    branches: [develop, main, master]
+  pull_request:
+    branches: [develop, main, master]
+  workflow_dispatch:
+    inputs:
+      enable_hangul:
+        description: 'Include Korean Hangul in font (~250 KB extra; may bust 815 KB ceiling)'
+        type: boolean
+        default: false
+      font_size:
+        description: 'OLED font size (px box). 10 fits, 12 is tight, 16 will not fit.'
+        type: choice
+        options: ['10', '12']
+        default: '10'
+      apply_spoof_id:
+        description: 'Cherry-pick Tauoooʼs SETNODEID spoof-id commits onto the build (default ON).'
+        type: boolean
+        default: true
+  schedule:
+    - cron: '0 6 * * *'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  # Don't pile up daily builds if one is already running.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - seeed_wio_tracker_L1
+          - gat562_mesh_trial_tracker
+
+    steps:
+      - name: Checkout this repo (for the workflow + patches)
+        uses: actions/checkout@v4
+        with:
+          path: this
+          fetch-depth: 1
+
+      - name: Clone ssp97/meshtastic_fw as the build source
+        run: |
+          git clone --depth 50 https://github.com/ssp97/meshtastic_fw base
+          cd base
+          git config user.email "ci@build.local"
+          git config user.name  "CI"
+          # submodules: protobufs, meshtestic
+          git submodule update --init --recursive --depth 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python build deps
+        run: pip install --quiet Pillow platformio
+
+      - name: Cache PlatformIO toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-${{ runner.os }}-nrf52-${{ hashFiles('base/platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-nrf52-
+
+      - name: Cherry-pick Tauooo SETNODEID spoof-id (preserved from upstream Tauooo/firmware)
+        env:
+          APPLY_SPOOF_ID: ${{ inputs.apply_spoof_id == 'false' && 'false' || 'true' }}
+        run: |
+          cd base
+          if [ "$APPLY_SPOOF_ID" = "false" ]; then
+            echo "::notice::apply_spoof_id=false; skipping SETNODEID feature"
+            exit 0
+          fi
+          # The 4 commits that make up the SETNODEID feature, chronological:
+          #   655751c69  Add files via upload          (NodeDB::setNodeNum)
+          #   0e61c9990  Implement node ID setting in AdminModule
+          #   fa0527883  Add files via upload          (CannedMessageModule UI)
+          #   e23cba11b  Rename HEX to hexChars for consistency
+          git remote add tauooo https://github.com/Tauooo/firmware
+          # Fetch deep enough to have the parent blobs for proper 3-way merge.
+          git fetch --depth 200 tauooo
+          for c in 655751c69 0e61c9990 fa0527883 e23cba11b; do
+            echo "::group::cherry-pick $c"
+            # -X theirs: prefer Tauooo's version on any context conflict.
+            # The actual SETNODEID semantic additions don't conflict with ssp97
+            # because they touch areas ssp97 doesn't modify; this flag only
+            # resolves surface-level whitespace/include reorder differences.
+            git cherry-pick -X theirs "$c"
+            echo "::endgroup::"
+          done
+          echo "==="
+          echo "SETNODEID hits in resulting tree (sanity check):"
+          grep -c "SETNODEID" \
+            src/modules/AdminModule.cpp \
+            src/modules/CannedMessageModule.cpp || true
+
+      - name: Apply Japanese IME patch (0016)
+        run: |
+          cd base
+          git am ../this/.github/cjk/patches/0016-feat-add-Japanese-romaji-to-kana-IME.patch
+
+      - name: Apply user extra patches (spoof-id, etc.)
+        run: |
+          cd base
+          shopt -s nullglob
+          patches=(../this/.github/cjk/extra-patches/*.patch)
+          if [ ${#patches[@]} -eq 0 ]; then
+            echo "::notice::No extra patches present in .github/cjk/extra-patches/."
+          else
+            for p in "${patches[@]}"; do
+              echo "::group::Applying $(basename "$p")"
+              if ! git am --keep-cr "$p"; then
+                echo "::warning::git am failed; trying 3-way..."
+                git am --abort 2>/dev/null || true
+                git apply --3way --whitespace=nowarn "$p"
+                git add -A
+                git -c user.email=ci@build.local -c user.name=CI \
+                    commit -m "extra: $(basename "$p")"
+              fi
+              echo "::endgroup::"
+            done
+          fi
+
+      - name: Download Noto Sans CJK (covers CN + JP + KR)
+        run: |
+          curl -sSL -o noto.ttc \
+            'https://github.com/notofonts/noto-cjk/raw/main/Sans/OTC/NotoSansCJK-Regular.ttc'
+          ls -la noto.ttc
+
+      - name: Generate CJK font header (GB2312 + Kana, optional Hangul)
+        env:
+          ENABLE_HANGUL: ${{ inputs.enable_hangul || false }}
+          FONT_SIZE: ${{ inputs.font_size || '10' }}
+        run: |
+          mkdir -p base/src/graphics/fonts
+          HANGUL_FLAG=""
+          if [ "$ENABLE_HANGUL" = "true" ]; then
+            HANGUL_FLAG="--hangul"
+            echo "::warning::Hangul enabled — adds ~250 KB. Build may exceed 815 KB ceiling."
+          fi
+          python3 this/.github/cjk/gen_oled_utf8_font.py \
+            --size "$FONT_SIZE" \
+            --charset gb2312 \
+            --kana $HANGUL_FLAG \
+            --ttf noto.ttc --ttc-index 0 \
+            --output "base/src/graphics/fonts/utf8_${FONT_SIZE}x${FONT_SIZE}.h" \
+            --prefix "utf8_${FONT_SIZE}x${FONT_SIZE}_"
+          # Stub the other sizes — Screen.cpp #includes all four unconditionally.
+          bash this/.github/cjk/scripts/stub_other_sizes.sh \
+            base/src/graphics/fonts "$FONT_SIZE"
+
+      - name: Overlay variant build_flags for ${{ matrix.target }}
+        run: |
+          cd base
+          bash ../this/.github/cjk/scripts/apply_variant.sh \
+            "${{ matrix.target }}" \
+            "../this/.github/cjk/variants"
+
+      - name: Show resolved build_flags for sanity
+        run: |
+          cd base
+          for ini in $(grep -rl "env:${{ matrix.target }}" variants/); do
+            echo "===== $ini ====="
+            cat "$ini"
+            echo
+          done
+
+      - name: Build firmware
+        run: |
+          cd base
+          # Use -v for verbose if a daily build mysteriously starts to fail.
+          pio run -e "${{ matrix.target }}"
+
+      - name: Report flash usage (vs 815104 byte ceiling)
+        if: always()
+        run: |
+          cd base
+          ELF=".pio/build/${{ matrix.target }}/firmware.elf"
+          if [ -f "$ELF" ]; then
+            SIZE_BIN="$HOME/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-size"
+            "$SIZE_BIN" "$ELF" || true
+            FLASH_USED=$("$SIZE_BIN" -A "$ELF" | awk '/\.text|\.data/ && !/\.bss/ {sum+=$2} END {print sum}')
+            CEILING=815104
+            HEADROOM=$((CEILING - FLASH_USED))
+            echo "::notice::flash used = $FLASH_USED / $CEILING bytes (headroom $HEADROOM)"
+            if [ "$FLASH_USED" -gt "$CEILING" ]; then
+              echo "::error::Over flash budget by $((-HEADROOM)) bytes — strip more features"
+              exit 1
+            fi
+          fi
+
+      - name: Upload firmware artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.target }}-${{ github.run_number }}
+          path: |
+            base/.pio/build/${{ matrix.target }}/firmware.uf2
+            base/.pio/build/${{ matrix.target }}/firmware.hex
+            base/.pio/build/${{ matrix.target }}/firmware.elf
+            base/.pio/build/${{ matrix.target }}/firmware.zip
+            base/.pio/build/${{ matrix.target }}/firmware.bin
+          retention-days: 30
+          if-no-files-found: warn
