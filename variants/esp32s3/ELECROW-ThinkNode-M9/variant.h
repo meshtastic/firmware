@@ -82,6 +82,7 @@
 #define BRIGHTNESS_DEFAULT 128
 
 /*Lora radio*/
+#define HW_SPI1_DEVICE
 #define LORA_SCK SPI_SCK
 #define LORA_MISO SPI_MISO
 #define LORA_MOSI SPI_MOSI
