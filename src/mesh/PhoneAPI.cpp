@@ -80,12 +80,25 @@ void PhoneAPI::handleStartConfig(uint32_t newConfigNonce)
         // our next CAS could commit a backwards-in-time value, breaking the rate limit
         // for the next arriving handshake.
         const uint32_t now = millis();
-        if (last != 0 && (now - last) < MIN_CONFIG_HANDSHAKE_INTERVAL_MS) {
+        // Only enforce the throttle when we're actually mid-dump
+        // (state in [STATE_SEND_UIDATA..STATE_SEND_COMPLETE_ID]). The throttle's purpose
+        // is preventing concurrent overlapping dumps from fragmenting the heap; it must
+        // NOT block legitimate fresh-client handshakes (state == STATE_SEND_NOTHING) or
+        // post-dump re-handshake requests (state == STATE_SEND_PACKETS, the steady state
+        // after a successful dump). Without this gate the static lastStartConfigMs across
+        // transports causes legitimate cross-transport reconnects (e.g. BLE → TCP) to
+        // silently early-return without advancing state, leaving the client stuck on
+        // "reading config" forever. Hardware-confirmed on Heltec V4 TFT 2026-04-27:
+        // first handshake passed (state was 0), Android closed and re-issued want_config
+        // ~570ms later when state was 11 (POST_DUMP), and the original throttle blocked
+        // the second handshake — Android stalled.
+        const bool dumpInFlight = (state >= STATE_SEND_UIDATA && state <= STATE_SEND_COMPLETE_ID);
+        if (dumpInFlight && last != 0 && (now - last) < MIN_CONFIG_HANDSHAKE_INTERVAL_MS) {
             static uint32_t lastThrottleLogMs = 0;
             if (!Throttle::isWithinTimespanMs(lastThrottleLogMs, HANDSHAKE_THROTTLE_LOG_INTERVAL_MS)) {
                 lastThrottleLogMs = now;
-                LOG_WARN("Config handshake throttled (last one %u ms ago, min interval %u ms)",
-                         (unsigned)(now - last), (unsigned)MIN_CONFIG_HANDSHAKE_INTERVAL_MS);
+                LOG_WARN("Config handshake throttled (last one %u ms ago, min interval %u ms, state=%d)",
+                         (unsigned)(now - last), (unsigned)MIN_CONFIG_HANDSHAKE_INTERVAL_MS, (int)state);
             }
             return;
         }
