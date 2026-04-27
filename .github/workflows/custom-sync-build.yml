@@ -7,7 +7,7 @@ on:
       targets:
         description: 'Space-separated PlatformIO targets'
         required: false
-        default: 'seeed_wio_tracker_L1 heltec-v4-tft'
+        default: 'seeed_wio_tracker_L1 heltec-v4-tft rak4631'
 permissions:
   contents: write
 jobs:
