@@ -20,7 +20,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.SYNC_PAT }}
       - name: Configure git
         run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
