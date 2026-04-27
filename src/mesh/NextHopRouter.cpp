@@ -140,10 +140,10 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                         LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE rebroadcast: preserving hop_limit");
                     }
 #if USERPREFS_EVENT_MODE
-                    if (tosend->hop_limit > 2) {
+                    if (tosend->hop_limit > 3) {
                         // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                        tosend->hop_start -= (tosend->hop_limit - 2);
-                        tosend->hop_limit = 2;
+                        tosend->hop_start -= (tosend->hop_limit - 3);
+                        tosend->hop_limit = 3;
                     }
 #endif
 
