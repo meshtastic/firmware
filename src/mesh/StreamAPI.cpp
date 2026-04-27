@@ -2,7 +2,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Throttle.h"
-#include "concurrency/LockGuard.h"
+#include <mutex>
 #include "configuration.h"
 
 #define START1 0x94
@@ -180,7 +180,7 @@ void StreamAPI::emitTxBuffer(size_t len)
         auto totalLen = len + HEADER_LEN;
         // Serialize stream writes against `emitLogRecord` so a LOG_ firing
         // mid-packet-emission can't interleave bytes on the wire.
-        concurrency::LockGuard guard(&streamLock);
+        std::lock_guard<std::mutex> guard(streamLock);
         stream->write(txBuf, totalLen);
         stream->flush();
     }
@@ -231,7 +231,7 @@ void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src,
         // Serialize stream writes against `emitTxBuffer` so a packet
         // emission in flight on another task doesn't interleave bytes
         // with this log record.
-        concurrency::LockGuard guard(&streamLock);
+        std::lock_guard<std::mutex> guard(streamLock);
         stream->write(txBufLog, totalLen);
         stream->flush();
     }

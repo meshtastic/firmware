@@ -15,7 +15,7 @@
 #include "Router.h"
 #include "SPILock.h"
 #include "TypeConversions.h"
-#include "concurrency/LockGuard.h"
+#include <mutex>
 #include "main.h"
 #include "modules/NodeInfoModule.h"
 #include "xmodem.h"
@@ -78,7 +78,7 @@ void PhoneAPI::handleStartConfig()
     LOG_INFO("Start API client config millis=%u", millis());
     // Protect against concurrent BLE callbacks: they run in NimBLE's FreeRTOS task and also touch nodeInfoQueue.
     {
-        concurrency::LockGuard guard(&nodeInfoMutex);
+        std::lock_guard<std::mutex> guard(nodeInfoMutex);
         nodeInfoForPhone = {};
         nodeInfoQueue.clear();
     }
@@ -117,7 +117,7 @@ void PhoneAPI::close()
         toRadioScratch = {};
         // Clear cached node info under lock because NimBLE callbacks can still be draining it.
         {
-            concurrency::LockGuard guard(&nodeInfoMutex);
+            std::lock_guard<std::mutex> guard(nodeInfoMutex);
             nodeInfoForPhone = {};
             nodeInfoQueue.clear();
         }
@@ -291,14 +291,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             info.has_hops_away = false;
             info.is_favorite = true;
             {
-                concurrency::LockGuard guard(&nodeInfoMutex);
+                std::lock_guard<std::mutex> guard(nodeInfoMutex);
                 nodeInfoForPhone = info;
             }
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = info;
             // Should allow us to resume sending NodeInfo in STATE_SEND_OTHER_NODEINFOS
             {
-                concurrency::LockGuard guard(&nodeInfoMutex);
+                std::lock_guard<std::mutex> guard(nodeInfoMutex);
                 nodeInfoForPhone.num = 0;
             }
         }
@@ -502,7 +502,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
         meshtastic_NodeInfo infoToSend = {};
         {
-            concurrency::LockGuard guard(&nodeInfoMutex);
+            std::lock_guard<std::mutex> guard(nodeInfoMutex);
             if (nodeInfoForPhone.num == 0 && !nodeInfoQueue.empty()) {
                 // Serve the next cached node without re-reading from the DB iterator.
                 nodeInfoForPhone = nodeInfoQueue.front();
@@ -532,7 +532,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             prefetchNodeInfos();
         } else {
             LOG_DEBUG("Done sending %d of %d nodeinfos millis=%u", readIndex, nodeDB->getNumMeshNodes(), millis());
-            concurrency::LockGuard guard(&nodeInfoMutex);
+            std::lock_guard<std::mutex> guard(nodeInfoMutex);
             nodeInfoQueue.clear();
             state = STATE_SEND_FILEMANIFEST;
             // Go ahead and send that ID right now
@@ -659,7 +659,7 @@ void PhoneAPI::prefetchNodeInfos()
     bool added = false;
     // Keep the queue topped up so BLE reads stay responsive even if DB fetches take a moment.
     {
-        concurrency::LockGuard guard(&nodeInfoMutex);
+        std::lock_guard<std::mutex> guard(nodeInfoMutex);
         while (nodeInfoQueue.size() < kNodePrefetchDepth) {
             auto nextNode = nodeDB->readNextMeshNode(readIndex);
             if (!nextNode)
@@ -717,7 +717,7 @@ bool PhoneAPI::available()
         return true;
 
     case STATE_SEND_OTHER_NODEINFOS: {
-        concurrency::LockGuard guard(&nodeInfoMutex);
+        std::lock_guard<std::mutex> guard(nodeInfoMutex);
         if (nodeInfoQueue.empty()) {
             // Drop the lock before prefetching; prefetchNodeInfos() will re-acquire it.
             goto PREFETCH_NODEINFO;
