@@ -166,17 +166,29 @@ void esp32Setup()
 #define APP_WATCHDOG_SECS 90
 
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
-    esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
-    wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
-    wdt_config->idle_core_mask = (1 << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1;
-    wdt_config->trigger_panic = true;
-    res = esp_task_wdt_init(wdt_config);
+    const esp_task_wdt_config_t wdt_config = {
+        .timeout_ms = APP_WATCHDOG_SECS * 1000,
+        .idle_core_mask = (1U << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1U,
+        .trigger_panic = true,
+    };
+    res = esp_task_wdt_init(&wdt_config);
+    if (res == ESP_ERR_INVALID_STATE) {
+        LOG_WARN("Task watchdog already initialized, reconfiguring existing instance");
+        res = esp_task_wdt_reconfigure(&wdt_config);
+    }
     assert(res == ESP_OK);
 #else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
+    if (res == ESP_ERR_INVALID_STATE) {
+        LOG_WARN("Task watchdog already initialized, reusing existing instance");
+        res = ESP_OK;
+    }
     assert(res == ESP_OK);
 #endif
-    res = esp_task_wdt_add(NULL);
+    res = esp_task_wdt_status(NULL);
+    if (res == ESP_ERR_NOT_FOUND) {
+        res = esp_task_wdt_add(NULL);
+    }
     assert(res == ESP_OK);
 
 #if HAS_32768HZ
