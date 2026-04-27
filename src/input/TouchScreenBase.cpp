@@ -9,6 +9,35 @@
 #define TIME_LONG_PRESS 400
 #endif
 
+// Touch sampling cadence (milliseconds).
+// Can be overridden by board variants for faster touch panels.
+#ifndef TOUCH_POLL_INTERVAL_IDLE
+#define TOUCH_POLL_INTERVAL_IDLE 100
+#endif
+
+#ifndef TOUCH_POLL_INTERVAL_ACTIVE
+#define TOUCH_POLL_INTERVAL_ACTIVE 20
+#endif
+
+#ifndef TOUCH_POLL_INTERVAL_RELEASE
+#define TOUCH_POLL_INTERVAL_RELEASE 50
+#endif
+
+// Faster cadence used for keyboard-like tap-heavy UIs.
+#ifndef TOUCH_POLL_INTERVAL_ACTIVE_FAST
+#define TOUCH_POLL_INTERVAL_ACTIVE_FAST TOUCH_POLL_INTERVAL_ACTIVE
+#endif
+
+#ifndef TOUCH_POLL_INTERVAL_RELEASE_FAST
+#define TOUCH_POLL_INTERVAL_RELEASE_FAST TOUCH_POLL_INTERVAL_RELEASE
+#endif
+
+// Ignore very short "finger lifted" glitches from noisy touch controllers.
+// A release is only accepted once we've seen no-touch for at least this duration.
+#ifndef TOUCH_RELEASE_GRACE_MS
+#define TOUCH_RELEASE_GRACE_MS 35
+#endif
+
 // move a minimum distance over the screen to detect a "swipe"
 #ifndef TOUCH_THRESHOLD_X
 #define TOUCH_THRESHOLD_X 30
@@ -20,7 +49,7 @@
 
 TouchScreenBase::TouchScreenBase(const char *name, uint16_t width, uint16_t height)
     : concurrency::OSThread(name), _display_width(width), _display_height(height), _first_x(0), _last_x(0), _first_y(0),
-      _last_y(0), _start(0), _tapped(false), _originName(name)
+      _last_y(0), _start(0), _lastTouchSeenMs(0), _tapped(false), _originName(name)
 {
 }
 
@@ -28,7 +57,7 @@ void TouchScreenBase::init(bool hasTouch)
 {
     if (hasTouch) {
         LOG_INFO("TouchScreen initialized %d %d", TOUCH_THRESHOLD_X, TOUCH_THRESHOLD_Y);
-        this->setInterval(100);
+        this->setInterval(TOUCH_POLL_INTERVAL_IDLE);
     } else {
         disable();
         this->setInterval(UINT_MAX);
@@ -39,6 +68,8 @@ int32_t TouchScreenBase::runOnce()
 {
     TouchEvent e;
     e.touchEvent = static_cast<char>(TOUCH_ACTION_NONE);
+    const bool fastTapMode = fastTapModeEnabled();
+    const bool allowLongPress = longPressEnabled();
 
     // process touch events
     int16_t x, y;
@@ -46,9 +77,13 @@ int32_t TouchScreenBase::runOnce()
     if (x < 0 || y < 0) // T-deck can emit phantom touch events with a negative value when turning off the screen
         touched = false;
     if (touched) {
-        this->setInterval(20);
+        _lastTouchSeenMs = millis();
+        this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_ACTIVE_FAST : TOUCH_POLL_INTERVAL_ACTIVE);
         _last_x = x;
         _last_y = y;
+    } else if (_touchedOld && ((uint32_t)millis() - _lastTouchSeenMs) < TOUCH_RELEASE_GRACE_MS) {
+        // Treat brief no-touch samples as continuous touch to preserve long-press detection.
+        touched = true;
     }
     if (touched != _touchedOld) {
         if (touched) {
@@ -62,7 +97,7 @@ int32_t TouchScreenBase::runOnce()
             time_t duration = millis() - _start;
             x = _last_x;
             y = _last_y;
-            this->setInterval(50);
+            this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_RELEASE_FAST : TOUCH_POLL_INTERVAL_RELEASE);
 
             // compute distance
             int16_t dx = x - _first_x;
@@ -92,7 +127,7 @@ int32_t TouchScreenBase::runOnce()
             }
             // tap
             else {
-                if (duration > 0 && duration < TIME_LONG_PRESS) {
+                if (duration > 0 && (duration < TIME_LONG_PRESS || !allowLongPress)) {
                     if (_tapped) {
                         _tapped = false;
                     } else {
@@ -132,7 +167,7 @@ int32_t TouchScreenBase::runOnce()
 #endif
 
     // fire LONG_PRESS event without the need for release
-    if (touched && (time_t(millis()) - _start) > TIME_LONG_PRESS) {
+    if (allowLongPress && touched && (time_t(millis()) - _start) > TIME_LONG_PRESS) {
         // tricky: prevent reoccurring events and another touch event when releasing
         _start = millis() + 30000;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
@@ -156,4 +191,14 @@ void TouchScreenBase::hapticFeedback()
     drv.setWaveform(1, 0); // end waveform
     drv.go();
 #endif
+}
+
+bool TouchScreenBase::fastTapModeEnabled() const
+{
+    return false;
+}
+
+bool TouchScreenBase::longPressEnabled() const
+{
+    return true;
 }

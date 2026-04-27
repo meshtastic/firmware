@@ -492,15 +492,24 @@ void PositionModule::sendLostAndFoundText()
 {
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = NODENUM_BROADCAST;
-    char *message = new char[60];
-    sprintf(message, "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7), (lastGpsLongitude * 1e-7));
+    char message[128];
+    int written = snprintf(message, sizeof(message), "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7),
+                           (lastGpsLongitude * 1e-7));
     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     p->want_ack = false;
-    p->decoded.payload.size = strlen(message);
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+    if (written < 0) {
+        // snprintf encoding error — send an empty payload rather than uninitialized bytes.
+        p->decoded.payload.size = 0;
+    } else {
+        // Clamp to buffer capacity (snprintf returns "would-have-written" which can exceed the buffer).
+        const size_t msg_len = std::min(static_cast<size_t>(written), sizeof(message) - 1);
+        p->decoded.payload.size = msg_len;
+        if (msg_len > 0) {
+            memcpy(p->decoded.payload.bytes, message, msg_len);
+        }
+    }
 
     service->sendToMesh(p, RX_SRC_LOCAL, true);
-    delete[] message;
 }
 
 // Helper: return imprecise (truncated + centered) lat/lon as int32 using current precision

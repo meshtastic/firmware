@@ -1220,7 +1220,9 @@ static LGFX *tft = nullptr;
 #endif
 
 #include "SPILock.h"
+#include "TFTColorRegions.h"
 #include "TFTDisplay.h"
+#include "TFTPalette.h"
 #include <SPI.h>
 
 #ifdef UNPHONE
@@ -1229,6 +1231,25 @@ extern unPhone unphone;
 #endif
 
 GpioPin *TFTDisplay::backlightEnable = NULL;
+
+namespace
+{
+static constexpr uint8_t kFullRepaintChunkRows = 8;
+
+static inline uint16_t getThemeDefaultOnColor()
+{
+    return graphics::TFTPalette::White;
+}
+
+static inline uint16_t getThemeDefaultOffColor()
+{
+#if GRAPHICS_TFT_COLORING_ENABLED
+    return graphics::getThemeBodyBg();
+#else
+    return TFT_BLACK;
+#endif
+}
+} // namespace
 
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
@@ -1269,14 +1290,15 @@ TFTDisplay::~TFTDisplay()
         free(linePixelBuffer);
         linePixelBuffer = nullptr;
     }
+    if (repaintChunkBuffer != nullptr) {
+        free(repaintChunkBuffer);
+        repaintChunkBuffer = nullptr;
+    }
 }
 
 // Write the buffer to the display memory
 void TFTDisplay::display(bool fromBlank)
 {
-    if (fromBlank)
-        tft->fillScreen(TFT_BLACK);
-
     concurrency::LockGuard g(spiLock);
 
     uint32_t x, y;
@@ -1285,12 +1307,70 @@ void TFTDisplay::display(bool fromBlank)
     uint32_t x_FirstPixelUpdate;
     uint32_t x_LastPixelUpdate;
     bool isset, dblbuf_isset;
-    uint16_t colorTftMesh, colorTftBlack;
+    uint16_t colorTftWhite, colorTftBlack;
     bool somethingChanged = false;
 
-    // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
-    colorTftMesh = __builtin_bswap16(TFT_MESH);
-    colorTftBlack = __builtin_bswap16(TFT_BLACK);
+    // Theme defaults for non-role pixels.
+    const uint16_t defaultOnColor = getThemeDefaultOnColor();
+    const uint16_t defaultOffColor = getThemeDefaultOffColor();
+    static uint16_t lastDefaultOnColor = 0;
+    static uint16_t lastDefaultOffColor = 0;
+    static bool haveLastDefaults = false;
+    const bool themeDefaultsChanged =
+        !haveLastDefaults || (defaultOnColor != lastDefaultOnColor) || (defaultOffColor != lastDefaultOffColor);
+    const bool forceFullRepaint = fromBlank || themeDefaultsChanged;
+
+    // If theme defaults changed, reset panel background immediately so stale pixels don't linger.
+    if (forceFullRepaint) {
+        tft->fillScreen(defaultOffColor);
+    }
+
+    colorTftWhite = (defaultOnColor >> 8) | ((defaultOnColor & 0xFF) << 8);
+    colorTftBlack = (defaultOffColor >> 8) | ((defaultOffColor & 0xFF) << 8);
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+    static uint32_t lastColorFrameSignature = 0;
+    const bool hasColorRegions = graphics::getTFTColorRegionCount() > 0;
+    const uint32_t colorFrameSignature = graphics::getTFTColorFrameSignature();
+    const bool forceFullColorRepaint = forceFullRepaint || (colorFrameSignature != lastColorFrameSignature);
+
+    // When region roles/layout changed, color can differ even with identical monochrome glyph bits.
+    // Repaint full frame only for those frames, then return to diff-based updates.
+    if (forceFullColorRepaint) {
+        for (uint32_t yStart = 0; yStart < displayHeight; yStart += kFullRepaintChunkRows) {
+            const uint32_t rowsThisChunk = min<uint32_t>(kFullRepaintChunkRows, displayHeight - yStart);
+            for (uint32_t row = 0; row < rowsThisChunk; row++) {
+                y = yStart + row;
+                y_byteIndex = (y / 8) * displayWidth;
+                y_byteMask = (1 << (y & 7));
+
+                uint16_t *chunkRow = repaintChunkBuffer + (row * displayWidth);
+                for (x = 0; x < displayWidth; x++) {
+                    isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
+                    if (hasColorRegions) {
+                        chunkRow[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
+                                                                     colorTftWhite, colorTftBlack);
+                    } else {
+                        chunkRow[x] = isset ? colorTftWhite : colorTftBlack;
+                    }
+                }
+            }
+#if defined(HACKADAY_COMMUNICATOR)
+            tft->draw16bitBeRGBBitmap(0, yStart, repaintChunkBuffer, displayWidth, rowsThisChunk);
+#else
+            tft->pushImage(0, yStart, displayWidth, rowsThisChunk, repaintChunkBuffer);
+#endif
+        }
+
+        memcpy(buffer_back, buffer, displayBufferSize);
+        lastColorFrameSignature = colorFrameSignature;
+        haveLastDefaults = true;
+        lastDefaultOnColor = defaultOnColor;
+        lastDefaultOffColor = defaultOffColor;
+        graphics::clearTFTColorRegions();
+        return;
+    }
+#endif
 
     y = 0;
     while (y < displayHeight) {
@@ -1299,7 +1379,7 @@ void TFTDisplay::display(bool fromBlank)
 
         // Step 1: Do a quick scan of 8 rows together. This allows fast-forwarding over unchanged screen areas.
         if (y_byteMask == 1) {
-            if (!fromBlank) {
+            if (!forceFullRepaint) {
                 for (x = 0; x < displayWidth; x++) {
                     if (buffer[x + y_byteIndex] != buffer_back[x + y_byteIndex])
                         break;
@@ -1317,13 +1397,14 @@ void TFTDisplay::display(bool fromBlank)
             }
         }
 
-        // Step 2: Scan each of the 8 rows individually. Find the first pixel in each row that needs updating
-        for (x_FirstPixelUpdate = 0; x_FirstPixelUpdate < displayWidth; x_FirstPixelUpdate++) {
-            isset = buffer[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
+        // Step 2: Scan this row for changed span (first and last changed pixel).
+        uint32_t x_FirstChanged = 0;
+        for (x_FirstChanged = 0; x_FirstChanged < displayWidth; x_FirstChanged++) {
+            isset = buffer[x_FirstChanged + y_byteIndex] & y_byteMask;
 
-            if (!fromBlank) {
+            if (!forceFullRepaint) {
                 // get src pixel in the page based ordering the OLED lib uses
-                dblbuf_isset = buffer_back[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
+                dblbuf_isset = buffer_back[x_FirstChanged + y_byteIndex] & y_byteMask;
                 if (isset != dblbuf_isset) {
                     break;
                 }
@@ -1333,37 +1414,45 @@ void TFTDisplay::display(bool fromBlank)
         }
 
         // Did we find a pixel that needs updating on this row?
-        if (x_FirstPixelUpdate < displayWidth) {
-            // Align the first pixel for update to an even number so the total alignment of
-            // the data will be at 32-bit boundary, which is required by GDMA SPI transfers.
-            x_FirstPixelUpdate &= ~1;
-
-            // Step 3a: copy rest of the pixels in this row into the pixel line buffer,
-            // while also recording the last pixel in the row that needs updating.
-            // Since the first changed pixel will be looked up, the x_LastPixelUpdate will be set.
-            for (x = x_FirstPixelUpdate; x < displayWidth; x++) {
-                isset = buffer[x + y_byteIndex] & y_byteMask;
-                linePixelBuffer[x] = isset ? colorTftMesh : colorTftBlack;
-
-                if (!fromBlank) {
-                    dblbuf_isset = buffer_back[x + y_byteIndex] & y_byteMask;
+        if (x_FirstChanged < displayWidth) {
+            uint32_t x_LastChanged = displayWidth - 1;
+            while (x_LastChanged > x_FirstChanged) {
+                isset = buffer[x_LastChanged + y_byteIndex] & y_byteMask;
+                if (!forceFullRepaint) {
+                    dblbuf_isset = buffer_back[x_LastChanged + y_byteIndex] & y_byteMask;
                     if (isset != dblbuf_isset) {
-                        x_LastPixelUpdate = x;
+                        break;
                     }
                 } else if (isset) {
-                    x_LastPixelUpdate = x;
+                    break;
                 }
+                x_LastChanged--;
             }
-            // Step 3b: Round up the last pixel to odd number to maintain 32-bit alignment for SPIs.
-            // Most displays will have even number of pixels in a row -- this will be in bounds
-            // of the displayWidth. (Hopefully odd displays will just ignore that extra pixel.)
-            x_LastPixelUpdate |= 1;
-            // Ensure the last pixel index does not exceed the display width.
+
+            // Align the first pixel for update to an even number so the total alignment of
+            // the data will be at 32-bit boundary, which is required by GDMA SPI transfers.
+            x_FirstPixelUpdate = x_FirstChanged & ~1U;
+            x_LastPixelUpdate = x_LastChanged | 1U;
             if (x_LastPixelUpdate >= displayWidth) {
                 x_LastPixelUpdate = displayWidth - 1;
             }
 
             int y_offset = 0;
+            // Step 3: Copy only the changed span into the pixel line buffer.
+            for (x = x_FirstPixelUpdate; x <= x_LastPixelUpdate; x++) {
+                isset = buffer[x + y_byteIndex] & y_byteMask;
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (hasColorRegions) {
+                    linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
+                                                                        colorTftWhite, colorTftBlack);
+                } else {
+                    linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+                }
+#else
+                linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+#endif
+            }
+
 #if defined(CO5300_CS)
             uint8_t lines_updated = 2;
             if (y % 2 == 0) {
@@ -1372,7 +1461,16 @@ void TFTDisplay::display(bool fromBlank)
                 uint32_t bufferIndex = 1;
                 for (x = x_FirstPixelUpdate; x < x_LastPixelUpdate; x++) {
                     isset = buffer[x + y_byteIndex] & y_byteMask;
-                    linePixelBuffer[bufferIndex++ + x_LastPixelUpdate] = isset ? colorTftMesh : colorTftBlack;
+#if GRAPHICS_TFT_COLORING_ENABLED
+                    if (hasColorRegions) {
+                        linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y),
+                                                                            isset, colorTftWhite, colorTftBlack);
+                    } else {
+                        linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+                    }
+#else
+                    linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+#endif
                 }
             } else {
                 y_offset = -1;
@@ -1383,7 +1481,16 @@ void TFTDisplay::display(bool fromBlank)
                 uint32_t bufferIndex = 0;
                 for (x = x_FirstPixelUpdate; x < x_LastPixelUpdate; x++) {
                     isset = buffer[x + y_byteIndex] & y_byteMask;
-                    linePixelBuffer[bufferIndex++ + x_FirstPixelUpdate] = isset ? colorTftMesh : colorTftBlack;
+#if GRAPHICS_TFT_COLORING_ENABLED
+                    if (hasColorRegions) {
+                        linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y),
+                                                                            isset, colorTftWhite, colorTftBlack);
+                    } else {
+                        linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+                    }
+#else
+                    linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+#endif
                 }
             }
 #else
@@ -1396,8 +1503,8 @@ void TFTDisplay::display(bool fromBlank)
 #else
             // Step 4: Send the changed pixels on this line to the screen as a single block transfer.
             // This function accepts pixel data MSB first so it can dump the memory straight out the SPI port.
-            tft->pushRect(x_FirstPixelUpdate, y + y_offset, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), lines_updated,
-                          &linePixelBuffer[x_FirstPixelUpdate]);
+            tft->pushImage(x_FirstPixelUpdate, y + y_offset, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), lines_updated,
+                           &linePixelBuffer[x_FirstPixelUpdate]);
 #endif
             somethingChanged = true;
         }
@@ -1406,6 +1513,14 @@ void TFTDisplay::display(bool fromBlank)
     // Copy the Buffer to the Back Buffer
     if (somethingChanged)
         memcpy(buffer_back, buffer, displayBufferSize);
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+    lastColorFrameSignature = colorFrameSignature;
+#endif
+    haveLastDefaults = true;
+    lastDefaultOnColor = defaultOnColor;
+    lastDefaultOffColor = defaultOffColor;
+    graphics::clearTFTColorRegions();
 }
 
 void TFTDisplay::sdlLoop()
@@ -1619,7 +1734,7 @@ bool TFTDisplay::connect()
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif
-    tft->fillScreen(TFT_BLACK);
+    tft->fillScreen(getThemeDefaultOffColor());
 
     if (this->linePixelBuffer == NULL) {
 #if defined(CO5300_CS)
@@ -1630,6 +1745,14 @@ bool TFTDisplay::connect()
 
         if (!this->linePixelBuffer) {
             LOG_ERROR("Not enough memory to create TFT line buffer\n");
+            return false;
+        }
+    }
+    if (this->repaintChunkBuffer == NULL) {
+        this->repaintChunkBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
+
+        if (!this->repaintChunkBuffer) {
+            LOG_ERROR("Not enough memory to create TFT repaint chunk buffer\n");
             return false;
         }
     }

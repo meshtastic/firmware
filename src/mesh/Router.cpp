@@ -499,9 +499,9 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 meshtastic_Data decodedtmp;
                 memset(&decodedtmp, 0, sizeof(decodedtmp));
                 if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
-                    LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!", p->id);
+                    LOG_DEBUG("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)", p->id);
                 } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
-                    LOG_ERROR("Invalid portnum (bad psk?)!");
+                    LOG_DEBUG("Invalid portnum (bad psk?)");
 #if !(MESHTASTIC_EXCLUDE_PKI)
                 } else if (!owner.is_licensed && isToUs(p) && decodedtmp.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
                     LOG_WARN("Rejecting legacy DM");
@@ -736,9 +736,13 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
 
-    // Store a copy of encrypted packet for MQTT
+    // Store a copy of the encrypted packet for MQTT.
+    // Local, not a class member: handleReceived re-enters itself when a module
+    // reply broadcast goes through MeshService::sendToMesh -> Router::sendLocal,
+    // and a member would be silently overwritten without release on the inner
+    // call. Each invocation now owns its own copy (issue #9632, #10101, #8729).
     DEBUG_HEAP_BEFORE;
-    p_encrypted = packetPool.allocCopy(*p);
+    meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
     DEBUG_HEAP_AFTER("Router::handleReceived", p_encrypted);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
@@ -832,8 +836,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 #endif
     }
 
-    packetPool.release(p_encrypted); // Release the encrypted packet
-    p_encrypted = nullptr;
+    packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
