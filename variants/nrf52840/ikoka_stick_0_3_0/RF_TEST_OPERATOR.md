@@ -16,7 +16,7 @@ pio run -e ikoka_stick_0_3_0
 
 ## Safety
 
-Use a 433 MHz dummy load or a correctly rated antenna before `START`.
+Use a correctly rated dummy load, attenuator path, or antenna for the selected test frequency before `START`.
 
 The E22-400M33S can produce about 33 dBm. Continuous transmission can overheat the PA, exceed local regulations, or damage the module if the RF output is unterminated. Start at lower power when checking wiring and power supply behavior.
 
@@ -42,13 +42,13 @@ STOP
 
 `MODE CW` starts an unmodulated carrier when `START` is sent. This is useful for carrier power and frequency checks, but it is not LoRa-modulated.
 
-`POWER` is requested module output power in dBm. The firmware prints both the requested E22 module output and the SX1268 chip power it applies.
+`FREQ` is the requested radio frequency in MHz. The firmware does not apply a narrow lab-band clamp; unsupported values are rejected by the SX1268/RadioLib when settings are applied.
 
-The default frequency range for this lab build is 433.000 to 435.000 MHz.
+`POWER` is requested module output power in dBm. The firmware prints both the requested E22 module output and the SX1268 chip power it applies.
 
 ## Suggested Lab Flow
 
-1. Attach a 433 MHz dummy load or attenuator path.
+1. Attach a dummy load, attenuator path, or antenna rated for the selected frequency.
 2. Open USB serial at 115200 baud.
 3. Send `STATUS`.
 4. Set `FREQ <MHz>`, `POWER <dBm>`, and `MODE LORA` or `MODE CW`.

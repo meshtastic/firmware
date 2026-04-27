@@ -31,6 +31,8 @@ The RF-test build does not use the normal Meshtastic protobuf serial API for RF-
 
 The firmware boots idle. TX starts only after `START`.
 
+`FREQ <MHz>` accepts any positive numeric MHz value at the controller layer. Do not reintroduce a narrow 433 MHz lab clamp; let the SX1268/RadioLib reject unsupported radio frequencies when settings are applied.
+
 ## RF Modes
 
 - `MODE LORA`: calls `SX126xInterface::startRfTestInfinitePreamble()`, which sends SX126x command `0xD2` (`SetTxInfinitePreamble`). This is the continuous LoRa-modulated test signal.

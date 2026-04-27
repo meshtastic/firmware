@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <RadioLib.h>
 #include <ctype.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -145,8 +146,8 @@ void RFTestController::setMode(const char *modeName)
 
 void RFTestController::setFrequency(float mhz)
 {
-    if (mhz < MIN_FREQ_MHZ || mhz > MAX_FREQ_MHZ) {
-        Serial.printf("ERROR: frequency must be %.3f..%.3f MHz for this 433 MHz lab build\r\n", MIN_FREQ_MHZ, MAX_FREQ_MHZ);
+    if (!isfinite(mhz) || mhz <= 0.0f) {
+        println("ERROR: frequency must be a positive MHz value");
         return;
     }
 

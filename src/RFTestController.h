@@ -17,8 +17,6 @@ class RFTestController
     enum class Mode { Off, LoRaPreamble, ContinuousWave };
 
     static constexpr float DEFAULT_FREQ_MHZ = 433.125f;
-    static constexpr float MIN_FREQ_MHZ = 433.0f;
-    static constexpr float MAX_FREQ_MHZ = 435.0f;
     static constexpr int8_t DEFAULT_MODULE_POWER_DBM = 33;
     static constexpr int8_t MIN_CHIP_POWER_DBM = -9;
     static constexpr int8_t MAX_CHIP_POWER_DBM = 21;
