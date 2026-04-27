@@ -1000,11 +1000,8 @@ int32_t Power::runOnce()
             powerFSM.trigger(EVENT_POWER_CONNECTED);
         }
 
-#ifdef T_WATCH_S3
-        /*
-            In the T-Watch S3 this code fragment reacts to the short press of the button by switching the
-            display on and off
-        */
+#ifdef PMU_POWER_BUTTON_IS_CANCEL
+        // cancel action also turns the screen on and off.
         if (PMU->isPekeyShortPressIrq()) {
             LOG_INFO("Input: Corona Button Click");
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_CANCEL, .kbchar = 0, .touchX = 0, .touchY = 0};
@@ -1027,13 +1024,6 @@ int32_t Power::runOnce()
             LOG_DEBUG("Battery removed");
         }
         */
-#ifndef T_WATCH_S3 // FIXME - why is this triggering on the T-Watch S3?
-        if (PMU->isPekeyLongPressIrq()) {
-            LOG_DEBUG("PEK long button press");
-            if (screen)
-                screen->setOn(false);
-        }
-#endif
 
         PMU->clearIrqStatus();
     }
@@ -1102,7 +1092,7 @@ void Power::attachPowerInterrupts()
     if (PMU) {
         attachInterrupt(
             PMU_IRQ,
-            [] {
+            []() {
                 pmu_irq = true;
                 power->setIntervalFromNow(0);
                 runASAP = true;
@@ -1405,19 +1395,16 @@ bool Power::axpChipInit()
     uint64_t pmuIrqMask = 0;
 
     if (PMU->getChipModel() == XPOWERS_AXP192) {
-        pmuIrqMask = XPOWERS_AXP192_VBUS_INSERT_IRQ | XPOWERS_AXP192_BAT_INSERT_IRQ | XPOWERS_AXP192_PKEY_SHORT_IRQ;
+        pmuIrqMask = XPOWERS_AXP192_VBUS_INSERT_IRQ | XPOWERS_AXP192_VBUS_REMOVE_IRQ | XPOWERS_AXP192_PKEY_SHORT_IRQ;
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
-        pmuIrqMask = XPOWERS_AXP2101_VBUS_INSERT_IRQ | XPOWERS_AXP2101_BAT_INSERT_IRQ | XPOWERS_AXP2101_PKEY_SHORT_IRQ;
+        pmuIrqMask = XPOWERS_AXP2101_VBUS_INSERT_IRQ | XPOWERS_AXP2101_VBUS_REMOVE_IRQ | XPOWERS_AXP2101_PKEY_SHORT_IRQ;
     }
 
     pinMode(PMU_IRQ, INPUT);
 
-    // we do not look for AXPXXX_CHARGING_FINISHED_IRQ & AXPXXX_CHARGING_IRQ
-    // because it occurs repeatedly while there is no battery also it could cause
-    // inadvertent waking from light sleep just because the battery filled we
-    // don't look for AXPXXX_BATT_REMOVED_IRQ because it occurs repeatedly while
-    // no battery installed we don't look at AXPXXX_VBUS_REMOVED_IRQ because we
-    // don't have anything hooked to vbus
+    // We wake on IRQ, so only enable the IRQs that we care about.
+    // we want USB plug and unplug to update the screen and LED status,
+    // and short press on the power button to trigger the "cancel" action in the UI (which also turns the screen on and off).
     PMU->enableIRQ(pmuIrqMask);
 
     PMU->clearIrqStatus();
