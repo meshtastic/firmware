@@ -1,6 +1,7 @@
 #include "CryptoEngine.h"
 // #include "NodeDB.h"
 #include "architecture.h"
+#include "endian.h"
 #include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -118,8 +119,9 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     uint8_t *auth;
     long extraNonceTmp = random();
     auth = bytesOut + numBytes;
-    memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
-           sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
+    uint32_t leExtraNonce = meshHtoLe32((uint32_t)extraNonceTmp);
+    memcpy((uint8_t *)(auth + 8), &leExtraNonce,
+           sizeof(uint32_t)); // Wire format is LE; swap on BE hosts before writing to auth buffer
     LOG_DEBUG("Random nonce value: %d", extraNonceTmp);
     if (remotePublic.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found", toNode);
@@ -136,8 +138,8 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     printBytes("Attempt encrypt with shared_key starting with: ", shared_key, 8);
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
                auth); // this can write up to 15 bytes longer than numbytes past bytesOut
-    memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
-           sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
+    memcpy((uint8_t *)(auth + 8), &leExtraNonce,
+           sizeof(uint32_t)); // Restore LE nonce in auth after aes_ccm_ae may overwrite it
     return true;
 }
 
@@ -159,6 +161,7 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_publ
     uint32_t extraNonce;                         // pointer was not really used
     memcpy(&extraNonce, auth + 8,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
+    extraNonce = meshLe32toH(extraNonce); // Wire format is LE; convert to host endian for initNonce
     LOG_INFO("Random nonce value: %d", extraNonce);
 
     if (remotePublic.size == 0) {
@@ -291,11 +294,16 @@ void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extr
 {
     memset(nonce, 0, sizeof(nonce));
 
-    // use memcpy to avoid breaking strict-aliasing
-    memcpy(nonce, &packetId, sizeof(uint64_t));
-    memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
-    if (extraNonce)
-        memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
+    // Protocol uses little-endian byte order for nonce fields.
+    // On big-endian hosts, swap before memcpy to match wire format.
+    uint64_t lePacketId = meshHtoLe64(packetId);
+    uint32_t leFromNode = meshHtoLe32(fromNode);
+    memcpy(nonce, &lePacketId, sizeof(uint64_t));
+    memcpy(nonce + sizeof(uint64_t), &leFromNode, sizeof(uint32_t));
+    if (extraNonce) {
+        uint32_t leExtra = meshHtoLe32(extraNonce);
+        memcpy(nonce + sizeof(uint32_t), &leExtra, sizeof(uint32_t));
+    }
 }
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;
