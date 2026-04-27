@@ -133,7 +133,7 @@ void getMacAddr(uint8_t *dmac)
         }
     } else if (portduino_config.mac_address.length() > 11) {
         MAC_from_string(portduino_config.mac_address, dmac);
-        exit;
+        return;
     } else {
 #ifdef PORTDUINO_LINUX_HARDWARE
         struct hci_dev_info di = {0};
