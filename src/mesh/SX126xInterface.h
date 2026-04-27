@@ -32,6 +32,13 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
 
+#ifdef MESHTASTIC_RF_TEST_FIRMWARE
+    int16_t setRfTestParameters(float frequencyMhz, int8_t chipPowerDbm) override;
+    int16_t startRfTestContinuousWave() override;
+    int16_t startRfTestInfinitePreamble() override;
+    void stopRfTest() override;
+#endif
+
   protected:
     float currentLimit = 140; // Higher OCP limit for SX126x PA
     float tcxoVoltage = 0.0;

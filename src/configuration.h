@@ -129,6 +129,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SX126X_MAX_POWER 8
 #endif
 
+#ifdef EBYTE_E22_400M33S
+// Virtual 9dB gain maps Meshtastic's 30dBm setting to SX1268 21dBm input and about 33dBm module output.
+#define TX_GAIN_LORA 9
+#define SX126X_MAX_POWER 21
+#endif
+
 #ifdef NICERF_MINIF27
 // Note that datasheet power level of 9 corresponds with SX1262 at 22dBm
 // Maximum output power of 29dBm with VCC_PA = 5V

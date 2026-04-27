@@ -9,6 +9,9 @@
 #include "PowerMon.h"
 #include "RadioLibInterface.h"
 #include "ReliableRouter.h"
+#ifdef MESHTASTIC_RF_TEST_FIRMWARE
+#include "RFTestController.h"
+#endif
 #include "TransmitHistory.h"
 #include "airtime.h"
 #include "buzz.h"
@@ -1084,6 +1087,15 @@ void setup()
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 
+#ifdef MESHTASTIC_RF_TEST_FIRMWARE
+    if (!rIf) {
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
+    } else {
+        rfTestController = new RFTestController(std::move(rIf));
+    }
+    return;
+#endif
+
 #if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();
 #endif
@@ -1258,13 +1270,22 @@ void loop()
             RadioLibInterface::instance->pollMissedIrqs();
         }
 
+#ifndef MESHTASTIC_RF_TEST_FIRMWARE
         // Periodic AGC reset — warm sleep + recalibrate to prevent stuck AGC gain
         static uint32_t lastAgcReset;
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
             lastAgcReset = millis();
             RadioLibInterface::instance->resetAGC();
         }
+#endif
     }
+
+#ifdef MESHTASTIC_RF_TEST_FIRMWARE
+    if (rfTestController) {
+        rfTestController->loop();
+        return;
+    }
+#endif
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
