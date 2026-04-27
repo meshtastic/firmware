@@ -4,6 +4,12 @@
 #include "graphics/Screen.h"
 #include "modules/ExternalNotificationModule.h"
 
+#ifdef POLYSAFE_TRACKER
+#include "mesh/MeshService.h"
+#include "mesh/MeshTypes.h"
+#include "mesh/NodeDB.h"
+#endif
+
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
 #include "input/SeesawRotary.h"
@@ -31,6 +37,29 @@
 
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "input/ButtonThread.h"
+
+#ifdef POLYSAFE_TRACKER
+extern MeshService *service;
+extern NodeDB *nodeDB;
+
+static uint32_t polySafeLastAlertSent = 0;
+
+#ifndef POLYSAFE_ALERT_COOLDOWN_MS
+#define POLYSAFE_ALERT_COOLDOWN_MS 15000
+#endif
+
+#ifndef POLYSAFE_ALERT_PORTNUM
+#define POLYSAFE_ALERT_PORTNUM 150
+#endif
+
+#ifndef POLYSAFE_ALERT_CHANNEL
+#define POLYSAFE_ALERT_CHANNEL 0
+#endif
+
+#ifndef POLYSAFE_BUTTON_SLEEP_LONG_PRESS_MS
+#define POLYSAFE_BUTTON_SLEEP_LONG_PRESS_MS 10000
+#endif
+#endif
 
 #if defined(BUTTON_PIN_TOUCH)
 ButtonThread *TouchButtonThread = nullptr;
@@ -114,6 +143,41 @@ int InputBroker::handleInputEvent(const InputEvent *event)
         // If this turns off a notification, don't further process the event
         return 0;
     }
+    #ifdef POLYSAFE_TRACKER
+    if (event && event->inputEvent == INPUT_BROKER_SEND_PING) {
+        uint32_t now = millis();
+
+        if (now - polySafeLastAlertSent < POLYSAFE_ALERT_COOLDOWN_MS) {
+            LOG_INFO("Poly-Safe alert blocked by cooldown");
+            return 0;
+        }
+
+        meshtastic_MeshPacket *p = packetPool.allocZeroed();
+        if (!p) {
+            LOG_WARN("Poly-Safe alert failed: packet allocation failed");
+            return 0;
+        }
+
+        polySafeLastAlertSent = now;
+
+        p->to = NODENUM_BROADCAST;
+        p->from = nodeDB->getNodeNum();
+        p->want_ack = false;
+        p->hop_limit = config.lora.hop_limit;
+        p->channel = POLYSAFE_ALERT_CHANNEL;
+        p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        p->decoded.portnum = (meshtastic_PortNum)POLYSAFE_ALERT_PORTNUM;
+
+        uint32_t tagID = nodeDB->getNodeNum();
+        memcpy(p->decoded.payload.bytes, &tagID, sizeof(tagID));
+        p->decoded.payload.size = sizeof(tagID);
+
+        service->sendToMesh(p);
+
+        LOG_INFO("Poly-Safe alert sent | Tag %u", tagID);
+        return 0;
+    }
+#endif
 
 #if HAS_SCREEN
     if (screen && screenWasOff) {
@@ -317,6 +381,9 @@ void InputBroker::Init()
         userConfig.longPress = INPUT_BROKER_SELECT;
         userConfig.longPressTime = 500;
         userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
+        #ifdef POLYSAFE_TRACKER
+        userConfig.longLongPressTime = POLYSAFE_BUTTON_SLEEP_LONG_PRESS_MS;
+#endif
         UserButtonThread->initButton(userConfig);
     } else
 #endif
@@ -337,6 +404,9 @@ void InputBroker::Init()
         userConfigNoScreen.longPress = INPUT_BROKER_NONE;
         userConfigNoScreen.longPressTime = 500;
         userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+        #ifdef POLYSAFE_TRACKER
+        userConfigNoScreen.longLongPressTime = POLYSAFE_BUTTON_SLEEP_LONG_PRESS_MS;
+#endif
         userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
         userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
         UserButtonThread->initButton(userConfigNoScreen);
