@@ -60,8 +60,11 @@ class Ch341Hal : public RadioLibHal
 
     void getSerialString(char *_serial, size_t len)
     {
-        len = len > 8 ? 8 : len;
-        std::strncpy(_serial, pinedio.serial_number, len);
+        if (len == 0)
+            return;
+        size_t bytesCopied = (len - 1) < 8 ? (len - 1) : 8;
+        std::strncpy(_serial, pinedio.serial_number, bytesCopied);
+        _serial[bytesCopied] = '\0';
     }
 
     void getProductString(char *_product_string, size_t len)
