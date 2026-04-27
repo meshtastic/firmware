@@ -79,7 +79,7 @@ RTC_DATA_ATTR int bootCount = 0;
  */
 void setCPUFast(bool on)
 {
-#if defined(ARCH_ESP32) && HAS_WIFI && !HAS_TFT
+#if defined(ARCH_ESP32) && HAS_WIFI && !HAS_TFT && !defined(T_LORA_PAGER) && !defined(T_DECK)
 
     if (isWifiAvailable()) {
         /*
@@ -316,9 +316,14 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 
 #ifdef HAS_PPM
     if (PPM) {
-        LOG_INFO("PMM shutdown");
-        console->flush();
-        PPM->shutdown();
+        // BQ25896 PMIC shutdown is a hard power-off state.
+        // Only use it for "sleep forever" / explicit shutdown, because timed deep sleep
+        // must remain wakeable by RTC timer.
+        if (msecToWake == portMAX_DELAY) {
+            LOG_INFO("PPM shutdown");
+            console->flush();
+            PPM->shutdown();
+        }
     }
 #endif
 
@@ -425,6 +430,10 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef KB_INT
     gpio_wakeup_enable((gpio_num_t)KB_INT, GPIO_INTR_LOW_LEVEL);
 #endif
+#ifdef BOARD_PCA9535_INT
+    // Side-key interrupt line from PCA9535 expander (active low).
+    gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
+#endif
 #ifdef BUTTON_PIN
     gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
@@ -472,6 +481,9 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef KB_INT
     gpio_wakeup_disable((gpio_num_t)KB_INT);
 #endif
+#ifdef BOARD_PCA9535_INT
+    gpio_wakeup_disable((gpio_num_t)BOARD_PCA9535_INT);
+#endif
 #ifdef BUTTON_PIN
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
@@ -497,13 +509,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
     notifyLightSleepEnd.notifyObservers(cause); // Button interrupts are reattached here
 
-#ifdef BUTTON_PIN
     if (cause == ESP_SLEEP_WAKEUP_GPIO) {
-        LOG_INFO("Exit light sleep gpio: btn=%d",
-                 !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
-    } else
-#endif
-    {
+        LOG_INFO("Exit light sleep gpio");
+        // If we woke because of a GPIO, it's possible power needs to run to handle.
+        power->setIntervalFromNow(0);
+        runASAP = true;
+    } else {
         LOG_INFO("Exit light sleep cause: %d", cause);
     }
 

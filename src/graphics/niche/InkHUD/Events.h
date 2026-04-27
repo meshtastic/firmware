@@ -17,6 +17,7 @@ however this class handles general events which concern InkHUD as a whole, e.g. 
 
 #include "./InkHUD.h"
 #include "./Persistence.h"
+#include <stdint.h>
 
 namespace NicheGraphics::InkHUD
 {
@@ -30,12 +31,17 @@ class Events
     void onButtonShort(); // User button: short press
     void onButtonLong();  // User button: long press
     void applyingChanges();
-    void onExitShort(); // Exit button: short press
-    void onExitLong();  // Exit button: long press
-    void onNavUp();     // Navigate up
-    void onNavDown();   // Navigate down
-    void onNavLeft();   // Navigate left
-    void onNavRight();  // Navigate right
+    void onExitShort();                                      // Exit button: short press
+    void onExitLong();                                       // Exit button: long press
+    void onNavUp();                                          // Navigate up
+    void onNavDown();                                        // Navigate down
+    void onNavLeft();                                        // Navigate left
+    void onNavRight();                                       // Navigate right
+    void onTouchNavUp();                                     // Navigate up from touch input
+    void onTouchNavDown();                                   // Navigate down from touch input
+    void onTouchNavLeft();                                   // Navigate left from touch input
+    void onTouchNavRight();                                  // Navigate right from touch input
+    void onTouchTap(uint16_t x, uint16_t y, bool longPress); // Touch tap/long-press with coordinates
 
     // Free text typing events
     void onFreeText(char c); // New freetext character input
@@ -79,6 +85,9 @@ class Events
 
     // If set, InkHUD's data will be erased during onReboot
     bool eraseOnReboot = false;
+
+    // Suppress follow-up tap generated immediately after a touch long-press opens menu.
+    uint32_t suppressTouchTapUntilMs = 0;
 };
 
 } // namespace NicheGraphics::InkHUD
