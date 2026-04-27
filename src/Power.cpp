@@ -755,8 +755,10 @@ void Power::reboot()
     rp2040.reboot();
 #elif defined(ARCH_PORTDUINO)
     deInitApiServer();
+#ifdef __linux__
     if (aLinuxInputImpl)
         aLinuxInputImpl->deInit();
+#endif
     SPI.end();
     Wire.end();
     Serial1.end();

@@ -109,7 +109,7 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
-bool RadioLibInterface::receiveDetected(uint16_t irq, ulong syncWordHeaderValidFlag, ulong preambleDetectedFlag)
+bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
     bool detected = (irq & (syncWordHeaderValidFlag | preambleDetectedFlag));
     // Handle false detections
