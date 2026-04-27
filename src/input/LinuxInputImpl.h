@@ -1,4 +1,5 @@
-#ifdef ARCH_PORTDUINO
+// Linux evdev impl. Same Linux-only gating as LinuxInput.h.
+#if defined(ARCH_PORTDUINO) && defined(__linux__)
 #pragma once
 #include "LinuxInput.h"
 #include "main.h"
