@@ -504,7 +504,7 @@ void portduinoSetup()
         ch341Hal->getSerialString(serial, sizeof(serial));
         std::cout << "CH341 Serial " << serial << std::endl;
         char product_string[96] = {0};
-        ch341Hal->getProductString(product_string, 95);
+        ch341Hal->getProductString(product_string, sizeof(product_string));
         std::cout << "CH341 Product " << product_string << std::endl;
         if (strlen(serial) == 8 && portduino_config.mac_address.length() < 12) {
             std::cout << "Deriving MAC address from Serial and Product String" << std::endl;
