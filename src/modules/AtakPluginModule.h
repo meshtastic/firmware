@@ -1,11 +1,15 @@
 #pragma once
-#include "ProtobufModule.h"
-#include "meshtastic/atak.pb.h"
+#include "SinglePortModule.h"
 
 /**
- * Waypoint message handling for meshtastic
+ * ATAK Plugin V2 module - passthrough for ATAK_PLUGIN_V2 payloads.
+ * The wire format includes a leading flags byte followed by opaque payload bytes.
+ * Depending on the flags, the payload may be zstd dictionary-compressed or raw/uncompressed protobuf.
+ * Compression/decompression and payload interpretation are handled by the apps
+ * (Android, iOS, ATAK plugin); firmware forwards the bytes unchanged on the
+ * ATAK_PLUGIN_V2 port.
  */
-class AtakPluginModule : public ProtobufModule<meshtastic_TAKPacket>, private concurrency::OSThread
+class AtakPluginModule : public SinglePortModule
 {
   public:
     /** Constructor
@@ -14,13 +18,7 @@ class AtakPluginModule : public ProtobufModule<meshtastic_TAKPacket>, private co
     AtakPluginModule();
 
   protected:
-    virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_TAKPacket *t) override;
-    virtual void alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_TAKPacket *t) override;
-    /* Does our periodic broadcast */
-    int32_t runOnce() override;
-
-  private:
-    meshtastic_TAKPacket cloneTAKPacketData(meshtastic_TAKPacket *t);
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 };
 
 extern AtakPluginModule *atakPluginModule;
