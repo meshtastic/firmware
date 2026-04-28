@@ -165,7 +165,12 @@ inline bool isValidJsonEnvelope(JSONObject &json)
 
 inline void onReceiveJson(byte *payload, size_t length)
 {
-    char payloadStr[length + 1];
+    // Cap length to prevent stack overflow from oversized MQTT payloads
+    if (length > 1024) {
+        LOG_WARN("MQTT JSON payload too large: %u bytes, dropping", length);
+        return;
+    }
+    char payloadStr[1025]; // fixed-size buffer instead of VLA
     memcpy(payloadStr, payload, length);
     payloadStr[length] = 0; // null terminated string
     std::unique_ptr<JSONValue> json_value(JSON::Parse(payloadStr));
