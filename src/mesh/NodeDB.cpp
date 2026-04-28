@@ -652,7 +652,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
-        printBytes("Restored key", config.security.private_key.bytes, config.security.private_key.size);
+        LOG_DEBUG("Restored private key (%u bytes)", config.security.private_key.size);
     } else {
         config.security.private_key.size = 0;
     }
@@ -1870,7 +1870,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
     if (p.public_key.size == 32 && nodeId != nodeDB->getNodeNum()) {
-        printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
+        LOG_DEBUG("Incoming public key from node 0x%08x", nodeId);
 
         // Alert the user if a remote node is advertising public key that matches our own
         if (owner.public_key.size == 32 && memcmp(p.public_key.bytes, owner.public_key.bytes, 32) == 0) {
@@ -1883,7 +1883,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 cn->level = meshtastic_LogRecord_Level_WARNING;
                 cn->time = getValidTime(RTCQualityFromNet);
-                sprintf(cn->message, warning, p.long_name);
+                snprintf(cn->message, sizeof(cn->message), warning, p.long_name);
                 service->sendClientNotification(cn);
             }
             return false;
@@ -1910,7 +1910,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
     info->user = lite;
     if (info->user.public_key.size == 32) {
-        printBytes("Saved Pubkey: ", info->user.public_key.bytes, 32);
+        LOG_DEBUG("Saved public key for node 0x%08x", nodeId);
     }
     if (nodeId != getNodeNum())
         info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
