@@ -24,15 +24,16 @@ Boards with an FT6336U touchscreen also sit at 0x48; the probe distinguishes by 
 
 Built in layers on top of raw T=1:
 
-| Layer                   | Methods                                                     |
-| ----------------------- | ----------------------------------------------------------- |
-| Transport (T=1 framing) | `transceive`                                                |
-| Applet selection        | `begin` (SELECT AID + `VersionInfo` parse)                  |
-| Identity                | `getUID`, `getCachedUID`                                    |
-| RNG                     | `getRandom` (chip TRNG, no session required)                |
-| SCP03 session           | `openPlatformScp03`, `sendSecure`                           |
-| EC crypto               | `createECCurve`, `writeECKeyGen`, `readECPub`, `ecdhX25519` |
-| Housekeeping            | `deleteObject`, `isReady`, `isSecureSession`                |
+| Layer                   | Methods                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| Transport (T=1 framing) | `transceive`                                                                           |
+| Applet selection        | `begin` (SELECT AID + `VersionInfo` parse)                                             |
+| Identity                | `getUID`, `getCachedUID`                                                               |
+| RNG                     | `getRandom` (chip TRNG, no session required)                                           |
+| SCP03 session           | `openPlatformScp03`, `sendSecure`                                                      |
+| EC crypto               | `createECCurve`, `writeECKeyGen`, `writeECKeyGenWithPolicy`, `readECPub`, `ecdhX25519` |
+| Object metadata         | `objectExists`, `getObjectInfo`, `readObjectWithAttestation`                           |
+| Housekeeping            | `deleteObject`, `isReady`, `isSecureSession`                                           |
 
 ### Host entropy for SCP03 host challenge
 
@@ -61,6 +62,12 @@ NXP reserves the `0x7F*` range for system objects (AN12413). Caller-created obje
 | Object ID    | Purpose                                        |
 | ------------ | ---------------------------------------------- |
 | `0x7FFF0206` | Pre-provisioned chip UID (read-only, 18 bytes) |
+
+### Object policies and attestation
+
+SE05x object policies are applied when an object is created; they are not a standalone mutable setting on an existing object. Use `writeECKeyGenWithPolicy()` for Meshtastic-owned X25519 keys that need constrained key agreement, read/delete, or attestation rights. If a policy needs to change, delete the caller-owned object and recreate it with the new policy.
+
+`readObjectWithAttestation()` is read-only from the secure element's perspective. It returns caller-requested object data when the object's read policy allows it, plus chip ID, attributes, timestamp, and signature fields for verifying that the response came from the SE050.
 
 ### SCP03 session state recovery
 

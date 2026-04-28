@@ -13,6 +13,18 @@ namespace se050
 
 constexpr size_t UID_SIZE = 18;
 constexpr size_t UID_HEX_SIZE = UID_SIZE * 2 + 1;
+constexpr size_t ATTESTATION_TIMESTAMP_SIZE = 12;
+
+// Object-policy access-rule bits from the SE05x applet policy header.
+constexpr uint32_t POLICY_ALLOW_SIGN = 0x10000000;
+constexpr uint32_t POLICY_ALLOW_VERIFY = 0x08000000;
+constexpr uint32_t POLICY_ALLOW_KA = 0x04000000;
+constexpr uint32_t POLICY_ALLOW_READ = 0x00200000;
+constexpr uint32_t POLICY_ALLOW_WRITE = 0x00100000;
+constexpr uint32_t POLICY_ALLOW_GEN = 0x00080000;
+constexpr uint32_t POLICY_ALLOW_DELETE = 0x00040000;
+constexpr uint32_t POLICY_REQUIRE_SM = 0x00020000;
+constexpr uint32_t POLICY_ALLOW_ATTESTATION = 0x00008000;
 
 class Client;
 
@@ -73,6 +85,40 @@ struct Scp03 {
     uint8_t sDek[16];
     uint8_t mcv[16];     // C-MAC chaining value
     uint32_t encCounter; // 3-byte counter; increments after each C-APDU
+};
+
+struct ObjectInfo {
+    bool exists;
+    uint8_t type;
+    bool isTransient;
+    uint16_t size;
+};
+
+struct ObjectPolicy {
+    uint32_t authObjectId;
+    uint32_t keyPermissions;
+    uint32_t commonPermissions;
+};
+
+struct AttestationResponse {
+    uint8_t *data;
+    size_t dataCapacity;
+    size_t dataLen;
+    uint8_t *attributes;
+    size_t attributesCapacity;
+    size_t attributesLen;
+    uint8_t *chipId;
+    size_t chipIdCapacity;
+    size_t chipIdLen;
+    uint8_t *timestamp;
+    size_t timestampCapacity;
+    size_t timestampLen;
+    uint8_t *object;
+    size_t objectCapacity;
+    size_t objectLen;
+    uint8_t *signature;
+    size_t signatureCapacity;
+    size_t signatureLen;
 };
 
 class Client
@@ -152,10 +198,29 @@ class Client
     bool createECCurve(uint8_t curveId, uint32_t timeout_ms = 1000);
 
     /**
+     * Check whether a secure object exists. Does not mutate chip state.
+     */
+    bool objectExists(uint32_t objectId, bool *existsOut, uint32_t timeout_ms = 1000);
+
+    /**
+     * Read existence, secure-object type, transient flag, and object size.
+     * Returns true for a valid APDU exchange even when the object does not exist;
+     * in that case `infoOut->exists` is false and other fields are zero.
+     */
+    bool getObjectInfo(uint32_t objectId, ObjectInfo *infoOut, uint32_t timeout_ms = 1000);
+
+    /**
      * Generate an EC keypair on-chip at `objectId` using `curveId`. The private
      * scalar remains inside the SE and is never extractable.
      */
     bool writeECKeyGen(uint32_t objectId, uint8_t curveId, uint32_t timeout_ms = 1000);
+
+    /**
+     * Generate an EC keypair with an object policy applied at creation time.
+     * SE05x policies are immutable for an existing object; delete + recreate if
+     * policy changes are required.
+     */
+    bool writeECKeyGenWithPolicy(uint32_t objectId, uint8_t curveId, const ObjectPolicy &policy, uint32_t timeout_ms = 1000);
 
     /**
      * Delete any secure object at `objectId`. Returns true on SW=9000 or if the
@@ -171,6 +236,16 @@ class Client
      * Does not require SCP03.
      */
     bool readECPub(uint32_t objectId, uint8_t *pubOut, size_t pubCapacity, size_t *pubLenOut, uint32_t timeout_ms = 1000);
+
+    /**
+     * Read an object and request SE050 attestation over that read. `response`
+     * contains caller-owned buffers; each `*Len` field is updated to the bytes
+     * copied. Chip ID and signature buffers are required for a successful return;
+     * null buffers for other fields simply skip those fields.
+     */
+    bool readObjectWithAttestation(uint32_t objectId, uint16_t offset, uint16_t length, uint32_t attestObjectId,
+                                   uint8_t attestAlgo, const uint8_t *freshness, size_t freshnessLen,
+                                   AttestationResponse *response, uint32_t timeout_ms = 1000);
 
     /**
      * Compute X25519 ECDH: `shared = ECDH(priv-at-objectId, peerPub)`.

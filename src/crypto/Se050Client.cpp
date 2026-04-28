@@ -32,6 +32,36 @@ const uint8_t SE050_IOT_APPLET_AID[16] = {0xA0, 0x00, 0x00, 0x03, 0x96, 0x54, 0x
 // Pre-provisioned object ID for the 18-byte chip UID.
 constexpr uint32_t SE050_OBJ_UNIQUE_ID = 0x7FFF0206;
 
+constexpr uint8_t SE050_CLA = 0x80;
+constexpr uint8_t SE050_INS_WRITE = 0x01;
+constexpr uint8_t SE050_INS_READ = 0x02;
+constexpr uint8_t SE050_INS_READ_ATTEST = 0x22;
+constexpr uint8_t SE050_INS_MGMT = 0x04;
+constexpr uint8_t SE050_P1_DEFAULT = 0x00;
+constexpr uint8_t SE050_P1_EC_KEY_PAIR = 0x61;
+constexpr uint8_t SE050_P1_CURVE = 0x0B;
+constexpr uint8_t SE050_P2_DEFAULT = 0x00;
+constexpr uint8_t SE050_P2_CREATE = 0x04;
+constexpr uint8_t SE050_P2_SIZE = 0x07;
+constexpr uint8_t SE050_P2_TYPE = 0x26;
+constexpr uint8_t SE050_P2_EXIST = 0x27;
+constexpr uint8_t SE050_P2_DELETE_OBJECT = 0x28;
+constexpr uint8_t SE050_P2_RANDOM = 0x49;
+constexpr uint8_t SE050_TAG_POLICY = 0x11;
+constexpr uint8_t SE050_TAG_1 = 0x41;
+constexpr uint8_t SE050_TAG_2 = 0x42;
+constexpr uint8_t SE050_TAG_3 = 0x43;
+constexpr uint8_t SE050_TAG_4 = 0x44;
+constexpr uint8_t SE050_TAG_5 = 0x45;
+constexpr uint8_t SE050_TAG_6 = 0x46;
+constexpr uint8_t SE050_TAG_7 = 0x47;
+constexpr uint8_t SE050_TAG_TIMESTAMP = 0x4F;
+constexpr uint8_t SE050_TAG_SIGNATURE = 0x52;
+constexpr uint16_t SE050_SW_OK = 0x9000;
+constexpr uint16_t SE050_SW_NOT_FOUND = 0x6A88;
+constexpr uint16_t SE050_SW_ALREADY_EXISTS = 0x6A89;
+constexpr uint8_t SE050_RESULT_SUCCESS = 0x01;
+
 // CRC-16/X-25 (== ISO/IEC 13239): poly 0x1021 reflected (=0x8408), init 0xFFFF,
 // reflected in/out, final XOR 0xFFFF. Used by SE050 T=1 framing.
 uint16_t crc16_x25(const uint8_t *data, size_t len)
@@ -44,6 +74,146 @@ uint16_t crc16_x25(const uint8_t *data, size_t len)
         }
     }
     return (uint16_t)(~crc);
+}
+
+uint16_t swFromRsp(const uint8_t *rsp, int rspLen)
+{
+    if (rspLen < 2)
+        return 0;
+    return ((uint16_t)rsp[rspLen - 2] << 8) | rsp[rspLen - 1];
+}
+
+bool appendTlv(uint8_t *buf, size_t capacity, size_t &len, uint8_t tag, const uint8_t *value, size_t valueLen)
+{
+    if (valueLen > 0x7F || len + 2 + valueLen > capacity)
+        return false;
+    buf[len++] = tag;
+    buf[len++] = (uint8_t)valueLen;
+    if (valueLen > 0) {
+        if (value == nullptr)
+            return false;
+        memcpy(buf + len, value, valueLen);
+        len += valueLen;
+    }
+    return true;
+}
+
+bool appendTlvU8(uint8_t *buf, size_t capacity, size_t &len, uint8_t tag, uint8_t value)
+{
+    return appendTlv(buf, capacity, len, tag, &value, 1);
+}
+
+bool appendTlvU16(uint8_t *buf, size_t capacity, size_t &len, uint8_t tag, uint16_t value)
+{
+    uint8_t tmp[2] = {(uint8_t)(value >> 8), (uint8_t)(value & 0xFF)};
+    return appendTlv(buf, capacity, len, tag, tmp, sizeof(tmp));
+}
+
+bool appendTlvU32(uint8_t *buf, size_t capacity, size_t &len, uint8_t tag, uint32_t value)
+{
+    uint8_t tmp[4] = {(uint8_t)(value >> 24), (uint8_t)(value >> 16), (uint8_t)(value >> 8), (uint8_t)(value & 0xFF)};
+    return appendTlv(buf, capacity, len, tag, tmp, sizeof(tmp));
+}
+
+bool readTlvLen(const uint8_t *buf, size_t bufLen, size_t offset, size_t &headerLen, size_t &valueLen)
+{
+    if (offset + 2 > bufLen)
+        return false;
+    uint8_t l0 = buf[offset + 1];
+    if (l0 < 0x80) {
+        headerLen = 2;
+        valueLen = l0;
+    } else if (l0 == 0x81 && offset + 3 <= bufLen) {
+        headerLen = 3;
+        valueLen = buf[offset + 2];
+    } else if (l0 == 0x82 && offset + 4 <= bufLen) {
+        headerLen = 4;
+        valueLen = ((size_t)buf[offset + 2] << 8) | buf[offset + 3];
+    } else {
+        return false;
+    }
+    return offset + headerLen + valueLen <= bufLen;
+}
+
+bool findTlv(const uint8_t *buf, size_t bufLen, uint8_t tag, const uint8_t **valueOut, size_t *valueLenOut)
+{
+    size_t pos = 0;
+    while (pos < bufLen) {
+        size_t headerLen = 0;
+        size_t valueLen = 0;
+        if (!readTlvLen(buf, bufLen, pos, headerLen, valueLen))
+            return false;
+        if (buf[pos] == tag) {
+            *valueOut = buf + pos + headerLen;
+            *valueLenOut = valueLen;
+            return true;
+        }
+        pos += headerLen + valueLen;
+    }
+    return false;
+}
+
+bool copyTlv(const uint8_t *buf, size_t bufLen, uint8_t tag, uint8_t *out, size_t capacity, size_t *copiedOut, bool required)
+{
+    const uint8_t *value = nullptr;
+    size_t valueLen = 0;
+    if (!findTlv(buf, bufLen, tag, &value, &valueLen)) {
+        if (copiedOut)
+            *copiedOut = 0;
+        return !required;
+    }
+    if (out == nullptr) {
+        if (copiedOut)
+            *copiedOut = 0;
+        return !required;
+    }
+    if (valueLen > capacity)
+        return false;
+    if (valueLen > 0)
+        memcpy(out, value, valueLen);
+    if (copiedOut)
+        *copiedOut = valueLen;
+    return true;
+}
+
+bool copyValue(const uint8_t *value, size_t valueLen, uint8_t *out, size_t capacity, size_t *copiedOut)
+{
+    if (out == nullptr) {
+        if (copiedOut)
+            *copiedOut = 0;
+        return true;
+    }
+    if (valueLen > capacity)
+        return false;
+    if (valueLen > 0)
+        memcpy(out, value, valueLen);
+    if (copiedOut)
+        *copiedOut = valueLen;
+    return true;
+}
+
+bool unwrapSingleTlv(const uint8_t *rsp, int payloadLen, uint8_t tag, const uint8_t **valueOut, size_t *valueLenOut)
+{
+    return payloadLen >= 0 && findTlv(rsp, (size_t)payloadLen, tag, valueOut, valueLenOut);
+}
+
+size_t buildPolicy(uint8_t *out, size_t capacity, const se050::ObjectPolicy &policy)
+{
+    uint32_t permissions = policy.keyPermissions | policy.commonPermissions;
+    if (permissions == 0)
+        return 0;
+    if (capacity < 9)
+        return 0;
+    out[0] = 8;
+    out[1] = (uint8_t)(policy.authObjectId >> 24);
+    out[2] = (uint8_t)(policy.authObjectId >> 16);
+    out[3] = (uint8_t)(policy.authObjectId >> 8);
+    out[4] = (uint8_t)(policy.authObjectId & 0xFF);
+    out[5] = (uint8_t)(permissions >> 24);
+    out[6] = (uint8_t)(permissions >> 16);
+    out[7] = (uint8_t)(permissions >> 8);
+    out[8] = (uint8_t)(permissions & 0xFF);
+    return 9;
 }
 
 // Derive the 16-byte IV for SCP03 C-DEC/R-ENC per GP 2.3 Amd D §6.2.6.
@@ -781,6 +951,16 @@ int Client::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t
     static uint8_t rmacBuf[320 + 16 + 2];
     static uint8_t decrypted[288];
 
+    uint8_t preCommandMcv[16];
+    memcpy(preCommandMcv, scp.mcv, sizeof(preCommandMcv));
+    uint32_t preCommandCounter = scp.encCounter;
+    auto failSecure = [&](int err) {
+        memcpy(scp.mcv, preCommandMcv, sizeof(scp.mcv));
+        scp.encCounter = preCommandCounter;
+        scp.active = false;
+        return err;
+    };
+
     // ---- C-DEC: pad + encrypt the command body ----
     // If there's no body, encrypted body stays empty (some applets allow this at
     // security level 0x33 even though GP spec describes empty-data edge cases
@@ -811,7 +991,7 @@ int Client::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t
     wrapped[wl++] = (uint8_t)(encDataLen + 8);
     if (encDataLen > 0) {
         if (wl + encDataLen > sizeof(wrapped))
-            return -202;
+            return failSecure(-202);
         memcpy(wrapped + wl, encData, encDataLen);
         wl += encDataLen;
     }
@@ -827,7 +1007,7 @@ int Client::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t
 
     if (hasLe) {
         if (wl >= sizeof(wrapped))
-            return -202;
+            return failSecure(-202);
         wrapped[wl++] = le;
     }
 
@@ -842,7 +1022,7 @@ int Client::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t
     // ---- Send + receive raw encrypted response ----
     int n = transceive(wrapped, wl, rspRaw, sizeof(rspRaw), timeout_ms);
     if (n < 0)
-        return n;
+        return failSecure(n);
     if (n < 10) {
         // Short response. If n >= 2 the last two bytes are an SW the applet
         // returned *before* the secure-channel layer could attach R-MAC -- pass
@@ -853,10 +1033,11 @@ int Client::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t
             LOG_WARN("SE050 sendSecure: short response (%d B), SW=%02x%02x (pre-R-MAC error)", n, sw1, sw2);
             rsp[0] = sw1;
             rsp[1] = sw2;
+            failSecure(-210);
             return 2;
         }
         LOG_WARN("SE050 sendSecure: short secure response %d", n);
-        return -210;
+        return failSecure(-210);
     }
 
     // Response frame: [encRspData (0 or 16N bytes)] [R-MAC (8)] [SW (2)]
@@ -876,8 +1057,7 @@ int Client::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t
     aes128_cmac(scp.sRmac, rmacBuf, 16 + encRspDataLen + 2, rmacExpected);
     if (memcmp(rmacExpected, rMacReceived, 8) != 0) {
         LOG_WARN("SE050 R-MAC verify failed (SW=%02x%02x)", sw1, sw2);
-        // Still fall through and surface SW to caller for diagnostic -- the response
-        // payload itself is suspect but the SW can still guide us.
+        return failSecure(-215);
     }
 
     // ---- Decrypt response body if any ----
@@ -885,7 +1065,7 @@ int Client::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t
     if (encRspDataLen > 0) {
         if (encRspDataLen % 16 != 0) {
             LOG_WARN("SE050 encRsp not multiple of 16: %u", (unsigned)encRspDataLen);
-            return -211;
+            return failSecure(-211);
         }
         uint8_t rspIv[16];
         gp_iv(scp.sEnc, scp.encCounter, true, rspIv);
@@ -897,18 +1077,18 @@ int Client::sendSecure(const uint8_t *apdu, size_t apduLen, uint8_t *rsp, size_t
             plainRspLen--;
         if (plainRspLen == 0 || decrypted[plainRspLen - 1] != 0x80) {
             LOG_WARN("SE050 response padding invalid");
-            return -212;
+            return failSecure(-212);
         }
         plainRspLen--; // drop the 0x80 marker
         if (plainRspLen > rspCap - 2)
-            return -213;
+            return failSecure(-213);
         if (plainRspLen > 0)
             memcpy(rsp, decrypted, plainRspLen);
     }
 
     // Append SW and return
     if (plainRspLen + 2 > rspCap)
-        return -214;
+        return failSecure(-214);
     rsp[plainRspLen] = sw1;
     rsp[plainRspLen + 1] = sw2;
 
@@ -950,44 +1130,150 @@ bool Client::createECCurve(uint8_t curveId, uint32_t timeout_ms)
     return false;
 }
 
+bool Client::objectExists(uint32_t objectId, bool *existsOut, uint32_t timeout_ms)
+{
+    if (existsOut == nullptr)
+        return false;
+
+    uint8_t apdu[12];
+    size_t bodyLen = 0;
+    if (!appendTlvU32(apdu + 5, sizeof(apdu) - 6, bodyLen, SE050_TAG_1, objectId))
+        return false;
+    apdu[0] = SE050_CLA;
+    apdu[1] = SE050_INS_MGMT;
+    apdu[2] = SE050_P1_DEFAULT;
+    apdu[3] = SE050_P2_EXIST;
+    apdu[4] = (uint8_t)bodyLen;
+    apdu[5 + bodyLen] = 0x00;
+
+    uint8_t rsp[16] = {0};
+    int n = sendSecure(apdu, 5 + bodyLen + 1, rsp, sizeof(rsp), timeout_ms);
+    if (n < 2) {
+        LOG_WARN("SE050 ObjectExists(0x%08x): transceive err %d", (unsigned)objectId, n);
+        return false;
+    }
+    uint16_t sw = swFromRsp(rsp, n);
+    if (sw != SE050_SW_OK) {
+        LOG_WARN("SE050 ObjectExists(0x%08x): SW=%04x", (unsigned)objectId, sw);
+        return false;
+    }
+
+    const uint8_t *value = nullptr;
+    size_t valueLen = 0;
+    if (!unwrapSingleTlv(rsp, n - 2, SE050_TAG_1, &value, &valueLen) || valueLen != 1)
+        return false;
+    *existsOut = value[0] == SE050_RESULT_SUCCESS;
+    return true;
+}
+
+bool Client::getObjectInfo(uint32_t objectId, ObjectInfo *infoOut, uint32_t timeout_ms)
+{
+    if (infoOut == nullptr)
+        return false;
+    memset(infoOut, 0, sizeof(*infoOut));
+
+    bool exists = false;
+    if (!objectExists(objectId, &exists, timeout_ms))
+        return false;
+    infoOut->exists = exists;
+    if (!exists)
+        return true;
+
+    uint8_t apdu[12];
+    size_t bodyLen = 0;
+    if (!appendTlvU32(apdu + 5, sizeof(apdu) - 6, bodyLen, SE050_TAG_1, objectId))
+        return false;
+    apdu[0] = SE050_CLA;
+    apdu[1] = SE050_INS_READ;
+    apdu[2] = SE050_P1_DEFAULT;
+    apdu[3] = SE050_P2_TYPE;
+    apdu[4] = (uint8_t)bodyLen;
+    apdu[5 + bodyLen] = 0x00;
+
+    uint8_t rsp[24] = {0};
+    int n = sendSecure(apdu, 5 + bodyLen + 1, rsp, sizeof(rsp), timeout_ms);
+    if (n < 2)
+        return false;
+    uint16_t sw = swFromRsp(rsp, n);
+    if (sw != SE050_SW_OK) {
+        LOG_WARN("SE050 ReadType(0x%08x): SW=%04x", (unsigned)objectId, sw);
+        return false;
+    }
+    const uint8_t *value = nullptr;
+    size_t valueLen = 0;
+    if (!unwrapSingleTlv(rsp, n - 2, SE050_TAG_1, &value, &valueLen) || valueLen != 1)
+        return false;
+    infoOut->type = value[0];
+    if (!unwrapSingleTlv(rsp, n - 2, SE050_TAG_2, &value, &valueLen) || valueLen != 1)
+        return false;
+    infoOut->isTransient = value[0] != 0;
+
+    bodyLen = 0;
+    if (!appendTlvU32(apdu + 5, sizeof(apdu) - 6, bodyLen, SE050_TAG_1, objectId))
+        return false;
+    apdu[1] = SE050_INS_READ;
+    apdu[3] = SE050_P2_SIZE;
+    apdu[4] = (uint8_t)bodyLen;
+    apdu[5 + bodyLen] = 0x00;
+
+    n = sendSecure(apdu, 5 + bodyLen + 1, rsp, sizeof(rsp), timeout_ms);
+    if (n < 2)
+        return false;
+    sw = swFromRsp(rsp, n);
+    if (sw != SE050_SW_OK) {
+        LOG_WARN("SE050 ReadSize(0x%08x): SW=%04x", (unsigned)objectId, sw);
+        return false;
+    }
+    if (!unwrapSingleTlv(rsp, n - 2, SE050_TAG_1, &value, &valueLen) || valueLen != 2)
+        return false;
+    infoOut->size = ((uint16_t)value[0] << 8) | value[1];
+    return true;
+}
+
 bool Client::writeECKeyGen(uint32_t objectId, uint8_t curveId, uint32_t timeout_ms)
+{
+    ObjectPolicy noPolicy = {0, 0, 0};
+    return writeECKeyGenWithPolicy(objectId, curveId, noPolicy, timeout_ms);
+}
+
+bool Client::writeECKeyGenWithPolicy(uint32_t objectId, uint8_t curveId, const ObjectPolicy &policy, uint32_t timeout_ms)
 {
     // WriteECKey (on-chip keygen) per NXP Plug & Trust Se05x_API_WriteECKey:
     //   CLA=0x80, INS=INS_WRITE=0x01,
     //   P1=P1_EC | P1_KEY_PAIR = 0x01 | 0x60 = 0x61,
     //   P2=P2_DEFAULT=0x00
-    //   Body (empty policy + empty max-attempts are omitted, key_part=KEY_PAIR):
+    //   Body (empty max-attempts are omitted, key_part=KEY_PAIR):
+    //     TLV(TAG_POLICY=0x11, policy bytes) when policy is non-empty
     //     TLV(TAG_1=0x41, 4-byte objectID)
     //     TLV(TAG_2=0x42, 1-byte curveID)
     //     -- no TAG_3/TAG_4 (privKey/pubKey) -> chip generates internally
     //   Case 3 (no Le, no response body beyond SW).
-    uint8_t apdu[5 + 6 + 3];
-    apdu[0] = 0x80;
-    apdu[1] = 0x01;
-    apdu[2] = 0x01 | 0x60; // P1_EC | P1_KEY_PAIR
-    apdu[3] = 0x00;        // P2_DEFAULT
-    apdu[4] = 0x09;        // Lc = 9
-    apdu[5] = 0x41;
-    apdu[6] = 0x04;
-    apdu[7] = (uint8_t)(objectId >> 24);
-    apdu[8] = (uint8_t)(objectId >> 16);
-    apdu[9] = (uint8_t)(objectId >> 8);
-    apdu[10] = (uint8_t)(objectId & 0xFF);
-    apdu[11] = 0x42;
-    apdu[12] = 0x01;
-    apdu[13] = curveId;
+    uint8_t apdu[64];
+    size_t bodyLen = 0;
+    uint8_t policyBytes[16];
+    size_t policyLen = buildPolicy(policyBytes, sizeof(policyBytes), policy);
+    if (policyLen > 0 && !appendTlv(apdu + 5, sizeof(apdu) - 5, bodyLen, SE050_TAG_POLICY, policyBytes, policyLen))
+        return false;
+    if (!appendTlvU32(apdu + 5, sizeof(apdu) - 5, bodyLen, SE050_TAG_1, objectId))
+        return false;
+    if (!appendTlvU8(apdu + 5, sizeof(apdu) - 5, bodyLen, SE050_TAG_2, curveId))
+        return false;
+    apdu[0] = SE050_CLA;
+    apdu[1] = SE050_INS_WRITE;
+    apdu[2] = SE050_P1_EC_KEY_PAIR;
+    apdu[3] = SE050_P2_DEFAULT;
+    apdu[4] = (uint8_t)bodyLen;
 
     uint8_t rsp[64] = {0};
-    int n = sendSecure(apdu, sizeof(apdu), rsp, sizeof(rsp), timeout_ms);
+    int n = sendSecure(apdu, 5 + bodyLen, rsp, sizeof(rsp), timeout_ms);
     if (n < 2) {
         LOG_WARN("SE050 WriteECKeyGen(0x%08x, 0x%02x): transceive err %d", (unsigned)objectId, curveId, n);
         return false;
     }
-    uint8_t sw1 = rsp[n - 2];
-    uint8_t sw2 = rsp[n - 1];
-    LOG_DEBUG("SE050 WriteECKeyGen(0x%08x, 0x%02x): SW=%02x%02x rspLen=%d", (unsigned)objectId, curveId, sw1, sw2, n);
-    if (!(sw1 == 0x90 && sw2 == 0x00)) {
-        LOG_WARN("SE050 WriteECKeyGen(0x%08x): SW=%02x%02x", (unsigned)objectId, sw1, sw2);
+    uint16_t sw = swFromRsp(rsp, n);
+    LOG_DEBUG("SE050 WriteECKeyGen(0x%08x, 0x%02x): SW=%04x rspLen=%d", (unsigned)objectId, curveId, sw, n);
+    if (sw != SE050_SW_OK) {
+        LOG_WARN("SE050 WriteECKeyGen(0x%08x): SW=%04x", (unsigned)objectId, sw);
         return false;
     }
     return true;
@@ -1103,6 +1389,92 @@ bool Client::readECPub(uint32_t objectId, uint8_t *pubOut, size_t pubCapacity, s
     memcpy(pubOut, p, remaining);
     *pubLenOut = (size_t)remaining;
     return true;
+}
+
+bool Client::readObjectWithAttestation(uint32_t objectId, uint16_t offset, uint16_t length, uint32_t attestObjectId,
+                                       uint8_t attestAlgo, const uint8_t *freshness, size_t freshnessLen,
+                                       AttestationResponse *response, uint32_t timeout_ms)
+{
+    if (response == nullptr)
+        return false;
+    response->dataLen = 0;
+    response->attributesLen = 0;
+    response->chipIdLen = 0;
+    response->timestampLen = 0;
+    response->objectLen = 0;
+    response->signatureLen = 0;
+    if (freshnessLen > 0 && freshness == nullptr)
+        return false;
+
+    // ReadObject_W_Attst per NXP Plug & Trust:
+    //   CLA=0x80, INS=INS_READ|INS_ATTEST=0x22, P1/P2=0
+    //   TAG_1 objectID, optional TAG_2 offset, optional TAG_3 length,
+    //   TAG_5 attestation key ID, TAG_6 attestation algorithm, optional TAG_7 freshness.
+    uint8_t apdu[80];
+    size_t bodyLen = 0;
+    if (!appendTlvU32(apdu + 5, sizeof(apdu) - 6, bodyLen, SE050_TAG_1, objectId))
+        return false;
+    if (offset != 0 && !appendTlvU16(apdu + 5, sizeof(apdu) - 6, bodyLen, SE050_TAG_2, offset))
+        return false;
+    if (length != 0 && !appendTlvU16(apdu + 5, sizeof(apdu) - 6, bodyLen, SE050_TAG_3, length))
+        return false;
+    if (!appendTlvU32(apdu + 5, sizeof(apdu) - 6, bodyLen, SE050_TAG_5, attestObjectId))
+        return false;
+    if (!appendTlvU8(apdu + 5, sizeof(apdu) - 6, bodyLen, SE050_TAG_6, attestAlgo))
+        return false;
+    if (freshnessLen > 0 && !appendTlv(apdu + 5, sizeof(apdu) - 6, bodyLen, SE050_TAG_7, freshness, freshnessLen))
+        return false;
+    apdu[0] = SE050_CLA;
+    apdu[1] = SE050_INS_READ_ATTEST;
+    apdu[2] = SE050_P1_DEFAULT;
+    apdu[3] = SE050_P2_DEFAULT;
+    apdu[4] = (uint8_t)bodyLen;
+    apdu[5 + bodyLen] = 0x00;
+
+    uint8_t rsp[300] = {0};
+    int n = sendSecure(apdu, 5 + bodyLen + 1, rsp, sizeof(rsp), timeout_ms);
+    if (n < 2) {
+        LOG_WARN("SE050 ReadObjectWithAttestation(0x%08x): transceive err %d", (unsigned)objectId, n);
+        return false;
+    }
+    uint16_t sw = swFromRsp(rsp, n);
+    if (sw != SE050_SW_OK) {
+        LOG_WARN("SE050 ReadObjectWithAttestation(0x%08x): SW=%04x", (unsigned)objectId, sw);
+        return false;
+    }
+
+    size_t payloadLen = (size_t)(n - 2);
+    if (!copyTlv(rsp, payloadLen, SE050_TAG_1, response->data, response->dataCapacity, &response->dataLen, false))
+        return false;
+
+    // Applet v7.2+ returns chipId/attributes/object/timestamp/signature as
+    // TAG_2/TAG_3/TAG_4/TAG_TIMESTAMP/TAG_SIGNATURE. Older applets used
+    // TAG_2/TAG_3/TAG_5/TAG_6 for attributes/timestamp/chipId/signature.
+    const uint8_t *value = nullptr;
+    size_t valueLen = 0;
+    bool v2Attestation = findTlv(rsp, payloadLen, SE050_TAG_TIMESTAMP, &value, &valueLen) ||
+                         findTlv(rsp, payloadLen, SE050_TAG_SIGNATURE, &value, &valueLen);
+    uint8_t attributesTag = v2Attestation ? SE050_TAG_3 : SE050_TAG_2;
+    uint8_t chipIdTag = v2Attestation ? SE050_TAG_2 : SE050_TAG_5;
+    uint8_t timestampTag = v2Attestation ? SE050_TAG_TIMESTAMP : SE050_TAG_3;
+    uint8_t signatureTag = v2Attestation ? SE050_TAG_SIGNATURE : SE050_TAG_6;
+
+    if (findTlv(rsp, payloadLen, attributesTag, &value, &valueLen) &&
+        !copyValue(value, valueLen, response->attributes, response->attributesCapacity, &response->attributesLen))
+        return false;
+    if (findTlv(rsp, payloadLen, chipIdTag, &value, &valueLen) &&
+        !copyValue(value, valueLen, response->chipId, response->chipIdCapacity, &response->chipIdLen))
+        return false;
+    if (findTlv(rsp, payloadLen, timestampTag, &value, &valueLen) &&
+        !copyValue(value, valueLen, response->timestamp, response->timestampCapacity, &response->timestampLen))
+        return false;
+    if (!copyTlv(rsp, payloadLen, SE050_TAG_4, response->object, response->objectCapacity, &response->objectLen, false))
+        return false;
+    if (findTlv(rsp, payloadLen, signatureTag, &value, &valueLen) &&
+        !copyValue(value, valueLen, response->signature, response->signatureCapacity, &response->signatureLen))
+        return false;
+
+    return response->signatureLen > 0 && response->chipIdLen > 0;
 }
 
 bool Client::ecdhX25519(uint32_t privObjectId, const uint8_t peerPub[32], uint8_t shared[32], uint32_t timeout_ms)
