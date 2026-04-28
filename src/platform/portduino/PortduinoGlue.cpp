@@ -494,10 +494,17 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
         char serial[9] = {0};
-        ch341Hal->getSerialString(serial, 8);
+        // Pass the full buffer size (9 = 8 chars + null) to getSerialString,
+        // not 8. The function treats `len` as buffer size and reserves one
+        // slot for the null terminator, so passing 8 produced a 7-char serial
+        // and broke the `strlen(serial) == 8` check below — masked on Linux
+        // by the BlueZ HCI MAC fallback in getMacAddr(), but on macOS (where
+        // the BlueZ path is __linux__-guarded) it left mac_address empty and
+        // meshtasticd refused to start.
+        ch341Hal->getSerialString(serial, sizeof(serial));
         std::cout << "CH341 Serial " << serial << std::endl;
         char product_string[96] = {0};
-        ch341Hal->getProductString(product_string, 95);
+        ch341Hal->getProductString(product_string, sizeof(product_string));
         std::cout << "CH341 Product " << product_string << std::endl;
         if (strlen(serial) == 8 && portduino_config.mac_address.length() < 12) {
             std::cout << "Deriving MAC address from Serial and Product String" << std::endl;
