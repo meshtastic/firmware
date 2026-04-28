@@ -74,6 +74,13 @@ class MockRadioInterface : public RadioInterface
         (void)received;
         return 0;
     }
+
+    uint32_t getPacketTimeForCodingRate(uint32_t totalPacketLen, uint8_t codingRate) override
+    {
+        (void)totalPacketLen;
+        (void)codingRate;
+        return 0;
+    }
 };
 
 class MockRouter : public Router

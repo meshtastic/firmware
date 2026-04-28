@@ -28,6 +28,7 @@ class TestableRadioInterface : public RadioInterface
 
     // Stubs for pure virtual methods required by RadioInterface
     uint32_t getPacketTime(uint32_t, bool) override { return 0; }
+    uint32_t getPacketTimeForCodingRate(uint32_t, uint8_t) override { return 0; }
     ErrorCode send(meshtastic_MeshPacket *p) override { return ERRNO_OK; }
 };
 
