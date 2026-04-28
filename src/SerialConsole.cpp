@@ -5,6 +5,7 @@
 #include "Throttle.h"
 #include "configuration.h"
 #include "time.h"
+#include "xmodem.h"
 
 #if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
 #define IS_USB_SERIAL
@@ -95,7 +96,7 @@ int32_t SerialConsole::runOnce()
 #if defined(SERIAL_HAS_ON_RECEIVE) || defined(CONFIG_IDF_TARGET_ESP32S2)
     return Port.available() ? delay : INT32_MAX;
 #elif defined(IS_USB_SERIAL)
-    return HWCDC::isPlugged() ? delay : (1000 * 20);
+    return (HWCDC::isPlugged() || xModem.isActive() || delay < 250) ? delay : (1000 * 20);
 #else
     return delay;
 #endif

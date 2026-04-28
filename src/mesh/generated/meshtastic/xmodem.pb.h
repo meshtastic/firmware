@@ -25,8 +25,9 @@ typedef enum _meshtastic_XModem_Control {
 typedef PB_BYTES_ARRAY_T(128) meshtastic_XModem_buffer_t;
 typedef struct _meshtastic_XModem {
     meshtastic_XModem_Control control;
-    uint16_t seq;
-    uint16_t crc16;
+    /* UINT32 in FIELDLIST — must be 32-bit or nanopb decode overwrites adjacent fields. */
+    uint32_t seq;
+    uint32_t crc16;
     meshtastic_XModem_buffer_t buffer;
 } meshtastic_XModem;
 

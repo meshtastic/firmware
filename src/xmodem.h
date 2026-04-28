@@ -35,6 +35,7 @@
 #include "FSCommon.h"
 #include "configuration.h"
 #include "mesh/generated/meshtastic/xmodem.pb.h"
+#include <vector>
 
 #define MAXRETRANS 25
 
@@ -51,9 +52,11 @@ class XModemAdapter
     void handlePacket(meshtastic_XModem xmodemPacket);
     meshtastic_XModem getForPhone();
     void resetForPhone();
+    bool isActive() const { return isReceiving || isTransmitting; }
 
   private:
     bool isReceiving = false;
+    bool recvCommitPending = false;
     bool isTransmitting = false;
     bool isEOT = false;
 
@@ -61,6 +64,7 @@ class XModemAdapter
 
     uint16_t packetno = 0;
 
+// Adafruit nRF/STM32 File can be constructed bound to FSCom; Arduino-ESP32 fs::File cannot.
 #if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     File file = File(FSCom);
 #else
@@ -68,6 +72,25 @@ class XModemAdapter
 #endif
 
     char filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
+    FSRoute activeRoute_; // final path; resolved at SOH seq 0, reused for transmit + EOT commit
+    /** Logical receive scratch path (`filename` + `.tmp`); commit via fsRename on EOT. */
+    char recvTmpPath[sizeof(filename) + 5] = {0};
+
+    /** Virtual file transmit: directory listing over the same framing as download. */
+    bool listingActive_ = false;
+    std::vector<uint8_t> listingBlob_;
+    size_t listingReadOffset_ = 0;
+
+    /** Raw first-packet bytes for duplicate OPEN (seq==0) while transmitting. */
+    uint8_t sessionKey[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
+    size_t sessionKeyLen_ = 0;
+
+    void captureSessionKey(const uint8_t *bytes, size_t len);
+    bool matchesSessionKey(const meshtastic_XModem &p) const;
+    void clearListing();
+    void primeTransmitPacket();
+    /** Host started a new OPEN while a prior session never got EOT/CAN (e.g. Ctrl+C on CLI). */
+    void abandonStaleTransfer();
 
   protected:
     meshtastic_XModem xmodemStore = meshtastic_XModem_init_zero;
