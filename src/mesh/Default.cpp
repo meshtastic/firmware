@@ -2,11 +2,7 @@
 
 #include "meshUtils.h"
 
-// Convert seconds to ms, clamping at INT32_MAX (~24.86 days). Callers store the
-// result in uint32_t but the ultimate consumers (OSThread runOnce returns,
-// `MAX_INTERVAL`, Apple-client interop per the FIXME at Default.h:14) treat it
-// as int32_t. Saturating at INT32_MAX keeps every conversion well-defined and
-// non-negative; no realistic interval (broadcast, throttle, sleep) needs more.
+// Convert seconds to ms, clamping at INT32_MAX (~24.86 days)
 static inline uint32_t secondsToMsClamped(uint32_t secs)
 {
     constexpr uint32_t MAX_MS = static_cast<uint32_t>(INT32_MAX);
