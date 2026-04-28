@@ -315,14 +315,21 @@ template <typename T> void SX126xInterface<T>::startReceive()
     setTransmitEnable(false);
     setStandby();
 
+    // On Linux-native (Portduino), use continuous receive instead of duty cycle auto-receive.
+    // The duty cycle mode causes intermittent false preamble detections due to GPIO read latency
+    // in userspace (gpiod), which leads to "Can not send yet, busyRx" errors.
+    // Power saving from duty cycle is irrelevant on mains-powered Linux devices.
+#if ARCH_PORTDUINO
+    int err = lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX126X startReceive %s%d", radioLibErr, err);
+        portduino_status.LoRa_in_error = true;
+    }
+#else
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX126X startReceiveDutyCycleAuto %s%d", radioLibErr, err);
-#ifdef ARCH_PORTDUINO
-    if (err != RADIOLIB_ERR_NONE)
-        portduino_status.LoRa_in_error = true;
-#else
     assert(err == RADIOLIB_ERR_NONE);
 #endif
 
