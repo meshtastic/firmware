@@ -565,7 +565,12 @@ void RadioLibInterface::resetAGC()
 void RadioLibInterface::checkRxDoneIrqFlag()
 {
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
-        LOG_WARN("caught missed RX_DONE");
+        // This is the normal recovery path for back-to-back RX events where the
+        // second packet's DIO1 edge happens while the GPIO interrupt was still
+        // disabled (between ISR disable and the handler re-enabling it).
+        // Matches the log level used for other "compensated for a normal radio
+        // oddity" events in this file (e.g. "Ignore false preamble detection").
+        LOG_DEBUG("Caught RX_DONE via poll (ISR-missed edge, normal under dense RX)");
         notify(ISR_RX, true);
     }
 }
