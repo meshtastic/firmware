@@ -78,6 +78,7 @@ void SimRadio::handleTransmitInterrupt()
     // ignore the transmit interrupt
     if (sendingPacket)
         completeSending();
+    restoreBaseCodingRate();
 
     isReceiving = true;
     if (receivingPacket) // This happens when we don't consider something a collision if we weren't sending long enough
@@ -207,6 +208,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
 {
     printPacket("Start low level send", txp);
     isReceiving = false;
+    chooseCodingRateForPacket(txp, txQueue.size());
     size_t numbytes = beginSending(txp);
     meshtastic_MeshPacket *p = packetPool.allocCopy(*txp);
     perhapsDecode(p);
@@ -321,12 +323,6 @@ void SimRadio::handleReceiveInterrupt()
     deliverToReceiver(mp);
 }
 
-size_t SimRadio::getPacketLength(meshtastic_MeshPacket *mp)
-{
-    auto &p = mp->decoded;
-    return (size_t)p.payload.size + sizeof(PacketHeader);
-}
-
 int16_t SimRadio::readData(uint8_t *data, size_t len)
 {
     int16_t state = RADIOLIB_ERR_NONE;
@@ -348,6 +344,26 @@ int16_t SimRadio::readData(uint8_t *data, size_t len)
  */
 uint32_t SimRadio::getPacketTime(uint32_t pl, bool received)
 {
+    (void)received;
+    return computePacketTime(pl, activeCr);
+}
+
+uint32_t SimRadio::getPacketTimeForCodingRate(uint32_t pl, uint8_t codingRate)
+{
+    return computePacketTime(pl, codingRate);
+}
+
+bool SimRadio::setActiveCodingRate(uint8_t codingRate)
+{
+    if (codingRate < 5 || codingRate > 8)
+        return false;
+
+    activeCr = codingRate;
+    return true;
+}
+
+uint32_t SimRadio::computePacketTime(uint32_t pl, uint8_t codingRate) const
+{
     float bandwidthHz = bw * 1000.0f;
     bool headDisable = false; // we currently always use the header
     float tSym = (1 << sf) / bandwidthHz;
@@ -356,7 +372,7 @@ uint32_t SimRadio::getPacketTime(uint32_t pl, bool received)
 
     float tPreamble = (preambleLength + 4.25f) * tSym;
     float numPayloadSym =
-        8 + max(ceilf(((8.0f * pl - 4 * sf + 28 + 16 - 20 * headDisable) / (4 * (sf - 2 * lowDataOptEn))) * cr), 0.0f);
+        8 + max(ceilf(((8.0f * pl - 4 * sf + 28 + 16 - 20 * headDisable) / (4 * (sf - 2 * lowDataOptEn))) * codingRate), 0.0f);
     float tPayload = numPayloadSym * tSym;
     float tPacket = tPreamble + tPayload;
 

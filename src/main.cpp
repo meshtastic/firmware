@@ -5,6 +5,7 @@
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "input/InputBroker.h"
 #endif
+#include "AirtimePolicy.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -1020,6 +1021,10 @@ void setup()
 
     // Start airtime logger thread.
     airTime = new AirTime();
+    // AirtimePolicy owns packet-level radio discipline decisions such as DCR.
+    // It is kept separate from modules so telemetry, routing, and relays all
+    // share the same CR budget and congestion view.
+    airtimePolicy = new AirtimePolicy();
 
     if (!rIf)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);

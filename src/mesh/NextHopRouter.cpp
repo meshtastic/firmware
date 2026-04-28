@@ -1,5 +1,9 @@
 #include "NextHopRouter.h"
+#include "AirtimePolicy.h"
+#include "MeshRadio.h"
 #include "MeshTypes.h"
+#include "airtime.h"
+#include "configuration.h"
 #include "meshUtils.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -8,6 +12,41 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 #include "NodeDB.h"
+
+namespace
+{
+bool quietLossChannelUtilizationLimit(float *limit)
+{
+    if (!myRegion || config.lora.override_duty_cycle)
+        return false;
+
+    float regionDutyCycle = myRegion->dutyCycle;
+    if (regionDutyCycle <= 0.0f || regionDutyCycle >= 100.0f)
+        return false;
+
+    // Quiet-loss retry escalation is a reliability bias, not duty-cycle enforcement.
+    // Use an actual regional duty-cycle limit when there is one; do not invent
+    // a local utilization threshold for unrestricted or explicitly overridden regions.
+    *limit = regionDutyCycle;
+    return true;
+}
+
+bool isQuietRetransmissionLoss()
+{
+    if (!airTime)
+        return true;
+
+    float utilizationLimit = 0.0f;
+    if (!quietLossChannelUtilizationLimit(&utilizationLimit)) {
+        // No regulatory duty-cycle limit means there is no region-derived
+        // utilization threshold here. Let AirtimePolicy's current busy/congested
+        // view decide whether this retry may actually add FEC.
+        return true;
+    }
+
+    return airTime->channelUtilizationPercent() < utilizationLimit;
+}
+} // namespace
 
 NextHopRouter::NextHopRouter() {}
 
@@ -218,10 +257,10 @@ PendingPacket *NextHopRouter::findPendingPacket(GlobalPacketId key)
 /**
  * Stop any retransmissions we are doing of the specified node/packet ID pair
  */
-bool NextHopRouter::stopRetransmission(NodeNum from, PacketId id)
+bool NextHopRouter::stopRetransmission(NodeNum from, PacketId id, bool success)
 {
     auto key = GlobalPacketId(from, id);
-    return stopRetransmission(key);
+    return stopRetransmission(key, success);
 }
 
 bool NextHopRouter::roleAllowsCancelingFromTxQueue(const meshtastic_MeshPacket *p)
@@ -233,11 +272,19 @@ bool NextHopRouter::roleAllowsCancelingFromTxQueue(const meshtastic_MeshPacket *
     return roleAllowsCancelingDupe(p); // same logic as FloodingRouter::roleAllowsCancelingDupe
 }
 
-bool NextHopRouter::stopRetransmission(GlobalPacketId key)
+bool NextHopRouter::stopRetransmission(GlobalPacketId key, bool success)
 {
     auto old = findPendingPacket(key);
     if (old) {
         auto p = old->packet;
+        if (success && airtimePolicy) {
+            airtimePolicy->observeTxResult({.to = p->to,
+                                            .from = getFrom(p),
+                                            .id = p->id,
+                                            .cr = airtimePolicy->getLastTxCr(getFrom(p), p->id),
+                                            .success = true});
+        }
+
         /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
           to avoid canceling a transmission if it was ACKed super fast via MQTT */
         if (old->numRetransmissions < NUM_RELIABLE_RETX - 1) {
@@ -270,7 +317,7 @@ PendingPacket *NextHopRouter::startRetransmission(meshtastic_MeshPacket *p, uint
     auto id = GlobalPacketId(p);
     auto rec = PendingPacket(p, numReTx);
 
-    stopRetransmission(getFrom(p), p->id);
+    stopRetransmission(getFrom(p), p->id, false);
 
     setNextTx(&rec);
     pending[id] = rec;
@@ -302,12 +349,31 @@ int32_t NextHopRouter::doRetransmissions()
                               p.packet->id);
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
+                if (airtimePolicy) {
+                    airtimePolicy->observeTxResult({.to = p.packet->to,
+                                                    .from = getFrom(p.packet),
+                                                    .id = p.packet->id,
+                                                    .cr = airtimePolicy->getLastTxCr(getFrom(p.packet), p.packet->id),
+                                                    .success = false});
+                }
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
-                stopRetransmission(it->first);
+                stopRetransmission(it->first, false);
                 stillValid = false; // just deleted it
             } else {
                 LOG_DEBUG("Sending retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
+
+                if (airtimePolicy) {
+                    uint8_t maxRetransmissions = isFromUs(p.packet) ? NUM_RELIABLE_RETX : NUM_INTERMEDIATE_RETX;
+                    uint8_t attempt =
+                        maxRetransmissions > p.numRetransmissions ? maxRetransmissions - p.numRetransmissions : 1;
+                    // Retry metadata is consumed later, immediately before the
+                    // retransmission hits the radio. That keeps CR selection
+                    // based on fresh queue/channel pressure instead of the
+                    // conditions from when the retry timer was scheduled.
+                    airtimePolicy->noteRetransmission(*p.packet, attempt, p.numRetransmissions == 1,
+                                                      isQuietRetransmissionLoss());
+                }
 
                 if (!isBroadcast(p.packet->to)) {
                     if (p.numRetransmissions == 1) {
