@@ -11,6 +11,7 @@
 
 struct PacketHistoryStruct {
     uint32_t time;
+    uint32_t sent_at;
     uint32_t to;
     uint32_t from;
     uint32_t id;
