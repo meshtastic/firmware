@@ -156,6 +156,36 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     return RADIOLIB_ERR_NONE;
 }
 
+template <typename T> bool SX128xInterface<T>::setActiveCodingRate(uint8_t codingRate)
+{
+    if (codingRate < 5 || codingRate > 8)
+        return false;
+
+    // DCR packets use normal interleaving so the explicit header CR stays the
+    // only cross-node compatibility requirement.  The static modem setting is
+    // restored once TX finishes.
+    int err = lora.setCodingRate(codingRate, false);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X set DCR coding rate %s%d", radioLibErr, err);
+        return false;
+    }
+
+    activeCr = codingRate;
+    return true;
+}
+
+template <typename T> bool SX128xInterface<T>::restoreBaseCodingRate()
+{
+    int err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX128X restore coding rate %s%d", radioLibErr, err);
+        return false;
+    }
+
+    activeCr = cr;
+    return true;
+}
+
 template <typename T> void SX128xInterface<T>::disableInterrupt()
 {
     lora.clearDio1Action();

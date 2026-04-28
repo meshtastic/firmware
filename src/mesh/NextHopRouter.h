@@ -130,8 +130,8 @@ class NextHopRouter : public FloodingRouter
      *
      * @return true if we found and removed a transmission with this ID
      */
-    bool stopRetransmission(NodeNum from, PacketId id);
-    bool stopRetransmission(GlobalPacketId p);
+    bool stopRetransmission(NodeNum from, PacketId id, bool success = true);
+    bool stopRetransmission(GlobalPacketId p, bool success = true);
 
     /**
      * Do any retransmissions that are scheduled (FIXME - for the time being called from loop)

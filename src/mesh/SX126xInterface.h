@@ -75,6 +75,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+    uint32_t getPacketTimeForCodingRate(uint32_t pl, uint8_t codingRate) override
+    {
+        return computePacketTimeForCodingRate(lora, pl, codingRate);
+    }
+    bool setActiveCodingRate(uint8_t codingRate) override;
 
   private:
     /** Some boards require GPIO control of tx vs rx paths */

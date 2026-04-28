@@ -1,4 +1,5 @@
 #include "RadioInterface.h"
+#include "AirtimePolicy.h"
 #include "Channels.h"
 #include "DisplayFormatters.h"
 #include "LLCC68Interface.h"
@@ -18,9 +19,11 @@
 #include "main.h"
 #include "meshUtils.h" // for pow_of_2
 #include "sleep.h"
+#include <algorithm>
 #include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <stdint.h>
 #include <string.h>
 
 #ifdef ARCH_PORTDUINO
@@ -243,6 +246,12 @@ static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 
 // Global LoRa radio type
 LoRaRadioType radioType = NO_RADIO;
+
+static uint32_t packetTimeForCodingRate(uint32_t packetLen, uint8_t codingRate, void *context)
+{
+    auto *radio = static_cast<RadioInterface *>(context);
+    return radio ? radio->getPacketTimeForCodingRate(packetLen, codingRate) : 0;
+}
 
 extern RadioLibHal *RadioLibHAL;
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
@@ -533,14 +542,93 @@ const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
 
 uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool received)
 {
-    uint32_t pl = 0;
-    if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
-        pl = p->encrypted.size + sizeof(PacketHeader);
-    } else {
-        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
-        pl = numbytes + sizeof(PacketHeader);
-    }
+    uint32_t pl = getPacketLength(p);
     return getPacketTime(pl, received);
+}
+
+uint32_t RadioInterface::getPacketLength(const meshtastic_MeshPacket *p) const
+{
+    if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+        return p->encrypted.size + sizeof(PacketHeader);
+    }
+
+    size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
+    return numbytes + sizeof(PacketHeader);
+}
+
+bool RadioInterface::setActiveCodingRate(uint8_t codingRate)
+{
+    if (codingRate < 5 || codingRate > 8)
+        return false;
+
+    // The base interface cannot touch hardware, so only a restore to the
+    // configured static CR can be considered successful here. Radio backends
+    // that can really retune CR override this method.
+    if (codingRate != cr)
+        return false;
+
+    activeCr = cr;
+    return true;
+}
+
+void RadioInterface::chooseCodingRateForPacket(meshtastic_MeshPacket *p, size_t queueDepth)
+{
+    if (!airtimePolicy || !p)
+        return;
+
+    DcrSettings settings = airtimePolicy->settingsFromConfig(config.lora);
+    if (settings.mode == meshtastic_Config_LoRaConfig_DynamicCodingRateMode_DCR_OFF)
+        return;
+
+    uint32_t packetLen = getPacketLength(p);
+    meshtastic_PortNum portnum = meshtastic_PortNum_UNKNOWN_APP;
+    bool classKnown = false;
+    // Classification here may only see encrypted/header-only state. For
+    // local-origin packets, AirtimePolicy can replace it with the pre-encryption
+    // class cached by Router::send().
+    DcrPacketClass packetClass = airtimePolicy->classifyPacket(*p, &portnum, &classKnown);
+    DcrRetryContext retry = airtimePolicy->getRetryContext(*p);
+    bool localOrigin = isFromUs(p);
+    bool relay = !localOrigin;
+
+    ChannelAirtimeStats channel = {.channelUtilizationPercent = airTime ? airTime->channelUtilizationPercent() : 0.0f,
+                                   .txUtilizationPercent = airTime ? airTime->utilizationTXPercent() : 0.0f,
+                                   .dutyCyclePercent = myRegion ? myRegion->dutyCycle : 100.0f,
+                                   .queueDepth = static_cast<uint8_t>(std::min<size_t>(queueDepth, UINT8_MAX))};
+
+    DcrPacketContext ctx = {.packet = p,
+                            .portnum = portnum,
+                            .packetClass = packetClass,
+                            .priority = p->priority,
+                            .baseCr = getBaseCodingRate(),
+                            .packetLen = packetLen,
+                            .predictedAirtimeMs = getPacketTimeForCodingRate(packetLen, getBaseCodingRate()),
+                            .retry = retry,
+                            .classKnown = classKnown,
+                            .localOrigin = localOrigin,
+                            .relay = relay,
+                            .lateRelay = relay && p->tx_after != 0,
+                            .lastHop = relay && p->hop_limit <= 1,
+                            .direct = p->hop_start != 0 && p->hop_start == p->hop_limit,
+                            .rxSnr = p->rx_snr,
+                            .rxRssi = p->rx_rssi,
+                            .nowMsec = millis()};
+
+    DcrDecision decision = airtimePolicy->choose(ctx, channel, settings, packetTimeForCodingRate, this);
+    bool urgent = decision.packetClass == DcrPacketClass::Urgent;
+    if (!setActiveCodingRate(decision.cr)) {
+        LOG_WARN("DCR failed to set cr=%u, using base cr=%u", decision.cr, getBaseCodingRate());
+        decision.cr = getBaseCodingRate();
+        decision.predictedAirtimeMs = getPacketTimeForCodingRate(packetLen, decision.cr);
+    }
+
+    // Record the actual CR selected for this packet. It is physical-layer
+    // metadata carried by the LoRa explicit header, so it must not be copied
+    // into MeshPacket just for later accounting.
+    airtimePolicy->observeTxStart(*p, decision.cr, decision.predictedAirtimeMs, urgent, millis());
+    LOG_DEBUG("DCR tx cr=%u class=%u reason=0x%08x util=%.1f%% q=%u retry=%u toa=%ums", decision.cr,
+              static_cast<unsigned>(decision.packetClass), decision.reasonFlags, channel.channelUtilizationPercent,
+              channel.queueDepth, retry.attempt, decision.predictedAirtimeMs);
 }
 
 /** The delay to use for retransmitting dropped packets */
@@ -1060,6 +1148,7 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
     LOG_INFO("Slot time: %u msec, preamble time: %u msec", slotTimeMsec, preambleTimeMsec);
+    activeCr = cr;
 } // end of applyModemConfig
 
 /** Slottime is the time to detect a transmission has started, consisting of:
