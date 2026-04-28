@@ -449,14 +449,19 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     bool decrypted = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    // Attempt PKI decryption first
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
-        nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
+    // Attempt PKI decryption first. Cache the NodeDB lookups in local pointers to avoid
+    // (a) repeat linear scans over numMeshNodes and (b) the TOCTOU hazard where a node could
+    // be evicted between two calls of getMeshNode() by a concurrent task.
+    meshtastic_NodeInfoLite *fromNode = (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to))
+                                            ? nodeDB->getMeshNode(p->from)
+                                            : nullptr;
+    meshtastic_NodeInfoLite *toNode = nullptr;
+    if (fromNode != nullptr && fromNode->user.public_key.size > 0 &&
+        (toNode = nodeDB->getMeshNode(p->to)) != nullptr && toNode->user.public_key.size > 0 &&
         rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes,
-                                      bytes)) {
+        if (crypto->decryptCurve25519(p->from, fromNode->user.public_key, p->id, rawSize, p->encrypted.bytes, bytes)) {
             LOG_INFO("PKI Decryption worked!");
 
             meshtastic_Data decodedtmp;
@@ -467,7 +472,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
-                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
+                memcpy(&p->public_key.bytes, fromNode->user.public_key.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
