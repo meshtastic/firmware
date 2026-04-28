@@ -97,7 +97,6 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 // Picomputer gets a white on black display
-#define TFT_MESH_OVERRIDE COLOR565(255, 255, 255)
 
 // keyboard changes
 
