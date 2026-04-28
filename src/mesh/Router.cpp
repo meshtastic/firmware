@@ -394,7 +394,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
 #if HAS_UDP_MULTICAST
     if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
+        bool res = udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
+        if (res && config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+            LOG_DEBUG("Packet successfully sent via UDP, skipping LoRa");
+            packetPool.release(p);
+            return ERRNO_OK;
+        }
     }
 #endif
 
@@ -831,6 +836,23 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                     }
                 }
                 mqtt->onSend(*p_encrypted, *p, p->channel);
+            }
+        }
+#endif
+#if HAS_UDP_MULTICAST
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && udpHandler &&
+            p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP &&
+            config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST && !isFromUs(p)) {
+#if MESHTASTIC_EXCLUDE_MQTT
+            if (decodedState == DecodeState::DECODE_FAILURE && p->channel == 0x00 && !isBroadcast(p->to) && !isToUs(p)) {
+                p_encrypted->pki_encrypted = true;
+            }
+#endif
+            if (decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) {
+                LOG_DEBUG("Rebroadcasting incoming packet via UDP too");
+                if (!udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p_encrypted))) {
+                    LOG_WARN("Rebroadcast via UDP failed");
+                }
             }
         }
 #endif
