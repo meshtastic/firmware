@@ -128,6 +128,8 @@ class GPS : private concurrency::OSThread
     // Let the GPS hardware save power between updates
     void down();
 
+    bool initFinished() const { return GPSInitFinished; };
+
   private:
     GPS() : concurrency::OSThread("GPS") {}
 

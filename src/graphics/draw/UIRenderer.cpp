@@ -1508,6 +1508,24 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
         display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5, title);
     }
     display->setFont(FONT_SMALL);
+    if (bootString != nullptr) {
+        static uint8_t bootStringStep = 0;
+        char stringCharacter = '.';
+        uint32_t stringWidth = getStringCenteredX(bootString);
+        if (bootStringStep == 0) {
+            stringCharacter = '.';
+            bootStringStep++;
+        } else if (bootStringStep == 1) {
+            stringCharacter = 'o';
+            bootStringStep++;
+        } else if (bootStringStep == 2) {
+            stringCharacter = 'O';
+            bootStringStep = 0;
+        }
+        char tmpBootString[40];
+        snprintf(tmpBootString, sizeof(tmpBootString), "%s %c", bootString, stringCharacter);
+        display->drawString(x + stringWidth, y + SCREEN_HEIGHT - 2 * FONT_HEIGHT_MEDIUM, tmpBootString);
+    }
     // Draw region in upper left
     if (upperMsg) {
         display->drawString(x + 5, y + 5, upperMsg);
