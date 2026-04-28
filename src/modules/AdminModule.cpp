@@ -2,6 +2,7 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "mesh/HWIdentity.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "SPILock.h"
@@ -896,8 +897,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         // If the client set the key to blank, go ahead and regenerate so long as we're not in ham mode
         if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             if (config.security.private_key.size != 32) {
-                crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-
+                // Prefer hardware-bound deterministic derivation so an admin-
+                // initiated key regeneration still lands on the stable per-
+                // chip identity instead of a fresh random key (matches the
+                // behavior at NodeDB keygen init).
+                if (HWIdentity::deriveKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                    config.security.public_key.size = 32;
+                    config.security.private_key.size = 32;
+                } else {
+                    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+                }
             } else {
                 if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
                     config.security.public_key.size = 32;
