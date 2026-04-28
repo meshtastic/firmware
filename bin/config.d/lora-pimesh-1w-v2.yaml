@@ -1,0 +1,14 @@
+# PiMesh-1W (V2)
+Lora:
+  Module: sx1262
+  IRQ: 6
+  Reset: 18
+  Busy: 5
+  CS: 8
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  SX126X_MAX_POWER: 22
+  spidev: spidev0.0
+
+# add the following to /boot/firmware/config.txt
+# gpio=26=op,dh
