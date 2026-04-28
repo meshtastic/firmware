@@ -96,7 +96,7 @@
 #define LR1121_SPI_MOSI_PIN LORA_MOSI
 #define LR1121_SPI_MISO_PIN LORA_MISO
 
-#define LR11X0_DIO3_TCXO_VOLTAGE 1.8
+#define LR11X0_TCXO_VOLTAGE 1.8
 #define LR11X0_DIO_AS_RF_SWITCH
 
 // This board needs external switching between sub-GHz and 2.4G circuits
