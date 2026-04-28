@@ -4,8 +4,11 @@
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
 #include "NotificationRenderer.h"
+#include "UIRenderer.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -299,7 +302,7 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     for (int i = 0; i < lineCount; i++) {
         linePointers[i] = lineStarts[i];
     }
-    char scratchLineBuffer[visibleTotalLines - lineCount][40];
+    char scratchLineBuffer[visibleTotalLines - lineCount][64];
 
     uint8_t firstOptionToShow = 0;
     if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount) {
@@ -312,28 +315,47 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     }
     int scratchLineNum = 0;
     for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
-        char temp_name[16] = {0};
-        if (nodeDB->getMeshNodeByIndex(i + 1)->has_user) {
-            std::string sanitized = sanitizeString(nodeDB->getMeshNodeByIndex(i + 1)->user.long_name);
-            strncpy(temp_name, sanitized.c_str(), sizeof(temp_name) - 1);
+        char tempName[48] = {0};
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i + 1);
+        if (node && node->has_user) {
+            const char *rawName = nullptr;
+            if (node->user.long_name[0]) {
+                rawName = node->user.long_name;
+            } else if (node->user.short_name[0]) {
+                rawName = node->user.short_name;
+            }
+            if (rawName) {
+                const int arrowWidth = (currentResolution == ScreenResolution::High)
+                                           ? UIRenderer::measureStringWithEmotes(display, ">  <")
+                                           : UIRenderer::measureStringWithEmotes(display, "><");
+                const int maxTextWidth = std::max(0, display->getWidth() - 28 - arrowWidth);
+                UIRenderer::truncateStringWithEmotes(display, rawName, tempName, sizeof(tempName), maxTextWidth);
+            }
         } else {
-            snprintf(temp_name, sizeof(temp_name), "(%04X)", (uint16_t)(nodeDB->getMeshNodeByIndex(i + 1)->num & 0xFFFF));
+            snprintf(tempName, sizeof(tempName), "(%04X)", (uint16_t)(node ? (node->num & 0xFFFF) : 0));
+        }
+        if (!tempName[0]) {
+            snprintf(tempName, sizeof(tempName), "(%04X)", (uint16_t)(node ? (node->num & 0xFFFF) : 0));
         }
         if (i == curSelected) {
-            selectedNodenum = nodeDB->getMeshNodeByIndex(i + 1)->num;
+            selectedNodenum = node ? node->num : 0;
             if (currentResolution == ScreenResolution::High) {
                 strncpy(scratchLineBuffer[scratchLineNum], "> ", 3);
-                strncpy(scratchLineBuffer[scratchLineNum] + 2, temp_name, 36);
-                strncpy(scratchLineBuffer[scratchLineNum] + strlen(temp_name) + 2, " <", 3);
+                strncpy(scratchLineBuffer[scratchLineNum] + 2, tempName, sizeof(scratchLineBuffer[scratchLineNum]) - 3);
+                scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
+                const size_t used = strnlen(scratchLineBuffer[scratchLineNum], sizeof(scratchLineBuffer[scratchLineNum]) - 1);
+                strncpy(scratchLineBuffer[scratchLineNum] + used, " <", sizeof(scratchLineBuffer[scratchLineNum]) - used - 1);
             } else {
                 strncpy(scratchLineBuffer[scratchLineNum], ">", 2);
-                strncpy(scratchLineBuffer[scratchLineNum] + 1, temp_name, 37);
-                strncpy(scratchLineBuffer[scratchLineNum] + strlen(temp_name) + 1, "<", 2);
+                strncpy(scratchLineBuffer[scratchLineNum] + 1, tempName, sizeof(scratchLineBuffer[scratchLineNum]) - 2);
+                scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
+                const size_t used = strnlen(scratchLineBuffer[scratchLineNum], sizeof(scratchLineBuffer[scratchLineNum]) - 1);
+                strncpy(scratchLineBuffer[scratchLineNum] + used, "<", sizeof(scratchLineBuffer[scratchLineNum]) - used - 1);
             }
-            scratchLineBuffer[scratchLineNum][39] = '\0';
+            scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
         } else {
-            strncpy(scratchLineBuffer[scratchLineNum], temp_name, 39);
-            scratchLineBuffer[scratchLineNum][39] = '\0';
+            strncpy(scratchLineBuffer[scratchLineNum], tempName, sizeof(scratchLineBuffer[scratchLineNum]) - 1);
+            scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
         }
         linePointers[linesShown] = scratchLineBuffer[scratchLineNum++];
     }
@@ -501,7 +523,13 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
         else // if the newline wasn't found, then pull string length from strlen
             lineLengths[lineCount] = strlen(lines[lineCount]);
 
-        lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
+        if (current_notification_type == notificationTypeEnum::node_picker) {
+            char measureBuffer[64] = {0};
+            strncpy(measureBuffer, lines[lineCount], std::min<size_t>(lineLengths[lineCount], sizeof(measureBuffer) - 1));
+            lineWidths[lineCount] = UIRenderer::measureStringWithEmotes(display, measureBuffer);
+        } else {
+            lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
+        }
 
         // Consider extra width for signal bars on lines that contain "Signal:"
         uint16_t potentialWidth = lineWidths[lineCount];
@@ -582,6 +610,9 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
     display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
     display->setColor(WHITE);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    registerTFTActionMenuRegions(boxLeft, boxTop, boxWidth, boxHeight);
+#endif
 
     // Draw Content
     int16_t lineY = boxTop + vPadding;
@@ -604,10 +635,28 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             if (strchr(lineBuffer, 'p') || strchr(lineBuffer, 'g') || strchr(lineBuffer, 'y') || strchr(lineBuffer, 'j')) {
                 background_yOffset = -1;
             }
-            display->fillRect(boxLeft, boxTop + 1, boxWidth, effectiveLineHeight - background_yOffset);
+            const int16_t titleBarY = boxTop + 1;
+            const int16_t titleBarHeight = effectiveLineHeight - background_yOffset;
+            display->fillRect(boxLeft, titleBarY, boxWidth, titleBarHeight);
+#if GRAPHICS_TFT_COLORING_ENABLED
+            if (alertBannerOptions > 0) {
+                const uint16_t titleTextColor =
+                    (getActiveTheme().id == ThemeID::DefaultLight) ? TFTPalette::Black : getThemeHeaderText();
+                // Keep title role away from border/corner pixels so rounded-corner masks are not remapped to the title text
+                // color.
+                if (boxWidth > 2 && titleBarHeight > 0) {
+                    setAndRegisterTFTColorRole(TFTColorRole::ActionMenuTitle, getThemeHeaderBg(), titleTextColor, boxLeft + 1,
+                                               titleBarY, boxWidth - 2, titleBarHeight);
+                }
+            }
+#endif
             display->setColor(BLACK);
             int yOffset = 3;
-            display->drawString(textX, lineY - yOffset, lineBuffer);
+            if (current_notification_type == notificationTypeEnum::node_picker) {
+                UIRenderer::drawStringWithEmotes(display, textX, lineY - yOffset, lineBuffer, FONT_HEIGHT_SMALL, 1, false);
+            } else {
+                display->drawString(textX, lineY - yOffset, lineBuffer);
+            }
             display->setColor(WHITE);
             lineY += (effectiveLineHeight - 2 - background_yOffset);
         } else {
@@ -620,16 +669,35 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                 const int barSpacing = 2;
                 const int barHeightStep = 2;
                 const int gap = 6;
+                const int maxBarHeight = totalBars * barHeightStep;
 
                 int textWidth = display->getStringWidth(lineBuffer, strlen(lineBuffer), true);
                 int barsWidth = totalBars * barWidth + (totalBars - 1) * barSpacing + gap;
                 int totalWidth = textWidth + barsWidth;
                 int groupStartX = boxLeft + (boxWidth - totalWidth) / 2;
 
-                display->drawString(groupStartX, lineY, lineBuffer);
+                if (current_notification_type == notificationTypeEnum::node_picker) {
+                    UIRenderer::drawStringWithEmotes(display, groupStartX, lineY, lineBuffer, FONT_HEIGHT_SMALL, 1, false);
+                } else {
+                    display->drawString(groupStartX, lineY, lineBuffer);
+                }
 
                 int baseX = groupStartX + textWidth + gap;
                 int baseY = lineY + effectiveLineHeight - 1;
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (graphics::bannerSignalBars > 0) {
+                    uint16_t signalBarsColor = TFTPalette::Medium;
+                    if (graphics::bannerSignalBars <= 1) {
+                        signalBarsColor = TFTPalette::Bad;
+                    } else if (graphics::bannerSignalBars >= 4) {
+                        signalBarsColor = TFTPalette::Good;
+                    }
+                    const int activeBars = min(graphics::bannerSignalBars, totalBars);
+                    const int regionWidth = activeBars * barWidth + (activeBars - 1) * barSpacing;
+                    setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, baseX,
+                                               baseY - maxBarHeight, regionWidth, maxBarHeight);
+                }
+#endif
                 for (int b = 0; b < totalBars; b++) {
                     int barHeight = (b + 1) * barHeightStep;
                     int x = baseX + b * (barWidth + barSpacing);
@@ -642,7 +710,11 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                     }
                 }
             } else {
-                display->drawString(textX, lineY, lineBuffer);
+                if (current_notification_type == notificationTypeEnum::node_picker) {
+                    UIRenderer::drawStringWithEmotes(display, textX, lineY, lineBuffer, FONT_HEIGHT_SMALL, 1, false);
+                } else {
+                    display->drawString(textX, lineY, lineBuffer);
+                }
             }
             lineY += (effectiveLineHeight);
         }

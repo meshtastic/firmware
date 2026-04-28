@@ -29,6 +29,14 @@
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
+// Enable Traffic Management Module for Heltec V4
+#ifndef HAS_TRAFFIC_MANAGEMENT
+#define HAS_TRAFFIC_MANAGEMENT 1
+#endif
+#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048
+#endif
+
 // ---- GC1109 RF FRONT END CONFIGURATION ----
 // The Heltec V4.2 uses a GC1109 FEM chip with integrated PA and LNA
 // RF path: SX1262 -> Pi attenuator -> GC1109 PA -> Antenna
@@ -65,12 +73,12 @@
 // Pin mapping:
 //   CPS (pin 5)  -> SX1262 DIO2: TX/RX path select (automatic via SX126X_DIO2_AS_RF_SWITCH)
 //   CSD (pin 4)  -> GPIO2: Chip enable (HIGH=on, LOW=shutdown)
-//   CTX (pin 6)  -> GPIO5: Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=bypass PA, LOW=LNA)
+//   CTX (pin 6)  -> GPIO5: Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=RX bypass, LOW=RX LNA)
 //   VCC0/VCC1    -> Vfem via U3 LDO, controlled by GPIO7
 // KCT8103L FEM: TX/RX path switching is handled by DIO2 -> CPS pin (via SX126X_DIO2_AS_RF_SWITCH)
 
 #define LORA_KCT8103L_PA_CSD 2 // CSD - KCT8103L chip enable (HIGH=on)
-#define LORA_KCT8103L_PA_CTX 5 // CTX - Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=bypass PA, LOW=LNA)
+#define LORA_KCT8103L_PA_CTX 5 // CTX - Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=RX bypass, LOW=RX LNA)
 
 #if HAS_TFT
 #define USE_TFTDISPLAY 1

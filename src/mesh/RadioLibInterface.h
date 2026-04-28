@@ -136,6 +136,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
 
+    /**
+     * Clear the static `instance` pointer if it still points at us, so callers
+     * that check `RadioLibInterface::instance != nullptr` don't dereference a
+     * freed object after a failed init() + unique_ptr reset.
+     */
+    virtual ~RadioLibInterface();
+
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
     /**
@@ -172,6 +179,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) override;
 
+    /**
+     * Request randomness sourced from the LoRa modem, if supported by the active RadioLib interface.
+     * @return true if len bytes were produced, false otherwise.
+     */
+    bool randomBytes(uint8_t *buffer, size_t length);
+
   private:
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
      * doing the transmit */
@@ -207,7 +220,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   protected:
     uint32_t activeReceiveStart = 0;
 
-    bool receiveDetected(uint16_t irq, ulong syncWordHeaderValidFlag, ulong preambleDetectedFlag);
+    bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
     /** Do any hardware setup needed on entry into send configuration for the radio.
      * Subclasses can customize, but must also call this base method */

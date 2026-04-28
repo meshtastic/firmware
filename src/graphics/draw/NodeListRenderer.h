@@ -4,6 +4,7 @@
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
+#include <string>
 
 namespace graphics
 {
@@ -31,7 +32,7 @@ enum ListMode_Location { MODE_DISTANCE = 0, MODE_BEARING = 1, MODE_COUNT_LOCATIO
 
 // Main node list screen function
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
-                        EntryRenderer renderer, NodeExtrasRenderer extras = nullptr, float heading = 0, double lat = 0,
+                        EntryRenderer renderer, NodeExtrasRenderer extras = nullptr, float headingRadian = 0, double lat = 0,
                         double lon = 0);
 
 // Entry renderers
@@ -42,8 +43,8 @@ void drawEntryDynamic_Nodes(OLEDDisplay *display, meshtastic_NodeInfoLite *node,
 void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth);
 
 // Extras renderers
-void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float myHeading,
-                      double userLat, double userLon);
+void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth,
+                      float myHeadingRadian, double userLat, double userLon);
 
 // Screen frame functions
 void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
@@ -56,7 +57,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 // Utility functions
 const char *getCurrentModeTitle_Nodes(int screenWidth);
 const char *getCurrentModeTitle_Location(int screenWidth);
-const char *getSafeNodeName(meshtastic_NodeInfoLite *node, int columnWidth);
+std::string getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int columnWidth);
 void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
 // Scrolling controls

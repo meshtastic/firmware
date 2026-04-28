@@ -11,6 +11,8 @@
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -408,7 +410,16 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->drawString(nameX, getTextPositions(display)[line++], device_role);
 
     // === Third Row: Radio Preset ===
-    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+    // For custom modem settings show the actual parameters; for presets use the preset name.
+    char modeStr[16];
+    if (!config.lora.use_preset) {
+        snprintf(modeStr, sizeof(modeStr), "BW%u-SF%u-CR%u", static_cast<unsigned>(config.lora.bandwidth),
+                 static_cast<unsigned>(config.lora.spread_factor), static_cast<unsigned>(config.lora.coding_rate));
+    } else {
+        strncpy(modeStr, DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true),
+                sizeof(modeStr) - 1);
+        modeStr[sizeof(modeStr) - 1] = '\0';
+    }
 
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
@@ -416,7 +427,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         if (currentResolution == ScreenResolution::UltraLow) {
             snprintf(regionradiopreset, sizeof(regionradiopreset), "%s", region);
         } else {
-            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, modeStr);
         }
     }
     textWidth = display->getStringWidth(regionradiopreset);
@@ -460,9 +471,11 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int chUtil_y = getTextPositions(display)[line] + 3;
 
     int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
+    int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
     int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
     int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
     int chutil_percent = airTime->channelUtilizationPercent();
+    const int raw_chutil_percent = chutil_percent;
 
     int centerofscreen = SCREEN_WIDTH / 2;
     int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
@@ -470,7 +483,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
     display->drawString(starting_position, getTextPositions(display)[line], chUtil);
 
-    // Force 56% or higher to show a full 100% bar, text would still show related percent.
+    // Force 61% or higher to show a full 100% bar, text would still show related percent.
     if (chutil_percent >= 61) {
         chutil_percent = 100;
     }
@@ -483,9 +496,9 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     float weight3 = 0.20; // Weight for 40–100%
     float totalWeight = weight1 + weight2 + weight3;
 
-    int seg1 = chutil_bar_width * (weight1 / totalWeight);
-    int seg2 = chutil_bar_width * (weight2 / totalWeight);
-    int seg3 = chutil_bar_width * (weight3 / totalWeight);
+    int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
+    int seg2 = chutil_bar_max_fill * (weight2 / totalWeight);
+    int seg3 = chutil_bar_max_fill - seg1 - seg2; // Remainder absorbs rounding errors
 
     int fillRight = 0;
 
@@ -502,7 +515,17 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
     // Fill progress
     if (fillRight > 0) {
-        display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
+#if GRAPHICS_TFT_COLORING_ENABLED
+        uint16_t UtilizationFillColor = TFTPalette::Good;
+        if (raw_chutil_percent >= 60) {
+            UtilizationFillColor = TFTPalette::Bad;
+        } else if (raw_chutil_percent >= 35) {
+            UtilizationFillColor = TFTPalette::Medium;
+        }
+        setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
+                                   starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
+#endif
+        display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
     }
 
     display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
@@ -534,6 +557,9 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 #ifdef USE_EINK
 #ifndef T_DECK_PRO
     barsOffset -= 12;
+#endif
+#if defined(T5_S3_EPAPER_PRO)
+    barsOffset += 60;
 #endif
 #endif
     int barX = x + barsOffset;
@@ -572,6 +598,17 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         display->setColor(WHITE);
         display->drawRect(barX, barY, adjustedBarWidth, barHeight);
 
+#if GRAPHICS_TFT_COLORING_ENABLED
+        uint16_t UtilizationFillColor = TFTPalette::Good;
+        if (percent >= 80) {
+            UtilizationFillColor = TFTPalette::Bad;
+        } else if (percent >= 60) {
+            UtilizationFillColor = TFTPalette::Medium;
+        }
+        setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black, barX + 1, barY + 1,
+                                   fillWidth - 1, barHeight - 2);
+#endif
+
         display->fillRect(barX, barY, fillWidth, barHeight);
         display->setColor(WHITE);
 #endif
@@ -584,11 +621,12 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     uint32_t heapUsed = memGet.getHeapSize() - memGet.getFreeHeap();
     uint32_t heapTotal = memGet.getHeapSize();
 
-    uint32_t psramUsed = memGet.getPsramSize() - memGet.getFreePsram();
-    uint32_t psramTotal = memGet.getPsramSize();
-
     uint32_t flashUsed = 0, flashTotal = 0;
 #ifdef ESP32
+#ifndef T5_S3_EPAPER_PRO
+    uint32_t psramUsed = memGet.getPsramSize() - memGet.getFreePsram();
+    uint32_t psramTotal = memGet.getPsramSize();
+#endif
     flashUsed = FSCom.usedBytes();
     flashTotal = FSCom.totalBytes();
 #endif
@@ -607,10 +645,12 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     // === Draw memory rows
     drawUsageRow("Heap:", heapUsed, heapTotal, true);
 #ifdef ESP32
+#ifndef T5_S3_EPAPER_PRO
     if (psramUsed > 0) {
         line += 1;
         drawUsageRow("PSRAM:", psramUsed, psramTotal);
     }
+#endif
     if (flashTotal > 0) {
         line += 1;
         drawUsageRow("Flash:", flashUsed, flashTotal);

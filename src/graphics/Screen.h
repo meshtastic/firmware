@@ -330,15 +330,11 @@ class Screen : public concurrency::OSThread
 
     // Function to allow the AccelerometerThread to set the heading if a sensor provides it
     // Mutex needed?
-    void setHeading(long _heading)
-    {
-        hasCompass = true;
-        compassHeading = fmod(_heading, 360);
-    }
+    void setHeading(float heading);
 
     bool hasHeading() { return hasCompass; }
 
-    long getHeading() { return compassHeading; }
+    float getHeading() { return compassHeading; }
 
     void setEndCalibration(uint32_t _endCalibrationAt) { endCalibrationAt = _endCalibrationAt; }
     uint32_t getEndCalibration() { return endCalibrationAt; }
@@ -673,6 +669,16 @@ class Screen : public concurrency::OSThread
     void handleOnPress();
     void handleStartFirmwareUpdateScreen();
 
+#ifdef USERPREFS_UI_TEST_LOG
+    // Test-only: emits one LOG_INFO line on every frame transition so the
+    // pytest harness can assert which frame is shown. Gated behind a macro
+    // so the chatty log doesn't ship in release builds. Enabled via
+    // build_testing_profile(enable_ui_log=True) in mcp-server/userprefs.py.
+    // Member function (not free) because FramesetInfo is a private nested
+    // type — only methods of Screen can reach it.
+    void logFrameChange(const char *reason, uint8_t targetIdx);
+#endif
+
     // Info collected by setFrames method.
     // Index location of specific frames.
     // - Used to apply the FrameFocus parameter of setFrames
@@ -765,7 +771,11 @@ class Screen : public concurrency::OSThread
     DebugInfo debugInfo;
 
     /// Display device
+#ifdef USE_ST7789
+    ST7789Spi *dispdev;
+#else
     OLEDDisplay *dispdev;
+#endif
 
     /// UI helper for rendering to frames and switching between them
     OLEDDisplayUi *ui;
