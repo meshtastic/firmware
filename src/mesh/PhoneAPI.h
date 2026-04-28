@@ -4,6 +4,7 @@
 #include "concurrency/Lock.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
+#include <atomic>
 #include <deque>
 #include <iterator>
 #include <string>
@@ -145,6 +146,19 @@ class PhoneAPI
     /** the last msec we heard from the client on the other side of this link */
     uint32_t lastContactMsec = 0;
 
+    /**
+     * Shared across all PhoneAPI instances — prevents a misbehaving client (or flapping TCP
+     * reconnect loop) from driving back-to-back full config handshakes. Every handshake
+     * exercises the protobuf encode path for MY_INFO, OWN_NODEINFO, METADATA, all channels,
+     * all configs, the entire NodeDB, and a filesystem walk — each cycle costs heap that
+     * takes time to recover, and high-rate repetition fragments the internal SRAM heap.
+     *
+     * Atomic because PhoneAPI subclasses run on different FreeRTOS tasks (NimBLE callback
+     * for BLE, APIServerPort OSThread for WiFi/HTTP/Ethernet, the serial-console task for
+     * USB) — concurrent reads/writes across transports are possible.
+     */
+    static std::atomic<uint32_t> lastStartConfigMs;
+
     /// Hookable to find out when connection changes
     virtual void onConnectionChanged(bool connected) {}
 
@@ -164,8 +178,11 @@ class PhoneAPI
     virtual void onConfigStart() {}
     virtual void onConfigComplete() {}
 
-    /// begin a new connection
-    void handleStartConfig();
+    /// begin a new connection. If the request is throttled (see lastStartConfigMs),
+    /// the member `config_nonce` is NOT updated from `newConfigNonce` — so an already
+    /// in-flight config dump keeps its original nonce and the caller's nonce is silently
+    /// dropped. Well-behaved clients retry on timeout.
+    void handleStartConfig(uint32_t newConfigNonce);
 
     enum APIType {
         TYPE_NONE, // Initial state, don't send anything until the client starts asking for config
