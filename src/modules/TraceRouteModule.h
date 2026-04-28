@@ -10,6 +10,17 @@
 #include <vector>
 
 #define ROUTE_SIZE sizeof(((meshtastic_RouteDiscovery *)0)->route) / sizeof(((meshtastic_RouteDiscovery *)0)->route[0])
+// SNR flag indicating that the SNR value is unknown or not available.
+// Valid value: INT8_MIN (-128). Used when SNR cannot be determined for a hop.
+#define TRACEROUTE_SNR_FLAG_UNKNOWN INT8_MIN
+
+// SNR flag indicating that the packet was received via MQTT (not over RF).
+// Valid value: (INT8_MIN + 1) (-127). Used to distinguish MQTT-injected hops.
+#define TRACEROUTE_SNR_FLAG_MQTT (INT8_MIN + 1)
+
+// SNR flag indicating that the packet was received via UDP (not over RF).
+// Valid value: INT8_MAX (127). Used to distinguish UDP-injected hops.
+#define TRACEROUTE_SNR_FLAG_UDP INT8_MAX
 
 /**
  * A module that traces the route to a certain destination node
