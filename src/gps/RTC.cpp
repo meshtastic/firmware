@@ -292,7 +292,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
                 LOG_WARN("Failed to set time for RX8130CE");
             }
         }
-#elif defined(ARCH_ESP32)
+#elif defined(ARCH_ESP32) || defined (ARCH_RP2040)
         settimeofday(tv, NULL);
 #endif
 
