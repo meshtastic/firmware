@@ -50,8 +50,43 @@
 
 #include "xmodem.h"
 #include "SPILock.h"
+#include <cstdio>
+#include <cstring>
 
 #ifdef FSCom
+
+/** Create every parent directory for @p route.path (file path) on the routed FS. */
+static bool mkdirParentsForRoute(const FSRoute &route)
+{
+    char tmp[sizeof(route.path)];
+    strlcpy(tmp, route.path, sizeof(tmp));
+    if (tmp[0] != '/')
+        return false;
+
+    // Drop basename — only directories are created here.
+    char *slash = strrchr(tmp + 1, '/');
+    if (!slash)
+        return true; // "/file.bin" at FS root
+
+    *slash = '\0';
+    if (strlen(tmp) <= 1)
+        return true;
+
+    // Prefix mkdir at each internal '/', then the full dirname (best-effort; already-exists is OK).
+    for (char *s = tmp + 1; *s; s++) {
+        if (*s != '/')
+            continue;
+        *s = '\0';
+        FSRoute d = route;
+        strlcpy(d.path, tmp, sizeof(d.path));
+        *s = '/';
+        fsMkdir(d);
+    }
+    FSRoute d = route;
+    strlcpy(d.path, tmp, sizeof(d.path));
+    fsMkdir(d);
+    return true;
+}
 
 XModemAdapter xModem;
 
@@ -118,12 +153,38 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     case meshtastic_XModem_Control_SOH:
     case meshtastic_XModem_Control_STX:
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
-            // NULL packet has the destination filename
-            memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+            // NULL packet has the destination filename (protobuf bytes are not NUL-terminated)
+            size_t n = xmodemPacket.buffer.size;
+            if (n >= sizeof(filename))
+                n = sizeof(filename) - 1;
+            memcpy(filename, xmodemPacket.buffer.bytes, n);
+            filename[n] = '\0';
+            activeRoute_ = fsRoute(filename);
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
                 spiLock->lock();
-                file = FSCom.open(filename, FILE_O_WRITE);
+                if (recvCommitPending) {
+                    fsRemove(fsRoute(recvTmpPath));
+                    recvCommitPending = false;
+                }
+                int plen = snprintf(recvTmpPath, sizeof(recvTmpPath), "%s.tmp", filename);
+                if (plen < 0 || (size_t)plen >= sizeof(recvTmpPath)) {
+                    spiLock->unlock();
+                    LOG_WARN("XModem: Receive path too long for .tmp suffix");
+                    sendControl(meshtastic_XModem_Control_NAK);
+                    isReceiving = false;
+                    break;
+                }
+                FSRoute tmpRoute = fsRoute(recvTmpPath);
+                if (fsExists(tmpRoute) && !fsRemove(tmpRoute)) {
+                    spiLock->unlock();
+                    LOG_WARN("XModem: Failed to remove existing temp before receive: %s", recvTmpPath);
+                    sendControl(meshtastic_XModem_Control_NAK);
+                    isReceiving = false;
+                    break;
+                }
+                mkdirParentsForRoute(tmpRoute);
+                file = fsOpenWrite(tmpRoute);
                 spiLock->unlock();
                 if (file) {
                     sendControl(meshtastic_XModem_Control_ACK);
@@ -131,13 +192,14 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                     packetno = 1;
                     break;
                 }
+                LOG_WARN("XModem: Failed to open temp for receive: %s", recvTmpPath);
                 sendControl(meshtastic_XModem_Control_NAK);
                 isReceiving = false;
                 break;
             } else { // Transmit this file from Flash
                 LOG_INFO("XModem: Transmit file %s", filename);
                 spiLock->lock();
-                file = FSCom.open(filename, FILE_O_READ);
+                file = fsOpenRead(activeRoute_);
                 spiLock->unlock();
                 if (file) {
                     packetno = 1;
@@ -163,6 +225,16 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             }
         } else {
             if (isReceiving) {
+                if (xmodemPacket.seq == 0) {
+                    // Duplicate OPEN retry (client re-sent while already receiving) — re-ACK so Python proceeds.
+                    sendControl(meshtastic_XModem_Control_ACK);
+                    break;
+                }
+                if (xmodemPacket.seq + 1 == packetno) {
+                    // Already-delivered packet still in flight (stale serial buffer retry) — re-ACK.
+                    sendControl(meshtastic_XModem_Control_ACK);
+                    break;
+                }
                 // normal file data packet
                 if ((xmodemPacket.seq == packetno) &&
                     check(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size, xmodemPacket.crc16)) {
@@ -186,24 +258,49 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         }
         break;
     case meshtastic_XModem_Control_EOT:
-        // End of transmission
-        sendControl(meshtastic_XModem_Control_ACK);
+        // End of transmission (receive): flush temp, rename to final, ACK only after commit
+        if (!isReceiving && !recvCommitPending)
+            break;
+        if (recvCommitPending) {
+            if (!fsRename(fsRoute(recvTmpPath), activeRoute_)) {
+                LOG_WARN("XModem: rename temp to final failed (retry): %s -> %s", recvTmpPath, filename);
+                sendControl(meshtastic_XModem_Control_NAK);
+                break;
+            }
+            sendControl(meshtastic_XModem_Control_ACK);
+            recvCommitPending = false;
+            memset(recvTmpPath, 0, sizeof(recvTmpPath));
+            break;
+        }
         spiLock->lock();
         file.flush();
         file.close();
         spiLock->unlock();
         isReceiving = false;
+        if (!fsRename(fsRoute(recvTmpPath), activeRoute_)) {
+            LOG_WARN("XModem: rename temp to final failed: %s -> %s", recvTmpPath, filename);
+            sendControl(meshtastic_XModem_Control_NAK);
+            recvCommitPending = true;
+            break;
+        }
+        sendControl(meshtastic_XModem_Control_ACK);
+        memset(recvTmpPath, 0, sizeof(recvTmpPath));
         break;
     case meshtastic_XModem_Control_CAN:
-        // Cancel transmission and remove file
+        // Cancel receive: drop partial temp only (final path unchanged)
+        if (!isReceiving && !recvCommitPending)
+            break;
         sendControl(meshtastic_XModem_Control_ACK);
         spiLock->lock();
-        file.flush();
-        file.close();
-
-        FSCom.remove(filename);
+        if (isReceiving) {
+            file.flush();
+            file.close();
+        }
+        fsRemove(fsRoute(recvTmpPath));
         spiLock->unlock();
         isReceiving = false;
+        recvCommitPending = false;
+        memset(recvTmpPath, 0, sizeof(recvTmpPath));
         break;
     case meshtastic_XModem_Control_ACK:
         // Acknowledge Send the next packet
@@ -255,7 +352,6 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             xmodemStore.seq = packetno;
             spiLock->lock();
             file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
-
             xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
             spiLock->unlock();
             xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
