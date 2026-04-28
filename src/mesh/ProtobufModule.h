@@ -42,8 +42,14 @@ template <class T> class ProtobufModule : protected SinglePortModule
      */
     meshtastic_MeshPacket *allocDataProtobuf(const T &payload)
     {
-        // Update our local node info with our position (even if we don't decide to update anyone else)
+        // allocDataPacket() now returns nullptr on packet-pool exhaustion (since
+        // Router::allocForSending was made null-safe in #10261). Propagate the nullptr
+        // to the caller rather than dereferencing `p->decoded`. All current callers
+        // either null-check the return or forward it to a helper that does — see the
+        // caller audit in the #10261 PR description.
         meshtastic_MeshPacket *p = allocDataPacket();
+        if (!p)
+            return nullptr;
 
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), fields, &payload);

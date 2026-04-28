@@ -189,6 +189,10 @@ inline void onReceiveJson(byte *payload, size_t length)
 
         // construct protobuf data packet using TEXT_MESSAGE, send it to the mesh
         meshtastic_MeshPacket *p = router->allocForSending();
+        if (!p) {
+            LOG_WARN("MQTT downlink sendtext dropped: packet pool exhausted");
+            return;
+        }
         p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
         if (json.find("channel") != json.end() && json["channel"]->IsNumber() &&
             (json["channel"]->AsNumber() < channels.getNumChannels()))
@@ -202,7 +206,11 @@ inline void onReceiveJson(byte *payload, size_t length)
             p->decoded.payload.size = jsonPayloadStr.length();
             service->sendToMesh(p, RX_SRC_LOCAL);
         } else {
+            // Release the allocated packet back to the pool — `p` would otherwise leak,
+            // permanently reducing the number of available slots for every future
+            // send attempt.
             LOG_WARN("Received MQTT json payload too long, drop");
+            packetPool.release(p);
         }
     } else if (json["type"]->AsString().compare("sendposition") == 0 && json["payload"]->IsObject()) {
         // invent the "sendposition" type for a valid envelope
@@ -220,6 +228,10 @@ inline void onReceiveJson(byte *payload, size_t length)
 
         // construct protobuf data packet using POSITION, send it to the mesh
         meshtastic_MeshPacket *p = router->allocForSending();
+        if (!p) {
+            LOG_WARN("MQTT downlink sendposition dropped: packet pool exhausted");
+            return;
+        }
         p->decoded.portnum = meshtastic_PortNum_POSITION_APP;
         if (json.find("channel") != json.end() && json["channel"]->IsNumber() &&
             (json["channel"]->AsNumber() < channels.getNumChannels()))

@@ -57,6 +57,12 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     // So we manually call pb_encode_to_bytes and specify routing port number
     // auto p = allocDataProtobuf(c);
     meshtastic_MeshPacket *p = router->allocForSending();
+    if (!p) {
+        // Router::allocForSending / MemoryPool::alloc already LOG_WARN on exhaustion;
+        // don't double-log. An unthrottled WARN here would spam during an ACK/NAK storm
+        // — which is exactly the scenario that drives the pool to empty in the first place.
+        return nullptr;
+    }
     p->decoded.portnum = meshtastic_PortNum_ROUTING_APP;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Routing_msg, &c);
@@ -79,6 +85,8 @@ meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error e
     uint8_t channelIndex =
         p->which_payload_variant == meshtastic_MeshPacket_decoded_tag ? p->channel : channels.getPrimaryIndex();
     auto r = allocAckNak(err, getFrom(p), p->id, channelIndex);
+    if (!r)
+        return nullptr;
 
     setReplyTo(r, *p);
 
