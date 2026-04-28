@@ -770,11 +770,14 @@ bool PhoneAPI::available()
 void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message)
 {
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
     cn->has_reply_id = true;
     cn->reply_id = replyId;
-    cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->level = level;
     cn->time = getValidTime(RTCQualityFromNet);
-    strncpy(cn->message, message, sizeof(cn->message));
+    strncpy(cn->message, message, sizeof(cn->message) - 1);
+    cn->message[sizeof(cn->message) - 1] = '\0';
     service->sendClientNotification(cn);
 }
 

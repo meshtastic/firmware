@@ -482,6 +482,10 @@ bool MQTT::publish(const char *topic, const char *payload, bool retained)
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
+        if (!msg) {
+            // MemoryPool::alloc already LOG_WARNs on exhaustion; don't double-log here.
+            return false;
+        }
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
         strncpy(msg->topic, topic, sizeof(msg->topic));
         msg->topic[sizeof(msg->topic) - 1] = '\0';
@@ -503,6 +507,10 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
+        if (!msg) {
+            // MemoryPool::alloc already LOG_WARNs on exhaustion; don't double-log here.
+            return false;
+        }
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_data_tag;
         strncpy(msg->topic, topic, sizeof(msg->topic));
         msg->topic[sizeof(msg->topic) - 1] = '\0'; // Ensure null termination
@@ -685,11 +693,13 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         LOG_ERROR(warning);
 #if !IS_RUNNING_TESTS
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_ERROR;
-        cn->time = getValidTime(RTCQualityFromNet);
-        strncpy(cn->message, warning, sizeof(cn->message) - 1);
-        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            strncpy(cn->message, warning, sizeof(cn->message) - 1);
+            cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+            service->sendClientNotification(cn);
+        }
 #endif
         return false;
 #endif
@@ -701,11 +711,13 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         LOG_ERROR(warning);
 #if !IS_RUNNING_TESTS
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_ERROR;
-        cn->time = getValidTime(RTCQualityFromNet);
-        strncpy(cn->message, warning, sizeof(cn->message) - 1);
-        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            strncpy(cn->message, warning, sizeof(cn->message) - 1);
+            cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+            service->sendClientNotification(cn);
+        }
 #endif
         return false;
     }
@@ -878,6 +890,15 @@ void MQTT::perhapsReportToMap()
 
     // Allocate MeshPacket and fill it
     meshtastic_MeshPacket *mp = packetPool.allocZeroed();
+    if (!mp) {
+        // Back off to the configured publish interval on pool exhaustion. Without this,
+        // perhapsReportToMap() would be called on every runOnce() (20–200 ms) until the
+        // pool recovers, and each call would retry the log + early return — turning
+        // sustained pool pressure into a log-flood instead of a throttled failure.
+        LOG_ERROR("MQTT Map report: packet pool exhausted");
+        last_report_to_map = millis();
+        return;
+    }
     mp->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     mp->from = nodeDB->getNodeNum();
     mp->to = NODENUM_BROADCAST;

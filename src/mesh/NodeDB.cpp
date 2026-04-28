@@ -1881,10 +1881,14 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
                     "to regenerate your public keys.";
                 LOG_WARN(warning, p.long_name);
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-                cn->level = meshtastic_LogRecord_Level_WARNING;
-                cn->time = getValidTime(RTCQualityFromNet);
-                sprintf(cn->message, warning, p.long_name);
-                service->sendClientNotification(cn);
+                if (cn) {
+                    cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->time = getValidTime(RTCQualityFromNet);
+                    // snprintf because p.long_name is remote-controlled up to 40 bytes and the
+                    // warning format itself is ~150 bytes — sprintf could overflow cn->message.
+                    snprintf(cn->message, sizeof(cn->message), warning, p.long_name);
+                    service->sendClientNotification(cn);
+                }
             }
             return false;
         }
