@@ -2,9 +2,9 @@
 
 #include "PhoneAPI.h"
 #include "Stream.h"
+#include "concurrency/Lock.h"
 #include "concurrency/OSThread.h"
 #include <cstdarg>
-#include <mutex>
 
 // A To/FromRadio packet + our 32 bit header
 #define MAX_STREAM_BUF_SIZE (MAX_TO_FROM_RADIO_SIZE + sizeof(uint32_t))
@@ -112,8 +112,8 @@ class StreamAPI : public PhoneAPI
     /// interleave on the wire.
     meshtastic_FromRadio fromRadioScratchLog = {};
     uint8_t txBufLog[MAX_STREAM_BUF_SIZE] = {0};
-    // std::mutex (not concurrency::Lock): std::mutex has a proper RAII destructor by C++ standard
-    // contract; concurrency::Lock has no destructor, so per-instance Lock members leak ~80 B of
-    // FreeRTOS handle on every connection close.
-    std::mutex streamLock;
+    // concurrency::Lock (not std::mutex): std::mutex isn't available on the bare-metal ARM-GCC
+    // newlib STL (nRF52/STM32/RP2). See Lock.cpp for the per-destruction ~80 B FreeRTOS handle
+    // leak trade-off — fixing that requires lifecycle work in PhoneAPI/StreamAPI, beyond scope.
+    concurrency::Lock streamLock;
 };

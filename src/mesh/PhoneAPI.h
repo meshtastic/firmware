@@ -1,11 +1,11 @@
 #pragma once
 
 #include "Observer.h"
+#include "concurrency/Lock.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
 #include <deque>
 #include <iterator>
-#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -86,10 +86,11 @@ class PhoneAPI
     // Tunable size of the node info cache so we can keep BLE reads non-blocking.
     static constexpr size_t kNodePrefetchDepth = 4;
     // Protect nodeInfoForPhone + nodeInfoQueue because NimBLE callbacks run in a separate FreeRTOS task.
-    // std::mutex (not concurrency::Lock): std::mutex has a proper RAII destructor by C++ standard
-    // contract; concurrency::Lock has no destructor, so per-instance Lock members leak ~80 B of
-    // FreeRTOS handle on every connection close.
-    std::mutex nodeInfoMutex;
+    // concurrency::Lock (not std::mutex): std::mutex isn't available on the bare-metal ARM-GCC
+    // newlib STL (nRF52/STM32/RP2 builds fail with "'mutex' in namespace 'std' does not name a
+    // type"). See Lock.cpp for the per-destruction ~80 B FreeRTOS handle leak trade-off — fixing
+    // that requires lifecycle work in PhoneAPI/StreamAPI, beyond the scope of this PR.
+    concurrency::Lock nodeInfoMutex;
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
