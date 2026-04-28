@@ -127,6 +127,60 @@ void test_client_uses_public_channel_minimums()
     TEST_ASSERT_EQUAL_UINT32(60 * 60, position);
 }
 
+// --- Saturation/clamp tests for getConfiguredOrDefaultMs[Scaled] ---
+// These guard the INT32_MAX clamp added to avoid uint32 wrap of secs*1000 and
+// to keep results safe to cast to int32_t for OSThread runOnce returns.
+
+void test_ms_below_threshold()
+{
+    // Ordinary value passes through unchanged.
+    TEST_ASSERT_EQUAL_UINT32(60000U, Default::getConfiguredOrDefaultMs(60, 0));
+}
+
+void test_ms_at_threshold()
+{
+    // INT32_MAX / 1000 = 2,147,483 — largest secs that does not clamp.
+    TEST_ASSERT_EQUAL_UINT32(2147483000U, Default::getConfiguredOrDefaultMs(2147483U, 0));
+}
+
+void test_ms_just_above_threshold()
+{
+    // One second over the boundary must saturate, not wrap.
+    TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(INT32_MAX), Default::getConfiguredOrDefaultMs(2147484U, 0));
+}
+
+void test_ms_uint32_max()
+{
+    // default_sds_secs == UINT32_MAX on non-routers must not wrap.
+    TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(INT32_MAX), Default::getConfiguredOrDefaultMs(UINT32_MAX, 0));
+}
+
+void test_ms_default_clamps()
+{
+    // Clamp also applies when the default-arg path is taken (configured == 0).
+    TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(INT32_MAX), Default::getConfiguredOrDefaultMs(0, UINT32_MAX));
+}
+
+void test_ms_result_is_int32_safe()
+{
+    // Regression guard for runOnce returns: cast to int32_t must not go negative.
+    int32_t result = static_cast<int32_t>(Default::getConfiguredOrDefaultMs(UINT32_MAX, 0));
+    TEST_ASSERT_GREATER_OR_EQUAL_INT32(0, result);
+}
+
+void test_scaled_overflow_saturates()
+{
+    // long_fast (SF11/BW250) with a 24h base and heavy congestion overflows
+    // the uint32 result without the double-precision guard. Must saturate.
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    config.lora.use_preset = false;
+    config.lora.spread_factor = 11;
+    config.lora.bandwidth = 250;
+
+    uint32_t res = Default::getConfiguredOrDefaultMsScaled(0, ONE_DAY, 1000);
+    TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(INT32_MAX), res);
+}
+
 void setup()
 {
     // Small delay to match other test mains
@@ -140,6 +194,13 @@ void setup()
     RUN_TEST(test_router_uses_router_minimums);
     RUN_TEST(test_router_late_uses_router_minimums);
     RUN_TEST(test_client_uses_public_channel_minimums);
+    RUN_TEST(test_ms_below_threshold);
+    RUN_TEST(test_ms_at_threshold);
+    RUN_TEST(test_ms_just_above_threshold);
+    RUN_TEST(test_ms_uint32_max);
+    RUN_TEST(test_ms_default_clamps);
+    RUN_TEST(test_ms_result_is_int32_safe);
+    RUN_TEST(test_scaled_overflow_saturates);
     exit(UNITY_END());
 }
 
