@@ -133,6 +133,8 @@ int32_t AirQualityTelemetryModule::runOnce()
                         return pendingForReadyMs;
                     }
                 }
+            } else {
+                LOG_INFO("%s: All subsensors are disabled", sensor->sensorName);
             }
         }
 
@@ -156,15 +158,19 @@ int32_t AirQualityTelemetryModule::runOnce()
         // Send to sleep sensors that consume power
         LOG_DEBUG("Sending sensors to sleep");
         for (TelemetrySensor *sensor : sensors) {
-            if (sensor->isActive() && sensor->canSleep()) {
-                if (sensor->wakeUpTimeMs() <
-                    (int32_t)Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
-                                                                     default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
-                    LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
-                    sensor->sleep();
-                } else {
-                    LOG_DEBUG("Sensor stays enabled due to warm up period");
+            if (!sensor->allDisabled()) {
+                if (sensor->isActive() && sensor->canSleep()) {
+                    if (sensor->wakeUpTimeMs() < (int32_t)Default::getConfiguredOrDefaultMsScaled(
+                                                     moduleConfig.telemetry.air_quality_interval,
+                                                     default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
+                        LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
+                        sensor->sleep();
+                    } else {
+                        LOG_DEBUG("Sensor stays enabled due to warm up period");
+                    }
                 }
+            } else {
+                LOG_INFO("%s: All subsensors are disabled", sensor->sensorName);
             }
         }
     }
@@ -314,11 +320,15 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 
     bool sensor_get = false;
     for (TelemetrySensor *sensor : sensors) {
-        LOG_DEBUG("Reading %s", sensor->sensorName);
-        // Note - this function doesn't get properly called if within a conditional
-        sensor_get = sensor->getMetrics(m);
-        valid = valid || sensor_get;
-        hasSensor = true;
+        if (!sensor->allDisabled()) {
+            LOG_DEBUG("Reading %s", sensor->sensorName);
+            // Note - this function doesn't get properly called if within a conditional
+            sensor_get = sensor->getMetrics(m);
+            valid = valid || sensor_get;
+            hasSensor = true;
+        } else {
+            LOG_INFO("%s: All subsensors are disabled", sensor->sensorName);
+        }
     }
 
     return valid && hasSensor;

@@ -183,16 +183,76 @@ bool SFA30Sensor::getMetrics(meshtastic_Telemetry *measurement)
     reClockI2C(currentClock, _bus, false);
 #endif
 
-    measurement->variant.air_quality_metrics.has_form_temperature = true;
-    measurement->variant.air_quality_metrics.has_form_humidity = true;
-    measurement->variant.air_quality_metrics.has_form_formaldehyde = true;
-
-    measurement->variant.air_quality_metrics.form_temperature = temperature;
-    measurement->variant.air_quality_metrics.form_humidity = humidity;
-    measurement->variant.air_quality_metrics.form_formaldehyde = hcho;
+    if (!moduleConfig.telemetry.sensordisables.sfa30.disable_hcho) {
+        measurement->variant.air_quality_metrics.has_form_formaldehyde = true;
+        measurement->variant.air_quality_metrics.form_formaldehyde = hcho;
+    }
+    if (!moduleConfig.telemetry.sensordisables.sfa30.disable_trh) {
+        measurement->variant.air_quality_metrics.has_form_temperature = true;
+        measurement->variant.air_quality_metrics.has_form_humidity = true;
+        measurement->variant.air_quality_metrics.form_temperature = temperature;
+        measurement->variant.air_quality_metrics.form_humidity = humidity;
+    }
 
     LOG_DEBUG("Got %s readings: hcho=%.2f, hcho_temp=%.2f, hcho_hum=%.2f", sensorName, hcho, temperature, humidity);
 
     return true;
+}
+
+bool SFA30Sensor::allDisabled()
+{
+    return moduleConfig.telemetry.sensordisables.sfa30.disable_hcho && moduleConfig.telemetry.sensordisables.sfa30.disable_trh;
+}
+
+void SFA30Sensor::setDisables(meshtastic_SFA30Disables setDisables)
+{
+    bool toSave = false;
+    if (setDisables.has_disable_hcho) {
+        moduleConfig.telemetry.sensordisables.sfa30.has_disable_hcho = true;
+        moduleConfig.telemetry.sensordisables.sfa30.disable_hcho = setDisables.disable_hcho;
+        LOG_INFO("%s %s HCHO metrics", sensorName, setDisables.disable_hcho ? "disabling" : "enabling");
+        toSave = true;
+    }
+    if (setDisables.has_disable_trh) {
+        moduleConfig.telemetry.sensordisables.sfa30.has_disable_trh = true;
+        moduleConfig.telemetry.sensordisables.sfa30.disable_trh = setDisables.disable_trh;
+        LOG_INFO("%s %s T/RH metrics", sensorName, setDisables.disable_trh ? "disabling" : "enabling");
+        toSave = true;
+    }
+    if (!toSave)
+        return;
+
+    moduleConfig.telemetry.has_sensordisables = true;
+    moduleConfig.telemetry.sensordisables.has_sfa30 = true;
+    if (!nodeDB->saveToDisk(SEGMENT_MODULECONFIG))
+        LOG_ERROR("%s: Can't save module config", sensorName);
+}
+
+AdminMessageHandleResult SFA30Sensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                         meshtastic_AdminMessage *response)
+{
+    AdminMessageHandleResult result;
+
+    switch (request->which_payload_variant) {
+    case meshtastic_AdminMessage_sensor_config_tag:
+        // Check for ASC-FRC request first
+        if (!request->sensor_config.has_sfa30_config) {
+            result = AdminMessageHandleResult::NOT_HANDLED;
+            break;
+        }
+
+        // Check for disables request
+        if (request->sensor_config.sfa30_config.has_sfa30disables) {
+            this->setDisables(request->sensor_config.sfa30_config.sfa30disables);
+        }
+
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    default:
+        result = AdminMessageHandleResult::NOT_HANDLED;
+    }
+
+    return result;
 }
 #endif

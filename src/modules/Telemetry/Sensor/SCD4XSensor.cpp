@@ -133,12 +133,16 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
         }
         return false;
     } else {
-        measurement->variant.air_quality_metrics.has_co2_temperature = true;
-        measurement->variant.air_quality_metrics.has_co2_humidity = true;
-        measurement->variant.air_quality_metrics.has_co2 = true;
-        measurement->variant.air_quality_metrics.co2_temperature = temperature;
-        measurement->variant.air_quality_metrics.co2_humidity = humidity;
-        measurement->variant.air_quality_metrics.co2 = co2;
+        if (!moduleConfig.telemetry.sensordisables.scd4x.disable_co2) {
+            measurement->variant.air_quality_metrics.has_co2 = true;
+            measurement->variant.air_quality_metrics.co2 = co2;
+        }
+        if (!moduleConfig.telemetry.sensordisables.scd4x.disable_trh) {
+            measurement->variant.air_quality_metrics.has_co2_temperature = true;
+            measurement->variant.air_quality_metrics.co2_temperature = temperature;
+            measurement->variant.air_quality_metrics.has_co2_humidity = true;
+            measurement->variant.air_quality_metrics.co2_humidity = humidity;
+        }
         return true;
     }
 }
@@ -791,6 +795,36 @@ int32_t SCD4XSensor::pendingForReadyMs()
     return 0;
 }
 
+bool SCD4XSensor::allDisabled()
+{
+    return moduleConfig.telemetry.sensordisables.scd4x.disable_co2 && moduleConfig.telemetry.sensordisables.scd4x.disable_trh;
+}
+
+void SCD4XSensor::setDisables(meshtastic_SCD4XDisables setDisables)
+{
+    bool toSave = false;
+    if (setDisables.has_disable_co2) {
+        moduleConfig.telemetry.sensordisables.scd4x.has_disable_co2 = true;
+        moduleConfig.telemetry.sensordisables.scd4x.disable_co2 = setDisables.disable_co2;
+        LOG_INFO("%s %s CO2 metric", sensorName, setDisables.disable_co2 ? "disabling" : "enabling");
+        toSave = true;
+    }
+    if (setDisables.has_disable_trh) {
+        moduleConfig.telemetry.sensordisables.scd4x.has_disable_trh = true;
+        moduleConfig.telemetry.sensordisables.scd4x.disable_trh = setDisables.disable_trh;
+        LOG_INFO("%s %s T/RH metrics", sensorName, setDisables.disable_trh ? "disabling" : "enabling");
+        toSave = true;
+    }
+
+    if (!toSave)
+        return;
+
+    moduleConfig.telemetry.has_sensordisables = true;
+    moduleConfig.telemetry.sensordisables.has_scd4x = true;
+    if (!nodeDB->saveToDisk(SEGMENT_MODULECONFIG))
+        LOG_ERROR("%s: Can't save module config", sensorName);
+}
+
 AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
                                                          meshtastic_AdminMessage *response)
 {
@@ -894,6 +928,11 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
                     result = AdminMessageHandleResult::NOT_HANDLED;
                     break;
                 }
+            }
+
+            // Check for disables request
+            if (request->sensor_config.scd4x_config.has_scd4xdisables) {
+                this->setDisables(request->sensor_config.scd4x_config.scd4xdisables);
             }
         }
 

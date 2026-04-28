@@ -68,6 +68,9 @@ class TelemetrySensor
     virtual int32_t wakeUpTimeMs() { return 0; }
     virtual int32_t pendingForReadyMs() { return 0; }
 
+    // Enables
+    virtual bool allDisabled() { return false; };
+
 #if WIRE_INTERFACES_COUNT > 1
     // Set to true if Implementation only works first I2C port (Wire)
     virtual bool onlyWire1() { return false; }
