@@ -190,6 +190,13 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 changes |= SEGMENT_MODULECONFIG;
             }
 
+#if !MESHTASTIC_EXCLUDE_GPS
+            // Enable gps if it was previously disabled due to region not being set
+            if (gps != nullptr && !gps->isEnabled() &&
+                config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+                gps->enable();
+#endif
+
             service->reloadConfig(changes);
         });
 
