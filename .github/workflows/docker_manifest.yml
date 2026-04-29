@@ -43,6 +43,15 @@ jobs:
       push: true
     secrets: inherit
 
+  docker-debian-riscv64:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: debian
+      platform: linux/riscv64
+      runs-on: ubuntu-24.04-arm
+      push: true
+    secrets: inherit
+
   docker-alpine-amd64:
     uses: ./.github/workflows/docker_build.yml
     with:
@@ -70,16 +79,27 @@ jobs:
       push: true
     secrets: inherit
 
+  docker-alpine-riscv64:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: alpine
+      platform: linux/riscv64
+      runs-on: ubuntu-24.04-arm
+      push: true
+    secrets: inherit
+
   docker-manifest:
     needs:
       # Debian
       - docker-debian-amd64
       - docker-debian-arm64
       - docker-debian-armv7
+      - docker-debian-riscv64
       # Alpine
       - docker-alpine-amd64
       - docker-alpine-arm64
       - docker-alpine-armv7
+      - docker-alpine-riscv64
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
@@ -162,6 +182,7 @@ jobs:
             meshtastic/meshtasticd@${{ needs.docker-debian-amd64.outputs.digest }}
             meshtastic/meshtasticd@${{ needs.docker-debian-arm64.outputs.digest }}
             meshtastic/meshtasticd@${{ needs.docker-debian-armv7.outputs.digest }}
+            meshtastic/meshtasticd@${{ needs.docker-debian-riscv64.outputs.digest }}
 
       - name: Docker meta (Alpine)
         id: meta_alpine
@@ -182,3 +203,4 @@ jobs:
             meshtastic/meshtasticd@${{ needs.docker-alpine-amd64.outputs.digest }}
             meshtastic/meshtasticd@${{ needs.docker-alpine-arm64.outputs.digest }}
             meshtastic/meshtasticd@${{ needs.docker-alpine-armv7.outputs.digest }}
+            meshtastic/meshtasticd@${{ needs.docker-alpine-riscv64.outputs.digest }}
