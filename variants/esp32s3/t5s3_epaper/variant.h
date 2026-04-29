@@ -16,6 +16,11 @@
 #define I2C_SCL SCL
 
 #define HAS_TOUCHSCREEN 1
+#define TOUCH_POLL_INTERVAL_IDLE 25
+#define TOUCH_POLL_INTERVAL_ACTIVE 15
+#define TOUCH_POLL_INTERVAL_RELEASE 20
+#define TOUCH_POLL_INTERVAL_ACTIVE_FAST 8
+#define TOUCH_POLL_INTERVAL_RELEASE_FAST 8
 #define GT911_PIN_SDA SDA
 #define GT911_PIN_SCL SCL
 #if defined(T5_S3_EPAPER_PRO_V1)
@@ -25,10 +30,34 @@
 #define GT911_PIN_INT 3
 #define GT911_PIN_RST 9
 #endif
+// Do not use touch as a light-sleep wake source on T5-S3.
+// Wake should come from physical buttons/radio/timer only.
+#define SCREEN_TOUCH_INT GT911_PIN_INT
 
-#define PCF85063_RTC 0x51
+// Touch control helpers for this variant
+bool isTouchInputEnabled();
+void setTouchInputEnabled(bool enabled, bool showIndicator);
+void toggleTouchInputEnabled();
+
+// Backlight control helpers for this variant (non-latching behavior)
+void t5BacklightSetUserEnabled(bool enabled);
+bool t5BacklightIsUserEnabled();
+void t5BacklightToggleUser();
+void t5BacklightSetForcedByTimeout(bool forced);
+void t5BacklightSetForcedBySleep(bool forced);
+void t5BacklightHandleUserInput();
+
+// Touch timeout/wake helpers for this variant
+void t5TouchSetForcedByTimeout(bool forced);
+bool t5TouchIsForcedByTimeout();
+void t5TouchHandleUserInput();
+
+// Gate GT911 capacitive-home callback delivery until InkHUD startup is complete.
+void t5SetHomeCapButtonEventsEnabled(bool enabled);
+
+#define PCF8563_RTC 0x51
 #define HAS_RTC 1
-#define PCF85063_INT 2
+#define PCF8563_INT 2
 
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
@@ -45,8 +74,10 @@
 #define ALT_BUTTON_PIN PIN_BUTTON2
 #else
 #define BUTTON_PIN 0
+#define BOARD_PCA9535_ADDR 0x20
+#define BOARD_PCA9535_INT 38
+#define BOARD_PCA9535_BUTTON_MASK 0x04
 #endif
-
 // SD card
 #define HAS_SDCARD
 #define SDCARD_CS SPI_CS

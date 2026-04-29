@@ -6,26 +6,27 @@ NicheGraphics attempts a different approach:
 Per-device config takes place in this setupNicheGraphics() method
 (And a small amount in platformio.ini)
 
-This file sets up InkHUD for Heltec VM-E290.
-Different NicheGraphics UIs and different hardware variants will each have their own setup procedure.
+This file sets up InkHUD for the LilyGo T5-E-Paper-S3-Pro.
+
+The board uses a 4.7" ED047TC1 parallel e-paper display (960×540, 8-bit parallel interface).
+This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver adapter.
 
 */
 
 #pragma once
 
 #include "configuration.h"
-#include "mesh/MeshModule.h"
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
 // InkHUD-specific components
 // ---------------------------
-// #include "graphics/niche/InkHUD/InkHUD.h"
-#include "graphics/niche/InkHUD/WindowManager.h"
+#include "graphics/niche/InkHUD/InkHUD.h"
 
 // Applets
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
@@ -33,27 +34,20 @@ Different NicheGraphics UIs and different hardware variants will each have their
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
-#include "graphics/niche/Drivers/EInk/DEPG0290BNS800.h"
+#include "graphics/niche/Drivers/EInk/ED047TC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
 
-    // SPI
-    // -----------------------------
-
-    // Display is connected to HSPI
-    SPIClass *hspi = new SPIClass(HSPI);
-    hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
-
     // E-Ink Driver
     // -----------------------------
+    // The ED047TC1 is a parallel display — no SPI bus setup needed.
+    // begin() args are part of the EInk interface but are ignored for parallel displays.
 
-    // Use E-Ink driver
-    Drivers::EInk *driver = new Drivers::DEPG0290BNS800;
-    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY);
+    Drivers::EInk *driver = new Drivers::ED047TC1;
+    driver->begin(nullptr, 0, 0, 0);
 
     // InkHUD
     // ----------------------------
@@ -67,55 +61,57 @@ void setupNicheGraphics()
     // Set how unhealthy additional FAST updates beyond this number are
     inkhud->setDisplayResilience(7, 1.5);
 
-    // Prepare fonts
-    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
-    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
+    // Prepare fonts — use larger sizes to suit the 4.7" screen at ~234 DPI
+    InkHUD::Applet::fontLarge = FREESANS_24PT_WIN1253;
+    InkHUD::Applet::fontMedium = FREESANS_18PT_WIN1253;
+    InkHUD::Applet::fontSmall = FREESANS_12PT_WIN1253;
 
-    // Init settings, and customize defaults
+    // Customize default settings
     inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
-    inkhud->persistence->settings.rotation = 1;           // 90 degrees clockwise
+    inkhud->persistence->settings.rotation = 3;           // 270 degrees clockwise
     inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
-    inkhud->persistence->settings.optionalMenuItems.nextTile = false;  // Behavior handled by aux button instead
-    inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
+    inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
+    inkhud->persistence->settings.optionalMenuItems.backlight = false;
 
-    // Setup backlight
-    // Note: AUX button behavior configured further down
-    Drivers::LatchingBacklight *backlight = Drivers::LatchingBacklight::getInstance();
-    backlight->setPin(PIN_EINK_EN);
+    // Alignment must cancel rotation for visual-frame touch input: (rotation + alignment) % 4 == 0.
+    inkhud->persistence->settings.joystick.alignment = (4 - inkhud->persistence->settings.rotation) % 4;
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
-    // Optional arguments for defaults:
-    // - is activated?
-    // - is autoshown?
-    // - is foreground on a specific tile (index)?
-    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
-    inkhud->addApplet("DMs", new InkHUD::DMApplet);
-    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
-    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
-    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true); // Activated
-    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);
+    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, false, false);      // Not Active, not autoshown
+    inkhud->addApplet("DMs", new InkHUD::DMApplet, true, true);                         // Activated, Autoshown
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, true);   // Activated, Autoshown
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1), false, false); // Not Active, not autoshown
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false);           // Activated, not autoshown
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false);      // Activated, not autoshown
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
-    // inkhud->addApplet("Basic", new InkHUD::BasicExampleApplet);
-    // inkhud->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // Not Active, not autoshown
+
+    // Enable reusable InkHUD touch status indicator for this touch-capable board.
+    inkhud->setTouchEnabledProvider(isTouchInputEnabled);
 
     // Start running InkHUD
     inkhud->begin();
+    // Arm GT911 capacitive-home callback only after InkHUD startup is complete.
+    t5SetHomeCapButtonEventsEnabled(true);
+
+    // Keep Wireless Paper single-button semantics regardless of persisted settings:
+    // short press advances, long press opens menu/selects.
+    inkhud->persistence->settings.joystick.enabled = false;
 
     // Buttons
     // --------------------------
 
     Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // A shared NicheGraphics component
 
-    // Setup the main user button (0)
+    // #0: BOOT button (primary user input for InkHUD navigation on T5-S3)
+#if defined(T5_S3_EPAPER_PRO_V1)
+    buttons->setWiring(0, PIN_BUTTON2);
+#else
     buttons->setWiring(0, BUTTON_PIN);
-    buttons->setHandlerShortPress(0, []() { InkHUD::InkHUD::getInstance()->shortpress(); });
-    buttons->setHandlerLongPress(0, []() { InkHUD::InkHUD::getInstance()->longpress(); });
-
-    // Setup the aux button (1)
-    // Bonus feature of VME290
-    buttons->setWiring(1, BUTTON_PIN_SECONDARY);
-    buttons->setHandlerShortPress(1, []() { InkHUD::InkHUD::getInstance()->nextTile(); });
+#endif
+    buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
+    buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
     buttons->start();
 }
