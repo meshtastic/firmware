@@ -171,7 +171,9 @@ typedef enum _meshtastic_Config_NetworkConfig_ProtocolFlags {
     /* Do not broadcast packets over any network protocol */
     meshtastic_Config_NetworkConfig_ProtocolFlags_NO_BROADCAST = 0,
     /* Enable broadcasting packets via UDP over the local network */
-    meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST = 1
+    meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST = 1,
+    /* Enable broadcasting packets over Bluetooth LE advertisements. */
+    meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_ADVERTISEMENT_BROADCAST = 2
 } meshtastic_Config_NetworkConfig_ProtocolFlags;
 
 /* Deprecated in 2.7.4: Unused */
@@ -706,8 +708,8 @@ extern "C" {
 #define _meshtastic_Config_NetworkConfig_AddressMode_ARRAYSIZE ((meshtastic_Config_NetworkConfig_AddressMode)(meshtastic_Config_NetworkConfig_AddressMode_STATIC+1))
 
 #define _meshtastic_Config_NetworkConfig_ProtocolFlags_MIN meshtastic_Config_NetworkConfig_ProtocolFlags_NO_BROADCAST
-#define _meshtastic_Config_NetworkConfig_ProtocolFlags_MAX meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST
-#define _meshtastic_Config_NetworkConfig_ProtocolFlags_ARRAYSIZE ((meshtastic_Config_NetworkConfig_ProtocolFlags)(meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST+1))
+#define _meshtastic_Config_NetworkConfig_ProtocolFlags_MAX meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_ADVERTISEMENT_BROADCAST
+#define _meshtastic_Config_NetworkConfig_ProtocolFlags_ARRAYSIZE ((meshtastic_Config_NetworkConfig_ProtocolFlags)(meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_ADVERTISEMENT_BROADCAST+1))
 
 #define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED
 #define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MAX meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED

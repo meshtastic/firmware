@@ -426,6 +426,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_BLUETOOTH
 #define HAS_BLUETOOTH 0
 #endif
+#ifndef HAS_BLE_MESH_ADVERTISING
+// Keep the experimental BLE advertisement bearer opt-in by platform capability:
+// it currently needs a NimBLE2 build with a spare legacy advertising instance.
+// Bluefruit/nRF52 builds compile the shared codec but leave the bearer disabled
+// until there is a backend that can scan and advertise without disturbing the
+// normal phone GATT advertising path.
+#if HAS_BLUETOOTH && defined(ARCH_ESP32) && defined(NIMBLE_TWO) && defined(CONFIG_BT_NIMBLE_EXT_ADV) &&                             \
+    CONFIG_BT_NIMBLE_EXT_ADV && defined(CONFIG_BT_NIMBLE_MAX_EXT_ADV_INSTANCES) && CONFIG_BT_NIMBLE_MAX_EXT_ADV_INSTANCES > 1
+#define HAS_BLE_MESH_ADVERTISING 1
+#else
+#define HAS_BLE_MESH_ADVERTISING 0
+#endif
+#endif
+#ifndef BLE_MESH_ADVERTISEMENT_COMPANY_ID
+// Experimental company id used by the BLE advertisement mesh bearer.  Builds
+// can override this once Meshtastic chooses a final Bluetooth SIG/company-data
+// allocation or switches the bearer to service data.
+#define BLE_MESH_ADVERTISEMENT_COMPANY_ID 0x05e1
+#endif
 #ifndef USE_TFTDISPLAY
 #define USE_TFTDISPLAY 0
 #endif
