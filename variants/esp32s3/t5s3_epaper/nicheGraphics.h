@@ -34,7 +34,6 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
 #include "graphics/niche/Drivers/EInk/ED047TC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
@@ -72,7 +71,7 @@ void setupNicheGraphics()
     inkhud->persistence->settings.rotation = 3;           // 270 degrees clockwise
     inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
-    inkhud->persistence->settings.optionalMenuItems.backlight = true;
+    inkhud->persistence->settings.optionalMenuItems.backlight = false;
 
     // Alignment must cancel rotation for visual-frame touch input: (rotation + alignment) % 4 == 0.
     inkhud->persistence->settings.joystick.alignment = (4 - inkhud->persistence->settings.rotation) % 4;
@@ -88,29 +87,31 @@ void setupNicheGraphics()
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // Not Active, not autoshown
 
-    // Backlight
-    // ----------------------------
-    Drivers::LatchingBacklight *backlight = Drivers::LatchingBacklight::getInstance();
-    backlight->setPin(BOARD_BL_EN); // GPIO11 on V2
+    // Enable reusable InkHUD touch status indicator for this touch-capable board.
+    inkhud->setTouchEnabledProvider(isTouchInputEnabled);
 
     // Start running InkHUD
     inkhud->begin();
+    // Arm GT911 capacitive-home callback only after InkHUD startup is complete.
+    t5SetHomeCapButtonEventsEnabled(true);
 
-    // Touch navigation requires joystick mode — enforce post-begin so flash cannot override.
-    inkhud->persistence->settings.joystick.enabled = true;
-    inkhud->persistence->settings.joystick.aligned = true;
+    // Keep Wireless Paper single-button semantics regardless of persisted settings:
+    // short press advances, long press opens menu/selects.
+    inkhud->persistence->settings.joystick.enabled = false;
 
     // Buttons
     // --------------------------
 
     Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // A shared NicheGraphics component
 
-    // Setup the main user button (boot button, GPIO 0)
+    // #0: BOOT button (primary user input for InkHUD navigation on T5-S3)
+#if defined(T5_S3_EPAPER_PRO_V1)
+    buttons->setWiring(0, PIN_BUTTON2);
+#else
     buttons->setWiring(0, BUTTON_PIN);
+#endif
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
-
-    // No dedicated aux button on this board
 
     buttons->start();
 }

@@ -118,3 +118,92 @@ size_t pb_string_length(const char *str, size_t max_len)
     }
     return len;
 }
+
+bool sanitizeUtf8(char *buf, size_t bufSize)
+{
+    if (!buf || bufSize == 0)
+        return false;
+
+    // Ensure null-terminated within buffer; report if we had to enforce it
+    bool replaced = (buf[bufSize - 1] != '\0');
+    buf[bufSize - 1] = '\0';
+
+    size_t i = 0;
+    size_t len = strlen(buf);
+
+    while (i < len) {
+        uint8_t b = (uint8_t)buf[i];
+
+        // Determine expected sequence length from lead byte
+        size_t seqLen;
+        uint32_t minCodepoint;
+        if (b <= 0x7F) {
+            // ASCII — valid single byte
+            i++;
+            continue;
+        } else if ((b & 0xE0) == 0xC0) {
+            seqLen = 2;
+            minCodepoint = 0x80; // Reject overlong
+        } else if ((b & 0xF0) == 0xE0) {
+            seqLen = 3;
+            minCodepoint = 0x800;
+        } else if ((b & 0xF8) == 0xF0) {
+            seqLen = 4;
+            minCodepoint = 0x10000;
+        } else {
+            // Invalid lead byte (0x80-0xBF or 0xF8+)
+            buf[i] = '?';
+            replaced = true;
+            i++;
+            continue;
+        }
+
+        // Check that we have enough bytes remaining
+        if (i + seqLen > len) {
+            // Truncated sequence at end of string — replace remaining bytes
+            for (size_t j = i; j < len; j++) {
+                buf[j] = '?';
+            }
+            replaced = true;
+            break;
+        }
+
+        // Validate continuation bytes (must be 10xxxxxx)
+        bool valid = true;
+        for (size_t j = 1; j < seqLen; j++) {
+            if (((uint8_t)buf[i + j] & 0xC0) != 0x80) {
+                valid = false;
+                break;
+            }
+        }
+
+        if (valid) {
+            // Decode codepoint to check for overlong encodings and surrogates
+            uint32_t cp = 0;
+            if (seqLen == 2)
+                cp = b & 0x1F;
+            else if (seqLen == 3)
+                cp = b & 0x0F;
+            else
+                cp = b & 0x07;
+            for (size_t j = 1; j < seqLen; j++)
+                cp = (cp << 6) | ((uint8_t)buf[i + j] & 0x3F);
+
+            if (cp < minCodepoint || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+                // Overlong encoding, out of Unicode range, or surrogate half
+                valid = false;
+            }
+        }
+
+        if (valid) {
+            i += seqLen;
+        } else {
+            // Replace only the lead byte; continuation bytes will be caught on next iteration
+            buf[i] = '?';
+            replaced = true;
+            i++;
+        }
+    }
+
+    return replaced;
+}
