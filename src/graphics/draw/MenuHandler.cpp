@@ -13,6 +13,7 @@
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
 #include "graphics/draw/MessageRenderer.h"
+#include "graphics/draw/RadarRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -1197,11 +1198,13 @@ void menuHandler::positionBaseMenu()
         CompassCalibrate,
         GPSSmartPosition,
         GPSUpdateInterval,
-        GPSPositionBroadcast
+        GPSPositionBroadcast,
+        RadarToggle,
     };
 
     static const PositionMenuOption baseOptions[] = {
         {"Back", OptionsAction::Back},
+        {"Radar View", OptionsAction::Select, static_cast<int>(PositionAction::RadarToggle)},
         {"On/Off Toggle", OptionsAction::Select, static_cast<int>(PositionAction::GpsToggle)},
         {"Format", OptionsAction::Select, static_cast<int>(PositionAction::GpsFormat)},
         {"Smart Position", OptionsAction::Select, static_cast<int>(PositionAction::GPSSmartPosition)},
@@ -1212,6 +1215,7 @@ void menuHandler::positionBaseMenu()
 
     static const PositionMenuOption calibrateOptions[] = {
         {"Back", OptionsAction::Back},
+        {"Radar View", OptionsAction::Select, static_cast<int>(PositionAction::RadarToggle)},
         {"On/Off Toggle", OptionsAction::Select, static_cast<int>(PositionAction::GpsToggle)},
         {"Format", OptionsAction::Select, static_cast<int>(PositionAction::GpsFormat)},
         {"Smart Position", OptionsAction::Select, static_cast<int>(PositionAction::GPSSmartPosition)},
@@ -1270,6 +1274,11 @@ void menuHandler::positionBaseMenu()
             menuQueue = GpsPositionBroadcastMenu;
             screen->runNow();
             break;
+        case PositionAction::RadarToggle:
+            uiconfig.radar_mode = true;
+            menuHandler::saveUIConfig();
+            screen->runNow();
+            break;
         }
     };
 
@@ -1284,6 +1293,51 @@ void menuHandler::positionBaseMenu()
     bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
 #endif
 
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::radarPositionMenu()
+{
+    enum optionsNumbers { Back, CompassView, ToggleHeading, ZoomIn, ZoomOut };
+    static const char *optionsArray[] = {
+        "Back",
+        "Compass View",
+        nullptr, // filled dynamically
+        "Zoom In",
+        "Zoom Out",
+    };
+    static int optionsEnumArray[] = {Back, CompassView, ToggleHeading, ZoomIn, ZoomOut};
+
+    optionsArray[ToggleHeading] = graphics::RadarRenderer::isNorthUp() ? "Switch to HDG-UP" : "Switch to N-UP";
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Radar Options";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 5;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+        } else if (selected == CompassView) {
+            uiconfig.radar_mode = false;
+            menuHandler::saveUIConfig();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ToggleHeading) {
+            graphics::RadarRenderer::toggleNorthUp();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ZoomIn) {
+            graphics::RadarRenderer::zoomIn();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ZoomOut) {
+            graphics::RadarRenderer::zoomOut();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        }
+    };
     screen->showOverlayBanner(bannerOptions);
 }
 

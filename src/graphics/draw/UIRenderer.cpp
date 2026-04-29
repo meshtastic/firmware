@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "CompassRenderer.h"
+#include "RadarRenderer.h"
 #include "GPSStatus.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -1559,6 +1560,17 @@ void UIRenderer::drawBootIconScreen(const char *upperMsg, OLEDDisplay *display, 
 void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->clear();
+
+    // === Radar overlay mode ===
+    // When radar_mode is enabled (toggled via long-press menu), replace the
+    // GPS text with a node list and draw a circular radar minimap on the right.
+    if (uiconfig.radar_mode) {
+        graphics::drawCommonHeader(display, x, y, "Radar");
+        graphics::RadarRenderer::drawRadarOverlay(display, x, y);
+        graphics::drawCommonFooter(display, x, y);
+        return;
+    }
+
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;

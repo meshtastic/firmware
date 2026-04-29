@@ -1972,7 +1972,11 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::systemBaseMenu();
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
-                    menuHandler::positionBaseMenu();
+                    if (uiconfig.radar_mode) {
+                        menuHandler::radarPositionMenu();
+                    } else {
+                        menuHandler::positionBaseMenu();
+                    }
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
                     menuHandler::clockMenu();
