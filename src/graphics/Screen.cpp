@@ -677,7 +677,7 @@ void Screen::setup()
     displayWidth = dispdev->width();
     displayHeight = dispdev->height();
 
-    ui->setTimePerTransition(0);           // Disable animation delays
+    ui->setTimePerTransition(200);         // Subtle slide between manually selected frames
     ui->setIndicatorPosition(BOTTOM);      // Not used (indicators disabled below)
     ui->setIndicatorDirection(LEFT_RIGHT); // Not used (indicators disabled below)
     ui->setFrameAnimation(SLIDE_LEFT);     // Used only when indicators are active
