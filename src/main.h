@@ -87,6 +87,13 @@ extern uint32_t rebootAtMsec;
 extern uint32_t shutdownAtMsec;
 extern bool suppressRebootBanner;
 
+#if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
+// Set by PhoneAPI::handleLockdownAuthInline after a successful unlock.
+// Serviced on the main loop thread because NodeDB::reloadFromDisk() is
+// too heavy for the BLE/serial transport callback stack.
+extern volatile bool lockdownReloadPending;
+#endif
+
 extern uint32_t serialSinceMsec;
 
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
