@@ -13,6 +13,7 @@ Meshtastic is an open-source LoRa mesh networking project for long-range, low-po
 - **RP2040/RP2350** - Raspberry Pi Pico variants
 - **STM32WL** - STM32 with integrated LoRa
 - **Linux/Portduino** - Native Linux builds (Raspberry Pi, etc.)
+- **macOS native** - Headless `meshtasticd` on Apple Silicon / x86_64; see `variants/native/portduino/platformio.ini` for Homebrew prereqs + CH341 LoRa setup
 
 ### Supported Radio Chips
 
@@ -369,7 +370,7 @@ To reduce avoidable agent mistakes, assume these tools are available (or install
 - **Required CLI basics**: `bash`, `git`, `find`, `grep`, `sed`, `awk`, `xargs`
 - **Strongly recommended**: `rg` (ripgrep) for fast file/text search, `jq` for JSON processing
 - **Build/test tools**: `python3`, `pip`, virtualenv (`python3 -m venv`), `platformio` (`pio`)
-- **Containerized native testing**: `docker` (especially important on macOS / non-Linux hosts)
+- **Containerized native testing**: `docker` (fallback for non-Linux hosts; macOS can also build natively via `pio run -e native-macos`)
 
 Fallback expectations for agents:
 
@@ -388,6 +389,7 @@ Build commands:
 pio run -e tbeam              # Build specific target
 pio run -e tbeam -t upload    # Build and upload
 pio run -e native             # Build native/Linux version
+pio run -e native-macos       # Build headless macOS meshtasticd (Homebrew prereqs in variants/native/portduino/platformio.ini)
 ```
 
 ### Build Manifest

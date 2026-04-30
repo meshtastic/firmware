@@ -116,6 +116,20 @@ jobs:
       build_location: local
     secrets: inherit
 
+  MacOS:
+    strategy:
+      fail-fast: false
+      matrix:
+        macos_ver:
+          - "26" # ARM64
+          # - '26-intel' # x86_64
+          - "15" # ARM64
+          # - '15-intel' # x86_64
+    uses: ./.github/workflows/build_macos_bin.yml
+    with:
+      macos_ver: ${{ matrix.macos_ver }}
+    # secrets: inherit
+
   package-pio-deps-native-tft:
     if: ${{ github.repository == 'meshtastic/firmware' && github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/package_pio_deps.yml
@@ -286,6 +300,7 @@ jobs:
       - gather-artifacts
       - build-debian-src
       - package-pio-deps-native-tft
+      # - MacOS
     steps:
       - name: Checkout
         uses: actions/checkout@v6
