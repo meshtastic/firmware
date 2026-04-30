@@ -801,18 +801,43 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case 0x48: {
-                i2cBus->beginTransmission(addr.address);
+                // Probe NXP SE050 with a T=1 S-block "resync/IFS" frame. The SE050 NACKs its
+                // read address until it has a response ready, so we poll briefly instead of
+                // single-shot-reading (which would falsely fall through to FT6336U if the
+                // chip is cold / wedged / mid-transaction).
                 uint8_t getInfo[] = {0x5A, 0xC0, 0x00, 0xFF, 0xFC};
                 uint8_t expectedInfo[] = {0xa5, 0xE0, 0x00, 0x3F, 0x19};
-                uint8_t info[5];
+                uint8_t info[5] = {0};
                 size_t len = 0;
+                i2cBus->beginTransmission(addr.address);
                 i2cBus->write(getInfo, 5);
-                i2cBus->endTransmission();
-                len = i2cBus->readBytes(info, 5);
-                if (len == 5 && memcmp(expectedInfo, info, len) == 0) {
-                    LOG_INFO("NXP SE050 crypto chip found");
-                    type = NXP_SE050;
-                    break;
+                uint8_t wErr = i2cBus->endTransmission();
+                if (wErr == 0) {
+                    const uint32_t probeStart = millis();
+                    uint32_t attempts = 0;
+                    while ((millis() - probeStart) < 50) { // up to 50 ms of polling
+                        attempts++;
+                        size_t requested = i2cBus->requestFrom((uint8_t)addr.address, (uint8_t)5);
+                        if (requested > 0) {
+                            while (len < 5 && i2cBus->available()) {
+                                info[len++] = i2cBus->read();
+                            }
+                            break;
+                        }
+                        delay(2);
+                    }
+                    LOG_DEBUG("SE050 probe @0x48: wErr=%u attempts=%u got=%u bytes=%02x %02x %02x %02x %02x", wErr,
+                              (unsigned)attempts, (unsigned)len, info[0], info[1], info[2], info[3], info[4]);
+                    // Strong match: exact S-block ATR response.
+                    bool exactAtr = (len == 5 && memcmp(expectedInfo, info, len) == 0);
+                    // Weak but still SE050-specific: T=1 NAD 0xA5 (SE050->host) with LEN=0.
+                    // No ADS1115 / FT6336U / TMP1xx / LM75 at 0x48 replies with 0xA5 as first byte.
+                    bool se050Nad = (len == 5 && info[0] == 0xA5 && info[2] == 0x00);
+                    if (exactAtr || se050Nad) {
+                        LOG_INFO("NXP SE050 crypto chip found (pcb=0x%02x%s)", info[1], exactAtr ? ", ATR" : ", R-block");
+                        type = NXP_SE050;
+                        break;
+                    }
                 }
 
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);

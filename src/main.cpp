@@ -20,6 +20,7 @@
 #include "Throttle.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
+#include "crypto/Se050Client.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
 #include "power.h"
@@ -550,6 +551,43 @@ void setup()
 #ifdef SENSOR_GPS_CONFLICT
         sensor_detected = true;
 #endif
+    }
+
+    // Secure element boot banner + first useful APDU (SELECT + GetUID).
+    // If SELECT succeeds the Client is promoted to a function-static object and
+    // exposed via se050::client so any module loaded later can reach the chip.
+    {
+        auto seFound = i2cScanner->find(ScanI2C::NXP_SE050);
+        if (seFound.type == ScanI2C::NXP_SE050) {
+            const bool onWire1 = (seFound.address.port == ScanI2C::I2CPort::WIRE1);
+            LOG_INFO("Secure element: NXP SE050 @%s 0x%02x", onWire1 ? "Wire1" : "Wire", seFound.address.address);
+#if WIRE_INTERFACES_COUNT > 1
+            TwoWire *seBus = onWire1 ? &Wire1 : &Wire;
+#else
+            TwoWire *seBus = &Wire;
+#endif
+            // Static so the Client outlives setup() and remains valid for any module that reads se050::client.
+            static se050::Client se(seBus, seFound.address.address);
+            se050::client = &se;
+
+            uint8_t aMaj = 0, aMin = 0, aPatch = 0;
+            uint16_t aCfg = 0;
+            if (se.begin(&aMaj, &aMin, &aPatch, &aCfg)) {
+                LOG_INFO("SE050 applet v%u.%u.%u  cfg=0x%04x", aMaj, aMin, aPatch, aCfg);
+
+                uint8_t uid[se050::UID_SIZE] = {0};
+                if (se.getUID(uid)) {
+                    char hex[se050::UID_HEX_SIZE];
+                    se050::formatUIDHex(uid, hex);
+                    LOG_INFO("SE050 UID: %s", hex);
+                } else {
+                    LOG_WARN("SE050 UID: read failed");
+                }
+            } else {
+                LOG_WARN("SE050: begin() failed, skipping");
+                se050::client = nullptr;
+            }
+        }
     }
 #ifdef ARCH_ESP32
 #ifdef DEBUG_PARTITION_TABLE
