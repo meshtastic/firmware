@@ -35,6 +35,8 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
 
     virtual bool getTouch(int16_t &x, int16_t &y) = 0;
     virtual void onEvent(const TouchEvent &event) = 0;
+    virtual bool fastTapModeEnabled() const;
+    virtual bool longPressEnabled() const;
 
     volatile TouchScreenBaseStateType _state = TOUCH_EVENT_CLEARED;
     volatile TouchScreenBaseEventType _action = TOUCH_ACTION_NONE;
@@ -49,6 +51,7 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     int16_t _first_x, _last_x; // horizontal swipe direction
     int16_t _first_y, _last_y; // vertical swipe direction
     time_t _start;             // for LONG_PRESS
+    uint32_t _lastTouchSeenMs; // helps suppress brief touch-controller dropouts
     bool _tapped;              // for DOUBLE_TAP
 
     const char *_originName;

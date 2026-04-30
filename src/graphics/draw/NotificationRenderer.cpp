@@ -7,6 +7,8 @@
 #include "UIRenderer.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -608,6 +610,9 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
     display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
     display->setColor(WHITE);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    registerTFTActionMenuRegions(boxLeft, boxTop, boxWidth, boxHeight);
+#endif
 
     // Draw Content
     int16_t lineY = boxTop + vPadding;
@@ -630,7 +635,21 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             if (strchr(lineBuffer, 'p') || strchr(lineBuffer, 'g') || strchr(lineBuffer, 'y') || strchr(lineBuffer, 'j')) {
                 background_yOffset = -1;
             }
-            display->fillRect(boxLeft, boxTop + 1, boxWidth, effectiveLineHeight - background_yOffset);
+            const int16_t titleBarY = boxTop + 1;
+            const int16_t titleBarHeight = effectiveLineHeight - background_yOffset;
+            display->fillRect(boxLeft, titleBarY, boxWidth, titleBarHeight);
+#if GRAPHICS_TFT_COLORING_ENABLED
+            if (alertBannerOptions > 0) {
+                const uint16_t titleTextColor =
+                    (getActiveTheme().id == ThemeID::DefaultLight) ? TFTPalette::Black : getThemeHeaderText();
+                // Keep title role away from border/corner pixels so rounded-corner masks are not remapped to the title text
+                // color.
+                if (boxWidth > 2 && titleBarHeight > 0) {
+                    setAndRegisterTFTColorRole(TFTColorRole::ActionMenuTitle, getThemeHeaderBg(), titleTextColor, boxLeft + 1,
+                                               titleBarY, boxWidth - 2, titleBarHeight);
+                }
+            }
+#endif
             display->setColor(BLACK);
             int yOffset = 3;
             if (current_notification_type == notificationTypeEnum::node_picker) {
@@ -650,6 +669,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                 const int barSpacing = 2;
                 const int barHeightStep = 2;
                 const int gap = 6;
+                const int maxBarHeight = totalBars * barHeightStep;
 
                 int textWidth = display->getStringWidth(lineBuffer, strlen(lineBuffer), true);
                 int barsWidth = totalBars * barWidth + (totalBars - 1) * barSpacing + gap;
@@ -664,6 +684,20 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
                 int baseX = groupStartX + textWidth + gap;
                 int baseY = lineY + effectiveLineHeight - 1;
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (graphics::bannerSignalBars > 0) {
+                    uint16_t signalBarsColor = TFTPalette::Medium;
+                    if (graphics::bannerSignalBars <= 1) {
+                        signalBarsColor = TFTPalette::Bad;
+                    } else if (graphics::bannerSignalBars >= 4) {
+                        signalBarsColor = TFTPalette::Good;
+                    }
+                    const int activeBars = min(graphics::bannerSignalBars, totalBars);
+                    const int regionWidth = activeBars * barWidth + (activeBars - 1) * barSpacing;
+                    setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, baseX,
+                                               baseY - maxBarHeight, regionWidth, maxBarHeight);
+                }
+#endif
                 for (int b = 0; b < totalBars; b++) {
                     int barHeight = (b + 1) * barHeightStep;
                     int x = baseX + b * (barWidth + barSpacing);

@@ -626,10 +626,14 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     if (*o.long_name) {
         changed |= strcmp(owner.long_name, o.long_name);
         strncpy(owner.long_name, o.long_name, sizeof(owner.long_name));
+        owner.long_name[sizeof(owner.long_name) - 1] = '\0';
+        sanitizeUtf8(owner.long_name, sizeof(owner.long_name));
     }
     if (*o.short_name) {
         changed |= strcmp(owner.short_name, o.short_name);
         strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
+        owner.short_name[sizeof(owner.short_name) - 1] = '\0';
+        sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
     }
     snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
 
@@ -1430,7 +1434,11 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
     // Set call sign and override lora limitations for licensed use
     strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
+    owner.long_name[sizeof(owner.long_name) - 1] = '\0';
+    sanitizeUtf8(owner.long_name, sizeof(owner.long_name));
     strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
+    owner.short_name[sizeof(owner.short_name) - 1] = '\0';
+    sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
     owner.is_licensed = true;
     config.lora.override_duty_cycle = true;
     config.lora.tx_power = p.tx_power;
@@ -1519,8 +1527,15 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
     LOG_DEBUG("Processing input event: event_code=%u, kb_char=%u, touch_x=%u, touch_y=%u", inputEvent.event_code,
               inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y);
 
-    // Create InputEvent for injection
-    InputEvent event = {.inputEvent = (input_broker_event)inputEvent.event_code,
+    // Create InputEvent for injection.
+    //
+    // `.source` MUST be a non-null C string: the LOG_INFO below formats it
+    // with %s, and passing NULL to the esp-log formatter crashes with
+    // Guru Meditation LoadProhibited at strlen(NULL). Other InputBroker
+    // sources (buttons, rotary) always set this; the admin path was the
+    // only one leaving it default-null.
+    InputEvent event = {.source = "admin",
+                        .inputEvent = (input_broker_event)inputEvent.event_code,
                         .kbchar = (unsigned char)inputEvent.kb_char,
                         .touchX = inputEvent.touch_x,
                         .touchY = inputEvent.touch_y};
