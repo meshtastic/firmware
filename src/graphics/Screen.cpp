@@ -93,14 +93,18 @@ uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
 #endif
 
 #if OLED_CJK
-#ifndef OLED_CJK_SIZE
-#define OLED_CJK_SIZE 12
-#endif
+    #ifndef OLED_CJK_SIZE
+    #define OLED_CJK_SIZE 12
+    #endif
 
-#include <utf8_10x10.h>
-#include <utf8_12x12.h>
-#include <utf8_16x16.h>
-#include <utf8_24x24.h>
+    #ifdef OLED_CJK_CUSTOM
+    #include OLED_CJK_CUSTOM
+    #else
+    #include <utf8_10x10.h>
+    #include <utf8_12x12.h>
+    #include <utf8_16x16.h>
+    #include <utf8_24x24.h>
+    #endif
 #endif
 
 using namespace meshtastic; /** @todo remove */

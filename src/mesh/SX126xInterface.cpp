@@ -437,4 +437,48 @@ template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
 #endif
 }
 
+// -----------------------------------------------------------------------------
+// Noise floor measurement
+// -----------------------------------------------------------------------------
+#define NUM_NOISE_FLOOR_SAMPLES 10
+#define SAMPLING_THRESHOLD 50
+
+template <typename T> float SX126xInterface<T>::getSNR()
+{
+    return lora.getSNR();
+}
+
+template <typename T> int16_t SX126xInterface<T>::getRSSI()
+{
+    return lround(lora.getRSSI());
+}
+
+template <typename T> int16_t SX126xInterface<T>::getNoise()
+{
+    return _noise_floor;
+}
+
+template <typename T> bool SX126xInterface<T>::runcheck()
+{
+    if (isReceiving == true && _num_floor_samples < NUM_NOISE_FLOOR_SAMPLES) {
+        if (!isActivelyReceiving()) {
+            int rssi = lora.getRSSI(false);
+            if (rssi < _noise_floor + SAMPLING_THRESHOLD) {
+                _num_floor_samples++;
+                _floor_sample_sum += rssi;
+            }
+        }
+    } else if (_num_floor_samples >= NUM_NOISE_FLOOR_SAMPLES && _floor_sample_sum != 0) {
+        _noise_floor = _floor_sample_sum / NUM_NOISE_FLOOR_SAMPLES;
+        if (_noise_floor < -150) {
+            _noise_floor = -150;
+        }
+        _floor_sample_sum = 0;
+        _num_floor_samples = 0;
+        LOG_INFO("noise floor: %d dbi", (int)_noise_floor);
+        return true;
+    }
+    return false;
+}
+
 #endif

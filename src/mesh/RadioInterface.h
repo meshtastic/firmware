@@ -234,6 +234,11 @@ class RadioInterface
     // Whether we use the default frequency slot given our LoRa config (region and modem preset)
     static bool uses_default_frequency_slot;
 
+    virtual int16_t getNoise() { return 0; };
+    virtual int16_t getRSSI() { return 0; };
+    virtual float getSNR() { return 0.0; };
+    virtual bool runcheck() { return true; };
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 

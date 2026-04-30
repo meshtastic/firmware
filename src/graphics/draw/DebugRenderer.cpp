@@ -417,7 +417,11 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         if (currentResolution == ScreenResolution::UltraLow) {
             snprintf(regionradiopreset, sizeof(regionradiopreset), "%s", region);
         } else {
-            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+            int16_t noise = 0;
+            if (RadioLibInterface::instance) {
+                noise = RadioLibInterface::instance->getNoise();
+            }
+            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s Noise:%d", region, mode, noise);
         }
     }
     textWidth = display->getStringWidth(regionradiopreset);
@@ -669,6 +673,26 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     display->drawString(nameX, getTextPositions(display)[line++], appversionstr);
 
+    // Show current radio RSSI and SNR
+#if defined(GAT562)
+    // Always show on GAT562
+    if (true) {
+#else
+    if (currentResolution != ScreenResolution::UltraLow) {
+#endif
+        char rssiSnrStr[32];
+        if (RadioLibInterface::instance) {
+            snprintf(rssiSnrStr, sizeof(rssiSnrStr), "RSSI:%d SNR:%.1f", RadioLibInterface::instance->getRSSI(),
+                     RadioLibInterface::instance->getSNR());
+        } else {
+            snprintf(rssiSnrStr, sizeof(rssiSnrStr), "RSSI:- SNR:-");
+        }
+        textWidth = display->getStringWidth(rssiSnrStr);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++], rssiSnrStr);
+    }
+
+#if !defined(GAT562)
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
         getUptimeStr(millis(), UI_STR("Up", "运行"), uptimeStr, sizeof(uptimeStr));
@@ -676,6 +700,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
     }
+#endif
 
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show API state if the screen can show it
         char api_state[32] = "";
