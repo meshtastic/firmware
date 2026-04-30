@@ -71,7 +71,14 @@ void PhoneAPI::handleStartConfig()
     }
     pauseBluetoothLogging = true;
     spiLock->lock();
+#if defined(NRF54L15_DK)
+    // getFiles recurses through LittleFS and reliably aborts inside
+    // fs_opendir/readdir on this variant. The manifest is only used for OTA
+    // browsing, which the nRF54L15-DK does not support anyway.
+    filesManifest.clear();
+#else
     filesManifest = getFiles("/", 10);
+#endif
     spiLock->unlock();
     LOG_DEBUG("Got %d files in manifest", filesManifest.size());
 

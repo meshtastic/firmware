@@ -1,0 +1,34 @@
+{
+  "build": {
+    "cpu": "cortex-m33",
+    "f_cpu": "128000000L",
+    "mcu": "nrf54l15",
+    "zephyr": {
+      "variant": "nrf54l15dk/nrf54l15/cpuapp"
+    }
+  },
+  "connectivity": [
+    "bluetooth"
+  ],
+  "debug": {
+    "default_tools": [
+      "jlink"
+    ],
+    "jlink_device": "nRF54L15_M33",
+    "svd_path": "nrf54l15.svd"
+  },
+  "frameworks": [
+    "zephyr"
+  ],
+  "name": "Nordic nRF54L15-DK (PCA10156)",
+  "upload": {
+    "maximum_ram_size": 262144,
+    "maximum_size": 1572864,
+    "protocol": "jlink",
+    "protocols": [
+      "jlink"
+    ]
+  },
+  "url": "https://www.nordicsemi.com/Products/nRF54L15",
+  "vendor": "Nordic Semiconductor"
+}

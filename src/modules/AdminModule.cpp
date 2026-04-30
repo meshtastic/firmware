@@ -1,5 +1,8 @@
 #include "AdminModule.h"
 #include "Channels.h"
+#ifdef OUTPUT_GPIO_PIN
+#include "modules/GpioOutputModule.h"
+#endif
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -665,7 +668,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     bool requiresReboot = true;
 
     switch (c.which_payload_variant) {
-    case meshtastic_Config_device_tag:
+    case meshtastic_Config_device_tag: {
         LOG_INFO("Set config: Device");
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
@@ -677,13 +680,31 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             accelerometerThread->start();
         }
 #endif
-        if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
+        // output_gpio_enabled OFF→ON: save to flash + reboot. GPIO goes HIGH after boot via
+        // GpioOutputModule::apply() — NOT before, to avoid a power-cycle on the co-processor
+        // (especially critical when the pin drives CHIP_PU/EN directly).
+        // ON→OFF: cut power immediately, no reboot needed.
+#ifdef OUTPUT_GPIO_PIN
+        bool outputGpioTurningOn = !config.device.output_gpio_enabled && c.payload_variant.device.output_gpio_enabled;
+#else
+        bool outputGpioTurningOn = false;
+#endif
+        if (!outputGpioTurningOn && config.device.button_gpio == c.payload_variant.device.button_gpio &&
             config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
             config.device.role == c.payload_variant.device.role &&
             config.device.rebroadcast_mode == c.payload_variant.device.rebroadcast_mode) {
             requiresReboot = false;
         }
         config.device = c.payload_variant.device;
+#ifdef OUTPUT_GPIO_PIN
+        if (gpioOutputModule && !outputGpioTurningOn) {
+            // ON→OFF and no-change transitions apply immediately.
+            // OFF→ON: do NOT drive the pin before reboot — the co-processor will power on
+            // cleanly via GpioOutputModule::apply() after boot. Driving it before reboot
+            // causes an unnecessary power cycle when using CHIP_PU/EN as control pin.
+            gpioOutputModule->apply();
+        }
+#endif
         if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE &&
             (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
              config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
@@ -719,6 +740,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
         break;
+    } // case meshtastic_Config_device_tag
     case meshtastic_Config_position_tag:
         LOG_INFO("Set config: Position");
         config.has_position = true;
@@ -1086,6 +1108,10 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
         switch (configType) {
         case meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG:
             LOG_INFO("Get config: Device");
+#ifdef OUTPUT_GPIO_PIN
+            // Read actual pin state so --get reflects real hardware, not just cached config
+            config.device.output_gpio_enabled = (digitalRead(OUTPUT_GPIO_PIN) == HIGH);
+#endif
             res.get_config_response.which_payload_variant = meshtastic_Config_device_tag;
             res.get_config_response.payload_variant.device = config.device;
             break;
@@ -1343,6 +1369,10 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #elif defined(ARCH_NRF52)
     if (config.bluetooth.enabled && nrf52Bluetooth) {
         conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+    }
+#elif defined(ARCH_NRF54L15)
+    if (config.bluetooth.enabled && nrf54l15Bluetooth) {
+        conn.bluetooth.is_connected = nrf54l15Bluetooth->isConnected();
     }
 #endif
 #endif
@@ -1602,6 +1632,9 @@ void disableBluetooth()
 #elif defined(ARCH_NRF52)
     if (nrf52Bluetooth)
         nrf52Bluetooth->shutdown();
+#elif defined(ARCH_NRF54L15)
+    if (nrf54l15Bluetooth)
+        nrf54l15Bluetooth->shutdown();
 #endif
 #endif
 }

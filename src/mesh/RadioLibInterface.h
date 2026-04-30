@@ -104,6 +104,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     static RadioLibInterface *instance;
 
+    /** Clear instance on destruction so stale pointer checks in loop() are safe */
+    virtual ~RadioLibInterface()
+    {
+        if (instance == this)
+            instance = nullptr;
+    }
+
     /**
      * Glue functions called from ISR land
      */
@@ -135,13 +142,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
-
-    /**
-     * Clear the static `instance` pointer if it still points at us, so callers
-     * that check `RadioLibInterface::instance != nullptr` don't dereference a
-     * freed object after a failed init() + unique_ptr reset.
-     */
-    virtual ~RadioLibInterface();
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
@@ -293,4 +293,5 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
 
     void checkRxDoneIrqFlag();
+    void checkTxDoneIrqFlag();
 };
