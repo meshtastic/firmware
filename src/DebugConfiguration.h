@@ -13,6 +13,11 @@ extern MemGet memGet;
 #define LED_STATE_ON 1
 #endif
 
+// WIFI LED
+#ifndef WIFI_STATE_ON
+#define WIFI_STATE_ON 1
+#endif
+
 // -----------------------------------------------------------------------------
 // DEBUG
 // -----------------------------------------------------------------------------
@@ -147,7 +152,9 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...);
 // Default Bluetooth PIN
 #define defaultBLEPin 123456
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET && defined(USE_CH390D)
+#include <ESP32_CH390.h>
+#elif HAS_ETHERNET && !defined(USE_WS5500)
 #include <RAK13800_W5100S.h>
 #endif // HAS_ETHERNET
 

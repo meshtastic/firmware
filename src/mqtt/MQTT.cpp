@@ -22,6 +22,9 @@
 #if HAS_ETHERNET && defined(USE_WS5500)
 #include <ETHClass2.h>
 #define ETH ETH2
+#elif HAS_ETHERNET && defined(USE_CH390D)
+#include "ESP32_CH390.h"
+#define ETH CH390
 #endif // HAS_ETHERNET
 #include "Default.h"
 #if !defined(ARCH_NRF52) || NRF52_USE_JSON
@@ -343,6 +346,9 @@ inline bool isConnectedToNetwork()
 {
 #ifdef USE_WS5500
     if (ETH.connected())
+        return true;
+#elif defined(USE_CH390D)
+    if (ETH.isConnected())
         return true;
 #endif
 

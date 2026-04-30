@@ -1,0 +1,43 @@
+#define HAS_GPS 0
+#define HAS_WIRE 0
+#define HAS_SCREEN 0
+#define I2C_NO_RESCAN
+
+#define UART_TX 43
+#define UART_RX 44
+
+#define WIFI_LED 3
+#define WIFI_STATE_ON 0
+
+#define LED_PIN 46
+#define LED_STATE_ON 0
+#define BUTTON_PIN 4
+#define BUTTON_ACTIVE_LOW true
+#define BUTTON_ACTIVE_PULLUP true
+
+#define LORA_SCK 11
+#define LORA_MISO 9
+#define LORA_MOSI 10
+#define LORA_CS 12
+#define LORA_RESET 39
+
+#define USE_LR1110
+#define LR1110_SPI_SCK_PIN LORA_SCK
+#define LR1110_SPI_MISO_PIN LORA_MISO
+#define LR1110_SPI_MOSI_PIN LORA_MOSI
+#define LR1110_SPI_NSS_PIN LORA_CS
+#define LR1110_IRQ_PIN 38
+#define LR1110_BUSY_PIN 13
+#define LR1110_NRESET_PIN LORA_RESET
+#define LR11X0_DIO3_TCXO_VOLTAGE 1.8
+#define LR11X0_DIO_AS_RF_SWITCH
+
+#define HAS_ETHERNET 1
+#define USE_CH390D 1
+
+#define ETH_MISO_PIN 14
+#define ETH_MOSI_PIN 48
+#define ETH_SCLK_PIN 47
+#define ETH_CS_PIN 21
+#define ETH_INT_PIN 45
+// #define ETH_ADDR 1
