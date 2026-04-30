@@ -384,12 +384,15 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 #if !MESHTASTIC_EXCLUDE_MQTT
-        // Only publish to MQTT if we're the original transmitter of the packet
-        if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
+        // Only publish to MQTT if we're the original transmitter of the packet.
+        // Skip on packetPool exhaustion (p_decoded == nullptr) — onSend would
+        // dereference the reference and crash; better to drop the MQTT publish
+        // for this one packet than panic the radio.
+        if (p_decoded && moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
             mqtt->onSend(*p, *p_decoded, chIndex);
         }
 #endif
-        packetPool.release(p_decoded);
+        packetPool.release(p_decoded); // release() handles nullptr
     }
 
 #if HAS_UDP_MULTICAST

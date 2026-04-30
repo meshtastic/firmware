@@ -21,7 +21,9 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         auto copy = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("ReliableRouter::send", copy);
 
-        startRetransmission(copy, NUM_RELIABLE_RETX);
+        if (copy)
+            startRetransmission(copy, NUM_RELIABLE_RETX);
+        // else: pool exhausted; the packet itself is still sent — just no retry
     }
 
     /* If we have pending retransmissions, add the airtime of this packet to it, because during that time we cannot receive an

@@ -110,7 +110,10 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     }
 
     printPacket("Forwarding to phone", mp);
-    sendToPhone(packetPool.allocCopy(*mp));
+    if (auto *c = packetPool.allocCopy(*mp))
+        sendToPhone(c);
+    else
+        LOG_WARN("phone-forward dropped: packetPool exhausted");
 
     return 0;
 }
@@ -205,7 +208,10 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     DEBUG_HEAP_BEFORE;
     auto a = packetPool.allocCopy(p);
     DEBUG_HEAP_AFTER("MeshService::handleToRadio", a);
-    sendToMesh(a, RX_SRC_USER);
+    if (a)
+        sendToMesh(a, RX_SRC_USER);
+    else
+        LOG_WARN("handleToRadio: packetPool exhausted, dropping ToRadio packet");
 
     bool loopback = false; // if true send any packet the phone sends back itself (for testing)
     if (loopback) {
@@ -225,6 +231,10 @@ bool MeshService::cancelSending(PacketId id)
 ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id)
 {
     meshtastic_QueueStatus *copied = queueStatusPool.allocCopy(qs);
+    if (!copied) {
+        LOG_WARN("sendQueueStatusToPhone: queueStatusPool exhausted, skipping");
+        return ERRNO_UNKNOWN;
+    }
 
     copied->res = res;
     copied->mesh_packet_id = mesh_packet_id;
@@ -265,7 +275,10 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
         auto a = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("MeshService::sendToMesh", a);
 
-        sendToPhone(a);
+        if (a)
+            sendToPhone(a);
+        // else: pool exhausted; phone will see this packet again via the
+        // normal RX-to-phone path on a future cycle.
     }
 
     // Router may ask us to release the packet if it wasn't sent
