@@ -984,7 +984,8 @@ void RadioInterface::applyModemConfig()
             loraConfig.modem_preset = newRegion->getDefaultPreset();
         }
         uint8_t newcr;
-        modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
+        uint16_t newPreamble;
+        modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr, newPreamble);
         // If custom CR is being used already, check if the new preset is higher
         if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < newcr) {
             cr = newcr;
@@ -1070,12 +1071,8 @@ void RadioInterface::applyModemConfig()
     saveFreq(freq + loraConfig.frequency_offset);
     const char *channelName = channels.getName(channels.getPrimaryIndex());
 
-    if (newRegion->wideLora) {                          // clamp if wide freq range
-        preambleLength = wideLoraPreambleLengthDefault; // 12 is the default for operation above 2GHz
-    } else {
-        preambleLength =
-            preambleLengthDefault; // 8 is default, but we use longer to increase the amount of sleep time when receiving
-    }
+    // Get preamble length from the modem preset
+    preambleLength = modemPresetToPreambleLength(loraConfig.modem_preset, newRegion->wideLora);
 
     slotTimeMsec = computeSlotTimeMsec();
     preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
