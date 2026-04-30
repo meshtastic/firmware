@@ -10,6 +10,19 @@
 extern AmbientLightingThread *ambientLightingThread;
 #endif
 
+// Drive a single WS2812 as the notification LED (M1/M2-style LED_NOTIFICATION
+// but addressable). A variant defines NEOPIXEL_STATUS_NOTIFICATION_PIN to
+// enable. Colour defaults to green but can be overridden.
+#ifdef NEOPIXEL_STATUS_NOTIFICATION_PIN
+#include <Adafruit_NeoPixel.h>
+#ifndef NEOPIXEL_STATUS_TYPE
+#define NEOPIXEL_STATUS_TYPE (NEO_GRB + NEO_KHZ800)
+#endif
+#ifndef NEOPIXEL_STATUS_NOTIFICATION_COLOR
+#define NEOPIXEL_STATUS_NOTIFICATION_COLOR 0x00FF00 // green
+#endif
+#endif
+
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 #include <NonBlockingRtttl.h>
 #else
@@ -37,6 +50,10 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     CallbackObserver<ExternalNotificationModule, const InputEvent *> inputObserver =
         CallbackObserver<ExternalNotificationModule, const InputEvent *>(this, &ExternalNotificationModule::handleInputEvent);
     uint32_t output = 0;
+
+#ifdef NEOPIXEL_STATUS_NOTIFICATION_PIN
+    Adafruit_NeoPixel notificationPixel = Adafruit_NeoPixel(1, NEOPIXEL_STATUS_NOTIFICATION_PIN, NEOPIXEL_STATUS_TYPE);
+#endif
 
   public:
     ExternalNotificationModule();

@@ -17,7 +17,28 @@ StatusLEDModule::StatusLEDModule() : concurrency::OSThread("StatusLEDModule")
     if (inputBroker)
         inputObserver.observe(inputBroker);
 #endif
+#ifdef NEOPIXEL_STATUS_POWER_PIN
+    powerPixel.begin();
+    powerPixel.clear();
+    powerPixel.show();
+#endif
+#ifdef NEOPIXEL_STATUS_PAIRING_PIN
+    pairingPixel.begin();
+    pairingPixel.clear();
+    pairingPixel.show();
+#endif
 }
+
+// Helper: write a 1-pixel NeoPixel strand to `color` when stateOn, else clear.
+// Kept as a static inline here (rather than a member) so it compiles out
+// completely when no NeoPixel status pins are defined.
+#if defined(NEOPIXEL_STATUS_POWER_PIN) || defined(NEOPIXEL_STATUS_PAIRING_PIN)
+static inline void writeStatusPixel(Adafruit_NeoPixel &pixel, uint32_t color, bool stateOn)
+{
+    pixel.setPixelColor(0, stateOn ? color : 0);
+    pixel.show();
+}
+#endif
 
 int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
 {
@@ -161,6 +182,12 @@ int32_t StatusLEDModule::runOnce()
 #ifdef LED_PAIRING
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif
+#ifdef NEOPIXEL_STATUS_POWER_PIN
+    writeStatusPixel(powerPixel, NEOPIXEL_STATUS_POWER_COLOR, CHARGE_LED_state == LED_STATE_ON);
+#endif
+#ifdef NEOPIXEL_STATUS_PAIRING_PIN
+    writeStatusPixel(pairingPixel, NEOPIXEL_STATUS_PAIRING_COLOR, PAIRING_LED_state == LED_STATE_ON);
+#endif
 
 #ifdef RGB_LED_POWER
     if (!config.device.led_heartbeat_disabled) {
@@ -209,6 +236,12 @@ void StatusLEDModule::setPowerLED(bool LEDon)
 #endif
 #ifdef LED_PAIRING
     digitalWrite(LED_PAIRING, ledState);
+#endif
+#ifdef NEOPIXEL_STATUS_POWER_PIN
+    writeStatusPixel(powerPixel, NEOPIXEL_STATUS_POWER_COLOR, LEDon);
+#endif
+#ifdef NEOPIXEL_STATUS_PAIRING_PIN
+    writeStatusPixel(pairingPixel, NEOPIXEL_STATUS_PAIRING_COLOR, LEDon);
 #endif
 
 #ifdef Battery_LED_1
