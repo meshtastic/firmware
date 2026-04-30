@@ -77,11 +77,11 @@ def parse_tcp_port(port: str) -> tuple[str, int]:
 
 
 def normalize_tcp_endpoint(endpoint: str) -> str:
-    """Normalize `host`, `host:port`, or `tcp://host[:port]` → canonical
+    r"""Normalize `host`, `host:port`, or `tcp://host[:port]` → canonical
     `tcp://host:port` form. One place that owns the lock-key shape.
 
     Defers all validation to `parse_tcp_port`, so path-like inputs
-    (`/dev/cu.foo`, `C:\\Windows\\…`), empty hosts, non-integer ports,
+    (`/dev/cu.foo`, `C:\Windows\…`), empty hosts, non-integer ports,
     and out-of-range ports raise `ConnectionError` here too.
     """
     if endpoint.startswith(TCP_SCHEME):
