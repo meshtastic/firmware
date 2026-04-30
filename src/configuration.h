@@ -561,5 +561,47 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN 0
 #endif
 
+// -----------------------------------------------------------------------------
+// MESHTASTIC_LOCKDOWN — opt-in hardened build flag (nRF52 only)
+//
+// Add -DMESHTASTIC_LOCKDOWN=1 to any env's build_flags to enable hardening.
+//
+// nRF52 (CC310 hardware crypto required):
+//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL — redact keys from unauthenticated clients;
+//                                        passphrase delivery via AdminModule
+//   MESHTASTIC_ENCRYPTED_STORAGE       — AES-128-CTR + HMAC-SHA256 at-rest encryption
+//   MESHTASTIC_ENABLE_APPROTECT        — one-way UICR APPROTECT write to lock SWD/JTAG
+//   DEBUG_MUTE                         — suppress all serial/USB-CDC log output
+//
+// Non-nRF52 (degraded — no passphrase path without encrypted storage to gate it):
+//   DEBUG_MUTE only. Access control is intentionally NOT enabled here because
+//   the passphrase-delivery code in AdminModule is wrapped in
+//   MESHTASTIC_ENCRYPTED_STORAGE; turning on access control alone would leave
+//   non-PKC clients with no way to authorize, redacting them out of admin
+//   forever. Use PKC admin keys for hardened deployments on these platforms.
+//
+// Add -DMESHTASTIC_LOCKDOWN_DEBUG=1 alongside MESHTASTIC_LOCKDOWN to keep the
+// irreversible bits (APPROTECT, DEBUG_MUTE) disabled while still exercising the
+// access-control + encrypted-storage code paths. For development and hardware
+// bring-up only — production firmware should not ship with this set.
+// -----------------------------------------------------------------------------
+#ifdef MESHTASTIC_LOCKDOWN
+
+#ifndef MESHTASTIC_LOCKDOWN_DEBUG
+#define DEBUG_MUTE
+#endif
+
+#if defined(ARCH_NRF52)
+#define MESHTASTIC_PHONEAPI_ACCESS_CONTROL 1
+#define MESHTASTIC_ENCRYPTED_STORAGE 1
+#ifndef MESHTASTIC_LOCKDOWN_DEBUG
+#define MESHTASTIC_ENABLE_APPROTECT 1
+#endif
+#else
+#warning "MESHTASTIC_LOCKDOWN: non-nRF52 target — only DEBUG_MUTE is active. Encrypted storage, APPROTECT, and access control are unavailable on this platform."
+#endif
+
+#endif // MESHTASTIC_LOCKDOWN
+
 #include "DebugConfiguration.h"
 #include "RF95Configuration.h"
