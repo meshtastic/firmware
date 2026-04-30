@@ -113,7 +113,7 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     if (auto *c = packetPool.allocCopy(*mp))
         sendToPhone(c);
     else
-        LOG_WARN("phone-forward dropped: packetPool exhausted");
+        LOG_DEBUG("phone-forward dropped: packetPool exhausted");
 
     return 0;
 }
@@ -232,7 +232,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
 {
     meshtastic_QueueStatus *copied = queueStatusPool.allocCopy(qs);
     if (!copied) {
-        LOG_WARN("sendQueueStatusToPhone: queueStatusPool exhausted, skipping");
+        LOG_DEBUG("sendQueueStatusToPhone: queueStatusPool exhausted, skipping");
         return ERRNO_UNKNOWN;
     }
 
@@ -277,8 +277,10 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
 
         if (a)
             sendToPhone(a);
-        // else: pool exhausted; phone will see this packet again via the
-        // normal RX-to-phone path on a future cycle.
+        // else: packetPool exhausted; the cc-to-phone copy is dropped here.
+        // The original packet is still queued to the mesh; phone visibility
+        // of cc'd local sends depends on whether the RX path forwards it,
+        // which is not guaranteed for non-broadcast / non-local-dest sends.
     }
 
     // Router may ask us to release the packet if it wasn't sent

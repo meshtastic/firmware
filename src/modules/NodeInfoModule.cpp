@@ -68,7 +68,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
             service->sendToPhone(packetCopy);
         } else {
-            LOG_WARN("NodeInfoModule: packetPool exhausted, skipping phone forward");
+            LOG_DEBUG("NodeInfoModule: packetPool exhausted, skipping phone forward");
         }
     }
 

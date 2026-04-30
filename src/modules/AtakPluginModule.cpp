@@ -198,11 +198,11 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
         }
         auto decompressedCopy = packetPool.allocCopy(mp);
         if (!decompressedCopy) {
-            LOG_WARN("AtakPluginModule: packetPool exhausted, skipping decompressed phone forward");
+            LOG_DEBUG("AtakPluginModule: packetPool exhausted, skipping decompressed phone forward");
             return;
         }
         decompressedCopy->decoded.payload.size =
-            pb_encode_to_bytes(decompressedCopy->decoded.payload.bytes, sizeof(decompressedCopy->decoded.payload),
+            pb_encode_to_bytes(decompressedCopy->decoded.payload.bytes, sizeof(decompressedCopy->decoded.payload.bytes),
                                meshtastic_TAKPacket_fields, &uncompressed);
 
         service->sendToPhone(decompressedCopy);
