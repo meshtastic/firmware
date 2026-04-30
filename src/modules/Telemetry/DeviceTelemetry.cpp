@@ -99,17 +99,21 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     t.variant.device_metrics.has_air_util_tx = true;
     t.variant.device_metrics.has_battery_level = true;
     t.variant.device_metrics.has_channel_utilization = true;
-    t.variant.device_metrics.has_voltage = true;
     t.variant.device_metrics.has_uptime_seconds = true;
-
     t.variant.device_metrics.air_util_tx = airTime->utilizationTXPercent();
     t.variant.device_metrics.battery_level = (!powerStatus->getHasBattery() || powerStatus->getIsCharging())
                                                  ? MAGIC_USB_BATTERY_LEVEL
                                                  : powerStatus->getBatteryChargePercent();
     t.variant.device_metrics.channel_utilization = airTime->channelUtilizationPercent();
-    t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
+    // Only populate voltage when we actually have a battery reading. Previously this assigned
+    // -0.001 (from -1 mV / 1000) whenever the ADC returned -1, leaking a sentinel onto the wire
+    // that clients then displayed as a real negative voltage. See GH #7958.
+    int32_t batteryMv = powerStatus->getBatteryVoltageMv();
+    if (powerStatus->getHasBattery() && batteryMv > 0) {
+        t.variant.device_metrics.has_voltage = true;
+        t.variant.device_metrics.voltage = batteryMv / 1000.0f;
+    }
     t.variant.device_metrics.uptime_seconds = getUptimeSeconds();
-
     return t;
 }
 
