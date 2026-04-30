@@ -13,6 +13,7 @@
 #include <ErriezCRC32.h>
 #include <Utility.h>
 #include <assert.h>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -1052,17 +1053,31 @@ static bool ends_with(std::string_view str, std::string_view suffix)
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
     mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
-    if (mac_str.length() == 12) {
-        dmac[0] = std::stoi(portduino_config.mac_address.substr(0, 2), nullptr, 16);
-        dmac[1] = std::stoi(portduino_config.mac_address.substr(2, 2), nullptr, 16);
-        dmac[2] = std::stoi(portduino_config.mac_address.substr(4, 2), nullptr, 16);
-        dmac[3] = std::stoi(portduino_config.mac_address.substr(6, 2), nullptr, 16);
-        dmac[4] = std::stoi(portduino_config.mac_address.substr(8, 2), nullptr, 16);
-        dmac[5] = std::stoi(portduino_config.mac_address.substr(10, 2), nullptr, 16);
-        return true;
-    } else {
+    if (mac_str.length() != 12) {
         return false;
     }
+    // Validate every character is a hex digit before parsing. std::stoi
+    // would otherwise skip leading whitespace and silently truncate at the
+    // first non-digit, which is too lenient for a MAC address.
+    for (char c : mac_str) {
+        if (!isxdigit(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+    // Parse into a temporary so dmac is not partially modified if a later
+    // byte fails. At least one caller in getMacAddr() ignores the bool
+    // return, so leaving stale bytes in dmac on failure would silently
+    // produce a wrong MAC.
+    uint8_t tmp[6];
+    try {
+        for (int i = 0; i < 6; i++) {
+            tmp[i] = static_cast<uint8_t>(std::stoi(mac_str.substr(i * 2, 2), nullptr, 16));
+        }
+    } catch (const std::exception &) {
+        return false;
+    }
+    memcpy(dmac, tmp, 6);
+    return true;
 }
 
 std::string exec(const char *cmd)
