@@ -199,4 +199,24 @@ class Syslog
 
 }; // namespace meshtastic
 
+inline uint8_t syslogLevelToMask(int configLevel)
+{
+    switch (configLevel) {
+    case 5: // LOG_TRACE — syslog has no TRACE; map to DEBUG (most verbose syslog level)
+        return LOG_UPTO(SYSLOG_DEBUG);
+    case 10: // LOG_DEBUG
+        return LOG_UPTO(SYSLOG_DEBUG);
+    case 30: // LOG_WARNING
+        return LOG_UPTO(SYSLOG_WARN);
+    case 40: // LOG_ERROR
+        return LOG_UPTO(SYSLOG_ERR);
+    case 50: // LOG_CRITICAL
+        return LOG_UPTO(SYSLOG_CRIT);
+    case 0:  // LOG_UNSET — default to INFO
+    case 20: // LOG_INFO
+    default:
+        return LOG_UPTO(SYSLOG_INFO);
+    }
+}
+
 #endif // HAS_NETWORKING

@@ -76,7 +76,7 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
         }
     }
 #endif
-#if !ARCH_PORTDUINO
+#if !ARCH_PORTDUINO && !defined(MESHTASTIC_RF_TEST_FIRMWARE)
     emitRebooted();
 #endif
 }
