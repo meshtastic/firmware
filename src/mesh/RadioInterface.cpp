@@ -241,7 +241,7 @@ const RegionInfo regions[] = {
         Channel centres at 869.442/869.525/869.608 MHz,
         10.4 kHz padding on channels, 27 dBm, duty cycle 10%
     */
-    RDEF(NARROW_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_NARROW, PRESET(NARROW_SLOW)),
+    RDEF(EU_N_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_NARROW, PRESET(NARROW_SLOW)),
 
     /*
         This needs to be last. Same as US.

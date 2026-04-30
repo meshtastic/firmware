@@ -781,7 +781,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case SET_REGION_NARROW_868:
-        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_NARROW_868);
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868);
         break;
 
     // Roles

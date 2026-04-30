@@ -118,7 +118,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"EU_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_433},
         {"EU_868", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_868},
         {"EU_866", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_866},
-        {"EU_868_NARROW", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NARROW_868},
+        {"EU_868_NARROW", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_N_868},
         {"CN", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_CN},
         {"JP", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_JP},
         {"ANZ", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ANZ},
