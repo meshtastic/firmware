@@ -54,7 +54,7 @@ File::File(char const *filename, uint8_t mode, STM32_LittleFS &fs) : File(fs)
 
 bool File::_open_file(char const *filepath, uint8_t mode)
 {
-    int flags = (mode == FILE_O_READ) ? LFS_O_RDONLY : (mode == FILE_O_WRITE) ? (LFS_O_RDWR | LFS_O_CREAT) : 0;
+    int flags = (mode == FILE_O_READ) ? LFS_O_RDONLY : (mode == FILE_O_WRITE) ? (LFS_O_RDWR | LFS_O_CREAT | LFS_O_TRUNC) : 0;
 
     if (flags) {
         _file = (lfs_file_t *)rtos_malloc(sizeof(lfs_file_t));
@@ -71,10 +71,6 @@ bool File::_open_file(char const *filepath, uint8_t mode)
             _file = NULL;
             return false;
         }
-
-        // move to end of file
-        if (mode == FILE_O_WRITE)
-            lfs_file_seek(_fs->_getFS(), _file, 0, LFS_SEEK_END);
 
         _is_dir = false;
     }
