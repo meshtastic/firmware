@@ -115,7 +115,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* SHT family of sensors for temperature and humidity */
     meshtastic_TelemetrySensorType_SHTXX = 50,
     /* DS248X Bridge for one-wire temperature sensors */
-    meshtastic_TelemetrySensorType_DS248X = 51
+    meshtastic_TelemetrySensorType_DS248X = 51,
+    /* QST QMP6988 temperature and pressure sensor */
+    meshtastic_TelemetrySensorType_QMP6988 = 52
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -496,8 +498,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_DS248X
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_DS248X+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_QMP6988
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_QMP6988+1))
 
 
 
