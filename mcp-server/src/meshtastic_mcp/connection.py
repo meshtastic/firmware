@@ -145,8 +145,15 @@ def connect(port: str | None = None, timeout_s: float = 8.0) -> Iterator:
     For TCP: no exclusive-access requirement, so the serial-session check
     is skipped — but the `port_lock` still serializes parallel `connect()`
     calls to the same daemon endpoint.
+
+    `timeout_s` is plumbed through to both `SerialInterface(timeout=...)`
+    and `TCPInterface(timeout=...)`. The meshtastic library uses the value
+    as the reply-wait deadline for `localNode.waitForConfig()` during
+    construction and for any subsequent admin RPC. `int()`-converted at
+    the boundary because the upstream API expects whole seconds.
     """
     resolved = resolve_port(port)
+    timeout = int(timeout_s)
 
     if is_tcp_port(resolved):
         from meshtastic.tcp_interface import (
@@ -168,6 +175,7 @@ def connect(port: str | None = None, timeout_s: float = 8.0) -> Iterator:
                 portNumber=tcp_port,
                 connectNow=True,
                 noProto=False,
+                timeout=timeout,
             )
             yield iface
         finally:
@@ -202,7 +210,12 @@ def connect(port: str | None = None, timeout_s: float = 8.0) -> Iterator:
 
     iface = None
     try:
-        iface = SerialInterface(devPath=resolved, connectNow=True, noProto=False)
+        iface = SerialInterface(
+            devPath=resolved,
+            connectNow=True,
+            noProto=False,
+            timeout=timeout,
+        )
         yield iface
     finally:
         if iface is not None:

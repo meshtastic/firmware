@@ -229,6 +229,90 @@ class TestDevicesTcpEntry:
             with pytest.raises(connection.ConnectionError, match="No Meshtastic"):
                 connection.resolve_port(None)
 
+    def test_invalid_env_var_does_not_double_tcp_scheme(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # If a user mistakenly sets `MESHTASTIC_MCP_TCP_HOST=tcp://host:bad`,
+        # the diagnostic entry must surface the raw value as-is rather than
+        # producing `tcp://tcp://host:bad`.
+        monkeypatch.setenv("MESHTASTIC_MCP_TCP_HOST", "tcp://host:notaport")
+        with patch("meshtastic_mcp.devices.list_ports.comports", return_value=[]):
+            ds = devices.list_devices(include_unknown=True)
+        tcp = [d for d in ds if "TCP" in (d["description"] or "")]
+        assert len(tcp) == 1
+        assert tcp[0]["port"] == "tcp://host:notaport"
+        assert "tcp://tcp://" not in tcp[0]["port"]
+
+    def test_invalid_env_var_does_not_pre_empt_real_usb_devices(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Sort ordering: a misconfigured TCP env var must NOT take position 0
+        # ahead of real USB candidates. Position 0 is reserved for the highest
+        # rank (likely_meshtastic=True), with TCP-before-USB as a tiebreaker
+        # within rank.
+        monkeypatch.setenv("MESHTASTIC_MCP_TCP_HOST", "host:notaport")
+
+        # Stub a USB Meshtastic candidate (Espressif VID, port present in
+        # findPorts).
+        class FakeInfo:
+            def __init__(self, device: str, vid: int, pid: int) -> None:
+                self.device = device
+                self.vid = vid
+                self.pid = pid
+                self.description = "Heltec V3"
+                self.manufacturer = "Espressif"
+                self.product = "USB JTAG/serial"
+                self.serial_number = "abc"
+
+        fake_port = FakeInfo("/dev/cu.usbmodem4201", 0x303A, 0x1001)
+        with patch(
+            "meshtastic_mcp.devices.list_ports.comports", return_value=[fake_port]
+        ), patch(
+            "meshtastic.util.findPorts",
+            return_value=["/dev/cu.usbmodem4201"],
+        ):
+            ds = devices.list_devices(include_unknown=True)
+
+        assert ds, "expected at least the USB + TCP entries"
+        # Real USB candidate must be at position 0 — it's likely_meshtastic.
+        assert ds[0]["port"] == "/dev/cu.usbmodem4201"
+        assert ds[0]["likely_meshtastic"] is True
+        # The malformed TCP entry exists but lands among the unlikely entries.
+        tcp = [d for d in ds if "TCP" in (d["description"] or "")]
+        assert len(tcp) == 1
+        assert tcp[0]["likely_meshtastic"] is False
+        assert ds.index(tcp[0]) > 0
+
+    def test_likely_tcp_entry_wins_tiebreak_over_usb(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Conversely, a *valid* TCP env var should sort ahead of USB
+        # candidates of equal likely_meshtastic rank — explicit env-var
+        # configuration is a precedence signal.
+        monkeypatch.setenv("MESHTASTIC_MCP_TCP_HOST", "localhost:4403")
+
+        class FakeInfo:
+            def __init__(self, device: str, vid: int, pid: int) -> None:
+                self.device = device
+                self.vid = vid
+                self.pid = pid
+                self.description = "Heltec V3"
+                self.manufacturer = "Espressif"
+                self.product = "USB JTAG/serial"
+                self.serial_number = "abc"
+
+        fake_port = FakeInfo("/dev/cu.usbmodem4201", 0x303A, 0x1001)
+        with patch(
+            "meshtastic_mcp.devices.list_ports.comports", return_value=[fake_port]
+        ), patch(
+            "meshtastic.util.findPorts",
+            return_value=["/dev/cu.usbmodem4201"],
+        ):
+            ds = devices.list_devices()
+
+        assert ds[0]["port"] == "tcp://localhost:4403"
+        assert ds[0]["likely_meshtastic"] is True
+
 
 # ---------- connect() routing ---------------------------------------------
 
@@ -246,7 +330,7 @@ class TestConnectRoutesTcp:
             "meshtastic.serial_interface.SerialInterface"
         ) as mock_serial:
             mock_tcp.return_value.close.return_value = None
-            with connection.connect(port="tcp://example.com:1234"):
+            with connection.connect(port="tcp://example.com:1234", timeout_s=12.0):
                 pass
 
         mock_tcp.assert_called_once_with(
@@ -254,8 +338,32 @@ class TestConnectRoutesTcp:
             portNumber=1234,
             connectNow=True,
             noProto=False,
+            timeout=12,
         )
         mock_serial.assert_not_called()
+
+    def test_connect_plumbs_timeout_to_serial_interface(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify the serial branch also propagates `timeout_s` so callers
+        passing a custom timeout to `device_info` / `list_nodes` / etc. don't
+        silently get the library default."""
+        monkeypatch.delenv("MESHTASTIC_MCP_TCP_HOST", raising=False)
+
+        with patch("meshtastic.serial_interface.SerialInterface") as mock_serial, patch(
+            "meshtastic.tcp_interface.TCPInterface"
+        ) as mock_tcp:
+            mock_serial.return_value.close.return_value = None
+            with connection.connect(port="/dev/cu.fake", timeout_s=20.0):
+                pass
+
+        mock_serial.assert_called_once_with(
+            devPath="/dev/cu.fake",
+            connectNow=True,
+            noProto=False,
+            timeout=20,
+        )
+        mock_tcp.assert_not_called()
 
     def test_connect_releases_lock_on_tcp_failure(
         self, monkeypatch: pytest.MonkeyPatch
