@@ -334,7 +334,11 @@ void SerialHalDevice::handleSpiTransfer(const meshtastic_SerialHalCommand &cmd, 
     {
         concurrency::LockGuard guard(spiLock);
         spiBus.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
+#ifdef ARCH_ESP32
+        spiBus.transferBytes(cmd.data.bytes, response.data.bytes, cmd.data.size);
+#else
         spiBus.transfer(cmd.data.bytes, response.data.bytes, cmd.data.size);
+#endif
         spiBus.endTransaction();
     }
 #else
