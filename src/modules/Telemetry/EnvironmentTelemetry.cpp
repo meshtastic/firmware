@@ -131,6 +131,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/BH1750Sensor.h"
 #endif
 
+#if __has_include(<Adafruit_ADS1X15.h>)
+#include "Sensor/ADS1X15Sensor.h"
+#endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -235,6 +239,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
 #if __has_include(<BH1750_WE.h>)
     addSensor<BH1750Sensor>(i2cScanner, ScanI2C::DeviceType::BH1750);
+#endif
+#if __has_include(<Adafruit_ADS1X15.h>)
+    addSensor<ADS1X15Sensor>(i2cScanner, ScanI2C::DeviceType::ADS1X15);
+    addSensor<ADS1X15Sensor>(i2cScanner, ScanI2C::DeviceType::ADS1X15_ALT);
 #endif
 #if __has_include(<SHTSensor.h>)
     // TODO Can we scan for multiple sensors connected on the same bus?
@@ -608,20 +616,46 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
 
     if (getEnvironmentTelemetry(&m)) {
-        LOG_INFO("Send: barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f",
-                 m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
-                 m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
-                 m.variant.environment_metrics.temperature);
-        LOG_INFO("Send: voltage=%f, IAQ=%d, distance=%f, lux=%f", m.variant.environment_metrics.voltage,
-                 m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
+        if (m.variant.environment_metrics.has_temperature || m.variant.environment_metrics.has_relative_humidity ||
+            m.variant.environment_metrics.has_barometric_pressure)
+            LOG_INFO("Send: barometric_pressure=%fkPa, relative_humidity=%f%RH, temperature=%fdegC",
+                     m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.relative_humidity,
+                     m.variant.environment_metrics.temperature);
 
-        LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees, weight=%fkg", m.variant.environment_metrics.wind_speed,
-                 m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
+        if (m.variant.environment_metrics.has_voltage || m.variant.environment_metrics.has_current ||
+            m.variant.environment_metrics.has_iaq || m.variant.environment_metrics.has_gas_resistance)
+            LOG_INFO("Send: voltage=%f, current=%f, IAQ=%d, gas_resistance=%f", m.variant.environment_metrics.voltage,
+                     m.variant.environment_metrics.current, m.variant.environment_metrics.iaq,
+                     m.variant.environment_metrics.gas_resistance);
 
-        LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
+        if (m.variant.environment_metrics.has_distance || m.variant.environment_metrics.has_lux)
+            LOG_INFO("Send: distance=%f, lux=%f", m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
 
-        LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
-                 m.variant.environment_metrics.soil_moisture);
+        if (m.variant.environment_metrics.has_wind_speed || m.variant.environment_metrics.has_wind_direction)
+            LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees", m.variant.environment_metrics.wind_speed,
+                     m.variant.environment_metrics.wind_direction);
+
+        if (m.variant.environment_metrics.has_weight)
+            LOG_INFO("Send: weight=%fkg", m.variant.environment_metrics.weight);
+
+        if (m.variant.environment_metrics.has_radiation)
+            LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
+
+        if (m.variant.environment_metrics.has_soil_temperature || m.variant.environment_metrics.has_soil_moisture)
+            LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
+                     m.variant.environment_metrics.soil_moisture);
+
+        if (m.variant.environment_metrics.has_adc_voltage_ch0 || m.variant.environment_metrics.has_adc_voltage_ch1 ||
+            m.variant.environment_metrics.has_adc_voltage_ch2 || m.variant.environment_metrics.has_adc_voltage_ch3)
+            LOG_INFO("Send: adc_ch0=%f, adc_ch1=%f, adc_ch2=%f, adc_ch3=%f", m.variant.environment_metrics.adc_voltage_ch0,
+                     m.variant.environment_metrics.adc_voltage_ch1, m.variant.environment_metrics.adc_voltage_ch2,
+                     m.variant.environment_metrics.adc_voltage_ch3);
+
+        if (m.variant.environment_metrics.has_adc_voltage_ch4 || m.variant.environment_metrics.has_adc_voltage_ch5 ||
+            m.variant.environment_metrics.has_adc_voltage_ch6 || m.variant.environment_metrics.has_adc_voltage_ch7)
+            LOG_INFO("Send: adc_ch4=%f, adc_ch5=%f, adc_ch6=%f, adc_ch7=%f", m.variant.environment_metrics.adc_voltage_ch4,
+                     m.variant.environment_metrics.adc_voltage_ch5, m.variant.environment_metrics.adc_voltage_ch6,
+                     m.variant.environment_metrics.adc_voltage_ch7);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;

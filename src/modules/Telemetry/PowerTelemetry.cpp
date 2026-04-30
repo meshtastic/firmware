@@ -258,10 +258,15 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_power_metrics_tag;
     m.time = getTime();
     if (getPowerTelemetry(&m)) {
-        LOG_INFO("Send: ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
-                 "ch3_voltage=%f, ch3_current=%f",
-                 m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
-                 m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_voltage, m.variant.power_metrics.ch3_current);
+        LOG_INFO("Send: ch1_voltage=%f, ch2_voltage=%f, ch3_voltage=%f", m.variant.power_metrics.ch1_voltage,
+                 m.variant.power_metrics.ch2_voltage, m.variant.power_metrics.ch3_voltage);
+
+        bool hasAnyCurrent = m.variant.power_metrics.has_ch1_current || m.variant.power_metrics.has_ch2_current ||
+                             m.variant.power_metrics.has_ch3_current;
+        if (hasAnyCurrent) {
+            LOG_INFO("Send: ch1_current=%f, ch2_current=%f, ch3_current=%f", m.variant.power_metrics.ch1_current,
+                     m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_current);
+        }
 
         sensor_read_error_count = 0;
 
