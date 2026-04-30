@@ -5,6 +5,7 @@
 #include "graphics/Screen.h"
 #include "graphics/VirtualKeyboard.h"
 #include "modules/OnScreenKeyboardModule.h"
+#include <cstdint>
 #include <functional>
 #include <string>
 #define MAX_LINES 5
@@ -26,6 +27,10 @@ class NotificationRenderer
     static std::function<void(int)> alertBannerCallback;
     static uint32_t numDigits;
     static uint32_t currentNumber;
+    static int16_t signedDecimalValueTenths;
+    static int16_t signedDecimalMinTenths;
+    static int16_t signedDecimalMaxTenths;
+    static bool signedDecimalIsNegative;
     static VirtualKeyboard *virtualKeyboard;
     static std::function<void(const std::string &)> textInputCallback;
 
@@ -36,6 +41,7 @@ class NotificationRenderer
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
+    static void drawSignedDecimalPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],
