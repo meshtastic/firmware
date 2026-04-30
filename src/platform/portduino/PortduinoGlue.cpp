@@ -561,7 +561,8 @@ void portduinoSetup()
     for (const auto *i : portduino_config.all_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i->config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i->config_section == "Lora" &&
+            (portduino_config.lora_spi_dev == "ch341" || portduino_config.lora_spi_dev == "serial")) {
             continue;
         }
         if (i->enabled) {
@@ -580,7 +581,8 @@ void portduinoSetup()
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i.config_section == "Lora" &&
+            (portduino_config.lora_spi_dev == "ch341" || portduino_config.lora_spi_dev == "serial")) {
             continue;
         }
         if (i.enabled) {
@@ -627,7 +629,8 @@ void portduinoSetup()
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i.config_section == "Lora" &&
+            (portduino_config.lora_spi_dev == "ch341" || portduino_config.lora_spi_dev == "serial")) {
             continue;
         }
         if (i.enabled && i.default_high) {
@@ -637,7 +640,8 @@ void portduinoSetup()
     }
 
     // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
-    if (portduino_config.lora_spi_dev != "" && portduino_config.lora_spi_dev != "ch341") {
+    if (portduino_config.lora_spi_dev != "" && portduino_config.lora_spi_dev != "ch341" &&
+        portduino_config.lora_spi_dev != "serial") {
         SPI.begin(portduino_config.lora_spi_dev.c_str());
     }
 
@@ -671,6 +675,7 @@ void portduinoSetup()
     }
     if (portduino_config.lora_spi_dev != "") {
         portduinoSetOptions({.realHardware = true});
+        LOG_DEBUG("Running with real hardware SPI device %s", portduino_config.lora_spi_dev.c_str());
     }
     return;
 }
@@ -807,12 +812,15 @@ bool loadConfig(const char *configPath)
             }
 
             portduino_config.spiSpeed = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
+            portduino_config.lora_serial_device = yamlConfig["Lora"]["SerialDevice"].as<std::string>("");
+            portduino_config.lora_serial_baud = yamlConfig["Lora"]["SerialBaud"].as<int>(115200);
+            portduino_config.lora_serial_timeout_ms = yamlConfig["Lora"]["SerialTimeoutMs"].as<int>(500);
             portduino_config.lora_usb_serial_num = yamlConfig["Lora"]["USB_Serialnum"].as<std::string>("");
             portduino_config.lora_usb_pid = yamlConfig["Lora"]["USB_PID"].as<int>(0x5512);
             portduino_config.lora_usb_vid = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
 
             portduino_config.lora_spi_dev = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
-            if (portduino_config.lora_spi_dev != "ch341") {
+            if (portduino_config.lora_spi_dev != "ch341" && portduino_config.lora_spi_dev != "serial") {
                 portduino_config.lora_spi_dev = "/dev/" + portduino_config.lora_spi_dev;
                 if (portduino_config.lora_spi_dev.length() == 14) {
                     int x = portduino_config.lora_spi_dev.at(11) - '0';

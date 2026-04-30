@@ -951,8 +951,12 @@ void setup()
 #endif
 #endif
 
-    auto rIf = initLoRa();
-
+    std::unique_ptr<RadioInterface> rIf;
+    if (!config.lora.serial_hal_only) {
+        rIf = initLoRa();
+    } else {
+        LOG_INFO("skipping LoRa radio init, for serialHal");
+    }
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -996,10 +1000,9 @@ void setup()
 
     // Start airtime logger thread.
     airTime = new AirTime();
-
-    if (!rIf)
+    if (!rIf && !config.lora.serial_hal_only)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
-    else {
+    else if (rIf) {
         // Log bit rate to debug output
         LOG_DEBUG("LoRA bitrate = %f bytes / sec", (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
                                                     (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
