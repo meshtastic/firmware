@@ -25,6 +25,7 @@
 
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
+#include "platform/portduino/SerialHal.h"
 #include "platform/portduino/SimRadio.h"
 #include "platform/portduino/USBHal.h"
 #endif
@@ -292,6 +293,9 @@ std::unique_ptr<RadioInterface> initLoRa()
               portduino_config.lora_spi_dev.c_str());
     if (portduino_config.lora_spi_dev == "ch341") {
         RadioLibHAL = ch341Hal;
+    } else if (portduino_config.lora_spi_dev == "serial") {
+        RadioLibHAL = new SerialHal(portduino_config.lora_serial_device, portduino_config.lora_serial_baud,
+                                    (uint32_t)portduino_config.lora_serial_timeout_ms);
     } else {
         if (RadioLibHAL != nullptr) {
             delete RadioLibHAL;

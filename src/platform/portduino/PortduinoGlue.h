@@ -86,6 +86,9 @@ extern struct portduino_config_struct {
     bool has_device_id = false;
     uint8_t device_id[16] = {0};
     std::string lora_spi_dev = "";
+    std::string lora_serial_device = "";
+    int lora_serial_baud = 115200;
+    int lora_serial_timeout_ms = 500;
     std::string lora_usb_serial_num = "";
     int lora_spi_dev_int = 0;
     int lora_default_gpiochip = 0;
@@ -276,6 +279,12 @@ extern struct portduino_config_struct {
         }
         if (lora_usb_serial_num != "")
             out << YAML::Key << "USB_Serialnum" << YAML::Value << lora_usb_serial_num;
+        if (lora_serial_device != "")
+            out << YAML::Key << "SerialDevice" << YAML::Value << lora_serial_device;
+        if (lora_serial_baud != 115200)
+            out << YAML::Key << "SerialBaud" << YAML::Value << lora_serial_baud;
+        if (lora_serial_timeout_ms != 500)
+            out << YAML::Key << "SerialTimeoutMs" << YAML::Value << lora_serial_timeout_ms;
         if (spiSpeed != 2000000)
             out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
         if (rfswitch_dio_pins[0] != RADIOLIB_NC) {
