@@ -1,7 +1,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-#if HAS_WIFI
+#if HAS_WIFI || HAS_ETHERNET
 #include "WiFiServerAPI.h"
 
 static WiFiServerPort *apiPort;

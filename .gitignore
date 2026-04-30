@@ -15,8 +15,20 @@ web.tar
 .platformio
 .local
 .cache
+.history
 
+# macOS
 .DS_Store
+.DS_Store?
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+.fseventsd
+.AppleDB
+.AppleDesktop
+
 Thumbs.db
 .autotools
 .built

@@ -1,32 +1,43 @@
 #include "configuration.h"
-#include <Arduino.h>
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#include <Arduino.h>
 
 #include "ethServerAPI.h"
 
-static ethServerPort *apiPort;
+#if HAS_ETHERNET
 
-void initApiServer(int port)
+static ethServerPort *apiPort = nullptr;
+
+void initEthApiServer(int port)
 {
-    // Start API server on port 4403
     if (!apiPort) {
         apiPort = new ethServerPort(port);
-        LOG_INFO("API server listening on TCP port %d", port);
+        LOG_INFO("Ethernet API server listening on TCP port %d", port);
         apiPort->init();
     }
 }
 
-void deInitApiServer()
+void deInitEthApiServer()
 {
     if (apiPort) {
-        LOG_INFO("Deinit API server");
+        LOG_INFO("Deinit Ethernet API server");
         delete apiPort;
         apiPort = nullptr;
     }
 }
 
-ethServerAPI::ethServerAPI(EthernetClient &_client) : ServerAPI(_client)
+#if !HAS_WIFI
+void initApiServer(int port)
+{
+    initEthApiServer(port);
+}
+void deInitApiServer()
+{
+    deInitEthApiServer();
+}
+#endif
+
+ethServerAPI::ethServerAPI(MeshEthernetClient &_client) : ServerAPI(_client)
 {
     LOG_INFO("Incoming ethernet connection");
     api_type = TYPE_ETH;

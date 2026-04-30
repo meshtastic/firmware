@@ -28,6 +28,10 @@
 #include "TypeConversions.h"
 #include "mesh/RadioLibInterface.h"
 
+#if HAS_ETHERNET && defined(ETH_PHY_TYPE)
+#include <ETH.h>
+#endif
+
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -1317,12 +1321,26 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     }
 #endif
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET
     conn.has_ethernet = true;
     conn.ethernet.has_status = true;
-    if (Ethernet.linkStatus() == LinkON) {
+    bool isConnected = false;
+
+#if defined(ESP32) && (defined(ETH_PHY_TYPE) || defined(USE_WS5500))
+    isConnected = ETH.linkUp();
+#else
+    isConnected = (Ethernet.linkStatus() == LinkON);
+#endif
+
+    if (isConnected) {
         conn.ethernet.status.is_connected = true;
-        conn.ethernet.status.ip_address = Ethernet.localIP();
+
+#if defined(ESP32) && (defined(ETH_PHY_TYPE) || defined(USE_WS5500))
+        conn.ethernet.status.ip_address = (uint32_t)ETH.localIP();
+#else
+        conn.ethernet.status.ip_address = (uint32_t)Ethernet.localIP();
+#endif
+
 #if !MESHTASTIC_EXCLUDE_MQTT
         conn.ethernet.status.is_mqtt_connected = mqtt && mqtt->isConnectedDirectly();
 #endif

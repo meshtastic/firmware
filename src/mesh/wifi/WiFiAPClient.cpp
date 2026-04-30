@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if HAS_WIFI
+#if HAS_WIFI || HAS_ETHERNET
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
@@ -7,13 +7,26 @@
 
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
-#include "target_specific.h"
-#include <WiFi.h>
 
-#if HAS_ETHERNET && defined(USE_WS5500)
+#if HAS_ETHERNET
+#include "mesh/api/ethServerAPI.h"
+#endif
+
+#include "target_specific.h"
+
+#if HAS_WIFI || defined(ARCH_ESP32)
+#include <WiFi.h>
+#endif
+
+#if HAS_ETHERNET
+#if defined(ARCH_ESP32) && defined(ETH_PHY_TYPE)
+#include <ETH.h>
+#endif
+#if defined(USE_WS5500)
 #include <ETHClass2.h>
 #define ETH ETH2
-#endif // HAS_ETHERNET
+#endif
+#endif
 
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
@@ -22,8 +35,8 @@
 #endif
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
-static void WiFiEvent(WiFiEvent_t event);
-#elif defined(ARCH_RP2040)
+static void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info);
+#elif defined(ARCH_RP2040) && HAS_WIFI
 #include <SimpleMDNS.h>
 #endif
 
@@ -46,35 +59,51 @@ uint8_t wifiDisconnectReason = 0;
 // Stores our hostname
 char ourHost[16];
 
+#if HAS_WIFI
 // To replace blocking wifi connect delay with a non-blocking sleep
 static unsigned long wifiReconnectStartMillis = 0;
+
 static bool wifiReconnectPending = false;
+bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
+bool isReconnecting = false; // If we are currently reconnecting
+Periodic *wifiReconnect;
+#endif
 
 bool APStartupComplete = 0;
 
 unsigned long lastrun_ntp = 0;
 
-bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
-bool isReconnecting = false; // If we are currently reconnecting
-
 WiFiUDP syslogClient;
 meshtastic::Syslog syslog(syslogClient);
 
-Periodic *wifiReconnect;
-
-#ifdef USE_WS5500
-// Startup Ethernet
+#if HAS_ETHERNET
+// Startup Ethernet (Universal: Native or SPI)
 bool initEthernet()
 {
-    if ((config.network.eth_enabled) && (ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
-                                                   ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN))) {
-        WiFi.onEvent(WiFiEvent);
+    WiFi.onEvent(WiFiEvent);
+    bool ok = false;
+#if defined(ESP32) && defined(ETH_PHY_TYPE)
+    // Native ESP32 Ethernet (LAN8720, etc.)
+    LOG_INFO("Starting Native Ethernet...");
+    ok = ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER, ETH_PHY_MDC, ETH_PHY_MDIO, ETH_PHY_TYPE, ETH_CLK_MODE);
+#elif defined(USE_WS5500)
+    // SPI Ethernet (W5500)
+    LOG_INFO("Starting W5500 Ethernet...");
+    ok = ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST, ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN);
+#endif
+
+    if (ok) {
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
-        createSSLCert(); // For WebServer
+        if (xPortGetFreeHeapSize() > 50000) {
+            createSSLCert(); // For WebServer
+        } else {
+            LOG_WARN("Not enough memory for SSL cert, WebServer will be HTTP only");
+        }
 #endif
         return true;
     }
 
+    LOG_ERROR("Ethernet failed to start");
     return false;
 }
 #endif
@@ -85,6 +114,7 @@ static void onNetworkConnected()
         // Start web server
         LOG_INFO("Start network services");
 
+#if defined(ARCH_ESP32) || (defined(ARCH_RP2040) && HAS_WIFI)
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
             LOG_ERROR("Error setting up mDNS responder!");
@@ -97,13 +127,14 @@ static void onNetworkConnected()
             MDNS.addServiceTxt("meshtastic", "tcp", "id", String(nodeDB->getNodeId().c_str()));
             MDNS.addServiceTxt("meshtastic", "tcp", "pio_env", optstr(APP_ENV));
             // ESP32 prints obtained IP address in WiFiEvent
-#elif defined(ARCH_RP2040)
+#elif defined(ARCH_RP2040) && HAS_WIFI
             MDNS.addServiceTxt("meshtastic", "shortname", owner.short_name);
             MDNS.addServiceTxt("meshtastic", "id", nodeDB->getNodeId().c_str());
             MDNS.addServiceTxt("meshtastic", "pio_env", optstr(APP_ENV));
             LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
 #endif
         }
+#endif
 
 #ifndef DISABLE_NTP
         LOG_INFO("Start NTP time client");
@@ -138,7 +169,11 @@ static void onNetworkConnected()
 #endif
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            initApiServer();
+#if HAS_ETHERNET
+            initEthApiServer(SERVER_API_DEFAULT_PORT);
+#else
+            initApiServer(SERVER_API_DEFAULT_PORT);
+#endif
         }
 #endif
         APStartupComplete = true;
@@ -151,6 +186,7 @@ static void onNetworkConnected()
 #endif
 }
 
+#if HAS_WIFI
 static int32_t reconnectWiFi()
 {
     const char *wifiName = config.network.wifi_ssid;
@@ -228,29 +264,30 @@ static int32_t reconnectWiFi()
         return 300000; // every 5 minutes
     }
 }
+#endif
 
 bool isWifiAvailable()
 {
-
     if (config.network.wifi_enabled && (config.network.wifi_ssid[0])) {
         return true;
-#ifdef USE_WS5500
-    } else if (config.network.eth_enabled) {
-        return true;
-#endif
-#ifndef ARCH_PORTDUINO
-    } else if (WiFi.status() == WL_CONNECTED) {
-        // it's likely we have wifi now, but user intends to turn it off in config!
-        return true;
-#endif
-    } else {
-        return false;
     }
+#if HAS_ETHERNET
+    else if (config.network.eth_enabled) {
+        return true;
+    }
+#endif
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    else if (WiFi.status() == WL_CONNECTED) {
+        return true;
+    }
+#endif
+    return false;
 }
 
 // Disable WiFi
 void deinitWifi()
 {
+#if HAS_WIFI
     LOG_INFO("WiFi deinit");
 
     if (isWifiAvailable()) {
@@ -263,11 +300,13 @@ void deinitWifi()
         LOG_INFO("WiFi Turned Off");
         // WiFi.printDiag(Serial);
     }
+#endif
 }
 
 // Startup WiFi
 bool initWifi()
 {
+#if HAS_WIFI
     if (config.network.wifi_enabled && config.network.wifi_ssid[0]) {
 
         const char *wifiName = config.network.wifi_ssid;
@@ -275,7 +314,9 @@ bool initWifi()
 
 #ifndef ARCH_RP2040
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
-        createSSLCert(); // For WebServer
+        if (xPortGetFreeHeapSize() > 50000) {
+            createSSLCert(); // For WebServer
+        }
 #endif
         WiFi.persistent(false); // Disable flash storage for WiFi credentials
 #endif
@@ -331,6 +372,8 @@ bool initWifi()
         LOG_INFO("Not using WIFI");
         return false;
     }
+#endif
+    return false;
 }
 
 #ifdef ARCH_ESP32
@@ -352,7 +395,7 @@ IPv6Address GlobalIPv6()
 }
 #endif
 // Called by the Espressif SDK to
-static void WiFiEvent(WiFiEvent_t event)
+static void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info)
 {
     LOG_DEBUG("Network-Event %d: ", event);
 
@@ -494,7 +537,10 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Ethernet disconnected");
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-#ifdef USE_WS5500
+#if defined(ETH_PHY_TYPE)
+        LOG_INFO("Ethernet Obtained IP address: %s", ETH.localIP().toString().c_str());
+        onNetworkConnected();
+#elif defined(USE_WS5500)
         LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
                  ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
         onNetworkConnected();
