@@ -41,6 +41,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/UIRenderer.h"
 #include "graphics/TFTColorRegions.h"
 #include "modules/CannedMessageModule.h"
+#if defined(BUTTON_PIN)
+#include "modules/SingleButtonInputManager.h"
+#endif
 
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -298,8 +301,14 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
 {
     LOG_INFO("showTextInput called with header='%s', durationMs=%d", header ? header : "NULL", durationMs);
 
+#if defined(BUTTON_PIN)
+    // For single-button input, use SingleButtonInputManager instead
+    graphics::SingleButtonInputManager::instance().start(header, initialText, durationMs, textCallback);
+#else
     // Start OnScreenKeyboardModule session (non-touch variant)
     OnScreenKeyboardModule::instance().start(header, initialText, durationMs, textCallback);
+#endif
+
     NotificationRenderer::textInputCallback = textCallback;
 
     // Store the message and set the expiration timestamp (use same pattern as other notifications)
