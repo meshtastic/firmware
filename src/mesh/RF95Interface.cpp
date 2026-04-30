@@ -255,6 +255,24 @@ bool RF95Interface::reconfigure()
     return RADIOLIB_ERR_NONE;
 }
 
+bool RF95Interface::setActiveCodingRate(uint8_t codingRate)
+{
+    if (!lora || codingRate < 5 || codingRate > 8)
+        return false;
+
+    if (codingRate == activeCr)
+        return true;
+
+    int err = lora->setCodingRate(codingRate);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("RF95 set DCR coding rate %s%d", radioLibErr, err);
+        return false;
+    }
+
+    activeCr = codingRate;
+    return true;
+}
+
 /**
  * Add SNR data to received messages
  */

@@ -219,6 +219,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     uint32_t activeReceiveStart = 0;
+    uint8_t lastRxCodingRate = 0;
 
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
@@ -259,11 +260,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
             bool hasCRC;
             lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC);
             // Go from raw header value to denominator
-            if (rxCR < 5) {
-                rxCR += 4;
-            } else if (rxCR == 7) {
-                rxCR = 8;
-            }
+            rxCR = normalizeRxCodingRate(rxCR);
+            lastRxCodingRate = rxCR;
 
             // Received packet configuration must be the same as configured, except for coding rate and CRC
             DataRate_t dr = getDataRate();
@@ -276,6 +274,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         }
 
         return lora.getTimeOnAir(pl) / 1000;
+    }
+
+    template <typename T> uint32_t computePacketTimeForCodingRate(T &lora, uint32_t pl, uint8_t codingRate)
+    {
+        DataRate_t dr = getDataRate();
+        dr.lora.codingRate = codingRate;
+        return lora.calculateTimeOnAir(modemType, dr, getPacketConfig(), pl) / 1000;
+    }
+
+    static uint8_t normalizeRxCodingRate(uint8_t rxCR)
+    {
+        if (rxCR < 5) {
+            rxCR += 4;
+        } else if (rxCR == 7) {
+            rxCR = 8;
+        }
+        return rxCR;
     }
 
     const char *radioLibErr = "RadioLib err=";

@@ -265,6 +265,24 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     return RADIOLIB_ERR_NONE;
 }
 
+template <typename T> bool SX126xInterface<T>::setActiveCodingRate(uint8_t codingRate)
+{
+    if (codingRate < 5 || codingRate > 8)
+        return false;
+
+    if (codingRate == activeCr)
+        return true;
+
+    int err = lora.setCodingRate(codingRate);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX126X set DCR coding rate %s%d", radioLibErr, err);
+        return false;
+    }
+
+    activeCr = codingRate;
+    return true;
+}
+
 template <typename T> void SX126xInterface<T>::disableInterrupt()
 {
     lora.clearDio1Action();

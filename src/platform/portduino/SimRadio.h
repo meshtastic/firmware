@@ -75,9 +75,6 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     // start an immediate transmit
     virtual void startSend(meshtastic_MeshPacket *txp);
 
-    // derive packet length
-    size_t getPacketLength(meshtastic_MeshPacket *p);
-
     int16_t readData(uint8_t *str, size_t len);
 
     meshtastic_MeshPacket *receivingPacket = nullptr; // The packet we are currently receiving
@@ -91,6 +88,10 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     void completeSending();
 
     virtual uint32_t getPacketTime(uint32_t pl, bool received = false) override;
+    virtual uint32_t getPacketTimeForCodingRate(uint32_t pl, uint8_t codingRate) override;
+    virtual bool setActiveCodingRate(uint8_t codingRate) override;
+
+    uint32_t computePacketTime(uint32_t pl, uint8_t codingRate) const;
 };
 
 extern SimRadio *simRadio;

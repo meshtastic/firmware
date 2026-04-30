@@ -1,4 +1,5 @@
 #include "RadioLibInterface.h"
+#include "AirtimePolicy.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
@@ -15,6 +16,7 @@
 #include "PortduinoGlue.h"
 #include "meshUtils.h"
 #endif
+
 void LockingArduinoHal::spiBeginTransaction()
 {
     spiLock->lock();
@@ -425,6 +427,7 @@ void RadioLibInterface::handleTransmitInterrupt()
     // ignore the transmit interrupt
     if (sendingPacket)
         completeSending();
+    restoreBaseCodingRate();
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
 }
 
@@ -527,6 +530,24 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->relay_node = mp->hop_start == 0 ? NO_RELAY_NODE : radioBuffer.header.relay_node;
 
             addReceiveMetadata(mp);
+            if (airtimePolicy) {
+                DcrSettings settings = airtimePolicy->settingsFromConfig(config.lora);
+                if (settings.mode != meshtastic_Config_LoRaConfig_DynamicCodingRateMode_DCR_OFF) {
+                    // In explicit-header mode the radio header tells us the CR
+                    // used on this hop. Store it as local observation only; the
+                    // Meshtastic packet payload remains unchanged.
+                    airtimePolicy->observeRx({.from = mp->from,
+                                              .relayNode = mp->relay_node,
+                                              .hopStart = mp->hop_start,
+                                              .hopLimit = mp->hop_limit,
+                                              .rxCr = lastRxCodingRate,
+                                              .airtimeMs = rxMsec,
+                                              .snr = mp->rx_snr,
+                                              .rssi = mp->rx_rssi,
+                                              .nowMsec = millis()},
+                                             settings.trackNeighborCr);
+                }
+            }
 
             mp->which_payload_variant =
                 meshtastic_MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
@@ -592,6 +613,10 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         packetPool.release(txp);
         return false;
     } else {
+        // Choose CR as late as possible so queued packets see fresh channel
+        // pressure. The call is kept cheap because it runs after CAD/CSMA delay
+        // and just before the radio starts transmitting.
+        chooseCodingRateForPacket(txp, txQueue.size());
         configHardwareForSend(); // must be after setStandby
 
         size_t numbytes = beginSending(txp);
@@ -603,6 +628,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 
             // This send failed, but make sure to 'complete' it properly
             completeSending();
+            restoreBaseCodingRate();
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {
