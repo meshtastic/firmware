@@ -524,6 +524,11 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             delay(100);
 #endif
 #if !ARCH_PORTDUINO
+#if defined(USE_ST7789) && defined(VTFT_CTRL)
+            // Ensure panel power rail is enabled before sending wake commands.
+            pinMode(VTFT_CTRL, OUTPUT);
+            digitalWrite(VTFT_CTRL, LOW);
+#endif
             dispdev->displayOn();
 #endif
 
@@ -545,10 +550,6 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             ui->init();
 #endif
 #if defined(USE_ST7789) && defined(VTFT_LEDA)
-#ifdef VTFT_CTRL
-            pinMode(VTFT_CTRL, OUTPUT);
-            digitalWrite(VTFT_CTRL, LOW);
-#endif
             ui->init();
 #ifdef ESP_PLATFORM
             analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
@@ -589,23 +590,22 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 #ifdef USE_ST7789
             SPI1.end();
-#if defined(ARCH_ESP32)
+            // Keep TFT control pins in deterministic states while timed-off.
+            // Floating/default pin states can corrupt panel edge rows on wake.
 #ifdef VTFT_LEDA
-            pinMode(VTFT_LEDA, ANALOG);
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, !TFT_BACKLIGHT_ON);
 #endif
 #ifdef VTFT_CTRL
-            pinMode(VTFT_CTRL, ANALOG);
+            pinMode(VTFT_CTRL, OUTPUT);
+            digitalWrite(VTFT_CTRL, HIGH);
 #endif
-            pinMode(ST7789_RESET, ANALOG);
-            pinMode(ST7789_RS, ANALOG);
-            pinMode(ST7789_NSS, ANALOG);
-#else
-            nrf_gpio_cfg_default(VTFT_LEDA);
-            nrf_gpio_cfg_default(VTFT_CTRL);
-            nrf_gpio_cfg_default(ST7789_RESET);
-            nrf_gpio_cfg_default(ST7789_RS);
-            nrf_gpio_cfg_default(ST7789_NSS);
-#endif
+            pinMode(ST7789_RESET, OUTPUT);
+            digitalWrite(ST7789_RESET, HIGH);
+            pinMode(ST7789_RS, OUTPUT);
+            digitalWrite(ST7789_RS, HIGH);
+            pinMode(ST7789_NSS, OUTPUT);
+            digitalWrite(ST7789_NSS, HIGH);
 #endif
 #ifdef USE_ST7796
             SPI1.end();
