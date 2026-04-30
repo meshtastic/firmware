@@ -25,23 +25,39 @@ def _to_hex(value: int | None) -> str | None:
 
 
 def _tcp_endpoint_from_env() -> dict[str, Any] | None:
-    """Synthesize a TCP device entry from MESHTASTIC_MCP_TCP_HOST, if set."""
+    """Synthesize a TCP device entry from MESHTASTIC_MCP_TCP_HOST, if set.
+
+    If the env var is malformed (non-integer port, path-like host, etc.),
+    return an entry with `likely_meshtastic=False` and the parser error in
+    the description, rather than raising — `list_devices` is the diagnostic
+    tool a user reaches for when their env var isn't working, so it must
+    not crash on misconfiguration.
+    """
     host = os.environ.get("MESHTASTIC_MCP_TCP_HOST")
     if not host:
         return None
     # Lazy import to avoid a circular dependency (connection imports devices).
     from . import connection
 
-    port = connection.normalize_tcp_endpoint(host)
+    try:
+        port = connection.normalize_tcp_endpoint(host)
+        description = "meshtasticd (TCP)"
+        likely = True
+    except connection.ConnectionError as e:
+        # Surface the raw env-var value plus the parser's reason so the
+        # user can see exactly what they set and why it was rejected.
+        port = f"tcp://{host}"
+        description = f"meshtasticd (TCP) — invalid MESHTASTIC_MCP_TCP_HOST: {e}"
+        likely = False
     return {
         "port": port,
         "vid": None,
         "pid": None,
-        "description": "meshtasticd (TCP)",
+        "description": description,
         "manufacturer": None,
         "product": None,
         "serial_number": None,
-        "likely_meshtastic": True,
+        "likely_meshtastic": likely,
         "blacklisted": False,
     }
 

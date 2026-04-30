@@ -71,14 +71,46 @@ class TestNormalizeTcpEndpoint:
         twice = connection.normalize_tcp_endpoint(once)
         assert once == twice == "tcp://localhost:4403"
 
-    def test_serial_path_not_misparsed_as_host(self) -> None:
-        # `/dev/cu.foo` contains no ":" — should pass through untouched in
-        # `is_tcp_port`'s sense (we only invoke normalize on TCP-like strings).
-        # Defensively, the leading `/` guards against treating `/foo:bar` as
-        # `host:port`.
-        assert (
-            connection.normalize_tcp_endpoint("/dev/cu.foo") == "tcp:///dev/cu.foo:4403"
-        )
+    def test_path_like_endpoint_rejected(self) -> None:
+        # Serial port paths and Windows drive paths are common config typos
+        # (someone passes a serial path to MESHTASTIC_MCP_TCP_HOST). Reject
+        # rather than producing a nonsense `tcp:///dev/cu.foo:4403` URL.
+        with pytest.raises(connection.ConnectionError, match="path separator"):
+            connection.normalize_tcp_endpoint("/dev/cu.foo")
+        with pytest.raises(connection.ConnectionError):
+            connection.normalize_tcp_endpoint("tcp:///dev/cu.foo:4403")
+        with pytest.raises(connection.ConnectionError):
+            connection.normalize_tcp_endpoint(r"C:\Windows\System32")
+
+    def test_non_integer_port_rejected(self) -> None:
+        with pytest.raises(connection.ConnectionError, match="not an integer"):
+            connection.normalize_tcp_endpoint("tcp://host:notaport")
+        with pytest.raises(connection.ConnectionError, match="not an integer"):
+            connection.normalize_tcp_endpoint("host:notaport")
+
+    def test_empty_host_rejected(self) -> None:
+        with pytest.raises(connection.ConnectionError, match="empty host"):
+            connection.normalize_tcp_endpoint("tcp://:4403")
+
+    def test_port_out_of_range_rejected(self) -> None:
+        with pytest.raises(connection.ConnectionError, match="out of range"):
+            connection.normalize_tcp_endpoint("tcp://host:0")
+        with pytest.raises(connection.ConnectionError, match="out of range"):
+            connection.normalize_tcp_endpoint("tcp://host:65536")
+        with pytest.raises(connection.ConnectionError, match="out of range"):
+            connection.normalize_tcp_endpoint("host:99999")
+
+
+class TestParseTcpPortValidation:
+    def test_missing_scheme_rejected(self) -> None:
+        # parse_tcp_port is a low-level helper that requires the scheme.
+        # Misuse should fail loudly rather than silently mis-parsing.
+        with pytest.raises(connection.ConnectionError, match="expected"):
+            connection.parse_tcp_port("localhost:4403")
+
+    def test_negative_port_rejected(self) -> None:
+        with pytest.raises(connection.ConnectionError, match="out of range"):
+            connection.parse_tcp_port("tcp://host:-1")
 
 
 # ---------- reject_if_tcp --------------------------------------------------
@@ -171,6 +203,31 @@ class TestDevicesTcpEntry:
             ds = devices.list_devices()
         assert ds, "expected at least the TCP entry"
         assert ds[0]["port"].startswith("tcp://")
+
+    def test_invalid_env_var_does_not_break_list_devices(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # `list_devices` is the diagnostic tool reached for when an env var
+        # isn't working — it must not throw on misconfiguration.
+        monkeypatch.setenv("MESHTASTIC_MCP_TCP_HOST", "host:notaport")
+        with patch("meshtastic_mcp.devices.list_ports.comports", return_value=[]):
+            ds = devices.list_devices(include_unknown=True)
+        tcp = [d for d in ds if "TCP" in (d["description"] or "")]
+        assert len(tcp) == 1
+        assert tcp[0]["likely_meshtastic"] is False
+        assert "invalid MESHTASTIC_MCP_TCP_HOST" in tcp[0]["description"]
+        assert "not an integer" in tcp[0]["description"]
+
+    def test_invalid_env_var_excluded_from_resolve_port_autodetect(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # `likely_meshtastic=False` keeps the bad TCP entry out of the
+        # auto-select path — `resolve_port(None)` should still report
+        # "no Meshtastic devices" rather than picking a broken endpoint.
+        monkeypatch.setenv("MESHTASTIC_MCP_TCP_HOST", "host:notaport")
+        with patch("meshtastic_mcp.devices.list_ports.comports", return_value=[]):
+            with pytest.raises(connection.ConnectionError, match="No Meshtastic"):
+                connection.resolve_port(None)
 
 
 # ---------- connect() routing ---------------------------------------------

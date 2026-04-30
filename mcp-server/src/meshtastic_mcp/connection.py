@@ -39,24 +39,58 @@ def is_tcp_port(port: str | None) -> bool:
 
 
 def parse_tcp_port(port: str) -> tuple[str, int]:
-    """Parse `tcp://host[:port]` → (host, port). Defaults to 4403."""
+    """Parse `tcp://host[:port]` → (host, port). Defaults to 4403.
+
+    Validates host shape (non-empty, no path separators) and port range
+    (1..65535). Raises `ConnectionError` on malformed input — never lets
+    a raw `ValueError` bubble up to a tool surface.
+    """
+    if not port.startswith(TCP_SCHEME):
+        raise ConnectionError(
+            f"Invalid TCP endpoint {port!r}: expected '{TCP_SCHEME}host[:port]'."
+        )
     rest = port[len(TCP_SCHEME) :]
     if ":" in rest:
         host, port_str = rest.rsplit(":", 1)
-        return host, int(port_str)
-    return rest, DEFAULT_TCP_PORT
+        try:
+            tcp_port = int(port_str)
+        except ValueError as e:
+            raise ConnectionError(
+                f"Invalid TCP endpoint {port!r}: port {port_str!r} is not an integer."
+            ) from e
+    else:
+        host, tcp_port = rest, DEFAULT_TCP_PORT
+    if not host:
+        raise ConnectionError(f"Invalid TCP endpoint {port!r}: empty host.")
+    if any(c in host for c in ("/", "\\")):
+        raise ConnectionError(
+            f"Invalid TCP endpoint {port!r}: host {host!r} contains a path "
+            "separator. TCP hostnames cannot contain '/' or '\\' — did you "
+            "pass a serial port path or a Windows drive path by mistake?"
+        )
+    if not (1 <= tcp_port <= 65535):
+        raise ConnectionError(
+            f"Invalid TCP endpoint {port!r}: port {tcp_port} out of range "
+            "(must be 1..65535)."
+        )
+    return host, tcp_port
 
 
 def normalize_tcp_endpoint(endpoint: str) -> str:
     """Normalize `host`, `host:port`, or `tcp://host[:port]` → canonical
-    `tcp://host:port` form. One place that owns the lock-key shape."""
+    `tcp://host:port` form. One place that owns the lock-key shape.
+
+    Defers all validation to `parse_tcp_port`, so path-like inputs
+    (`/dev/cu.foo`, `C:\\Windows\\…`), empty hosts, non-integer ports,
+    and out-of-range ports raise `ConnectionError` here too.
+    """
     if endpoint.startswith(TCP_SCHEME):
-        host, port = parse_tcp_port(endpoint)
-    elif ":" in endpoint and not endpoint.startswith("/"):
-        host, port_str = endpoint.rsplit(":", 1)
-        port = int(port_str)
+        canonical = endpoint
+    elif ":" in endpoint:
+        canonical = f"{TCP_SCHEME}{endpoint}"
     else:
-        host, port = endpoint, DEFAULT_TCP_PORT
+        canonical = f"{TCP_SCHEME}{endpoint}:{DEFAULT_TCP_PORT}"
+    host, port = parse_tcp_port(canonical)
     return f"{TCP_SCHEME}{host}:{port}"
 
 
