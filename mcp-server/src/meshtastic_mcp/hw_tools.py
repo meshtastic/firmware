@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Sequence
 
-from . import config, pio
+from . import config, connection, pio
 
 _TIMEOUT_SHORT = 30
 _TIMEOUT_LONG = 600
@@ -102,6 +102,7 @@ def _parse_esptool_chip_info(stdout: str) -> dict[str, Any]:
 
 
 def esptool_chip_info(port: str) -> dict[str, Any]:
+    connection.reject_if_tcp(port, "esptool_chip_info")
     binary = config.esptool_bin()
     # `chip_id` prints chip + mac + crystal + features. `flash_id` adds flash.
     combined = _run(binary, ["--port", port, "flash_id"], timeout=_TIMEOUT_SHORT)
@@ -116,6 +117,7 @@ def esptool_chip_info(port: str) -> dict[str, Any]:
 def esptool_erase_flash(port: str, confirm: bool = False) -> dict[str, Any]:
     """Full-chip erase. Leaves the device unbootable until reflashed."""
     _require_confirm(confirm, "esptool_erase_flash")
+    connection.reject_if_tcp(port, "esptool_erase_flash")
     binary = config.esptool_bin()
     # esptool v5 uses `erase-flash`, older uses `erase_flash`. Try the new name
     # first; if it fails with unknown command, retry old.
@@ -134,6 +136,7 @@ def esptool_raw(
     """Raw esptool passthrough. Destructive subcommands require confirm=True."""
     if not args:
         raise ToolError("args must not be empty")
+    connection.reject_if_tcp(port, "esptool_raw")
     # Find the first non-flag arg (the subcommand).
     subcommand = next((a for a in args if not a.startswith("-")), None)
     if subcommand and subcommand.replace("-", "_") in {
@@ -156,6 +159,7 @@ NRFUTIL_DESTRUCTIVE = {"dfu", "settings"}
 
 def nrfutil_dfu(port: str, package_path: str, confirm: bool = False) -> dict[str, Any]:
     _require_confirm(confirm, "nrfutil_dfu")
+    connection.reject_if_tcp(port, "nrfutil_dfu")
     pkg = Path(package_path).expanduser()
     if not pkg.is_file():
         raise ToolError(f"Package not found: {pkg}")
@@ -213,6 +217,7 @@ def _parse_picotool_info(stdout: str) -> dict[str, Any]:
 def picotool_info(port: str | None = None) -> dict[str, Any]:
     """Read device info from a Pico in BOOTSEL mode. `port` is informational
     only — picotool auto-detects."""
+    connection.reject_if_tcp(port, "picotool_info")
     binary = config.picotool_bin()
     res = _run(binary, ["info", "-a"], timeout=_TIMEOUT_SHORT)
     if res["exit_code"] != 0:
