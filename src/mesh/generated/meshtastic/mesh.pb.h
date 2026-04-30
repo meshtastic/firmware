@@ -501,7 +501,11 @@ typedef enum _meshtastic_Routing_Error {
     meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED = 38,
     /* PKI encryption failed, due to no public key for the remote node
  This is different from PKI_UNKNOWN_PUBKEY which indicates a failure upon receiving a packet */
-    meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY = 39
+    meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY = 39,
+    /* PKI packet could not be decrypted, even though the sender's public key is in NodeDB.
+ Typically happens after the sender rotated keys; may also happen due to RF corruption or
+ builds without PKI support (MESHTASTIC_EXCLUDE_PKI). */
+    meshtastic_Routing_Error_PKI_DECRYPT_FAILED = 40
 } meshtastic_Routing_Error;
 
 /* Enum of message types */
@@ -1431,8 +1435,8 @@ extern "C" {
 #define _meshtastic_Position_AltSource_ARRAYSIZE ((meshtastic_Position_AltSource)(meshtastic_Position_AltSource_ALT_BAROMETRIC+1))
 
 #define _meshtastic_Routing_Error_MIN meshtastic_Routing_Error_NONE
-#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY
-#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY+1))
+#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_PKI_DECRYPT_FAILED
+#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_PKI_DECRYPT_FAILED+1))
 
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE_SECONDHALF
