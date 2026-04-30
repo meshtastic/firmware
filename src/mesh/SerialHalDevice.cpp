@@ -8,11 +8,12 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <cstring>
-#include <mutex>
 #include <stdint.h>
 
-#if defined(ARCH_ESP32) && defined(HW_SPI1_DEVICE)
+#if defined(ARCH_ESP32)
+#if defined(HW_SPI1_DEVICE)
 extern SPIClass SPI1;
+#endif
 #endif
 
 namespace
@@ -31,7 +32,7 @@ struct InterruptSlot {
     volatile bool pending = false;
 };
 
-std::mutex interruptMutex;
+concurrency::Lock interruptMutex;
 InterruptSlot interruptSlots[MAX_INTERRUPT_SLOTS];
 StreamAPI *interruptStreamApi = nullptr;
 concurrency::Periodic *interruptEmitter = nullptr;
@@ -102,7 +103,7 @@ void emitInterruptEvent(uint32_t pin, StreamAPI *streamApi)
     SerialHalDevice::emitResponse(event, streamApi);
 }
 
-void markPendingBySlot(size_t slot)
+void markPendingBySlot(uint8_t slot)
 {
     if (slot < MAX_INTERRUPT_SLOTS && interruptSlots[slot].used) {
         interruptSlots[slot].pending = true;
@@ -151,7 +152,7 @@ int32_t pumpInterruptEvents()
     StreamAPI *streamApi = nullptr;
 
     {
-        std::lock_guard<std::mutex> lock(interruptMutex);
+        concurrency::LockGuard lock(&interruptMutex);
         streamApi = interruptStreamApi;
         for (size_t i = 0; i < MAX_INTERRUPT_SLOTS; ++i) {
             if (interruptSlots[i].used && interruptSlots[i].pending) {
@@ -273,7 +274,7 @@ void SerialHalDevice::handleAttachInterrupt(const meshtastic_SerialHalCommand &c
 
     int slot = -1;
     {
-        std::lock_guard<std::mutex> lock(interruptMutex);
+        concurrency::LockGuard lock(&interruptMutex);
         slot = findSlotByPinLocked(cmd.pin);
         if (slot < 0) {
             slot = allocateSlotLocked();
@@ -302,7 +303,7 @@ void SerialHalDevice::handleDetachInterrupt(const meshtastic_SerialHalCommand &c
     ::detachInterrupt((int)cmd.pin);
 
     {
-        std::lock_guard<std::mutex> lock(interruptMutex);
+        concurrency::LockGuard lock(&interruptMutex);
         const int slot = findSlotByPinLocked(cmd.pin);
         if (slot >= 0) {
             interruptSlots[slot] = InterruptSlot{};
@@ -374,7 +375,7 @@ void SerialHalDevice::emitResponse(const meshtastic_SerialHalResponse &response,
 
     // Keep a recent stream instance so async interrupt events can be emitted.
     {
-        std::lock_guard<std::mutex> lock(interruptMutex);
+        concurrency::LockGuard lock(&interruptMutex);
         interruptStreamApi = streamApi;
     }
 }
