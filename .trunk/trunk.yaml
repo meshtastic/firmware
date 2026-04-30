@@ -4,7 +4,7 @@ cli:
 plugins:
   sources:
     - id: trunk
-      ref: v1.7.6
+      ref: v1.8.0
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
@@ -36,7 +36,7 @@ lint:
         - bin/**
 runtimes:
   enabled:
-    - python@3.10.8
+    - python@3.14.4
     - go@1.21.0
     - node@22.16.0
 actions:
