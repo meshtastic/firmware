@@ -6,7 +6,14 @@
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
 #include "target_specific.h"
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+#include "mesh/eth/ethOTA.h"
+#endif
+#ifdef WIZNET_5500_EVB_PICO2
+#include <Ethernet.h> // arduino-libraries/Ethernet — supports W5100/W5200/W5500
+#else
 #include <RAK13800_W5100S.h>
+#endif
 #include <SPI.h>
 
 #if HAS_NETWORKING
@@ -69,6 +76,13 @@ static int32_t reconnectETH()
             delay(100);
 #endif
 
+#ifdef WIZNET_5500_EVB_PICO2 // Re-configure SPI0 for the on-board W5500
+            SPI.setRX(ETH_SPI0_MISO);
+            SPI.setSCK(ETH_SPI0_SCK);
+            SPI.setTX(ETH_SPI0_MOSI);
+            SPI.begin();
+            Ethernet.init(PIN_ETHERNET_SS);
+#else
 #ifdef RAK11310
             ETH_SPI_PORT.setSCK(PIN_SPI0_SCK);
             ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
@@ -76,6 +90,7 @@ static int32_t reconnectETH()
             ETH_SPI_PORT.begin();
 #endif
             Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
+#endif
 
             int status = 0;
             if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
@@ -136,6 +151,10 @@ static int32_t reconnectETH()
             }
 #endif
 
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+            initEthOTA();
+#endif
+
             ethStartupComplete = true;
         }
     }
@@ -162,6 +181,10 @@ static int32_t reconnectETH()
     }
 #endif
 
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+    ethOTALoop();
+#endif
+
     return 5000; // every 5 seconds
 }
 
@@ -182,6 +205,13 @@ bool initEthernet()
         digitalWrite(PIN_ETHERNET_RESET, HIGH); // Reset Time.
 #endif
 
+#ifdef WIZNET_5500_EVB_PICO2 // Configure SPI0 for the on-board W5500
+        SPI.setRX(ETH_SPI0_MISO);
+        SPI.setSCK(ETH_SPI0_SCK);
+        SPI.setTX(ETH_SPI0_MOSI);
+        SPI.begin();
+        Ethernet.init(PIN_ETHERNET_SS);
+#else
 #ifdef RAK11310 // Initialize the SPI port
         ETH_SPI_PORT.setSCK(PIN_SPI0_SCK);
         ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
@@ -189,6 +219,7 @@ bool initEthernet()
         ETH_SPI_PORT.begin();
 #endif
         Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
+#endif
 
         uint8_t mac[6];
 
@@ -201,7 +232,7 @@ bool initEthernet()
 
         if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
             LOG_INFO("Start Ethernet DHCP");
-            status = Ethernet.begin(mac);
+            status = Ethernet.begin(mac, 10000); // 10s timeout instead of default 60s
         } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
             LOG_INFO("Start Ethernet Static");
             Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
