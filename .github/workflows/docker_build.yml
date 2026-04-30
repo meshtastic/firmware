@@ -73,7 +73,9 @@ jobs:
       - name: Sanitize platform string
         id: sanitize_platform
         # Replace slashes with underscores
-        run: echo "cleaned_platform=${{ inputs.platform }}" | sed 's/\//_/g' >> $GITHUB_OUTPUT
+        env:
+          plat: ${{ inputs.platform }}
+        run: echo "cleaned_platform=${plat}" | sed 's/\//_/g' >> $GITHUB_OUTPUT
 
       - name: Docker login
         if: ${{ inputs.push }}
