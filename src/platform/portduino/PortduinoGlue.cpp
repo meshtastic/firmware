@@ -1053,12 +1053,12 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
     mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
     if (mac_str.length() == 12) {
-        dmac[0] = std::stoi(portduino_config.mac_address.substr(0, 2), nullptr, 16);
-        dmac[1] = std::stoi(portduino_config.mac_address.substr(2, 2), nullptr, 16);
-        dmac[2] = std::stoi(portduino_config.mac_address.substr(4, 2), nullptr, 16);
-        dmac[3] = std::stoi(portduino_config.mac_address.substr(6, 2), nullptr, 16);
-        dmac[4] = std::stoi(portduino_config.mac_address.substr(8, 2), nullptr, 16);
-        dmac[5] = std::stoi(portduino_config.mac_address.substr(10, 2), nullptr, 16);
+        dmac[0] = std::stoi(mac_str.substr(0, 2), nullptr, 16);
+        dmac[1] = std::stoi(mac_str.substr(2, 2), nullptr, 16);
+        dmac[2] = std::stoi(mac_str.substr(4, 2), nullptr, 16);
+        dmac[3] = std::stoi(mac_str.substr(6, 2), nullptr, 16);
+        dmac[4] = std::stoi(mac_str.substr(8, 2), nullptr, 16);
+        dmac[5] = std::stoi(mac_str.substr(10, 2), nullptr, 16);
         return true;
     } else {
         return false;
