@@ -24,6 +24,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#if HAS_VARIABLE_HOPS
+#include "modules/HopScalingModule.h"
+#endif
 #include <ErriezCRC32.h>
 #include <algorithm>
 #include <pb_decode.h>
@@ -1959,6 +1962,14 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
 
         info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
+
+#if HAS_VARIABLE_HOPS
+        // Only sample packets that arrived over LoRa.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && hopScalingModule) {
+            uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
+            hopScalingModule->samplePacketForHistogram(mp.from, hopCount);
+        }
+#endif
 
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
         const int8_t hopsAway = getHopsAway(mp);
