@@ -390,8 +390,11 @@ void InputBroker::Init()
                 seesawRotary = nullptr;
             }
         }
+#ifdef __linux__
+        // Linux evdev keyboard input only — macOS has no <linux/input.h>.
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
+#endif
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL
