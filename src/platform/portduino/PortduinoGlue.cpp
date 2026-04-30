@@ -13,6 +13,7 @@
 #include <ErriezCRC32.h>
 #include <Utility.h>
 #include <assert.h>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
