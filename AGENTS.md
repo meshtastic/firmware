@@ -10,17 +10,18 @@ This file (`AGENTS.md`) is a short pointer + quick reference for agents that don
 
 ## Quick command reference
 
-| Action                           | Command                                                                             |
-| -------------------------------- | ----------------------------------------------------------------------------------- |
-| Build a firmware variant         | `pio run -e <env>` (e.g. `pio run -e rak4631`, `pio run -e heltec-v3`)              |
-| Clean + rebuild                  | `pio run -e <env> -t clean && pio run -e <env>`                                     |
-| Flash a device                   | `pio run -e <env> -t upload --upload-port <port>` (or use the `pio_flash` MCP tool) |
-| Run firmware unit tests (native) | `pio test -e native`                                                                |
-| Run MCP hardware tests           | `./mcp-server/run-tests.sh`                                                         |
-| Live TUI test runner             | `mcp-server/.venv/bin/meshtastic-mcp-test-tui`                                      |
-| Format before commit             | `trunk fmt`                                                                         |
-| Regenerate protobuf bindings     | `bin/regen-protos.sh`                                                               |
-| Generate CI matrix               | `./bin/generate_ci_matrix.py all [--level pr]`                                      |
+| Action                           | Command                                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Build a firmware variant         | `pio run -e <env>` (e.g. `pio run -e rak4631`, `pio run -e heltec-v3`)                                        |
+| Build native macOS host binary   | `pio run -e native-macos` (Homebrew prereqs + CH341 LoRa setup in `variants/native/portduino/platformio.ini`) |
+| Clean + rebuild                  | `pio run -e <env> -t clean && pio run -e <env>`                                                               |
+| Flash a device                   | `pio run -e <env> -t upload --upload-port <port>` (or use the `pio_flash` MCP tool)                           |
+| Run firmware unit tests (native) | `pio test -e native`                                                                                          |
+| Run MCP hardware tests           | `./mcp-server/run-tests.sh`                                                                                   |
+| Live TUI test runner             | `mcp-server/.venv/bin/meshtastic-mcp-test-tui`                                                                |
+| Format before commit             | `trunk fmt`                                                                                                   |
+| Regenerate protobuf bindings     | `bin/regen-protos.sh`                                                                                         |
+| Generate CI matrix               | `./bin/generate_ci_matrix.py all [--level pr]`                                                                |
 
 ## MCP server (device + test automation)
 
@@ -121,6 +122,7 @@ Sequence these; don't parallelize on the same port.
 - **Device fully wedged (no DFU)?** `mcp__meshtastic__uhubctl_cycle(role="nrf52", confirm=True)` hard-power-cycles it via USB hub PPPS. Needs `uhubctl` installed (`brew install uhubctl` / `apt install uhubctl`); on Linux without udev rules, permission errors fail fast, so use `sudo uhubctl` yourself or configure udev access.
 - **Port busy?** `lsof <port>` to find the holder. Usually a stale `pio device monitor` or zombie `meshtastic_mcp` process. Kill it.
 - **Multiple MCP servers running?** `ps aux | grep meshtastic_mcp` — zombies hold ports. Kill all but the one your host spawned.
+- **macOS: `LIBUSB_ERROR_BUSY` on a CH341 LoRa adapter?** A third-party WCH `CH34xVCPDriver` is claiming interface 0. Find the bundle ID with `ioreg -p IOUSB -l -w 0 | grep -B2 -A30 0x5512`, then `sudo kmutil unload -b <bundleID>`. Apple's bundled CH34x kext targets the CH340 UART (PID 0x7523), not the SPI bridge — it's never the culprit.
 
 ## Environment variables (test harness)
 
