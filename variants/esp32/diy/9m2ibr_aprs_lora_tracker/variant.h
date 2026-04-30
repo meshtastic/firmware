@@ -30,7 +30,7 @@
 // Battery sense
 #define BATTERY_PIN 35
 #define ADC_MULTIPLIER 2.01 // 100k + 100k, and add 1% tolerance
-#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_7
 #define BATTERY_SENSE_RESOLUTION_BITS ADC_RESOLUTION
 
 // SPI
