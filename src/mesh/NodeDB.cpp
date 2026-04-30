@@ -917,8 +917,17 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.neighbor_info.enabled = false;
 
     moduleConfig.has_detection_sensor = true;
+#ifdef DETECTION_SENSOR_DEFAULT_PIN
+    moduleConfig.detection_sensor.enabled = true;
+    moduleConfig.detection_sensor.monitor_pin = DETECTION_SENSOR_DEFAULT_PIN;
+    moduleConfig.detection_sensor.detection_trigger_type =
+        meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_EITHER_EDGE_ACTIVE_HIGH;
+    moduleConfig.detection_sensor.use_pullup = true;
+    strncpy(moduleConfig.detection_sensor.name, "Tamper", sizeof(moduleConfig.detection_sensor.name));
+#else
     moduleConfig.detection_sensor.enabled = false;
     moduleConfig.detection_sensor.detection_trigger_type = meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
+#endif
     moduleConfig.detection_sensor.minimum_broadcast_secs = 45;
 
     moduleConfig.has_ambient_lighting = true;

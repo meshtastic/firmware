@@ -48,6 +48,7 @@ class ScanI2C
         BMA423,
         BQ24295,
         LSM6DS3,
+        LSM6DSOX,
         TCA9535,
         TCA9555,
         VEML7700,
