@@ -1,6 +1,6 @@
 // Unit tests for MAC_from_string in src/platform/portduino/PortduinoGlue.cpp.
 //
-// Regression coverage for the where the function stripped colons from
+// Regression coverage for when the function stripped colons from
 // its mac_str parameter but then read bytes from the global
 // portduino_config.mac_address. Symptoms: --hwid silently ignored when
 // MACAddress: was also set, and SIGABRT (stoi: no conversion) when --hwid
@@ -133,6 +133,43 @@ void test_extra_colons_still_parses()
     TEST_ASSERT_EQUAL_HEX8(0xFF, dmac[5]);
 }
 
+void test_non_hex_input_returns_false()
+{
+    // 12 chars of non-hex would have made std::stoi throw before the
+    // try/catch wrapper was added, killing the daemon. Now must return false
+    // and leave dmac untouched.
+    uint8_t dmac[6] = {0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11};
+    uint8_t before[6];
+    std::memcpy(before, dmac, 6);
+    TEST_ASSERT_FALSE(MAC_from_string("ZZ:ZZ:ZZ:ZZ:ZZ:ZZ", dmac));
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(before, dmac, 6);
+}
+
+void test_partial_hex_failure_preserves_dmac()
+{
+    // First five bytes are valid hex; the sixth ("ZZ") is not. Without the
+    // temp-buffer staging, dmac would be partially overwritten with the five
+    // good bytes plus stale data in slot 5 — silently producing a wrong MAC
+    // since the only caller that uses this in getMacAddr() ignores the bool
+    // return value.
+    uint8_t dmac[6] = {0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11};
+    uint8_t before[6];
+    std::memcpy(before, dmac, 6);
+    TEST_ASSERT_FALSE(MAC_from_string("AA:BB:CC:DD:EE:ZZ", dmac));
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(before, dmac, 6);
+}
+
+void test_embedded_non_hex_returns_false()
+{
+    // std::stoi tolerates leading whitespace and a "0x" prefix, so a stray
+    // space inside a 2-char window like " F" would silently parse as 0xF.
+    // The per-character isxdigit() pre-check rejects these. The 14-char
+    // "0xAABBCCDDEEFF" is also rejected by the length check.
+    uint8_t dmac[6] = {0};
+    TEST_ASSERT_FALSE(MAC_from_string("AA:BB:CC:DD:EE: F", dmac));
+    TEST_ASSERT_FALSE(MAC_from_string("0xAABBCCDDEEFF", dmac));
+}
+
 // --- Unity lifecycle ---
 
 void setup()
@@ -149,6 +186,9 @@ void setup()
     RUN_TEST(test_too_long_returns_false);
     RUN_TEST(test_only_colons_returns_false);
     RUN_TEST(test_extra_colons_still_parses);
+    RUN_TEST(test_non_hex_input_returns_false);
+    RUN_TEST(test_partial_hex_failure_preserves_dmac);
+    RUN_TEST(test_embedded_non_hex_returns_false);
     exit(UNITY_END());
 }
 
