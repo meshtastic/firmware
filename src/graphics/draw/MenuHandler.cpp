@@ -111,6 +111,15 @@ void menuHandler::OnboardMessage()
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
+#ifdef HAS_HAM_2M_ONLY
+    // Hardware is restricted to the amateur 2m band — offer only the two 2m regions
+    // so the user cannot pick a sub-GHz region the RF path cannot emit or receive.
+    static const LoraRegionOption regionOptions[] = {
+        {"Back", OptionsAction::Back},
+        {"ITU1_2M (144-146)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M},
+        {"ITU23_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M},
+    };
+#else
     static const LoraRegionOption regionOptions[] = {
         {"Back", OptionsAction::Back},
         {"US", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_US},
@@ -140,6 +149,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"NP_865", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NP_865},
         {"BR_902", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_BR_902},
     };
+#endif
 
     constexpr size_t regionCount = sizeof(regionOptions) / sizeof(regionOptions[0]);
     static std::array<const char *, regionCount> regionLabels{};

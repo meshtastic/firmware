@@ -1124,6 +1124,13 @@ void NodeDB::installDefaultDeviceState()
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
     owner.has_is_unmessagable = true;
     owner.is_unmessagable = false;
+
+#ifdef HAS_HAM_2M_ONLY
+    // Ham-band-only hardware defaults to licensed operation. The user can still flip this off later
+    // (e.g. a commercial operator on an adjacent allocation who wants to keep encryption on) — we
+    // only set the default here, not on every boot.
+    owner.is_licensed = true;
+#endif
 }
 
 // We reserve a few nodenums for future use

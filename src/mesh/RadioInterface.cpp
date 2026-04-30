@@ -54,6 +54,7 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {meshtas
 const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 0, 0, 0};
 const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 0, 0, 0};
 const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 0, 0, 0};
+const RegionProfile PROFILE_HAM = {PRESETS_STD, 0, 0, false, true, 0, 0, 0, 0};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr)                   \
     {                                                                                                                            \
@@ -222,6 +223,19 @@ const RegionInfo regions[] = {
         https://github.com/meshtastic/firmware/issues/3741
     */
     RDEF(BR_902, 902.0f, 907.5f, 100, 30, false, false, PROFILE_STD),
+
+    /*
+        ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 2m allocation: 144.000 - 146.000 MHz.
+        Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
+        via its own PA curve; the field here is just the legal upper bound.
+    */
+    RDEF(ITU1_2M, 144.0f, 146.0f, 100, 30, false, false, PROFILE_HAM),
+
+    /*
+        ITU Region 2 (Americas) and Region 3 (Asia/Pacific) amateur 2m allocation: 144.000 - 148.000 MHz.
+        Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
+    */
+    RDEF(ITU23_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
@@ -505,6 +519,23 @@ std::unique_ptr<RadioInterface> initLoRa()
             rebootAtMsec = millis() + 5000;
         }
     }
+
+    // Hardware/region crosscheck for the amateur 2m band: ham-only boards must run a 2m region,
+    // and boards without 2m support must not run one. In either mismatch, drop to UNSET so the
+    // first-start picker runs and the user re-selects a legal region for the hardware.
+    const bool is2mRegion = config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M ||
+                            config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M;
+#ifdef HAS_HAM_2M_ONLY
+    const bool mismatch = !is2mRegion && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+#else
+    const bool mismatch = is2mRegion;
+#endif
+    if (mismatch) {
+        LOG_WARN("Saved region incompatible with this hardware's RF path. Revert to unset");
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+    }
+
     return rIf;
 }
 
@@ -787,7 +818,14 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
     // If you are not licensed, you can't use ham regions.
-    if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {
+    // Exception: on hardware that can *only* operate on a ham band (e.g. T-Beam BPF), the user has
+    // no other region to choose, so allow unlicensed selection — a commercial operator on adjacent
+    // frequencies can still use the band plan and keep encryption enabled.
+    bool allowUnlicensedHam = false;
+#ifdef HAS_HAM_2M_ONLY
+    allowUnlicensedHam = true;
+#endif
+    if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed && !allowUnlicensedHam) {
         char err_string[160];
         snprintf(err_string, sizeof(err_string), "Region %s requires licensed mode", newRegion->name);
         LOG_ERROR("%s", err_string);
@@ -795,6 +833,34 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
         sendErrorNotification(err_string);
         return false;
     }
+
+    const bool is2mRegion = loraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M ||
+                            loraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M;
+
+#ifdef HAS_HAM_2M_ONLY
+    // This hardware's front-end / band-pass filter only passes 144-148 MHz. Any other region
+    // selection would key the radio on a frequency the RF path cannot emit or receive.
+    if (!is2mRegion && loraConfig.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        char err_string[160];
+        snprintf(err_string, sizeof(err_string), "Region %s not supported: this hardware is 2m-only", newRegion->name);
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        sendErrorNotification(err_string);
+        return false;
+    }
+#else
+    // Conversely, the 2m ham regions are illegal RF output for hardware not designed for that band
+    // (e.g. selecting ITU23_2M on a 915 MHz node would transmit at ~3x the expected frequency with
+    // an untuned antenna and filter). Refuse the selection entirely.
+    if (is2mRegion) {
+        char err_string[160];
+        snprintf(err_string, sizeof(err_string), "Region %s requires 2m-band hardware", newRegion->name);
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        sendErrorNotification(err_string);
+        return false;
+    }
+#endif
 
     return true;
 }
