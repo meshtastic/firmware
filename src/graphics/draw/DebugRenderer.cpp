@@ -11,6 +11,8 @@
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -469,9 +471,11 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int chUtil_y = getTextPositions(display)[line] + 3;
 
     int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
+    int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
     int chutil_bar_height = (currentResolution == ScreenResolution::High) ? 12 : 7;
     int extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 3;
     int chutil_percent = airTime->channelUtilizationPercent();
+    const int raw_chutil_percent = chutil_percent;
 
     int centerofscreen = SCREEN_WIDTH / 2;
     int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
@@ -479,7 +483,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
     display->drawString(starting_position, getTextPositions(display)[line], chUtil);
 
-    // Force 56% or higher to show a full 100% bar, text would still show related percent.
+    // Force 61% or higher to show a full 100% bar, text would still show related percent.
     if (chutil_percent >= 61) {
         chutil_percent = 100;
     }
@@ -492,9 +496,9 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     float weight3 = 0.20; // Weight for 40–100%
     float totalWeight = weight1 + weight2 + weight3;
 
-    int seg1 = chutil_bar_width * (weight1 / totalWeight);
-    int seg2 = chutil_bar_width * (weight2 / totalWeight);
-    int seg3 = chutil_bar_width * (weight3 / totalWeight);
+    int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
+    int seg2 = chutil_bar_max_fill * (weight2 / totalWeight);
+    int seg3 = chutil_bar_max_fill - seg1 - seg2; // Remainder absorbs rounding errors
 
     int fillRight = 0;
 
@@ -511,7 +515,17 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
     // Fill progress
     if (fillRight > 0) {
-        display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
+#if GRAPHICS_TFT_COLORING_ENABLED
+        uint16_t UtilizationFillColor = TFTPalette::Good;
+        if (raw_chutil_percent >= 60) {
+            UtilizationFillColor = TFTPalette::Bad;
+        } else if (raw_chutil_percent >= 35) {
+            UtilizationFillColor = TFTPalette::Medium;
+        }
+        setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black,
+                                   starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
+#endif
+        display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
     }
 
     display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
@@ -583,6 +597,17 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         int barY = getTextPositions(display)[line] + (FONT_HEIGHT_SMALL - barHeight) / 2;
         display->setColor(WHITE);
         display->drawRect(barX, barY, adjustedBarWidth, barHeight);
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+        uint16_t UtilizationFillColor = TFTPalette::Good;
+        if (percent >= 80) {
+            UtilizationFillColor = TFTPalette::Bad;
+        } else if (percent >= 60) {
+            UtilizationFillColor = TFTPalette::Medium;
+        }
+        setAndRegisterTFTColorRole(TFTColorRole::UtilizationFill, UtilizationFillColor, TFTPalette::Black, barX + 1, barY + 1,
+                                   fillWidth - 1, barHeight - 2);
+#endif
 
         display->fillRect(barX, barY, fillWidth, barHeight);
         display->setColor(WHITE);

@@ -124,10 +124,10 @@ bool sanitizeUtf8(char *buf, size_t bufSize)
     if (!buf || bufSize == 0)
         return false;
 
-    // Ensure null-terminated within buffer
+    // Ensure null-terminated within buffer; report if we had to enforce it
+    bool replaced = (buf[bufSize - 1] != '\0');
     buf[bufSize - 1] = '\0';
 
-    bool replaced = false;
     size_t i = 0;
     size_t len = strlen(buf);
 

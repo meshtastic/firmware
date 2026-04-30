@@ -163,7 +163,7 @@ void test_above_max_codepoint()
     TEST_ASSERT_TRUE(sanitizeUtf8(buf, sizeof(buf)));
 }
 
-int main(int argc, char **argv)
+void setup()
 {
     UNITY_BEGIN();
 
@@ -191,5 +191,7 @@ int main(int argc, char **argv)
     RUN_TEST(test_valid_max_codepoint);
     RUN_TEST(test_above_max_codepoint);
 
-    return UNITY_END();
+    exit(UNITY_END());
 }
+
+void loop() {}

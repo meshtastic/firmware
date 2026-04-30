@@ -6,8 +6,11 @@
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
 
-// Sentinel marking the end of a modem preset array
-static constexpr meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
+// Sentinel marking the end of a modem preset array. Declared `const` rather
+// than `constexpr` because the cast from 0xFF to the enum is out-of-range and
+// therefore not a valid constant expression on Clang 16+ (Apple Clang on
+// macOS). The value is only ever compared at runtime, so static-init is fine.
+static const meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
     static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(0xFF);
 
 // Region profile: bundles the preset list with regulatory parameters shared across regions
