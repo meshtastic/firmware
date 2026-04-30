@@ -198,6 +198,8 @@ void nrf54l15Setup()
 
 void nrf54l15Loop()
 {
+    // First-call gate for the future WDT init — body will hold real init code, not just the bookkeeping flag.
+    // cppcheck-suppress duplicateConditionalAssign
     if (!watchdog_running) {
         // TODO(nrf54l15): enable WDT here
         watchdog_running = true;

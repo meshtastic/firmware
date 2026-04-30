@@ -25,6 +25,8 @@ struct SPISettings {
     uint8_t bitOrder;
     uint8_t dataMode;
 
+    // Arduino API allows `SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0))` — implicit form is intentional.
+    // cppcheck-suppress noExplicitConstructor
     SPISettings(uint32_t clock = 4000000, uint8_t bitOrder = MSBFIRST, uint8_t dataMode = SPI_MODE0)
         : clock(clock), bitOrder(bitOrder), dataMode(dataMode)
     {

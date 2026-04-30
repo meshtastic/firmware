@@ -64,7 +64,7 @@ extern "C" void k_sys_fatal_error_handler(unsigned int reason, const struct arch
     uint32_t psp;
     __asm__ volatile("mrs %0, psp" : "=r"(psp));
     printk("[nrf54l15] PSP=0x%08x — stack walk:\n", psp);
-    uint32_t *sp = (uint32_t *)psp;
+    const uint32_t *sp = (const uint32_t *)psp;
     for (int i = 0; i < 96; i++) {
         uint32_t v = sp[i];
         if (v >= 0x00001000 && v < 0x00080000 && (v & 1)) {

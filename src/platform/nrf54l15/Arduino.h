@@ -312,47 +312,57 @@ class String
 {
   public:
     String() : _buf(nullptr), _len(0), _cap(0) {}
+    // Implicit conversion is part of the Arduino String contract, used pervasively across the codebase.
+    // cppcheck-suppress noExplicitConstructor
     String(const char *cstr) : _buf(nullptr), _len(0), _cap(0)
     {
         if (cstr)
             assign(cstr, strlen(cstr));
     }
+    // cppcheck-suppress noExplicitConstructor
     String(const String &s) : _buf(nullptr), _len(0), _cap(0) { assign(s._buf ? s._buf : "", s._len); }
+    // cppcheck-suppress noExplicitConstructor
     String(char c) : _buf(nullptr), _len(0), _cap(0)
     {
-        char tmp[2] = {c, 0};
+        const char tmp[2] = {c, 0};
         assign(tmp, 1);
     }
+    // cppcheck-suppress noExplicitConstructor
     String(int n) : _buf(nullptr), _len(0), _cap(0)
     {
         char tmp[16];
         snprintf(tmp, 16, "%d", n);
         assign(tmp, strlen(tmp));
     }
+    // cppcheck-suppress noExplicitConstructor
     String(unsigned int n) : _buf(nullptr), _len(0), _cap(0)
     {
         char tmp[16];
         snprintf(tmp, 16, "%u", n);
         assign(tmp, strlen(tmp));
     }
+    // cppcheck-suppress noExplicitConstructor
     String(long n) : _buf(nullptr), _len(0), _cap(0)
     {
         char tmp[24];
         snprintf(tmp, 24, "%ld", n);
         assign(tmp, strlen(tmp));
     }
+    // cppcheck-suppress noExplicitConstructor
     String(unsigned long n) : _buf(nullptr), _len(0), _cap(0)
     {
         char tmp[24];
         snprintf(tmp, 24, "%lu", n);
         assign(tmp, strlen(tmp));
     }
+    // cppcheck-suppress noExplicitConstructor
     String(float n, int d = 2) : _buf(nullptr), _len(0), _cap(0)
     {
         char tmp[32];
         snprintf(tmp, 32, "%.*f", d, n);
         assign(tmp, strlen(tmp));
     }
+    // cppcheck-suppress noExplicitConstructor
     String(double n, int d = 2) : _buf(nullptr), _len(0), _cap(0)
     {
         char tmp[32];
@@ -373,7 +383,7 @@ class String
     }
     String &operator=(char c)
     {
-        char tmp[2] = {c, 0};
+        const char tmp[2] = {c, 0};
         assign(tmp, 1);
         return *this;
     }
