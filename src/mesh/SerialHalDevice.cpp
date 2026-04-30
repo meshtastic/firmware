@@ -57,7 +57,7 @@ int allocateSlotLocked()
     return -1;
 }
 
-#ifdef ARCH_PORTDUINO
+#if defined(ARCH_PORTDUINO) || defined(ARCH_RP2040)
 PinStatus toInterruptMode(uint32_t serialMode)
 {
     if (serialMode == SERIAL_PI_RISING) {
@@ -187,13 +187,13 @@ void SerialHalDevice::handleCommand(const uint8_t *buf, size_t len, StreamAPI *s
     }
 
     // Validate role - SerialHal commands only handled when config.lora.serial_hal_only
-    /*if (!config.lora.serial_hal_only) {
+    if (!config.lora.serial_hal_only) {
         meshtastic_SerialHalResponse response = meshtastic_SerialHalResponse_init_zero;
         response.result = meshtastic_SerialHalResponse_Result_UNSUPPORTED;
         snprintf(response.error, sizeof(response.error), "SerialHal not enabled for this role");
         emitResponse(response, streamApi);
         return;
-    }*/
+    }
 
     // Decode the command
     meshtastic_SerialHalCommand cmd = meshtastic_SerialHalCommand_init_zero;
@@ -317,7 +317,7 @@ void SerialHalDevice::handleSpiTransfer(const meshtastic_SerialHalCommand &cmd, 
         return;
     }
 
-#if defined(ARCH_ESP32)
+#if !ARCH_PORTDUINO
     if (spiLock == nullptr) {
         setResponseError(response, meshtastic_SerialHalResponse_Result_ERROR, "SPI lock not initialized");
         return;
@@ -334,7 +334,7 @@ void SerialHalDevice::handleSpiTransfer(const meshtastic_SerialHalCommand &cmd, 
     {
         concurrency::LockGuard guard(spiLock);
         spiBus.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
-        spiBus.transferBytes(cmd.data.bytes, response.data.bytes, cmd.data.size);
+        spiBus.transfer(cmd.data.bytes, response.data.bytes, cmd.data.size);
         spiBus.endTransaction();
     }
 #else
