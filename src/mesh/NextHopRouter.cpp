@@ -317,6 +317,7 @@ int32_t NextHopRouter::doRetransmissions()
                               p.packet->id);
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
+                txRetransmitFailed++;
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
                 stopRetransmission(it->first);
                 stillValid = false; // just deleted it
