@@ -269,13 +269,20 @@ void pinMode(uint32_t pin, uint32_t mode)
     gpio_pin_configure(dev, zpin, flags);
 }
 
-// Log first N CS (pin 37=P2.05) and RST (pin 32=P2.00) toggles to verify GPIO works.
-// Silenced after GPIO_LOG_MAX calls to keep the log readable.
+// Bring-up diagnostics for the SX1262 wiring path. Off by default — enable by
+// adding `-DNRF54L15_GPIO_DEBUG` to platformio.ini build_flags. Useful when
+// validating CS/NRESET toggles after a wiring change, diagnosing a "stuck HIGH"
+// BUSY before the first NRESET pulse, or tracing BUSY transitions during early
+// boot. In normal operation these traces are noise (they bypass LOG level
+// controls and print on every GPIO touch), so they are gated at compile time.
+#ifdef NRF54L15_GPIO_DEBUG
 #define GPIO_LOG_MAX 20
 static uint32_t _gpio_log_count = 0;
+#endif
 
 void digitalWrite(uint32_t pin, uint32_t value)
 {
+#ifdef NRF54L15_GPIO_DEBUG
     // Before the very first NRESET pulse, snapshot BUSY state.
     // If BUSY is already HIGH here, the chip never completed power-on calibration.
     if (pin == 32 && value == 0) {
@@ -291,20 +298,25 @@ void digitalWrite(uint32_t pin, uint32_t value)
             }
         }
     }
+#endif
 
     gpio_pin_t zpin;
     const struct device *dev = _gpio_dev_for_pin(pin, &zpin);
     if (!device_is_ready(dev)) {
+        // Genuine hardware/DTS misconfiguration — keep this regardless of the
+        // GPIO_DEBUG gate so it surfaces in production builds too.
         printk("[GPIO] pin%u dev NOT READY\n", (unsigned)pin);
         return;
     }
     gpio_pin_set(dev, zpin, (int)value);
+#ifdef NRF54L15_GPIO_DEBUG
     if ((pin == 37 || pin == 32) && _gpio_log_count < GPIO_LOG_MAX) {
         // Read back the pin state to confirm it actually changed
         int actual = gpio_pin_get(dev, zpin);
         printk("[GPIO] pin%u → %u (read-back=%d)\n", (unsigned)pin, (unsigned)value, actual);
         _gpio_log_count++;
     }
+#endif
 }
 
 int digitalRead(uint32_t pin)
@@ -314,6 +326,7 @@ int digitalRead(uint32_t pin)
     if (!device_is_ready(dev))
         return 0;
     int v = gpio_pin_get(dev, zpin);
+#ifdef NRF54L15_GPIO_DEBUG
     // Log BUSY pin (35=P2.03) state changes + periodic updates for 10 seconds
     if (pin == 35) {
         static uint32_t busy_log_count = 0;
@@ -334,6 +347,7 @@ int digitalRead(uint32_t pin)
             busy_log_count = (elapsed_ms / 500) + 1;
         }
     }
+#endif
     return v;
 }
 

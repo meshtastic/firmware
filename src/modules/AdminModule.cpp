@@ -1108,12 +1108,13 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
         switch (configType) {
         case meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG:
             LOG_INFO("Get config: Device");
-#ifdef OUTPUT_GPIO_PIN
-            // Read actual pin state so --get reflects real hardware, not just cached config
-            config.device.output_gpio_enabled = (digitalRead(OUTPUT_GPIO_PIN) == HIGH);
-#endif
             res.get_config_response.which_payload_variant = meshtastic_Config_device_tag;
             res.get_config_response.payload_variant.device = config.device;
+#ifdef OUTPUT_GPIO_PIN
+            // Reflect the live pin state in the response without mutating the
+            // cached config (a getter must not write back to disk-persisted state).
+            res.get_config_response.payload_variant.device.output_gpio_enabled = (digitalRead(OUTPUT_GPIO_PIN) == HIGH);
+#endif
             break;
         case meshtastic_AdminMessage_ConfigType_POSITION_CONFIG:
             LOG_INFO("Get config: Position");

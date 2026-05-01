@@ -1,8 +1,10 @@
 // InternalFileSystem.h — Zephyr LittleFS backend for nRF54L15
 //
 // Implements the Adafruit InternalFileSystem API subset used by Meshtastic,
-// backed by Zephyr's fs/littlefs on the 36 KB storage_partition of the
-// nRF54L15's internal RRAM.
+// backed by Zephyr's fs/littlefs on the storage_partition of the nRF54L15's
+// internal RRAM. Partition size is taken from the DTS at compile time via
+// FIXED_PARTITION_SIZE(storage_partition) — the DK overlay currently maps
+// ~700 KB into slot1 (see zephyr/boards/nrf54l15dk_nrf54l15_cpuapp.overlay).
 //
 // Mount point: /lfs
 // All paths passed to open/exists/mkdir etc. are relative to the FS root
@@ -19,6 +21,7 @@
 #include <string.h>
 
 #include <zephyr/fs/fs.h>
+#include <zephyr/storage/flash_map.h>
 
 #ifndef FILE_O_READ
 #define FILE_O_READ "r"
@@ -175,7 +178,7 @@ class InternalFileSystem
     bool rmdir(const char *path);
     bool rmdir_r(const char *path); // recursive delete (used by FSCommon rmDir)
     uint32_t usedBytes() { return 0; }
-    uint32_t totalBytes() { return 36U * 1024U; }
+    uint32_t totalBytes() { return (uint32_t)FIXED_PARTITION_SIZE(storage_partition); }
     bool format();
 
     // Convert a FS-root-relative path to an absolute Zephyr path.

@@ -28,10 +28,11 @@ else:
     def _extract_gcc_command(ninja_build):
         """Parse build.ninja to find the gcc -E command that generates linker.cmd.
 
-        The rule looks like:
-          build zephyr/linker.cmd | ...: CUSTOM_COMMAND ...
-            COMMAND = cmd.exe /C "cd /D ZEPHYR_DIR && arm-none-eabi-gcc.exe ... -o linker.cmd && cmake.exe -E cmake_transform_depfile ..."
-            DESC = Generating linker.cmd
+        The rule format depends on the host:
+          Windows (CMake's RunCMake wraps every command):
+            COMMAND = cmd.exe /C "cd /D DIR && arm-none-eabi-gcc.exe ... -o linker.cmd && cmake.exe -E cmake_transform_depfile ..."
+          POSIX (Linux/macOS — no wrapper):
+            COMMAND = cd DIR && arm-none-eabi-gcc ... -o linker.cmd && cmake -E cmake_transform_depfile ...
 
         Returns (gcc_cmd_string, cwd_path) or raises RuntimeError.
         """
@@ -50,24 +51,21 @@ else:
 
                 command_val = stripped[len("COMMAND = ") :]
 
-                # The value is: C:\Windows\system32\cmd.exe /C "cd /D DIR && GCC_CMD && cmake ..."
-                # Extract the content between the outermost double-quotes.
-                m = re.search(r'/C\s+"(.*)"', command_val)
-                if not m:
-                    raise RuntimeError(
-                        "nRF54L15 linker fix: unexpected COMMAND format in build.ninja:\n%s"
-                        % command_val[:200]
-                    )
-
-                inner = m.group(1)  # "cd /D DIR && GCC_CMD && cmake ..."
+                # On Windows the value is wrapped in `cmd.exe /C "..."` — strip
+                # the wrapper. On POSIX hosts the inner sequence is the value
+                # itself (no quoting layer).
+                m = re.search(r'/C\s+"(.*)"\s*$', command_val)
+                inner = m.group(1) if m else command_val
                 parts = inner.split(" && ")
 
                 cwd = None
                 gcc_cmd = None
                 for part in parts:
                     part = part.strip()
-                    if part.startswith("cd /D "):
+                    if part.startswith("cd /D "):  # Windows form
                         cwd = part[len("cd /D ") :]
+                    elif part.startswith("cd "):  # POSIX form
+                        cwd = part[len("cd ") :]
                     elif "arm-none-eabi-gcc" in part:
                         gcc_cmd = part
 

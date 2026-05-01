@@ -64,11 +64,25 @@ extern "C" void k_sys_fatal_error_handler(unsigned int reason, const struct arch
     uint32_t psp;
     __asm__ volatile("mrs %0, psp" : "=r"(psp));
     printk("[nrf54l15] PSP=0x%08x — stack walk:\n", psp);
-    const uint32_t *sp = (const uint32_t *)psp;
-    for (int i = 0; i < 96; i++) {
-        uint32_t v = sp[i];
-        if (v >= 0x00001000 && v < 0x00080000 && (v & 1)) {
-            printk("[nrf54l15]   sp[%d]=0x%08x (code)\n", i, v);
+    // Validate PSP before dereferencing. Real faults frequently leave PSP
+    // pointing at corrupted/unmapped memory, and walking it blindly triggers a
+    // second fault inside this handler. Restrict to nRF54L15 SRAM (256 KB at
+    // 0x20000000) with 4-byte alignment, and clamp the walk so we never read
+    // past the end of RAM.
+    const uintptr_t SRAM_START = 0x20000000UL;
+    const uintptr_t SRAM_END = 0x20040000UL;
+    if (psp < SRAM_START || psp >= SRAM_END || (psp & 0x3U) != 0) {
+        printk("[nrf54l15]   PSP out of SRAM range or unaligned, skipping walk\n");
+    } else {
+        const uint32_t *sp = (const uint32_t *)psp;
+        int max_words = (int)((SRAM_END - psp) / sizeof(uint32_t));
+        if (max_words > 96)
+            max_words = 96;
+        for (int i = 0; i < max_words; i++) {
+            uint32_t v = sp[i];
+            if (v >= 0x00001000 && v < 0x00080000 && (v & 1)) {
+                printk("[nrf54l15]   sp[%d]=0x%08x (code)\n", i, v);
+            }
         }
     }
 
