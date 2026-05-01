@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+# trunk-ignore-all(ruff/F821)
+# trunk-ignore-all(flake8/F821): For SConstruct imports
+#
 # post:extra_scripts/nrf54l15_linker.py
 #
 # Fix for Zephyr two-pass link on nRF54L15:
@@ -11,10 +15,11 @@
 # so we parse the COMMAND line from build.ninja and run just the gcc -E part,
 # skipping the cmake_transform_depfile step (only needed for Ninja deps tracking).
 
-Import("env")
 import os
 import re
 import subprocess
+
+Import("env")
 
 if env.get("PIOENV") != "nrf54l15dk":
     pass  # Only for the nrf54l15dk environment

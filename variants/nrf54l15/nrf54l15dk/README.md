@@ -25,18 +25,18 @@ therefore live on **P2** and are driven by **SPIM00**.
 
 ## Connections — J2 header, P2 bank
 
-| E22-900M30S | GPIO  | DK pin | Function                                            |
-|-------------|-------|--------|-----------------------------------------------------|
-| MISO        | P2.04 | 36     | SPIM00 data in                                      |
-| NSS / CS    | P2.05 | 37     | SPI chip-select (driven by RadioLib as a GPIO)      |
-| DIO1        | P2.06 | 38     | IRQ — modem interrupt (routed via gpiote30)         |
-| BUSY        | P2.03 | 35     | Module busy (GPIO input)                            |
-| NRESET      | P2.00 | 32     | Module reset (GPIO output, active LOW)              |
-| RXEN        | P2.07 | 39     | LNA enable — held HIGH via `SX126X_ANT_SW`          |
-| MOSI        | P2.02 | 34     | SPIM00 data out                                     |
-| SCK         | P2.01 | 33     | SPIM00 clock                                        |
-| GND         | —     | GND    | Common ground                                       |
-| VCC         | —     | VDD    | 3.3 V                                               |
+| E22-900M30S | GPIO  | DK pin | Function                                       |
+| ----------- | ----- | ------ | ---------------------------------------------- |
+| MISO        | P2.04 | 36     | SPIM00 data in                                 |
+| NSS / CS    | P2.05 | 37     | SPI chip-select (driven by RadioLib as a GPIO) |
+| DIO1        | P2.06 | 38     | IRQ — modem interrupt (routed via gpiote30)    |
+| BUSY        | P2.03 | 35     | Module busy (GPIO input)                       |
+| NRESET      | P2.00 | 32     | Module reset (GPIO output, active LOW)         |
+| RXEN        | P2.07 | 39     | LNA enable — held HIGH via `SX126X_ANT_SW`     |
+| MOSI        | P2.02 | 34     | SPIM00 data out                                |
+| SCK         | P2.01 | 33     | SPIM00 clock                                   |
+| GND         | —     | GND    | Common ground                                  |
+| VCC         | —     | VDD    | 3.3 V                                          |
 
 > **Numbering convention**: `P0.n = n`, `P1.n = 16+n`, `P2.n = 32+n`.
 > Example: `P2.04` → 32 + 4 = **36**.
@@ -65,17 +65,17 @@ the LNA would stay disabled (radio deaf in RX).
 
 ## Reserved DK pins — do not reuse
 
-| Pins         | Reserved function                                         |
-|--------------|-----------------------------------------------------------|
-| P0.00–P0.03  | IMCU debug UART (uart30, J-Link VCOM — used by RTT host) |
-| P0.04        | BTN3                                                      |
-| P1.00–P1.01  | 32 kHz crystal                                            |
-| P1.02–P1.03  | NFC antenna                                               |
-| P1.10        | LED1 (status LED — kept)                                  |
-| P1.13        | BTN0 (only remaining user button)                         |
-| P1.14        | LED3                                                      |
-| P2.01–P2.05  | SPIM00 / E22 (see connection table above)                 |
-| P2.08–P2.10  | Trace ETM / LED2 (avoid)                                  |
+| Pins        | Reserved function                                        |
+| ----------- | -------------------------------------------------------- |
+| P0.00–P0.03 | IMCU debug UART (uart30, J-Link VCOM — used by RTT host) |
+| P0.04       | BTN3                                                     |
+| P1.00–P1.01 | 32 kHz crystal                                           |
+| P1.02–P1.03 | NFC antenna                                              |
+| P1.10       | LED1 (status LED — kept)                                 |
+| P1.13       | BTN0 (only remaining user button)                        |
+| P1.14       | LED3                                                     |
+| P2.01–P2.05 | SPIM00 / E22 (see connection table above)                |
+| P2.08–P2.10 | Trace ETM / LED2 (avoid)                                 |
 
 ---
 
