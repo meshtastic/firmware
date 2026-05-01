@@ -7,7 +7,7 @@ static File openFile(const char *filename, bool fullAtomic)
 {
     concurrency::LockGuard g(spiLock);
     LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
-#ifdef ARCH_NRF52
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     FSCom.remove(filename);
     return FSCom.open(filename, FILE_O_WRITE);
 #endif
@@ -67,7 +67,7 @@ bool SafeFile::close()
     f.close();
     spiLock->unlock();
 
-#ifdef ARCH_NRF52
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     return true;
 #endif
     if (!testReadback())
@@ -76,10 +76,14 @@ bool SafeFile::close()
     // Rename or overwrite (atomic operation)
     String filenameTmp = filename;
     filenameTmp += ".tmp";
-    if (!renameFile(filenameTmp.c_str(), filename.c_str())) {
+
+    spiLock->lock();
+    if (!FSCom.rename(filenameTmp.c_str(), filename.c_str())) {
+        spiLock->unlock();
         LOG_ERROR("Error: can't rename new pref file");
         return false;
     }
+    spiLock->unlock();
 
     return true;
 }
