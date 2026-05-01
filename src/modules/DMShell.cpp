@@ -570,6 +570,8 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, 
     }
 
     packet->to = peer;
+    packet->hop_limit = 0;
+    packet->hop_start = 0;
     packet->channel = 0;
     packet->want_ack = false;
     packet->pki_encrypted = true;
