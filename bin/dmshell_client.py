@@ -634,6 +634,10 @@ def reader_loop(transport, state: SessionState) -> None:
                 sys.stdout.buffer.flush()
         elif shell.op == state.pb2.mesh.RemoteShell.ERROR:
             message = shell.payload.decode("utf-8", errors="replace")
+            if state.replay_log_file is None:
+                state.open_replay_log(shell.session_id or state.session_id)
+            sanitized = message.replace("\n", "\\n")
+            state.log_replay_event("error_received", shell.seq, f"message={sanitized}")
             state.event_queue.put(f"remote error: {message}")
         elif shell.op == state.pb2.mesh.RemoteShell.CLOSED:
             message = shell.payload.decode("utf-8", errors="replace")
@@ -645,7 +649,7 @@ def reader_loop(transport, state: SessionState) -> None:
             remote_last_tx_seq = shell.last_tx_seq
             remote_last_rx_seq = shell.last_rx_seq
             local_latest_tx_seq = state.highest_sent_seq()
-            if remote_last_rx_seq < local_latest_tx_seq:
+            if remote_last_rx_seq != 0 and remote_last_rx_seq < local_latest_tx_seq:
                 replay_frames_from(transport, state, remote_last_rx_seq + 1)
             if remote_last_tx_seq > state.current_ack_seq():
                 state.note_peer_reported_tx_seq(remote_last_tx_seq)
