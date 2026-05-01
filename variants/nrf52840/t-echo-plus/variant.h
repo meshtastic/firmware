@@ -77,6 +77,7 @@ static const uint8_t A0 = PIN_A0;
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES MX25R1635F
 #define EXTERNAL_FLASH_USE_QSPI
+#define MESHTASTIC_EXTERNAL_FLASH_FS
 
 // LoRa SX1262
 #define USE_SX1262

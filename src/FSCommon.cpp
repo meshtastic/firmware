@@ -30,75 +30,6 @@ SPIClass SPI_HSPI(HSPI);
 
 #endif // HAS_SDCARD
 
-/**
- * @brief Copies a file from one location to another.
- *
- * @param from The path of the source file.
- * @param to The path of the destination file.
- * @return true if the file was successfully copied, false otherwise.
- */
-bool copyFile(const char *from, const char *to)
-{
-#ifdef FSCom
-    // take SPI Lock
-    concurrency::LockGuard g(spiLock);
-    unsigned char cbuffer[16];
-
-    File f1 = FSCom.open(from, FILE_O_READ);
-    if (!f1) {
-        LOG_ERROR("Failed to open source file %s", from);
-        return false;
-    }
-
-    File f2 = FSCom.open(to, FILE_O_WRITE);
-    if (!f2) {
-        LOG_ERROR("Failed to open destination file %s", to);
-        return false;
-    }
-
-    while (f1.available() > 0) {
-        byte i = f1.read(cbuffer, 16);
-        f2.write(cbuffer, i);
-    }
-
-    f2.flush();
-    f2.close();
-    f1.close();
-    return true;
-#endif
-}
-
-/**
- * Renames a file from pathFrom to pathTo.
- *
- * @param pathFrom The original path of the file.
- * @param pathTo The new path of the file.
- *
- * @return True if the file was successfully renamed, false otherwise.
- */
-bool renameFile(const char *pathFrom, const char *pathTo)
-{
-#ifdef FSCom
-
-#ifdef ARCH_ESP32
-    // take SPI Lock
-    spiLock->lock();
-    // rename was fixed for ESP32 IDF LittleFS in April
-    bool result = FSCom.rename(pathFrom, pathTo);
-    spiLock->unlock();
-    return result;
-#else
-    // copyFile does its own locking.
-    if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom)) {
-        return true;
-    } else {
-        return false;
-    }
-#endif
-
-#endif
-}
-
 #include <vector>
 
 /**
@@ -284,6 +215,22 @@ void rmDir(const char *dirname)
  */
 __attribute__((weak, noinline)) void preFSBegin() {}
 
+#if defined(ARCH_NRF52)
+// Default null; set by extFSInit() when external flash is available.
+Adafruit_LittleFS *extFS = nullptr;
+
+/**
+ * Default weak implementation — no external filesystem.
+ * Override in your firmware to mount a QSPI/SPI flash chip and assign extFS:
+ *
+ *   void extFSInit() {
+ *       static MyExternalFS myFS;
+ *       if (myFS.begin()) extFS = &myFS;
+ *   }
+ */
+__attribute__((weak, noinline)) void extFSInit() {}
+#endif
+
 void fsInit()
 {
 #ifdef FSCom
@@ -293,6 +240,12 @@ void fsInit()
         LOG_ERROR("Filesystem mount failed");
         // assert(0); This auto-formats the partition, so no need to fail here.
     }
+#if defined(ARCH_NRF52)
+    extFSInit();
+    if (extFS) {
+        LOG_DEBUG("External filesystem mounted OK");
+    }
+#endif
 #if defined(ARCH_ESP32)
     LOG_DEBUG("Filesystem files (%d/%d Bytes):", FSCom.usedBytes(), FSCom.totalBytes());
 #else
@@ -301,6 +254,271 @@ void fsInit()
     listDir("/", 10);
 #endif
 }
+
+// ── FSRoute virtual mount-point routing ──────────────────────────────────────
+
+#ifdef FSCom
+
+FSRoute fsRoute(const char *path)
+{
+    FSRoute r;
+    if (strncmp(path, "/__ext__/", 9) == 0) {
+        r.mount  = FsMount::External;
+        r.path[0] = '/';
+        strlcpy(r.path + 1, path + 9, sizeof(r.path) - 1);
+    } else if (strncmp(path, "/__int__/", 9) == 0) {
+        r.mount  = FsMount::Internal;
+        r.path[0] = '/';
+        strlcpy(r.path + 1, path + 9, sizeof(r.path) - 1);
+    } else if (strncmp(path, "/__sd__/", 8) == 0) {
+        r.mount  = FsMount::SD;
+        r.path[0] = '/';
+        strlcpy(r.path + 1, path + 8, sizeof(r.path) - 1);
+    } else {
+        r.mount = FsMount::Internal;
+        strlcpy(r.path, path, sizeof(r.path));
+    }
+    return r;
+}
+
+// ── FS selection helper ───────────────────────────────────────────────────────
+// Returns the correct FS object for the given mount, falling back to FSCom
+// when the requested mount is unavailable.
+
+#if defined(ARCH_NRF52)
+static Adafruit_LittleFS &_fsForMount(FsMount mount)
+{
+    if (mount == FsMount::External && extFS != nullptr)
+        return *extFS;
+    // SD: future
+    return (Adafruit_LittleFS &)FSCom;
+}
+#endif
+
+// ── Public helpers ────────────────────────────────────────────────────────────
+
+File fsOpenRead(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    return _fsForMount(r.mount).open(r.path, FILE_O_READ);
+#else
+    (void)r.mount;
+    return FSCom.open(r.path, FILE_O_READ);
+#endif
+}
+
+File fsOpenWrite(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    return _fsForMount(r.mount).open(r.path, FILE_O_WRITE);
+#else
+    (void)r.mount;
+    return FSCom.open(r.path, FILE_O_WRITE);
+#endif
+}
+
+bool fsRemove(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    return _fsForMount(r.mount).remove(r.path);
+#else
+    (void)r.mount;
+    return FSCom.remove(r.path);
+#endif
+}
+
+bool fsMkdir(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    return _fsForMount(r.mount).mkdir(r.path);
+#else
+    (void)r.mount;
+    return FSCom.mkdir(r.path);
+#endif
+}
+
+bool fsExists(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    return _fsForMount(r.mount).exists(r.path);
+#else
+    (void)r.mount;
+    return FSCom.exists(r.path);
+#endif
+}
+
+bool fsIsDirectory(const FSRoute &r)
+{
+#if defined(ARCH_NRF52)
+    File t = _fsForMount(r.mount).open(r.path, FILE_O_READ);
+#else
+    File t = FSCom.open(r.path, FILE_O_READ);
+#endif
+    if (!t)
+        return false;
+    bool isdir = t.isDirectory();
+    t.close();
+    return isdir;
+}
+
+static void joinFsPath(const char *dir, const char *name, char *out, size_t cap)
+{
+    if (!name || !name[0]) {
+        strlcpy(out, dir, cap);
+        return;
+    }
+    if (strcmp(dir, "/") == 0)
+        snprintf(out, cap, "/%s", name);
+    else
+        snprintf(out, cap, "%s/%s", dir, name);
+}
+
+static void toVirtualPath(FsMount m, const char *pathOnFs, char *out, size_t cap)
+{
+    if (!pathOnFs || !pathOnFs[0]) {
+        out[0] = '\0';
+        return;
+    }
+    if (m == FsMount::External) {
+        if (pathOnFs[0] == '/')
+            snprintf(out, cap, "/__ext__%s", pathOnFs);
+        else
+            snprintf(out, cap, "/__ext__/%s", pathOnFs);
+    } else if (m == FsMount::SD) {
+        if (pathOnFs[0] == '/')
+            snprintf(out, cap, "/__sd__%s", pathOnFs);
+        else
+            snprintf(out, cap, "/__sd__/%s", pathOnFs);
+    } else {
+        strlcpy(out, pathOnFs, cap);
+    }
+}
+
+std::vector<meshtastic_FileInfo> getFilesForRoute(const FSRoute &r, uint8_t levels)
+{
+    std::vector<meshtastic_FileInfo> filenames;
+#if defined(ARCH_NRF52)
+    File root = _fsForMount(r.mount).open(r.path, FILE_O_READ);
+#else
+    File root = FSCom.open(r.path, FILE_O_READ);
+#endif
+    if (!root)
+        return filenames;
+    if (!root.isDirectory()) {
+        root.close();
+        return filenames;
+    }
+
+    File file = root.openNextFile();
+    while (file && file.name()[0]) {
+        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
+            if (levels > 0) {
+                FSRoute sub = r;
+#if defined(ARCH_ESP32)
+                strlcpy(sub.path, file.path(), sizeof(sub.path));
+#else
+                joinFsPath(r.path, file.name(), sub.path, sizeof(sub.path));
+#endif
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFilesForRoute(sub, levels - 1);
+                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
+            }
+            file.close();
+        } else {
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
+            char onMount[sizeof(FSRoute::path) * 2];
+#if defined(ARCH_ESP32)
+            strlcpy(onMount, file.path(), sizeof(onMount));
+#else
+            joinFsPath(r.path, file.name(), onMount, sizeof(onMount));
+#endif
+            toVirtualPath(r.mount, onMount, fileInfo.file_name, sizeof(fileInfo.file_name));
+            if (!String(fileInfo.file_name).endsWith(".")) {
+                filenames.push_back(fileInfo);
+            }
+            file.close();
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+    return filenames;
+}
+
+/** Caller must hold spiLock (avoids deadlock if fsRename falls back to copy). */
+static bool fsStreamFileCopyUnlocked(const FSRoute &from, const FSRoute &to)
+{
+    File f1 = fsOpenRead(from);
+    if (!f1) {
+        LOG_ERROR("fsCopy: failed to open source %s", from.path);
+        return false;
+    }
+    File f2 = fsOpenWrite(to);
+    if (!f2) {
+        LOG_ERROR("fsCopy: failed to open dest %s", to.path);
+        f1.close();
+        return false;
+    }
+    uint8_t buf[128];
+    while (f1.available() > 0) {
+        size_t n = f1.read(buf, sizeof(buf));
+        if (n == 0) {
+            if (f1.available() > 0) {
+                f1.close();
+                f2.close();
+                return false;
+            }
+            break;
+        }
+        if (f2.write(buf, n) != n) {
+            f1.close();
+            f2.close();
+            return false;
+        }
+    }
+    f2.flush();
+    f2.close();
+    f1.close();
+    return true;
+}
+
+bool fsCopy(const FSRoute &from, const FSRoute &to)
+{
+    concurrency::LockGuard g(spiLock);
+    return fsStreamFileCopyUnlocked(from, to);
+}
+
+bool fsRename(const FSRoute &from, const FSRoute &to)
+{
+#if defined(ARCH_NRF52)
+    if (from.mount != to.mount) {
+        LOG_WARN("fsRename: mount mismatch (use fsCopy then fsRemove)");
+        return false;
+    }
+#endif
+    concurrency::LockGuard g(spiLock);
+#if defined(ARCH_NRF52)
+    return _fsForMount(from.mount).rename(from.path, to.path);
+#elif defined(ARCH_ESP32)
+    return FSCom.rename(from.path, to.path);
+#else
+    if (FSCom.rename(from.path, to.path))
+        return true;
+    if (!fsStreamFileCopyUnlocked(from, to))
+        return false;
+    return fsRemove(from);
+#endif
+}
+
+bool copyFile(const char *from, const char *to)
+{
+    return fsCopy(fsRoute(from), fsRoute(to));
+}
+
+bool renameFile(const char *pathFrom, const char *pathTo)
+{
+    return fsRename(fsRoute(pathFrom), fsRoute(pathTo));
+}
+
+#endif // FSCom
 
 /**
  * Initializes the SD card and mounts the file system.
