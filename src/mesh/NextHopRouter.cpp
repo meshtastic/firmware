@@ -9,12 +9,34 @@
 #endif
 #include "NodeDB.h"
 
+namespace
+{
+
+uint8_t computeInitialRetransmissionBudget(uint8_t totalRetransmissions)
+{
+    return totalRetransmissions > 0 ? totalRetransmissions - 1 : 0;
+}
+
+uint8_t getRetransmissionAttempt(const PendingPacket &pending)
+{
+    return (pending.initialNumRetransmissions - pending.numRetransmissions) + 1;
+}
+
+uint8_t computeRetransmissionCodingRate(const PendingPacket &pending)
+{
+    return computeDesiredRetransmissionCodingRate(pending.baseCodingRate, getRetransmissionAttempt(pending));
+}
+
+} // namespace
+
 NextHopRouter::NextHopRouter() {}
 
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions)
 {
     packet = p;
-    this->numRetransmissions = numRetransmissions - 1; // We subtract one, because we assume the user just did the first send
+    initialNumRetransmissions = computeInitialRetransmissionBudget(numRetransmissions);
+    this->numRetransmissions =
+        initialNumRetransmissions; // The first send already happened before a retransmission record exists.
 }
 
 /**
@@ -269,6 +291,7 @@ PendingPacket *NextHopRouter::startRetransmission(meshtastic_MeshPacket *p, uint
 {
     auto id = GlobalPacketId(p);
     auto rec = PendingPacket(p, numReTx);
+    rec.baseCodingRate = iface ? iface->getCodingRate() : rec.baseCodingRate;
 
     stopRetransmission(getFrom(p), p->id);
 
@@ -309,6 +332,12 @@ int32_t NextHopRouter::doRetransmissions()
                 LOG_DEBUG("Sending retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
 
+                auto *retransmission = packetPool.allocCopy(*p.packet);
+                p.baseCodingRate = iface ? iface->getCodingRate() : p.baseCodingRate;
+                uint8_t desiredCodingRate = computeRetransmissionCodingRate(p);
+                iface->setTransmitCodingRateOverride(getFrom(retransmission), retransmission->id, desiredCodingRate);
+                ErrorCode sendResult = ERRNO_UNKNOWN;
+
                 if (!isBroadcast(p.packet->to)) {
                     if (p.numRetransmissions == 1) {
                         // Last retransmission, reset next_hop (fallback to FloodingRouter)
@@ -319,14 +348,18 @@ int32_t NextHopRouter::doRetransmissions()
                             LOG_INFO("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
                             sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
                         }
-                        FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                        sendResult = FloodingRouter::send(retransmission);
                     } else {
-                        NextHopRouter::send(packetPool.allocCopy(*p.packet));
+                        sendResult = NextHopRouter::send(retransmission);
                     }
                 } else {
                     // Note: we call the superclass version because we don't want to have our version of send() add a new
                     // retransmission record
-                    FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                    sendResult = FloodingRouter::send(retransmission);
+                }
+
+                if (sendResult != ERRNO_OK) {
+                    iface->clearTransmitCodingRateOverride(getFrom(p.packet), p.packet->id);
                 }
 
                 // Queue again

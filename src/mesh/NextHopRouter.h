@@ -4,6 +4,16 @@
 #include <optional>
 #include <unordered_map>
 
+static inline uint8_t computeDesiredRetransmissionCodingRate(uint8_t baseCodingRate, uint8_t retransmissionAttempt)
+{
+    if (retransmissionAttempt >= 2) {
+        return 8;
+    }
+
+    uint16_t desiredCodingRate = baseCodingRate + 1;
+    return desiredCodingRate > 8 ? 8 : desiredCodingRate;
+}
+
 /**
  * An identifier for a globally unique message - a pair of the sending nodenum and the packet id assigned
  * to that message
@@ -38,6 +48,12 @@ struct PendingPacket {
 
     /** Starts at NUM_RETRANSMISSIONS -1 and counts down.  Once zero it will be removed from the list */
     uint8_t numRetransmissions = 0;
+
+    /** The initial retransmission budget after the first send has already happened. */
+    uint8_t initialNumRetransmissions = 0;
+
+    /** Base coding rate used to compute retry-specific increments. */
+    uint8_t baseCodingRate = 5;
 
     PendingPacket() {}
     explicit PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions);

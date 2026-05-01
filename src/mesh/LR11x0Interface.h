@@ -70,6 +70,8 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     virtual void setStandby() override;
 
+    int16_t applyCodingRate(uint8_t codingRate) override;
+
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 };
 #endif

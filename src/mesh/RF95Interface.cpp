@@ -196,6 +196,11 @@ bool RF95Interface::init()
     return res == RADIOLIB_ERR_NONE;
 }
 
+int16_t RF95Interface::applyCodingRate(uint8_t codingRate)
+{
+    return lora->setCodingRate(codingRate);
+}
+
 void RF95Interface::disableInterrupt()
 {
     lora->clearDio0Action();

@@ -110,6 +110,11 @@ template <typename T> bool SX128xInterface<T>::init()
     return res == RADIOLIB_ERR_NONE;
 }
 
+template <typename T> int16_t SX128xInterface<T>::applyCodingRate(uint8_t codingRate)
+{
+    return lora.setCodingRate(codingRate, codingRate != 7);
+}
+
 template <typename T> bool SX128xInterface<T>::reconfigure()
 {
     RadioLibInterface::reconfigure();
