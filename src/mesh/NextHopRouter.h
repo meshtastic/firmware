@@ -52,9 +52,6 @@ struct PendingPacket {
     /** The initial retransmission budget after the first send has already happened. */
     uint8_t initialNumRetransmissions = 0;
 
-    /** Base coding rate used to compute retry-specific increments. */
-    uint8_t baseCodingRate = 5;
-
     PendingPacket() {}
     explicit PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions);
 };

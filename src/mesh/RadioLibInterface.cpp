@@ -476,6 +476,8 @@ void RadioLibInterface::restoreTemporaryCodingRateOverride()
     int err = applyCodingRate(cr);
     if (err != RADIOLIB_ERR_NONE) {
         LOG_WARN("Restoring base coding rate %u failed, error=%d", cr, err);
+    } else {
+        LOG_DEBUG("Restored coding rate to %u after retransmission", cr);
     }
 
     activeTxCodingRateOverride.reset();
