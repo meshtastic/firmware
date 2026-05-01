@@ -7,6 +7,7 @@
 #include "NodeDB.h"
 #include "Router.h"
 #include "TypeConversions.h"
+#include "airtime.h"
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
@@ -1001,7 +1002,11 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     const auto &cfg = moduleConfig.traffic_management;
     const bool isTelemetry = mp.decoded.portnum == meshtastic_PortNum_TELEMETRY_APP;
     const bool isPosition = mp.decoded.portnum == meshtastic_PortNum_POSITION_APP;
-    const bool shouldExhaust = (isTelemetry && cfg.exhaust_hop_telemetry) || (isPosition && cfg.exhaust_hop_position);
+    // Only exhaust telemetry hops when channel is actually congested, mirroring the same
+    // airtime checks that gate self-generated telemetry in the telemetry modules.
+    const bool channelBusy = airTime && (!airTime->isTxAllowedChannelUtil(true) || !airTime->isTxAllowedAirUtil());
+    const bool shouldExhaust =
+        ((channelBusy && isTelemetry && cfg.exhaust_hop_telemetry) || (isPosition && cfg.exhaust_hop_position));
 
     if (!shouldExhaust || !isBroadcast(mp.to))
         return;

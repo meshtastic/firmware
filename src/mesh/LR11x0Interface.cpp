@@ -71,12 +71,10 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     RadioLibInterface::init();
 
-    limitPower(LR1110_MAX_POWER);
-
-    if ((power > LR1120_MAX_POWER) &&
-        (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) { // clamp again if wide freq range
-        power = LR1120_MAX_POWER;
-        preambleLength = 12; // 12 is the default for operation above 2GHz
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
+        limitPower(LR1120_MAX_POWER);
+    } else {
+        limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
     }
 
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
@@ -177,17 +175,18 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     err = lora.setSyncWord(syncWord);
     assert(err == RADIOLIB_ERR_NONE);
 
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
+        limitPower(LR1120_MAX_POWER);
+    } else {
+        limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
+    }
+
     err = lora.setPreambleLength(preambleLength);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    if (power > LR1110_MAX_POWER) // This chip has lower power limits than some
-        power = LR1110_MAX_POWER;
-    if ((power > LR1120_MAX_POWER) && (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) // 2.4G power limit
-        power = LR1120_MAX_POWER;
 
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);

@@ -162,6 +162,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #elif defined(HELTEC_MESH_NODE_T096)
 #define NUM_PA_POINTS 22
 #define TX_GAIN_LORA 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 13, 12, 11, 10, 9, 8, 7
+#elif defined(HELTEC_V4_R8)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 12, 12, 11, 11, 10, 9, 8, 7
 #else
 // If a board enables USE_KCT8103L_PA but does not match a known variant and has
 // not already provided a PA curve, fail at compile time to avoid unsafe defaults.
@@ -499,6 +502,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_PKI 1
 #define MESHTASTIC_EXCLUDE_POWER_FSM 1
 #define MESHTASTIC_EXCLUDE_TZ 1
+#define MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH 1
 #endif
 
 // Turn off all optional modules

@@ -22,7 +22,7 @@ jobs:
       # Step 1: Check if PR already has automation/type labels (skip if so)
       # ─────────────────────────────────────────────────────────────────────────
       - name: Check existing labels
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         id: check-labels
         with:
           script: |
@@ -58,7 +58,7 @@ jobs:
 
       - name: Apply quality label if needed
         if: steps.check-labels.outputs.skip_all != 'true' && steps.quality.outputs.response != '' && steps.quality.outputs.response != 'ok'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         id: quality-label
         env:
           QUALITY_LABEL: ${{ steps.quality.outputs.response }}
@@ -113,7 +113,7 @@ jobs:
 
       - name: Apply type label
         if: steps.check-labels.outputs.skip_all != 'true' && steps.check-labels.outputs.has_type_label != 'true' && steps.classify.outputs.response != ''
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           TYPE_LABEL: ${{ steps.classify.outputs.response }}
         with:

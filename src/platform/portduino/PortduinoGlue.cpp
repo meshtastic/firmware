@@ -1,4 +1,5 @@
 #include "CryptoEngine.h"
+#include "HardwareRNG.h"
 #include "PortduinoGPIO.h"
 #include "SPIChip.h"
 #include "mesh/RF95Interface.h"
@@ -8,13 +9,10 @@
 #include "PortduinoGlue.h"
 #include "SHA256.h"
 #include "api/ServerAPI.h"
-#include "linux/gpio/LinuxGPIOPin.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
 #include <assert.h>
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -23,6 +21,12 @@
 #include <stdexcept>
 #include <sys/ioctl.h>
 #include <unistd.h>
+
+#ifdef PORTDUINO_LINUX_HARDWARE
+#include "linux/gpio/LinuxGPIOPin.h"
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/hci.h>
+#endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
@@ -129,9 +133,9 @@ void getMacAddr(uint8_t *dmac)
         }
     } else if (portduino_config.mac_address.length() > 11) {
         MAC_from_string(portduino_config.mac_address, dmac);
-        exit;
+        return;
     } else {
-
+#ifdef PORTDUINO_LINUX_HARDWARE
         struct hci_dev_info di = {0};
         di.dev_id = 0;
         bdaddr_t bdaddr;
@@ -151,6 +155,11 @@ void getMacAddr(uint8_t *dmac)
         dmac[3] = di.bdaddr.b[2];
         dmac[4] = di.bdaddr.b[1];
         dmac[5] = di.bdaddr.b[0];
+#else
+        // No BlueZ on non-Linux hosts (e.g. macOS). Leave dmac at its default;
+        // the caller can override via the --hwid CLI flag or the YAML config.
+        (void)dmac;
+#endif
     }
 }
 
@@ -180,6 +189,10 @@ void portduinoSetup()
 
     // Force stdout to be line buffered
     setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
+
+    // We do this super early so that we can log from the rest of the init code
+    concurrency::hasBeenSetup = true;
+    consoleInit();
 
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
@@ -233,7 +246,9 @@ void portduinoSetup()
         std::cout << "Running in simulated mode." << std::endl;
         portduino_config.MaxNodes = 200; // Default to 200 nodes
         // Set the random seed equal to TCPPort to have a different seed per instance
-        randomSeed(TCPPort);
+        uint32_t seed = TCPPort;
+        HardwareRNG::seed(seed);
+        randomSeed(seed);
         return;
     }
 
@@ -479,10 +494,17 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
         char serial[9] = {0};
-        ch341Hal->getSerialString(serial, 8);
+        // Pass the full buffer size (9 = 8 chars + null) to getSerialString,
+        // not 8. The function treats `len` as buffer size and reserves one
+        // slot for the null terminator, so passing 8 produced a 7-char serial
+        // and broke the `strlen(serial) == 8` check below — masked on Linux
+        // by the BlueZ HCI MAC fallback in getMacAddr(), but on macOS (where
+        // the BlueZ path is __linux__-guarded) it left mac_address empty and
+        // meshtasticd refused to start.
+        ch341Hal->getSerialString(serial, sizeof(serial));
         std::cout << "CH341 Serial " << serial << std::endl;
         char product_string[96] = {0};
-        ch341Hal->getProductString(product_string, 95);
+        ch341Hal->getProductString(product_string, sizeof(product_string));
         std::cout << "CH341 Product " << product_string << std::endl;
         if (strlen(serial) == 8 && portduino_config.mac_address.length() < 12) {
             std::cout << "Deriving MAC address from Serial and Product String" << std::endl;
@@ -512,7 +534,9 @@ void portduinoSetup()
 #endif
     printf("MAC ADDRESS: %02X:%02X:%02X:%02X:%02X:%02X\n", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
     // Rather important to set this, if not running simulated.
-    randomSeed(time(NULL));
+    uint32_t seed = static_cast<uint32_t>(time(NULL));
+    HardwareRNG::seed(seed);
+    randomSeed(seed);
 
     std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
 
@@ -645,7 +669,9 @@ void portduinoSetup()
     if (verboseEnabled && portduino_config.logoutputlevel != level_trace) {
         portduino_config.logoutputlevel = level_debug;
     }
-
+    if (portduino_config.lora_spi_dev != "") {
+        portduinoSetOptions({.realHardware = true});
+    }
     return;
 }
 

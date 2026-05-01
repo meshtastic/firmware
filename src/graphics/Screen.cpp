@@ -39,6 +39,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/NodeListRenderer.h"
 #include "draw/NotificationRenderer.h"
 #include "draw/UIRenderer.h"
+#include "graphics/TFTColorRegions.h"
 #include "modules/CannedMessageModule.h"
 
 #if !MESHTASTIC_EXCLUDE_GPS
@@ -54,12 +55,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/emotes.h"
 #include "graphics/images.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
+#include "mesh/Default.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
@@ -67,12 +70,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "sleep.h"
 #include "target_specific.h"
 extern MessageStore messageStore;
-
-#if USE_TFTDISPLAY
-extern uint16_t TFT_MESH;
-#else
-uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
-#endif
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -98,6 +95,7 @@ namespace graphics
 
 // This means the *visible* area (sh1106 can address 132, but shows 128 for example)
 #define IDLE_FRAMERATE 1 // in fps
+#define COMPASS_ACTIVE_FRAMERATE 20
 
 // DEBUG
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
@@ -107,6 +105,27 @@ namespace graphics
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
+#if GRAPHICS_TFT_COLORING_ENABLED
+static inline void prepareFrameColorRegions()
+{
+#if GRAPHICS_TFT_COLORING_ENABLED
+    clearTFTColorRegions();
+    // Full-frame FrameMono inversion for themes that need it (e.g. light themes).
+    if (isThemeFullFrameInvert()) {
+        setAndRegisterTFTColorRole(TFTColorRole::FrameMono, getThemeBodyFg(), getThemeBodyBg(), 0, 0, screen->getWidth(),
+                                   screen->getHeight());
+    }
+#endif
+}
+#endif
+
+static inline void updateUiFrame(OLEDDisplayUi *ui)
+{
+#if GRAPHICS_TFT_COLORING_ENABLED
+    prepareFrameColorRegions();
+#endif
+    ui->update();
+}
 // Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
@@ -134,6 +153,60 @@ static bool heartbeat = false;
 // End Functions to write date/time to the screen
 
 extern bool hasUnreadMessage;
+
+static inline float wrapHeading360(float heading)
+{
+    if (heading < 0.0f) {
+        heading += 360.0f;
+    } else if (heading >= 360.0f) {
+        heading -= 360.0f;
+    }
+    return heading;
+}
+
+void Screen::setHeading(float heading)
+{
+    const float wrappedHeading = wrapHeading360(heading);
+
+    if (!hasCompass) {
+        hasCompass = true;
+        compassHeading = wrappedHeading;
+        return;
+    }
+
+    // Interpolate using shortest-path angular delta to avoid jumps around 0/360.
+    float delta = wrappedHeading - compassHeading;
+    if (delta > 180.0f) {
+        delta -= 360.0f;
+    } else if (delta < -180.0f) {
+        delta += 360.0f;
+    }
+
+    // Adaptive filtering:
+    // - Strong damping for tiny deltas (jitter)
+    // - Faster response for larger turns
+    const float absDelta = (delta >= 0.0f) ? delta : -delta;
+    if (absDelta < 1.0f) {
+        return;
+    }
+
+    float alpha = 0.35f;
+    if (absDelta > 25.0f) {
+        alpha = 0.85f;
+    } else if (absDelta > 10.0f) {
+        alpha = 0.65f;
+    }
+
+    float step = delta * alpha;
+    const float maxStep = 12.0f;
+    if (step > maxStep) {
+        step = maxStep;
+    } else if (step < -maxStep) {
+        step = -maxStep;
+    }
+
+    compassHeading = wrapHeading360(compassHeading + step);
+}
 
 // ==============================
 // Overlay Alert Banner Renderer
@@ -171,7 +244,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     ui->setTargetFPS(60);
-    ui->update();
+    updateUiFrame(ui);
 }
 
 // Called to trigger a banner with custom message and duration
@@ -193,7 +266,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     ui->setTargetFPS(60);
-    ui->update();
+    updateUiFrame(ui);
 }
 
 // Called to trigger a banner with custom message and duration
@@ -217,7 +290,7 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     ui->setTargetFPS(60);
-    ui->update();
+    updateUiFrame(ui);
 }
 
 void Screen::showTextInput(const char *header, const char *initialText, uint32_t durationMs,
@@ -240,7 +313,7 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     ui->setTargetFPS(60);
-    ui->update();
+    updateUiFrame(ui);
 }
 
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -272,10 +345,25 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
-    static float b;
+    static float b = -1.0f;
+    static uint32_t lastHeadingAtMs = 0;
+    const uint32_t now = millis();
+    const uint32_t gpsUpdateIntervalSecs =
+        Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
+    uint32_t effectiveUpdateIntervalSecs = gpsUpdateIntervalSecs;
+    if (config.position.position_broadcast_smart_enabled) {
+        const uint32_t smartMinIntervalSecs = Default::getConfiguredOrDefault(
+            config.position.broadcast_smart_minimum_interval_secs, default_broadcast_smart_minimum_interval_secs);
+        if (smartMinIntervalSecs > effectiveUpdateIntervalSecs) {
+            effectiveUpdateIntervalSecs = smartMinIntervalSecs;
+        }
+    }
+    // Two expected update windows; keep arithmetic 32-bit to avoid pulling in larger 64-bit helpers.
+    const uint32_t headingStaleMs =
+        (effectiveUpdateIntervalSecs > (UINT32_MAX / 2000U)) ? UINT32_MAX : (effectiveUpdateIntervalSecs * 2000U);
 
     if (oldLat == 0) {
-        // just prepare for next time
+        // Need at least two position points before we can infer heading.
         oldLat = lat;
         oldLon = lon;
 
@@ -283,12 +371,20 @@ float Screen::estimatedHeading(double lat, double lon)
     }
 
     float d = GeoCoord::latLongToMeter(oldLat, oldLon, lat, lon);
-    if (d < 10) // haven't moved enough, just keep current bearing
+    if (d < 10) { // haven't moved enough, keep previous heading (invalid until first real movement)
+        if (lastHeadingAtMs != 0 && (now - lastHeadingAtMs) >= headingStaleMs) {
+            // Heading is stale after prolonged no-movement; force reacquire.
+            b = -1.0f;
+            oldLat = lat;
+            oldLon = lon;
+        }
         return b;
+    }
 
     b = GeoCoord::bearing(oldLat, oldLon, lat, lon) * RAD_TO_DEG;
     oldLat = lat;
     oldLon = lon;
+    lastHeadingAtMs = now;
 
     return b;
 }
@@ -308,30 +404,6 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
     graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
-
-    int32_t rawRGB = uiconfig.screen_rgb_color;
-
-    // Only validate the combined value once
-    if (rawRGB > 0 && rawRGB <= 255255255) {
-        LOG_INFO("Setting screen RGB color to user chosen: 0x%06X", rawRGB);
-        // Extract each component as a normal int first
-        int r = (rawRGB >> 16) & 0xFF;
-        int g = (rawRGB >> 8) & 0xFF;
-        int b = rawRGB & 0xFF;
-        if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
-            TFT_MESH = COLOR565(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
-        }
-#ifdef TFT_MESH_OVERRIDE
-    } else if (rawRGB == 0) {
-        LOG_INFO("Setting screen RGB color to TFT_MESH_OVERRIDE: 0x%04X", TFT_MESH_OVERRIDE);
-        // Default to TFT_MESH_OVERRIDE if available
-        TFT_MESH = TFT_MESH_OVERRIDE;
-#endif
-    } else {
-        // Default best readable yellow color
-        LOG_INFO("Setting screen RGB color to default: (255,255,128)");
-        TFT_MESH = COLOR565(255, 255, 128);
-    }
 
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
@@ -395,9 +467,13 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #endif
 
 #if defined(USE_ST7789)
-    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+    // Keep firmware and ST7789 driver region structs layout-compatible:
+    // we pass `graphics::colorRegions` through a type cast below.
+    static_assert(sizeof(graphics::TFTColorRegion) == sizeof(::TFTColorRegion),
+                  "graphics::TFTColorRegion layout must match ST7789 TFTColorRegion");
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFTPalette::White, (::TFTColorRegion *)colorRegions);
 #elif defined(USE_ST7796)
-    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
+    static_cast<ST7796Spi *>(dispdev)->setRGB(TFTPalette::White);
 #endif
 
     ui = new OLEDDisplayUi(dispdev);
@@ -448,6 +524,11 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             delay(100);
 #endif
 #if !ARCH_PORTDUINO
+#if defined(USE_ST7789) && defined(VTFT_CTRL)
+            // Ensure panel power rail is enabled before sending wake commands.
+            pinMode(VTFT_CTRL, OUTPUT);
+            digitalWrite(VTFT_CTRL, LOW);
+#endif
             dispdev->displayOn();
 #endif
 
@@ -469,10 +550,6 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             ui->init();
 #endif
 #if defined(USE_ST7789) && defined(VTFT_LEDA)
-#ifdef VTFT_CTRL
-            pinMode(VTFT_CTRL, OUTPUT);
-            digitalWrite(VTFT_CTRL, LOW);
-#endif
             ui->init();
 #ifdef ESP_PLATFORM
             analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
@@ -513,23 +590,22 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 #ifdef USE_ST7789
             SPI1.end();
-#if defined(ARCH_ESP32)
+            // Keep TFT control pins in deterministic states while timed-off.
+            // Floating/default pin states can corrupt panel edge rows on wake.
 #ifdef VTFT_LEDA
-            pinMode(VTFT_LEDA, ANALOG);
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, !TFT_BACKLIGHT_ON);
 #endif
 #ifdef VTFT_CTRL
-            pinMode(VTFT_CTRL, ANALOG);
+            pinMode(VTFT_CTRL, OUTPUT);
+            digitalWrite(VTFT_CTRL, HIGH);
 #endif
-            pinMode(ST7789_RESET, ANALOG);
-            pinMode(ST7789_RS, ANALOG);
-            pinMode(ST7789_NSS, ANALOG);
-#else
-            nrf_gpio_cfg_default(VTFT_LEDA);
-            nrf_gpio_cfg_default(VTFT_CTRL);
-            nrf_gpio_cfg_default(ST7789_RESET);
-            nrf_gpio_cfg_default(ST7789_RS);
-            nrf_gpio_cfg_default(ST7789_NSS);
-#endif
+            pinMode(ST7789_RESET, OUTPUT);
+            digitalWrite(ST7789_RESET, HIGH);
+            pinMode(ST7789_RS, OUTPUT);
+            digitalWrite(ST7789_RS, HIGH);
+            pinMode(ST7789_NSS, OUTPUT);
+            digitalWrite(ST7789_NSS, HIGH);
 #endif
 #ifdef USE_ST7796
             SPI1.end();
@@ -584,16 +660,16 @@ void Screen::setup()
     static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
-#if defined(USE_ST7789) && defined(TFT_MESH)
-    // Apply custom RGB color (e.g. Heltec T114/T190)
-    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#if defined(USE_ST7789)
+    static_assert(sizeof(graphics::TFTColorRegion) == sizeof(::TFTColorRegion),
+                  "graphics::TFTColorRegion layout must match ST7789 TFTColorRegion");
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFTPalette::White, (::TFTColorRegion *)colorRegions);
 #endif
 #if defined(MUZI_BASE)
     dispdev->delayPoweron = true;
 #endif
-#if defined(USE_ST7796) && defined(TFT_MESH)
-    // Custom text color, if defined in variant.h
-    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
+#if defined(USE_ST7796)
+    static_cast<ST7796Spi *>(dispdev)->setRGB(TFTPalette::White);
 #endif
 
     // Initialize display and UI system
@@ -639,7 +715,7 @@ void Screen::setup()
 #endif
         {
             const char *region = myRegion ? myRegion->name : nullptr;
-            graphics::UIRenderer::drawIconScreen(region, display, state, x, y);
+            graphics::UIRenderer::drawBootIconScreen(region, display, state, x, y);
         }
     };
     ui->setFrames(alertFrames, 1);
@@ -678,9 +754,9 @@ void Screen::setup()
     //  Turn on display and trigger first draw
     handleSetOn(true);
     graphics::currentResolution = graphics::determineScreenResolution(dispdev->height(), dispdev->width());
-    ui->update();
+    updateUiFrame(ui);
 #ifndef USE_EINK
-    ui->update(); // Some SSD1306 clones drop the first draw, so run twice
+    updateUiFrame(ui); // Some SSD1306 clones drop the first draw, so run twice
 #endif
     serialSinceMsec = millis();
 
@@ -753,7 +829,7 @@ void Screen::forceDisplay(bool forceUiUpdate)
         do {
             startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
             delay(10);
-            ui->update();
+            updateUiFrame(ui);
         } while (ui->getUiState()->lastUpdate < startUpdate);
 
         // Return to normal frame rate
@@ -824,9 +900,9 @@ int32_t Screen::runOnce()
         static FrameCallback bootOEMFrames[] = {graphics::UIRenderer::drawOEMBootScreen};
         static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
         ui->setFrames(bootOEMFrames, bootOEMFrameCount);
-        ui->update();
+        updateUiFrame(ui);
 #ifndef USE_EINK
-        ui->update();
+        updateUiFrame(ui);
 #endif
         showingOEMBootScreen = false;
     }
@@ -917,15 +993,28 @@ int32_t Screen::runOnce()
 
     // this must be before the frameState == FIXED check, because we always
     // want to draw at least one FIXED frame before doing forceDisplay
-    ui->update();
+    updateUiFrame(ui);
 
     // Switch to a low framerate (to save CPU) when we are not in transition
     // but we should only call setTargetFPS when framestate changes, because
     // otherwise that breaks animations.
 
-    if (targetFramerate != IDLE_FRAMERATE && ui->getUiState()->frameState == FIXED) {
+    uint32_t desiredFramerate = IDLE_FRAMERATE;
+#if HAS_GPS && !defined(USE_EINK)
+    if (showingNormalScreen && hasCompass) {
+        const uint8_t currentFrame = ui->getUiState()->currentFrame;
+        if ((framesetInfo.positions.gps != 255 && currentFrame == framesetInfo.positions.gps) ||
+            (framesetInfo.positions.waypoint != 255 && currentFrame == framesetInfo.positions.waypoint) ||
+            (framesetInfo.positions.firstFavorite != 255 && currentFrame >= framesetInfo.positions.firstFavorite &&
+             currentFrame <= framesetInfo.positions.lastFavorite)) {
+            desiredFramerate = COMPASS_ACTIVE_FRAMERATE;
+        }
+    }
+#endif
+
+    if (targetFramerate != desiredFramerate && ui->getUiState()->frameState == FIXED) {
         // oldFrameState = ui->getUiState()->frameState;
-        targetFramerate = IDLE_FRAMERATE;
+        targetFramerate = desiredFramerate;
 
         ui->setTargetFPS(targetFramerate);
         forceDisplay();
@@ -966,7 +1055,7 @@ void Screen::setSSLFrames()
         // LOG_DEBUG("Show SSL frames");
         static FrameCallback sslFrames[] = {NotificationRenderer::drawSSLScreen};
         ui->setFrames(sslFrames, 1);
-        ui->update();
+        updateUiFrame(ui);
     }
 }
 
@@ -1002,7 +1091,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     do {
         startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
         delay(1);
-        ui->update();
+        updateUiFrame(ui);
     } while (ui->getUiState()->lastUpdate < startUpdate);
 
 #if defined(USE_EINK_PARALLELDISPLAY)
@@ -1197,7 +1286,7 @@ void Screen::setFrames(FrameFocus focus)
         for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
             const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
             if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
-                favoriteFrames.push_back(graphics::UIRenderer::drawNodeInfo);
+                favoriteFrames.push_back(graphics::UIRenderer::drawFavoriteNode);
             }
         }
 
@@ -1226,7 +1315,7 @@ void Screen::setFrames(FrameFocus focus)
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
-    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list just changed)
+    prevFrame = -1; // Force drawFavoriteNode to pick a new node (because our list just changed)
 
     // Focus on a specific frame, in the frame set we just created
     switch (focus) {
@@ -1264,6 +1353,10 @@ void Screen::setFrames(FrameFocus focus)
 
     // Store the info about this frameset, for future setFrames calls
     this->framesetInfo = fsi;
+
+#ifdef USERPREFS_UI_TEST_LOG
+    logFrameChange("rebuild", ui->getUiState()->currentFrame);
+#endif
 
     setFastFramerate(); // Draw ASAP
 }
@@ -1373,9 +1466,15 @@ void Screen::blink()
     dispdev->setBrightness(254);
     while (count > 0) {
         dispdev->fillRect(0, 0, dispdev->getWidth(), dispdev->getHeight());
+#if GRAPHICS_TFT_COLORING_ENABLED
+        prepareFrameColorRegions();
+#endif
         dispdev->display();
         delay(50);
         dispdev->clear();
+#if GRAPHICS_TFT_COLORING_ENABLED
+        prepareFrameColorRegions();
+#endif
         dispdev->display();
         delay(50);
         count = count - 1;
@@ -1419,10 +1518,76 @@ void Screen::handleOnPress()
     }
 }
 
+#ifdef USERPREFS_UI_TEST_LOG
+void Screen::logFrameChange(const char *reason, uint8_t targetIdx)
+{
+    // Reverse-map an index to a stable name string keyed off FramePositions
+    // field names — so the pytest harness can assert `name=nodelist_nodes`
+    // without caring about how the positions were ordered this boot.
+    const auto &p = framesetInfo.positions;
+    const char *name = "unknown";
+    if (targetIdx == p.home)
+        name = "home";
+    else if (targetIdx == p.deviceFocused)
+        name = "deviceFocused";
+    else if (targetIdx == p.textMessage)
+        name = "textMessage";
+    else if (targetIdx == p.nodelist_nodes)
+        name = "nodelist_nodes";
+    else if (targetIdx == p.nodelist_location)
+        name = "nodelist_location";
+    else if (targetIdx == p.nodelist_lastheard)
+        name = "nodelist_lastheard";
+    else if (targetIdx == p.nodelist_hopsignal)
+        name = "nodelist_hopsignal";
+    else if (targetIdx == p.nodelist_distance)
+        name = "nodelist_distance";
+    else if (targetIdx == p.nodelist_bearings)
+        name = "nodelist_bearings";
+    else if (targetIdx == p.system)
+        name = "system";
+    else if (targetIdx == p.gps)
+        name = "gps";
+    else if (targetIdx == p.lora)
+        name = "lora";
+    else if (targetIdx == p.clock)
+        name = "clock";
+    else if (targetIdx == p.chirpy)
+        name = "chirpy";
+    else if (targetIdx == p.fault)
+        name = "fault";
+    else if (targetIdx == p.waypoint)
+        name = "waypoint";
+    else if (targetIdx == p.focusedModule)
+        name = "focusedModule";
+    else if (targetIdx == p.log)
+        name = "log";
+    else if (targetIdx == p.settings)
+        name = "settings";
+    else if (targetIdx == p.wifi)
+        name = "wifi";
+    else if (p.firstFavorite != 255 && p.lastFavorite != 255 && targetIdx >= p.firstFavorite && targetIdx <= p.lastFavorite)
+        name = "favorite";
+    LOG_INFO("Screen: frame %u/%u name=%s reason=%s", (unsigned)targetIdx, (unsigned)framesetInfo.frameCount, name, reason);
+}
+#endif
+
 void Screen::showFrame(FrameDirection direction)
 {
     // Only advance frames when UI is stable
     if (ui->getUiState()->frameState == FIXED) {
+
+#ifdef USERPREFS_UI_TEST_LOG
+        // Log the *intended* target before the (async) transition fires, so
+        // tests see a deterministic record of what was requested.
+        if (framesetInfo.frameCount > 0) {
+            uint8_t curr = ui->getUiState()->currentFrame;
+            uint8_t target = (direction == FrameDirection::NEXT)
+                                 ? (uint8_t)((curr + 1) % framesetInfo.frameCount)
+                                 : (uint8_t)((curr + framesetInfo.frameCount - 1) % framesetInfo.frameCount);
+            logFrameChange(direction == FrameDirection::NEXT ? "next" : "prev", target);
+        }
+#endif
 
         if (direction == FrameDirection::NEXT) {
             ui->nextFrame();
@@ -1443,6 +1608,9 @@ void Screen::setFastFramerate()
 {
 #if defined(M5STACK_UNITC6L)
     dispdev->clear();
+#if GRAPHICS_TFT_COLORING_ENABLED
+    prepareFrameColorRegions();
+#endif
     dispdev->display();
 #endif
     // We are about to start a transition so speed up fps
@@ -1654,7 +1822,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
         setFastFramerate(); // Draw ASAP
-        ui->update();
+        updateUiFrame(ui);
         return 0;
     }
 
@@ -1669,7 +1837,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
         setFastFramerate(); // Draw ASAP
-        ui->update();
+        updateUiFrame(ui);
 
         menuHandler::handleMenuSwitch(dispdev);
         return 0;
@@ -1755,22 +1923,37 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showFrame(FrameDirection::NEXT);
             } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
                 this->ui->switchToFrame(0);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f1", 0);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F2) {
                 this->ui->switchToFrame(1);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f2", 1);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F3) {
                 this->ui->switchToFrame(2);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f3", 2);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F4) {
                 this->ui->switchToFrame(3);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f4", 3);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F5) {
                 this->ui->switchToFrame(4);
+#ifdef USERPREFS_UI_TEST_LOG
+                logFrameChange("fn_f5", 4);
+#endif
                 lastScreenTransition = millis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_UP_LONG) {

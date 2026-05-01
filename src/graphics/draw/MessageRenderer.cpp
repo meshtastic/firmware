@@ -11,6 +11,8 @@
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/emotes.h"
 #include "main.h"
@@ -254,6 +256,76 @@ struct MessageBlock {
     bool mine;
 };
 
+#if GRAPHICS_TFT_COLORING_ENABLED
+static void setDarkModeBubbleRoleColors(uint32_t themeId, bool mine)
+{
+    uint16_t bubbleOnColor;
+    uint16_t bubbleOffColor;
+
+    if (themeId == ThemeID::Blue) {
+        bubbleOnColor = mine ? TFTPalette::Navy : TFTPalette::White;
+        bubbleOffColor = mine ? TFTPalette::SkyBlue : TFTPalette::DeepBlue;
+    } else {
+        bubbleOnColor = mine ? TFTPalette::Black : getThemeBodyFg();
+        bubbleOffColor = mine ? TFTPalette::SkyBlue : TFTPalette::DarkGray;
+    }
+
+    setTFTColorRole(TFTColorRole::ActionMenuBody, bubbleOnColor, bubbleOffColor);
+}
+
+static void registerRoundedBubbleFillRegion(int x, int y, int w, int h, int radius)
+{
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    if (radius <= 0 || w < 3 || h < 3) {
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, x, y, w, h);
+        return;
+    }
+
+    // Keep region count low so we don't churn MAX_TFT_COLOR_REGIONS while
+    // scrolling long message lists (which can flatten older bubble corners).
+    int capRows = 0;
+    if (radius >= 4 && h >= 5) {
+        capRows = 2; // 5 regions total (2 top caps + middle + 2 bottom caps)
+    } else if (radius >= 2 && h >= 3) {
+        capRows = 1; // 3 regions total
+    }
+    if (capRows <= 0) {
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, x, y, w, h);
+        return;
+    }
+
+    for (int row = 0; row < capRows; ++row) {
+        int inset = 0;
+        if (radius >= 4) {
+            inset = (row == 0) ? 2 : 1;
+        } else if (radius >= 2) {
+            inset = 1;
+        }
+        const int stripW = w - (inset * 2);
+        if (stripW <= 0) {
+            continue;
+        }
+
+        const int topY = y + row;
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, x + inset, topY, stripW, 1);
+
+        const int bottomY = y + h - 1 - row;
+        if (bottomY != topY) {
+            registerTFTColorRegion(TFTColorRole::ActionMenuBody, x + inset, bottomY, stripW, 1);
+        }
+    }
+
+    const int middleY = y + capRows;
+    const int middleH = h - (capRows * 2);
+    if (middleH > 0) {
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, x, middleY, w, middleH);
+    }
+}
+#endif
+
 static int getDrawnLinePixelBottom(int lineTopY, const std::string &line, bool isHeaderLine)
 {
     if (isHeaderLine) {
@@ -422,6 +494,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::vector<bool> isMine;   // track alignment
     std::vector<bool> isHeader; // track header lines
     std::vector<AckStatus> ackForLine;
+    // Hard limit on total cached lines to prevent unbounded growth from a single long message.
+    // Reserve to the actual cache cap up front, because a single message can expand to many more
+    // wrapped display lines than a small per-message estimate would predict. For a display
+    // rendering only ~5-30 lines at a time, caching more than this limit wastes heap. Stop
+    // appending once we reach MAX_CACHED_LINES to prevent a single message from blowing out the
+    // heap.
+    constexpr size_t MAX_CACHED_LINES = 100U; // ~5-6KB for std::string overhead on 32-bit (if each ~50-60 bytes avg)
+    allLines.reserve(MAX_CACHED_LINES);
+    isMine.reserve(MAX_CACHED_LINES);
+    isHeader.reserve(MAX_CACHED_LINES);
+    ackForLine.reserve(MAX_CACHED_LINES);
 
     for (auto it = filtered.rbegin(); it != filtered.rend(); ++it) {
         const auto &m = *it;
@@ -565,16 +648,23 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         int wrapWidth = mine ? rightTextWidth : leftTextWidth;
         std::vector<std::string> wrapped = generateLines(display, "", msgText, wrapWidth);
+        // Per-message wrap-line limit: even if wrapping produces many lines, cap them to prevent
+        // a single long message from consuming most or all of the cache.
+        constexpr size_t MAX_WRAPPED_LINES_PER_MSG = 20U;
+        size_t wrappedCount = 0;
         for (auto &ln : wrapped) {
-            allLines.push_back(ln);
+            if (allLines.size() >= MAX_CACHED_LINES || wrappedCount >= MAX_WRAPPED_LINES_PER_MSG)
+                break; // Cache limit or per-message limit reached; stop adding lines from this message
+            allLines.emplace_back(std::move(ln));
             isMine.push_back(mine);
             isHeader.push_back(false);
             ackForLine.push_back(AckStatus::NONE);
+            ++wrappedCount;
         }
     }
 
     // Cache lines and heights
-    cachedLines = allLines;
+    cachedLines.swap(allLines);
     cachedHeights = calculateLineHeights(cachedLines, emotes, isHeader);
 
     std::vector<MessageBlock> blocks = buildMessageBlocks(isHeader, isMine);
@@ -630,6 +720,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int contentBottom = scrollBottom; // already excludes nav line
     const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
     const int bubbleGapY = std::max(1, MESSAGE_BLOCK_GAP / 2);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    const uint32_t themeId = getActiveTheme().id;
+    // Blue is a dark variant but uses full frame inversion, Keep it on the same filled bubble style as Default Dark.
+    const bool useDarkModeBubbleFill = showBubbles && (!isThemeFullFrameInvert() || themeId == ThemeID::Blue);
+#endif
 
     std::vector<int> lineTop;
     lineTop.resize(cachedLines.size());
@@ -667,6 +762,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
             int visualBottom = getDrawnLinePixelBottom(lineTop[b.end], cachedLines[b.end], isHeader[b.end]);
             int bottomY = visualBottom + BUBBLE_PAD_Y;
+
+            // On high-res screens, keep a 1px gap under the header
+            if (currentResolution == ScreenResolution::High) {
+                const int minTopY = contentTop + 1;
+                if (topY < minTopY) {
+                    // Preserve bubble height when we push it down from the header.
+                    const int shift = minTopY - topY;
+                    topY = minTopY;
+                    bottomY += shift;
+                }
+            }
 
             if (bi + 1 < blocks.size()) {
                 int nextHeaderIndex = (int)blocks[bi + 1].start;
@@ -717,24 +823,56 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 const int by = topY;
                 const int bw = bubbleW;
                 const int bh = bubbleH;
+#if GRAPHICS_TFT_COLORING_ENABLED
+                const bool drawBubbleOutline = !useDarkModeBubbleFill;
+#else
+                const bool drawBubbleOutline = true;
+#endif
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (useDarkModeBubbleFill) {
+                    setDarkModeBubbleRoleColors(themeId, b.mine);
+                    registerRoundedBubbleFillRegion(bx, by, bw, bh, r);
+                }
+#endif
 
-                // Draw the 4 corner arcs using drawCircleQuads
-                display->drawCircleQuads(bx + r, by + r, r, 0x2);                   // Top-left
-                display->drawCircleQuads(bx + bw - r - 1, by + r, r, 0x1);          // Top-right
-                display->drawCircleQuads(bx + r, by + bh - r - 1, r, 0x4);          // Bottom-left
-                display->drawCircleQuads(bx + bw - r - 1, by + bh - r - 1, r, 0x8); // Bottom-right
+                if (drawBubbleOutline) {
+                    // Draw the 4 corner arcs using drawCircleQuads
+                    display->drawCircleQuads(bx + r, by + r, r, 0x2);                   // Top-left
+                    display->drawCircleQuads(bx + bw - r - 1, by + r, r, 0x1);          // Top-right
+                    display->drawCircleQuads(bx + r, by + bh - r - 1, r, 0x4);          // Bottom-left
+                    display->drawCircleQuads(bx + bw - r - 1, by + bh - r - 1, r, 0x8); // Bottom-right
 
-                // Draw the 4 edges between corners
-                display->drawHorizontalLine(bx + r, by, bw - 2 * r);          // Top edge
-                display->drawHorizontalLine(bx + r, by + bh - 1, bw - 2 * r); // Bottom edge
-                display->drawVerticalLine(bx, by + r, bh - 2 * r);            // Left edge
-                display->drawVerticalLine(bx + bw - 1, by + r, bh - 2 * r);   // Right edge
+                    // Draw the 4 edges between corners
+                    display->drawHorizontalLine(bx + r, by, bw - 2 * r);          // Top edge
+                    display->drawHorizontalLine(bx + r, by + bh - 1, bw - 2 * r); // Bottom edge
+                    display->drawVerticalLine(bx, by + r, bh - 2 * r);            // Left edge
+                    display->drawVerticalLine(bx + bw - 1, by + r, bh - 2 * r);   // Right edge
+                }
             } else if (bubbleW > 1 && bubbleH > 1) {
                 // Fallback to simple rectangle for very small bubbles
-                display->drawRect(bubbleX, topY, bubbleW, bubbleH);
+#if GRAPHICS_TFT_COLORING_ENABLED
+                const bool drawBubbleOutline = !useDarkModeBubbleFill;
+#else
+                const bool drawBubbleOutline = true;
+#endif
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (useDarkModeBubbleFill) {
+                    setDarkModeBubbleRoleColors(themeId, b.mine);
+                    registerTFTColorRegion(TFTColorRole::ActionMenuBody, bubbleX, topY, bubbleW, bubbleH);
+                }
+#endif
+                if (drawBubbleOutline) {
+                    display->drawRect(bubbleX, topY, bubbleW, bubbleH);
+                }
             }
         }
     } // end if (showBubbles)
+#if GRAPHICS_TFT_COLORING_ENABLED
+    if (useDarkModeBubbleFill) {
+        // Restore theme role defaults so other screens keep their intended palette.
+        loadThemeDefaults();
+    }
+#endif
 
     // Render visible lines
     int lineY = yOffset;
@@ -754,7 +892,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     headerX = x + textIndent;
                 }
                 graphics::UIRenderer::drawStringWithEmotes(display, headerX, lineY, cachedLines[i].c_str(), FONT_HEIGHT_SMALL, 1,
-                                                           false);
+                                                           true);
 
                 // Draw underline just under header text
                 int underlineY = lineY + FONT_HEIGHT_SMALL;
