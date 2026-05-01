@@ -20,10 +20,12 @@ Linux (apt):
 macOS (Homebrew):
 1.) Install prerequisites via Homebrew:
 
-    brew install ulfius openssl
+    brew install ulfius openssl@3
 
-    The PlatformIO env (native-macos) picks up compiler/linker flags automatically
-    via `pkg-config` for ulfius, liborcania, libyder, and openssl.
+    The PlatformIO env (native-macos) picks up compiler/linker flags via
+    `pkg-config`. In particular, OpenSSL needs `pkg-config --cflags --libs openssl`
+    so both the Homebrew include path and linker flags are provided; ulfius and its
+    dependencies (liborcania, libyder) are also resolved via `pkg-config`.
 
 2.) Configure the root directory of the web Content in the config.yaml file.
     The following tags should be included and set at your needs
