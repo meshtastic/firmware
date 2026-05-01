@@ -1,22 +1,32 @@
 /*
-Adds a WebServer and WebService callbacks to meshtastic as Linux Version. The WebServer & Webservices
-runs in a real linux thread beside the portdunio threading emulation. It replaces the complete ESP32
-Webserver libs including generation of SSL certifcicates,  because the use ESP specific details in
-the lib that can't be emulated.
+Adds a WebServer and WebService callbacks to meshtastic via the Portduino/native target (Linux and
+macOS). The WebServer & Webservices run in a real host thread beside the Portduino threading
+emulation. It replaces the complete ESP32 Webserver libs including generation of SSL certificates,
+because those libs use ESP-specific details that can't be emulated.
 
 The WebServices adapt to the two major phoneapi functions "handleAPIv1FromRadio,handleAPIv1ToRadio"
-The WebServer just adds basaic support to deliver WebContent, so it can be used to
-deliver the WebGui definded by the WebClient Project.
+The WebServer just adds basic support to deliver WebContent, so it can be used to
+deliver the WebGui defined by the WebClient Project.
 
 Steps to get it running:
-1.) Add these Linux Libs to the compile and target machine:
+
+Linux (apt):
+1.) Add these libs to the compile and target machine:
 
     sudo apt update && \
         apt -y install openssl libssl-dev libopenssl libsdl2-dev \
                      libulfius-dev liborcania-dev
 
+macOS (Homebrew):
+1.) Install prerequisites via Homebrew:
+
+    brew install ulfius openssl
+
+    The PlatformIO env (native-macos) picks up compiler/linker flags automatically
+    via `pkg-config` for ulfius, liborcania, libyder, and openssl.
+
 2.) Configure the root directory of the web Content in the config.yaml file.
-    The followinng tags should be included and set at your needs
+    The following tags should be included and set at your needs
 
     Example entry in the config.yaml
     Webserver:

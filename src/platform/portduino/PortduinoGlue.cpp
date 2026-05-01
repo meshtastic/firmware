@@ -37,6 +37,7 @@
 // Used by getMacAddr()'s macOS fallback to read the en0 link-layer address.
 // `getifaddrs()` is the BSD-portable way; `<net/if_dl.h>` provides the
 // `sockaddr_dl` cast and the `LLADDR()` macro that points at the 6-byte MAC.
+#include <cstring> // strcmp, memcpy
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <net/if_dl.h>
