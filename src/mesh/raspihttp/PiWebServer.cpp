@@ -34,7 +34,10 @@ Author: Marc Philipp Hammermann
 mail:   marchammermann@googlemail.com
 
 */
-#ifdef PORTDUINO_LINUX_HARDWARE
+// Mirrors the guard in PiWebServer.h — see comment there. macOS Homebrew
+// provides ulfius + deps; Linux pulls them via apt. Either way, this
+// translation unit only compiles when the headers are present.
+#ifdef ARCH_PORTDUINO
 #if __has_include(<ulfius.h>)
 #include "PiWebServer.h"
 #include "NodeDB.h"
