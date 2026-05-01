@@ -33,6 +33,16 @@
 #include <cxxabi.h>
 #endif
 
+#ifdef __APPLE__
+// Used by getMacAddr()'s macOS fallback to read the en0 link-layer address.
+// `getifaddrs()` is the BSD-portable way; `<net/if_dl.h>` provides the
+// `sockaddr_dl` cast and the `LLADDR()` macro that points at the 6-byte MAC.
+#include <cstring> // strcmp, memcpy
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <net/if_dl.h>
+#endif
+
 #include "platform/portduino/USBHal.h"
 
 portduino_config_struct portduino_config;
@@ -156,9 +166,35 @@ void getMacAddr(uint8_t *dmac)
         dmac[3] = di.bdaddr.b[2];
         dmac[4] = di.bdaddr.b[1];
         dmac[5] = di.bdaddr.b[0];
+#elif defined(__APPLE__)
+        // No BlueZ on macOS, but we can fall back to the host's primary
+        // network interface MAC. `en0` is Wi-Fi on every shipping Mac
+        // (Ethernet, when present, is en1 or higher), which gives the user
+        // the same kind of stable, host-derived identifier that the BlueZ
+        // path provides on Linux. If en0 isn't found or has no MAC, dmac is
+        // left untouched and the caller's "Blank MAC Address not allowed!"
+        // check will still fire — preserving existing behavior for users
+        // who deliberately rely on --hwid or YAML override.
+        struct ifaddrs *ifap = nullptr;
+        if (getifaddrs(&ifap) == 0) {
+            for (struct ifaddrs *p = ifap; p != nullptr; p = p->ifa_next) {
+                if (p->ifa_addr == nullptr || p->ifa_addr->sa_family != AF_LINK) {
+                    continue;
+                }
+                if (strcmp(p->ifa_name, "en0") != 0) {
+                    continue;
+                }
+                auto *sdl = reinterpret_cast<struct sockaddr_dl *>(p->ifa_addr);
+                if (sdl->sdl_alen == 6) {
+                    memcpy(dmac, LLADDR(sdl), 6);
+                    break;
+                }
+            }
+            freeifaddrs(ifap);
+        }
 #else
-        // No BlueZ on non-Linux hosts (e.g. macOS). Leave dmac at its default;
-        // the caller can override via the --hwid CLI flag or the YAML config.
+        // No platform-specific MAC source; leave dmac at its default. Caller
+        // can override via the --hwid CLI flag or the YAML config.
         (void)dmac;
 #endif
     }
