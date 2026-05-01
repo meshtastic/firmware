@@ -44,6 +44,7 @@ class File : public Stream
   public:
     explicit File(STM32_LittleFS &fs);
     File(char const *filename, uint8_t mode, STM32_LittleFS &fs);
+    File(); // default-constructs against InternalFS; defined in STM32_LittleFS_File.cpp
 
   public:
     bool open(char const *filename, uint8_t mode);
