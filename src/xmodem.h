@@ -51,9 +51,11 @@ class XModemAdapter
     void handlePacket(meshtastic_XModem xmodemPacket);
     meshtastic_XModem getForPhone();
     void resetForPhone();
+    bool isActive() const { return isReceiving || isTransmitting; }
 
   private:
     bool isReceiving = false;
+    bool recvCommitPending = false;
     bool isTransmitting = false;
     bool isEOT = false;
 
@@ -61,6 +63,7 @@ class XModemAdapter
 
     uint16_t packetno = 0;
 
+// Adafruit nRF/STM32 File can be constructed bound to FSCom; Arduino-ESP32 fs::File cannot.
 #if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     File file = File(FSCom);
 #else
@@ -68,6 +71,9 @@ class XModemAdapter
 #endif
 
     char filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
+    FSRoute activeRoute_; // final path; resolved at SOH seq 0, reused for transmit + EOT commit
+    /** Logical receive scratch path (`filename` + `.tmp`); commit via fsRename on EOT. */
+    char recvTmpPath[sizeof(filename) + 5] = {0};
 
   protected:
     meshtastic_XModem xmodemStore = meshtastic_XModem_init_zero;
