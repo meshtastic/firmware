@@ -14,7 +14,7 @@ Linux (apt):
 1.) Add these libs to the compile and target machine:
 
     sudo apt update && \
-        apt -y install openssl libssl-dev libopenssl libsdl2-dev \
+        apt -y install openssl libssl-dev libsdl2-dev \
                      libulfius-dev liborcania-dev
 
 macOS (Homebrew):
@@ -23,7 +23,7 @@ macOS (Homebrew):
     brew install ulfius openssl@3
 
     The PlatformIO env (native-macos) picks up compiler/linker flags via
-    `pkg-config`. In particular, OpenSSL needs `pkg-config --cflags --libs openssl`
+    `pkg-config`. In particular, OpenSSL needs `pkg-config --cflags --libs openssl@3`
     so both the Homebrew include path and linker flags are provided; ulfius and its
     dependencies (liborcania, libyder) are also resolved via `pkg-config`.
 
