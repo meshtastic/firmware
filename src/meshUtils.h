@@ -56,6 +56,10 @@ const std::string vformat(const char *const zcFormat, ...);
 // Get actual string length for nanopb char array fields.
 size_t pb_string_length(const char *str, size_t max_len);
 
+// Sanitize a fixed-size char buffer in-place by replacing invalid UTF-8 sequences with '?'.
+// Ensures the result is null-terminated within bufSize. Returns true if any bytes were replaced.
+bool sanitizeUtf8(char *buf, size_t bufSize);
+
 /// Calculate 2^n without calling pow() - used for spreading factor and other calculations
 inline uint32_t pow_of_2(uint32_t n)
 {

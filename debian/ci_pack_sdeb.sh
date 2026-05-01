@@ -1,4 +1,5 @@
 #!/usr/bin/bash
+set -e
 export DEBEMAIL="jbennett@incomsystems.biz"
 export PLATFORMIO_LIBDEPS_DIR=pio/libdeps
 export PLATFORMIO_PACKAGES_DIR=pio/packages
