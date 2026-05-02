@@ -19,8 +19,12 @@ extern Adafruit_nRFCrypto nRFCrypto;
 #include <Arduino.h>
 #elif defined(ARCH_PORTDUINO)
 #include <random>
-#include <sys/random.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/random.h> // getrandom()
+#else
+#include <stdlib.h> // arc4random_buf() on Darwin/BSD
+#endif
 #endif
 
 namespace HardwareRNG
@@ -119,10 +123,16 @@ bool fill(uint8_t *buffer, size_t length, bool useRadioEntropy)
     filled = true;
 #elif defined(ARCH_PORTDUINO)
     // Prefer the host OS RNG first when running under Portduino.
+#ifdef __linux__
     ssize_t generated = ::getrandom(buffer, length, 0);
     if (generated == static_cast<ssize_t>(length)) {
         filled = true;
     }
+#else
+    // arc4random_buf is available on Darwin/BSD and cannot fail.
+    ::arc4random_buf(buffer, length);
+    filled = true;
+#endif
 
     if (!filled) {
         fillWithRandomDevice(buffer, length);
