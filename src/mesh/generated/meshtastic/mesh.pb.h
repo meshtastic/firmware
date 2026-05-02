@@ -315,6 +315,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_THINKNODE_M7 = 129,
     meshtastic_HardwareModel_THINKNODE_M8 = 130,
     meshtastic_HardwareModel_THINKNODE_M9 = 131,
+    /* The Heltec-V4-R8 uses an ESP32S3R8 chip, plus an SX1262. */
+    meshtastic_HardwareModel_HELTEC_V4_R8 = 132,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

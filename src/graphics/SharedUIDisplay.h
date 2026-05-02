@@ -1,6 +1,7 @@
 #pragma once
 
 #include <OLEDDisplay.h>
+#include <stdint.h>
 #include <string>
 
 namespace graphics
@@ -52,7 +53,8 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 
 // Shared battery/time/mail header
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr = "", bool force_no_invert = false,
-                      bool show_date = false);
+                      bool show_date = false, bool transparent_background = false, bool use_title_color_override = false,
+                      uint16_t title_color_override = 0);
 
 // Shared battery/time/mail header
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y);
