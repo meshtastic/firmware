@@ -38,7 +38,7 @@
 #ifdef USERPREFS_RINGTONE_NAG_SECS
 #define default_ringtone_nag_secs USERPREFS_RINGTONE_NAG_SECS
 #else
-#define default_ringtone_nag_secs 15
+#define default_ringtone_nag_secs 5
 #endif
 #define default_network_ipv6_enabled false
 

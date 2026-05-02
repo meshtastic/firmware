@@ -109,6 +109,26 @@ int InputBroker::handleInputEvent(const InputEvent *event)
         screenWasOff = !screen->isScreenOn();
     }
 #endif
+
+#if defined(TINYLORA_MV) && HAS_SCREEN
+    // Don't wake screen on joystick navigation to prevent accidental inputs
+    if (screenWasOff && event) {
+        switch (event->inputEvent) {
+            case INPUT_BROKER_UP:
+            case INPUT_BROKER_DOWN:
+            case INPUT_BROKER_LEFT:
+            case INPUT_BROKER_RIGHT:
+            case INPUT_BROKER_SELECT:
+            case INPUT_BROKER_SELECT_LONG:
+            case INPUT_BROKER_UP_LONG:
+            case INPUT_BROKER_DOWN_LONG:
+                return 0;
+            default:
+                break;
+        }
+    }
+#endif
+
     powerFSM.trigger(EVENT_INPUT);
 
     if (event && event->inputEvent != INPUT_BROKER_NONE && externalNotificationModule &&

@@ -938,7 +938,7 @@ void menuHandler::messageViewModeMenu()
 
 void menuHandler::homeBaseMenu()
 {
-    enum optionsNumbers { Back, Mute, Backlight, Position, Preset, Freetext, Sleep, Flashlight, enumEnd };
+    enum optionsNumbers { Back, Mute, Backlight, Position, Preset, Freetext, Sleep, Flashlight, SOS, enumEnd };
 
     static const char *optionsArray[enumEnd] = {UI_STR("Back", "返回")};
     static int optionsEnumArray[enumEnd] = {Back};
@@ -970,6 +970,11 @@ void menuHandler::homeBaseMenu()
     const bool flashlightActive = (ambientLightingThread != nullptr) && ambientLightingThread->isFlashlightModeActive();
     optionsArray[options] = flashlightActive ? UI_STR("Flashlight Off", "关闭手电") : UI_STR("Flashlight", "手电筒");
     optionsEnumArray[options++] = Flashlight;
+#endif
+#if HAS_SOS
+    const bool sosActive = (ambientLightingThread != nullptr) && ambientLightingThread->isSOSModeActive();
+    optionsArray[options] = sosActive ? UI_STR("SOS Off", "关闭SOS") : UI_STR("SOS", "SOS");
+    optionsEnumArray[options++] = SOS;
 #endif
 
     BannerOverlayOptions bannerOptions;
@@ -1026,6 +1031,55 @@ void menuHandler::homeBaseMenu()
                         externalNotificationModule->stopNow();
                     }
                     ambientLightingThread->setFlashlightMode(true);
+                }
+            }
+#endif
+        } else if (selected == SOS) {
+#if HAS_SOS && defined(HAS_NEOPIXEL)
+            if (ambientLightingThread != nullptr) {
+                if (ambientLightingThread->isSOSModeActive()) {
+                    ambientLightingThread->setSOSMode(false);
+                    IF_SCREEN(screen->showSimpleBanner(UI_STR("SOS Stopped", "SOS已停止"), 2000));
+                } else {
+                    if (externalNotificationModule != nullptr) {
+                        externalNotificationModule->stopNow();
+                    }
+                    // Turn off flashlight if active
+                    if (ambientLightingThread->isFlashlightModeActive()) {
+                        ambientLightingThread->setFlashlightMode(false);
+                    }
+#if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
+                    // Force-enable GPS if disabled
+                    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+                        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+                        if (gps) {
+                            gps->enable();
+                        }
+                    }
+                    // Send SOS text on channel 0
+                    char sosMsg[meshtastic_Constants_DATA_PAYLOAD_LEN];
+                    if (gpsStatus && gpsStatus->getHasLock()) {
+                        float lat = gpsStatus->getLatitude() * 1e-7;
+                        float lon = gpsStatus->getLongitude() * 1e-7;
+                        snprintf(sosMsg, sizeof(sosMsg), "SOS! Lat: %.6f, Lon: %.6f", lat, lon);
+                    } else {
+                        snprintf(sosMsg, sizeof(sosMsg), "SOS!");
+                    }
+                    meshtastic_MeshPacket *p = router->allocForSending();
+                    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+                    p->to = NODENUM_BROADCAST;
+                    p->channel = 0;
+                    p->want_ack = true;
+                    p->decoded.payload.size = strlen(sosMsg);
+                    memcpy(p->decoded.payload.bytes, sosMsg, p->decoded.payload.size);
+                    service->sendToMesh(p, RX_SRC_LOCAL, true);
+                    // Broadcast position
+                    service->refreshLocalMeshNode();
+                    service->trySendPosition(NODENUM_BROADCAST, true);
+#endif
+                    // Start SOS flashing
+                    ambientLightingThread->setSOSMode(true);
+                    IF_SCREEN(screen->showSimpleBanner(UI_STR("SOS Active", "SOS已启动"), 2000));
                 }
             }
 #endif

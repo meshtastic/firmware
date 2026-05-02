@@ -119,6 +119,9 @@ class AmbientLightingThread : public concurrency::OSThread
         {
             _flashlightOverrideActive = enabled;
             if (enabled) {
+#if HAS_SOS
+                _sosOverrideActive = false;
+#endif
                 setLighting(255, 255, 255, 255);
             } else {
                 // if (moduleConfig.ambient_lighting.led_state) {
@@ -129,10 +132,33 @@ class AmbientLightingThread : public concurrency::OSThread
             }
         }
 
+#if HAS_SOS
+        bool isSOSModeActive() const { return _sosOverrideActive; }
+
+        void setSOSMode(bool enabled)
+        {
+            _sosOverrideActive = enabled;
+            _sosPatternIndex = 0;
+            _sosLedOn = false;
+            if (enabled) {
+                _flashlightOverrideActive = false;
+                _sosLastToggle = millis();
+            } else {
+                setLightingOff(nullptr);
+            }
+        }
+#endif
+
       protected:
         int32_t runOnce() override
         {
 #ifdef HAS_RGB_LED
+#if HAS_SOS
+            if (_sosOverrideActive) {
+                handleSOSBlink();
+                return 25;
+            }
+#endif
             if (_flashlightOverrideActive) {
                 return 250;
             }
@@ -179,6 +205,12 @@ class AmbientLightingThread : public concurrency::OSThread
         bool _bootMarqueeDone = false;
         bool _ledOff = false;
         bool _flashlightOverrideActive = false;
+#if HAS_SOS
+        bool _sosOverrideActive = false;
+        uint8_t _sosPatternIndex = 0;
+        uint32_t _sosLastToggle = 0;
+        bool _sosLedOn = false;
+#endif
 #if defined(HAS_NEOPIXEL) && defined(ESP32)
         esp_pm_lock_handle_t _neoPixelApbLock = nullptr;
 #endif
@@ -269,6 +301,59 @@ class AmbientLightingThread : public concurrency::OSThread
 #endif
         }
 
+#if HAS_SOS && defined(HAS_NEOPIXEL)
+        void handleSOSBlink()
+        {
+            uint32_t now = millis();
+            uint32_t elapsed = now - _sosLastToggle;
+
+            uint16_t onTime = SOS_PATTERN[_sosPatternIndex * 2];
+            uint16_t offTime = SOS_PATTERN[_sosPatternIndex * 2 + 1];
+
+            if (_sosLedOn) {
+                if (elapsed >= onTime) {
+                    _sosLedOn = false;
+                    _sosLastToggle = now;
+                    pixels.clear();
+                    acquireNeoPixelClockLock();
+                    pixels.show();
+                    releaseNeoPixelClockLock();
+                }
+            } else {
+                if (elapsed >= offTime) {
+                    _sosPatternIndex++;
+                    if (_sosPatternIndex >= 10) {
+                        _sosPatternIndex = 0;
+                    }
+                    _sosLastToggle = now;
+                    _sosLedOn = SOS_PATTERN[_sosPatternIndex * 2] > 0;
+                    if (_sosLedOn) {
+                        pixels.setBrightness(255);
+                        pixels.fill(pixels.Color(255, 0, 0), 0, NEOPIXEL_COUNT);
+                        acquireNeoPixelClockLock();
+                        pixels.show();
+                        releaseNeoPixelClockLock();
+                    }
+                }
+            }
+        }
+
+        // SOS Morse pattern: each pair is (on_ms, off_ms)
+        // S = 3 dots, O = 3 dashes, S = 3 dots, then cycle gap
+        static constexpr uint16_t SOS_PATTERN[20] = {
+            200, 200,  // dot
+            200, 200,  // dot
+            200, 200,  // dot
+            600, 200,  // dash
+            600, 200,  // dash
+            600, 200,  // dash
+            200, 200,  // dot
+            200, 200,  // dot
+            200, 200,  // dot
+            0,    1000, // cycle gap
+        };
+#endif
+
         void setLighting()
         {
             setLighting(moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red,
@@ -280,6 +365,11 @@ class AmbientLightingThread : public concurrency::OSThread
             if (_flashlightOverrideActive && !(red == 255 && green == 255 && blue == 255 && current == 255)) {
                 return;
             }
+#if HAS_SOS
+            if (_sosOverrideActive) {
+                return;
+            }
+#endif
 #ifdef HAS_NCP5623
             rgb.setCurrent(current);
             rgb.setRed(red);

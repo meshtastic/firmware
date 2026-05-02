@@ -210,4 +210,6 @@
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
 #define ENABLE_AMBIENTLIGHTING
 
+#define HAS_SOS 1
+
 #endif

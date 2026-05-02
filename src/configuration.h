@@ -462,6 +462,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_RGB_LED
 #endif
 
+#ifndef HAS_SOS
+#define HAS_SOS 0
+#endif
+
 #ifndef LED_STATE_ON
 #define LED_STATE_ON 1
 #endif
