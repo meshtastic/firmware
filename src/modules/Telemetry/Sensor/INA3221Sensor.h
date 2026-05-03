@@ -8,27 +8,29 @@
 #include "VoltageSensor.h"
 #include <INA3221.h>
 
+// INA3221 channels are zero-based integers: 0 = CH1, 1 = CH2, 2 = CH3
 #ifndef INA3221_ENV_CH
-#define INA3221_ENV_CH INA3221_CH1
+#define INA3221_ENV_CH 0 // channel to report in environment metrics (default: CH1)
 #endif
 
 #ifndef INA3221_BAT_CH
-#define INA3221_BAT_CH INA3221_CH1
+#define INA3221_BAT_CH 0 // channel for device_battery_ina_address (default: CH1)
 #endif
 
 class INA3221Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
 {
   private:
-    INA3221 ina3221 = INA3221(INA3221_ADDR42_SDA);
+    // Placeholder constructor; re-initialised with correct address and Wire in runOnce().
+    INA3221 ina3221 = INA3221(INA3221_ADDR);
 
     // channel to report voltage/current for environment metrics
-    static const ina3221_ch_t ENV_CH = INA3221_ENV_CH;
+    static const uint8_t ENV_CH = INA3221_ENV_CH;
 
     // channel to report battery voltage for device_battery_ina_address
-    static const ina3221_ch_t BAT_CH = INA3221_BAT_CH;
+    static const uint8_t BAT_CH = INA3221_BAT_CH;
 
     // get a single measurement for a channel
-    struct _INA3221Measurement getMeasurement(ina3221_ch_t ch);
+    struct _INA3221Measurement getMeasurement(uint8_t ch);
 
     // get all measurements for all channels
     struct _INA3221Measurements getMeasurements();

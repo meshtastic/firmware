@@ -16,10 +16,19 @@ int32_t INA3221Sensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     if (!status) {
-        ina3221.begin(nodeTelemetrySensorsMap[sensorType].second);
-        ina3221.setShuntRes(100, 100, 100); // 0.1 Ohm shunt resistors
-        status = true;
+        // Re-initialise with the address and Wire bus from the telemetry sensors map.
+        // (Rob Tillaart INA3221_RT takes address + TwoWire*, unlike sgtwilko which took Wire in begin().)
+        ina3221 = INA3221(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
+        status = ina3221.begin();
+        if (status) {
+            // Default all three channels to a 0.1 Ω shunt resistor.
+            // Override per-variant with INA3221_SHUNT_R_CH0/1/2 if needed.
+            ina3221.setShuntR(0, 0.1f); // CH1
+            ina3221.setShuntR(1, 0.1f); // CH2
+            ina3221.setShuntR(2, 0.1f); // CH3
+        }
     } else {
+        // Already initialised; status stays true and initI2CSensor() returns next poll interval.
         status = true;
     }
     return initI2CSensor();
@@ -27,12 +36,14 @@ int32_t INA3221Sensor::runOnce()
 
 void INA3221Sensor::setup() {}
 
-struct _INA3221Measurement INA3221Sensor::getMeasurement(ina3221_ch_t ch)
+struct _INA3221Measurement INA3221Sensor::getMeasurement(uint8_t ch)
 {
     struct _INA3221Measurement measurement;
 
-    measurement.voltage = ina3221.getVoltage(ch);
-    measurement.current = ina3221.getCurrent(ch);
+    measurement.voltage = ina3221.getBusVoltage(ch); // Volts
+    // getCurrent_mA() is used instead of getCurrent() because Rob Tillaart's getCurrent()
+    // returns Amperes; the telemetry proto and VoltageSensor/CurrentSensor interfaces expect mA.
+    measurement.current = ina3221.getCurrent_mA(ch); // milliAmps
 
     return measurement;
 }
@@ -43,7 +54,7 @@ struct _INA3221Measurements INA3221Sensor::getMeasurements()
 
     // INA3221 has 3 channels starting from 0
     for (int i = 0; i < 3; i++) {
-        measurements.measurements[i] = getMeasurement((ina3221_ch_t)i);
+        measurements.measurements[i] = getMeasurement((uint8_t)i);
     }
 
     return measurements;
@@ -87,24 +98,25 @@ bool INA3221Sensor::getPowerMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.power_metrics.has_ch3_voltage = true;
     measurement->variant.power_metrics.has_ch3_current = true;
 
-    measurement->variant.power_metrics.ch1_voltage = m.measurements[INA3221_CH1].voltage;
-    measurement->variant.power_metrics.ch1_current = m.measurements[INA3221_CH1].current;
-    measurement->variant.power_metrics.ch2_voltage = m.measurements[INA3221_CH2].voltage;
-    measurement->variant.power_metrics.ch2_current = m.measurements[INA3221_CH2].current;
-    measurement->variant.power_metrics.ch3_voltage = m.measurements[INA3221_CH3].voltage;
-    measurement->variant.power_metrics.ch3_current = m.measurements[INA3221_CH3].current;
+    // INA3221 channel indices are zero-based (0=CH1, 1=CH2, 2=CH3).
+    measurement->variant.power_metrics.ch1_voltage = m.measurements[0].voltage;
+    measurement->variant.power_metrics.ch1_current = m.measurements[0].current;
+    measurement->variant.power_metrics.ch2_voltage = m.measurements[1].voltage;
+    measurement->variant.power_metrics.ch2_current = m.measurements[1].current;
+    measurement->variant.power_metrics.ch3_voltage = m.measurements[2].voltage;
+    measurement->variant.power_metrics.ch3_current = m.measurements[2].current;
 
     return true;
 }
 
 uint16_t INA3221Sensor::getBusVoltageMv()
 {
-    return lround(ina3221.getVoltage(BAT_CH) * 1000);
+    return lround(ina3221.getBusVoltage_mV(BAT_CH));
 }
 
 int16_t INA3221Sensor::getCurrentMa()
 {
-    return lround(ina3221.getCurrent(BAT_CH));
+    return lround(ina3221.getCurrent_mA(BAT_CH));
 }
 
 #endif
