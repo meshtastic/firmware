@@ -30,11 +30,11 @@ class INA3221Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
 
     // channel to report voltage/current for environment metrics
     static const uint8_t ENV_CH = INA3221_ENV_CH;
-    static_assert(INA3221_ENV_CH <= 2, "INA3221_ENV_CH must be 0, 1, or 2");
+    static_assert(INA3221_ENV_CH >= 0 && INA3221_ENV_CH <= 2, "INA3221_ENV_CH must be 0, 1, or 2");
 
     // channel to report battery voltage for device_battery_ina_address
     static const uint8_t BAT_CH = INA3221_BAT_CH;
-    static_assert(INA3221_BAT_CH <= 2, "INA3221_BAT_CH must be 0, 1, or 2");
+    static_assert(INA3221_BAT_CH >= 0 && INA3221_BAT_CH <= 2, "INA3221_BAT_CH must be 0, 1, or 2");
 
     // get a single measurement for a channel
     struct _INA3221Measurement getMeasurement(uint8_t ch);
