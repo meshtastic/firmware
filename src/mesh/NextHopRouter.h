@@ -39,6 +39,9 @@ struct PendingPacket {
     /** Starts at NUM_RETRANSMISSIONS -1 and counts down.  Once zero it will be removed from the list */
     uint8_t numRetransmissions = 0;
 
+    /** The starting countdown value, used to derive the retransmission attempt without role assumptions */
+    uint8_t initialNumRetransmissions = 0;
+
     PendingPacket() {}
     explicit PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions);
 };
