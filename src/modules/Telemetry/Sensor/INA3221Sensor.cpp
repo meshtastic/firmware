@@ -22,10 +22,19 @@ int32_t INA3221Sensor::runOnce()
         status = ina3221.begin();
         if (status) {
             // Default all three channels to a 0.1 Ω shunt resistor.
-            // Override per-variant with INA3221_SHUNT_R_CH0/1/2 if needed.
-            ina3221.setShuntR(0, 0.1f); // CH1
-            ina3221.setShuntR(1, 0.1f); // CH2
-            ina3221.setShuntR(2, 0.1f); // CH3
+            // Override per-variant by defining INA3221_SHUNT_R_CH1/CH2/CH3 (in Ohms) in variant.h.
+#ifndef INA3221_SHUNT_R_CH1
+#define INA3221_SHUNT_R_CH1 0.1f
+#endif
+#ifndef INA3221_SHUNT_R_CH2
+#define INA3221_SHUNT_R_CH2 0.1f
+#endif
+#ifndef INA3221_SHUNT_R_CH3
+#define INA3221_SHUNT_R_CH3 0.1f
+#endif
+            ina3221.setShuntR(0, INA3221_SHUNT_R_CH1);
+            ina3221.setShuntR(1, INA3221_SHUNT_R_CH2);
+            ina3221.setShuntR(2, INA3221_SHUNT_R_CH3);
         }
     } else {
         // Already initialised; status stays true and initI2CSensor() returns next poll interval.

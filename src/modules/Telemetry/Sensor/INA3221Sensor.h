@@ -8,13 +8,18 @@
 #include "VoltageSensor.h"
 #include <INA3221.h>
 
-// INA3221 channels are zero-based integers: 0 = CH1, 1 = CH2, 2 = CH3
+// INA3221 channels are zero-based integers: 0 = CH1, 1 = CH2, 2 = CH3.
+// Backward-compat aliases for out-of-tree variant.h files that still use the old INA3221_CH* names.
+#define INA3221_CH1 0
+#define INA3221_CH2 1
+#define INA3221_CH3 2
+
 #ifndef INA3221_ENV_CH
-#define INA3221_ENV_CH 0 // channel to report in environment metrics (default: CH1)
+#define INA3221_ENV_CH INA3221_CH1 // channel to report in environment metrics (default: CH1)
 #endif
 
 #ifndef INA3221_BAT_CH
-#define INA3221_BAT_CH 0 // channel for device_battery_ina_address (default: CH1)
+#define INA3221_BAT_CH INA3221_CH1 // channel for device_battery_ina_address (default: CH1)
 #endif
 
 class INA3221Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
@@ -25,9 +30,11 @@ class INA3221Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
 
     // channel to report voltage/current for environment metrics
     static const uint8_t ENV_CH = INA3221_ENV_CH;
+    static_assert(INA3221_ENV_CH <= 2, "INA3221_ENV_CH must be 0, 1, or 2");
 
     // channel to report battery voltage for device_battery_ina_address
     static const uint8_t BAT_CH = INA3221_BAT_CH;
+    static_assert(INA3221_BAT_CH <= 2, "INA3221_BAT_CH must be 0, 1, or 2");
 
     // get a single measurement for a channel
     struct _INA3221Measurement getMeasurement(uint8_t ch);
