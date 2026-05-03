@@ -30,20 +30,6 @@ DcrSettings AirtimePolicy::settingsFromConfig(const meshtastic_Config_LoRaConfig
     if (settings.mode < _meshtastic_Config_LoRaConfig_DynamicCodingRateMode_MIN ||
         settings.mode > _meshtastic_Config_LoRaConfig_DynamicCodingRateMode_MAX)
         settings.mode = meshtastic_Config_LoRaConfig_DynamicCodingRateMode_DCR_OFF;
-    settings.minCr = clampCr(loraConfig.dcr_min_cr, DCR_CR_SLIM);
-    settings.maxCr = clampCr(loraConfig.dcr_max_cr, DCR_CR_RESCUE);
-    if (settings.minCr > settings.maxCr)
-        std::swap(settings.minCr, settings.maxCr);
-
-    // Config value 0 means "use firmware default" so older clients can enable
-    // DCR without learning every advanced clamp at once.
-    settings.robustAirtimePct = loraConfig.dcr_robust_airtime_pct
-                                    ? static_cast<uint8_t>(std::min<uint32_t>(loraConfig.dcr_robust_airtime_pct, 100))
-                                    : 10;
-    settings.trackNeighborCr = !loraConfig.dcr_disable_neighbor_tracking;
-    settings.telemetryMaxCr = clampCr(loraConfig.dcr_telemetry_max_cr, DCR_CR_NORMAL);
-    settings.userMinCr = clampCr(loraConfig.dcr_user_min_cr, DCR_CR_SLIM);
-    settings.alertMinCr = clampCr(loraConfig.dcr_alert_min_cr, DCR_CR_ROBUST);
     return settings;
 }
 

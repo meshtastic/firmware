@@ -10,14 +10,10 @@ DCR settings live in `Config.LoRaConfig`:
 
 - `dcr_mode`: `DCR_OFF` or `DCR_ON`. `DCR_OFF` keeps the configured static coding rate; `DCR_ON` applies
   per-packet CR selection.
-- `dcr_min_cr` / `dcr_max_cr`: optional denominator clamps, where `0` means firmware default.
-- `dcr_robust_airtime_pct`: rolling-window cap for non-urgent CR 4/8 airtime.
-- `dcr_disable_neighbor_tracking`: disables local neighbor CR tracking.
-- `dcr_telemetry_max_cr`, `dcr_user_min_cr`, and `dcr_alert_min_cr`: class-level policy clamps. By default,
-  telemetry caps at CR 4/6, user traffic may compact down to CR 4/5 when the channel is pressured, and alerts stay
-  at least CR 4/7.
 
 Existing `coding_rate` remains the base/static CR. When DCR is off, it is the transmit CR. When DCR is enabled, the radio starts from that base and may choose a different CR immediately before TX.
+
+The rest of the policy is intentionally tuned in firmware rather than exposed as user configuration. Meshtasticator modeling found that small changes to retry, relay, and CR 4/8 budget rules can improve one scenario while hurting dense collision-heavy cases, so this PR keeps the first public surface to a single opt-in switch.
 
 ## Runtime Flow
 
@@ -54,7 +50,7 @@ Relays choose their own CR per hop. A previous hop's CR is treated as an observa
 
 DCR has several clamps before a packet reaches the radio:
 
-- config min/max CR
+- internal min/max CR
 - telemetry/user/alert class bounds
 - per-class airtime caps
 - duty-cycle pressure bias
@@ -83,7 +79,7 @@ LR11x0 and SX128x static config currently restores their existing long-interleav
 - quiet final retry escalation
 - congested retry not jumping to CR 4/8
 - CR 4/8 token-bucket clamping
-- configured `min_cr` staying authoritative through later safety clamps
+- internal CR bounds staying authoritative through later safety clamps
 - off mode
 - direct RX neighbor CR attribution
 

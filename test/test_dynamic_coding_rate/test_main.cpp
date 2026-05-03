@@ -80,20 +80,17 @@ static DcrDecision choose(AirtimePolicy &policy, const meshtastic_MeshPacket &pa
     return policy.choose(ctx, channel, settings, fakeAirtime, nullptr);
 }
 
-static void test_settings_defaults_to_off_with_safety_clamps()
+static void test_settings_default_to_off_with_tuned_policy_defaults()
 {
     AirtimePolicy policy;
     meshtastic_Config_LoRaConfig config = meshtastic_Config_LoRaConfig_init_zero;
-    config.dcr_min_cr = 9;
-    config.dcr_max_cr = 4;
-    config.dcr_robust_airtime_pct = 250;
 
     DcrSettings settings = policy.settingsFromConfig(config);
 
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_DynamicCodingRateMode_DCR_OFF, settings.mode);
     TEST_ASSERT_EQUAL_UINT8(DCR_CR_SLIM, settings.minCr);
     TEST_ASSERT_EQUAL_UINT8(DCR_CR_RESCUE, settings.maxCr);
-    TEST_ASSERT_EQUAL_UINT8(100, settings.robustAirtimePct);
+    TEST_ASSERT_EQUAL_UINT8(10, settings.robustAirtimePct);
     TEST_ASSERT_TRUE(settings.trackNeighborCr);
     TEST_ASSERT_EQUAL_UINT8(DCR_CR_NORMAL, settings.telemetryMaxCr);
     TEST_ASSERT_EQUAL_UINT8(DCR_CR_SLIM, settings.userMinCr);
@@ -317,7 +314,7 @@ void setup()
     delay(10);
     initializeTestEnvironment();
     UNITY_BEGIN();
-    RUN_TEST(test_settings_defaults_to_off_with_safety_clamps);
+    RUN_TEST(test_settings_default_to_off_with_tuned_policy_defaults);
     RUN_TEST(test_telemetry_uses_compact_cr_when_congested);
     RUN_TEST(test_idle_telemetry_is_not_rescue_by_default);
     RUN_TEST(test_idle_text_uses_robust_cr);
