@@ -11,7 +11,10 @@
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <SPI.h>
 #include <map>
-#if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2)
+#if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && defined(MESHTASTIC_ENABLE_BLUETOOTHCLASSIC)
+#include "modules/esp32/BluetoothClassic.h"
+extern BluetoothClassic *bluetoothClassic;
+#elif defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2)
 #include "nimble/NimbleBluetooth.h"
 extern NimbleBluetooth *nimbleBluetooth;
 #endif
