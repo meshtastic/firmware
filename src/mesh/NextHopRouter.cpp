@@ -53,7 +53,8 @@ NextHopRouter::NextHopRouter() {}
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions)
 {
     packet = p;
-    this->numRetransmissions = numRetransmissions - 1; // We subtract one, because we assume the user just did the first send
+    initialNumRetransmissions = numRetransmissions > 0 ? numRetransmissions - 1 : 0;
+    this->numRetransmissions = initialNumRetransmissions; // We assume the user just did the first send
 }
 
 /**
@@ -364,9 +365,9 @@ int32_t NextHopRouter::doRetransmissions()
                           p.packet->id, p.numRetransmissions);
 
                 if (airtimePolicy) {
-                    uint8_t maxRetransmissions = isFromUs(p.packet) ? NUM_RELIABLE_RETX : NUM_INTERMEDIATE_RETX;
-                    uint8_t attempt =
-                        maxRetransmissions > p.numRetransmissions ? maxRetransmissions - p.numRetransmissions : 1;
+                    uint8_t attempt = p.initialNumRetransmissions >= p.numRetransmissions
+                                          ? p.initialNumRetransmissions - p.numRetransmissions + 1
+                                          : 1;
                     // Retry metadata is consumed later, immediately before the
                     // retransmission hits the radio. That keeps CR selection
                     // based on fresh queue/channel pressure instead of the
