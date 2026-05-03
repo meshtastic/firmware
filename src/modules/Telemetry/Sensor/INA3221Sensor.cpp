@@ -128,4 +128,20 @@ int16_t INA3221Sensor::getCurrentMa()
     return lround(ina3221.getCurrent_mA(BAT_CH));
 }
 
+// Bus voltage register (0x02 + ch*2): bits [15:3] unsigned, 1 LSB = 8 mV (datasheet p.6).
+// Voltage raw units: 1 count = 8 mV, so V_mV = raw * 8.
+int16_t INA3221Sensor::getRawBusVoltage(uint8_t ch)
+{
+    return (int16_t)(ina3221.getRegister(0x02 + ch * 2) >> 3);
+}
+
+// Shunt voltage register (0x01 + ch*2): bits [15:3] signed two's complement, 1 LSB = 40 µV (datasheet p.6).
+// Current raw units are shunt-voltage counts: 1 count = 40 uV, signed.
+// I_mA = (raw * 40 uV) / R_mOhm, because uV / mOhm = mA.
+// Example for 100 mOhm shunt: I_mA = raw * 40 / 100 = raw * 0.4.
+int16_t INA3221Sensor::getRawShuntCurrent(uint8_t ch)
+{
+    return (int16_t)(ina3221.getRegister(0x01 + ch * 2) >> 3);
+}
+
 #endif

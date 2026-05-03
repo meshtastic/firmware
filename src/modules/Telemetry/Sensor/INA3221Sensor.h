@@ -54,6 +54,10 @@ class INA3221Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
     bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual uint16_t getBusVoltageMv() override;
     virtual int16_t getCurrentMa() override;
+
+    // Raw register reads (bits [15:3] right-shifted), no conversion applied.
+    int16_t getRawBusVoltage(uint8_t ch);
+    int16_t getRawShuntCurrent(uint8_t ch);
 };
 
 struct _INA3221Measurement {
