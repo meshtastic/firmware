@@ -503,11 +503,15 @@ void RadioLibInterface::completeSending()
     // that can take a long time
     auto p = sendingPacket;
     sendingPacket = NULL;
-    restoreTemporaryCodingRateOverride();
 
     if (p) {
-        // Packet has been sent, count it toward our TX airtime utilization.
+        // Compute airtime before restoring the base coding rate so that getPacketTime
+        // queries the hardware with the CR that was actually used for this transmission
+        // (which may have been escalated for a retransmission).
         uint32_t xmitMsec = getPacketTime(p);
+        restoreTemporaryCodingRateOverride();
+
+        // Packet has been sent, count it toward our TX airtime utilization.
         airTime->logAirtime(TX_LOG, xmitMsec);
 
         txGood++;
@@ -517,6 +521,8 @@ void RadioLibInterface::completeSending()
 
         // We are done sending that packet, release it
         packetPool.release(p);
+    } else {
+        restoreTemporaryCodingRateOverride();
     }
 }
 

@@ -202,6 +202,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void setTransmitCodingRateOverride(NodeNum from, PacketId id, uint8_t codingRate) override;
     void clearTransmitCodingRateOverride(NodeNum from, PacketId id) override;
 
+#ifdef UNIT_TEST
+    friend class TestRadioLibInterface;
+#endif
+
     /**
      * Request randomness sourced from the LoRa modem, if supported by the active RadioLib interface.
      * @return true if len bytes were produced, false otherwise.
