@@ -1,3 +1,9 @@
+// INA3221 channel aliases (zero-based: 0 = CH1, 1 = CH2, 2 = CH3).
+// Defined before configuration.h so variant.h can use them in INA3221_ENV_CH / INA3221_BAT_CH.
+#define INA3221_CH1 0
+#define INA3221_CH2 1
+#define INA3221_CH3 2
+
 #include "configuration.h"
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<INA3221.h>)
@@ -7,12 +13,6 @@
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
 #include <INA3221.h>
-
-// INA3221 channels are zero-based integers: 0 = CH1, 1 = CH2, 2 = CH3.
-// Backward-compat aliases for out-of-tree variant.h files that still use the old INA3221_CH* names.
-#define INA3221_CH1 0
-#define INA3221_CH2 1
-#define INA3221_CH3 2
 
 #ifndef INA3221_ENV_CH
 #define INA3221_ENV_CH INA3221_CH1 // channel to report in environment metrics (default: CH1)
