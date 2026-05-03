@@ -1,6 +1,7 @@
 #define LED_POWER 33
 #define LED_POWER2 34
 #define EXT_PWR_DETECT 35
+#define EXT_PWR_DETECT_MODE INPUT_PULLUP
 
 #define BUTTON_PIN 18
 #define BUTTON_ACTIVE_LOW false

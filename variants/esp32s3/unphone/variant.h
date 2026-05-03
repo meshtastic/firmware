@@ -35,7 +35,7 @@
 #define TFT_OFFSET_ROTATION 6 // unPhone's screen wired unusually, 0 typical
 #define TFT_INVERT false
 #define SCREEN_ROTATE true
-#define SCREEN_TRANSITION_FRAMERATE 5
+#define SCREEN_TRANSITION_FRAMERATE 30
 #define USE_TFTDISPLAY 1
 
 #define HAS_TOUCHSCREEN 1

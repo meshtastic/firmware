@@ -1,3 +1,6 @@
+// Pin-level early init only. All touch, backlight, and InkHUD code lives in
+// src/platform/extra_variants/t5s3_epaper/variant.cpp where PlatformIO's
+// library dependency finder can resolve headers like TouchDrvGT911.hpp.
 #include "variant.h"
 #include "Arduino.h"
 #include "pins_arduino.h"
@@ -9,6 +12,9 @@ void earlyInitVariant()
     pinMode(SDCARD_CS, OUTPUT);
     digitalWrite(SDCARD_CS, HIGH);
     pinMode(BOARD_BL_EN, OUTPUT);
+    // Backlight ON at boot (active-HIGH). Full backlight state management
+    // lives in src/platform/extra_variants/t5s3_epaper/variant.cpp.
+    digitalWrite(BOARD_BL_EN, HIGH);
 
     // Program GT911 touch controller to I2C address 0x14 (GT911_SLAVE_ADDRESS_H) before
     // the I2C bus scan runs.  GPIO3 (INT) defaults LOW on ESP32-S3 cold boot, which would
@@ -30,10 +36,4 @@ void earlyInitVariant()
     digitalWrite(GT911_PIN_RST, HIGH);
     delay(10);                     // > 5 ms startup
     pinMode(GT911_PIN_INT, INPUT); // release INT for interrupt use
-}
-
-void variant_shutdown()
-{
-    // Ensure frontlight is off during deep sleep
-    digitalWrite(BOARD_BL_EN, LOW);
 }
