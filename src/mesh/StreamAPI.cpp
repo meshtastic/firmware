@@ -2,6 +2,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Throttle.h"
+#include "concurrency/LockGuard.h"
 #include "configuration.h"
 
 #define START1 0x94
@@ -177,6 +178,9 @@ void StreamAPI::emitTxBuffer(size_t len)
         txBuf[3] = len & 0xff;
 
         auto totalLen = len + HEADER_LEN;
+        // Serialize stream writes against `emitLogRecord` so a LOG_ firing
+        // mid-packet-emission can't interleave bytes on the wire.
+        concurrency::LockGuard guard(&streamLock);
         stream->write(txBuf, totalLen);
         stream->flush();
     }
@@ -195,21 +199,42 @@ void StreamAPI::emitRebooted()
 
 void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg)
 {
-    // In case we send a FromRadio packet
-    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_log_record_tag;
-    fromRadioScratch.log_record.level = level;
+    // IMPORTANT: do NOT touch `fromRadioScratch` or `txBuf` here — those
+    // belong to the main packet-emission path and a LOG_ firing during
+    // `writeStream()` would corrupt an in-flight encode. We keep a
+    // dedicated `fromRadioScratchLog` + `txBufLog` for log records and
+    // only serialize the actual `stream->write` call via `streamLock` so
+    // a concurrent packet emission doesn't interleave bytes on the wire.
+    memset(&fromRadioScratchLog, 0, sizeof(fromRadioScratchLog));
+    fromRadioScratchLog.which_payload_variant = meshtastic_FromRadio_log_record_tag;
+    fromRadioScratchLog.log_record.level = level;
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-    fromRadioScratch.log_record.time = rtc_sec;
-    strncpy(fromRadioScratch.log_record.source, src, sizeof(fromRadioScratch.log_record.source) - 1);
+    fromRadioScratchLog.log_record.time = rtc_sec;
+    strncpy(fromRadioScratchLog.log_record.source, src, sizeof(fromRadioScratchLog.log_record.source) - 1);
 
     auto num_printed =
-        vsnprintf(fromRadioScratch.log_record.message, sizeof(fromRadioScratch.log_record.message) - 1, format, arg);
-    if (num_printed > 0 && fromRadioScratch.log_record.message[num_printed - 1] ==
+        vsnprintf(fromRadioScratchLog.log_record.message, sizeof(fromRadioScratchLog.log_record.message) - 1, format, arg);
+    if (num_printed > 0 && fromRadioScratchLog.log_record.message[num_printed - 1] ==
                                '\n') // Strip any ending newline, because we have records for framing instead.
-        fromRadioScratch.log_record.message[num_printed - 1] = '\0';
-    emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
+        fromRadioScratchLog.log_record.message[num_printed - 1] = '\0';
+
+    size_t len =
+        pb_encode_to_bytes(txBufLog + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratchLog);
+    if (len != 0) {
+        txBufLog[0] = START1;
+        txBufLog[1] = START2;
+        txBufLog[2] = (len >> 8) & 0xff;
+        txBufLog[3] = len & 0xff;
+
+        auto totalLen = len + HEADER_LEN;
+        // Serialize stream writes against `emitTxBuffer` so a packet
+        // emission in flight on another task doesn't interleave bytes
+        // with this log record.
+        concurrency::LockGuard guard(&streamLock);
+        stream->write(txBufLog, totalLen);
+        stream->flush();
+    }
 }
 
 /// Hookable to find out when connection changes

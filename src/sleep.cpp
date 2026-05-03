@@ -497,13 +497,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
     notifyLightSleepEnd.notifyObservers(cause); // Button interrupts are reattached here
 
-#ifdef BUTTON_PIN
     if (cause == ESP_SLEEP_WAKEUP_GPIO) {
-        LOG_INFO("Exit light sleep gpio: btn=%d",
-                 !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
-    } else
-#endif
-    {
+        LOG_INFO("Exit light sleep gpio");
+        // If we woke because of a GPIO, it's possible power needs to run to handle.
+        power->setIntervalFromNow(0);
+        runASAP = true;
+    } else {
         LOG_INFO("Exit light sleep cause: %d", cause);
     }
 

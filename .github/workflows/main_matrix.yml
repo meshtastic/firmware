@@ -116,6 +116,20 @@ jobs:
       build_location: local
     secrets: inherit
 
+  MacOS:
+    strategy:
+      fail-fast: false
+      matrix:
+        macos_ver:
+          - "26" # ARM64
+          # - '26-intel' # x86_64
+          - "15" # ARM64
+          # - '15-intel' # x86_64
+    uses: ./.github/workflows/build_macos_bin.yml
+    with:
+      macos_ver: ${{ matrix.macos_ver }}
+    # secrets: inherit
+
   package-pio-deps-native-tft:
     if: ${{ github.repository == 'meshtastic/firmware' && github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/package_pio_deps.yml
@@ -286,6 +300,7 @@ jobs:
       - gather-artifacts
       - build-debian-src
       - package-pio-deps-native-tft
+      # - MacOS
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -301,15 +316,17 @@ jobs:
         id: release_notes
         run: |
           chmod +x ./bin/generate_release_notes.py
-          NOTES=$(./bin/generate_release_notes.py ${{ needs.version.outputs.long }})
+          NOTES=$(./bin/generate_release_notes.py ${{ needs.version.outputs.long }} --compare-ref HEAD 2>release_notes.log)
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          echo "### Release note range" >> $GITHUB_STEP_SUMMARY
+          cat release_notes.log >> $GITHUB_STEP_SUMMARY
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         id: create_release
         with:
           draft: true
@@ -466,7 +483,7 @@ jobs:
       - name: Generate release notes
         run: |
           chmod +x ./bin/generate_release_notes.py
-          ./bin/generate_release_notes.py ${{ needs.version.outputs.long }} > ./publish/release_notes.md
+          ./bin/generate_release_notes.py ${{ needs.version.outputs.long }} --compare-ref HEAD > ./publish/release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

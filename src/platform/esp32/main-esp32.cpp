@@ -231,7 +231,9 @@ void cpuDeepSleep(uint32_t msecToWake)
 #if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
     uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
 #endif
-
+#ifdef ALT_BUTTON_WAKE
+    gpioMask |= (1ULL << BUTTON_PIN_ALT);
+#endif
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #endif

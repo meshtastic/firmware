@@ -102,7 +102,6 @@ static int32_t reconnectETH()
 
 #ifndef DISABLE_NTP
             LOG_INFO("Start NTP time client");
-            timeClient.begin();
             timeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
 
@@ -159,6 +158,7 @@ static int32_t reconnectETH()
             LOG_ERROR("NTP Update failed");
             ntp_renew = millis() + 300 * 1000; // failure, retry every 5 minutes
         }
+        timeClient.end(); // W5100S: release UDP socket for other services
     }
 #endif
 
