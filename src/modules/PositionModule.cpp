@@ -117,7 +117,9 @@ void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
 {
     // Phone position packets need to be truncated to the channel precision
     if (isFromUs(&mp)) {
-        if (precision < 32)
+        if (precision == 0)
+            LOG_DEBUG("Strip phone position due to channel precision 0");
+        else if (precision < 32)
             LOG_DEBUG("Truncate phone position to channel precision %i", precision);
         applyPositionPrecision(*p, precision);
         mp.decoded.payload.size =
