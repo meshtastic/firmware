@@ -55,7 +55,6 @@ bool applyPositionPrecision(meshtastic_MeshPacket &packet, uint32_t precision)
 
     meshtastic_Position position = meshtastic_Position_init_default;
     if (!pb_decode_from_bytes(packet.decoded.payload.bytes, packet.decoded.payload.size, &meshtastic_Position_msg, &position)) {
-        LOG_ERROR("Error decoding position for precision filtering!");
         return false;
     }
 
