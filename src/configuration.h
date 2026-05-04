@@ -179,6 +179,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
 #endif
 
+#ifdef EDICT_HP
+// Edict HP: SX1262 -> Qualcomm SAW filter (~2.2 dB IL) -> SKY66122 FEM
+// Limit SX1262 drive so SKY66122 input stays around <= +12 dBm.
+// Measured: SX1262 14 dBm gives ~30 dBm output.
+#define TX_GAIN_LORA 16
+#define SX126X_MAX_POWER 14
+#endif
+
 // Default system gain to 0 if not defined
 #ifndef NUM_PA_POINTS
 #define NUM_PA_POINTS 1
