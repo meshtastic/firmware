@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           brew update
-          brew install platformio yaml-cpp libuv openssl@3 libusb argp-standalone pkg-config
+          brew install platformio yaml-cpp libuv openssl@3 libusb argp-standalone pkg-config ulfius
 
       - name: Get release version string
         run: |
