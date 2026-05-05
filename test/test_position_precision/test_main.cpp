@@ -84,6 +84,7 @@ void setUp(void) {}
 
 void tearDown(void) {}
 
+extern "C" {
 void setup()
 {
     initializeTestEnvironment();
@@ -96,3 +97,4 @@ void setup()
 }
 
 void loop() {}
+}
