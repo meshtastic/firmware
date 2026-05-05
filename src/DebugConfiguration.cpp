@@ -26,6 +26,8 @@ SOFTWARE.*/
 
 #include "DebugConfiguration.h"
 
+#include <memory>
+
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -119,27 +121,16 @@ bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
 
 bool Syslog::vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args)
 {
-    char *message;
-    size_t initialLen;
-    size_t len;
-    bool result;
+    size_t initialLen = strlen(fmt);
+    auto message = std::unique_ptr<char[]>(new char[initialLen + 1]);
 
-    initialLen = strlen(fmt);
-
-    message = new char[initialLen + 1];
-
-    len = vsnprintf(message, initialLen + 1, fmt, args);
+    size_t len = vsnprintf(message.get(), initialLen + 1, fmt, args);
     if (len > initialLen) {
-        delete[] message;
-        message = new char[len + 1];
-
-        vsnprintf(message, len + 1, fmt, args);
+        message.reset(new char[len + 1]);
+        vsnprintf(message.get(), len + 1, fmt, args);
     }
 
-    result = this->_sendLog(pri, appName, message);
-
-    delete[] message;
-    return result;
+    return this->_sendLog(pri, appName, message.get());
 }
 
 inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *message)
