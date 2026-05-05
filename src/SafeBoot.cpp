@@ -402,6 +402,33 @@ bool detectUncleanReset()
     //
     // Variants on solar deployments SHOULD define BATTERY_LPCOMP_INPUT.
 
+    // Optional: actively pull external radio EN/RXEN pins to GND before
+    // sleep. Some external SX126x modules (e.g. EBYTE E22P on ProMicro/
+    // NiceNano-based DIY boards) have internal pull-ups on their enable
+    // line; if we leave it floating during SYSTEM_OFF the module will
+    // backpower the MCU through that pin and either wake it spuriously
+    // ("phantom boot") or just keep draining the battery. Variants that
+    // need this define EXTERNAL_RADIO_ENABLE_PIN (single pin) and/or
+    // EXTERNAL_RADIO_ENABLE_PINS_LIST (comma-separated initialiser list)
+    // in their variant.h. Boards without external modules don't define
+    // these macros and this whole block compiles out -- zero risk.
+    // See https://github.com/meshtastic/firmware/issues/10084
+#if __has_include(<nrf_gpio.h>) && (defined(EXTERNAL_RADIO_ENABLE_PIN) || defined(EXTERNAL_RADIO_ENABLE_PINS_LIST))
+    {
+#ifdef EXTERNAL_RADIO_ENABLE_PIN
+        nrf_gpio_cfg_output(EXTERNAL_RADIO_ENABLE_PIN);
+        nrf_gpio_pin_clear(EXTERNAL_RADIO_ENABLE_PIN);
+#endif
+#ifdef EXTERNAL_RADIO_ENABLE_PINS_LIST
+        const uint32_t kRadioEnPins[] = {EXTERNAL_RADIO_ENABLE_PINS_LIST};
+        for (size_t i = 0; i < sizeof(kRadioEnPins) / sizeof(kRadioEnPins[0]); i++) {
+            nrf_gpio_cfg_output(kRadioEnPins[i]);
+            nrf_gpio_pin_clear(kRadioEnPins[i]);
+        }
+#endif
+    }
+#endif
+
 #ifdef BATTERY_LPCOMP_INPUT
     {
         nrf_lpcomp_config_t c = {};
