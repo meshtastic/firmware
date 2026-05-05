@@ -61,11 +61,12 @@ void InkHUD::HeardApplet::handleParsed(CardInfo c)
 void InkHUD::HeardApplet::populateFromNodeDB()
 {
     // Fill a collection with pointers to each node in db
-    std::vector<meshtastic_NodeInfoLite *> ordered;
-    for (auto mn = nodeDB->meshNodes->begin(); mn != nodeDB->meshNodes->end(); ++mn) {
-        // Only copy if valid, and not our own node
-        if (mn->num != 0 && mn->num != nodeDB->getNodeNum())
-            ordered.push_back(&*mn);
+    std::vector<const meshtastic_NodeInfoLite *> ordered;
+    uint32_t readIndex = 0;
+    const meshtastic_NodeInfoLite *node;
+    while ((node = nodeDB->readNextMeshNode(readIndex)) != nullptr) {
+        if (node->num != 0 && node->num != nodeDB->getNodeNum())
+            ordered.push_back(node);
     }
 
     // Sort the collection by age
@@ -80,8 +81,8 @@ void InkHUD::HeardApplet::populateFromNodeDB()
         ordered.resize(maxCards());
 
     // Create card info for these (stale) node observations
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    for (meshtastic_NodeInfoLite *node : ordered) {
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    for (const meshtastic_NodeInfoLite *node : ordered) {
         CardInfo c;
         c.nodeNum = node->num;
 
