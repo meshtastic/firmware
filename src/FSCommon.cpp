@@ -79,27 +79,45 @@ bool copyFile(const char *from, const char *to)
 bool renameFile(const char *pathFrom, const char *pathTo)
 {
 #ifdef FSCom
-
-#ifdef ARCH_ESP32
-    // take SPI Lock
     spiLock->lock();
-    // rename was fixed for ESP32 IDF LittleFS in April
     bool result = FSCom.rename(pathFrom, pathTo);
     spiLock->unlock();
     return result;
 #else
-    // copyFile does its own locking.
-    if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom)) {
-        return true;
-    } else {
-        return false;
-    }
-#endif
-
+    return false;
 #endif
 }
 
 #include <vector>
+
+/**
+ * @brief Platform-agnostic filesystem format / wipe.
+ *
+ * On embedded targets (ESP32, NRF52, STM32WL, RP2040) this calls the
+ * native FSCom.format() which erases and reinitialises the LittleFS
+ * partition.
+ *
+ * On Portduino the fs::FS backend has no format() method. We instead
+ * delete /prefs (the only meshtastic data directory written at runtime)
+ * and return. rmDir("/prefs") is already called unconditionally by
+ * factoryReset() so this is a proven primitive on Portduino.
+ * FSBegin() is a no-op (#define FSBegin() true) on Portduino.
+ *
+ * @return true on success, false on failure or if no filesystem is configured.
+ */
+bool fsFormat()
+{
+#ifdef FSCom
+#if defined(ARCH_PORTDUINO)
+    rmDir("/prefs");
+    return FSBegin();
+#else
+    return FSCom.format();
+#endif
+#else
+    return false;
+#endif
+}
 
 /**
  * @brief Get the list of files in a directory.
@@ -123,23 +141,21 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 
     File file = root.openNextFile();
     while (file) {
+#ifdef ARCH_ESP32
+        const char *filepath = file.path();
+#else
+        const char *filepath = file.name();
+#endif
         if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             if (levels) {
-#ifdef ARCH_ESP32
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
-#else
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.name(), levels - 1);
-#endif
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(filepath, levels - 1);
                 filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
                 file.close();
             }
         } else {
             meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
-#ifdef ARCH_ESP32
-            strcpy(fileInfo.file_name, file.path());
-#else
-            strcpy(fileInfo.file_name, file.name());
-#endif
+            strncpy(fileInfo.file_name, filepath, sizeof(fileInfo.file_name) - 1);
+            fileInfo.file_name[sizeof(fileInfo.file_name) - 1] = '\0';
             if (!String(fileInfo.file_name).endsWith(".")) {
                 filenames.push_back(fileInfo);
             }
@@ -163,98 +179,59 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 void listDir(const char *dirname, uint8_t levels, bool del)
 {
 #ifdef FSCom
-#if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     char buffer[255];
-#endif
     File root = FSCom.open(dirname, FILE_O_READ);
-    if (!root) {
+    if (!root || !root.isDirectory())
         return;
-    }
-    if (!root.isDirectory()) {
-        return;
-    }
 
     File file = root.openNextFile();
-    while (
-        file &&
-        file.name()[0]) { // This file.name() check is a workaround for a bug in the Adafruit LittleFS nrf52 glue (see issue 4395)
+    while (file && file.name()[0]) { // file.name()[0] check: workaround for Adafruit LittleFS nRF52 bug #4395
+#ifdef ARCH_ESP32
+        const char *filepath = file.path();
+#else
+        const char *filepath = file.name();
+#endif
         if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             if (levels) {
-#ifdef ARCH_ESP32
-                listDir(file.path(), levels - 1, del);
+                listDir(filepath, levels - 1, del);
                 if (del) {
-                    LOG_DEBUG("Remove %s", file.path());
-                    strncpy(buffer, file.path(), sizeof(buffer));
+                    LOG_DEBUG("Remove %s", filepath);
+                    strncpy(buffer, filepath, sizeof(buffer) - 1);
+                    buffer[sizeof(buffer) - 1] = '\0';
                     file.close();
                     FSCom.rmdir(buffer);
                 } else {
                     file.close();
                 }
-#elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
-                listDir(file.name(), levels - 1, del);
-                if (del) {
-                    LOG_DEBUG("Remove %s", file.name());
-                    strncpy(buffer, file.name(), sizeof(buffer));
-                    file.close();
-                    FSCom.rmdir(buffer);
-                } else {
-                    file.close();
-                }
-#else
-                LOG_DEBUG(" %s (directory)", file.name());
-                listDir(file.name(), levels - 1, del);
-                file.close();
-#endif
             }
         } else {
-#ifdef ARCH_ESP32
             if (del) {
-                LOG_DEBUG("Delete %s", file.path());
-                strncpy(buffer, file.path(), sizeof(buffer));
+                LOG_DEBUG("Delete %s", filepath);
+                strncpy(buffer, filepath, sizeof(buffer) - 1);
+                buffer[sizeof(buffer) - 1] = '\0';
                 file.close();
                 FSCom.remove(buffer);
             } else {
-                LOG_DEBUG(" %s (%i Bytes)", file.path(), file.size());
+                LOG_DEBUG(" %s (%i Bytes)", filepath, file.size());
                 file.close();
             }
-#elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
-            if (del) {
-                LOG_DEBUG("Delete %s", file.name());
-                strncpy(buffer, file.name(), sizeof(buffer));
-                file.close();
-                FSCom.remove(buffer);
-            } else {
-                LOG_DEBUG(" %s (%i Bytes)", file.name(), file.size());
-                file.close();
-            }
-#else
-            LOG_DEBUG("   %s (%i Bytes)", file.name(), file.size());
-            file.close();
-#endif
         }
         file = root.openNextFile();
     }
 #ifdef ARCH_ESP32
-    if (del) {
-        LOG_DEBUG("Remove %s", root.path());
-        strncpy(buffer, root.path(), sizeof(buffer));
-        root.close();
-        FSCom.rmdir(buffer);
-    } else {
-        root.close();
-    }
-#elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
-    if (del) {
-        LOG_DEBUG("Remove %s", root.name());
-        strncpy(buffer, root.name(), sizeof(buffer));
-        root.close();
-        FSCom.rmdir(buffer);
-    } else {
-        root.close();
-    }
+    const char *rootpath = root.path();
 #else
-    root.close();
+    const char *rootpath = root.name();
 #endif
+    if (del) {
+        LOG_DEBUG("Remove %s", rootpath);
+        strncpy(buffer, rootpath, sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+        root.close();
+        FSCom.rmdir(buffer);
+    } else {
+        root.close();
+    }
 #endif
 }
 
@@ -268,14 +245,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 void rmDir(const char *dirname)
 {
 #ifdef FSCom
-
-#if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     listDir(dirname, 10, true);
-#elif defined(ARCH_NRF52)
-    // nRF52 implementation of LittleFS has a recursive delete function
-    FSCom.rmdir_r(dirname);
-#endif
-
 #endif
 }
 

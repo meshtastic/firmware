@@ -522,11 +522,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
             // nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
 
-            // Occasional progress logging. (readIndex==2 will be true for the first non-us node)
-            if (readIndex == 2 || readIndex % 20 == 0) {
-                LOG_DEBUG("nodeinfo: %d/%d", readIndex, nodeDB->getNumMeshNodes());
-            }
-
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = infoToSend;
             prefetchNodeInfos();
@@ -657,9 +652,11 @@ void PhoneAPI::releaseQueueStatusPhonePacket()
 void PhoneAPI::prefetchNodeInfos()
 {
     bool added = false;
+    bool wasEmpty = false;
     // Keep the queue topped up so BLE reads stay responsive even if DB fetches take a moment.
     {
         concurrency::LockGuard guard(&nodeInfoMutex);
+        wasEmpty = nodeInfoQueue.empty();
         while (nodeInfoQueue.size() < kNodePrefetchDepth) {
             auto nextNode = nodeDB->readNextMeshNode(readIndex);
             if (!nextNode)
@@ -673,11 +670,15 @@ void PhoneAPI::prefetchNodeInfos()
             info.via_mqtt = isUs ? false : info.via_mqtt;
             info.is_favorite = info.is_favorite || isUs;
             nodeInfoQueue.push_back(info);
+            // Log progress here (at fetch time) so readIndex is accurate and each value logs only once.
+            if (readIndex == 2 || readIndex % 20 == 0) {
+                LOG_DEBUG("nodeinfo: %d/%d", readIndex, nodeDB->getNumMeshNodes());
+            }
             added = true;
         }
     }
 
-    if (added)
+    if (added && wasEmpty)
         onNowHasData(0);
 }
 
