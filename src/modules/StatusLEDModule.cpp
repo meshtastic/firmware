@@ -78,8 +78,6 @@ int32_t StatusLEDModule::runOnce()
 #ifndef POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING
         CHARGE_LED_state = !CHARGE_LED_state;
 #endif
-    } else if (power_state == charged) {
-        CHARGE_LED_state = LED_STATE_ON;
     } else if (power_state == critical) {
         if (POWER_LED_starttime + 30000 < millis() && !doing_fast_blink) {
             doing_fast_blink = true;
@@ -96,7 +94,7 @@ int32_t StatusLEDModule::runOnce()
         }
     }
 
-    if (power_state != charging && power_state != charged && !doing_fast_blink) {
+    if (power_state != charging && !doing_fast_blink) {
         if (CHARGE_LED_state == LED_STATE_ON) {
             CHARGE_LED_state = LED_STATE_OFF;
             my_interval = 999;
@@ -145,7 +143,7 @@ int32_t StatusLEDModule::runOnce()
 #if defined(HAS_PMU)
     if (pmu_found && PMU) {
         // blink the axp led
-        PMU->setChargingLedMode(CHARGE_LED_state ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
+        PMU->setChargingLedMode((CHARGE_LED_state == LED_STATE_ON) ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
     }
 #endif
 
