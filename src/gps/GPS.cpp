@@ -1548,7 +1548,12 @@ std::unique_ptr<GPS> GPS::createGps()
         _en_gpio = PIN_GPS_EN;
 #endif
 #ifdef ARCH_PORTDUINO
-    if (!portduino_config.has_gps)
+    if (portduino_config.has_gps) {
+        // These need to set as flags so later checks will pass on native and GPS will work.
+        // They are not used for any hardware access.
+        _rx_gpio = 1;
+        _tx_gpio = 1;
+    } else
         return nullptr;
 #endif
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
