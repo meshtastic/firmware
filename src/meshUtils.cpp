@@ -58,6 +58,22 @@ char *strnstr(const char *s, const char *find, size_t slen)
     return ((char *)s);
 }
 
+int constant_time_compare(const void *a_, const void *b_, size_t len)
+{
+    const volatile uint8_t *volatile a = (const volatile uint8_t *volatile)a_;
+    const volatile uint8_t *volatile b = (const volatile uint8_t *volatile)b_;
+    if (len == 0)
+        return 0;
+    if (a == NULL || b == NULL)
+        return -1;
+    size_t i;
+    volatile uint8_t d = 0U;
+    for (i = 0U; i < len; i++) {
+        d |= (a[i] ^ b[i]);
+    }
+    return (1 & ((d - 1) >> 8)) - 1;
+}
+
 void printBytes(const char *label, const uint8_t *p, size_t numbytes)
 {
     int labelSize = strlen(label);
