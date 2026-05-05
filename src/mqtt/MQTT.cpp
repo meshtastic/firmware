@@ -349,6 +349,8 @@ inline bool isConnectedToNetwork()
     return WiFi.isConnected();
 #elif HAS_ETHERNET
     return Ethernet.linkStatus() == LinkON;
+#elif defined(ARCH_PORTDUINO)
+    return true;
 #else
     return false;
 #endif

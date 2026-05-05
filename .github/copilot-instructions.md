@@ -13,6 +13,7 @@ Meshtastic is an open-source LoRa mesh networking project for long-range, low-po
 - **RP2040/RP2350** - Raspberry Pi Pico variants
 - **STM32WL** - STM32 with integrated LoRa
 - **Linux/Portduino** - Native Linux builds (Raspberry Pi, etc.)
+- **macOS native** - Headless `meshtasticd` on Apple Silicon / x86_64; see `variants/native/portduino/platformio.ini` for Homebrew prereqs + CH341 LoRa setup
 
 ### Supported Radio Chips
 
@@ -369,7 +370,7 @@ To reduce avoidable agent mistakes, assume these tools are available (or install
 - **Required CLI basics**: `bash`, `git`, `find`, `grep`, `sed`, `awk`, `xargs`
 - **Strongly recommended**: `rg` (ripgrep) for fast file/text search, `jq` for JSON processing
 - **Build/test tools**: `python3`, `pip`, virtualenv (`python3 -m venv`), `platformio` (`pio`)
-- **Containerized native testing**: `docker` (especially important on macOS / non-Linux hosts)
+- **Containerized native testing**: `docker` (fallback for non-Linux hosts; macOS can also build natively via `pio run -e native-macos`)
 
 Fallback expectations for agents:
 
@@ -388,6 +389,7 @@ Build commands:
 pio run -e tbeam              # Build specific target
 pio run -e tbeam -t upload    # Build and upload
 pio run -e native             # Build native/Linux version
+pio run -e native-macos       # Build headless macOS meshtasticd (Homebrew prereqs in variants/native/portduino/platformio.ini)
 ```
 
 ### Build Manifest
@@ -572,6 +574,8 @@ Grouped by purpose. Full argument shapes in `mcp-server/README.md`; a few high-v
 - **Observability** (UI tier + operator ad-hoc): `capture_screen(role, ocr=True)` — grabs a USB-webcam frame of the device OLED and optionally OCRs it. Requires `mcp-server[ui]` extras (`opencv-python-headless`, `easyocr`) and `MESHTASTIC_UI_CAMERA_DEVICE_<ROLE>` env var; falls through to a 1×1 black PNG `NullBackend` when unconfigured.
 
 `confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve — it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `factory_reset`, `erase_and_flash`, `uhubctl_power(action='off')`, and `uhubctl_cycle`.
+
+**TCP / native-host nodes.** Setting `MESHTASTIC_MCP_TCP_HOST=<host[:port]>` makes `list_devices` surface a `meshtasticd` daemon (e.g. the `native-macos` build) as a synthetic `tcp://host:port` entry, and `connect()` routes through `meshtastic.tcp_interface.TCPInterface` instead of `SerialInterface`. Every read/write/admin tool that flows through `connect()` works against the daemon transparently. USB-only tools (`pio_flash`, `erase_and_flash`, `update_flash`, `touch_1200bps`, `serial_open`, `esptool_*`, `nrfutil_*`, `picotool_*`) raise a clear `ConnectionError` when handed a `tcp://` port; `pio_flash` against a `native*` env raises a `FlashError` (no upload step — use `build` and run the binary directly). The pytest harness still assumes USB-attached devices per role; TCP-aware fixtures are deferred. See `mcp-server/README.md` § "TCP / native-host nodes".
 
 ### Hardware test suite (`mcp-server/run-tests.sh`)
 
