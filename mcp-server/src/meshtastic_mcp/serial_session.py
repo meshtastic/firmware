@@ -71,6 +71,10 @@ def open_session(
     If `env` is supplied, pio resolves baud and filters from platformio.ini.
     Otherwise uses the supplied `baud` and `filters` (default `['direct']`).
     """
+    # Lazy import to avoid circular: registry imports serial_session.
+    from . import connection
+
+    connection.reject_if_tcp(port, "serial_open")
     args = ["device", "monitor", "--port", port, "--no-reconnect"]
     effective_filters: list[str]
     effective_baud: int = baud

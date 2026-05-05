@@ -1,22 +1,34 @@
 /*
-Adds a WebServer and WebService callbacks to meshtastic as Linux Version. The WebServer & Webservices
-runs in a real linux thread beside the portdunio threading emulation. It replaces the complete ESP32
-Webserver libs including generation of SSL certifcicates,  because the use ESP specific details in
-the lib that can't be emulated.
+Adds a WebServer and WebService callbacks to meshtastic via the Portduino/native target (Linux and
+macOS). The WebServer & Webservices run in a real host thread beside the Portduino threading
+emulation. It replaces the complete ESP32 Webserver libs including generation of SSL certificates,
+because those libs use ESP-specific details that can't be emulated.
 
 The WebServices adapt to the two major phoneapi functions "handleAPIv1FromRadio,handleAPIv1ToRadio"
-The WebServer just adds basaic support to deliver WebContent, so it can be used to
-deliver the WebGui definded by the WebClient Project.
+The WebServer just adds basic support to deliver WebContent, so it can be used to
+deliver the WebGui defined by the WebClient Project.
 
 Steps to get it running:
-1.) Add these Linux Libs to the compile and target machine:
+
+Linux (apt):
+1.) Add these libs to the compile and target machine:
 
     sudo apt update && \
-        apt -y install openssl libssl-dev libopenssl libsdl2-dev \
+        apt -y install openssl libssl-dev libsdl2-dev \
                      libulfius-dev liborcania-dev
 
+macOS (Homebrew):
+1.) Install prerequisites via Homebrew:
+
+    brew install ulfius openssl@3
+
+    The PlatformIO env (native-macos) picks up compiler/linker flags via
+    `pkg-config`. In particular, OpenSSL needs `pkg-config --cflags --libs openssl@3`
+    so both the Homebrew include path and linker flags are provided; ulfius and its
+    dependencies (liborcania, libyder) are also resolved via `pkg-config`.
+
 2.) Configure the root directory of the web Content in the config.yaml file.
-    The followinng tags should be included and set at your needs
+    The following tags should be included and set at your needs
 
     Example entry in the config.yaml
     Webserver:
@@ -34,7 +46,10 @@ Author: Marc Philipp Hammermann
 mail:   marchammermann@googlemail.com
 
 */
-#ifdef PORTDUINO_LINUX_HARDWARE
+// Mirrors the guard in PiWebServer.h — see comment there. macOS Homebrew
+// provides ulfius + deps; Linux pulls them via apt. Either way, this
+// translation unit only compiles when the headers are present.
+#ifdef ARCH_PORTDUINO
 #if __has_include(<ulfius.h>)
 #include "PiWebServer.h"
 #include "NodeDB.h"

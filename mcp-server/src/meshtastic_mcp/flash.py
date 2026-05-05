@@ -17,7 +17,7 @@ from typing import Any
 
 import serial
 
-from . import boards, config, devices, pio, userprefs
+from . import boards, config, connection, devices, pio, userprefs
 
 # Meshtastic variants use both `esp32s3` and `esp32-s3` style names across
 # variants/*/platformio.ini (no consistency enforced). Accept both spellings.
@@ -43,6 +43,18 @@ def _require_confirm(confirm: bool, operation: str) -> None:
         raise FlashError(
             f"{operation} is destructive and requires confirm=True. "
             "This will overwrite firmware on the device."
+        )
+
+
+def _reject_native_env(env: str, operation: str) -> None:
+    """`native*` envs build a host executable, not firmware — there's no
+    upload step. The user wants `build` (or just runs the binary directly).
+    """
+    if env.startswith("native"):
+        raise FlashError(
+            f"{operation} is not applicable for env {env!r}: native envs "
+            "produce a host executable, not flashable firmware. Use `build` "
+            "instead, then run the resulting binary directly."
         )
 
 
@@ -141,6 +153,8 @@ def flash(
     that pio performs will pick up the injected values.
     """
     _require_confirm(confirm, "flash")
+    _reject_native_env(env, "flash")
+    connection.reject_if_tcp(port, "flash")
     with userprefs.temporary_overrides(userprefs_overrides) as effective:
         result = pio.run(
             ["run", "-e", env, "-t", "upload", "--upload-port", port],
@@ -200,6 +214,7 @@ def erase_and_flash(
     in that case) since a cached factory.bin would not reflect the new prefs.
     """
     _require_confirm(confirm, "erase_and_flash")
+    connection.reject_if_tcp(port, "erase_and_flash")
     _check_esp32_env(env)
 
     if userprefs_overrides and skip_build:
@@ -257,6 +272,7 @@ def update_flash(
     overrides are provided we always force a rebuild.
     """
     _require_confirm(confirm, "update_flash")
+    connection.reject_if_tcp(port, "update_flash")
     _check_esp32_env(env)
 
     if userprefs_overrides and skip_build:
@@ -391,6 +407,7 @@ def touch_1200bps(
 
     Returns `{ok, former_port, new_port, new_port_vid_pid, attempts}`.
     """
+    connection.reject_if_tcp(port, "touch_1200bps")
     before_list = devices.list_devices(include_unknown=True)
     before_ports = {d["port"] for d in before_list}
 
