@@ -13,6 +13,7 @@
 #include <ErriezCRC32.h>
 #include <Utility.h>
 #include <assert.h>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -30,6 +31,16 @@
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
+#endif
+
+#ifdef __APPLE__
+// Used by getMacAddr()'s macOS fallback to read the en0 link-layer address.
+// `getifaddrs()` is the BSD-portable way; `<net/if_dl.h>` provides the
+// `sockaddr_dl` cast and the `LLADDR()` macro that points at the 6-byte MAC.
+#include <cstring> // strcmp, memcpy
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <net/if_dl.h>
 #endif
 
 #include "platform/portduino/USBHal.h"
@@ -155,9 +166,35 @@ void getMacAddr(uint8_t *dmac)
         dmac[3] = di.bdaddr.b[2];
         dmac[4] = di.bdaddr.b[1];
         dmac[5] = di.bdaddr.b[0];
+#elif defined(__APPLE__)
+        // No BlueZ on macOS, but we can fall back to the host's primary
+        // network interface MAC. `en0` is Wi-Fi on every shipping Mac
+        // (Ethernet, when present, is en1 or higher), which gives the user
+        // the same kind of stable, host-derived identifier that the BlueZ
+        // path provides on Linux. If en0 isn't found or has no MAC, dmac is
+        // left untouched and the caller's "Blank MAC Address not allowed!"
+        // check will still fire — preserving existing behavior for users
+        // who deliberately rely on --hwid or YAML override.
+        struct ifaddrs *ifap = nullptr;
+        if (getifaddrs(&ifap) == 0) {
+            for (struct ifaddrs *p = ifap; p != nullptr; p = p->ifa_next) {
+                if (p->ifa_addr == nullptr || p->ifa_addr->sa_family != AF_LINK) {
+                    continue;
+                }
+                if (strcmp(p->ifa_name, "en0") != 0) {
+                    continue;
+                }
+                auto *sdl = reinterpret_cast<struct sockaddr_dl *>(p->ifa_addr);
+                if (sdl->sdl_alen == 6) {
+                    memcpy(dmac, LLADDR(sdl), 6);
+                    break;
+                }
+            }
+            freeifaddrs(ifap);
+        }
 #else
-        // No BlueZ on non-Linux hosts (e.g. macOS). Leave dmac at its default;
-        // the caller can override via the --hwid CLI flag or the YAML config.
+        // No platform-specific MAC source; leave dmac at its default. Caller
+        // can override via the --hwid CLI flag or the YAML config.
         (void)dmac;
 #endif
     }
@@ -1056,17 +1093,31 @@ static bool ends_with(std::string_view str, std::string_view suffix)
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
     mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
-    if (mac_str.length() == 12) {
-        dmac[0] = std::stoi(portduino_config.mac_address.substr(0, 2), nullptr, 16);
-        dmac[1] = std::stoi(portduino_config.mac_address.substr(2, 2), nullptr, 16);
-        dmac[2] = std::stoi(portduino_config.mac_address.substr(4, 2), nullptr, 16);
-        dmac[3] = std::stoi(portduino_config.mac_address.substr(6, 2), nullptr, 16);
-        dmac[4] = std::stoi(portduino_config.mac_address.substr(8, 2), nullptr, 16);
-        dmac[5] = std::stoi(portduino_config.mac_address.substr(10, 2), nullptr, 16);
-        return true;
-    } else {
+    if (mac_str.length() != 12) {
         return false;
     }
+    // Validate every character is a hex digit before parsing. std::stoi
+    // would otherwise skip leading whitespace and silently truncate at the
+    // first non-digit, which is too lenient for a MAC address.
+    for (char c : mac_str) {
+        if (!isxdigit(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+    // Parse into a temporary so dmac is not partially modified if a later
+    // byte fails. At least one caller in getMacAddr() ignores the bool
+    // return, so leaving stale bytes in dmac on failure would silently
+    // produce a wrong MAC.
+    uint8_t tmp[6];
+    try {
+        for (int i = 0; i < 6; i++) {
+            tmp[i] = static_cast<uint8_t>(std::stoi(mac_str.substr(i * 2, 2), nullptr, 16));
+        }
+    } catch (const std::exception &) {
+        return false;
+    }
+    memcpy(dmac, tmp, 6);
+    return true;
 }
 
 std::string exec(const char *cmd)
