@@ -6,7 +6,7 @@
 
 uint32_t getPositionPrecisionForChannel(uint8_t channelIndex)
 {
-    meshtastic_Channel &channel = channels.getByIndex(channelIndex);
+    const meshtastic_Channel &channel = channels.getByIndex(channelIndex);
 
     if (channel.settings.has_module_settings) {
         return channel.settings.module_settings.position_precision;
