@@ -1,4 +1,5 @@
 #include "AdminModule.h"
+#include "modules/ClientAppDataStore.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -546,6 +547,75 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         exit(0);
         break;
 #endif
+
+    /**
+     * Bounded local client-app metadata store. See modules/ClientAppDataStore.h
+     * and meshtastic/admin.proto's ClientAppData for the namespaced-not-owned
+     * caveat: writes/deletes are local-only by default; reads follow the same
+     * authorization as other get_* requests.
+     */
+    case meshtastic_AdminMessage_set_client_app_data_tag: {
+        LOG_DEBUG("Client set client_app_data app_id=%s", r->set_client_app_data.app_id);
+        if (mp.from != 0) {
+            LOG_WARN("Reject remote set_client_app_data");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+            break;
+        }
+        if (clientAppDataStore == nullptr) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+            break;
+        }
+        ClientAppDataStore::Result result = clientAppDataStore->set(r->set_client_app_data);
+        if (result != ClientAppDataStore::Result::Ok) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_get_client_app_data_request_tag: {
+        LOG_DEBUG("Client get client_app_data app_id=%s", r->get_client_app_data_request);
+        if (clientAppDataStore == nullptr) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+            break;
+        }
+        if (!ClientAppDataStore::isValidAppId(r->get_client_app_data_request)) {
+            LOG_WARN("Reject get_client_app_data: invalid app_id");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+            break;
+        }
+        if (mp.decoded.want_response) {
+            meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
+            res.which_payload_variant = meshtastic_AdminMessage_get_client_app_data_response_tag;
+            // get() leaves *out untouched on NotFound, so the _init_default
+            // empty-app_id sentinel passes through automatically.
+            clientAppDataStore->get(r->get_client_app_data_request, &res.get_client_app_data_response);
+            setPassKey(&res);
+            myReply = allocDataProtobuf(res);
+            if (mp.pki_encrypted) {
+                myReply->pki_encrypted = true;
+            }
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_delete_client_app_data_request_tag: {
+        LOG_DEBUG("Client delete client_app_data app_id=%s", r->delete_client_app_data_request);
+        if (mp.from != 0) {
+            LOG_WARN("Reject remote delete_client_app_data");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+            break;
+        }
+        if (clientAppDataStore == nullptr) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+            break;
+        }
+        ClientAppDataStore::Result result = clientAppDataStore->remove(r->delete_client_app_data_request);
+        // NotFound is treated as success: matches existing delete semantics
+        // (remove_by_nodenum, remove_favorite_node, delete_file_request all
+        // silently succeed on missing targets, falling through to auto-ACK).
+        if (result != ClientAppDataStore::Result::Ok && result != ClientAppDataStore::Result::NotFound) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        }
+        break;
+    }
 
     default:
         meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
@@ -1501,7 +1571,8 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
-        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_response_tag)
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_response_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_get_client_app_data_response_tag)
         return true;
     else
         return false;
@@ -1518,7 +1589,8 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag ||
-        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag)
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_get_client_app_data_request_tag)
         return true;
     else
         return false;
