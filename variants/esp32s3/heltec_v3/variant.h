@@ -20,6 +20,12 @@
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.045
 
+// SafeBoot thresholds for the on-board AMS1117-3.3 LDO (dropout ~1.1V at TX peak).
+// Below 3.4V the rail sags during a LoRa TX burst and triggers the brownout
+// detector. Wake hysteresis is 300 mV to avoid waking on transient solar surges.
+#define DEFAULT_SAFE_BOOT_WAKE_MV 3700
+#define DEFAULT_SAFE_BOOT_SLEEP_MV 3400
+
 #define USE_SX1262
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module

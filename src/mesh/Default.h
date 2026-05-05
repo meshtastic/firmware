@@ -19,6 +19,25 @@
 #define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
 #define default_min_wake_secs 10
 #define default_screen_on_secs IF_ROUTER(1, 60 * 10)
+
+// SafeBoot defaults (LiIon single-cell). See src/SafeBoot.cpp for the
+// rationale behind these numbers; per-board overrides come from variant.h
+// (DEFAULT_SAFE_BOOT_*) or USERPREFS (USERPREFS_POWER_SAFE_BOOT_*).
+// These mirror the compile-time defaults in SafeBoot.cpp and exist here so
+// that other subsystems (e.g. UI, telemetry) can reuse the same numbers
+// without including SafeBoot.h directly.
+#ifndef default_safe_boot_wake_mv
+#define default_safe_boot_wake_mv 3700
+#endif
+#ifndef default_safe_boot_sleep_mv
+#define default_safe_boot_sleep_mv 3400
+#endif
+#ifndef default_safe_boot_recheck_secs
+#define default_safe_boot_recheck_secs 120
+#endif
+#ifndef default_safe_boot_max_recheck_secs
+#define default_safe_boot_max_recheck_secs 600
+#endif
 #define default_node_info_broadcast_secs 3 * 60 * 60
 #define default_neighbor_info_broadcast_secs 6 * 60 * 60
 #define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
