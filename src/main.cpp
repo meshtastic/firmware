@@ -34,6 +34,7 @@
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
+#include "modules/ClientAppDataStore.h"
 #include "modules/Modules.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -707,6 +708,10 @@ void setup()
 
     // Initialize transmit history to persist broadcast throttle timers across reboots
     TransmitHistory::getInstance()->loadFromDisk();
+
+    // Bounded local client-app metadata store (see modules/ClientAppDataStore.h).
+    // Loads /prefs/clientappdata.proto if present; missing/corrupt -> empty store.
+    ClientAppDataStore::init();
 #if HAS_TFT
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         tftSetup();

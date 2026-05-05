@@ -250,6 +250,55 @@ typedef struct _meshtastic_SensorConfig {
     meshtastic_SHTXX_config shtxx_config;
 } meshtastic_SensorConfig;
 
+typedef PB_BYTES_ARRAY_T(512) meshtastic_ClientAppData_payload_t;
+/* Optional, bounded, local-node-only storage for opaque, app-owned metadata
+ that a companion application can ask its locally-connected node to persist
+ on its behalf. Not a filesystem, not a database, and not arbitrary NVRAM.
+ It is a tiny fixed-slot table for a few small records.
+
+ Intended to give clients an explicit, firmware-bounded place to store
+ non-secret convenience metadata, without overloading user-visible
+ fields like long_name or unrelated configuration surfaces.
+
+ IMPORTANT: namespaced, not owned. The firmware enforces shape, payload
+ size, and record-count limits, but does NOT authenticate which companion
+ application is making a write request. app_id prevents accidental name
+ collisions between apps, NOT malicious or intentional overwrites: any
+ admin-capable client may overwrite or delete any app_id. Callers must
+ therefore treat stored payloads as untrusted, optional, and recoverable.
+
+ Do NOT store secrets, identity keys, session keys, paid-entitlement
+ state, trust authority, blocklists, or any data used to make security,
+ routing, authentication, or purchase decisions. Treat this as a
+ convenience cache for non-critical app state only.
+
+ Firmware never interprets `payload`, never broadcasts these records over
+ LoRa, never includes them in NodeInfo, and never relays them via MQTT.
+ Records are local-node-only, survive reboot, and are cleared by factory
+ reset.
+
+ Client guidance: gracefully fall back to app-local storage when the
+ firmware does not support this feature; version your payloads via the
+ `version` field below; keep payloads small (well under the 512-byte cap)
+ to leave headroom for other apps. */
+typedef struct _meshtastic_ClientAppData {
+    /* Namespacing key. Must match `^[a-z0-9._-]{1,32}$`.
+ Convention examples: "meshtastic-ios",
+ "meshtastic-android", "thirdparty.example". */
+    char app_id[33];
+    /* Application-defined schema version for `payload`. The firmware does not
+ interpret this; clients use it to migrate or reject stale payloads. */
+    uint32_t version;
+    /* Opaque app-owned bytes, max 512. Firmware never inspects or interprets
+ the contents. */
+    meshtastic_ClientAppData_payload_t payload;
+    /* Unix epoch seconds, set by the firmware on every successful write.
+ May be 0 if the firmware does not yet have a valid wall-clock time.
+ Useful for clients to detect that another admin-capable client has
+ overwritten or deleted-then-recreated the record since the last read. */
+    uint32_t updated_at;
+} meshtastic_ClientAppData;
+
 typedef PB_BYTES_ARRAY_T(8) meshtastic_AdminMessage_session_passkey_t;
 /* This message is handled by the Admin module and is responsible for all settings/channel read/write operations.
  This message is used to do settings operations to both remote AND local nodes.
@@ -384,6 +433,27 @@ typedef struct _meshtastic_AdminMessage {
         meshtastic_AdminMessage_OTAEvent ota_request;
         /* Parameters and sensor configuration */
         meshtastic_SensorConfig sensor_config;
+        /* Write a bounded local client-app metadata record. Local-only by
+     default: the firmware refuses set_client_app_data from non-local
+     senders. See top-level ClientAppData for the namespaced-not-owned
+     caveat: any admin-capable client may overwrite any app_id, so
+     callers must treat stored payloads as untrusted and recoverable.
+     Validation failures (bad app_id, oversize payload, no slot free)
+     are reported via meshtastic_Routing_Error_BAD_REQUEST.
+     TODO(maintainer): confirm field-number allocation for 104..107. */
+        meshtastic_ClientAppData set_client_app_data;
+        /* Read a stored client-app metadata record by app_id. The firmware
+     replies with get_client_app_data_response: a populated record on
+     hit, or a record with empty app_id to signal NOT_FOUND. */
+        char get_client_app_data_request[33];
+        /* Stored client-app metadata in response to get_client_app_data_request.
+     If app_id is empty, no record exists for the requested key. */
+        meshtastic_ClientAppData get_client_app_data_response;
+        /* Delete a stored client-app metadata record by app_id. Local-only by
+     default. Returns Routing_Error_NONE on success (record removed) or
+     Routing_Error_BAD_REQUEST on invalid app_id. Deleting a missing
+     app_id is treated as success (idempotent). */
+        char delete_client_app_data_request[33];
     };
     /* The node generates this key and sends it with any get_x_response packets.
  The client MUST include the same key with any set_x commands. Key expires after 300 seconds.
@@ -437,6 +507,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define meshtastic_AdminMessage_init_default     {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_default {0, 0, 0, 0}
@@ -450,6 +521,7 @@ extern "C" {
 #define meshtastic_SEN5X_config_init_default     {false, 0, false, 0}
 #define meshtastic_SCD30_config_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SHTXX_config_init_default     {false, 0}
+#define meshtastic_ClientAppData_init_default    {"", 0, {0, {0}}, 0}
 #define meshtastic_AdminMessage_init_zero        {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_zero {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_zero {_meshtastic_OTAMode_MIN, {0, {0}}}
@@ -462,6 +534,7 @@ extern "C" {
 #define meshtastic_SEN5X_config_init_zero        {false, 0, false, 0}
 #define meshtastic_SCD30_config_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_SHTXX_config_init_zero        {false, 0}
+#define meshtastic_ClientAppData_init_zero       {"", 0, {0, {0}}, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_AdminMessage_InputEvent_event_code_tag 1
@@ -503,6 +576,10 @@ extern "C" {
 #define meshtastic_SensorConfig_sen5x_config_tag 2
 #define meshtastic_SensorConfig_scd30_config_tag 3
 #define meshtastic_SensorConfig_shtxx_config_tag 4
+#define meshtastic_ClientAppData_app_id_tag      1
+#define meshtastic_ClientAppData_version_tag     2
+#define meshtastic_ClientAppData_payload_tag     3
+#define meshtastic_ClientAppData_updated_at_tag  4
 #define meshtastic_AdminMessage_get_channel_request_tag 1
 #define meshtastic_AdminMessage_get_channel_response_tag 2
 #define meshtastic_AdminMessage_get_owner_request_tag 3
@@ -560,6 +637,10 @@ extern "C" {
 #define meshtastic_AdminMessage_nodedb_reset_tag 100
 #define meshtastic_AdminMessage_ota_request_tag  102
 #define meshtastic_AdminMessage_sensor_config_tag 103
+#define meshtastic_AdminMessage_set_client_app_data_tag 104
+#define meshtastic_AdminMessage_get_client_app_data_request_tag 105
+#define meshtastic_AdminMessage_get_client_app_data_response_tag 106
+#define meshtastic_AdminMessage_delete_client_app_data_request_tag 107
 #define meshtastic_AdminMessage_session_passkey_tag 101
 
 /* Struct field encoding specification for nanopb */
@@ -621,7 +702,11 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_config,factory
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,nodedb_reset,nodedb_reset), 100) \
 X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,ota_request,ota_request), 102) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sensor_config,sensor_config), 103)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sensor_config,sensor_config), 103) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_client_app_data,set_client_app_data), 104) \
+X(a, STATIC,   ONEOF,    STRING,   (payload_variant,get_client_app_data_request,get_client_app_data_request), 105) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_client_app_data_response,get_client_app_data_response), 106) \
+X(a, STATIC,   ONEOF,    STRING,   (payload_variant,delete_client_app_data_request,delete_client_app_data_request), 107)
 #define meshtastic_AdminMessage_CALLBACK NULL
 #define meshtastic_AdminMessage_DEFAULT NULL
 #define meshtastic_AdminMessage_payload_variant_get_channel_response_MSGTYPE meshtastic_Channel
@@ -644,6 +729,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sensor_config,sensor_config)
 #define meshtastic_AdminMessage_payload_variant_key_verification_MSGTYPE meshtastic_KeyVerificationAdmin
 #define meshtastic_AdminMessage_payload_variant_ota_request_MSGTYPE meshtastic_AdminMessage_OTAEvent
 #define meshtastic_AdminMessage_payload_variant_sensor_config_MSGTYPE meshtastic_SensorConfig
+#define meshtastic_AdminMessage_payload_variant_set_client_app_data_MSGTYPE meshtastic_ClientAppData
+#define meshtastic_AdminMessage_payload_variant_get_client_app_data_response_MSGTYPE meshtastic_ClientAppData
 
 #define meshtastic_AdminMessage_InputEvent_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   event_code,        1) \
@@ -734,6 +821,14 @@ X(a, STATIC,   OPTIONAL, UINT32,   set_accuracy,      1)
 #define meshtastic_SHTXX_config_CALLBACK NULL
 #define meshtastic_SHTXX_config_DEFAULT NULL
 
+#define meshtastic_ClientAppData_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   app_id,            1) \
+X(a, STATIC,   SINGULAR, UINT32,   version,           2) \
+X(a, STATIC,   SINGULAR, BYTES,    payload,           3) \
+X(a, STATIC,   SINGULAR, FIXED32,  updated_at,        4)
+#define meshtastic_ClientAppData_CALLBACK NULL
+#define meshtastic_ClientAppData_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_AdminMessage_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_InputEvent_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_OTAEvent_msg;
@@ -746,6 +841,7 @@ extern const pb_msgdesc_t meshtastic_SCD4X_config_msg;
 extern const pb_msgdesc_t meshtastic_SEN5X_config_msg;
 extern const pb_msgdesc_t meshtastic_SCD30_config_msg;
 extern const pb_msgdesc_t meshtastic_SHTXX_config_msg;
+extern const pb_msgdesc_t meshtastic_ClientAppData_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_AdminMessage_fields &meshtastic_AdminMessage_msg
@@ -760,12 +856,14 @@ extern const pb_msgdesc_t meshtastic_SHTXX_config_msg;
 #define meshtastic_SEN5X_config_fields &meshtastic_SEN5X_config_msg
 #define meshtastic_SCD30_config_fields &meshtastic_SCD30_config_msg
 #define meshtastic_SHTXX_config_fields &meshtastic_SHTXX_config_msg
+#define meshtastic_ClientAppData_fields &meshtastic_ClientAppData_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_ADMIN_PB_H_MAX_SIZE meshtastic_AdminMessage_size
 #define meshtastic_AdminMessage_InputEvent_size  14
 #define meshtastic_AdminMessage_OTAEvent_size    36
-#define meshtastic_AdminMessage_size             511
+#define meshtastic_AdminMessage_size             575
+#define meshtastic_ClientAppData_size            560
 #define meshtastic_HamParameters_size            31
 #define meshtastic_KeyVerificationAdmin_size     25
 #define meshtastic_NodeRemoteHardwarePinsResponse_size 496

@@ -102,6 +102,7 @@ static constexpr const char *configFileName = "/prefs/config.proto";
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 static constexpr const char *channelFileName = "/prefs/channels.proto";
+static constexpr const char *clientAppDataFileName = "/prefs/clientappdata.proto";
 static constexpr const char *backupFileName = "/backups/backup.proto";
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
