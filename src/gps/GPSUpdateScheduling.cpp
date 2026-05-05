@@ -17,6 +17,16 @@ void GPSUpdateScheduling::informGotLock()
     updateLockTimePrediction();
 }
 
+// Search finished without obtaining a fix. We still need to mark the end time so
+// the next sleep is timed correctly, but we must not feed the timeout duration
+// into predictedMsToGetLock — doing so poisons msUntilNextSearch() and causes
+// down() to fall into GPS_IDLE, leaving the chip awake on subsequent indoor cycles.
+void GPSUpdateScheduling::informSearchFailed()
+{
+    searchEndedMs = millis();
+    LOG_DEBUG("GPS search ended without fix after %us", (searchEndedMs - searchStartedMs) / 1000);
+}
+
 // Clear old lock-time prediction data.
 // When re-enabling GPS with user button.
 void GPSUpdateScheduling::reset()

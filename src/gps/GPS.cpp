@@ -1017,10 +1017,13 @@ void GPS::up()
     setPowerState(GPS_ACTIVE);
 }
 
-// We've got a GPS lock. Enter a low power state, potentially.
+// We've finished a GPS search cycle (lock or timeout). Enter a low power state, potentially.
 void GPS::down()
 {
-    scheduling.informGotLock();
+    if (hasValidLocation)
+        scheduling.informGotLock();
+    else
+        scheduling.informSearchFailed();
     uint32_t predictedSearchDuration = scheduling.predictedSearchDurationMs();
     uint32_t sleepTime = scheduling.msUntilNextSearch();
     uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);

@@ -8,7 +8,8 @@ class GPSUpdateScheduling
   public:
     // Marks the time of these events, for calculation use
     void informSearching();
-    void informGotLock(); // Predicted lock-time is recalculated here
+    void informGotLock();      // Predicted lock-time is recalculated here
+    void informSearchFailed(); // Search ended without a fix; prediction is left untouched
 
     void reset();           // Reset the prediction - after GPS::disable() / GPS::enable()
     bool isUpdateDue();     // Is it time to begin searching for a GPS position?
