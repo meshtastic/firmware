@@ -260,10 +260,10 @@ class NodeDB
 
     bool factoryReset(bool eraseBleBonds = false);
 
-    LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
-                             void *dest_struct);
-    bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
-                   bool fullAtomic = true);
+    virtual LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
+                                     void *dest_struct);
+    virtual bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
+                           bool fullAtomic = true);
 
     void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
 
