@@ -1043,6 +1043,18 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_traffic_management = true;
         moduleConfig.traffic_management = c.payload_variant.traffic_management;
         break;
+    case meshtastic_ModuleConfig_node_list_report_tag:
+        LOG_INFO("Set module config: Node List Report");
+        moduleConfig.has_node_list_report = true;
+        moduleConfig.node_list_report = c.payload_variant.node_list_report;
+        if (moduleConfig.node_list_report.interval_seconds > 0 && moduleConfig.node_list_report.interval_seconds < 15 * 60) {
+            moduleConfig.node_list_report.interval_seconds = 15 * 60;
+        }
+        if (moduleConfig.node_list_report.full_snapshot_interval_seconds > 0 &&
+            moduleConfig.node_list_report.full_snapshot_interval_seconds < 6 * 60 * 60) {
+            moduleConfig.node_list_report.full_snapshot_interval_seconds = 6 * 60 * 60;
+        }
+        break;
     }
     saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
     return true;
@@ -1233,6 +1245,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             configName = "Traffic Management";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             res.get_module_config_response.payload_variant.traffic_management = moduleConfig.traffic_management;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_NODELISTREPORT_CONFIG:
+            configName = "Node List Report";
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_node_list_report_tag;
+            res.get_module_config_response.payload_variant.node_list_report = moduleConfig.node_list_report;
             break;
         }
         LOG_INFO("Get module config: %s", configName);

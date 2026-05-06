@@ -262,6 +262,28 @@ typedef struct _meshtastic_ModuleConfig_TrafficManagementConfig {
     bool router_preserve_hops;
 } meshtastic_ModuleConfig_TrafficManagementConfig;
 
+/* Config for the Node List Report module.
+ Sends compact direct summaries of this node's known NodeDB entries. */
+typedef struct _meshtastic_ModuleConfig_NodeListReportConfig {
+    /* Master enable for node list reporting. Disabled by default. */
+    bool enabled;
+    /* Destination node number for direct report packets. */
+    uint32_t destination_node;
+    /* Minimum interval in seconds between incremental reports. */
+    uint32_t interval_seconds;
+    /* Minimum interval in seconds between full snapshots. */
+    uint32_t full_snapshot_interval_seconds;
+    /* Maximum node records to include in one report packet. */
+    uint32_t max_nodes_per_report;
+    /* Include a coarse position hash when position data is already present. */
+    bool include_position;
+    /* Include a short hash of user id/name data when already present. */
+    bool include_user_info;
+    /* Do not send an incremental report until at least this many changed
+ records are available. */
+    uint32_t min_changed_nodes_before_send;
+} meshtastic_ModuleConfig_NodeListReportConfig;
+
 /* Serial Config */
 typedef struct _meshtastic_ModuleConfig_SerialConfig {
     /* Preferences for the SerialModule */
@@ -516,6 +538,8 @@ typedef struct _meshtastic_ModuleConfig {
         meshtastic_ModuleConfig_TrafficManagementConfig traffic_management;
         /* TAK team/role configuration for TAK_TRACKER */
         meshtastic_ModuleConfig_TAKConfig tak;
+        /* Node list report module config */
+        meshtastic_ModuleConfig_NodeListReportConfig node_list_report;
     } payload_variant;
 } meshtastic_ModuleConfig;
 
@@ -560,6 +584,7 @@ extern "C" {
 
 
 
+
 #define meshtastic_ModuleConfig_SerialConfig_baud_ENUMTYPE meshtastic_ModuleConfig_SerialConfig_Serial_Baud
 #define meshtastic_ModuleConfig_SerialConfig_mode_ENUMTYPE meshtastic_ModuleConfig_SerialConfig_Serial_Mode
 
@@ -589,6 +614,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_NodeListReportConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
@@ -608,6 +634,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_NodeListReportConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
@@ -670,6 +697,14 @@ extern "C" {
 #define meshtastic_ModuleConfig_TrafficManagementConfig_exhaust_hop_telemetry_tag 12
 #define meshtastic_ModuleConfig_TrafficManagementConfig_exhaust_hop_position_tag 13
 #define meshtastic_ModuleConfig_TrafficManagementConfig_router_preserve_hops_tag 14
+#define meshtastic_ModuleConfig_NodeListReportConfig_enabled_tag 1
+#define meshtastic_ModuleConfig_NodeListReportConfig_destination_node_tag 2
+#define meshtastic_ModuleConfig_NodeListReportConfig_interval_seconds_tag 3
+#define meshtastic_ModuleConfig_NodeListReportConfig_full_snapshot_interval_seconds_tag 4
+#define meshtastic_ModuleConfig_NodeListReportConfig_max_nodes_per_report_tag 5
+#define meshtastic_ModuleConfig_NodeListReportConfig_include_position_tag 6
+#define meshtastic_ModuleConfig_NodeListReportConfig_include_user_info_tag 7
+#define meshtastic_ModuleConfig_NodeListReportConfig_min_changed_nodes_before_send_tag 8
 #define meshtastic_ModuleConfig_SerialConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_SerialConfig_echo_tag 2
 #define meshtastic_ModuleConfig_SerialConfig_rxd_tag 3
@@ -759,6 +794,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_statusmessage_tag 14
 #define meshtastic_ModuleConfig_traffic_management_tag 15
 #define meshtastic_ModuleConfig_tak_tag          16
+#define meshtastic_ModuleConfig_node_list_report_tag 17
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_ModuleConfig_FIELDLIST(X, a) \
@@ -777,7 +813,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,detection_sensor,payload_var
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,paxcounter,payload_variant.paxcounter),  13) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,statusmessage,payload_variant.statusmessage),  14) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,traffic_management,payload_variant.traffic_management),  15) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak,payload_variant.tak),  16)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak,payload_variant.tak),  16) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,node_list_report,payload_variant.node_list_report),  17)
 #define meshtastic_ModuleConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_DEFAULT NULL
 #define meshtastic_ModuleConfig_payload_variant_mqtt_MSGTYPE meshtastic_ModuleConfig_MQTTConfig
@@ -796,6 +833,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak,payload_variant.tak),  1
 #define meshtastic_ModuleConfig_payload_variant_statusmessage_MSGTYPE meshtastic_ModuleConfig_StatusMessageConfig
 #define meshtastic_ModuleConfig_payload_variant_traffic_management_MSGTYPE meshtastic_ModuleConfig_TrafficManagementConfig
 #define meshtastic_ModuleConfig_payload_variant_tak_MSGTYPE meshtastic_ModuleConfig_TAKConfig
+#define meshtastic_ModuleConfig_payload_variant_node_list_report_MSGTYPE meshtastic_ModuleConfig_NodeListReportConfig
 
 #define meshtastic_ModuleConfig_MQTTConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -883,6 +921,18 @@ X(a, STATIC,   SINGULAR, BOOL,     exhaust_hop_position,  13) \
 X(a, STATIC,   SINGULAR, BOOL,     router_preserve_hops,  14)
 #define meshtastic_ModuleConfig_TrafficManagementConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TrafficManagementConfig_DEFAULT NULL
+
+#define meshtastic_ModuleConfig_NodeListReportConfig_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   destination_node,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   interval_seconds,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   full_snapshot_interval_seconds,   4) \
+X(a, STATIC,   SINGULAR, UINT32,   max_nodes_per_report,   5) \
+X(a, STATIC,   SINGULAR, BOOL,     include_position,   6) \
+X(a, STATIC,   SINGULAR, BOOL,     include_user_info,   7) \
+X(a, STATIC,   SINGULAR, UINT32,   min_changed_nodes_before_send,   8)
+#define meshtastic_ModuleConfig_NodeListReportConfig_CALLBACK NULL
+#define meshtastic_ModuleConfig_NodeListReportConfig_DEFAULT NULL
 
 #define meshtastic_ModuleConfig_SerialConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -1003,6 +1053,7 @@ extern const pb_msgdesc_t meshtastic_ModuleConfig_DetectionSensorConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_AudioConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_PaxcounterConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_TrafficManagementConfig_msg;
+extern const pb_msgdesc_t meshtastic_ModuleConfig_NodeListReportConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_SerialConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_ExternalNotificationConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_StoreForwardConfig_msg;
@@ -1024,6 +1075,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_AudioConfig_fields &meshtastic_ModuleConfig_AudioConfig_msg
 #define meshtastic_ModuleConfig_PaxcounterConfig_fields &meshtastic_ModuleConfig_PaxcounterConfig_msg
 #define meshtastic_ModuleConfig_TrafficManagementConfig_fields &meshtastic_ModuleConfig_TrafficManagementConfig_msg
+#define meshtastic_ModuleConfig_NodeListReportConfig_fields &meshtastic_ModuleConfig_NodeListReportConfig_msg
 #define meshtastic_ModuleConfig_SerialConfig_fields &meshtastic_ModuleConfig_SerialConfig_msg
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_fields &meshtastic_ModuleConfig_ExternalNotificationConfig_msg
 #define meshtastic_ModuleConfig_StoreForwardConfig_fields &meshtastic_ModuleConfig_StoreForwardConfig_msg
@@ -1045,6 +1097,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MQTTConfig_size  224
 #define meshtastic_ModuleConfig_MapReportSettings_size 14
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
+#define meshtastic_ModuleConfig_NodeListReportConfig_size 36
 #define meshtastic_ModuleConfig_PaxcounterConfig_size 30
 #define meshtastic_ModuleConfig_RangeTestConfig_size 12
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96

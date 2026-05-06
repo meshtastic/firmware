@@ -385,6 +385,10 @@ NodeDB::NodeDB()
         moduleConfig.telemetry.air_quality_interval = MAX_INTERVAL;
     if (moduleConfig.telemetry.health_update_interval > MAX_INTERVAL)
         moduleConfig.telemetry.health_update_interval = MAX_INTERVAL;
+    if (moduleConfig.node_list_report.interval_seconds > MAX_INTERVAL)
+        moduleConfig.node_list_report.interval_seconds = MAX_INTERVAL;
+    if (moduleConfig.node_list_report.full_snapshot_interval_seconds > MAX_INTERVAL)
+        moduleConfig.node_list_report.full_snapshot_interval_seconds = MAX_INTERVAL;
 
     if (moduleConfig.mqtt.has_map_report_settings &&
         moduleConfig.mqtt.map_report_settings.publish_interval_secs < default_map_publish_interval_secs) {
@@ -394,6 +398,10 @@ NodeDB::NodeDB()
     // Ensure that the neighbor info update interval is coerced to the minimum
     moduleConfig.neighbor_info.update_interval =
         Default::getConfiguredOrMinimumValue(moduleConfig.neighbor_info.update_interval, min_neighbor_info_broadcast_secs);
+    moduleConfig.node_list_report.interval_seconds =
+        Default::getConfiguredOrMinimumValue(moduleConfig.node_list_report.interval_seconds, min_node_list_report_interval_secs);
+    moduleConfig.node_list_report.full_snapshot_interval_seconds = Default::getConfiguredOrMinimumValue(
+        moduleConfig.node_list_report.full_snapshot_interval_seconds, min_node_list_report_full_snapshot_interval_secs);
 
     // Don't let licensed users to rebroadcast encrypted packets
     if (owner.is_licensed) {
@@ -915,6 +923,13 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
+
+    moduleConfig.has_node_list_report = true;
+    moduleConfig.node_list_report.enabled = false;
+    moduleConfig.node_list_report.interval_seconds = default_node_list_report_interval_secs;
+    moduleConfig.node_list_report.full_snapshot_interval_seconds = default_node_list_report_full_snapshot_interval_secs;
+    moduleConfig.node_list_report.max_nodes_per_report = default_node_list_report_max_nodes;
+    moduleConfig.node_list_report.min_changed_nodes_before_send = 1;
 
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;

@@ -30,6 +30,11 @@
 #define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
 #define min_neighbor_info_broadcast_secs 4 * 60 * 60
 #define default_map_publish_interval_secs 60 * 60
+#define default_node_list_report_interval_secs 60 * 60
+#define min_node_list_report_interval_secs 15 * 60
+#define default_node_list_report_full_snapshot_interval_secs ONE_DAY
+#define min_node_list_report_full_snapshot_interval_secs 6 * 60 * 60
+#define default_node_list_report_max_nodes 10
 
 // Traffic management defaults
 #define default_traffic_mgmt_position_precision_bits 24               // ~10m grid cells

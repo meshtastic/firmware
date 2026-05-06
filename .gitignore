@@ -15,6 +15,7 @@ web.tar
 .platformio
 .local
 .cache
+.docker-cache
 
 .DS_Store
 Thumbs.db

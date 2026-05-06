@@ -1,0 +1,20 @@
+FROM python:3.12-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_ROOT_USER_ACTION=ignore
+
+RUN apt-get update && apt-get install --no-install-recommends -y \
+        ca-certificates \
+        clang-format \
+        curl \
+        g++ \
+        gcc \
+        git \
+        make \
+        pkg-config \
+        python3-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir -U platformio intelhex protobuf grpcio-tools
+
+ENTRYPOINT ["pio"]
