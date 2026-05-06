@@ -9,6 +9,7 @@
 #define ST7789_BUSY -1
 // #define VTFT_CTRL 38
 #define VTFT_LEDA 38
+#define TFT_BACKLIGHT_ON HIGH
 // #define ST7789_BL (32+6)
 #define ST7789_SPI_HOST SPI2_HOST
 // #define TFT_BL (32+6)
