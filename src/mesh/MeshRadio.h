@@ -15,6 +15,11 @@ static const meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
 
 #define PRESET(name) meshtastic_Config_LoRaConfig_ModemPreset_##name
 
+// Override slot magic numbers for RegionProfile.overrideSlot
+#define OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH 0 // Use hash of primary channel name
+#define OVERRIDE_SLOT_PRESET_HASH -1         // Use hash of preset name instead
+// Positive values (1-32767) are explicit slot numbers
+
 // Region profile: bundles the preset list with regulatory parameters shared across regions
 struct RegionProfile {
     const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated
@@ -25,7 +30,8 @@ struct RegionProfile {
     int8_t textThrottle;      // throttle for text - future expansion
     int8_t positionThrottle;  // throttle for location data - future expansion
     int8_t telemetryThrottle; // throttle for telemetry - future expansion
-    uint8_t overrideSlot;     // a per-region override slot for if we need to fix it in place
+    int16_t overrideSlot;     // a per-region override slot for if we need to fix it in place
+                              // Magic values: 0 = use channel name hash, -1 = use preset name hash, >0 = explicit slot
 };
 
 /**
