@@ -1,7 +1,8 @@
-#if RADIOLIB_EXCLUDE_LR2021 != 1
+#include "configuration.h"
+
+#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
 #include "LR20x0Interface.h"
 #include "Throttle.h"
-#include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
 
@@ -80,8 +81,15 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     RadioLibInterface::init();
 
+#ifdef LR2021_IRQ_DIO_NUM
     lora.irqDioNum = LR2021_IRQ_DIO_NUM;
     LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+#elif defined(IRQ_DIO_NUM)
+    lora.irqDioNum = IRQ_DIO_NUM;
+    LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+#else
+    LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
+#endif
 
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
         limitPower(LR2021_MAX_POWER_HF);
