@@ -121,14 +121,20 @@ bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
 
 bool Syslog::vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args)
 {
-    size_t initialLen = strlen(fmt);
-    auto message = std::unique_ptr<char[]>(new char[initialLen + 1]);
+    // First measure the formatted length using a copy of args; passing args directly
+    // to vsnprintf consumes it, and reusing a consumed va_list is undefined behavior.
+    va_list args_measure;
+    va_copy(args_measure, args);
+    int needed = vsnprintf(nullptr, 0, fmt, args_measure);
+    va_end(args_measure);
 
-    size_t len = vsnprintf(message.get(), initialLen + 1, fmt, args);
-    if (len > initialLen) {
-        message.reset(new char[len + 1]);
-        vsnprintf(message.get(), len + 1, fmt, args);
-    }
+    if (needed < 0)
+        return false; // encoding error
+
+    auto message = std::unique_ptr<char[]>(new char[static_cast<size_t>(needed) + 1]);
+    int written = vsnprintf(message.get(), static_cast<size_t>(needed) + 1, fmt, args);
+    if (written < 0)
+        return false;
 
     return this->_sendLog(pri, appName, message.get());
 }
