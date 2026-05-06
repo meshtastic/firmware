@@ -3,15 +3,17 @@
 # trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
-FROM python:3.14-slim-trixie AS builder
+FROM debian:trixie AS builder
 ARG PIO_ENV=native
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
 # Install Dependencies
 ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN apt-get update && apt-get install --no-install-recommends -y \
         curl wget g++ zip git ca-certificates pkg-config \
+        python3-pip python3-grpc-tools \
         libgpiod-dev libyaml-cpp-dev libbluetooth-dev libi2c-dev libuv1-dev \
         libusb-1.0-0-dev libulfius-dev liborcania-dev libssl-dev \
         libx11-dev libinput-dev libxkbcommon-x11-dev libsqlite3-dev libsdl2-dev \
