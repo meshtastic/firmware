@@ -364,6 +364,9 @@ typedef struct _meshtastic_AdminMessage {
         meshtastic_SharedContact add_contact;
         /* Initiate or respond to a key verification request */
         meshtastic_KeyVerificationAdmin key_verification;
+        /* Trigger the Node List Report module to send a report immediately.
+     When true, request a full snapshot. When false, request an incremental diff. */
+        bool send_node_list_report;
         /* Tell the node to factory reset config everything; all device state and configuration will be returned to factory defaults and BLE bonds will be cleared. */
         int32_t factory_reset_device;
         /* Tell the node to reboot into the OTA Firmware in this many seconds (or <0 to cancel reboot)
@@ -553,6 +556,7 @@ extern "C" {
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
 #define meshtastic_AdminMessage_add_contact_tag  66
 #define meshtastic_AdminMessage_key_verification_tag 67
+#define meshtastic_AdminMessage_send_node_list_report_tag 68
 #define meshtastic_AdminMessage_factory_reset_device_tag 94
 #define meshtastic_AdminMessage_reboot_ota_seconds_tag 95
 #define meshtastic_AdminMessage_exit_simulator_tag 96
@@ -614,6 +618,7 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_ed
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,add_contact,add_contact),  66) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,key_verification,key_verification),  67) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,send_node_list_report,send_node_list_report),  68) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_device,factory_reset_device),  94) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulator),  96) \

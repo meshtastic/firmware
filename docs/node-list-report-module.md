@@ -33,6 +33,17 @@ The module is configured through `ModuleConfig.NodeListReportConfig`:
 
 Changing module enablement requires the usual firmware config reboot path so the module instance is created during startup.
 
+## Manual Trigger
+
+Clients can request an immediate report with `AdminMessage.send_node_list_report`.
+
+- `true`: send a full snapshot now
+- `false`: send an incremental diff now
+
+The trigger still uses the module's safety checks: the module must be enabled, a non-broadcast destination must be configured,
+the destination public key must be known, Ham mode must be off, and airtime/channel-utilization limits must allow a transmit.
+If any check fails, firmware returns a bad-request routing response instead of forcing a packet onto the mesh.
+
 ## RF Congestion
 
 Use this only for a specific operational need. Even compact NodeDB summaries consume LoRa airtime. Keep the default one-hour

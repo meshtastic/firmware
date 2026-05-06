@@ -47,6 +47,9 @@
     !defined(CONFIG_IDF_TARGET_ESP32C3)
 #include "SerialModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_NODELISTREPORT
+#include "modules/NodeListReportModule.h"
+#endif
 
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
@@ -387,6 +390,19 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_add_contact_tag: {
         LOG_INFO("Client received add_contact command");
         nodeDB->addFromContact(r->add_contact);
+        break;
+    }
+    case meshtastic_AdminMessage_send_node_list_report_tag: {
+        LOG_INFO("Client requested Node List Report send, full_snapshot=%d", r->send_node_list_report);
+#if !MESHTASTIC_EXCLUDE_NODELISTREPORT
+        if (nodeListReportModule && nodeListReportModule->triggerReport(r->send_node_list_report)) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
+        } else {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        }
+#else
+        myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+#endif
         break;
     }
     case meshtastic_AdminMessage_set_favorite_node_tag: {

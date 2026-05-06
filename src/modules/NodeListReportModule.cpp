@@ -320,6 +320,16 @@ bool NodeListReportModule::sendReport(bool fullSnapshot)
     return true;
 }
 
+bool NodeListReportModule::triggerReport(bool fullSnapshot)
+{
+    if (!isConfigured()) {
+        LOG_WARN("NodeListReport: trigger ignored, module is disabled or missing destination");
+        return false;
+    }
+
+    return sendReport(fullSnapshot);
+}
+
 int32_t NodeListReportModule::runOnce()
 {
     if (!isConfigured()) {

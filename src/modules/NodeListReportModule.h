@@ -8,6 +8,7 @@ class NodeListReportModule : public SinglePortModule, private concurrency::OSThr
 {
   public:
     NodeListReportModule();
+    bool triggerReport(bool fullSnapshot);
 
   protected:
     virtual int32_t runOnce() override;
