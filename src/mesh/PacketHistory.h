@@ -72,5 +72,5 @@ class PacketHistory
     void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 
     // To check if the PacketHistory was initialized correctly by constructor
-    bool initOk(void) { return recentPackets != NULL && recentPacketsCapacity != 0; }
+    bool initOk(void) { return recentPackets != nullptr && recentPacketsCapacity != 0; }
 };
