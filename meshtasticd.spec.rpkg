@@ -102,6 +102,7 @@ cp -r bin/config.d/* %{buildroot}%{_sysconfdir}/meshtasticd/available.d
 
 # Install systemd service
 install -D -m 0644 bin/meshtasticd.service %{buildroot}%{_unitdir}/meshtasticd.service
+install -D -m 0644 bin/meshtasticd@.service %{buildroot}%{_unitdir}/meshtasticd@.service
 
 # Install meshtasticd start wrapper
 install -D -m 0755 bin/meshtasticd-start.sh %{buildroot}%{_bindir}/meshtasticd-start.sh
@@ -167,6 +168,7 @@ fi
 %config(noreplace) %{_sysconfdir}/meshtasticd/config.yaml
 %config %{_sysconfdir}/meshtasticd/available.d/*
 %{_unitdir}/meshtasticd.service
+%{_unitdir}/meshtasticd@.service
 %dir %{_datadir}/meshtasticd
 %dir %{_datadir}/meshtasticd/web
 %{_datadir}/meshtasticd/web/*
