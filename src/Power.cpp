@@ -1495,7 +1495,17 @@ bool Power::cw2015Init()
 class LipoCharger : public HasBatteryLevel
 {
   private:
+#if defined(XPOWERS_CHIP_SY6970)
+#define PPM_CLASS PowersSY6970
+    PowersSY6970 *bq = nullptr;
+#define PPM_ADDR SY6970_ADDR
+#define CHARGE_TARGET_VOLTAGE 4224
+#elif defined(XPOWERS_CHIP_BQ25896)
+#define PPM_CLASS BQ27220
     BQ27220 *bq = nullptr;
+#define PPM_ADDR BQ25896_ADDR
+#define CHARGE_TARGET_VOLTAGE 4288
+#endif
 
   public:
     /**
@@ -1505,12 +1515,11 @@ class LipoCharger : public HasBatteryLevel
     {
         if (PPM == nullptr) {
             PPM = new XPowersPPM;
-            bool result = PPM->init(Wire, I2C_SDA, I2C_SCL, BQ25896_ADDR);
+            bool result = PPM->init(Wire, I2C_SDA, I2C_SCL, PPM_ADDR);
             if (result) {
                 LOG_INFO("PPM BQ25896 init succeeded");
                 // Set the minimum operating voltage. Below this voltage, the PPM will
                 // protect PPM->setSysPowerDownVoltage(3100);
-
                 // Set input current limit, default is 500mA
                 // PPM->setInputCurrentLimit(800);
 
@@ -1518,7 +1527,7 @@ class LipoCharger : public HasBatteryLevel
                 // PPM->disableCurrentLimitPin();
 
                 // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
-                PPM->setChargeTargetVoltage(4288);
+                PPM->setChargeTargetVoltage(CHARGE_TARGET_VOLTAGE);
 
                 // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
                 // PPM->setPrechargeCurr(64);
@@ -1543,17 +1552,21 @@ class LipoCharger : public HasBatteryLevel
             }
         }
         if (bq == nullptr) {
-            bq = new BQ27220;
+            bq = new PPM_CLASS;
+#if defined(XPOWERS_CHIP_BQ25896)
             bq->setDefaultCapacity(BQ27220_DESIGN_CAPACITY);
+#endif
 
             bool result = bq->init();
             if (result) {
+#if defined(XPOWERS_CHIP_BQ25896)
                 LOG_DEBUG("BQ27220 design capacity: %d", bq->getDesignCapacity());
                 LOG_DEBUG("BQ27220 fullCharge capacity: %d", bq->getFullChargeCapacity());
                 LOG_DEBUG("BQ27220 remaining capacity: %d", bq->getRemainingCapacity());
+#endif
                 return true;
             } else {
-                LOG_WARN("BQ27220 init failed");
+                LOG_WARN("PPM init failed");
                 delete bq;
                 bq = nullptr;
                 return false;
@@ -1575,7 +1588,14 @@ class LipoCharger : public HasBatteryLevel
     /**
      * The raw voltage of the battery in millivolts, or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override { return bq->getVoltage(); }
+    virtual uint16_t getBattVoltage() override
+    {
+#if defined(XPOWERS_CHIP_BQ25896)
+        return bq->getVoltage();
+#else
+        return PPM->getBattVoltage();
+#endif
+    }
 
     /**
      * return true if there is a battery installed in this unit
@@ -1593,6 +1613,7 @@ class LipoCharger : public HasBatteryLevel
     virtual bool isCharging() override
     {
         bool isCharging = PPM->isCharging();
+#if defined(XPOWERS_CHIP_BQ25896)
         if (isCharging) {
             LOG_DEBUG("BQ27220 time to full charge: %d min", bq->getTimeToFull());
         } else {
@@ -1600,6 +1621,7 @@ class LipoCharger : public HasBatteryLevel
                 LOG_DEBUG("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
             }
         }
+#endif
         return isCharging;
     }
 };
