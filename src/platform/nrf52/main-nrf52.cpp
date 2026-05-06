@@ -497,6 +497,9 @@ void cpuDeepSleep(uint32_t msecToWake)
             ;
 #endif
 
+#ifdef POWER_ON_OFF
+        digitalWrite(POWER_ON_OFF, HIGH);
+#endif
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
             LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!");

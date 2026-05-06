@@ -36,4 +36,8 @@ void initVariant()
     // 3V3 Power Rail
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
+
+    // Power latch
+    pinMode(POWER_ON_OFF, OUTPUT);
+    digitalWrite(POWER_ON_OFF, HIGH);
 }

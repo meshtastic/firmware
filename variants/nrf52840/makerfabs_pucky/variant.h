@@ -119,7 +119,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define LR1121_SPI_SCK_PIN PIN_SPI_SCK
 #define LR1121_SPI_MOSI_PIN PIN_SPI_MOSI
 #define LR1121_SPI_MISO_PIN PIN_SPI_MISO
-#define LR11X0_DIO3_TCXO_VOLTAGE 1.8
+#define LR11X0_DIO3_TCXO_VOLTAGE 3.3
 // #define LR11X0_DIO_AS_RF_SWITCH
 
 /*
@@ -134,8 +134,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 /*
  * Power Switches
  */
-#define V_RFSW (13)
-#define POWER_ON_OFF (30)
+#define POWER_ON_OFF (30) // P0.30 Power latch control, set high to keep power on, set low to turn off
 #define PIN_3V3_EN (16)
 
 #define HAS_GPS 1
