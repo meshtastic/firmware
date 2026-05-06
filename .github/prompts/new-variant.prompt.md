@@ -6,7 +6,7 @@ Guide for adding a new Meshtastic hardware variant to the firmware.
 
 Create under `variants/<arch>/<name>/`:
 
-```
+```text
 variants/
 ├── esp32/          # ESP32
 ├── esp32s3/        # ESP32-S3

@@ -109,6 +109,7 @@ enum MenuAction {
     TOGGLE_CHANNEL_POSITION,
     SET_CHANNEL_PRECISION,
     // Display
+    SET_DISPLAY_TIMEOUT,
     TOGGLE_DISPLAY_UNITS,
     // Network
     TOGGLE_WIFI,

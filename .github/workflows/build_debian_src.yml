@@ -32,10 +32,15 @@ jobs:
         shell: bash
         working-directory: meshtasticd
         run: |
+          # Build-tools (notably platformio) come from the Meshtastic project
+          # on the OpenSUSE Build Service:
+          # https://build.opensuse.org/project/show/network:Meshtastic:build-tools
+          echo 'deb http://download.opensuse.org/repositories/network:/Meshtastic:/build-tools/xUbuntu_24.04/ /' \
+            | sudo tee /etc/apt/sources.list.d/network:Meshtastic:build-tools.list
+          curl -fsSL https://download.opensuse.org/repositories/network:Meshtastic:build-tools/xUbuntu_24.04/Release.key \
+            | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/network_Meshtastic_build-tools.gpg >/dev/null
           sudo apt-get update -y --fix-missing
-          sudo apt-get install -y software-properties-common build-essential devscripts equivs
-          sudo add-apt-repository ppa:meshtastic/build-tools -y
-          sudo apt-get update -y --fix-missing
+          sudo apt-get install -y build-essential devscripts equivs
           sudo mk-build-deps --install --remove --tool='apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends --yes' debian/control
 
       - name: Import GPG key

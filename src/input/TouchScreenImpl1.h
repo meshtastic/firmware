@@ -10,6 +10,8 @@ class TouchScreenImpl1 : public TouchScreenBase
   protected:
     virtual bool getTouch(int16_t &x, int16_t &y);
     virtual void onEvent(const TouchEvent &event);
+    bool fastTapModeEnabled() const override;
+    bool longPressEnabled() const override;
 
     bool (*_getTouch)(int16_t *, int16_t *);
 };
