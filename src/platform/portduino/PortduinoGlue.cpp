@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <set>
 #include <stdexcept>
 #include <sys/ioctl.h>
@@ -297,10 +298,9 @@ void portduinoSetup()
         // Try CH341
         try {
             std::cout << "autoconf: Looking for CH341 device..." << std::endl;
-            ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
-                                    portduino_config.lora_usb_pid);
-            ch341Hal->getProductString(autoconf_product, 95);
-            delete ch341Hal;
+            auto probe = std::unique_ptr<Ch341Hal>(new Ch341Hal(0, portduino_config.lora_usb_serial_num,
+                                                                portduino_config.lora_usb_vid, portduino_config.lora_usb_pid));
+            probe->getProductString(autoconf_product, 95);
             std::cout << "autoconf: Found CH341 device " << autoconf_product << std::endl;
 
             found_ch341 = true;
