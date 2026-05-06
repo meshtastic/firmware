@@ -29,10 +29,23 @@ int32_t StatusMessageModule::runOnce()
 ProcessMessage StatusMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-        meshtastic_StatusMessage incomingMessage;
+        meshtastic_StatusMessage incomingMessage = meshtastic_StatusMessage_init_zero;
+
         if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_StatusMessage_fields,
                                  &incomingMessage)) {
+
             LOG_INFO("Received a NodeStatus message %s", incomingMessage.status);
+
+            RecentStatus entry;
+            entry.fromNodeId = mp.from;
+            entry.statusText = incomingMessage.status;
+
+            recentReceived.push_back(std::move(entry));
+
+            // Keep only last MAX_RECENT_STATUSMESSAGES
+            if (recentReceived.size() > MAX_RECENT_STATUSMESSAGES) {
+                recentReceived.erase(recentReceived.begin()); // drop oldest
+            }
         }
     }
     return ProcessMessage::CONTINUE;

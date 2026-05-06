@@ -11,6 +11,24 @@ template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi
     return (v < lo) ? lo : (hi < v) ? hi : v;
 }
 
+/// Return the smallest power of 2 >= n (undefined for n > 2^31)
+static inline uint32_t nextPowerOf2(uint32_t n)
+{
+    if (n <= 1)
+        return 1;
+#if defined(__GNUC__)
+    return 1U << (32 - __builtin_clz(n - 1));
+#else
+    n--;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    return n + 1;
+#endif
+}
+
 #if HAS_SCREEN
 #define IF_SCREEN(X)                                                                                                             \
     if (screen) {                                                                                                                \

@@ -38,13 +38,23 @@ struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
     float freqStart;
     float freqEnd;
-    float dutyCycle;
-    float spacing;
+    float dutyCycle;    // modified by getEffectiveDutyCycle
     uint8_t powerLimit; // Or zero for not set
-    bool audioPermitted;
     bool freqSwitching;
     bool wideLora;
+    const RegionProfile *profile;
     const char *name; // EU433 etc
+
+    // Preset accessors (delegate through profile)
+    meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return profile->presets[0]; }
+    const meshtastic_Config_LoRaConfig_ModemPreset *getAvailablePresets() const { return profile->presets; }
+    size_t getNumPresets() const
+    {
+        size_t n = 0;
+        while (profile->presets[n] != MODEM_PRESET_END)
+            n++;
+        return n;
+    }
 };
 
 extern const RegionInfo regions[];

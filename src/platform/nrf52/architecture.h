@@ -78,6 +78,9 @@
 #define HW_VENDOR meshtastic_HardwareModel_MUZI_R1_NEO
 #elif defined(RAK3401)
 #define HW_VENDOR meshtastic_HardwareModel_RAK3401
+// Custom RAK4630-derived boards can opt out of the generic RAK4631 model mapping.
+#elif defined(EDICT_HP)
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 // MAke sure all custom RAK4630 boards are defined before the generic RAK4630
 #elif defined(RAK4630)
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631

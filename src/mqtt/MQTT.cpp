@@ -322,8 +322,8 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
     pubSub.setClient(client);
     pubSub.setServer(config.serverAddr.c_str(), config.serverPort);
 
-    LOG_INFO("Connecting directly to MQTT server %s, port: %d, username: %s, password: %s", config.serverAddr.c_str(),
-             config.serverPort, config.mqttUsername, config.mqttPassword);
+    LOG_INFO("Connecting directly to MQTT server %s, port: %d, username: %s, password: ***", config.serverAddr.c_str(),
+             config.serverPort, config.mqttUsername);
 
     // Generate node ID from nodenum for client identification
     std::string nodeId = nodeDB->getNodeId();
@@ -350,6 +350,8 @@ inline bool isConnectedToNetwork()
     return WiFi.isConnected();
 #elif HAS_ETHERNET
     return Ethernet.linkStatus() == LinkON;
+#elif defined(ARCH_PORTDUINO)
+    return true;
 #else
     return false;
 #endif

@@ -4,9 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       # trunk-ignore(checkov/CKV_GHA_7)
+      target:
+        type: string
+        required: false
+        description: Choose the target board, e.g. nrf52_promicro_diy_tcxo. If blank, will find available targets.
       arch:
         type: choice
         options:
+          - all
           - esp32
           - esp32s3
           - esp32c3
@@ -15,32 +20,18 @@ on:
           - rp2040
           - rp2350
           - stm32
-      target:
-        type: string
-        required: false
-        description: Choose the target board, e.g. nrf52_promicro_diy_tcxo. If blank, will find available targets.
-      # find-target:
-      #   type: boolean
-      #   default: true
-      #   description: 'Find the available targets'
+        description: Choose an arch to limit the search, or 'all' to search all architectures.
+        default: all
 
 permissions: read-all
 
 jobs:
   find-targets:
-    if: ${{ inputs.target == '' }}
     strategy:
       fail-fast: false
       matrix:
         arch:
-          - esp32
-          - esp32s3
-          - esp32c3
-          - esp32c6
-          - nrf52840
-          - rp2040
-          - rp2350
-          - stm32
+          - all
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -51,14 +42,37 @@ jobs:
       - run: pip install -U platformio
       - name: Generate matrix
         id: jsonStep
+        env:
+          BUILDTARGET: ${{ inputs.target }}
+          MATRIXARCH: ${{ inputs.arch }}
         run: |
           TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level extra)
-          echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
-          echo "Base: $GITHUB_BASE_REF" >> $GITHUB_STEP_SUMMARY
-          echo "Arch: ${{matrix.arch}}" >> $GITHUB_STEP_SUMMARY
-          echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
-          echo "Targets:" >> $GITHUB_STEP_SUMMARY
-          echo $TARGETS | jq -r 'sort_by(.board) |.[] | "- " + .board' >> $GITHUB_STEP_SUMMARY
+          if [ "$BUILDTARGET" = "" ]; then
+            echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
+            echo "Base: $GITHUB_BASE_REF" >> $GITHUB_STEP_SUMMARY
+            echo "Arch: $MATRIXARCH" >> $GITHUB_STEP_SUMMARY
+            echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
+            echo "## 🎯 The following target boards are available to build:" >> $GITHUB_STEP_SUMMARY
+            echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
+            echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
+            echo $TARGETS | jq -r 'sort_by(.board) | sort_by(.platform) |.[] | "| " + .platform + " | " + .board + " |" ' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "We build this one:" >> $GITHUB_STEP_SUMMARY
+            ARCH=$(echo "$TARGETS" | jq --arg BUILDTARGET "$BUILDTARGET" -r '.[] | select(.board==$BUILDTARGET) | .platform')
+            echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
+            echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
+            echo "| $ARCH | "$BUILDTARGET" |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [[ "$ARCH" == "" ]]; then
+              echo "## ❌ Error: Target "$BUILDTARGET" not found!" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "## ✅ Target "$BUILDTARGET" found, proceeding to build." >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "You may need to refresh this page to make the built firmware appear below." >> $GITHUB_STEP_SUMMARY
+            echo "arch=$ARCH" >> $GITHUB_OUTPUT
+          fi
+    outputs:
+      arch: ${{ steps.jsonStep.outputs.arch }}
 
   version:
     if: ${{ inputs.target != '' }}
@@ -78,12 +92,12 @@ jobs:
 
   build:
     if: ${{ inputs.target != '' && inputs.arch != 'native' }}
-    needs: [version]
+    needs: [version, find-targets]
     uses: ./.github/workflows/build_firmware.yml
     with:
       version: ${{ needs.version.outputs.long }}
       pio_env: ${{ inputs.target }}
-      platform: ${{ inputs.arch }}
+      platform: ${{ needs.find-targets.outputs.arch }}
 
   gather-artifacts:
     permissions:
