@@ -465,6 +465,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             fromRadioScratch.moduleConfig.payload_variant.paxcounter = moduleConfig.paxcounter;
             break;
+        case meshtastic_ModuleConfig_statusmessage_tag:
+            LOG_DEBUG("Send module config: status message");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_statusmessage_tag;
+            fromRadioScratch.moduleConfig.payload_variant.statusmessage = moduleConfig.statusmessage;
+            break;
         case meshtastic_ModuleConfig_traffic_management_tag:
             LOG_DEBUG("Send module config: traffic management");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
@@ -474,6 +479,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Send module config: tak");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_tak_tag;
             fromRadioScratch.moduleConfig.payload_variant.tak = moduleConfig.tak;
+            break;
+        case meshtastic_ModuleConfig_node_list_report_tag:
+            LOG_DEBUG("Send module config: node list report");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_node_list_report_tag;
+            fromRadioScratch.moduleConfig.payload_variant.node_list_report = moduleConfig.node_list_report;
+            break;
+        case meshtastic_ModuleConfig_wifi_node_list_report_tag:
+            LOG_DEBUG("Send module config: WiFi node list report");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_wifi_node_list_report_tag;
+            fromRadioScratch.moduleConfig.payload_variant.wifi_node_list_report = moduleConfig.wifi_node_list_report;
             break;
         default:
             LOG_DEBUG("Unhandled module config type %d", config_state);
