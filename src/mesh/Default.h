@@ -35,6 +35,12 @@
 #define default_node_list_report_full_snapshot_interval_secs ONE_DAY
 #define min_node_list_report_full_snapshot_interval_secs 6 * 60 * 60
 #define default_node_list_report_max_nodes 10
+#define default_wifi_node_list_report_interval_secs 60 * 60
+#define min_wifi_node_list_report_interval_secs 15 * 60
+#define default_wifi_node_list_report_full_snapshot_interval_secs ONE_DAY
+#define min_wifi_node_list_report_full_snapshot_interval_secs 6 * 60 * 60
+#define default_wifi_node_list_report_battery_threshold_percent 50
+#define default_wifi_node_list_report_connect_timeout_secs 30
 
 // Traffic management defaults
 #define default_traffic_mgmt_position_precision_bits 24               // ~10m grid cells

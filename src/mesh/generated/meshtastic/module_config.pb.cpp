@@ -36,6 +36,9 @@ PB_BIND(meshtastic_ModuleConfig_TrafficManagementConfig, meshtastic_ModuleConfig
 PB_BIND(meshtastic_ModuleConfig_NodeListReportConfig, meshtastic_ModuleConfig_NodeListReportConfig, AUTO)
 
 
+PB_BIND(meshtastic_ModuleConfig_WifiNodeListReportConfig, meshtastic_ModuleConfig_WifiNodeListReportConfig, AUTO)
+
+
 PB_BIND(meshtastic_ModuleConfig_SerialConfig, meshtastic_ModuleConfig_SerialConfig, AUTO)
 
 

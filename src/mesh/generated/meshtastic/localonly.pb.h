@@ -99,6 +99,9 @@ typedef struct _meshtastic_LocalModuleConfig {
     /* The part of the config that is specific to the Node List Report module */
     bool has_node_list_report;
     meshtastic_ModuleConfig_NodeListReportConfig node_list_report;
+    /* The part of the config that is specific to the WiFi Node List Report module */
+    bool has_wifi_node_list_report;
+    meshtastic_ModuleConfig_WifiNodeListReportConfig wifi_node_list_report;
 } meshtastic_LocalModuleConfig;
 
 
@@ -108,9 +111,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_LocalConfig_init_default      {false, meshtastic_Config_DeviceConfig_init_default, false, meshtastic_Config_PositionConfig_init_default, false, meshtastic_Config_PowerConfig_init_default, false, meshtastic_Config_NetworkConfig_init_default, false, meshtastic_Config_DisplayConfig_init_default, false, meshtastic_Config_LoRaConfig_init_default, false, meshtastic_Config_BluetoothConfig_init_default, 0, false, meshtastic_Config_SecurityConfig_init_default}
-#define meshtastic_LocalModuleConfig_init_default {false, meshtastic_ModuleConfig_MQTTConfig_init_default, false, meshtastic_ModuleConfig_SerialConfig_init_default, false, meshtastic_ModuleConfig_ExternalNotificationConfig_init_default, false, meshtastic_ModuleConfig_StoreForwardConfig_init_default, false, meshtastic_ModuleConfig_RangeTestConfig_init_default, false, meshtastic_ModuleConfig_TelemetryConfig_init_default, false, meshtastic_ModuleConfig_CannedMessageConfig_init_default, 0, false, meshtastic_ModuleConfig_AudioConfig_init_default, false, meshtastic_ModuleConfig_RemoteHardwareConfig_init_default, false, meshtastic_ModuleConfig_NeighborInfoConfig_init_default, false, meshtastic_ModuleConfig_AmbientLightingConfig_init_default, false, meshtastic_ModuleConfig_DetectionSensorConfig_init_default, false, meshtastic_ModuleConfig_PaxcounterConfig_init_default, false, meshtastic_ModuleConfig_StatusMessageConfig_init_default, false, meshtastic_ModuleConfig_TrafficManagementConfig_init_default, false, meshtastic_ModuleConfig_TAKConfig_init_default, false, meshtastic_ModuleConfig_NodeListReportConfig_init_default}
+#define meshtastic_LocalModuleConfig_init_default {false, meshtastic_ModuleConfig_MQTTConfig_init_default, false, meshtastic_ModuleConfig_SerialConfig_init_default, false, meshtastic_ModuleConfig_ExternalNotificationConfig_init_default, false, meshtastic_ModuleConfig_StoreForwardConfig_init_default, false, meshtastic_ModuleConfig_RangeTestConfig_init_default, false, meshtastic_ModuleConfig_TelemetryConfig_init_default, false, meshtastic_ModuleConfig_CannedMessageConfig_init_default, 0, false, meshtastic_ModuleConfig_AudioConfig_init_default, false, meshtastic_ModuleConfig_RemoteHardwareConfig_init_default, false, meshtastic_ModuleConfig_NeighborInfoConfig_init_default, false, meshtastic_ModuleConfig_AmbientLightingConfig_init_default, false, meshtastic_ModuleConfig_DetectionSensorConfig_init_default, false, meshtastic_ModuleConfig_PaxcounterConfig_init_default, false, meshtastic_ModuleConfig_StatusMessageConfig_init_default, false, meshtastic_ModuleConfig_TrafficManagementConfig_init_default, false, meshtastic_ModuleConfig_TAKConfig_init_default, false, meshtastic_ModuleConfig_NodeListReportConfig_init_default, false, meshtastic_ModuleConfig_WifiNodeListReportConfig_init_default}
 #define meshtastic_LocalConfig_init_zero         {false, meshtastic_Config_DeviceConfig_init_zero, false, meshtastic_Config_PositionConfig_init_zero, false, meshtastic_Config_PowerConfig_init_zero, false, meshtastic_Config_NetworkConfig_init_zero, false, meshtastic_Config_DisplayConfig_init_zero, false, meshtastic_Config_LoRaConfig_init_zero, false, meshtastic_Config_BluetoothConfig_init_zero, 0, false, meshtastic_Config_SecurityConfig_init_zero}
-#define meshtastic_LocalModuleConfig_init_zero   {false, meshtastic_ModuleConfig_MQTTConfig_init_zero, false, meshtastic_ModuleConfig_SerialConfig_init_zero, false, meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero, false, meshtastic_ModuleConfig_StoreForwardConfig_init_zero, false, meshtastic_ModuleConfig_RangeTestConfig_init_zero, false, meshtastic_ModuleConfig_TelemetryConfig_init_zero, false, meshtastic_ModuleConfig_CannedMessageConfig_init_zero, 0, false, meshtastic_ModuleConfig_AudioConfig_init_zero, false, meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero, false, meshtastic_ModuleConfig_NeighborInfoConfig_init_zero, false, meshtastic_ModuleConfig_AmbientLightingConfig_init_zero, false, meshtastic_ModuleConfig_DetectionSensorConfig_init_zero, false, meshtastic_ModuleConfig_PaxcounterConfig_init_zero, false, meshtastic_ModuleConfig_StatusMessageConfig_init_zero, false, meshtastic_ModuleConfig_TrafficManagementConfig_init_zero, false, meshtastic_ModuleConfig_TAKConfig_init_zero, false, meshtastic_ModuleConfig_NodeListReportConfig_init_zero}
+#define meshtastic_LocalModuleConfig_init_zero   {false, meshtastic_ModuleConfig_MQTTConfig_init_zero, false, meshtastic_ModuleConfig_SerialConfig_init_zero, false, meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero, false, meshtastic_ModuleConfig_StoreForwardConfig_init_zero, false, meshtastic_ModuleConfig_RangeTestConfig_init_zero, false, meshtastic_ModuleConfig_TelemetryConfig_init_zero, false, meshtastic_ModuleConfig_CannedMessageConfig_init_zero, 0, false, meshtastic_ModuleConfig_AudioConfig_init_zero, false, meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero, false, meshtastic_ModuleConfig_NeighborInfoConfig_init_zero, false, meshtastic_ModuleConfig_AmbientLightingConfig_init_zero, false, meshtastic_ModuleConfig_DetectionSensorConfig_init_zero, false, meshtastic_ModuleConfig_PaxcounterConfig_init_zero, false, meshtastic_ModuleConfig_StatusMessageConfig_init_zero, false, meshtastic_ModuleConfig_TrafficManagementConfig_init_zero, false, meshtastic_ModuleConfig_TAKConfig_init_zero, false, meshtastic_ModuleConfig_NodeListReportConfig_init_zero, false, meshtastic_ModuleConfig_WifiNodeListReportConfig_init_zero}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_LocalConfig_device_tag        1
@@ -140,6 +143,7 @@ extern "C" {
 #define meshtastic_LocalModuleConfig_traffic_management_tag 16
 #define meshtastic_LocalModuleConfig_tak_tag     17
 #define meshtastic_LocalModuleConfig_node_list_report_tag 18
+#define meshtastic_LocalModuleConfig_wifi_node_list_report_tag 19
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_LocalConfig_FIELDLIST(X, a) \
@@ -181,7 +185,8 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  paxcounter,       14) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  statusmessage,    15) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  traffic_management,  16) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  tak,              17) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  node_list_report,  18)
+X(a, STATIC,   OPTIONAL, MESSAGE,  node_list_report,  18) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  wifi_node_list_report,  19)
 #define meshtastic_LocalModuleConfig_CALLBACK NULL
 #define meshtastic_LocalModuleConfig_DEFAULT NULL
 #define meshtastic_LocalModuleConfig_mqtt_MSGTYPE meshtastic_ModuleConfig_MQTTConfig
@@ -201,6 +206,7 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  node_list_report,  18)
 #define meshtastic_LocalModuleConfig_traffic_management_MSGTYPE meshtastic_ModuleConfig_TrafficManagementConfig
 #define meshtastic_LocalModuleConfig_tak_MSGTYPE meshtastic_ModuleConfig_TAKConfig
 #define meshtastic_LocalModuleConfig_node_list_report_MSGTYPE meshtastic_ModuleConfig_NodeListReportConfig
+#define meshtastic_LocalModuleConfig_wifi_node_list_report_MSGTYPE meshtastic_ModuleConfig_WifiNodeListReportConfig
 
 extern const pb_msgdesc_t meshtastic_LocalConfig_msg;
 extern const pb_msgdesc_t meshtastic_LocalModuleConfig_msg;
@@ -212,7 +218,7 @@ extern const pb_msgdesc_t meshtastic_LocalModuleConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_LOCALONLY_PB_H_MAX_SIZE meshtastic_LocalModuleConfig_size
 #define meshtastic_LocalConfig_size              757
-#define meshtastic_LocalModuleConfig_size        859
+#define meshtastic_LocalModuleConfig_size        1059
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -1071,6 +1071,22 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             moduleConfig.node_list_report.full_snapshot_interval_seconds = 6 * 60 * 60;
         }
         break;
+    case meshtastic_ModuleConfig_wifi_node_list_report_tag:
+        LOG_INFO("Set module config: WiFi Node List Report");
+        moduleConfig.has_wifi_node_list_report = true;
+        moduleConfig.wifi_node_list_report = c.payload_variant.wifi_node_list_report;
+        if (moduleConfig.wifi_node_list_report.interval_seconds > 0 &&
+            moduleConfig.wifi_node_list_report.interval_seconds < min_wifi_node_list_report_interval_secs) {
+            moduleConfig.wifi_node_list_report.interval_seconds = min_wifi_node_list_report_interval_secs;
+        }
+        if (moduleConfig.wifi_node_list_report.full_snapshot_interval_seconds > 0 &&
+            moduleConfig.wifi_node_list_report.full_snapshot_interval_seconds < min_wifi_node_list_report_full_snapshot_interval_secs) {
+            moduleConfig.wifi_node_list_report.full_snapshot_interval_seconds = min_wifi_node_list_report_full_snapshot_interval_secs;
+        }
+        if (moduleConfig.wifi_node_list_report.battery_threshold_percent > 100) {
+            moduleConfig.wifi_node_list_report.battery_threshold_percent = 100;
+        }
+        break;
     }
     saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
     return true;
@@ -1266,6 +1282,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             configName = "Node List Report";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_node_list_report_tag;
             res.get_module_config_response.payload_variant.node_list_report = moduleConfig.node_list_report;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_WIFINODELISTREPORT_CONFIG:
+            configName = "WiFi Node List Report";
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_wifi_node_list_report_tag;
+            res.get_module_config_response.payload_variant.wifi_node_list_report = moduleConfig.wifi_node_list_report;
             break;
         }
         LOG_INFO("Get module config: %s", configName);

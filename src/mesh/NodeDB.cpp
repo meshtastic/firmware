@@ -389,6 +389,10 @@ NodeDB::NodeDB()
         moduleConfig.node_list_report.interval_seconds = MAX_INTERVAL;
     if (moduleConfig.node_list_report.full_snapshot_interval_seconds > MAX_INTERVAL)
         moduleConfig.node_list_report.full_snapshot_interval_seconds = MAX_INTERVAL;
+    if (moduleConfig.wifi_node_list_report.interval_seconds > MAX_INTERVAL)
+        moduleConfig.wifi_node_list_report.interval_seconds = MAX_INTERVAL;
+    if (moduleConfig.wifi_node_list_report.full_snapshot_interval_seconds > MAX_INTERVAL)
+        moduleConfig.wifi_node_list_report.full_snapshot_interval_seconds = MAX_INTERVAL;
 
     if (moduleConfig.mqtt.has_map_report_settings &&
         moduleConfig.mqtt.map_report_settings.publish_interval_secs < default_map_publish_interval_secs) {
@@ -402,6 +406,10 @@ NodeDB::NodeDB()
         Default::getConfiguredOrMinimumValue(moduleConfig.node_list_report.interval_seconds, min_node_list_report_interval_secs);
     moduleConfig.node_list_report.full_snapshot_interval_seconds = Default::getConfiguredOrMinimumValue(
         moduleConfig.node_list_report.full_snapshot_interval_seconds, min_node_list_report_full_snapshot_interval_secs);
+    moduleConfig.wifi_node_list_report.interval_seconds = Default::getConfiguredOrMinimumValue(
+        moduleConfig.wifi_node_list_report.interval_seconds, min_wifi_node_list_report_interval_secs);
+    moduleConfig.wifi_node_list_report.full_snapshot_interval_seconds = Default::getConfiguredOrMinimumValue(
+        moduleConfig.wifi_node_list_report.full_snapshot_interval_seconds, min_wifi_node_list_report_full_snapshot_interval_secs);
 
     // Don't let licensed users to rebroadcast encrypted packets
     if (owner.is_licensed) {
@@ -930,6 +938,14 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.node_list_report.full_snapshot_interval_seconds = default_node_list_report_full_snapshot_interval_secs;
     moduleConfig.node_list_report.max_nodes_per_report = default_node_list_report_max_nodes;
     moduleConfig.node_list_report.min_changed_nodes_before_send = 1;
+
+    moduleConfig.has_wifi_node_list_report = true;
+    moduleConfig.wifi_node_list_report.enabled = false;
+    moduleConfig.wifi_node_list_report.interval_seconds = default_wifi_node_list_report_interval_secs;
+    moduleConfig.wifi_node_list_report.full_snapshot_interval_seconds = default_wifi_node_list_report_full_snapshot_interval_secs;
+    moduleConfig.wifi_node_list_report.battery_threshold_percent = default_wifi_node_list_report_battery_threshold_percent;
+    moduleConfig.wifi_node_list_report.connect_timeout_seconds = default_wifi_node_list_report_connect_timeout_secs;
+    moduleConfig.wifi_node_list_report.min_changed_nodes_before_send = 1;
 
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;

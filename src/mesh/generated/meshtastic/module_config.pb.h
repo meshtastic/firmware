@@ -284,6 +284,29 @@ typedef struct _meshtastic_ModuleConfig_NodeListReportConfig {
     uint32_t min_changed_nodes_before_send;
 } meshtastic_ModuleConfig_NodeListReportConfig;
 
+/* Config for the WiFi Node List Report module.
+ Sends NodeDB snapshots/diffs to an HTTP endpoint while power conditions allow WiFi use. */
+typedef struct _meshtastic_ModuleConfig_WifiNodeListReportConfig {
+    /* Master enable for WiFi node list reporting. Disabled by default. */
+    bool enabled;
+    /* HTTP or HTTPS URL to POST JSON reports to. */
+    char url[160];
+    /* Minimum interval in seconds between incremental diff reports. */
+    uint32_t interval_seconds;
+    /* Minimum interval in seconds between full snapshot reports. */
+    uint32_t full_snapshot_interval_seconds;
+    /* Allow WiFi reporting when battery charge is at or above this percentage.
+ USB power bypasses this threshold. */
+    uint32_t battery_threshold_percent;
+    /* WiFi connection timeout in seconds when the radio was not already connected. */
+    uint32_t connect_timeout_seconds;
+    /* Include a coarse position hash when position data is already present. */
+    bool include_position;
+    /* Do not send an incremental report until at least this many changed
+ records are available. */
+    uint32_t min_changed_nodes_before_send;
+} meshtastic_ModuleConfig_WifiNodeListReportConfig;
+
 /* Serial Config */
 typedef struct _meshtastic_ModuleConfig_SerialConfig {
     /* Preferences for the SerialModule */
@@ -540,6 +563,8 @@ typedef struct _meshtastic_ModuleConfig {
         meshtastic_ModuleConfig_TAKConfig tak;
         /* Node list report module config */
         meshtastic_ModuleConfig_NodeListReportConfig node_list_report;
+        /* WiFi node list report module config */
+        meshtastic_ModuleConfig_WifiNodeListReportConfig wifi_node_list_report;
     } payload_variant;
 } meshtastic_ModuleConfig;
 
@@ -585,6 +610,7 @@ extern "C" {
 
 
 
+
 #define meshtastic_ModuleConfig_SerialConfig_baud_ENUMTYPE meshtastic_ModuleConfig_SerialConfig_Serial_Baud
 #define meshtastic_ModuleConfig_SerialConfig_mode_ENUMTYPE meshtastic_ModuleConfig_SerialConfig_Serial_Mode
 
@@ -615,6 +641,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_NodeListReportConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_init_default {0, "", 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
@@ -635,6 +662,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_NodeListReportConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_init_zero {0, "", 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
@@ -705,6 +733,14 @@ extern "C" {
 #define meshtastic_ModuleConfig_NodeListReportConfig_include_position_tag 6
 #define meshtastic_ModuleConfig_NodeListReportConfig_include_user_info_tag 7
 #define meshtastic_ModuleConfig_NodeListReportConfig_min_changed_nodes_before_send_tag 8
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_enabled_tag 1
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_url_tag 2
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_interval_seconds_tag 3
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_full_snapshot_interval_seconds_tag 4
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_battery_threshold_percent_tag 5
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_connect_timeout_seconds_tag 6
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_include_position_tag 7
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_min_changed_nodes_before_send_tag 8
 #define meshtastic_ModuleConfig_SerialConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_SerialConfig_echo_tag 2
 #define meshtastic_ModuleConfig_SerialConfig_rxd_tag 3
@@ -795,6 +831,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_traffic_management_tag 15
 #define meshtastic_ModuleConfig_tak_tag          16
 #define meshtastic_ModuleConfig_node_list_report_tag 17
+#define meshtastic_ModuleConfig_wifi_node_list_report_tag 18
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_ModuleConfig_FIELDLIST(X, a) \
@@ -814,7 +851,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,paxcounter,payload_variant.p
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,statusmessage,payload_variant.statusmessage),  14) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,traffic_management,payload_variant.traffic_management),  15) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak,payload_variant.tak),  16) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,node_list_report,payload_variant.node_list_report),  17)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,node_list_report,payload_variant.node_list_report),  17) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,wifi_node_list_report,payload_variant.wifi_node_list_report),  18)
 #define meshtastic_ModuleConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_DEFAULT NULL
 #define meshtastic_ModuleConfig_payload_variant_mqtt_MSGTYPE meshtastic_ModuleConfig_MQTTConfig
@@ -834,6 +872,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,node_list_report,payload_var
 #define meshtastic_ModuleConfig_payload_variant_traffic_management_MSGTYPE meshtastic_ModuleConfig_TrafficManagementConfig
 #define meshtastic_ModuleConfig_payload_variant_tak_MSGTYPE meshtastic_ModuleConfig_TAKConfig
 #define meshtastic_ModuleConfig_payload_variant_node_list_report_MSGTYPE meshtastic_ModuleConfig_NodeListReportConfig
+#define meshtastic_ModuleConfig_payload_variant_wifi_node_list_report_MSGTYPE meshtastic_ModuleConfig_WifiNodeListReportConfig
 
 #define meshtastic_ModuleConfig_MQTTConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -933,6 +972,18 @@ X(a, STATIC,   SINGULAR, BOOL,     include_user_info,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   min_changed_nodes_before_send,   8)
 #define meshtastic_ModuleConfig_NodeListReportConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_NodeListReportConfig_DEFAULT NULL
+
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
+X(a, STATIC,   SINGULAR, STRING,   url,               2) \
+X(a, STATIC,   SINGULAR, UINT32,   interval_seconds,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   full_snapshot_interval_seconds,   4) \
+X(a, STATIC,   SINGULAR, UINT32,   battery_threshold_percent,   5) \
+X(a, STATIC,   SINGULAR, UINT32,   connect_timeout_seconds,   6) \
+X(a, STATIC,   SINGULAR, BOOL,     include_position,   7) \
+X(a, STATIC,   SINGULAR, UINT32,   min_changed_nodes_before_send,   8)
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_CALLBACK NULL
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_DEFAULT NULL
 
 #define meshtastic_ModuleConfig_SerialConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -1054,6 +1105,7 @@ extern const pb_msgdesc_t meshtastic_ModuleConfig_AudioConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_PaxcounterConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_TrafficManagementConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_NodeListReportConfig_msg;
+extern const pb_msgdesc_t meshtastic_ModuleConfig_WifiNodeListReportConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_SerialConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_ExternalNotificationConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_StoreForwardConfig_msg;
@@ -1076,6 +1128,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_PaxcounterConfig_fields &meshtastic_ModuleConfig_PaxcounterConfig_msg
 #define meshtastic_ModuleConfig_TrafficManagementConfig_fields &meshtastic_ModuleConfig_TrafficManagementConfig_msg
 #define meshtastic_ModuleConfig_NodeListReportConfig_fields &meshtastic_ModuleConfig_NodeListReportConfig_msg
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_fields &meshtastic_ModuleConfig_WifiNodeListReportConfig_msg
 #define meshtastic_ModuleConfig_SerialConfig_fields &meshtastic_ModuleConfig_SerialConfig_msg
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_fields &meshtastic_ModuleConfig_ExternalNotificationConfig_msg
 #define meshtastic_ModuleConfig_StoreForwardConfig_fields &meshtastic_ModuleConfig_StoreForwardConfig_msg
@@ -1107,6 +1160,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_TAKConfig_size   4
 #define meshtastic_ModuleConfig_TelemetryConfig_size 50
 #define meshtastic_ModuleConfig_TrafficManagementConfig_size 52
+#define meshtastic_ModuleConfig_WifiNodeListReportConfig_size 196
 #define meshtastic_ModuleConfig_size             227
 #define meshtastic_RemoteHardwarePin_size        21
 
