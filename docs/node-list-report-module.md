@@ -9,14 +9,16 @@ module defers instead of sending a clear broadcast-style report.
 
 ## Payload
 
-The wire payload is a compact fixed binary format, not JSON:
+The wire payload is a compact binary format, not JSON. Current packets use the `NLR2` format:
 
-- 10 byte header: magic/version, flags, sequence, known NodeDB count
-- 12 bytes per node record: node number, last-heard age bucket, hops-away, SNR bucket, flags, optional user hash, optional
-  coarse position hash
+- 16 byte header: magic/version, flags, sequence, unique report id, chunk index, known NodeDB count
+- variable length records: node number, record flags, last-heard age bucket, hops-away, SNR bucket, optional coarse position
+  hash, optional capped short and long names
 
-Only changed records are sent during incremental reports. Full snapshots are capped by `max_nodes_per_report` and are sent much
-less often.
+Only changed records are sent during incremental reports. Full snapshots walk the entire NodeDB and are chunked across multiple
+direct packets using the report id and chunk index. Full snapshot records and newly seen node diff records include capped short
+and long names when present. Existing-node diffs for last-heard, hops-away, SNR, or position changes omit names to keep routine
+updates small.
 
 ## Configuration
 
@@ -26,7 +28,7 @@ The module is configured through `ModuleConfig.NodeListReportConfig`:
 - `destination_node`: node number to receive direct reports
 - `interval_seconds`: incremental report interval, default `3600`, minimum `900`
 - `full_snapshot_interval_seconds`: full snapshot interval, default `86400`, minimum `21600`
-- `max_nodes_per_report`: default `10`, firmware hard cap `14`
+- `max_nodes_per_report`: maximum records per packet/chunk, default `10`, firmware hard cap `14`
 - `include_position`: include a coarse position hash when position is already present, default `false`
 - `include_user_info`: include a short user id/name hash when user info is already present, default `false`
 - `min_changed_nodes_before_send`: default `1`
@@ -42,7 +44,9 @@ Clients can request an immediate report with `AdminMessage.send_node_list_report
 
 The trigger still uses the module's safety checks: the module must be enabled, a non-broadcast destination must be configured,
 the destination public key must be known, Ham mode must be off, and airtime/channel-utilization limits must allow a transmit.
-If any check fails, firmware returns a bad-request routing response instead of forcing a packet onto the mesh.
+If any check fails, firmware returns a bad-request routing response instead of forcing a packet onto the mesh. A full snapshot
+trigger starts a chunked snapshot; subsequent chunks are sent about every two minutes, with jitter, until the whole NodeDB has
+been covered.
 
 ## RF Congestion
 

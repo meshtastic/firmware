@@ -19,10 +19,11 @@ namespace
 constexpr uint32_t fnvOffset = 2166136261UL;
 constexpr uint32_t fnvPrime = 16777619UL;
 constexpr uint8_t payloadFlagFullSnapshot = 0x01;
+constexpr uint8_t payloadFlagFinalChunk = 0x02;
 constexpr uint8_t recordFlagNew = 0x01;
 constexpr uint8_t recordFlagUpdated = 0x02;
 constexpr uint8_t recordFlagStale = 0x04;
-constexpr uint8_t recordFlagHasUserHash = 0x08;
+constexpr uint8_t recordFlagHasNames = 0x08;
 constexpr uint8_t recordFlagHasPositionHash = 0x10;
 
 uint32_t hashByte(uint32_t hash, uint8_t value)
@@ -36,6 +37,15 @@ uint32_t hashUint32(uint32_t hash, uint32_t value)
         hash = hashByte(hash, (value >> (8 * i)) & 0xff);
     }
     return hash;
+}
+
+uint8_t boundedStringLen(const char *value, uint8_t maxLen)
+{
+    uint8_t len = 0;
+    while (value && value[len] != '\0' && len < maxLen) {
+        len++;
+    }
+    return len;
 }
 
 void writeU16(uint8_t *dest, uint16_t value)
@@ -160,92 +170,148 @@ int8_t NodeListReportModule::snrBucket(float snr) const
     return static_cast<int8_t>(std::max(-128, std::min(127, static_cast<int>(lroundf(snr)))));
 }
 
-uint32_t NodeListReportModule::computeNodeSignature(const meshtastic_NodeInfoLite &node) const
+uint32_t NodeListReportModule::computeMetricSignature(const meshtastic_NodeInfoLite &node) const
 {
     uint32_t hash = hashUint32(fnvOffset, node.num);
     hash = hashByte(hash, ageBucket(node));
     hash = hashByte(hash, node.has_hops_away ? node.hops_away : 0xff);
     hash = hashByte(hash, static_cast<uint8_t>(snrBucket(node.snr)));
     hash = hashUint32(hash, positionHash(node));
-    if (moduleConfig.node_list_report.include_user_info && node.has_user) {
+    return hash;
+}
+
+uint32_t NodeListReportModule::computeNameSignature(const meshtastic_NodeInfoLite &node) const
+{
+    uint32_t hash = hashUint32(fnvOffset, node.num);
+    if (node.has_user) {
         for (uint8_t b : node.user.macaddr) {
             hash = hashByte(hash, b);
         }
         hash = hashUint32(hash, hashString16(node.user.short_name));
+        hash = hashUint32(hash, hashString16(node.user.long_name));
     }
     return hash;
 }
 
-uint32_t *NodeListReportModule::cachedSignature(NodeNum nodeNum)
+NodeListReportModule::CachedNode *NodeListReportModule::cachedNode(NodeNum nodeNum)
 {
     for (auto &entry : cache) {
         if (entry.nodeNum == nodeNum) {
-            return &entry.signature;
+            return &entry;
         }
     }
     return nullptr;
 }
 
-bool NodeListReportModule::buildPayload(uint8_t *payload, size_t &payloadSize, bool fullSnapshot)
+bool NodeListReportModule::appendRecord(uint8_t *payload, size_t &payloadSize, const meshtastic_NodeInfoLite &node, uint8_t flags,
+                                        bool includeNames)
+{
+    const uint16_t posHash = positionHash(node);
+    if (ageBucket(node) >= 6) {
+        flags |= recordFlagStale;
+    }
+    if (posHash != 0) {
+        flags |= recordFlagHasPositionHash;
+    }
+
+    uint8_t shortLen = 0;
+    uint8_t longLen = 0;
+    if (includeNames && node.has_user) {
+        shortLen = boundedStringLen(node.user.short_name, maxShortNameBytes);
+        longLen = boundedStringLen(node.user.long_name, maxLongNameBytes);
+        if (shortLen || longLen) {
+            flags |= recordFlagHasNames;
+        }
+    }
+
+    const size_t requiredSize = fixedRecordSize + ((flags & recordFlagHasPositionHash) ? 2 : 0) +
+                                ((flags & recordFlagHasNames) ? (2 + shortLen + longLen) : 0);
+    if (payloadSize + requiredSize > maxPayloadSize) {
+        return false;
+    }
+
+    uint8_t *record = payload + payloadSize;
+    writeU32(record, node.num);
+    record[4] = flags;
+    record[5] = ageBucket(node);
+    record[6] = node.has_hops_away ? node.hops_away : 0xff;
+    record[7] = static_cast<uint8_t>(snrBucket(node.snr));
+    payloadSize += fixedRecordSize;
+
+    if (flags & recordFlagHasPositionHash) {
+        writeU16(payload + payloadSize, posHash);
+        payloadSize += 2;
+    }
+    if (flags & recordFlagHasNames) {
+        payload[payloadSize++] = shortLen;
+        if (shortLen) {
+            memcpy(payload + payloadSize, node.user.short_name, shortLen);
+            payloadSize += shortLen;
+        }
+        payload[payloadSize++] = longLen;
+        if (longLen) {
+            memcpy(payload + payloadSize, node.user.long_name, longLen);
+            payloadSize += longLen;
+        }
+    }
+
+    return true;
+}
+
+bool NodeListReportModule::buildPayload(uint8_t *payload, size_t &payloadSize, bool fullSnapshot, bool &snapshotComplete)
 {
     const uint8_t maxRecords = maxNodesPerReport();
     uint8_t count = 0;
-    uint32_t readIndex = 0;
+    uint32_t readIndex = fullSnapshot ? fullSnapshotReadIndex : 0;
 
-    memcpy(payload, "NLR1", 4);
+    snapshotComplete = false;
+    memcpy(payload, "NLR2", 4);
     payload[4] = fullSnapshot ? payloadFlagFullSnapshot : 0;
     payload[5] = 0;
     writeU16(payload + 6, sequence);
-    writeU16(payload + 8, static_cast<uint16_t>(nodeDB->getNumMeshNodes()));
+    writeU32(payload + 8, fullSnapshot ? fullSnapshotReportId : sequence);
+    writeU16(payload + 12, fullSnapshot ? fullSnapshotChunkIndex : 0);
+    writeU16(payload + 14, static_cast<uint16_t>(nodeDB->getNumMeshNodes()));
     payloadSize = headerSize;
 
     while (count < maxRecords) {
+        const uint32_t nodeReadIndex = readIndex;
         const meshtastic_NodeInfoLite *node = nodeDB->readNextMeshNode(readIndex);
         if (!node) {
+            snapshotComplete = true;
             break;
         }
         if (node->num == 0 || node->num == nodeDB->getNodeNum()) {
             continue;
         }
 
-        const uint32_t signature = computeNodeSignature(*node);
-        uint32_t *cached = cachedSignature(node->num);
+        const uint32_t metricSignature = computeMetricSignature(*node);
+        const uint32_t nameSignature = computeNameSignature(*node);
+        CachedNode *cached = cachedNode(node->num);
         const bool isNew = cached == nullptr;
-        if (!fullSnapshot && !isNew && *cached == signature) {
+        const bool metricsChanged = isNew || cached->metricSignature != metricSignature;
+        const bool namesChanged = isNew || cached->nameSignature != nameSignature;
+        if (!fullSnapshot && !metricsChanged && !namesChanged) {
             continue;
         }
 
-        uint8_t *record = payload + payloadSize;
         uint8_t flags = isNew ? recordFlagNew : recordFlagUpdated;
-        uint16_t userHash = 0;
-        if (moduleConfig.node_list_report.include_user_info && node->has_user) {
-            uint32_t hash = fnvOffset;
-            for (uint8_t b : node->user.macaddr) {
-                hash = hashByte(hash, b);
+        const bool includeNames = fullSnapshot || isNew || namesChanged;
+        if (!appendRecord(payload, payloadSize, *node, flags, includeNames)) {
+            if (fullSnapshot) {
+                readIndex = nodeReadIndex;
             }
-            hash = hashUint32(hash, hashString16(node->user.short_name));
-            userHash = static_cast<uint16_t>((hash >> 16) ^ hash);
-        }
-        const uint16_t posHash = positionHash(*node);
-        if (ageBucket(*node) >= 6) {
-            flags |= recordFlagStale;
-        }
-        if (userHash != 0) {
-            flags |= recordFlagHasUserHash;
-        }
-        if (posHash != 0) {
-            flags |= recordFlagHasPositionHash;
+            break;
         }
 
-        writeU32(record, node->num);
-        record[4] = ageBucket(*node);
-        record[5] = node->has_hops_away ? node->hops_away : 0xff;
-        record[6] = static_cast<uint8_t>(snrBucket(node->snr));
-        record[7] = flags;
-        writeU16(record + 8, userHash);
-        writeU16(record + 10, posHash);
-        payloadSize += recordSize;
         count++;
+    }
+
+    if (fullSnapshot) {
+        fullSnapshotReadIndex = readIndex;
+        if (snapshotComplete) {
+            payload[4] |= payloadFlagFinalChunk;
+        }
     }
 
     payload[5] = count;
@@ -255,25 +321,55 @@ bool NodeListReportModule::buildPayload(uint8_t *payload, size_t &payloadSize, b
 void NodeListReportModule::markPayloadSent(const uint8_t *payload, size_t payloadSize)
 {
     const uint8_t count = payload[5];
+    size_t offset = headerSize;
     for (uint8_t i = 0; i < count; i++) {
-        const uint8_t *record = payload + headerSize + (i * recordSize);
+        if (offset + fixedRecordSize > payloadSize) {
+            break;
+        }
+        const uint8_t *record = payload + offset;
         const NodeNum nodeNum = static_cast<NodeNum>(record[0]) | (static_cast<NodeNum>(record[1]) << 8) |
                                 (static_cast<NodeNum>(record[2]) << 16) | (static_cast<NodeNum>(record[3]) << 24);
+        const uint8_t flags = record[4];
+        offset += fixedRecordSize;
+        if (flags & recordFlagHasPositionHash) {
+            offset += 2;
+        }
+        if (flags & recordFlagHasNames) {
+            if (offset >= payloadSize) {
+                break;
+            }
+            offset += 1 + payload[offset];
+            if (offset >= payloadSize) {
+                break;
+            }
+            offset += 1 + payload[offset];
+        }
+
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
         if (!node) {
             continue;
         }
 
-        const uint32_t signature = computeNodeSignature(*node);
-        uint32_t *cached = cachedSignature(nodeNum);
+        const uint32_t metricSignature = computeMetricSignature(*node);
+        const uint32_t nameSignature = computeNameSignature(*node);
+        CachedNode *cached = cachedNode(nodeNum);
         if (cached) {
-            *cached = signature;
+            cached->metricSignature = metricSignature;
+            cached->nameSignature = nameSignature;
         } else {
-            cache.push_back({nodeNum, signature});
+            cache.push_back({nodeNum, metricSignature, nameSignature});
         }
     }
 
     (void)payloadSize;
+}
+
+void NodeListReportModule::startFullSnapshot()
+{
+    fullSnapshotInProgress = true;
+    fullSnapshotReadIndex = 0;
+    fullSnapshotChunkIndex = 0;
+    fullSnapshotReportId = (static_cast<uint32_t>(random(0xffff)) << 16) | static_cast<uint32_t>(random(0xffff));
 }
 
 bool NodeListReportModule::sendReport(bool fullSnapshot)
@@ -294,9 +390,18 @@ bool NodeListReportModule::sendReport(bool fullSnapshot)
         return false;
     }
 
-    uint8_t payload[headerSize + hardMaxNodesPerReport * recordSize];
+    if (fullSnapshot && !fullSnapshotInProgress) {
+        startFullSnapshot();
+    }
+
+    uint8_t payload[maxPayloadSize];
     size_t payloadSize = 0;
-    if (!buildPayload(payload, payloadSize, fullSnapshot)) {
+    bool snapshotComplete = false;
+    if (!buildPayload(payload, payloadSize, fullSnapshot, snapshotComplete)) {
+        if (fullSnapshot && snapshotComplete) {
+            fullSnapshotInProgress = false;
+            lastFullSnapshotMs = millis();
+        }
         return false;
     }
 
@@ -313,7 +418,11 @@ bool NodeListReportModule::sendReport(bool fullSnapshot)
     sequence++;
 
     if (fullSnapshot) {
-        lastFullSnapshotMs = millis();
+        fullSnapshotChunkIndex++;
+        if (snapshotComplete) {
+            fullSnapshotInProgress = false;
+            lastFullSnapshotMs = millis();
+        }
     }
     lastIncrementalMs = millis();
     LOG_INFO("NodeListReport: sent %u %s records to 0x%x", payload[5], fullSnapshot ? "snapshot" : "changed", dest);
@@ -327,6 +436,10 @@ bool NodeListReportModule::triggerReport(bool fullSnapshot)
         return false;
     }
 
+    if (fullSnapshot) {
+        startFullSnapshot();
+    }
+
     return sendReport(fullSnapshot);
 }
 
@@ -337,9 +450,18 @@ int32_t NodeListReportModule::runOnce()
         return disable();
     }
 
+    if (fullSnapshotInProgress) {
+        sendReport(true);
+        return fullSnapshotChunkIntervalMs + random(0, 60 * 1000);
+    }
+
     const bool fullSnapshot = shouldSendFullSnapshot();
     if (fullSnapshot || lastIncrementalMs == 0 || !Throttle::isWithinTimespanMs(lastIncrementalMs, intervalMs())) {
         sendReport(fullSnapshot);
+    }
+
+    if (fullSnapshotInProgress) {
+        return fullSnapshotChunkIntervalMs + random(0, 60 * 1000);
     }
 
     const uint32_t jitterMs = random(0, 5 * 60 * 1000);
