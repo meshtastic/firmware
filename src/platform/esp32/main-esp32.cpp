@@ -36,28 +36,36 @@ void variant_shutdown() {}
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 static bool bluetoothMemoryReleased;
+static bool bluetoothMemoryReleaseWarned;
 #endif
 
-#ifdef CAN_RELEASE_BT_MEMORY
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+static bool isNetworkConfiguredToDisableBluetooth()
+{
+#if HAS_WIFI
+    return isWifiAvailable();
+#elif defined(USE_WS5500)
+    return config.network.wifi_enabled;
+#else
+    return false;
+#endif
+}
+
 static bool shouldReleaseBluetoothMemory()
 {
-#if HAS_WIFI || defined(USE_WS5500)
     // On ESP32 targets WiFi and BLE share radio resources. When WiFi is configured for this boot,
     // BLE will not be started, so its reserved memory can be returned to the heap until reboot.
-    if (config.network.wifi_enabled) {
+    if (isNetworkConfiguredToDisableBluetooth()) {
         return true;
     }
-#endif
     return !config.bluetooth.enabled;
 }
 
 static const char *getBluetoothReleaseReason()
 {
-#if HAS_WIFI || defined(USE_WS5500)
-    if (config.network.wifi_enabled) {
+    if (isNetworkConfiguredToDisableBluetooth()) {
         return "WiFi is enabled";
     }
-#endif
     return "Bluetooth is disabled";
 }
 #endif
@@ -66,7 +74,10 @@ static const char *getBluetoothReleaseReason()
 void setBluetoothEnable(bool enable)
 {
     if (enable && bluetoothMemoryReleased) {
-        LOG_WARN("Bluetooth memory has been released; reboot to re-enable Bluetooth");
+        if (!shouldReleaseBluetoothMemory() && !bluetoothMemoryReleaseWarned) {
+            bluetoothMemoryReleaseWarned = true;
+            LOG_WARN("Bluetooth memory has been released; reboot to re-enable Bluetooth");
+        }
         return;
     }
 
