@@ -1594,6 +1594,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     }
 
     if (saveWhat & SEGMENT_MODULECONFIG) {
+        moduleConfig.version = DEVICESTATE_CUR_VER;
         moduleConfig.has_canned_message = true;
         moduleConfig.has_external_notification = true;
         moduleConfig.has_mqtt = true;
