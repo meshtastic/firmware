@@ -49,6 +49,9 @@
 #endif
 #if !MESHTASTIC_EXCLUDE_NODELISTREPORT
 #include "modules/NodeListReportModule.h"
+#if HAS_WIFI
+#include "modules/WifiNodeListReportModule.h"
+#endif
 #endif
 
 AdminModule *adminModule;
@@ -1075,6 +1078,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         LOG_INFO("Set module config: WiFi Node List Report");
         moduleConfig.has_wifi_node_list_report = true;
         moduleConfig.wifi_node_list_report = c.payload_variant.wifi_node_list_report;
+        shouldReboot = false;
         if (moduleConfig.wifi_node_list_report.interval_seconds > 0 &&
             moduleConfig.wifi_node_list_report.interval_seconds < min_wifi_node_list_report_interval_secs) {
             moduleConfig.wifi_node_list_report.interval_seconds = min_wifi_node_list_report_interval_secs;
@@ -1086,6 +1090,11 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         if (moduleConfig.wifi_node_list_report.battery_threshold_percent > 100) {
             moduleConfig.wifi_node_list_report.battery_threshold_percent = 100;
         }
+#if HAS_WIFI
+        if (moduleConfig.wifi_node_list_report.enabled && !wifiNodeListReportModule) {
+            wifiNodeListReportModule = new WifiNodeListReportModule();
+        }
+#endif
         break;
     }
     saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
