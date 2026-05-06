@@ -56,9 +56,8 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
     // periodically (in case conditions change). Reset on any successful lock.
     if (consecutiveFailures > 0) {
         constexpr uint32_t failureRetryCapMs = 60UL * 60UL * 1000UL; // 1 hour cap
-        uint32_t broadcastSecs =
-            Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, default_broadcast_interval_secs);
-        uint32_t failureSleepMs = broadcastSecs * 1000UL;
+        uint32_t failureSleepMs =
+            Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
         if (failureSleepMs > failureRetryCapMs)
             failureSleepMs = failureRetryCapMs;
         if (updateInterval < failureSleepMs)
