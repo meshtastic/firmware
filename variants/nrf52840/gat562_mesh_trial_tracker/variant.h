@@ -148,6 +148,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #ifdef HAS_NEOPIXEL      // Enable the use of neopixels
 #define NEOPIXEL_COUNT 1 // How many neopixels are connected
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#define HAS_SOS 1
 #endif
 
 /*

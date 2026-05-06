@@ -805,6 +805,10 @@ void NodeDB::initConfigIntervals()
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
 #endif
+
+#if defined(GAT562)
+    config.display.screen_on_secs = 10;
+#endif
 }
 
 void NodeDB::installDefaultModuleConfig()

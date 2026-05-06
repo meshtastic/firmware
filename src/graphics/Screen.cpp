@@ -1918,6 +1918,10 @@ graphics::Screen::Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig
 
 bool shouldWakeOnReceivedMessage()
 {
+#if defined(GAT562)
+    // GAT562: always wake screen on message received
+    return true;
+#else
     /*
     The goal here is to determine when we do NOT wake up the screen on message received:
     - Any ext. notifications are turned on
@@ -1936,4 +1940,5 @@ bool shouldWakeOnReceivedMessage()
         return false;
     }
     return true;
+#endif
 }
