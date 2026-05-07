@@ -106,6 +106,19 @@ int32_t StatusLEDModule::runOnce()
         }
     }
 
+// If we want a LED to be dedicated to the simple hearbeat, we can use that instead of the charge LED
+#if defined(LED_HEARTBEAT)
+    if (!config.device.led_heartbeat_disabled) {
+        if (HEARTBEAT_LED_state == LED_STATE_ON) {
+            HEARTBEAT_LED_state = LED_STATE_OFF;
+            my_interval = 999;
+        } else {
+            HEARTBEAT_LED_state = LED_STATE_ON;
+            my_interval = 1;
+        }
+        digitalWrite(LED_HEARTBEAT, HEARTBEAT_LED_state);
+    }
+#endif
     if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < millis() || doing_fast_blink) {
         PAIRING_LED_state = LED_STATE_OFF;
     } else if (ble_state == unpaired) {
