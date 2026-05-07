@@ -26,6 +26,8 @@ SOFTWARE.*/
 
 #include "DebugConfiguration.h"
 
+#include <memory>
+
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -119,27 +121,22 @@ bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
 
 bool Syslog::vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args)
 {
-    char *message;
-    size_t initialLen;
-    size_t len;
-    bool result;
+    // First measure the formatted length using a copy of args; passing args directly
+    // to vsnprintf consumes it, and reusing a consumed va_list is undefined behavior.
+    va_list args_measure;
+    va_copy(args_measure, args);
+    int needed = vsnprintf(nullptr, 0, fmt, args_measure);
+    va_end(args_measure);
 
-    initialLen = strlen(fmt);
+    if (needed < 0)
+        return false; // encoding error
 
-    message = new char[initialLen + 1];
+    auto message = std::unique_ptr<char[]>(new char[static_cast<size_t>(needed) + 1]);
+    int written = vsnprintf(message.get(), static_cast<size_t>(needed) + 1, fmt, args);
+    if (written < 0)
+        return false;
 
-    len = vsnprintf(message, initialLen + 1, fmt, args);
-    if (len > initialLen) {
-        delete[] message;
-        message = new char[len + 1];
-
-        vsnprintf(message, len + 1, fmt, args);
-    }
-
-    result = this->_sendLog(pri, appName, message);
-
-    delete[] message;
-    return result;
+    return this->_sendLog(pri, appName, message.get());
 }
 
 inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *message)

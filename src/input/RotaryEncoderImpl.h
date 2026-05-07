@@ -5,6 +5,7 @@
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
 #include "mesh/NodeDB.h"
+#include <memory>
 
 class RotaryEncoder;
 
@@ -28,7 +29,7 @@ class RotaryEncoderImpl final : public InputPollable
     input_broker_event eventCcw = INPUT_BROKER_NONE;
     input_broker_event eventPressed = INPUT_BROKER_NONE;
 
-    RotaryEncoder *rotary;
+    std::unique_ptr<RotaryEncoder> rotary;
 
   private:
 #ifdef ARCH_ESP32

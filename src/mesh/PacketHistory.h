@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NodeDB.h"
+#include <memory>
 
 // Number of relayers we keep track of. Use 6 to be efficient with memory alignment of PacketRecord to 20 bytes
 #define NUM_RELAYERS 6
@@ -26,7 +27,7 @@ class PacketHistory
 
     uint32_t recentPacketsCapacity =
         0; // Can be set in constructor, no need to recompile. Used to allocate memory for mx_recentPackets.
-    PacketRecord *recentPackets = NULL; // Simple and fixed in size. Debloat.
+    std::unique_ptr<PacketRecord[]> recentPackets; // Simple and fixed in size. Debloat.
 
 #if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
     // Open-addressing hash table for O(1) lookup in find(), replacing the O(N) linear scan.
@@ -34,7 +35,7 @@ class PacketHistory
     // The load factor invariant holds permanently: hashCapacity = 2 * nextPowerOf2(recentPacketsCapacity),
     // and at most recentPacketsCapacity entries can ever be live (one per recentPackets[] slot).
     static constexpr uint16_t HASH_EMPTY = 0xFFFF;
-    uint16_t *hashIndex = NULL;
+    std::unique_ptr<uint16_t[]> hashIndex;
     uint32_t hashCapacity = 0; // Always a power of 2
     uint32_t hashMask = 0;     // hashCapacity - 1, for fast modular indexing
 
@@ -64,11 +65,8 @@ class PacketHistory
     uint8_t getOurTxHopLimit(const PacketRecord &r);
     void setOurTxHopLimit(PacketRecord &r, uint8_t hopLimit);
 
-    PacketHistory(const PacketHistory &);            // non construction-copyable
-    PacketHistory &operator=(const PacketHistory &); // non copyable
   public:
     explicit PacketHistory(uint32_t size = -1); // Constructor with size parameter, default is PACKETHISTORY_MAX
-    ~PacketHistory();
 
     /**
      * Update recentBroadcasts and return true if we have already seen this packet
@@ -100,5 +98,5 @@ class PacketHistory
     void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 
     // To check if the PacketHistory was initialized correctly by constructor
-    bool initOk(void) { return recentPackets != NULL && recentPacketsCapacity != 0; }
+    bool initOk(void) { return recentPackets != nullptr && recentPacketsCapacity != 0; }
 };
