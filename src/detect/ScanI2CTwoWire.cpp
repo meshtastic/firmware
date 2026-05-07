@@ -476,6 +476,23 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         logFoundDevice("DFRobot Lark", (uint8_t)addr.address);
                         type = DFROBOT_LARK;
                     }
+#ifdef OUTPUT_GPIO_PIN
+                    // ESP32-C5 OTA co-processor shares I2C 0x42 with INA3221.
+                    // Probe with OTA_CMD_STATUS (0x01); coprocessor replies 0xA0..0xAF.
+                    else {
+                        i2cBus->beginTransmission(addr.address);
+                        i2cBus->write(0x01); // OTA_CMD_STATUS
+                        i2cBus->endTransmission(false);
+                        i2cBus->requestFrom(addr.address, (uint8_t)1);
+                        if (i2cBus->available()) {
+                            uint8_t status = i2cBus->read();
+                            if (status >= 0xA0 && status <= 0xAF) {
+                                logFoundDevice("ESP32-C5 OTA coprocessor", (uint8_t)addr.address);
+                                type = ESP32_OTA_COPROCESSOR;
+                            }
+                        }
+                    }
+#endif
                     // else: probably a RAK12500/UBLOX GPS on I2C
                 }
                 break;
@@ -826,13 +843,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = FT6336U;
                 break;
             }
-
-#ifdef OUTPUT_GPIO_PIN
-            case 0x42: // ESP32-C5 OTA co-processor
-                type = ESP32_OTA_COPROCESSOR;
-                logFoundDevice("ESP32-C5 OTA coprocessor", (uint8_t)addr.address);
-                break;
-#endif
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated", (uint8_t)addr.address);
