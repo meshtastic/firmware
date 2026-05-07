@@ -43,6 +43,7 @@ extern "C" {
 #define LED_BUILTIN -1
 #define LED_BLUE -1
 #define PIN_LED2 (32 + 9)
+#define LED_HEARTBEAT PIN_LED2
 #define LED_PAIRING (13)
 
 #define Battery_LED_1 (15)
