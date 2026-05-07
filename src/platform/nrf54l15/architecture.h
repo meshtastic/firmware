@@ -68,8 +68,9 @@
 
 //
 // HW_VENDOR — maps build-time define to HardwareModel enum.
-// Uses PRIVATE_HW until the Meshtastic protobufs assign a dedicated enum value
-// for the nRF54L15-DK (the variant declares custom_meshtastic_hw_model = 132).
+// PRIVATE_HW (255): the protobuf HardwareModel enum reserves DK / DIY boards
+// without an SKU under this value; the nRF54L15-DK doesn't get a dedicated
+// enum number. Variant manifest matches via custom_meshtastic_hw_model = 255.
 //
 #ifdef NRF54L15_DK
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
