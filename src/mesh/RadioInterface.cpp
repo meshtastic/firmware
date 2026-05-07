@@ -486,7 +486,6 @@ std::unique_ptr<RadioInterface> initLoRa()
         if (!rIf->init()) {
             LOG_WARN("No LR2021 radio");
             rIf = nullptr;
-            RadioLibInterface::instance = NULL;
         } else {
             LOG_INFO("LR2021 init success");
             radioType = LR2021_RADIO;

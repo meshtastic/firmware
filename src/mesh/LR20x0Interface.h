@@ -4,7 +4,7 @@
 
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
- * \tparam T RadioLib module type for LR20x0: SX1262, SX1268.
+ * \tparam T RadioLib module type for LR20x0, e.g. LR2021.
  */
 template <class T> class LR20x0Interface : public RadioLibInterface
 {

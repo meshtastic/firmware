@@ -2,9 +2,7 @@
 
 #if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
 #include "LR20x0Interface.h"
-#include "Throttle.h"
 #include "error.h"
-#include "mesh/NodeDB.h"
 
 // Keep LR20x0 naming while RadioLib exposes LR2021 symbols.
 #ifndef LR20x0
@@ -34,7 +32,7 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 #define LR2021_MAX_POWER 22
 #endif
 
-// the 2.4G part maxes at 13dBm ???
+// the 2.4G part maxes at 12dBm
 
 #if ARCH_PORTDUINO
 #define LR2021_MAX_POWER_HF portduino_config.lr1120_max_power
@@ -67,7 +65,7 @@ template <typename T> bool LR20x0Interface<T>::init()
 #elif defined(LR2021_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage = LR2021_DIO3_TCXO_VOLTAGE;
     LOG_DEBUG("LR2021_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", LR2021_DIO3_TCXO_VOLTAGE);
-    // (DIO3 is not free to be used as an IRQ) ???
+    // (DIO3 is not free to be used as an IRQ)
 #elif defined(TCXO_OPTIONAL)
     float tcxoVoltage = 1.6f; // TCXO_OPTIONAL: try default 1.6 V first, fall back to XTAL on failure
     LOG_DEBUG("TCXO_OPTIONAL: no LR2021_DIO3_TCXO_VOLTAGE defined, trying default TCXO Vref 1.6 V first");
@@ -230,7 +228,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
 template <typename T> void LR20x0Interface<T>::disableInterrupt()
