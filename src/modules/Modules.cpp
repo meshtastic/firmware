@@ -146,7 +146,7 @@ void setupModules()
         nodeListReportModule = new NodeListReportModule();
     }
 #if HAS_WIFI
-    if (moduleConfig.has_wifi_node_list_report && moduleConfig.wifi_node_list_report.enabled) {
+    if (moduleConfig.wifi_node_list_report.enabled) {
         wifiNodeListReportModule = new WifiNodeListReportModule();
     }
 #endif

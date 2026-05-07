@@ -10,6 +10,7 @@ class WifiNodeListReportModule : private concurrency::OSThread
 {
   public:
     WifiNodeListReportModule();
+    bool triggerReport(bool fullSnapshot);
 
   protected:
     virtual int32_t runOnce() override;
@@ -26,6 +27,7 @@ class WifiNodeListReportModule : private concurrency::OSThread
     static constexpr uint32_t defaultFullSnapshotIntervalSeconds = 24 * 60 * 60;
     static constexpr uint32_t minFullSnapshotIntervalSeconds = 6 * 60 * 60;
     static constexpr uint32_t defaultConnectTimeoutSeconds = 30;
+    static constexpr uint8_t maxRecordsPerPost = 12;
 
     uint32_t lastIncrementalMs = 0;
     uint32_t lastFullSnapshotMs = 0;
@@ -49,7 +51,9 @@ class WifiNodeListReportModule : private concurrency::OSThread
     CachedNode *cachedNode(NodeNum nodeNum);
     void appendEscaped(String &out, const char *value) const;
     void appendRecordJson(String &out, const meshtastic_NodeInfoLite &node, uint8_t flags, bool includeNames) const;
-    bool buildJson(String &json, bool fullSnapshot, uint8_t &recordCount);
+    uint16_t countEligibleRecords(bool fullSnapshot);
+    bool buildJson(String &json, bool fullSnapshot, uint16_t reportId, uint16_t chunkIndex, uint16_t skipRecords,
+                   uint16_t totalRecords, uint8_t &recordCount);
     void markJsonSent(bool fullSnapshot);
     bool postReport(bool fullSnapshot);
 };

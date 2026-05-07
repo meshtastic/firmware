@@ -398,7 +398,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_send_node_list_report_tag: {
         LOG_INFO("Client requested Node List Report send, full_snapshot=%d", r->send_node_list_report);
 #if !MESHTASTIC_EXCLUDE_NODELISTREPORT
-        if (nodeListReportModule && nodeListReportModule->triggerReport(r->send_node_list_report)) {
+        bool sent = false;
+        if (nodeListReportModule) {
+            sent = nodeListReportModule->triggerReport(r->send_node_list_report);
+        }
+#if HAS_WIFI
+        if (wifiNodeListReportModule) {
+            sent = wifiNodeListReportModule->triggerReport(r->send_node_list_report) || sent;
+        }
+#endif
+        if (sent) {
             myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
         } else {
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);

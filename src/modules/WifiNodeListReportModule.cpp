@@ -6,6 +6,7 @@
 #include "RTC.h"
 #include "WifiNodeListReportModule.h"
 #include "mesh/wifi/WiFiAPClient.h"
+#include "target_specific.h"
 #include <Arduino.h>
 #include <Throttle.h>
 #include <algorithm>
@@ -13,6 +14,11 @@
 
 #if defined(ARCH_ESP32)
 #include <HTTPClient.h>
+#include <esp_wifi.h>
+#if HAS_BLUETOOTH
+#include "nimble/NimbleBluetooth.h"
+extern NimbleBluetooth *nimbleBluetooth;
+#endif
 #endif
 
 WifiNodeListReportModule *wifiNodeListReportModule;
@@ -26,6 +32,10 @@ constexpr uint8_t recordFlagUpdated = 0x02;
 constexpr uint8_t recordFlagStale = 0x04;
 constexpr uint8_t recordFlagHasNames = 0x08;
 constexpr uint8_t recordFlagHasPositionHash = 0x10;
+#if defined(ARCH_ESP32)
+uint8_t lastWifiDisconnectReason = 0;
+bool wifiEventHandlerAttached = false;
+#endif
 
 uint32_t hashByte(uint32_t hash, uint8_t value)
 {
@@ -53,12 +63,9 @@ WifiNodeListReportModule::WifiNodeListReportModule() : concurrency::OSThread("Wi
 {
     cache.reserve(16);
 
-    if (isConfigured()) {
-        const uint32_t startupDelayMs = random(2 * 60 * 1000, 10 * 60 * 1000);
-        setIntervalFromNow(startupDelayMs);
-    } else {
-        disable();
-    }
+    const uint32_t startupDelayMs = random(30 * 1000, 90 * 1000);
+    LOG_INFO("WifiNodeListReport: startup in %u ms", startupDelayMs);
+    setIntervalFromNow(startupDelayMs);
 }
 
 uint32_t WifiNodeListReportModule::intervalMs() const
@@ -118,22 +125,79 @@ bool WifiNodeListReportModule::ensureWifiConnected(bool &startedWifi)
         return true;
     }
 
+    if (!wifiEventHandlerAttached) {
+        WiFi.onEvent(
+            [](WiFiEvent_t event, WiFiEventInfo_t info) {
+                if (event == WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+                    lastWifiDisconnectReason = info.wifi_sta_disconnected.reason;
+                }
+            },
+            WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+        wifiEventHandlerAttached = true;
+    }
+
     const char *wifiPsw = config.network.wifi_psk;
     if (!*wifiPsw) {
         wifiPsw = nullptr;
     }
 
     startedWifi = true;
+    lastWifiDisconnectReason = 0;
+#if HAS_BLUETOOTH
+    if (!config.network.wifi_enabled && nimbleBluetooth && !nimbleBluetooth->isDeInit) {
+        LOG_INFO("WifiNodeListReport: disabling Bluetooth for WiFi report");
+        nimbleBluetooth->deinit();
+        delay(1000);
+    }
+#endif
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
     WiFi.setAutoReconnect(false);
-    WiFi.begin(config.network.wifi_ssid, wifiPsw);
+
+    uint8_t dmac[6];
+    getMacAddr(dmac);
+    char host[16];
+    snprintf(host, sizeof(host), "Meshtastic-%02x%02x", dmac[4], dmac[5]);
+    WiFi.setHostname(host);
+
+    if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC && config.network.ipv4_config.ip != 0) {
+        WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.gateway, config.network.ipv4_config.subnet,
+                    config.network.ipv4_config.dns);
+    }
+
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    WiFi.disconnect(false, true);
+    LOG_INFO("WifiNodeListReport: joining WiFi SSID %s, timeout=%us", config.network.wifi_ssid, connectTimeoutMs() / 1000);
+    delay(5000);
+    const wl_status_t beginStatus = WiFi.begin(config.network.wifi_ssid, wifiPsw);
+    LOG_DEBUG("WifiNodeListReport: WiFi.begin status=%d", beginStatus);
 
     const uint32_t start = millis();
     while (!WiFi.isConnected() && millis() - start < connectTimeoutMs()) {
         delay(250);
     }
-    return WiFi.isConnected();
+    const bool connected = WiFi.isConnected();
+    if (!connected) {
+        LOG_WARN("WifiNodeListReport: WiFi status=%d, disconnect_reason=%u", WiFi.status(), lastWifiDisconnectReason);
+        const int scanCount = WiFi.scanNetworks(false, true);
+        int bestRssi = -128;
+        int bestAuth = -1;
+        uint8_t matches = 0;
+        for (int i = 0; i < scanCount; i++) {
+            if (WiFi.SSID(i) == config.network.wifi_ssid) {
+                matches++;
+                if (WiFi.RSSI(i) > bestRssi) {
+                    bestRssi = WiFi.RSSI(i);
+                    bestAuth = WiFi.encryptionType(i);
+                }
+            }
+        }
+        LOG_WARN("WifiNodeListReport: scan found %d APs, SSID matches=%u, best_rssi=%d, auth=%d", scanCount, matches, bestRssi,
+                 bestAuth);
+        WiFi.scanDelete();
+    }
+    return connected;
 #else
     return false;
 #endif
@@ -290,13 +354,46 @@ void WifiNodeListReportModule::appendRecordJson(String &out, const meshtastic_No
     out += '}';
 }
 
-bool WifiNodeListReportModule::buildJson(String &json, bool fullSnapshot, uint8_t &recordCount)
+uint16_t WifiNodeListReportModule::countEligibleRecords(bool fullSnapshot)
+{
+    uint16_t count = 0;
+    uint32_t readIndex = 0;
+    while (true) {
+        const meshtastic_NodeInfoLite *node = nodeDB->readNextMeshNode(readIndex);
+        if (!node) {
+            break;
+        }
+        if (node->num == 0 || node->num == nodeDB->getNodeNum()) {
+            continue;
+        }
+
+        const uint32_t metricSignature = computeMetricSignature(*node);
+        const uint32_t nameSignature = computeNameSignature(*node);
+        CachedNode *cached = cachedNode(node->num);
+        const bool isNew = cached == nullptr;
+        const bool metricsChanged = isNew || cached->metricSignature != metricSignature;
+        const bool namesChanged = isNew || cached->nameSignature != nameSignature;
+        if (fullSnapshot || metricsChanged || namesChanged) {
+            count++;
+        }
+    }
+    return count;
+}
+
+bool WifiNodeListReportModule::buildJson(String &json, bool fullSnapshot, uint16_t reportId, uint16_t chunkIndex,
+                                         uint16_t skipRecords, uint16_t totalRecords, uint8_t &recordCount)
 {
     recordCount = 0;
     json = "{\"type\":\"";
     json += fullSnapshot ? "full_snapshot" : "diff";
     json += "\",\"version\":1,\"sequence\":";
     json += sequence;
+    json += ",\"report_id\":";
+    json += reportId;
+    json += ",\"chunk_index\":";
+    json += chunkIndex;
+    json += ",\"final_chunk\":";
+    json += skipRecords + maxRecordsPerPost >= totalRecords ? "true" : "false";
     json += ",\"from\":\"!";
     char fromId[9];
     snprintf(fromId, sizeof(fromId), "%08x", nodeDB->getNodeNum());
@@ -306,6 +403,7 @@ bool WifiNodeListReportModule::buildJson(String &json, bool fullSnapshot, uint8_
     json += ",\"records\":[";
 
     uint32_t readIndex = 0;
+    uint16_t eligibleIndex = 0;
     bool first = true;
     while (true) {
         const meshtastic_NodeInfoLite *node = nodeDB->readNextMeshNode(readIndex);
@@ -325,6 +423,12 @@ bool WifiNodeListReportModule::buildJson(String &json, bool fullSnapshot, uint8_
         if (!fullSnapshot && !metricsChanged && !namesChanged) {
             continue;
         }
+        if (eligibleIndex++ < skipRecords) {
+            continue;
+        }
+        if (recordCount >= maxRecordsPerPost) {
+            break;
+        }
 
         if (!first) {
             json += ',';
@@ -337,7 +441,7 @@ bool WifiNodeListReportModule::buildJson(String &json, bool fullSnapshot, uint8_
     }
 
     json += "]}";
-    return fullSnapshot ? recordCount > 0 : recordCount >= minChangedNodesBeforeSend();
+    return recordCount > 0;
 }
 
 void WifiNodeListReportModule::markJsonSent(bool fullSnapshot)
@@ -373,15 +477,20 @@ void WifiNodeListReportModule::markJsonSent(bool fullSnapshot)
 bool WifiNodeListReportModule::postReport(bool fullSnapshot)
 {
 #if defined(ARCH_ESP32)
+    if (!isConfigured()) {
+        return false;
+    }
+
+    LOG_INFO("WifiNodeListReport: attempting %s report to %s", fullSnapshot ? "full" : "diff",
+             moduleConfig.wifi_node_list_report.url);
+
     if (!powerGateAllowsWifi()) {
         LOG_DEBUG("WifiNodeListReport: power gate blocked WiFi report");
         return false;
     }
 
-    uint8_t recordCount = 0;
-    String body;
-    body.reserve(fullSnapshot ? 8192 : 2048);
-    if (!buildJson(body, fullSnapshot, recordCount)) {
+    const uint16_t totalRecords = countEligibleRecords(fullSnapshot);
+    if (fullSnapshot ? totalRecords == 0 : totalRecords < minChangedNodesBeforeSend()) {
         return false;
     }
 
@@ -392,42 +501,71 @@ bool WifiNodeListReportModule::postReport(bool fullSnapshot)
         return false;
     }
 
-    HTTPClient http;
-    http.setTimeout(15000);
-    if (!http.begin(moduleConfig.wifi_node_list_report.url)) {
-        LOG_WARN("WifiNodeListReport: invalid URL");
-        restoreWifi(startedWifi);
-        return false;
-    }
+    const uint16_t reportId = sequence;
+    uint16_t sentRecords = 0;
+    uint16_t chunkIndex = 0;
+    while (sentRecords < totalRecords) {
+        uint8_t recordCount = 0;
+        String body;
+        body.reserve(3072);
+        if (!buildJson(body, fullSnapshot, reportId, chunkIndex, sentRecords, totalRecords, recordCount)) {
+            restoreWifi(startedWifi);
+            return false;
+        }
 
-    http.addHeader("Content-Type", "application/json");
-    const int code = http.POST(body);
-    http.end();
+        HTTPClient http;
+        http.setTimeout(15000);
+        if (!http.begin(moduleConfig.wifi_node_list_report.url)) {
+            LOG_WARN("WifiNodeListReport: invalid URL");
+            restoreWifi(startedWifi);
+            return false;
+        }
+
+        http.addHeader("Content-Type", "application/json");
+        const int code = http.POST(body);
+        http.end();
+
+        if (code < 200 || code >= 300) {
+            LOG_WARN("WifiNodeListReport: HTTP POST failed, code=%d", code);
+            restoreWifi(startedWifi);
+            return false;
+        }
+
+        sentRecords += recordCount;
+        chunkIndex++;
+        delay(250);
+    }
     restoreWifi(startedWifi);
 
-    if (code < 200 || code >= 300) {
-        LOG_WARN("WifiNodeListReport: HTTP POST failed, code=%d", code);
-        return false;
-    }
-
     markJsonSent(fullSnapshot);
-    LOG_INFO("WifiNodeListReport: posted %u %s records", recordCount, fullSnapshot ? "snapshot" : "changed");
+    LOG_INFO("WifiNodeListReport: posted %u %s records in %u chunks", sentRecords, fullSnapshot ? "snapshot" : "changed",
+             chunkIndex);
     return true;
 #else
     return false;
 #endif
 }
 
+bool WifiNodeListReportModule::triggerReport(bool fullSnapshot)
+{
+    return postReport(fullSnapshot);
+}
+
 int32_t WifiNodeListReportModule::runOnce()
 {
     if (!isConfigured()) {
         LOG_DEBUG("WifiNodeListReportModule is disabled or missing URL/WiFi SSID");
-        return disable();
+        if (!moduleConfig.has_wifi_node_list_report || !moduleConfig.wifi_node_list_report.enabled) {
+            return disable();
+        }
+        return 60 * 1000;
     }
 
     const bool fullSnapshot = shouldSendFullSnapshot();
     if (fullSnapshot || lastIncrementalMs == 0 || !Throttle::isWithinTimespanMs(lastIncrementalMs, intervalMs())) {
-        postReport(fullSnapshot);
+        if (!postReport(fullSnapshot)) {
+            return 60 * 1000;
+        }
     }
 
     return intervalMs() + random(0, 5 * 60 * 1000);

@@ -15,7 +15,8 @@ Before each report, the module checks whether WiFi use is allowed:
 - battery charge is at or above `battery_threshold_percent`
 
 If the gate is closed, the module skips the report and tries again on the next interval. When firmware WiFi is not otherwise
-enabled, the module starts station mode for the report, sends the HTTP POST, then disconnects and turns WiFi off again.
+enabled, the module starts station mode for the report, sends the HTTP POST, then disconnects and turns WiFi off again. On
+ESP32 builds, enabling WiFi requires disabling BLE until the next reboot, matching Meshtastic's normal WiFi/Bluetooth tradeoff.
 
 ## Payload
 
@@ -24,6 +25,9 @@ Reports are JSON documents posted to the configured URL:
 - `type`: `full_snapshot` or `diff`
 - `version`: payload version
 - `sequence`: module-local report sequence
+- `report_id`: id shared by all chunks for one report
+- `chunk_index`: zero-based chunk index
+- `final_chunk`: true on the last chunk
 - `from`: sender node number
 - `known_node_count`: current NodeDB count
 - `records`: compact node records
@@ -32,6 +36,9 @@ Full snapshots include all known nodes. Incremental reports include only nodes w
 successful report. Records include node id, flags, last-heard age bucket, hops-away, and SNR bucket. Full snapshots and newly
 seen node diffs also include short and long names when present. Position is represented only as a coarse hash when
 `include_position` is enabled and position already exists in NodeDB.
+
+Reports are chunked into small POST bodies on device. The receiver writes one JSONL line per chunk; consumers should group by
+`from` and `report.report_id` and treat `report.flags.final_chunk` as the completion marker.
 
 ## Configuration
 
@@ -86,8 +93,7 @@ This module avoids LoRa airtime for the reports themselves, but WiFi increases p
 diff interval and daily full snapshot interval unless the receiving system needs tighter freshness. On battery-only nodes, set
 `battery_threshold_percent` conservatively.
 
-The current implementation builds one JSON document in memory per POST. This is appropriate for moderate NodeDB sizes on ESP32
-targets, but very large NodeDBs may need future HTTP chunking or streaming.
+The current implementation builds one small JSON document in memory per POST and sends full snapshots as multiple chunks.
 
 ## Docker Build
 
