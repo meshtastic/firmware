@@ -15,9 +15,11 @@
 /* Struct definitions */
 /* Legacy NodeInfoLite descriptor used only to decode pre-split
  /prefs/nodes.proto saves during the v24 -> v25 migration boot.
- Field tags here mirror the original NodeInfoLite tags 3 and 6 so that
- old wire bytes parse cleanly. Steady-state code does not use this
- struct; it is dropped after migration completes. This file should be
+ This preserves the original NodeInfoLite-compatible field numbers needed
+ to parse old wire bytes cleanly, including user (2), position (3),
+ device_metrics (6), and the legacy-only compatibility fields via_mqtt (8),
+ is_favorite (10), and is_ignored (11). Steady-state code does not use
+ this struct; it is dropped after migration completes. This file should be
  removed once DEVICESTATE_MIN_VER advances past 24. */
 typedef struct _meshtastic_NodeInfoLite_Legacy {
     uint32_t num;
