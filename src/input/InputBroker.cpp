@@ -40,7 +40,7 @@ static bool touchBacklightActive = false;
 #endif
 #endif
 
-#if defined(HAS_BUTTON) || defined(ARCH_PORTDUINO)
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
 ButtonThread *UserButtonThread = nullptr;
 #endif
 
@@ -144,7 +144,7 @@ void InputBroker::pollSoonWorker(void *p)
 void InputBroker::Init()
 {
 
-#ifdef HAS_BUTTON
+#if HAS_BUTTON
     int _pinNum = -1;
 
 #if defined(BUTTON_PIN)

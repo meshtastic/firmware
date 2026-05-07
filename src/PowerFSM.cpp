@@ -160,7 +160,7 @@ static void lsIdle()
                 // We woke for some other reason (button press, device IRQ interrupt)
                 bool pressed = false;
 
-#ifdef HAS_BUTTON
+#if HAS_BUTTON
                 int _buttonPin = -1;
 #if defined(BUTTON_PIN)
                 _buttonPin = BUTTON_PIN;
