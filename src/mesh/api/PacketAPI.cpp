@@ -66,9 +66,8 @@ bool PacketAPI::receivePacket(void)
             break;
         }
         case meshtastic_ToRadio_want_config_id_tag: {
-            uint32_t config_nonce = mr->want_config_id;
-            LOG_INFO("Screen wants config, nonce=%u", config_nonce);
-            handleStartConfig();
+            LOG_INFO("Screen wants config, nonce=%u", mr->want_config_id);
+            handleStartConfig(mr->want_config_id);
             break;
         }
         case meshtastic_ToRadio_heartbeat_tag:

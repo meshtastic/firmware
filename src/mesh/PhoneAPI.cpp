@@ -47,8 +47,70 @@ PhoneAPI::~PhoneAPI()
     close();
 }
 
-void PhoneAPI::handleStartConfig()
+std::atomic<uint32_t> PhoneAPI::lastStartConfigMs{0};
+
+// Minimum interval between full config-dump handshakes, shared across all PhoneAPI
+// transports (BLE, WiFi/TCP, Serial, HTTP, Ethernet). Chosen to be just longer than
+// a nominal config dump takes to complete (~1.5-2 seconds on a 250-node DB), so
+// legitimate reconnect-after-disconnect flows still work but a flapping client
+// can't drive one handshake per second and exhaust internal SRAM.
+static constexpr uint32_t MIN_CONFIG_HANDSHAKE_INTERVAL_MS = 2000;
+// Rate-limit the throttled-handshake WARN itself so a flapping client can't turn this
+// defensive code into its own log-flood problem.
+static constexpr uint32_t HANDSHAKE_THROTTLE_LOG_INTERVAL_MS = 5000;
+
+void PhoneAPI::handleStartConfig(uint32_t newConfigNonce)
 {
+    // Rate-limit full config dumps. Each dump exercises the protobuf encode path for
+    // all channels, configs, the entire NodeDB, and a full filesystem walk — back-to-back
+    // dumps fragment the internal SRAM heap and can wedge the device on static-pool
+    // allocators. Well-behaved clients only issue one want_config_id per reconnect.
+    //
+    // Use atomic load/compare_exchange so concurrent handshakes across transports (BLE
+    // callback task vs WiFi/Eth OSThread vs serial-console task) can't both pass the check.
+    //
+    // The new nonce is only committed to config_nonce AFTER the throttle check passes — so
+    // an in-flight dump (triggered by an earlier accepted handshake) keeps its nonce and
+    // sendConfigComplete matches what the client asked for.
+    uint32_t last = lastStartConfigMs.load(std::memory_order_relaxed);
+    while (true) {
+        // Re-read `now` on every iteration. If a concurrent task CASed lastStartConfigMs
+        // between our load and our CAS, the weak-CAS failure path updates `last` to the
+        // newer timestamp — if we then reused a stale `now` (captured before the race)
+        // our next CAS could commit a backwards-in-time value, breaking the rate limit
+        // for the next arriving handshake.
+        const uint32_t now = millis();
+        // Only enforce the throttle when we're actually mid-dump
+        // (state in [STATE_SEND_UIDATA..STATE_SEND_COMPLETE_ID]). The throttle's purpose
+        // is preventing concurrent overlapping dumps from fragmenting the heap; it must
+        // NOT block legitimate fresh-client handshakes (state == STATE_SEND_NOTHING) or
+        // post-dump re-handshake requests (state == STATE_SEND_PACKETS, the steady state
+        // after a successful dump). Without this gate the static lastStartConfigMs across
+        // transports causes legitimate cross-transport reconnects (e.g. BLE → TCP) to
+        // silently early-return without advancing state, leaving the client stuck on
+        // "reading config" forever. Hardware-confirmed on Heltec V4 TFT 2026-04-27:
+        // first handshake passed (state was 0), Android closed and re-issued want_config
+        // ~570ms later when state was 11 (POST_DUMP), and the original throttle blocked
+        // the second handshake — Android stalled.
+        const bool dumpInFlight = (state >= STATE_SEND_UIDATA && state <= STATE_SEND_COMPLETE_ID);
+        if (dumpInFlight && last != 0 && (now - last) < MIN_CONFIG_HANDSHAKE_INTERVAL_MS) {
+            static uint32_t lastThrottleLogMs = 0;
+            if (!Throttle::isWithinTimespanMs(lastThrottleLogMs, HANDSHAKE_THROTTLE_LOG_INTERVAL_MS)) {
+                lastThrottleLogMs = now;
+                LOG_WARN("Config handshake throttled (last one %u ms ago, min interval %u ms, state=%d)",
+                         (unsigned)(now - last), (unsigned)MIN_CONFIG_HANDSHAKE_INTERVAL_MS, (int)state);
+            }
+            return;
+        }
+        if (lastStartConfigMs.compare_exchange_weak(last, now, std::memory_order_acq_rel, std::memory_order_relaxed))
+            break;
+        // another task raced us — loop re-reads `now` and re-checks the updated `last`
+    }
+
+    // Throttle passed — safe to advance state. Commit the new nonce so sendConfigComplete
+    // returns it back to the client that asked for it.
+    config_nonce = newConfigNonce;
+
     // Must be before setting state (because state is how we know !connected)
     if (!isConnected()) {
         onConnectionChanged(true);
@@ -160,9 +222,8 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         case meshtastic_ToRadio_packet_tag:
             return handleToRadioPacket(toRadioScratch.packet);
         case meshtastic_ToRadio_want_config_id_tag:
-            config_nonce = toRadioScratch.want_config_id;
-            LOG_INFO("Client wants config, nonce=%u", config_nonce);
-            handleStartConfig();
+            LOG_INFO("Client wants config, nonce=%u", toRadioScratch.want_config_id);
+            handleStartConfig(toRadioScratch.want_config_id);
             break;
         case meshtastic_ToRadio_disconnect_tag:
             LOG_INFO("Disconnect from phone");
