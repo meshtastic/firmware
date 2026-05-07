@@ -70,22 +70,16 @@ meshtastic --set wifi_node_list_report.url "https://example.com/meshtastic/node-
 meshtastic --set wifi_node_list_report.battery_threshold_percent 60
 ```
 
-## Minimal HTTP Receiver
+## HTTP Receiver
 
-For local testing or simple collection, run the repo-provided receiver:
-
-```bash
-tools/node_list_report_http_receiver.py --host 0.0.0.0 --port 8787 --outfile node-list-reports-http.jsonl --sender '!3369cbc8'
-```
-
-Then configure the node URL to match the host running the receiver:
+Configure the node URL to match the host running a compatible HTTP receiver:
 
 ```bash
 meshtastic --set wifi_node_list_report.url "http://192.168.0.92:8787/"
 ```
 
-The receiver accepts WiFi report JSON POSTs, normalizes record flags to the same boolean structure used by
-`tools/node_list_report_tcp_receiver.py`, and appends one JSON object per received report to the JSONL file.
+The receiver must accept JSON POSTs and should persist one object per received chunk. Consumers can reassemble full reports
+by grouping chunks on sender and `report_id`, then waiting for `final_chunk`.
 
 ## Operational Notes
 
