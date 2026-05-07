@@ -63,6 +63,23 @@ meshtastic --set wifi_node_list_report.url "https://example.com/meshtastic/node-
 meshtastic --set wifi_node_list_report.battery_threshold_percent 60
 ```
 
+## Minimal HTTP Receiver
+
+For local testing or simple collection, run the repo-provided receiver:
+
+```bash
+tools/node_list_report_http_receiver.py --host 0.0.0.0 --port 8787 --outfile node-list-reports-http.jsonl --sender '!3369cbc8'
+```
+
+Then configure the node URL to match the host running the receiver:
+
+```bash
+meshtastic --set wifi_node_list_report.url "http://192.168.0.92:8787/"
+```
+
+The receiver accepts WiFi report JSON POSTs, normalizes record flags to the same boolean structure used by
+`tools/node_list_report_tcp_receiver.py`, and appends one JSON object per received report to the JSONL file.
+
 ## Operational Notes
 
 This module avoids LoRa airtime for the reports themselves, but WiFi increases power draw while active. Keep the default hourly
