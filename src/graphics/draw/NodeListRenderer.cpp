@@ -253,7 +253,7 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 #if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
 #endif
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    bool isMuted = nodeInfoLiteIsMuted(node);
 
     char timeStr[10];
     uint32_t seconds = sinceLastSeen(node);
@@ -315,7 +315,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 #if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
 #endif
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    bool isMuted = nodeInfoLiteIsMuted(node);
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -395,7 +395,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 #if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
 #endif
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    bool isMuted = nodeInfoLiteIsMuted(node);
     char distStr[10] = "";
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -505,7 +505,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 #if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
 #endif
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    bool isMuted = nodeInfoLiteIsMuted(node);
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);

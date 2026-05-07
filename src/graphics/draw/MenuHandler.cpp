@@ -1362,7 +1362,7 @@ void menuHandler::manageNodeMenu()
     }
     optionsEnumArray[options++] = Favorite;
 
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    bool isMuted = nodeInfoLiteIsMuted(node);
     if (isMuted) {
         optionsArray[options] = "Unmute Notifications";
     } else {
@@ -1426,13 +1426,9 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
-            if (n->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) {
-                n->bitfield &= ~NODEINFO_BITFIELD_IS_MUTED_MASK;
-                LOG_INFO("Unmuted node %08X", menuHandler::pickedNodeNum);
-            } else {
-                n->bitfield |= NODEINFO_BITFIELD_IS_MUTED_MASK;
-                LOG_INFO("Muted node %08X", menuHandler::pickedNodeNum);
-            }
+            const bool wasMuted = nodeInfoLiteIsMuted(n);
+            nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_MUTED_MASK, !wasMuted);
+            LOG_INFO(wasMuted ? "Unmuted node %08X" : "Muted node %08X", menuHandler::pickedNodeNum);
             nodeDB->notifyObservers(true);
             nodeDB->saveToDisk();
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);

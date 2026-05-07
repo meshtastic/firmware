@@ -1137,7 +1137,7 @@ void NodeDB::resetNodes(bool keepFavorites)
         LOG_INFO("Clearing node database - preserving favorites");
         for (size_t i = 0; i < meshNodes->size(); i++) {
             meshtastic_NodeInfoLite &node = meshNodes->at(i);
-            if (i > 0 && !(node.bitfield & NODEINFO_BITFIELD_IS_FAVORITE_MASK)) {
+            if (i > 0 && !nodeInfoLiteIsFavorite(&node)) {
                 eraseNodeSatellites(node.num);
                 node = meshtastic_NodeInfoLite();
             } else {
@@ -1264,7 +1264,7 @@ void NodeDB::cleanupMeshDB()
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
         meshtastic_NodeInfoLite &n = meshNodes->at(i);
-        if (n.bitfield & NODEINFO_BITFIELD_HAS_USER_MASK) {
+        if (nodeInfoLiteHasUser(&n)) {
             if (n.public_key.size > 0) {
                 if (memfll(n.public_key.bytes, 0, n.public_key.size)) {
                     n.public_key.size = 0;
@@ -1343,7 +1343,7 @@ void NodeDB::pickNewNodeNum()
             return false;
         if (owner.public_key.size == 32 && n->public_key.size == 32)
             return memcmp(n->public_key.bytes, owner.public_key.bytes, 32) == 0;
-        return !(n->bitfield & NODEINFO_BITFIELD_HAS_USER_MASK);
+        return !nodeInfoLiteHasUser(n);
     };
 
     meshtastic_NodeInfoLite *found;
@@ -1599,16 +1599,16 @@ void NodeDB::loadFromDisk()
 
         // Attempt recovery of owner fields from our own NodeDB entry if available.
         meshtastic_NodeInfoLite *us = getMeshNode(getNodeNum());
-        if (us && (us->bitfield & NODEINFO_BITFIELD_HAS_USER_MASK)) {
+        if (nodeInfoLiteHasUser(us)) {
             LOG_WARN("Restoring owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for our node 0x%08x",
                      us->num);
             memcpy(owner.long_name, us->long_name, sizeof(owner.long_name));
             owner.long_name[sizeof(owner.long_name) - 1] = '\0';
             memcpy(owner.short_name, us->short_name, sizeof(owner.short_name));
             owner.short_name[sizeof(owner.short_name) - 1] = '\0';
-            owner.is_licensed = (us->bitfield & NODEINFO_BITFIELD_IS_LICENSED_MASK) != 0;
-            owner.has_is_unmessagable = (us->bitfield & NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK) != 0;
-            owner.is_unmessagable = (us->bitfield & NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK) != 0;
+            owner.is_licensed = nodeInfoLiteIsLicensed(us);
+            owner.has_is_unmessagable = nodeInfoLiteHasIsUnmessagable(us);
+            owner.is_unmessagable = nodeInfoLiteIsUnmessagable(us);
 
             // Save the recovered owner to device state on disk
             saveToDisk(SEGMENT_DEVICESTATE);
@@ -2091,7 +2091,7 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 
     // FIXME this implementation is kinda expensive
     for (int i = 0; i < numMeshNodes; i++) {
-        if (localOnly && (meshNodes->at(i).bitfield & NODEINFO_BITFIELD_VIA_MQTT_MASK))
+        if (localOnly && nodeInfoLiteViaMqtt(&meshNodes->at(i)))
             continue;
         if (sinceLastSeen(&meshNodes->at(i)) < NUM_ONLINE_SECS)
             numseen++;
@@ -2217,7 +2217,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     // If the local node has this node marked as manually verified
     // and the client does not, do not allow the client to update the
     // saved public key.
-    if ((info->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) && !contact.manually_verified) {
+    if (nodeInfoLiteIsKeyManuallyVerified(info) && !contact.manually_verified) {
         if (contact.user.public_key.size != info->public_key.size ||
             memcmp(contact.user.public_key.bytes, info->public_key.bytes, info->public_key.size) != 0) {
             return;
@@ -2256,7 +2256,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
         if (contact.manually_verified) {
-            info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK, true);
         }
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
@@ -2470,12 +2470,10 @@ void NodeDB::sortMeshDB()
                     // TODO: Look for at(i-1) also matching own node num, and throw the DB in the trash
                     std::swap(meshNodes->at(i), meshNodes->at(i - 1));
                     changed = true;
-                } else if ((meshNodes->at(i).bitfield & NODEINFO_BITFIELD_IS_FAVORITE_MASK) &&
-                           !(meshNodes->at(i - 1).bitfield & NODEINFO_BITFIELD_IS_FAVORITE_MASK)) {
+                } else if (nodeInfoLiteIsFavorite(&meshNodes->at(i)) && !nodeInfoLiteIsFavorite(&meshNodes->at(i - 1))) {
                     std::swap(meshNodes->at(i), meshNodes->at(i - 1));
                     changed = true;
-                } else if (!(meshNodes->at(i).bitfield & NODEINFO_BITFIELD_IS_FAVORITE_MASK) &&
-                           (meshNodes->at(i - 1).bitfield & NODEINFO_BITFIELD_IS_FAVORITE_MASK)) {
+                } else if (!nodeInfoLiteIsFavorite(&meshNodes->at(i)) && nodeInfoLiteIsFavorite(&meshNodes->at(i - 1))) {
                     // noop
                 } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
                     std::swap(meshNodes->at(i), meshNodes->at(i - 1));
@@ -2535,19 +2533,18 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             int oldestIndex = -1;
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
-                const uint32_t bf = meshNodes->at(i).bitfield;
-                const bool isFavorite = (bf & NODEINFO_BITFIELD_IS_FAVORITE_MASK) != 0;
-                const bool isIgnored = (bf & NODEINFO_BITFIELD_IS_IGNORED_MASK) != 0;
-                const bool isVerified = (bf & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) != 0;
+                const meshtastic_NodeInfoLite *cand = &meshNodes->at(i);
+                const bool isFavorite = nodeInfoLiteIsFavorite(cand);
+                const bool isIgnored = nodeInfoLiteIsIgnored(cand);
+                const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
                 // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!isFavorite && !isIgnored && !isVerified && meshNodes->at(i).last_heard < oldest) {
-                    oldest = meshNodes->at(i).last_heard;
+                if (!isFavorite && !isIgnored && !isVerified && cand->last_heard < oldest) {
+                    oldest = cand->last_heard;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!isFavorite && !isIgnored && meshNodes->at(i).public_key.size == 0 &&
-                    meshNodes->at(i).last_heard < oldestBoring) {
-                    oldestBoring = meshNodes->at(i).last_heard;
+                if (!isFavorite && !isIgnored && cand->public_key.size == 0 && cand->last_heard < oldestBoring) {
+                    oldestBoring = cand->last_heard;
                     oldestBoringIndex = i;
                 }
             }
@@ -2592,10 +2589,9 @@ bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
 UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
 {
     meshtastic_NodeInfoLite *info = getMeshNode(nodeNum);
-    if (!info || !(info->bitfield & NODEINFO_BITFIELD_HAS_USER_MASK)) {
+    if (!nodeInfoLiteHasUser(info))
         return UserLicenseStatus::NotKnown;
-    }
-    return (info->bitfield & NODEINFO_BITFIELD_IS_LICENSED_MASK) ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
+    return nodeInfoLiteIsLicensed(info) ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
 #if !defined(MESHTASTIC_EXCLUDE_PKI)

@@ -13,11 +13,11 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
     info.snr = lite->snr;
     info.last_heard = lite->last_heard;
     info.channel = lite->channel;
-    info.via_mqtt = (lite->bitfield & NODEINFO_BITFIELD_VIA_MQTT_MASK) != 0;
-    info.is_favorite = (lite->bitfield & NODEINFO_BITFIELD_IS_FAVORITE_MASK) != 0;
-    info.is_ignored = (lite->bitfield & NODEINFO_BITFIELD_IS_IGNORED_MASK) != 0;
-    info.is_key_manually_verified = (lite->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) != 0;
-    info.is_muted = (lite->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    info.via_mqtt = nodeInfoLiteViaMqtt(lite);
+    info.is_favorite = nodeInfoLiteIsFavorite(lite);
+    info.is_ignored = nodeInfoLiteIsIgnored(lite);
+    info.is_key_manually_verified = nodeInfoLiteIsKeyManuallyVerified(lite);
+    info.is_muted = nodeInfoLiteIsMuted(lite);
 
     if (lite->has_hops_away) {
         info.has_hops_away = true;
@@ -38,7 +38,7 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
         info.position.location_source = position->location_source;
         info.position.time = position->time;
     }
-    if (lite->bitfield & NODEINFO_BITFIELD_HAS_USER_MASK) {
+    if (nodeInfoLiteHasUser(lite)) {
         info.has_user = true;
         info.user = ConvertToUser(lite);
     }
@@ -128,11 +128,11 @@ meshtastic_User TypeConversions::ConvertToUser(const meshtastic_NodeInfoLite *li
     sanitizeUtf8(user.short_name, sizeof(user.short_name));
     user.hw_model = lite->hw_model;
     user.role = lite->role;
-    user.is_licensed = (lite->bitfield & NODEINFO_BITFIELD_IS_LICENSED_MASK) != 0;
+    user.is_licensed = nodeInfoLiteIsLicensed(lite);
     memcpy(user.public_key.bytes, lite->public_key.bytes, sizeof(user.public_key.bytes));
     user.public_key.size = lite->public_key.size;
-    user.has_is_unmessagable = (lite->bitfield & NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK) != 0;
-    user.is_unmessagable = (lite->bitfield & NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK) != 0;
+    user.has_is_unmessagable = nodeInfoLiteHasIsUnmessagable(lite);
+    user.is_unmessagable = nodeInfoLiteIsUnmessagable(lite);
     // macaddr is gone from the slim header; zero-fill for old clients that read it.
     memset(user.macaddr, 0, sizeof(user.macaddr));
 
