@@ -26,7 +26,7 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and LR20x0 power config forgotten)
 #if ARCH_PORTDUINO
-#define LR2021_MAX_POWER portduino_config.lr1110_max_power
+#define LR2021_MAX_POWER portduino_config.lr2021_max_power
 #endif
 #ifndef LR2021_MAX_POWER
 #define LR2021_MAX_POWER 22
@@ -35,7 +35,7 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 // the 2.4G part maxes at 12dBm
 
 #if ARCH_PORTDUINO
-#define LR2021_MAX_POWER_HF portduino_config.lr1120_max_power
+#define LR2021_MAX_POWER_HF portduino_config.lr2021_max_power_hf
 #endif
 #ifndef LR2021_MAX_POWER_HF
 #define LR2021_MAX_POWER_HF 12
@@ -296,7 +296,7 @@ template <typename T> void LR20x0Interface<T>::startReceive()
 
     RadioLibInterface::startReceive();
 
-    // Must be done AFTER starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+    // Must be done AFTER starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
 #endif
