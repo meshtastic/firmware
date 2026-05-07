@@ -70,11 +70,6 @@ uint8_t TwoButton::getUserButtonPin()
     pin = BUTTON_PIN;
 #endif
 
-    // From userPrefs.jsonc, if set
-#ifdef USERPREFS_BUTTON_PIN
-    pin = USERPREFS_BUTTON_PIN;
-#endif
-
     // From user's override in device settings, if set
     if (config.device.button_gpio)
         pin = config.device.button_gpio;

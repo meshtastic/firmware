@@ -50,14 +50,7 @@ extern "C" {
 #define LED_GREEN PIN_LED1
 #define LED_NOTIFICATION LED_BLUE
 
-#define LED_STATE_ON 1 // State when LED is litted
-
-/*
- * Buttons
- */
-
-#define PIN_BUTTON1 31
-#define BUTTON_NEED_PULLUP
+#define LED_STATE_ON 1 // State when LED is lit
 
 /*
  * Analog pins

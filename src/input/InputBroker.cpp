@@ -40,7 +40,7 @@ static bool touchBacklightActive = false;
 #endif
 #endif
 
-#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+#if defined(HAS_BUTTON) || defined(ARCH_PORTDUINO)
 ButtonThread *UserButtonThread = nullptr;
 #endif
 
@@ -144,31 +144,42 @@ void InputBroker::pollSoonWorker(void *p)
 void InputBroker::Init()
 {
 
-#ifdef BUTTON_PIN
+#ifdef HAS_BUTTON
+    int _pinNum = -1;
+
+#if defined(BUTTON_PIN)
+    // if this is defined, do we really even want to honor the config value?
+    _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#else
+    _pinNum = config.device.button_gpio ? config.device.button_gpio : -1;
+#endif
+
 #ifdef ARCH_ESP32
 
+    if (_pinNum >= 0) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
+
 #ifdef BUTTON_NEED_PULLUP
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP);
+        pinMode(_pinNum, INPUT_PULLUP);
 #else
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
+        pinMode(_pinNum, INPUT); // default to BUTTON_PIN
 #endif
+    }
 #else
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
+        pinMode(_pinNum, INPUT); // default to BUTTON_PIN
 #ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
-    delay(10);
+        gpio_pullup_en((gpio_num_t)_pinNum);
+        delay(10);
 #endif
+    }
 #ifdef BUTTON_NEED_PULLUP2
     gpio_pullup_en((gpio_num_t)BUTTON_NEED_PULLUP2);
     delay(10);
 #endif
 #endif
-#endif
-#endif
+#endif // ARCH_ESP32
 
-// buttons are now inputBroker, so have to come after setupModules
-#if HAS_BUTTON
+    // buttons are now inputBroker, so have to come after setupModules
     int pullup_sense = 0;
 #ifdef INPUT_PULLUP_SENSE
     // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
@@ -283,12 +294,6 @@ void InputBroker::Init()
     BackButtonThread->initButton(backConfig);
 #endif
 
-#if defined(BUTTON_PIN)
-#if defined(USERPREFS_BUTTON_PIN)
-    int _pinNum = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
-#else
-    int _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
-#endif
 #ifndef BUTTON_ACTIVE_LOW
 #define BUTTON_ACTIVE_LOW true
 #endif
@@ -298,51 +303,52 @@ void InputBroker::Init()
 
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
-    UserButtonThread = new ButtonThread("UserButton");
+    if (_pinNum >= 0) {
+        UserButtonThread = new ButtonThread("UserButton");
 #if !MESHTASTIC_EXCLUDE_SCREEN
-    if (screen) {
-        ButtonConfig userConfig;
-        userConfig.pinNumber = (uint8_t)_pinNum;
-        userConfig.activeLow = BUTTON_ACTIVE_LOW;
-        userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
-        userConfig.pullupSense = pullup_sense;
-        userConfig.intRoutine = []() {
-            UserButtonThread->userButton.tick();
-            UserButtonThread->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            concurrency::mainDelay.interruptFromISR(&higherWake);
-        };
-        userConfig.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfig.longPress = INPUT_BROKER_SELECT;
-        userConfig.longPressTime = 500;
-        userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
-        UserButtonThread->initButton(userConfig);
-    } else
+        if (screen) {
+            ButtonConfig userConfig;
+            userConfig.pinNumber = (uint8_t)_pinNum;
+            userConfig.activeLow = BUTTON_ACTIVE_LOW;
+            userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
+            userConfig.pullupSense = pullup_sense;
+            userConfig.intRoutine = []() {
+                UserButtonThread->userButton.tick();
+                UserButtonThread->setIntervalFromNow(0);
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                concurrency::mainDelay.interruptFromISR(&higherWake);
+            };
+            userConfig.singlePress = INPUT_BROKER_USER_PRESS;
+            userConfig.longPress = INPUT_BROKER_SELECT;
+            userConfig.longPressTime = 500;
+            userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
+            UserButtonThread->initButton(userConfig);
+        } else
 #endif
-    {
-        ButtonConfig userConfigNoScreen;
-        userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
-        userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
-        userConfigNoScreen.activePullup = BUTTON_ACTIVE_PULLUP;
-        userConfigNoScreen.pullupSense = pullup_sense;
-        userConfigNoScreen.intRoutine = []() {
-            UserButtonThread->userButton.tick();
-            UserButtonThread->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            concurrency::mainDelay.interruptFromISR(&higherWake);
-        };
-        userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfigNoScreen.longPress = INPUT_BROKER_NONE;
-        userConfigNoScreen.longPressTime = 500;
-        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
-        userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
-        userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
-        UserButtonThread->initButton(userConfigNoScreen);
+        {
+            ButtonConfig userConfigNoScreen;
+            userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
+            userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
+            userConfigNoScreen.activePullup = BUTTON_ACTIVE_PULLUP;
+            userConfigNoScreen.pullupSense = pullup_sense;
+            userConfigNoScreen.intRoutine = []() {
+                UserButtonThread->userButton.tick();
+                UserButtonThread->setIntervalFromNow(0);
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                concurrency::mainDelay.interruptFromISR(&higherWake);
+            };
+            userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
+            userConfigNoScreen.longPress = INPUT_BROKER_NONE;
+            userConfigNoScreen.longPressTime = 500;
+            userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+            userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
+            userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
+            UserButtonThread->initButton(userConfigNoScreen);
+        }
     }
-#endif
-#endif
+#endif // HAS_BUTTON
 
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
