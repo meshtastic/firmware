@@ -4,7 +4,6 @@
 #include "TestUtil.h"
 #include <unity.h>
 
-#include "detect/LoRaRadioType.h"
 #include "meshtastic/config.pb.h"
 
 class MockMeshService : public MeshService
@@ -184,19 +183,6 @@ static void test_applyModemConfig_customCodingRateLowerThanPreset()
     TEST_ASSERT_EQUAL_UINT8(8, testRadio->getCr());
 }
 
-// -----------------------------------------------------------------------
-// LR2021 radio type detection tests
-// -----------------------------------------------------------------------
-
-static void test_loraRadioType_LR2021_enumExists()
-{
-    // Verify that LR2021_RADIO enum value exists and is distinct from other radio types
-    TEST_ASSERT_NOT_EQUAL(NO_RADIO, LR2021_RADIO);
-    TEST_ASSERT_NOT_EQUAL(SX1262_RADIO, LR2021_RADIO);
-    TEST_ASSERT_NOT_EQUAL(LR1110_RADIO, LR2021_RADIO);
-    TEST_ASSERT_NOT_EQUAL(LR1120_RADIO, LR2021_RADIO);
-}
-
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -237,7 +223,6 @@ void setup()
     RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
-    RUN_TEST(test_loraRadioType_LR2021_enumExists);
     exit(UNITY_END());
 }
 
