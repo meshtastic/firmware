@@ -212,7 +212,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
 template <typename T> void LR11x0Interface<T>::disableInterrupt()
