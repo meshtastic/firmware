@@ -90,6 +90,7 @@ External serial flash W25Q16JV_IQ
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES W25Q16JV_IQ
 #define EXTERNAL_FLASH_USE_QSPI
+#define MESHTASTIC_EXTERNAL_FLASH_FS
 
 /*
  * Lora radio
