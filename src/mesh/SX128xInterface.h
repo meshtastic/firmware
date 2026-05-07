@@ -29,6 +29,9 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+    /// Push a TX power to the chip for the next packet. See base class for semantics.
+    void setTransmitPower(int dbm) override;
+
   protected:
     /**
      * Specific module instance

@@ -208,6 +208,21 @@ class RadioInterface
     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
 
     /**
+     * Set the radio's TX power for the next transmission.
+     *
+     * Takes an int (not int8_t) so callers can pass the result of
+     * `power - penalty` without pre-clamping. Per-radio overrides are
+     * responsible for clamping `dbm` to the chip's hardware range before
+     * touching the chip, and must never exceed the configured `power`.
+     *
+     * Does not mutate `power`, so a subsequent setTransmitPower(power)
+     * call restores the configured value.
+     *
+     * Default is a no-op so non-RadioLib interfaces still compile.
+     */
+    virtual void setTransmitPower(int dbm) { (void)dbm; }
+
+    /**
      * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
      * @return Whether a pending packet was removed
      */

@@ -201,6 +201,23 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     return true;
 }
 
+template <typename T> void LR11x0Interface<T>::setTransmitPower(int dbm)
+{
+    // Never exceed the configured `power` (see SX126x override).
+    // LR11x0 low-power path minimum is -17 dBm.
+    if (dbm > power) {
+        LOG_WARN("LR11x0 TX power %d dBm above configured %d dBm, clamping down", dbm, power);
+        dbm = power;
+    }
+    if (dbm < -17) {
+        LOG_WARN("LR11x0 TX power %d dBm below chip minimum, clamping to -17 dBm", dbm);
+        dbm = -17;
+    }
+    int err = lora.setOutputPower((int8_t)dbm);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("LR11x0 setOutputPower %s%d", radioLibErr, err);
+}
+
 template <typename T> void LR11x0Interface<T>::disableInterrupt()
 {
     lora.clearIrqAction();
