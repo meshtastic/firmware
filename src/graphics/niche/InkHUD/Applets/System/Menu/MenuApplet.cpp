@@ -2090,7 +2090,7 @@ void InkHUD::MenuApplet::populateRecipientPage()
 
     // Count favorites
     for (uint32_t i = 0; i < nodeCount; i++) {
-        if (nodeDB->getMeshNodeByIndex(i)->is_favorite)
+        if (nodeInfoLiteIsFavorite(nodeDB->getMeshNodeByIndex(i)))
             favoriteCount++;
     }
 
@@ -2101,7 +2101,7 @@ void InkHUD::MenuApplet::populateRecipientPage()
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
 
             // Skip node if not a favorite
-            if (!node->is_favorite)
+            if (!nodeInfoLiteIsFavorite(node))
                 continue;
 
             CannedMessages::RecipientItem r;
@@ -2111,8 +2111,8 @@ void InkHUD::MenuApplet::populateRecipientPage()
 
             // Set a label for the menu item
             r.label = "DM: ";
-            if (node->has_user)
-                r.label += parse(node->user.long_name);
+            if (nodeInfoLiteHasUser(node))
+                r.label += parse(node->long_name);
             else
                 r.label += hexifyNodeNum(node->num); // Unsure if it's possible to favorite a node without NodeInfo?
 

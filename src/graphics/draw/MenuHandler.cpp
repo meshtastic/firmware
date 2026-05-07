@@ -847,8 +847,8 @@ void menuHandler::messageViewModeMenu()
         uint32_t peer = uniquePeers[i];
         auto node = nodeDB->getMeshNode(peer);
         std::string name;
-        if (node && node->has_user)
-            name = sanitizeString(node->user.long_name).substr(0, 15);
+        if (nodeInfoLiteHasUser(node))
+            name = sanitizeString(node->long_name).substr(0, 15);
         else {
             char buf[20];
             snprintf(buf, sizeof(buf), "Node %08X", peer);
@@ -1355,7 +1355,7 @@ void menuHandler::manageNodeMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-    if (node->is_favorite) {
+    if (nodeInfoLiteIsFavorite(node)) {
         optionsArray[options] = "Unfavorite";
     } else {
         optionsArray[options] = "Favorite";
@@ -1376,7 +1376,7 @@ void menuHandler::manageNodeMenu()
     optionsArray[options] = "Key Verification";
     optionsEnumArray[options++] = KeyVerification;
 
-    if (node->is_ignored) {
+    if (nodeInfoLiteIsIgnored(node)) {
         optionsArray[options] = "Unignore Node";
     } else {
         optionsArray[options] = "Ignore Node";
@@ -1386,8 +1386,8 @@ void menuHandler::manageNodeMenu()
     BannerOverlayOptions bannerOptions;
 
     std::string title = "";
-    if (node->has_user && node->user.long_name && node->user.long_name[0]) {
-        title += sanitizeString(node->user.long_name).substr(0, 15);
+    if (nodeInfoLiteHasUser(node) && node->long_name[0]) {
+        title += sanitizeString(node->long_name).substr(0, 15);
     } else {
         char buf[20];
         snprintf(buf, sizeof(buf), "%08X", (unsigned int)node->num);
@@ -1409,7 +1409,7 @@ void menuHandler::manageNodeMenu()
             if (!n) {
                 return;
             }
-            if (n->is_favorite) {
+            if (nodeInfoLiteIsFavorite(n)) {
                 LOG_INFO("Removing node %08X from favorites", menuHandler::pickedNodeNum);
                 nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
             } else {
@@ -1461,11 +1461,11 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
-            if (n->is_ignored) {
-                n->is_ignored = false;
+            if (nodeInfoLiteIsIgnored(n)) {
+                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
                 LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
             } else {
-                n->is_ignored = true;
+                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
                 LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
             }
             nodeDB->notifyObservers(true);
@@ -2080,8 +2080,8 @@ void menuHandler::removeFavoriteMenu()
     BannerOverlayOptions bannerOptions;
     std::string message = "Unfavorite This Node?\n";
     auto node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
-    if (node && node->has_user) {
-        message += sanitizeString(node->user.long_name).substr(0, 15);
+    if (nodeInfoLiteHasUser(node)) {
+        message += sanitizeString(node->long_name).substr(0, 15);
     }
     bannerOptions.message = message.c_str();
     bannerOptions.optionsArrayPtr = optionsArray;

@@ -62,7 +62,7 @@ void PhoneAPI::handleStartConfig()
     onConfigStart();
 
     // even if we were already connected - restart our state machine
-    if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
+    if (config_nonce == SPECIAL_NONCE_ONLY_NODES || config_nonce == SPECIAL_NONCE_GRADIENT_ONLY_NODES) {
         // If client only wants node info, jump directly to sending nodes
         state = STATE_SEND_OWN_NODEINFO;
         LOG_INFO("Client only wants node info, skipping other config");
@@ -81,6 +81,15 @@ void PhoneAPI::handleStartConfig()
         concurrency::LockGuard guard(&nodeInfoMutex);
         nodeInfoForPhone = {};
         nodeInfoQueue.clear();
+        replayQueue.clear();
+        replayPositionOrder.clear();
+        replayTelemetryOrder.clear();
+        replayEnvironmentOrder.clear();
+        replayStatusOrder.clear();
+        replayPositionIndex = 0;
+        replayTelemetryIndex = 0;
+        replayEnvironmentIndex = 0;
+        replayStatusIndex = 0;
     }
     resetReadIndex();
 }
@@ -120,6 +129,15 @@ void PhoneAPI::close()
             concurrency::LockGuard guard(&nodeInfoMutex);
             nodeInfoForPhone = {};
             nodeInfoQueue.clear();
+            replayQueue.clear();
+            replayPositionOrder.clear();
+            replayTelemetryOrder.clear();
+            replayEnvironmentOrder.clear();
+            replayStatusOrder.clear();
+            replayPositionIndex = 0;
+            replayTelemetryIndex = 0;
+            replayEnvironmentIndex = 0;
+            replayStatusIndex = 0;
         }
         packetForPhone = NULL;
         filesManifest.clear();
@@ -302,7 +320,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 nodeInfoForPhone.num = 0;
             }
         }
-        if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
+        if (config_nonce == SPECIAL_NONCE_ONLY_NODES || config_nonce == SPECIAL_NONCE_GRADIENT_ONLY_NODES) {
             // If client only wants node info, jump directly to sending nodes
             state = STATE_SEND_OTHER_NODEINFOS;
             onNowHasData(0);
@@ -529,8 +547,124 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Done sending %d of %d nodeinfos millis=%u", readIndex, nodeDB->getNumMeshNodes(), millis());
             concurrency::LockGuard guard(&nodeInfoMutex);
             nodeInfoQueue.clear();
+            // Replay states no-op for legacy clients / excluded DBs.
+            state = STATE_REPLAY_POSITIONS;
+            return getFromRadio(buf);
+        }
+        break;
+    }
+
+    case STATE_REPLAY_POSITIONS: {
+        if (replayPositionOrder.empty() && replayPositionIndex == 0)
+            beginReplayPositions();
+        prefetchReplayPositions();
+
+        meshtastic_MeshPacket pkt = {};
+        bool havePkt = false;
+        {
+            concurrency::LockGuard guard(&nodeInfoMutex);
+            if (!replayQueue.empty()) {
+                pkt = replayQueue.front();
+                replayQueue.pop_front();
+                havePkt = true;
+            }
+        }
+
+        if (havePkt) {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_packet_tag;
+            fromRadioScratch.packet = pkt;
+        } else {
+            LOG_DEBUG("Done replaying positions count=%u millis=%u", (unsigned)replayPositionIndex, millis());
+            state = STATE_REPLAY_TELEMETRY;
+            return getFromRadio(buf);
+        }
+        break;
+    }
+
+    case STATE_REPLAY_TELEMETRY: {
+        if (replayTelemetryOrder.empty() && replayTelemetryIndex == 0)
+            beginReplayTelemetry();
+        prefetchReplayTelemetry();
+
+        meshtastic_MeshPacket pkt = {};
+        bool havePkt = false;
+        {
+            concurrency::LockGuard guard(&nodeInfoMutex);
+            if (!replayQueue.empty()) {
+                pkt = replayQueue.front();
+                replayQueue.pop_front();
+                havePkt = true;
+            }
+        }
+
+        if (havePkt) {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_packet_tag;
+            fromRadioScratch.packet = pkt;
+        } else {
+            LOG_DEBUG("Done replaying telemetry count=%u millis=%u", (unsigned)replayTelemetryIndex, millis());
+            state = STATE_REPLAY_ENVIRONMENT;
+            return getFromRadio(buf);
+        }
+        break;
+    }
+
+    case STATE_REPLAY_ENVIRONMENT: {
+        if (replayEnvironmentOrder.empty() && replayEnvironmentIndex == 0)
+            beginReplayEnvironment();
+        prefetchReplayEnvironment();
+
+        meshtastic_MeshPacket pkt = {};
+        bool havePkt = false;
+        {
+            concurrency::LockGuard guard(&nodeInfoMutex);
+            if (!replayQueue.empty()) {
+                pkt = replayQueue.front();
+                replayQueue.pop_front();
+                havePkt = true;
+            }
+        }
+
+        if (havePkt) {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_packet_tag;
+            fromRadioScratch.packet = pkt;
+        } else {
+            LOG_DEBUG("Done replaying environment count=%u millis=%u", (unsigned)replayEnvironmentIndex, millis());
+            state = STATE_REPLAY_STATUS;
+            return getFromRadio(buf);
+        }
+        break;
+    }
+
+    case STATE_REPLAY_STATUS: {
+        if (replayStatusOrder.empty() && replayStatusIndex == 0)
+            beginReplayStatus();
+        prefetchReplayStatus();
+
+        meshtastic_MeshPacket pkt = {};
+        bool havePkt = false;
+        {
+            concurrency::LockGuard guard(&nodeInfoMutex);
+            if (!replayQueue.empty()) {
+                pkt = replayQueue.front();
+                replayQueue.pop_front();
+                havePkt = true;
+            }
+        }
+
+        if (havePkt) {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_packet_tag;
+            fromRadioScratch.packet = pkt;
+        } else {
+            LOG_DEBUG("Done replaying status count=%u millis=%u", (unsigned)replayStatusIndex, millis());
+            replayPositionOrder.clear();
+            replayPositionOrder.shrink_to_fit();
+            replayTelemetryOrder.clear();
+            replayTelemetryOrder.shrink_to_fit();
+            replayEnvironmentOrder.clear();
+            replayEnvironmentOrder.shrink_to_fit();
+            replayStatusOrder.clear();
+            replayStatusOrder.shrink_to_fit();
             state = STATE_SEND_FILEMANIFEST;
-            // Go ahead and send that ID right now
             return getFromRadio(buf);
         }
         break;
@@ -538,9 +672,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_FILEMANIFEST: {
         LOG_DEBUG("FromRadio=STATE_SEND_FILEMANIFEST");
-        // last element
-        if (config_state == filesManifest.size() ||
-            config_nonce == SPECIAL_NONCE_ONLY_NODES) { // also handles an empty filesManifest
+        // ONLY_NODES variants skip the manifest.
+        if (config_state == filesManifest.size() || config_nonce == SPECIAL_NONCE_ONLY_NODES ||
+            config_nonce == SPECIAL_NONCE_GRADIENT_ONLY_NODES) {
             config_state = 0;
             filesManifest.clear();
             // Skip to complete packet
@@ -653,6 +787,7 @@ void PhoneAPI::prefetchNodeInfos()
 {
     bool added = false;
     bool wasEmpty = false;
+    const bool gradient = clientWantsGradientSync();
     // Keep the queue topped up so BLE reads stay responsive even if DB fetches take a moment.
     {
         concurrency::LockGuard guard(&nodeInfoMutex);
@@ -662,7 +797,8 @@ void PhoneAPI::prefetchNodeInfos()
             if (!nextNode)
                 break;
 
-            auto info = TypeConversions::ConvertToNodeInfo(nextNode);
+            auto info =
+                gradient ? TypeConversions::ConvertToNodeInfoThin(nextNode) : TypeConversions::ConvertToNodeInfo(nextNode);
             bool isUs = info.num == nodeDB->getNodeNum();
             info.hops_away = isUs ? 0 : info.hops_away;
             info.last_heard = isUs ? getValidTime(RTCQualityFromNet) : info.last_heard;
@@ -680,6 +816,281 @@ void PhoneAPI::prefetchNodeInfos()
 
     if (added && wasEmpty)
         onNowHasData(0);
+}
+
+meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const meshtastic_PositionLite &pos)
+{
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
+    pkt.from = num;
+    pkt.to = nodeDB->getNodeNum();
+    pkt.id = generatePacketId();
+    pkt.rx_time = pos.time;
+    pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    pkt.decoded.portnum = meshtastic_PortNum_POSITION_APP;
+    meshtastic_Position fullPos = TypeConversions::ConvertToPosition(pos);
+    size_t len =
+        pb_encode_to_bytes(pkt.decoded.payload.bytes, sizeof(pkt.decoded.payload.bytes), &meshtastic_Position_msg, &fullPos);
+    pkt.decoded.payload.size = (pb_size_t)len;
+    return pkt;
+}
+
+meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(NodeNum num, const meshtastic_DeviceMetrics &metrics)
+{
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
+    pkt.from = num;
+    pkt.to = nodeDB->getNodeNum();
+    pkt.id = generatePacketId();
+    // No native timestamp on telemetry packets here; use last_heard.
+    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
+    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    pkt.decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
+    meshtastic_Telemetry fullTel = meshtastic_Telemetry_init_default;
+    fullTel.time = pkt.rx_time;
+    fullTel.which_variant = meshtastic_Telemetry_device_metrics_tag;
+    fullTel.variant.device_metrics = metrics;
+    size_t len =
+        pb_encode_to_bytes(pkt.decoded.payload.bytes, sizeof(pkt.decoded.payload.bytes), &meshtastic_Telemetry_msg, &fullTel);
+    pkt.decoded.payload.size = (pb_size_t)len;
+    return pkt;
+}
+
+void PhoneAPI::beginReplayPositions()
+{
+#if MESHTASTIC_EXCLUDE_POSITIONDB
+    // Build excluded entirely - leave the order list empty so the state arm
+    // immediately drains and advances.
+    replayPositionOrder.clear();
+    replayPositionIndex = 0;
+#else
+    if (!clientWantsGradientSync()) {
+        replayPositionOrder.clear();
+        replayPositionIndex = 0;
+        return;
+    }
+    // Snapshot the keyset at phase start so concurrent inserts/erases on the
+    // map don't invalidate iteration. Skip our own node - the phone already
+    // got our position bundled in STATE_SEND_OWN_NODEINFO.
+    replayPositionOrder.clear();
+    NodeNum ourNum = nodeDB->getNodeNum();
+    replayPositionOrder.reserve(nodeDB->nodePositions.size());
+    for (const auto &kv : nodeDB->nodePositions) {
+        if (kv.first != ourNum)
+            replayPositionOrder.push_back(kv.first);
+    }
+    replayPositionIndex = 0;
+    LOG_INFO("Begin position replay: %u entries millis=%u", (unsigned)replayPositionOrder.size(), millis());
+#endif
+}
+
+void PhoneAPI::prefetchReplayPositions()
+{
+#if MESHTASTIC_EXCLUDE_POSITIONDB
+    return;
+#else
+    if (!clientWantsGradientSync())
+        return;
+    bool added = false;
+    bool wasEmpty = false;
+    {
+        concurrency::LockGuard guard(&nodeInfoMutex);
+        wasEmpty = replayQueue.empty();
+        while (replayQueue.size() < kReplayPrefetchDepth && replayPositionIndex < replayPositionOrder.size()) {
+            NodeNum num = replayPositionOrder[replayPositionIndex++];
+            const meshtastic_PositionLite *pos = nodeDB->getNodePosition(num);
+            if (!pos)
+                continue; // entry was evicted between snapshot and now
+            replayQueue.push_back(makeReplayPositionPacket(num, *pos));
+            added = true;
+        }
+    }
+    if (added && wasEmpty)
+        onNowHasData(0);
+#endif
+}
+
+void PhoneAPI::beginReplayTelemetry()
+{
+#if MESHTASTIC_EXCLUDE_TELEMETRYDB
+    replayTelemetryOrder.clear();
+    replayTelemetryIndex = 0;
+#else
+    if (!clientWantsGradientSync()) {
+        replayTelemetryOrder.clear();
+        replayTelemetryIndex = 0;
+        return;
+    }
+    replayTelemetryOrder.clear();
+    NodeNum ourNum = nodeDB->getNodeNum();
+    replayTelemetryOrder.reserve(nodeDB->nodeTelemetry.size());
+    for (const auto &kv : nodeDB->nodeTelemetry) {
+        if (kv.first != ourNum)
+            replayTelemetryOrder.push_back(kv.first);
+    }
+    replayTelemetryIndex = 0;
+    LOG_INFO("Begin telemetry replay: %u entries millis=%u", (unsigned)replayTelemetryOrder.size(), millis());
+#endif
+}
+
+void PhoneAPI::prefetchReplayTelemetry()
+{
+#if MESHTASTIC_EXCLUDE_TELEMETRYDB
+    return;
+#else
+    if (!clientWantsGradientSync())
+        return;
+    bool added = false;
+    bool wasEmpty = false;
+    {
+        concurrency::LockGuard guard(&nodeInfoMutex);
+        wasEmpty = replayQueue.empty();
+        while (replayQueue.size() < kReplayPrefetchDepth && replayTelemetryIndex < replayTelemetryOrder.size()) {
+            NodeNum num = replayTelemetryOrder[replayTelemetryIndex++];
+            const meshtastic_DeviceMetrics *dm = nodeDB->getNodeTelemetry(num);
+            if (!dm)
+                continue;
+            replayQueue.push_back(makeReplayTelemetryPacket(num, *dm));
+            added = true;
+        }
+    }
+    if (added && wasEmpty)
+        onNowHasData(0);
+#endif
+}
+
+meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(uint32_t num, const meshtastic_EnvironmentMetrics &env)
+{
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
+    pkt.from = num;
+    pkt.to = nodeDB->getNodeNum();
+    pkt.id = generatePacketId();
+    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
+    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    pkt.decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
+    meshtastic_Telemetry fullTel = meshtastic_Telemetry_init_default;
+    fullTel.time = pkt.rx_time;
+    fullTel.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    fullTel.variant.environment_metrics = env;
+    size_t len =
+        pb_encode_to_bytes(pkt.decoded.payload.bytes, sizeof(pkt.decoded.payload.bytes), &meshtastic_Telemetry_msg, &fullTel);
+    pkt.decoded.payload.size = (pb_size_t)len;
+    return pkt;
+}
+
+void PhoneAPI::beginReplayEnvironment()
+{
+#if MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    replayEnvironmentOrder.clear();
+    replayEnvironmentIndex = 0;
+#else
+    if (!clientWantsGradientSync()) {
+        replayEnvironmentOrder.clear();
+        replayEnvironmentIndex = 0;
+        return;
+    }
+    replayEnvironmentOrder.clear();
+    NodeNum ourNum = nodeDB->getNodeNum();
+    replayEnvironmentOrder.reserve(nodeDB->nodeEnvironment.size());
+    for (const auto &kv : nodeDB->nodeEnvironment) {
+        if (kv.first != ourNum)
+            replayEnvironmentOrder.push_back(kv.first);
+    }
+    replayEnvironmentIndex = 0;
+    LOG_INFO("Begin environment replay: %u entries millis=%u", (unsigned)replayEnvironmentOrder.size(), millis());
+#endif
+}
+
+void PhoneAPI::prefetchReplayEnvironment()
+{
+#if MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    return;
+#else
+    if (!clientWantsGradientSync())
+        return;
+    bool added = false;
+    bool wasEmpty = false;
+    {
+        concurrency::LockGuard guard(&nodeInfoMutex);
+        wasEmpty = replayQueue.empty();
+        while (replayQueue.size() < kReplayPrefetchDepth && replayEnvironmentIndex < replayEnvironmentOrder.size()) {
+            NodeNum num = replayEnvironmentOrder[replayEnvironmentIndex++];
+            const meshtastic_EnvironmentMetrics *env = nodeDB->getNodeEnvironment(num);
+            if (!env)
+                continue;
+            replayQueue.push_back(makeReplayEnvironmentPacket(num, *env));
+            added = true;
+        }
+    }
+    if (added && wasEmpty)
+        onNowHasData(0);
+#endif
+}
+
+meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(uint32_t num, const meshtastic_StatusMessage &status)
+{
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
+    pkt.from = num;
+    pkt.to = nodeDB->getNodeNum();
+    pkt.id = generatePacketId();
+    // StatusMessage has no native timestamp; use last_heard.
+    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
+    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    pkt.decoded.portnum = meshtastic_PortNum_NODE_STATUS_APP;
+    size_t len =
+        pb_encode_to_bytes(pkt.decoded.payload.bytes, sizeof(pkt.decoded.payload.bytes), &meshtastic_StatusMessage_msg, &status);
+    pkt.decoded.payload.size = (pb_size_t)len;
+    return pkt;
+}
+
+void PhoneAPI::beginReplayStatus()
+{
+#if MESHTASTIC_EXCLUDE_STATUSDB
+    replayStatusOrder.clear();
+    replayStatusIndex = 0;
+#else
+    if (!clientWantsGradientSync()) {
+        replayStatusOrder.clear();
+        replayStatusIndex = 0;
+        return;
+    }
+    replayStatusOrder.clear();
+    NodeNum ourNum = nodeDB->getNodeNum();
+    replayStatusOrder.reserve(nodeDB->nodeStatus.size());
+    for (const auto &kv : nodeDB->nodeStatus) {
+        if (kv.first != ourNum)
+            replayStatusOrder.push_back(kv.first);
+    }
+    replayStatusIndex = 0;
+    LOG_INFO("Begin status replay: %u entries millis=%u", (unsigned)replayStatusOrder.size(), millis());
+#endif
+}
+
+void PhoneAPI::prefetchReplayStatus()
+{
+#if MESHTASTIC_EXCLUDE_STATUSDB
+    return;
+#else
+    if (!clientWantsGradientSync())
+        return;
+    bool added = false;
+    bool wasEmpty = false;
+    {
+        concurrency::LockGuard guard(&nodeInfoMutex);
+        wasEmpty = replayQueue.empty();
+        while (replayQueue.size() < kReplayPrefetchDepth && replayStatusIndex < replayStatusOrder.size()) {
+            NodeNum num = replayStatusOrder[replayStatusIndex++];
+            const meshtastic_StatusMessage *status = nodeDB->getNodeStatus(num);
+            if (!status || status->status[0] == '\0')
+                continue;
+            replayQueue.push_back(makeReplayStatusPacket(num, *status));
+            added = true;
+        }
+    }
+    if (added && wasEmpty)
+        onNowHasData(0);
+#endif
 }
 
 void PhoneAPI::releaseMqttClientProxyPhonePacket()
@@ -728,6 +1139,31 @@ bool PhoneAPI::available()
     PREFETCH_NODEINFO:
         prefetchNodeInfos();
         return true;
+    case STATE_REPLAY_POSITIONS: {
+        // Prime the iterator if we haven't yet, then top up the queue.
+        if (replayPositionOrder.empty() && replayPositionIndex == 0)
+            beginReplayPositions();
+        prefetchReplayPositions();
+        return true; // Always advance state machine; arm itself transitions when drained
+    }
+    case STATE_REPLAY_TELEMETRY: {
+        if (replayTelemetryOrder.empty() && replayTelemetryIndex == 0)
+            beginReplayTelemetry();
+        prefetchReplayTelemetry();
+        return true;
+    }
+    case STATE_REPLAY_ENVIRONMENT: {
+        if (replayEnvironmentOrder.empty() && replayEnvironmentIndex == 0)
+            beginReplayEnvironment();
+        prefetchReplayEnvironment();
+        return true;
+    }
+    case STATE_REPLAY_STATUS: {
+        if (replayStatusOrder.empty() && replayStatusIndex == 0)
+            beginReplayStatus();
+        prefetchReplayStatus();
+        return true;
+    }
     case STATE_SEND_PACKETS: {
         if (!queueStatusPacketForPhone)
             queueStatusPacketForPhone = service->getQueueStatusForPhone();

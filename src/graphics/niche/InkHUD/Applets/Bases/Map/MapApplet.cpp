@@ -137,8 +137,9 @@ void InkHUD::MapApplet::onRender(bool full)
 
     // Draw our node LAST with full white fill + outline
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    if (ourNode && nodeDB->hasValidPosition(ourNode)) {
-        Marker self = calculateMarker(ourNode->position.latitude_i * 1e-7, ourNode->position.longitude_i * 1e-7, false, 0);
+    const meshtastic_PositionLite *ourSelfPos = ourNode ? nodeDB->getNodePosition(ourNode->num) : nullptr;
+    if (ourNode && nodeDB->hasValidPosition(ourNode) && ourSelfPos) {
+        Marker self = calculateMarker(ourSelfPos->latitude_i * 1e-7, ourSelfPos->longitude_i * 1e-7, false, 0);
 
         int16_t centerX = X(0.5) + (self.eastMeters * metersToPx);
         int16_t centerY = Y(0.5) - (self.northMeters * metersToPx);
@@ -169,9 +170,10 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
 {
     // If we have a valid position for our own node, use that as the anchor
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    if (ourNode && nodeDB->hasValidPosition(ourNode)) {
-        *lat = ourNode->position.latitude_i * 1e-7;
-        *lng = ourNode->position.longitude_i * 1e-7;
+    const meshtastic_PositionLite *ourSelfPos = ourNode ? nodeDB->getNodePosition(ourNode->num) : nullptr;
+    if (ourNode && nodeDB->hasValidPosition(ourNode) && ourSelfPos) {
+        *lat = ourSelfPos->latitude_i * 1e-7;
+        *lng = ourSelfPos->longitude_i * 1e-7;
     } else {
         // Find mean lat long coords
         // ============================
@@ -201,9 +203,13 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
             if (!shouldDrawNode(node))
                 continue;
 
+            const meshtastic_PositionLite *pos = nodeDB->getNodePosition(node->num);
+            if (!pos)
+                continue;
+
             // Latitude and Longitude of node, in radians
-            float latRad = node->position.latitude_i * (1e-7) * DEG_TO_RAD;
-            float lngRad = node->position.longitude_i * (1e-7) * DEG_TO_RAD;
+            float latRad = pos->latitude_i * (1e-7) * DEG_TO_RAD;
+            float lngRad = pos->longitude_i * (1e-7) * DEG_TO_RAD;
 
             // Convert to cartesian points, with center of earth at 0, 0, 0
             // Exact distance from center is irrelevant, as we're only interested in the vector
@@ -300,13 +306,17 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
         if (!shouldDrawNode(node))
             continue;
 
+        const meshtastic_PositionLite *pos = nodeDB->getNodePosition(node->num);
+        if (!pos)
+            continue;
+
         // Check for a new top or bottom latitude
-        float latNode = node->position.latitude_i * 1e-7;
+        float latNode = pos->latitude_i * 1e-7;
         northernmost = max(northernmost, latNode);
         southernmost = min(southernmost, latNode);
 
         // Longitude is trickier
-        float lngNode = node->position.longitude_i * 1e-7;
+        float lngNode = pos->longitude_i * 1e-7;
         float degEastward = fmod(((lngNode - lngCenter) + 360), 360);      // Degrees traveled east from lngCenter to reach node
         float degWestward = abs(fmod(((lngNode - lngCenter) - 360), 360)); // Degrees traveled west from lngCenter to reach node
         if (degEastward < degWestward)
@@ -372,10 +382,12 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
 {
     // Find x and y position based on node's position in nodeDB
     assert(nodeDB->hasValidPosition(node));
-    Marker m = calculateMarker(node->position.latitude_i * 1e-7,  // Lat, converted from Meshtastic's internal int32 style
-                               node->position.longitude_i * 1e-7, // Long, converted from Meshtastic's internal int32 style
-                               node->has_hops_away,               // Is the hopsAway number valid
-                               node->hops_away                    // Hops away
+    const meshtastic_PositionLite *pos = nodeDB->getNodePosition(node->num);
+    assert(pos);
+    Marker m = calculateMarker(pos->latitude_i * 1e-7,  // Lat, converted from Meshtastic's internal int32 style
+                               pos->longitude_i * 1e-7, // Long, converted from Meshtastic's internal int32 style
+                               node->has_hops_away,     // Is the hopsAway number valid
+                               node->hops_away          // Hops away
     );
 
     // Convert to pixel coords
@@ -516,13 +528,16 @@ void InkHUD::MapApplet::calculateAllMarkers()
         if (node->num == nodeDB->getNodeNum())
             continue;
 
+        const meshtastic_PositionLite *pos = nodeDB->getNodePosition(node->num);
+        if (!pos)
+            continue;
+
         // Calculate marker and store it
-        markers.push_back(
-            calculateMarker(node->position.latitude_i * 1e-7,  // Lat, converted from Meshtastic's internal int32 style
-                            node->position.longitude_i * 1e-7, // Long, converted from Meshtastic's internal int32 style
-                            node->has_hops_away,               // Is the hopsAway number valid
-                            node->hops_away                    // Hops away
-                            ));
+        markers.push_back(calculateMarker(pos->latitude_i * 1e-7,  // Lat, converted from Meshtastic's internal int32 style
+                                          pos->longitude_i * 1e-7, // Long, converted from Meshtastic's internal int32 style
+                                          node->has_hops_away,     // Is the hopsAway number valid
+                                          node->hops_away          // Hops away
+                                          ));
     }
 }
 
