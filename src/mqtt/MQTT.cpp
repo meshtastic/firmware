@@ -409,6 +409,9 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
 
 void mqttInit()
 {
+    if (!moduleConfig.mqtt.enabled)
+        return;
+
     new MQTT();
 }
 
