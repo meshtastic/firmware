@@ -9,6 +9,7 @@
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/fatal.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/reboot.h>
 
 // Forward declarations from src/main.cpp
 void setup();
@@ -30,10 +31,10 @@ struct crash_info {
 static struct crash_info saved_crash __attribute__((section(".noinit")));
 #define CRASH_MAGIC 0xDEADBEEF
 
-// Override Zephyr's weak fatal handler to save crash info. On Cortex-M33 the
-// handler runs on MSP; k_fatal_halt below either resets the SoC (CONFIG_RESET_
-// ON_FATAL_ERROR=y) or spins forever, so what we record here will only be
-// visible after a subsequent reset.
+// Override Zephyr's weak fatal handler to save crash info, then cold-reboot so
+// main() can report the saved record on the next boot. We don't rely on
+// CONFIG_RESET_ON_FATAL_ERROR (default off → k_fatal_halt would spin forever)
+// — we issue sys_reboot() ourselves after flushing logs.
 extern "C" void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 {
     saved_crash.magic = CRASH_MAGIC;
@@ -86,6 +87,13 @@ extern "C" void k_sys_fatal_error_handler(unsigned int reason, const struct arch
         }
     }
 
+    // Give the RTT/printk backend a chance to drain before we reset, otherwise
+    // the crash log line above is lost and the next boot's "Prev crash" line is
+    // the only forensic evidence we get.
+    k_busy_wait(50000); // 50 ms
+    sys_reboot(SYS_REBOOT_COLD);
+    // Unreachable; k_fatal_halt as a defensive backstop in case sys_reboot
+    // returns (it shouldn't).
     k_fatal_halt(reason);
 }
 

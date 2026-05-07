@@ -130,8 +130,16 @@ class File
 
     void rewindDirectory()
     {
-        if (_s && _s->valid && _s->is_dir)
-            fs_opendir(&_s->dir, _s->fullpath);
+        if (!_s || !_s->valid || !_s->is_dir)
+            return;
+        // Zephyr has no rewinddir(); close + reopen the same handle. Skipping
+        // the close would leak the LittleFS dir state and the next openNextFile
+        // could return stale entries on some Zephyr versions.
+        fs_closedir(&_s->dir);
+        fs_dir_t_init(&_s->dir);
+        if (fs_opendir(&_s->dir, _s->fullpath) != 0) {
+            _s->valid = false;
+        }
     }
 
     bool seek(uint32_t pos)
@@ -177,7 +185,18 @@ class InternalFileSystem
     bool mkdir(const char *path);
     bool rmdir(const char *path);
     bool rmdir_r(const char *path); // recursive delete (used by FSCommon rmDir)
-    uint32_t usedBytes() { return 0; }
+    uint32_t usedBytes()
+    {
+        struct fs_statvfs st = {};
+        if (fs_statvfs(NRF54L15_FS_MOUNT, &st) != 0)
+            return 0;
+        // Zephyr returns block counts; convert to bytes. f_frsize is the
+        // fundamental fragment size (LittleFS reports it equal to the block
+        // size). used = (total - free) * frag_size.
+        if (st.f_blocks <= st.f_bfree)
+            return 0;
+        return (uint32_t)((st.f_blocks - st.f_bfree) * st.f_frsize);
+    }
     uint32_t totalBytes() { return (uint32_t)FIXED_PARTITION_SIZE(storage_partition); }
     bool format();
 

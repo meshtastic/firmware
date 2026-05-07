@@ -31,17 +31,17 @@
     status = "disabled";
 };
 
-/* Enable uart30 — IMCU VCOM debug console (P0.00 TX, P0.01 RX, 3.0V) */
+/* Enable uart30 — IMCU VCOM peripheral kept available so swapping the console
+ * to UART (e.g. for boards without a J-Link RTT path) is a one-line prj.conf
+ * change. We do NOT bind it as zephyr,console here: prj.conf disables
+ * CONFIG_UART_CONSOLE and routes the console through RTT (segger_rtt0), so
+ * setting zephyr,console = &uart30 would silently misroute output if the
+ * Kconfig changed. RTT becomes the implicit console because RTT_CONSOLE=y. */
 &uart30 {
     status = "okay";
 };
 
 / {
-    chosen {
-        zephyr,console = &uart30;
-        zephyr,shell-uart = &uart30;
-    };
-
     buttons {
         /* button1 (P1.09) and button2 (P1.08) no longer repurposed —
          * E22 now uses P2. Restore them if needed, or leave deleted

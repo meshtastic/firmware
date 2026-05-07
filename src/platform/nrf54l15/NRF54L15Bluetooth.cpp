@@ -57,6 +57,23 @@ static const struct bt_uuid_128 logradio_uuid = BT_UUID_INIT_128(LOGRADIO_UUID_V
 static struct bt_conn *active_conn = nullptr;
 static K_MUTEX_DEFINE(ble_mutex);
 
+// Take a reference to active_conn under ble_mutex. Returns nullptr if there is
+// no active connection. Caller MUST bt_conn_unref() when done.
+//
+// Reading `active_conn` outside this lock races with disconnected_cb which can
+// unref + null it on the BT RX thread — touching the freed pointer (even just
+// to bt_conn_ref it) is a use-after-free.
+static struct bt_conn *acquire_active_conn()
+{
+    struct bt_conn *conn = nullptr;
+    k_mutex_lock(&ble_mutex, K_FOREVER);
+    if (active_conn) {
+        conn = bt_conn_ref(active_conn);
+    }
+    k_mutex_unlock(&ble_mutex);
+    return conn;
+}
+
 static bool bt_initialized = false; // bt_enable() called at most once
 static bool ble_enabled = false;    // set by setup(), cleared by shutdown()
 
@@ -203,12 +220,16 @@ static ssize_t write_toradio(struct bt_conn *conn, const struct bt_gatt_attr *at
     if (offset != 0) {
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
     }
-    if (len > sizeof(toRadioBytes)) {
+    // Reject any write that won't fit in the dedup buffer (lastToRadio) or the
+    // pending handoff buffer (pendingToRadioBuf), both sized
+    // MAX_TO_FROM_RADIO_SIZE. Returning success while silently dropping a
+    // payload would let the phone believe a config write was applied.
+    if (len > sizeof(toRadioBytes) || len > MAX_TO_FROM_RADIO_SIZE) {
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
 
     // Deduplicate — drop packet if identical to the last one we processed
-    if (len <= MAX_TO_FROM_RADIO_SIZE && memcmp(lastToRadio, buf, len) != 0) {
+    if (memcmp(lastToRadio, buf, len) != 0) {
         memcpy(lastToRadio, buf, len);
         if (len < MAX_TO_FROM_RADIO_SIZE) {
             memset(lastToRadio + len, 0, MAX_TO_FROM_RADIO_SIZE - len);
@@ -303,7 +324,15 @@ static void start_advertising()
     static const uint8_t adv_uuid128_val[] = {MESH_SVC_UUID_VAL};
 
     const char *name = bt_get_name();
-    uint8_t name_len = (uint8_t)strlen(name);
+    size_t full_name_len = strlen(name);
+
+    // Legacy scan-response payload is 31 bytes total. Each AD entry costs 2
+    // bytes (length + type), leaving 29 bytes for the name. With
+    // CONFIG_BT_DEVICE_NAME_MAX=32 the name can exceed that — truncate and
+    // mark as SHORTENED so bt_le_adv_start() doesn't reject the payload.
+    constexpr size_t LEGACY_SCAN_RSP_NAME_MAX = 31 - 2;
+    bool name_shortened = full_name_len > LEGACY_SCAN_RSP_NAME_MAX;
+    uint8_t name_len = (uint8_t)(name_shortened ? LEGACY_SCAN_RSP_NAME_MAX : full_name_len);
 
     // Primary advertising data: FLAGS + Meshtastic service UUID128 (21 bytes
     // total)
@@ -313,7 +342,7 @@ static void start_advertising()
     };
     // Scan response: device name (discovered after scan request)
     struct bt_data sd[] = {
-        {BT_DATA_NAME_COMPLETE, name_len, (const uint8_t *)name},
+        {(uint8_t)(name_shortened ? BT_DATA_NAME_SHORTENED : BT_DATA_NAME_COMPLETE), name_len, (const uint8_t *)name},
     };
 
     // BT_LE_ADV_OPT_CONN         = connectable legacy ADV_IND + stops after first
@@ -494,9 +523,9 @@ void BluetoothPhoneAPI::onNowHasData(uint32_t fromRadioNum)
         return;
 
     // active_conn may be torn down on another thread while we're dispatching
-    // this notify — take a reference under the BT host's own lock so the conn
-    // object can't be freed mid-call.
-    struct bt_conn *conn = active_conn ? bt_conn_ref(active_conn) : nullptr;
+    // this notify — acquire under ble_mutex so disconnected_cb can't free the
+    // conn between the null check and bt_conn_ref.
+    struct bt_conn *conn = acquire_active_conn();
     if (!conn)
         return;
     bt_gatt_notify(conn, &mesh_svc.attrs[FROMNUM_ATTR_IDX], &fromNumValue, sizeof(fromNumValue));
@@ -566,7 +595,7 @@ class BleDeferredThread : public concurrency::OSThread
 
         // Take a reference to active_conn so it can't be freed underneath us
         // if disconnected_cb fires on another thread while we're dispatching.
-        struct bt_conn *conn = active_conn ? bt_conn_ref(active_conn) : nullptr;
+        struct bt_conn *conn = acquire_active_conn();
         if (!conn || connect_time_ms == 0) {
             if (conn)
                 bt_conn_unref(conn);
@@ -716,10 +745,7 @@ void NRF54L15Bluetooth::shutdown()
     ble_enabled = false;
     stop_advertising();
 
-    k_mutex_lock(&ble_mutex, K_FOREVER);
-    struct bt_conn *conn = active_conn ? bt_conn_ref(active_conn) : nullptr;
-    k_mutex_unlock(&ble_mutex);
-
+    struct bt_conn *conn = acquire_active_conn();
     if (conn) {
         bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
         bt_conn_unref(conn);
@@ -761,12 +787,19 @@ int NRF54L15Bluetooth::getRssi()
 
 void NRF54L15Bluetooth::sendLog(const uint8_t *logMessage, size_t length)
 {
-    if (!active_conn || length > 512 || logradio_ccc_val == 0) {
+    if (length > 512 || logradio_ccc_val == 0) {
+        return;
+    }
+    // Acquire a reference under ble_mutex so disconnected_cb can't free the
+    // connection between the null check and bt_gatt_notify.
+    struct bt_conn *conn = acquire_active_conn();
+    if (!conn) {
         return;
     }
     // Send as notify regardless of whether client subscribed to NOTIFY or
     // INDICATE — bt_gatt_indicate() requires a params struct with a callback;
     // notify is simpler and the app accepts both. Change to indicate if
     // compatibility issues arise.
-    bt_gatt_notify(active_conn, &mesh_svc.attrs[LOGRADIO_ATTR_IDX], logMessage, (uint16_t)length);
+    bt_gatt_notify(conn, &mesh_svc.attrs[LOGRADIO_ATTR_IDX], logMessage, (uint16_t)length);
+    bt_conn_unref(conn);
 }

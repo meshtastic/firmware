@@ -510,20 +510,28 @@ uint8_t SPIClass::transfer(uint8_t data)
     return _spi_rx_byte;
 }
 
+// Static DMA-safe buffers for transfer16 — same EasyDMA reachability concern
+// applies as for the byte path: stack buffers from a caller thread may sit in
+// per-thread RAM regions that EasyDMA cannot reach.
+static uint8_t _spi_tx16[2] __attribute__((aligned(4)));
+static uint8_t _spi_rx16[2] __attribute__((aligned(4)));
+
 uint16_t SPIClass::transfer16(uint16_t data)
 {
     const struct device *dev = _spi00();
     if (!dev)
         return 0xFFFF;
 
-    uint8_t tx[2] = {(uint8_t)(data >> 8), (uint8_t)(data & 0xFF)};
-    uint8_t rx[2] = {0, 0};
-    struct spi_buf tx_buf = {.buf = tx, .len = 2};
-    struct spi_buf rx_buf = {.buf = rx, .len = 2};
+    _spi_tx16[0] = (uint8_t)(data >> 8);
+    _spi_tx16[1] = (uint8_t)(data & 0xFF);
+    _spi_rx16[0] = 0xAA;
+    _spi_rx16[1] = 0xAA;
+    struct spi_buf tx_buf = {.buf = _spi_tx16, .len = 2};
+    struct spi_buf rx_buf = {.buf = _spi_rx16, .len = 2};
     struct spi_buf_set tx_set = {.buffers = &tx_buf, .count = 1};
     struct spi_buf_set rx_set = {.buffers = &rx_buf, .count = 1};
     spi_transceive(dev, &_spi00_cfg, &tx_set, &rx_set);
-    return ((uint16_t)rx[0] << 8) | rx[1];
+    return ((uint16_t)_spi_rx16[0] << 8) | _spi_rx16[1];
 }
 
 void SPIClass::transferBytes(const uint8_t *tx, uint8_t *rx, uint32_t count)
