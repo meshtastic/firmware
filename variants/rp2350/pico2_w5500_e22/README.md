@@ -2,8 +2,6 @@
 
 Soporte de Meshtastic para una **Raspberry Pi Pico 2** (RP2350, 4 MB flash) con módulo Ethernet **W5500** externo y módulo LoRa **EBYTE E22-900M30S** externo.
 
-> **Diferencia con `wiznet_5500_evb_pico2_e22`**: en el EVB-Pico2 el W5500 está soldado en la PCB con pines fijos y la flash es de 2 MB. Aquí el W5500 es un módulo externo y la Pico 2 tiene 4 MB de flash.
-
 ---
 
 ## Hardware necesario
@@ -147,39 +145,9 @@ Mapeado a `meshtastic_HardwareModel_PRIVATE_HW` — no existe modelo dedicado en
 
 ---
 
-## Diferencias respecto a `wiznet_5500_evb_pico2_e22`
-
-| Aspecto        | `wiznet_5500_evb_pico2_e22`           | `pico2_w5500_e22` (este)           |
-|----------------|-----------------------------------|------------------------------------|
-| Board          | WIZnet W5500-EVB-Pico2            | Raspberry Pi Pico 2                |
-| Flash          | 2 MB                              | **4 MB**                           |
-| W5500          | Soldado en PCB (pines fijos)      | Módulo externo (mismo pinout)      |
-| `board =`      | `wiznet_5500_evb_pico2_e22`           | `rpipico2`                         |
-| `variant.h`    | Idéntico en pines                 | Idéntico en pines                  |
-
----
-
 ## Uso de memoria (build de referencia)
 
 | Recurso | Usado   | Total    | %     |
 |---------|---------|----------|-------|
 | RAM     | 94 KB   | 512 KB   | 18%   |
 | Flash   | 964 KB  | 3.58 MB  | 26.3% |
-
----
-Perfecto, gracias por confirmar. El log lo dice claro:
-
-No SX1262 radio + init result -2 (CHIP_NOT_FOUND) → el RP2350 no puede hablar con el SX1262 por SPI.
-
-Para mañana, cosas a verificar en orden:
-
-Alimentación del E22 — ¿3.3V presente en el pin VCC del módulo?
-GND común — ¿el GND del E22 está conectado al GND del Pico2?
-SPI1 pins — revisa cada cable con continuidad:
-GP10 → SCK del E22
-GP11 → MOSI (TXD) del E22
-GP12 → MISO (RXD) del E22
-GP13 → CS/NSS del E22
-BUSY (GP2) — ¿conectado al pin BUSY del E22? Si está flotando puede bloquear el init
-RESET (GP15) — ¿conectado al pin NRST del E22?
-El error CHIP_NOT_FOUND casi siempre es un cable mal puesto, GND flotante, o VCC ausente. Con un multímetro en 30 segundos se descarta lo eléctrico.
