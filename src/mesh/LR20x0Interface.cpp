@@ -3,6 +3,7 @@
 #if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
 #include "LR20x0Interface.h"
 #include "error.h"
+#include "mesh/NodeDB.h"
 
 // Keep LR20x0 naming while RadioLib exposes LR2021 symbols.
 #ifndef LR20x0
@@ -149,9 +150,14 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
 
-        // // FIXME: May want to set depending on a definition, currently all LR1110 variant files use the DC-DC regulator option
-        // if (res == RADIOLIB_ERR_NONE)
-        //     res = lora.setRegulatorDCDC();
+        // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
+        // Currently requires radiolib godmode
+        // if (res == RADIOLIB_ERR_NONE) {
+        //     uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
+        //     res = lora.setRegMode(RADIOLIB_LR2021_REG_MODE_SIMO_NORMAL, rampTimes);
+        //     if (res != RADIOLIB_ERR_NONE)
+        //         LOG_WARN("LR2021 setRegMode failed: %d", res);
+        // }
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
     bool dioAsRfSwitch = true;

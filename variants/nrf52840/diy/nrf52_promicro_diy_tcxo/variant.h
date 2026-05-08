@@ -1,6 +1,9 @@
 #ifndef _VARIANT_PROMICRO_DIY_
 #define _VARIANT_PROMICRO_DIY_
 
+// #undef RADIOLIB_GODMODE
+// #define RADIOLIB_GODMODE 1
+
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
 
