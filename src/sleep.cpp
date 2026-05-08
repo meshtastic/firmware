@@ -200,6 +200,9 @@ static void waitEnterSleep(bool skipPreflight = false)
                 // no core-dump pollution, and the firmware can come back up with a
                 // working state machine instead of triggering the panic handler.
                 LOG_ERROR("Preflight sleep wait exceeded 30s, restarting");
+                // Notify reboot observers (e.g. InkHUD) so they can persist /
+                // shut down cleanly, matching Power::reboot's contract.
+                notifyReboot.notifyObservers(NULL);
                 console->flush();
 #if defined(ARCH_ESP32)
                 ESP.restart();
