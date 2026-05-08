@@ -370,6 +370,14 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     pinMode(I2C_SCL, ANALOG);
 #endif
 
+#ifdef ARCH_ESP32
+    // gpio_hold_en alone only retains pin state during light sleep on ESP32;
+    // for the holds to apply during deep sleep the global enable must be
+    // armed once before esp_deep_sleep_start. Without this, BUTTON_PIN and
+    // LORA_CS float in DSLP and can leak current or trigger spurious activity.
+    gpio_deep_sleep_hold_en();
+#endif
+
     console->flush();
     cpuDeepSleep(msecToWake);
 }
