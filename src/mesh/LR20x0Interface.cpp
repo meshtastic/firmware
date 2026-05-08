@@ -136,12 +136,16 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
 
-    // LR20x0VersionInfo_t version;
-    // res = lora.getVersionInfo(&version);
-    // if (res == RADIOLIB_ERR_NONE)
-    //     LOG_DEBUG("LR20x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware,
-    //     version.fwMajor,
-    //               version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS, version.almanacGNSS);
+        // Some basic info about the module's explicit firmware version - no other info available
+        // Currently requires radiolib godmode
+
+#if RADIOLIB_GODMODE
+    uint8_t fwMajor = 0;
+    uint8_t fwMinor = 0;
+    int versionRes = lora.getVersion(&fwMajor, &fwMinor);
+    if (versionRes == RADIOLIB_ERR_NONE)
+        LOG_DEBUG("LR20x0 FW %d.%d", fwMajor, fwMinor);
+#endif
 
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
@@ -152,12 +156,14 @@ template <typename T> bool LR20x0Interface<T>::init()
 
         // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
         // Currently requires radiolib godmode
-        // if (res == RADIOLIB_ERR_NONE) {
-        //     uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
-        //     res = lora.setRegMode(RADIOLIB_LR2021_REG_MODE_SIMO_NORMAL, rampTimes);
-        //     if (res != RADIOLIB_ERR_NONE)
-        //         LOG_WARN("LR2021 setRegMode failed: %d", res);
-        // }
+#if RADIOLIB_GODMODE
+    if (res == RADIOLIB_ERR_NONE) {
+        uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
+        res = lora.setRegMode(RADIOLIB_LR2021_REG_MODE_SIMO_NORMAL, rampTimes);
+        if (res != RADIOLIB_ERR_NONE)
+            LOG_WARN("LR2021 setRegMode failed: %d", res);
+    }
+#endif
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
     bool dioAsRfSwitch = true;
