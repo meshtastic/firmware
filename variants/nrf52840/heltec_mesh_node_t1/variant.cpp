@@ -47,6 +47,7 @@ void variant_shutdown()
     nrf_gpio_cfg_default(ST7735_SCK);
     nrf_gpio_cfg_default(ST7735_RESET);
     nrf_gpio_cfg_default(ST7735_BL);
+    nrf_gpio_cfg_default(VTFT_CTRL);
 
     nrf_gpio_cfg_default(PIN_WIRE_SDA);
     nrf_gpio_cfg_default(PIN_WIRE_SCL);
@@ -79,9 +80,6 @@ void variant_shutdown()
     pinMode(PIN_SENSOR_EN, OUTPUT);
     digitalWrite(PIN_SENSOR_EN, !PIN_SENSOR_EN_ACTIVE); // Turn off sensor power
 
-    pinMode(PIN_GPS_EN, OUTPUT);
-    digitalWrite(PIN_GPS_EN, !GPS_EN_ACTIVE); // Turn off GPS power
-
-    pinMode(32 + 3, OUTPUT);
-    digitalWrite(32 + 3, HIGH);
+    pinMode(PIN_LED1, OUTPUT);
+    digitalWrite(PIN_LED1, HIGH);
 }
