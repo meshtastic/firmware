@@ -168,13 +168,22 @@ int32_t Router::runOnce()
  */
 void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p)
 {
-    // Try enqueue until successful
-    while (!fromRadioQueue.enqueue(p, 0)) {
-        meshtastic_MeshPacket *old_p;
-        old_p = fromRadioQueue.dequeuePtr(0); // Dequeue and discard the oldest packet
-        if (old_p) {
-            printPacket("fromRadioQ full, drop oldest!", old_p);
-            packetPool.release(old_p);
+    // Try enqueue, but if the queue is full and the incoming packet is itself
+    // low priority, drop *it* rather than evicting an older (likely higher-
+    // priority) packet such as an ACK or routing reply.
+    if (!fromRadioQueue.enqueue(p, 0)) {
+        if (p->priority != meshtastic_MeshPacket_Priority_UNSET && p->priority <= meshtastic_MeshPacket_Priority_BACKGROUND) {
+            printPacket("fromRadioQ full, drop incoming low-prio!", p);
+            packetPool.release(p);
+            return;
+        }
+        // Higher-priority packet — fall back to evicting until it fits.
+        while (!fromRadioQueue.enqueue(p, 0)) {
+            meshtastic_MeshPacket *old_p = fromRadioQueue.dequeuePtr(0);
+            if (old_p) {
+                printPacket("fromRadioQ full, drop oldest!", old_p);
+                packetPool.release(old_p);
+            }
         }
     }
     // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
