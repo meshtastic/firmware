@@ -198,6 +198,13 @@ class GPS : private concurrency::OSThread
 
     CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
 
+#ifdef ARCH_ESP32
+    GPSPowerState preLightSleepState = GPS_OFF;
+    CallbackObserver<GPS, void *> notifyLightSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareLightSleep);
+    CallbackObserver<GPS, esp_sleep_wakeup_cause_t> notifyLightSleepEndObserver =
+        CallbackObserver<GPS, esp_sleep_wakeup_cause_t>(this, &GPS::endLightSleep);
+#endif
+
     /** If !NULL we will use this serial port to construct our GPS */
 #if defined(ARCH_RP2040)
     static SerialUART *_serial_gps;
@@ -225,6 +232,12 @@ class GPS : private concurrency::OSThread
     /// Prepare the GPS for the cpu entering deep sleep, expect to be gone for at least 100s of msecs
     /// always returns 0 to indicate okay to sleep
     int prepareDeepSleep(void *unused);
+
+#ifdef ARCH_ESP32
+    /// Drop the GPS into a low-power state for the duration of CPU light-sleep, and restore on wake.
+    int prepareLightSleep(void *unused);
+    int endLightSleep(esp_sleep_wakeup_cause_t cause);
+#endif
 
     /** Set power with EN pin, if relevant
      */
