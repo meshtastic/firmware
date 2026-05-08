@@ -29,6 +29,20 @@ class TestableRadioInterface : public RadioInterface
     // Stubs for pure virtual methods required by RadioInterface
     uint32_t getPacketTime(uint32_t, bool) override { return 0; }
     ErrorCode send(meshtastic_MeshPacket *p) override { return ERRNO_OK; }
+
+    // Whisper test hooks: record the last value passed to setTransmitPower
+    // and how many times it was called. Lets tests assert what would have
+    // been pushed to the chip without needing the real RadioLib stack.
+    int lastSetPowerDbm = INT_MIN;
+    int setPowerCallCount = 0;
+    void setTransmitPower(int dbm) override
+    {
+        lastSetPowerDbm = dbm;
+        setPowerCallCount++;
+    }
+
+    // Direct access to the configured TX power member for test setup.
+    void setConfiguredPower(int8_t dbm) { power = dbm; }
 };
 
 static void test_bwCodeToKHz_specialMappings()
@@ -183,6 +197,80 @@ static void test_applyModemConfig_customCodingRateLowerThanPreset()
     TEST_ASSERT_EQUAL_UINT8(8, testRadio->getCr());
 }
 
+static void test_applyTxPowerPenalty_zeroPenalty_noOp()
+{
+    testRadio->setConfiguredPower(22);
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.tx_power_penalty_db = 0;
+
+    testRadio->applyTxPowerPenalty(&p, /*fromUs=*/true);
+
+    TEST_ASSERT_FALSE(testRadio->isWhispering);
+    TEST_ASSERT_EQUAL_INT(0, testRadio->setPowerCallCount);
+}
+
+static void test_applyTxPowerPenalty_fromUs_appliesPenalty()
+{
+    testRadio->setConfiguredPower(22);
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.tx_power_penalty_db = 10;
+
+    testRadio->applyTxPowerPenalty(&p, /*fromUs=*/true);
+
+    TEST_ASSERT_TRUE(testRadio->isWhispering);
+    TEST_ASSERT_EQUAL_INT(1, testRadio->setPowerCallCount);
+    TEST_ASSERT_EQUAL_INT(12, testRadio->lastSetPowerDbm);
+}
+
+static void test_applyTxPowerPenalty_relay_noPenalty()
+{
+    testRadio->setConfiguredPower(22);
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.tx_power_penalty_db = 10;
+
+    testRadio->applyTxPowerPenalty(&p, /*fromUs=*/false);
+
+    TEST_ASSERT_FALSE(testRadio->isWhispering);
+    TEST_ASSERT_EQUAL_INT(0, testRadio->setPowerCallCount);
+}
+
+static void test_applyTxPowerPenalty_clampsAboveMax()
+{
+    testRadio->setConfiguredPower(22);
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.tx_power_penalty_db = 200;
+
+    testRadio->applyTxPowerPenalty(&p, /*fromUs=*/true);
+
+    TEST_ASSERT_TRUE(testRadio->isWhispering);
+    TEST_ASSERT_EQUAL_INT(1, testRadio->setPowerCallCount);
+    TEST_ASSERT_EQUAL_INT(-38, testRadio->lastSetPowerDbm);
+}
+
+static void test_applyTxPowerPenalty_underflowSafe()
+{
+    testRadio->setConfiguredPower(-9);
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.tx_power_penalty_db = 60;
+
+    testRadio->applyTxPowerPenalty(&p, /*fromUs=*/true);
+
+    TEST_ASSERT_TRUE(testRadio->isWhispering);
+    TEST_ASSERT_EQUAL_INT(-69, testRadio->lastSetPowerDbm);
+}
+
+static void test_applyTxPowerPenalty_atBoundary_max()
+{
+    testRadio->setConfiguredPower(22);
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.tx_power_penalty_db = RadioInterface::MAX_TX_PENALTY_DB;
+
+    testRadio->applyTxPowerPenalty(&p, /*fromUs=*/true);
+
+    TEST_ASSERT_TRUE(testRadio->isWhispering);
+    TEST_ASSERT_EQUAL_INT(22 - (int)RadioInterface::MAX_TX_PENALTY_DB, testRadio->lastSetPowerDbm);
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -223,6 +311,12 @@ void setup()
     RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
+    RUN_TEST(test_applyTxPowerPenalty_zeroPenalty_noOp);
+    RUN_TEST(test_applyTxPowerPenalty_fromUs_appliesPenalty);
+    RUN_TEST(test_applyTxPowerPenalty_relay_noPenalty);
+    RUN_TEST(test_applyTxPowerPenalty_clampsAboveMax);
+    RUN_TEST(test_applyTxPowerPenalty_underflowSafe);
+    RUN_TEST(test_applyTxPowerPenalty_atBoundary_max);
     exit(UNITY_END());
 }
 

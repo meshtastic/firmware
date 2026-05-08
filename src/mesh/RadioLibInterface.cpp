@@ -603,25 +603,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
     } else {
         configHardwareForSend(); // must be after setStandby
 
-        // Whisper: drop TX power for this packet only, if requested.
-        // Gated on isFromUs(): relays/rebroadcasts must keep their
-        // configured power. want_ack retries reuse the same MeshPacket,
-        // so the penalty is reapplied automatically on retransmit.
-        constexpr uint8_t MAX_TX_PENALTY_DB = 60;
-        uint8_t penalty = txp->tx_power_penalty_db;
-        if (penalty > MAX_TX_PENALTY_DB) {
-            LOG_WARN("Whisper penalty %u dB exceeds max, clamping to %u dB", (unsigned)penalty,
-                     (unsigned)MAX_TX_PENALTY_DB);
-            penalty = MAX_TX_PENALTY_DB;
-        }
-        isWhispering = penalty > 0 && isFromUs(txp);
-        if (isWhispering) {
-            // Promote both to int before subtracting so we don't underflow
-            // int8_t. The per-radio override does the final hw-range clamp.
-            int target = (int)power - (int)penalty;
-            LOG_INFO("Whisper: applying %u dB penalty (target %d dBm)", (unsigned)penalty, target);
-            setTransmitPower(target);
-        }
+        applyTxPowerPenalty(txp, isFromUs(txp));
 
         size_t numbytes = beginSending(txp);
 

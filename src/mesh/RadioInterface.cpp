@@ -1135,6 +1135,23 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
     LOG_INFO("Final Tx power: %d dBm", power);
 }
 
+void RadioInterface::applyTxPowerPenalty(meshtastic_MeshPacket *const txp, bool fromUs)
+{
+    uint8_t penalty = txp->tx_power_penalty_db;
+    if (penalty > MAX_TX_PENALTY_DB) {
+        LOG_WARN("Whisper penalty %u dB exceeds max, clamping to %u dB", (unsigned)penalty, (unsigned)MAX_TX_PENALTY_DB);
+        penalty = MAX_TX_PENALTY_DB;
+    }
+    isWhispering = penalty > 0 && fromUs;
+    if (isWhispering) {
+        // Promote both to int before subtracting so we don't underflow
+        // int8_t. The per-radio override does the final hw-range clamp.
+        int target = (int)power - (int)penalty;
+        LOG_INFO("Whisper: applying %u dB penalty (target %d dBm)", (unsigned)penalty, target);
+        setTransmitPower(target);
+    }
+}
+
 void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
 {
     if (router) {

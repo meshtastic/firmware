@@ -222,6 +222,32 @@ class RadioInterface
      */
     virtual void setTransmitPower(int dbm) { (void)dbm; }
 
+    /// Upper bound on a per-packet whisper penalty before we treat it as a
+    /// malformed value and clamp. 60 dB is well past anything the chip can
+    /// actually produce, but keeps a runaway value from underflowing the
+    /// int8 math downstream.
+    static constexpr uint8_t MAX_TX_PENALTY_DB = 60;
+
+    /**
+     * Apply (or skip) the whisper TX-power penalty for an outgoing packet.
+     *
+     * Sets `isWhispering` and calls `setTransmitPower()` only when the
+     * packet asked for a non-zero penalty AND the caller indicates the
+     * local node originated the packet. Relays/rebroadcasts (`fromUs ==
+     * false`) are deliberately skipped so they keep their own configured
+     * power.
+     *
+     * fromUs is taken as a parameter rather than computed inside (via
+     * `isFromUs(txp)`) so the method can be exercised from unit tests
+     * without standing up the global NodeDB.
+     */
+    void applyTxPowerPenalty(meshtastic_MeshPacket *const txp, bool fromUs);
+
+    /// True between applyTxPowerPenalty() and the matching restore in
+    /// completeSending(). Tracks whether the chip's TX power has been
+    /// dropped from the configured value for the in-flight packet.
+    bool isWhispering = false;
+
     /**
      * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
      * @return Whether a pending packet was removed

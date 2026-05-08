@@ -99,11 +99,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
 
-    /// Set in startSend() when a packet requested a per-message TX power
-    /// penalty (whisper). Cleared in completeSending() after the configured
-    /// TX power has been restored. Used to gate the restore so we only touch
-    /// setOutputPower() when we actually changed it.
-    bool isWhispering = false;
 
   public:
     /** Our ISR code currently needs this to find our active instance
