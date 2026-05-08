@@ -1668,9 +1668,14 @@ class LipoCharger : public HasBatteryLevel
     }
 
     /**
-     * The raw voltage of the battery in millivolts, or NAN if unknown
+     * The raw voltage of the battery in millivolts, or 0 if unknown.
+     * Use the BQ25896 charger ADC for both voltage and presence detection so
+     * the two readings can never disagree. The BQ27220 fuel gauge can report
+     * 0 / stale on a freshly-attached cell before its initial learn cycle
+     * finishes, which would make hasBattery=false but voltage=4.0V — the
+     * upstream PowerFSM then thinks the device is externally powered.
      */
-    virtual uint16_t getBattVoltage() override { return bq->getVoltage(); }
+    virtual uint16_t getBattVoltage() override { return PPM->getBattVoltage(); }
 
     /**
      * return true if there is a battery installed in this unit
