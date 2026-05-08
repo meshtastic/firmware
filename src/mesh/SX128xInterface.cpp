@@ -117,43 +117,57 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     // set mode to standby
     setStandby();
 
-    // configure publicly accessible settings
+    // The caller reboots the device when reconfigure returns false; track
+    // every SPI setter so we don't silently report success after a glitch.
+    bool ok = true;
+
     int err = lora.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        ok = false;
+    }
 
     err = lora.setBandwidth(bw);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        ok = false;
+    }
 
     err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        ok = false;
+    }
 
     err = lora.setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("SX128X setSyncWord %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        ok = false;
+    }
 
     err = lora.setPreambleLength(preambleLength);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("SX128X setPreambleLength %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        ok = false;
+    }
 
     err = lora.setFrequency(getFreq());
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        ok = false;
+    }
 
     limitPower(SX128X_MAX_POWER);
 
     err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("SX128X setOutputPower %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        ok = false;
+    }
 
     startReceive(); // restart receiving
 
-    return true;
+    return ok;
 }
 
 template <typename T> void SX128xInterface<T>::disableInterrupt()
@@ -174,7 +188,6 @@ template <typename T> void SX128xInterface<T>::setStandby()
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX128x standby %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
 #if ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
