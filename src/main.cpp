@@ -908,12 +908,17 @@ void setup()
     // warn the user about a low entropy key
     if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
         LOG_WARN(LOW_ENTROPY_WARNING);
-        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_WARNING;
-        cn->time = getValidTime(RTCQualityFromNet);
-        sprintf(cn->message, LOW_ENTROPY_WARNING);
-        service->sendClientNotification(cn);
+        // Mark as warned unconditionally — the LOG_WARN above has already fired the user-visible
+        // notice. `hasWarned` persists in NodeDB, so this also suppresses the same warning on
+        // subsequent boots regardless of whether the ClientNotification pool had room this time.
         nodeDB->hasWarned = true;
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->time = getValidTime(RTCQualityFromNet);
+            sprintf(cn->message, LOW_ENTROPY_WARNING);
+            service->sendClientNotification(cn);
+        }
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER

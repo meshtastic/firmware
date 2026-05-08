@@ -96,10 +96,12 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
         LOG_ERROR(warning);
 #if !IS_RUNNING_TESTS
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_ERROR;
-        cn->time = getValidTime(RTCQualityFromNet);
-        snprintf(cn->message, sizeof(cn->message), "%s", warning);
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            snprintf(cn->message, sizeof(cn->message), "%s", warning);
+            service->sendClientNotification(cn);
+        }
 #endif
         return false;
     }
