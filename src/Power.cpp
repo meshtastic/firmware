@@ -848,6 +848,17 @@ void Power::shutdown()
 #endif
 }
 
+// Persisted across SDS / deep-sleep on ESP32 so a flat-cell device that has
+// already chosen to deep-sleep doesn't wake on the timer, see still-low
+// voltage, and burn boot energy on a doomed full init only to deep-sleep
+// again. On non-ESP32 the SDS path doesn't reset this anyway, so a plain
+// static gives the same effective semantics.
+#ifdef ARCH_ESP32
+RTC_DATA_ATTR static bool low_battery_latched = false;
+#else
+static bool low_battery_latched = false;
+#endif
+
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
@@ -968,11 +979,41 @@ void Power::readPowerStatus()
     //
 
     if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-        if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
+        // Hysteresis around the low-battery latch:
+        // - The latch survives SDS via RTC memory so a still-flat cell doesn't
+        //   wake-thrash on the timer.
+        // - To clear the latch, voltage has to recover above OCV[min] +
+        //   LOW_BATT_HYSTERESIS_MV (per cell) for the same K reads we used
+        //   to set it.
+        // - If still low when we wake, immediately re-trigger SDS rather than
+        //   spending battery on a doomed boot.
+        // OCV[] is per-cell; getBattVoltage() returns pack voltage. Scale by
+        // NUM_CELLS to keep the comparison consistent with the per-cell
+        // table on multi-cell variants (e.g. chatter2, station-g1).
+        constexpr int LOW_BATT_HYSTERESIS_MV_PER_CELL = 100;
+        const int v = batteryLevel->getBattVoltage();
+        const int lowThreshold = OCV[NUM_OCV_POINTS - 1] * NUM_CELLS;
+        const int recoveryThreshold = lowThreshold + LOW_BATT_HYSTERESIS_MV_PER_CELL * NUM_CELLS;
+        if (low_battery_latched) {
+            if (v > recoveryThreshold) {
+                low_voltage_counter++;
+                if (low_voltage_counter > 10) {
+                    LOG_INFO("Battery recovered above hysteresis threshold, clear latch");
+                    low_battery_latched = false;
+                    low_voltage_counter = 0;
+                }
+            } else {
+                low_voltage_counter = 0;
+                LOG_INFO("Latched low-battery still flat at %dmV, re-enter deep sleep", v);
+                powerFSM.trigger(EVENT_LOW_BATTERY);
+            }
+        } else if (v < lowThreshold) {
             low_voltage_counter++;
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
             if (low_voltage_counter > 10) {
                 LOG_INFO("Low voltage detected, trigger deep sleep");
+                low_battery_latched = true;
+                low_voltage_counter = 0;
                 powerFSM.trigger(EVENT_LOW_BATTERY);
             }
         } else {
