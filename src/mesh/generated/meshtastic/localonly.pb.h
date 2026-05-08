@@ -4,6 +4,7 @@
 #ifndef PB_MESHTASTIC_MESHTASTIC_LOCALONLY_PB_H_INCLUDED
 #define PB_MESHTASTIC_MESHTASTIC_LOCALONLY_PB_H_INCLUDED
 #include <pb.h>
+#include "meshtastic/admin.pb.h"
 #include "meshtastic/config.pb.h"
 #include "meshtastic/module_config.pb.h"
 
@@ -98,6 +99,22 @@ typedef struct _meshtastic_LocalModuleConfig {
     meshtastic_ModuleConfig_TAKConfig tak;
 } meshtastic_LocalModuleConfig;
 
+/* On-disk wrapper for the bounded local client-app metadata store.
+ Persisted by the firmware to /prefs/clientappdata.proto. Never sent over
+ the wire and never broadcast. See ClientAppData (admin.proto) for the
+ namespaced-not-owned caveat that governs how clients should treat the
+ stored payloads. */
+typedef struct _meshtastic_LocalClientAppData {
+    /* The set of stored records. Bounded by localonly.options to a small
+ number (initially 4). Firmware enforces uniqueness on app_id. */
+    pb_size_t records_count;
+    meshtastic_ClientAppData records[4];
+    /* A version integer used to invalidate old save files when we make
+ incompatible changes. Set at build time by NodeDB.cpp in the device
+ code, mirroring LocalConfig.version / LocalModuleConfig.version. */
+    uint32_t version;
+} meshtastic_LocalClientAppData;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -106,8 +123,10 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_LocalConfig_init_default      {false, meshtastic_Config_DeviceConfig_init_default, false, meshtastic_Config_PositionConfig_init_default, false, meshtastic_Config_PowerConfig_init_default, false, meshtastic_Config_NetworkConfig_init_default, false, meshtastic_Config_DisplayConfig_init_default, false, meshtastic_Config_LoRaConfig_init_default, false, meshtastic_Config_BluetoothConfig_init_default, 0, false, meshtastic_Config_SecurityConfig_init_default}
 #define meshtastic_LocalModuleConfig_init_default {false, meshtastic_ModuleConfig_MQTTConfig_init_default, false, meshtastic_ModuleConfig_SerialConfig_init_default, false, meshtastic_ModuleConfig_ExternalNotificationConfig_init_default, false, meshtastic_ModuleConfig_StoreForwardConfig_init_default, false, meshtastic_ModuleConfig_RangeTestConfig_init_default, false, meshtastic_ModuleConfig_TelemetryConfig_init_default, false, meshtastic_ModuleConfig_CannedMessageConfig_init_default, 0, false, meshtastic_ModuleConfig_AudioConfig_init_default, false, meshtastic_ModuleConfig_RemoteHardwareConfig_init_default, false, meshtastic_ModuleConfig_NeighborInfoConfig_init_default, false, meshtastic_ModuleConfig_AmbientLightingConfig_init_default, false, meshtastic_ModuleConfig_DetectionSensorConfig_init_default, false, meshtastic_ModuleConfig_PaxcounterConfig_init_default, false, meshtastic_ModuleConfig_StatusMessageConfig_init_default, false, meshtastic_ModuleConfig_TrafficManagementConfig_init_default, false, meshtastic_ModuleConfig_TAKConfig_init_default}
+#define meshtastic_LocalClientAppData_init_default {0, {meshtastic_ClientAppData_init_default, meshtastic_ClientAppData_init_default, meshtastic_ClientAppData_init_default, meshtastic_ClientAppData_init_default}, 0}
 #define meshtastic_LocalConfig_init_zero         {false, meshtastic_Config_DeviceConfig_init_zero, false, meshtastic_Config_PositionConfig_init_zero, false, meshtastic_Config_PowerConfig_init_zero, false, meshtastic_Config_NetworkConfig_init_zero, false, meshtastic_Config_DisplayConfig_init_zero, false, meshtastic_Config_LoRaConfig_init_zero, false, meshtastic_Config_BluetoothConfig_init_zero, 0, false, meshtastic_Config_SecurityConfig_init_zero}
 #define meshtastic_LocalModuleConfig_init_zero   {false, meshtastic_ModuleConfig_MQTTConfig_init_zero, false, meshtastic_ModuleConfig_SerialConfig_init_zero, false, meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero, false, meshtastic_ModuleConfig_StoreForwardConfig_init_zero, false, meshtastic_ModuleConfig_RangeTestConfig_init_zero, false, meshtastic_ModuleConfig_TelemetryConfig_init_zero, false, meshtastic_ModuleConfig_CannedMessageConfig_init_zero, 0, false, meshtastic_ModuleConfig_AudioConfig_init_zero, false, meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero, false, meshtastic_ModuleConfig_NeighborInfoConfig_init_zero, false, meshtastic_ModuleConfig_AmbientLightingConfig_init_zero, false, meshtastic_ModuleConfig_DetectionSensorConfig_init_zero, false, meshtastic_ModuleConfig_PaxcounterConfig_init_zero, false, meshtastic_ModuleConfig_StatusMessageConfig_init_zero, false, meshtastic_ModuleConfig_TrafficManagementConfig_init_zero, false, meshtastic_ModuleConfig_TAKConfig_init_zero}
+#define meshtastic_LocalClientAppData_init_zero  {0, {meshtastic_ClientAppData_init_zero, meshtastic_ClientAppData_init_zero, meshtastic_ClientAppData_init_zero, meshtastic_ClientAppData_init_zero}, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_LocalConfig_device_tag        1
@@ -136,6 +155,8 @@ extern "C" {
 #define meshtastic_LocalModuleConfig_statusmessage_tag 15
 #define meshtastic_LocalModuleConfig_traffic_management_tag 16
 #define meshtastic_LocalModuleConfig_tak_tag     17
+#define meshtastic_LocalClientAppData_records_tag 1
+#define meshtastic_LocalClientAppData_version_tag 2
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_LocalConfig_FIELDLIST(X, a) \
@@ -196,15 +217,25 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  tak,              17)
 #define meshtastic_LocalModuleConfig_traffic_management_MSGTYPE meshtastic_ModuleConfig_TrafficManagementConfig
 #define meshtastic_LocalModuleConfig_tak_MSGTYPE meshtastic_ModuleConfig_TAKConfig
 
+#define meshtastic_LocalClientAppData_FIELDLIST(X, a) \
+X(a, STATIC,   REPEATED, MESSAGE,  records,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   version,           2)
+#define meshtastic_LocalClientAppData_CALLBACK NULL
+#define meshtastic_LocalClientAppData_DEFAULT NULL
+#define meshtastic_LocalClientAppData_records_MSGTYPE meshtastic_ClientAppData
+
 extern const pb_msgdesc_t meshtastic_LocalConfig_msg;
 extern const pb_msgdesc_t meshtastic_LocalModuleConfig_msg;
+extern const pb_msgdesc_t meshtastic_LocalClientAppData_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_LocalConfig_fields &meshtastic_LocalConfig_msg
 #define meshtastic_LocalModuleConfig_fields &meshtastic_LocalModuleConfig_msg
+#define meshtastic_LocalClientAppData_fields &meshtastic_LocalClientAppData_msg
 
 /* Maximum encoded size of messages (where known) */
-#define MESHTASTIC_MESHTASTIC_LOCALONLY_PB_H_MAX_SIZE meshtastic_LocalModuleConfig_size
+#define MESHTASTIC_MESHTASTIC_LOCALONLY_PB_H_MAX_SIZE meshtastic_LocalClientAppData_size
+#define meshtastic_LocalClientAppData_size       2258
 #define meshtastic_LocalConfig_size              757
 #define meshtastic_LocalModuleConfig_size        820
 

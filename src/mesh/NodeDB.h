@@ -102,6 +102,7 @@ static constexpr const char *configFileName = "/prefs/config.proto";
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 static constexpr const char *channelFileName = "/prefs/channels.proto";
+static constexpr const char *clientAppDataFileName = "/prefs/clientappdata.proto";
 static constexpr const char *backupFileName = "/backups/backup.proto";
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -259,10 +260,10 @@ class NodeDB
 
     bool factoryReset(bool eraseBleBonds = false);
 
-    LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
-                             void *dest_struct);
-    bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
-                   bool fullAtomic = true);
+    virtual LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
+                                     void *dest_struct);
+    virtual bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
+                           bool fullAtomic = true);
 
     void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
 
