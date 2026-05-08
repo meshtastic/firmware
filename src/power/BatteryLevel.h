@@ -97,7 +97,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
 };
 
-#if !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_MAX1704X.h>)
+#if !MESHTASTIC_EXCLUDE_I2C && HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_MAX1704X.h>)
 class MAX17048BatteryLevel : public HasBatteryLevel
 {
   private:

@@ -25,8 +25,6 @@
 #include "power/BatteryLevel.h"
 #include "power/PowerHAL.h"
 #include "sleep.h"
-#ifdef ARCH_ESP32
-#endif
 
 #if defined(ARCH_PORTDUINO)
 #include "api/WiFiServerAPI.h"
