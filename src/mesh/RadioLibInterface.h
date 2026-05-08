@@ -293,4 +293,5 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
 
     void checkRxDoneIrqFlag();
+    void checkTxDoneIrqFlag();
 };
