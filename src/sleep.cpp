@@ -195,7 +195,26 @@ static void waitEnterSleep(bool skipPreflight = false)
             if (!Throttle::isWithinTimespanMs(now,
                                               THIRTY_SECONDS_MS)) { // If we wait too long just report an error and go to sleep
                 RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_SLEEP_ENTER_WAIT);
-                assert(0); // FIXME - for now we just restart, need to fix bug #167
+                // FIXME issue #167: a misbehaving observer can veto sleep forever.
+                // Restart cleanly rather than panicking — same effective recovery,
+                // no core-dump pollution, and the firmware can come back up with a
+                // working state machine instead of triggering the panic handler.
+                LOG_ERROR("Preflight sleep wait exceeded 30s, restarting");
+                // Notify reboot observers (e.g. InkHUD) so they can persist /
+                // shut down cleanly, matching Power::reboot's contract.
+                notifyReboot.notifyObservers(NULL);
+                console->flush();
+#if defined(ARCH_ESP32)
+                ESP.restart();
+#elif defined(ARCH_NRF52)
+                NVIC_SystemReset();
+#elif defined(ARCH_RP2040)
+                rp2040.reboot();
+#elif defined(ARCH_STM32WL)
+                HAL_NVIC_SystemReset();
+#else
+                assert(0); // fallback for archs without a clean restart primitive
+#endif
                 break;
             }
         }
