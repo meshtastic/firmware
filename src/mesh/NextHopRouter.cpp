@@ -349,9 +349,16 @@ int32_t NextHopRouter::doRetransmissions()
 void NextHopRouter::setNextTx(PendingPacket *pending)
 {
     assert(iface);
-    auto d = iface->getRetransmissionMsec(pending->packet);
+    // Two nodes that NAK each other will otherwise re-collide on near-identical
+    // schedules; spread successive attempts with exponential backoff plus jitter.
+    uint32_t base = iface->getRetransmissionMsec(pending->packet);
+    uint8_t attempt = (NUM_RELIABLE_RETX - 1) - pending->numRetransmissions;
+    uint8_t shift = attempt < 3 ? attempt : 3; // cap multiplier at 8x
+    uint32_t backoff = base << shift;
+    uint32_t jitter = base ? random(base / 2 + 1) : 0;
+    uint32_t d = backoff + jitter;
     pending->nextTxMsec = millis() + d;
-    LOG_DEBUG("Setting next retransmission in %u msecs: ", d);
+    LOG_DEBUG("Setting next retransmission in %u msecs (attempt %u): ", d, attempt);
     printPacket("", pending->packet);
     setReceivedMessage(); // Run ASAP, so we can figure out our correct sleep time
 }
