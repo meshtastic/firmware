@@ -128,7 +128,8 @@ def logs_window(
         try:
             grep_re = re.compile(grep)
         except re.error as exc:
-            raise ValueError(f"invalid grep regex {grep!r}: {exc}") from exc
+            preview = grep if len(grep) <= 100 else f"{grep[:97]}..."
+            raise ValueError(f"invalid grep regex {preview!r}: {exc}") from exc
     else:
         grep_re = None
 

@@ -39,7 +39,7 @@ def _start_recorder() -> None:
     try:
         get_recorder().start()
     except Exception as exc:
-        log.warning("Persistent recorder disabled: %s", exc)
+        log.warning("Failed to start persistent recorder: %s", exc)
 
 
 _start_recorder()
