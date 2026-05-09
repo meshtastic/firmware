@@ -16,7 +16,7 @@ void copyNodeLongNameOrUnknown(char *dest, size_t destSize, const meshtastic_Nod
     if (!dest || destSize == 0)
         return;
     const char *name = (node && nodeInfoLiteHasUser(node) && node->long_name[0]) ? node->long_name : "Unknown";
-    strncpy(dest, name, destSize);
+    strncpy(dest, name, destSize - 1);
     dest[destSize - 1] = '\0';
 }
 } // namespace

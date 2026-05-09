@@ -1505,7 +1505,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
         LOG_INFO("Load %s", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
         if (fields != &meshtastic_NodeDatabase_msg &&
-            fields != &meshtastic_NodeDatabase_Legacy_msg) // contains a vector object
+            fields != &meshtastic_NodeDatabase_Legacy_msg) // both NodeDatabase descriptors contain std::vector members
             memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
             LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
@@ -1599,7 +1599,7 @@ void NodeDB::loadFromDisk()
             nodeDatabase.nodes.reserve(maxToMigrate);
             size_t posCount = 0, telCount = 0;
             {
-                concurrency::LockGuard satelliteGuard(&satelliteMutex);
+                concurrency::LockGuard guard(&satelliteMutex);
                 for (size_t i = 0; i < maxToMigrate; ++i) {
                     const auto &legacy = legacyDb.nodes[i];
                     meshtastic_NodeInfoLite slim = meshtastic_NodeInfoLite_init_default;
