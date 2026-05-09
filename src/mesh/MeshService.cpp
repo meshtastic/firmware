@@ -94,18 +94,23 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
         LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo");
         //  ignore our request for its NodeInfo
-    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
-               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
-        if (airTime->isTxAllowedChannelUtil(true)) {
-            const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
-            if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
-                LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
+    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && nodeInfoModule && !isPreferredRebroadcaster &&
+               !nodeDB->isFull()) {
+        // Cache the NodeDB lookup so the hot RX path does one linear scan instead of two, and
+        // so another task can't evict the node between the null-check and the has_user read.
+        meshtastic_NodeInfoLite *fromNode = nodeDB->getMeshNode(mp->from);
+        if (fromNode != nullptr && !fromNode->has_user) {
+            if (airTime->isTxAllowedChannelUtil(true)) {
+                const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
+                if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
+                    LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
+                } else {
+                    LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
+                    nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+                }
             } else {
-                LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
-                nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+                LOG_DEBUG("Skip sending NodeInfo > 25%% ch. util");
             }
-        } else {
-            LOG_DEBUG("Skip sending NodeInfo > 25%% ch. util");
         }
     }
 
