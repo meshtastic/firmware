@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 
 app = FastMCP("meshtastic-mcp")
 
+
 def _start_recorder() -> None:
     # Persistent device-log capture. Starts on first import — pubsub fan-out
     # is process-global, so subscribing here captures every active interface

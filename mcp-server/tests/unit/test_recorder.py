@@ -16,8 +16,8 @@ import os
 import time
 from pathlib import Path
 
-import pytest
 import pubsub
+import pytest
 from meshtastic_mcp import log_query
 from meshtastic_mcp.recorder.parsers import (
     extract_telemetry,
@@ -530,7 +530,10 @@ class TestRecorderLocks:
         assert out["files"]
 
     def test_wire_pubsub_logs_subscription_failure(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         class FailingPubSubMock:
             def subscribe(self, callback: object, topic: str) -> None:
@@ -540,4 +543,6 @@ class TestRecorderLocks:
         recorder = Recorder(base_dir=tmp_path)
         with caplog.at_level(logging.WARNING):
             recorder._wire_pubsub()
-        assert "Recorder failed to subscribe to meshtastic.log.line: boom" in caplog.text
+        assert (
+            "Recorder failed to subscribe to meshtastic.log.line: boom" in caplog.text
+        )
