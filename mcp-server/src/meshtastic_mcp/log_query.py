@@ -29,6 +29,8 @@ from typing import Any, Iterator
 from .recorder.recorder import get_recorder
 
 _REL_RE = re.compile(r"^\s*-\s*(\d+(?:\.\d+)?)\s*([smhd])\s*$")
+_REGEX_PREVIEW_MAX = 100
+_REGEX_PREVIEW_TRUNCATE = 97
 
 
 def _parse_time(value: Any, *, now: float | None = None) -> float:
@@ -128,7 +130,11 @@ def logs_window(
         try:
             grep_re = re.compile(grep)
         except re.error as exc:
-            preview = grep if len(grep) <= 100 else f"{grep[:97]}..."
+            preview = (
+                grep
+                if len(grep) <= _REGEX_PREVIEW_MAX
+                else f"{grep[:_REGEX_PREVIEW_TRUNCATE]}..."
+            )
             raise ValueError(f"invalid grep regex {preview!r}: {exc}") from exc
     else:
         grep_re = None

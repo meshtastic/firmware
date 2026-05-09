@@ -533,7 +533,7 @@ class TestRecorderLocks:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         class FailingPubSubMock:
-            def subscribe(self, handler: object, topic: str) -> None:
+            def subscribe(self, callback: object, topic: str) -> None:
                 raise RuntimeError("boom")
 
         monkeypatch.setattr(pubsub, "pub", FailingPubSubMock())
