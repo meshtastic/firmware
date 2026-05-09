@@ -3,6 +3,8 @@ description: Hunt for memory leaks (and other slow degradations) by reading the 
 argument-hint: [window=1h] [field=free_heap] [variant=local]
 ---
 
+<!-- markdownlint-disable MD029 -->
+
 # `/leakhunt` — read the recorder, classify a memory leak
 
 Use the always-on recorder (`mcp-server/.mtlog/`) to read a heap timeline plus the matching log slice and produce a one-page verdict: **steady / slow leak / fragmentation / OOM-imminent**. No firmware changes, no special build flags — the LocalStats telemetry packet that the firmware already broadcasts every ~60 s carries `heap_free_bytes` and `heap_total_bytes`.
@@ -36,11 +38,7 @@ Both feed the same `telemetry_timeline(field="free_heap")` query — when DEBUG_
 
 6. **Pull marker events** so we know if the operator labeled phases — `mcp__meshtastic__events_window(start="-${window}", kind="mark|connection_lost|connection_established")`. If a `connection_lost` overlaps a sharp drop, that's not a leak; that's a reboot.
 
-<!-- markdownlint-disable-next-line MD029 -->
-
 6a. **(DEBUG_HEAP only) Per-thread attribution** — `mcp__meshtastic__logs_window(start="-${window}", grep="leaked heap", max_lines=200)`. Each row has a structured `heap_event` field with `{kind, thread, before, after, delta}`. Aggregate by thread: sum the `delta` over the window per thread name. The thread with the largest cumulative negative delta is your suspect. Note the count too — a thread with 50× small leaks is different from 1× big leak.
-
-<!-- markdownlint-disable-next-line MD029 -->
 
 7. **Classify** based on what the data says, NOT on what you wish it said. Use these rules in order:
    - **Insufficient data** (< 5 samples): say so. Suggest a longer window or longer wait. Stop.
@@ -50,8 +48,6 @@ Both feed the same `telemetry_timeline(field="free_heap")` query — when DEBUG_
    - **Fragmentation suspect**: `slope_per_min` close to zero (|x| < 50) BUT min trends down across the window AND the log slice shows `Alloc an err` warnings WITHOUT total OOM. Means free total is OK but largest contiguous block is shrinking. Recommend a `DEBUG_HEAP` build to confirm.
    - **Steady**: |slope_per_min| < 50, no error lines. Heap is fine.
    - **Recovery curve**: slope is POSITIVE — heap recovered. Either a workload completed or GC fired. Note it; not a leak.
-
-<!-- markdownlint-disable-next-line MD029 -->
 
 8. **Report**:
 
