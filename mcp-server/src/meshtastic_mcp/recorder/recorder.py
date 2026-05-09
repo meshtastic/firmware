@@ -40,7 +40,7 @@ class Recorder:
 
     def __init__(self, base_dir: Path | None = None) -> None:
         self.base_dir = Path(base_dir) if base_dir else _DEFAULT_DIR
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._started = False
         self._paused = False
         self._pause_reason: str | None = None

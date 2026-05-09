@@ -2,9 +2,9 @@
 
 A `_RotatingJsonl` owns one live `.jsonl` file. Writes are line-delimited
 JSON objects (one row per call). When the live file exceeds `max_bytes`,
-it is closed, gzipped to `<name>.YYYYMMDD-HHMMSS.jsonl.gz`, and the live
-file resets to empty. Old archives past `keep_archives` are unlinked
-oldest-first.
+it is closed, gzipped to `<name>.YYYYMMDD-HHMMSS-uuuuuu-NNNNN.jsonl.gz`,
+and the live file resets to empty. Old archives past `keep_archives` are
+unlinked oldest-first.
 
 Size check is amortized — `os.fstat` runs every `check_every` writes,
 not per-write, so the hot path stays at one `fh.write` + one `fh.flush`.
@@ -130,10 +130,9 @@ class _RotatingJsonl:
     def _prune_archives(self) -> None:
         # Match siblings of self.path.name with `.jsonl.gz` suffix.
         prefix = self.path.stem  # "logs" for "logs.jsonl"
-        archives = sorted(
-            self.path.parent.glob(f"{prefix}.*.jsonl.gz"),
-            key=lambda p: p.stat().st_mtime,
-        )
+        # Archive filenames are already lexicographically chronological.
+        # Prune by name, not mtime, so copied/restored files don't reorder.
+        archives = sorted(self.path.parent.glob(f"{prefix}.*.jsonl.gz"))
         excess = len(archives) - self.keep_archives
         for old in archives[: max(0, excess)]:
             try:

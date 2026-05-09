@@ -8,7 +8,8 @@ forward scan is cheap; we don't need an index.
 All time arguments accept:
   - epoch seconds (int/float)
   - relative strings: "-15m", "-2h", "-3d", "now"
-  - ISO-ish absolute strings: "2026-05-07T14:30:00"
+  - ISO-ish absolute strings: "2026-05-07T14:30:00" (naive timestamps are
+    treated as UTC)
 
 Tools that return data ALWAYS cap their output (max_lines / max_points
 / max), and report whether more matched than was returned.
@@ -48,7 +49,7 @@ def _parse_time(value: Any, *, now: float | None = None) -> float:
         secs = n * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
         base = time.time() if now is None else now
         return base - secs
-    # Try ISO 8601. Accept naive (assume local) and Z-suffixed.
+    # Try ISO 8601. Accept naive (assume UTC) and Z-suffixed.
     try:
         if s.endswith("z"):
             s = s[:-1] + "+00:00"
@@ -91,10 +92,11 @@ def _iter_jsonl(path: Path, *, since: float, until: float) -> Iterator[dict[str,
                     if ts < since:
                         continue
                     if ts > until:
-                        # Records are append-monotonic per file, but
-                        # archives might overlap each other. We can't
-                        # short-circuit globally; skip and keep going.
-                        continue
+                        # Records are append-monotonic within a file, so
+                        # the rest of this file is also past `until`.
+                        # Archives can still overlap each other, so only
+                        # short-circuit this file, not the whole scan.
+                        break
                     yield rec
         except (FileNotFoundError, OSError):
             continue

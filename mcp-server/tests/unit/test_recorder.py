@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import time
 from pathlib import Path
 
@@ -442,6 +443,11 @@ class TestParseTime:
         ts = log_query._parse_time("2026-01-01T00:00:00Z")
         assert isinstance(ts, float) and ts > 1_700_000_000
 
+    def test_naive_iso_assumes_utc(self) -> None:
+        assert log_query._parse_time("2026-01-01T00:00:00") == log_query._parse_time(
+            "2026-01-01T00:00:00Z"
+        )
+
     def test_invalid(self) -> None:
         with pytest.raises(ValueError):
             log_query._parse_time("not a time")
@@ -476,6 +482,27 @@ class TestRotation:
         archives = sorted(tmp_path.glob("rot.*.jsonl.gz"))
         assert len(archives) <= 2, f"expected ≤2 kept archives, got {len(archives)}"
 
+    def test_archive_pruning_uses_filename_order(self, tmp_path: Path) -> None:
+        path = tmp_path / "rot.jsonl"
+        r = _RotatingJsonl(path, keep_archives=2)
+        old = tmp_path / "rot.20260101-000000-000000-00000.jsonl.gz"
+        mid = tmp_path / "rot.20260101-000001-000000-00000.jsonl.gz"
+        new = tmp_path / "rot.20260101-000002-000000-00000.jsonl.gz"
+        for archive in (old, mid, new):
+            with gzip.open(archive, "wt", encoding="utf-8") as fh:
+                fh.write('{"ts":1}\n')
+        # Deliberately scramble mtimes so lexicographic filename order is
+        # the only stable chronological signal.
+        os.utime(old, (300, 300))
+        os.utime(mid, (100, 100))
+        os.utime(new, (200, 200))
+
+        r._prune_archives()
+        r.close()
+
+        archives = sorted(p.name for p in tmp_path.glob("rot.*.jsonl.gz"))
+        assert archives == [mid.name, new.name]
+
     def test_force_rotate_when_below_threshold(self, tmp_path: Path) -> None:
         path = tmp_path / "rot.jsonl"
         r = _RotatingJsonl(path, max_bytes=10_000_000, check_every=999_999)
@@ -487,3 +514,10 @@ class TestRotation:
         assert len(archives) == 1
         assert path.exists()
         assert "after-rotate" in path.read_text()
+
+
+class TestRecorderLocks:
+    def test_force_rotate_all_returns_status(self, recorder: Recorder) -> None:
+        out = recorder.force_rotate_all()
+        assert out["running"] is True
+        assert out["files"]

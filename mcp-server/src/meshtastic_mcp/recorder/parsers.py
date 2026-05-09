@@ -5,7 +5,7 @@ Two flavors of log line cross our pubsub subscription:
      accumulates bytes between protobuf frames and emits the full
      firmware-formatted line, e.g.
          "INFO  | 12:34:56 12345 [Main] Booting"
-     — level, HH:MM:SS, uptime millis, thread bracket, then message.
+     — level, HH:MM:SS, uptime seconds, thread bracket, then message.
   2. LogRecord protobuf path (debug_log_api enabled): the lib calls
      `_handleLogLine(record.message)` with ONLY the message body. The
      level/source/time fields on the LogRecord are dropped before

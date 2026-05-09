@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Forward the recorder's JSONL streams to Datadog.
+"""Forward selected recorder JSONL streams to Datadog.
 
-Reads `.mtlog/{logs,telemetry,packets,events}.jsonl`, ships logs to the
+Reads `.mtlog/logs.jsonl` and `.mtlog/telemetry.jsonl`, ships logs to the
 Logs Intake API and telemetry numerics to the Metrics v2 series API.
 Resumes from `.mtlog/.dd-cursor.json` so a daemon restart doesn't
-duplicate or lose rows.
+duplicate rows already shipped from the current live files.
+
+This forwarder does not currently backfill rotated `.jsonl.gz` archives.
+If the recorder rotates before this process drains the live file, or the
+forwarder is down across a rotation, those older rows are skipped.
 
 Usage:
     DD_API_KEY=... ./scripts/mtlog_to_datadog.py --tail
@@ -57,9 +61,10 @@ _RETRY_BASE_S = 1.5
 class _StreamReader:
     """Reads a single rotating JSONL with cursor-based resume.
 
-    The recorder rotates files (live `.jsonl` → `.YYYYMMDD-HHMMSS.jsonl.gz`),
-    which means the live file shrinks abruptly. We detect that via inode
-    change OR live size < cursor position, and reset the cursor to 0.
+    This tails only the live `.jsonl` file. The recorder rotates files
+    (live `.jsonl` → `.YYYYMMDD-HHMMSS-uuuuuu-NNNNN.jsonl.gz`), which means
+    the live file shrinks abruptly. We detect that via inode change OR live
+    size < cursor position, and reset the live-file cursor to 0.
     """
 
     def __init__(self, path: Path, cursor: dict[str, Any]):
