@@ -14,12 +14,11 @@ import importlib
 import json
 import logging
 import os
-import sys
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
+import pubsub
 from meshtastic_mcp import log_query
 from meshtastic_mcp.recorder.parsers import (
     extract_telemetry,
@@ -538,7 +537,7 @@ class TestRecorderLocks:
             def subscribe(self, handler: object, topic: str) -> None:
                 raise RuntimeError("boom")
 
-        monkeypatch.setitem(sys.modules, "pubsub", SimpleNamespace(pub=FakePub()))
+        monkeypatch.setattr(pubsub, "pub", FakePub())
         recorder = Recorder(base_dir=tmp_path)
         with caplog.at_level(logging.WARNING):
             recorder._wire_pubsub()
@@ -558,8 +557,9 @@ class TestServerStartup:
                 raise RuntimeError("cannot write")
 
         monkeypatch.setattr(server, "get_recorder", lambda: BrokenRecorder())
-        with caplog.at_level(logging.WARNING, logger=server.__name__):
-            server._start_recorder()
-        assert "Persistent recorder disabled: cannot write" in caplog.text
-
-        real_get_recorder().stop()
+        try:
+            with caplog.at_level(logging.WARNING, logger=server.__name__):
+                server._start_recorder()
+            assert "Persistent recorder disabled: cannot write" in caplog.text
+        finally:
+            real_get_recorder().stop()
