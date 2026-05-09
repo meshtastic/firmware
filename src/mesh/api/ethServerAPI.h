@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ServerAPI.h"
-#ifndef USE_WS5500
+#if !(defined(USE_WS5500) || defined(USE_ESP32_RMIIPHY))
 #include <RAK13800_W5100S.h>
 
 /**
