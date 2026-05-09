@@ -2391,7 +2391,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
 void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
 {
-    const meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
     if (lite && nodeInfoLiteIsFavorite(lite) != is_favorite) {
         nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_IS_FAVORITE_MASK, is_favorite);
         sortMeshDB();
