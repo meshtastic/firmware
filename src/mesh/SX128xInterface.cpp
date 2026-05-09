@@ -156,6 +156,23 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     return true;
 }
 
+template <typename T> void SX128xInterface<T>::setTransmitPower(int dbm)
+{
+    // Never exceed the configured `power` (see SX126x override).
+    // SX128x published minimum is -18 dBm.
+    if (dbm > power) {
+        LOG_WARN("SX128X TX power %d dBm above configured %d dBm, clamping down", dbm, power);
+        dbm = power;
+    }
+    if (dbm < -18) {
+        LOG_WARN("SX128X TX power %d dBm below chip minimum, clamping to -18 dBm", dbm);
+        dbm = -18;
+    }
+    int err = lora.setOutputPower((int8_t)dbm);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX128X setOutputPower %s%d", radioLibErr, err);
+}
+
 template <typename T> void SX128xInterface<T>::disableInterrupt()
 {
     lora.clearDio1Action();

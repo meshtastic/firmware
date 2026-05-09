@@ -196,6 +196,33 @@ bool RF95Interface::init()
     return res == RADIOLIB_ERR_NONE;
 }
 
+void RF95Interface::setTransmitPower(int dbm)
+{
+    // Never exceed the configured `power` (see SX126x override).
+    // PA_BOOST path minimum is 2 dBm; RFO path minimum is -4 dBm.
+    const int minDbm =
+#ifdef USE_RF95_RFO
+        -4;
+#else
+        2;
+#endif
+    if (dbm > power) {
+        LOG_WARN("RF95 TX power %d dBm above configured %d dBm, clamping down", dbm, power);
+        dbm = power;
+    }
+    if (dbm < minDbm) {
+        LOG_WARN("RF95 TX power %d dBm below chip minimum, clamping to %d dBm", dbm, minDbm);
+        dbm = minDbm;
+    }
+#ifdef USE_RF95_RFO
+    int err = lora->setOutputPower((int8_t)dbm, true);
+#else
+    int err = lora->setOutputPower((int8_t)dbm);
+#endif
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("RF95 setOutputPower err=%d", err);
+}
+
 void RF95Interface::disableInterrupt()
 {
     lora->clearDio0Action();

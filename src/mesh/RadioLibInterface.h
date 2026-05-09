@@ -99,6 +99,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
 
+
   public:
     /** Our ISR code currently needs this to find our active instance
      */

@@ -430,6 +430,15 @@ void RadioLibInterface::handleTransmitInterrupt()
 
 void RadioLibInterface::completeSending()
 {
+    // Restore TX power if the just-finished packet was whispered.
+    // Done here (not after startTransmit) because setOutputPower is only
+    // safe in standby, and by the time we hit completeSending the TX-done
+    // IRQ has already returned the chip to standby.
+    if (isWhispering) {
+        setTransmitPower(power);
+        isWhispering = false;
+    }
+
     // We are careful to clear sending packet before calling printPacket because
     // that can take a long time
     auto p = sendingPacket;
@@ -593,6 +602,8 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         return false;
     } else {
         configHardwareForSend(); // must be after setStandby
+
+        applyTxPowerPenalty(txp, isFromUs(txp));
 
         size_t numbytes = beginSending(txp);
 

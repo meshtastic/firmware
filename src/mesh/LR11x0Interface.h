@@ -31,6 +31,9 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     void resetAGC() override;
 #endif
 
+    /// Push a TX power to the chip for the next packet. See base class for semantics.
+    void setTransmitPower(int dbm) override;
+
   protected:
     /**
      * Specific module instance

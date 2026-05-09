@@ -32,6 +32,9 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
 
+    /// Push a TX power to the chip for the next packet. See base class for semantics.
+    void setTransmitPower(int dbm) override;
+
   protected:
     float currentLimit = 140; // Higher OCP limit for SX126x PA
     float tcxoVoltage = 0.0;

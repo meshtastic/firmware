@@ -31,6 +31,9 @@ class RF95Interface : public RadioLibInterface
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() override;
 
+    /// Push a TX power to the chip for the next packet. See base class for semantics.
+    void setTransmitPower(int dbm) override;
+
   protected:
     /**
      * Glue functions called from ISR land
