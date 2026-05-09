@@ -128,7 +128,7 @@ def logs_window(
         try:
             grep_re = re.compile(grep)
         except re.error as exc:
-            raise ValueError(f"invalid grep regex: {grep!r}") from exc
+            raise ValueError(f"invalid grep regex {grep!r}: {exc}") from exc
     else:
         grep_re = None
 

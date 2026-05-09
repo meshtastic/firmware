@@ -532,13 +532,12 @@ class TestRecorderLocks:
     def test_wire_pubsub_logs_subscription_failure(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        class FakePub:
+        class FailingPubSubMock:
             def subscribe(self, handler: object, topic: str) -> None:
                 raise RuntimeError("boom")
 
-        monkeypatch.setattr(pubsub, "pub", FakePub())
+        monkeypatch.setattr(pubsub, "pub", FailingPubSubMock())
         recorder = Recorder(base_dir=tmp_path)
         with caplog.at_level(logging.WARNING):
             recorder._wire_pubsub()
         assert "Recorder failed to subscribe to meshtastic.log.line: boom" in caplog.text
-
