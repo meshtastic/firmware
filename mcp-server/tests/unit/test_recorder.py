@@ -13,7 +13,6 @@ import gzip
 import json
 import time
 from pathlib import Path
-from typing import Any
 
 import pytest
 from meshtastic_mcp import log_query

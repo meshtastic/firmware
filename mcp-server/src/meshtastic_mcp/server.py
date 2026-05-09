@@ -875,7 +875,7 @@ def events_window(
     kind: str | None = None,
     max: int = 200,
 ) -> dict[str, Any]:
-    """Recorder events: connection lifecycle, node updates, and `mark_event` markers.
+    """Return recorder events: connection lifecycle, node updates, and `mark_event` markers.
 
     `kind` ∈ recorder_start, recorder_pause, recorder_resume,
     connection_established, connection_lost, node_updated, mark.
@@ -904,7 +904,7 @@ def mark_event(
 
 @app.tool()
 def recorder_status() -> dict[str, Any]:
-    """Recorder runtime info: running, paused, file sizes, last_ts per stream.
+    """Return recorder runtime info: running, paused, file sizes, last_ts per stream.
 
     Use this to sanity-check that capture is working before you trust a
     `logs_window` / `telemetry_timeline` result.

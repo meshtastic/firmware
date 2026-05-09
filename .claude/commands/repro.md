@@ -40,7 +40,11 @@ Re-run a single pytest node ID N times in isolation, track pass rate, and surfac
 
    Surface the top 3 differences as a "passes when / fails when" table. Don't dump full logs — pull specific lines with uptime timestamps.
 
+<!-- markdownlint-disable-next-line MD029 -->
+
 5a. **Archive recorder slices per attempt** (no extra device interaction; the recorder runs autouse). Right after each attempt finishes, capture its `(start_ts, end_ts)` and call `mcp__meshtastic__recorder_export(start=<start>, end=<end>, dest_dir="mcp-server/tests/repro_artifacts/<safe-test-id>/attempt_<n>/")`. This drops a `logs.jsonl`, `telemetry.jsonl`, `packets.jsonl`, and `events.jsonl` snapshot scoped to the attempt window. Use these for cross-attempt diffs in step 5: `jq '.line' logs.jsonl` is faster than re-running the test, and the telemetry slice lets you compare heap behavior across attempts.
+
+<!-- markdownlint-disable-next-line MD029 -->
 
 6. **Classify the flake** into one of:
    - **LoRa airtime collision** → pass rate improves with fewer concurrent transmitters; propose a `time.sleep` gap or retry bump in the test body.
@@ -49,6 +53,8 @@ Re-run a single pytest node ID N times in isolation, track pass rate, and surfac
    - **Hardware-specific** (one direction fails, other passes; one device's firmware is older; driver wedged) → specific recovery pointer. For a device that's wedged past `touch_1200bps`, the next escalation is `uhubctl_cycle(role=..., confirm=True)` to hard-power-cycle its hub port (requires `uhubctl` installed).
    - **Device went dark mid-run** → fails from some attempt onward, never recovers, firmware log stops arriving. Almost always hardware: a Guru crash + frozen CDC. Hard-power-cycle via `uhubctl_cycle(role=..., confirm=True)` before the next iteration; if that also fails, escalate to replug.
    - **Genuinely unknown** → say so; don't invent a root cause.
+
+<!-- markdownlint-disable-next-line MD029 -->
 
 7. **Report back** with:
    - Pass rate and mean duration.
