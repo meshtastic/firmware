@@ -316,7 +316,7 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
         southernmost = min(southernmost, latNode);
 
         // Longitude is trickier
-        float lngNode = pos->longitude_i * 1e-7;
+        float lngNode = pos.longitude_i * 1e-7;
         float degEastward = fmod(((lngNode - lngCenter) + 360), 360);      // Degrees traveled east from lngCenter to reach node
         float degWestward = abs(fmod(((lngNode - lngCenter) - 360), 360)); // Degrees traveled west from lngCenter to reach node
         if (degEastward < degWestward)

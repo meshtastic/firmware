@@ -20,12 +20,13 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-bool meshtastic_NodeDatabase_Legacy_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
+bool meshtastic_NodeDatabase_Legacy_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field)
 {
+    const auto *iter = reinterpret_cast<const pb_field_iter_t *>(field);
     if (ostream) {
-        const auto *vec = static_cast<const std::vector<meshtastic_NodeInfoLite_Legacy> *>(field->pData);
+        const auto *vec = static_cast<const std::vector<meshtastic_NodeInfoLite_Legacy> *>(iter->pData);
         for (auto item : *vec) {
-            if (!pb_encode_tag_for_field(ostream, field))
+            if (!pb_encode_tag_for_field(ostream, iter))
                 return false;
             if (!pb_encode_submessage(ostream, meshtastic_NodeInfoLite_Legacy_fields, &item))
                 return false;
@@ -33,7 +34,7 @@ bool meshtastic_NodeDatabase_Legacy_callback(pb_istream_t *istream, pb_ostream_t
     }
     if (istream) {
         meshtastic_NodeInfoLite_Legacy node;
-        auto *vec = static_cast<std::vector<meshtastic_NodeInfoLite_Legacy> *>(field->pData);
+        auto *vec = static_cast<std::vector<meshtastic_NodeInfoLite_Legacy> *>(iter->pData);
         if (istream->bytes_left && pb_decode(istream, meshtastic_NodeInfoLite_Legacy_fields, &node))
             vec->push_back(node);
     }

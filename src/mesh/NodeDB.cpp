@@ -152,14 +152,15 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
 
 #endif
 
-bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
+bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field)
 {
-    switch (field->tag) {
+    const auto *iter = reinterpret_cast<const pb_field_iter_t *>(field);
+    switch (iter->tag) {
     case meshtastic_NodeDatabase_nodes_tag: {
         if (ostream) {
-            const auto *vec = static_cast<const std::vector<meshtastic_NodeInfoLite> *>(field->pData);
+            const auto *vec = static_cast<const std::vector<meshtastic_NodeInfoLite> *>(iter->pData);
             for (auto item : *vec) {
-                if (!pb_encode_tag_for_field(ostream, field))
+                if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
                 if (!pb_encode_submessage(ostream, meshtastic_NodeInfoLite_fields, &item))
                     return false;
@@ -167,7 +168,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
         }
         if (istream) {
             meshtastic_NodeInfoLite node;
-            auto *vec = static_cast<std::vector<meshtastic_NodeInfoLite> *>(field->pData);
+            auto *vec = static_cast<std::vector<meshtastic_NodeInfoLite> *>(iter->pData);
             if (istream->bytes_left && pb_decode(istream, meshtastic_NodeInfoLite_fields, &node))
                 vec->push_back(node);
         }
@@ -175,9 +176,9 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_positions_tag: {
         if (ostream) {
-            const auto *vec = static_cast<const std::vector<meshtastic_NodePositionEntry> *>(field->pData);
+            const auto *vec = static_cast<const std::vector<meshtastic_NodePositionEntry> *>(iter->pData);
             for (auto item : *vec) {
-                if (!pb_encode_tag_for_field(ostream, field))
+                if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
                 if (!pb_encode_submessage(ostream, meshtastic_NodePositionEntry_fields, &item))
                     return false;
@@ -185,7 +186,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
         }
         if (istream) {
             meshtastic_NodePositionEntry entry;
-            auto *vec = static_cast<std::vector<meshtastic_NodePositionEntry> *>(field->pData);
+            auto *vec = static_cast<std::vector<meshtastic_NodePositionEntry> *>(iter->pData);
             if (istream->bytes_left && pb_decode(istream, meshtastic_NodePositionEntry_fields, &entry))
                 vec->push_back(entry);
         }
@@ -193,9 +194,9 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_telemetry_tag: {
         if (ostream) {
-            const auto *vec = static_cast<const std::vector<meshtastic_NodeTelemetryEntry> *>(field->pData);
+            const auto *vec = static_cast<const std::vector<meshtastic_NodeTelemetryEntry> *>(iter->pData);
             for (auto item : *vec) {
-                if (!pb_encode_tag_for_field(ostream, field))
+                if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
                 if (!pb_encode_submessage(ostream, meshtastic_NodeTelemetryEntry_fields, &item))
                     return false;
@@ -203,7 +204,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
         }
         if (istream) {
             meshtastic_NodeTelemetryEntry entry;
-            auto *vec = static_cast<std::vector<meshtastic_NodeTelemetryEntry> *>(field->pData);
+            auto *vec = static_cast<std::vector<meshtastic_NodeTelemetryEntry> *>(iter->pData);
             if (istream->bytes_left && pb_decode(istream, meshtastic_NodeTelemetryEntry_fields, &entry))
                 vec->push_back(entry);
         }
@@ -211,9 +212,9 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_status_tag: {
         if (ostream) {
-            const auto *vec = static_cast<const std::vector<meshtastic_NodeStatusEntry> *>(field->pData);
+            const auto *vec = static_cast<const std::vector<meshtastic_NodeStatusEntry> *>(iter->pData);
             for (auto item : *vec) {
-                if (!pb_encode_tag_for_field(ostream, field))
+                if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
                 if (!pb_encode_submessage(ostream, meshtastic_NodeStatusEntry_fields, &item))
                     return false;
@@ -221,7 +222,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
         }
         if (istream) {
             meshtastic_NodeStatusEntry entry;
-            auto *vec = static_cast<std::vector<meshtastic_NodeStatusEntry> *>(field->pData);
+            auto *vec = static_cast<std::vector<meshtastic_NodeStatusEntry> *>(iter->pData);
             if (istream->bytes_left && pb_decode(istream, meshtastic_NodeStatusEntry_fields, &entry))
                 vec->push_back(entry);
         }
@@ -229,9 +230,9 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_environment_tag: {
         if (ostream) {
-            const auto *vec = static_cast<const std::vector<meshtastic_NodeEnvironmentEntry> *>(field->pData);
+            const auto *vec = static_cast<const std::vector<meshtastic_NodeEnvironmentEntry> *>(iter->pData);
             for (auto item : *vec) {
-                if (!pb_encode_tag_for_field(ostream, field))
+                if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
                 if (!pb_encode_submessage(ostream, meshtastic_NodeEnvironmentEntry_fields, &item))
                     return false;
@@ -239,7 +240,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
         }
         if (istream) {
             meshtastic_NodeEnvironmentEntry entry;
-            auto *vec = static_cast<std::vector<meshtastic_NodeEnvironmentEntry> *>(field->pData);
+            auto *vec = static_cast<std::vector<meshtastic_NodeEnvironmentEntry> *>(iter->pData);
             if (istream->bytes_left && pb_decode(istream, meshtastic_NodeEnvironmentEntry_fields, &entry))
                 vec->push_back(entry);
         }
@@ -2186,13 +2187,21 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         return;
 
     if (t.which_variant == meshtastic_Telemetry_device_metrics_tag) {
-        LOG_DEBUG(src == RX_SRC_LOCAL ? "updateTelemetry LOCAL device" : "updateTelemetry REMOTE device node=0x%x", nodeId);
+        if (src == RX_SRC_LOCAL) {
+            LOG_DEBUG("updateTelemetry LOCAL device");
+        } else {
+            LOG_DEBUG("updateTelemetry REMOTE device node=0x%x", nodeId);
+        }
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
         concurrency::LockGuard guard(&satelliteMutex);
         nodeTelemetry[nodeId] = t.variant.device_metrics;
 #endif
     } else if (t.which_variant == meshtastic_Telemetry_environment_metrics_tag) {
-        LOG_DEBUG(src == RX_SRC_LOCAL ? "updateTelemetry LOCAL env" : "updateTelemetry REMOTE env node=0x%x", nodeId);
+        if (src == RX_SRC_LOCAL) {
+            LOG_DEBUG("updateTelemetry LOCAL env");
+        } else {
+            LOG_DEBUG("updateTelemetry REMOTE env node=0x%x", nodeId);
+        }
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
         nodeEnvironment[nodeId] = t.variant.environment_metrics;
