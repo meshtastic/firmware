@@ -202,7 +202,7 @@ Every code path that drops a node from the header table must also evict the sate
 
 `PhoneAPI::clientWantsGradientSync()` is the single switch. When true, `STATE_SEND_OTHER_NODEINFOS` is followed by:
 
-```
+```text
 STATE_REPLAY_POSITIONS → STATE_REPLAY_TELEMETRY → STATE_REPLAY_ENVIRONMENT → STATE_REPLAY_STATUS
 ```
 
