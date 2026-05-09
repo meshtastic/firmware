@@ -270,10 +270,10 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     fileToAppend.printf("%d,", getFrom(&mp));          // From
     fileToAppend.printf("%s,", n ? n->long_name : ""); // Long Name
-    const meshtastic_PositionLite *senderPos = nodeDB->getNodePosition(getFrom(&mp));
-    if (senderPos) {
-        fileToAppend.printf("%f,", senderPos->latitude_i * 1e-7);  // Sender Lat
-        fileToAppend.printf("%f,", senderPos->longitude_i * 1e-7); // Sender Long
+    meshtastic_PositionLite senderPos;
+    if (nodeDB->copyNodePosition(getFrom(&mp), senderPos)) {
+        fileToAppend.printf("%f,", senderPos.latitude_i * 1e-7);  // Sender Lat
+        fileToAppend.printf("%f,", senderPos.longitude_i * 1e-7); // Sender Long
     } else {
         fileToAppend.printf("0.0,0.0,");
     }
@@ -283,11 +283,11 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         fileToAppend.printf("%d,", gpsStatus->getAltitude());         // RX Altitude
     } else {
         // When the phone API is in use, the node info will be updated with position
-        const meshtastic_PositionLite *usPos = nodeDB->getNodePosition(nodeDB->getNodeNum());
-        if (usPos) {
-            fileToAppend.printf("%f,", usPos->latitude_i * 1e-7);  // RX Lat
-            fileToAppend.printf("%f,", usPos->longitude_i * 1e-7); // RX Long
-            fileToAppend.printf("%d,", usPos->altitude);           // RX Altitude
+        meshtastic_PositionLite usPos;
+        if (nodeDB->copyNodePosition(nodeDB->getNodeNum(), usPos)) {
+            fileToAppend.printf("%f,", usPos.latitude_i * 1e-7);  // RX Lat
+            fileToAppend.printf("%f,", usPos.longitude_i * 1e-7); // RX Long
+            fileToAppend.printf("%d,", usPos.altitude);           // RX Altitude
         } else {
             fileToAppend.printf("0.0,0.0,0,");
         }

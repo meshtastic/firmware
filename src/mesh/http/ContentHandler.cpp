@@ -742,12 +742,12 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
             node["position"] = new JSONValue();
 
             if (nodeDB->hasValidPosition(tempNodeInfo)) {
-                const meshtastic_PositionLite *posLite = nodeDB->getNodePosition(tempNodeInfo->num);
-                if (posLite) {
+                meshtastic_PositionLite posLite;
+                if (nodeDB->copyNodePosition(tempNodeInfo->num, posLite)) {
                     JSONObject position;
-                    position["latitude"] = new JSONValue((float)posLite->latitude_i * 1e-7);
-                    position["longitude"] = new JSONValue((float)posLite->longitude_i * 1e-7);
-                    position["altitude"] = new JSONValue((int)posLite->altitude);
+                    position["latitude"] = new JSONValue((float)posLite.latitude_i * 1e-7);
+                    position["longitude"] = new JSONValue((float)posLite.longitude_i * 1e-7);
+                    position["altitude"] = new JSONValue((int)posLite.altitude);
                     node["position"] = new JSONValue(position);
                 }
             }

@@ -147,9 +147,10 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     const char *statusLine2 = nullptr;
 
     // Distance only needs our own position fix; compass/bearing additionally needs heading.
-    const meshtastic_PositionLite *ownPos = ourNode ? nodeDB->getNodePosition(ourNode->num) : nullptr;
-    if (hasOwnPositionFix && ownPos) {
-        const meshtastic_PositionLite &op = *ownPos;
+    meshtastic_PositionLite ownPos;
+    const bool haveOwnPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ownPos);
+    if (hasOwnPositionFix && haveOwnPos) {
+        const meshtastic_PositionLite &op = ownPos;
         const float d =
             GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
 

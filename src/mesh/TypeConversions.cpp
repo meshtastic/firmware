@@ -51,8 +51,12 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
 
 meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfoLite *lite)
 {
-    const meshtastic_PositionLite *pos = nodeDB ? nodeDB->getNodePosition(lite->num) : nullptr;
-    const meshtastic_DeviceMetrics *dm = nodeDB ? nodeDB->getNodeTelemetry(lite->num) : nullptr;
+    meshtastic_PositionLite posScratch;
+    meshtastic_DeviceMetrics dmScratch;
+    const meshtastic_PositionLite *pos =
+        (nodeDB && nodeDB->copyNodePosition(lite->num, posScratch)) ? &posScratch : nullptr;
+    const meshtastic_DeviceMetrics *dm =
+        (nodeDB && nodeDB->copyNodeTelemetry(lite->num, dmScratch)) ? &dmScratch : nullptr;
     return ConvertToNodeInfo(lite, pos, dm);
 }
 

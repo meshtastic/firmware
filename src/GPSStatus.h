@@ -53,8 +53,8 @@ class GPSStatus : public Status
     int32_t getLatitude() const
     {
         if (config.position.fixed_position) {
-            const meshtastic_PositionLite *pos = nodeDB->getNodePosition(nodeDB->getNodeNum());
-            return pos ? pos->latitude_i : 0;
+            meshtastic_PositionLite pos;
+            return nodeDB->copyNodePosition(nodeDB->getNodeNum(), pos) ? pos.latitude_i : 0;
         } else {
             return p.latitude_i;
         }
@@ -63,8 +63,8 @@ class GPSStatus : public Status
     int32_t getLongitude() const
     {
         if (config.position.fixed_position) {
-            const meshtastic_PositionLite *pos = nodeDB->getNodePosition(nodeDB->getNodeNum());
-            return pos ? pos->longitude_i : 0;
+            meshtastic_PositionLite pos;
+            return nodeDB->copyNodePosition(nodeDB->getNodeNum(), pos) ? pos.longitude_i : 0;
         } else {
             return p.longitude_i;
         }
@@ -73,8 +73,8 @@ class GPSStatus : public Status
     int32_t getAltitude() const
     {
         if (config.position.fixed_position) {
-            const meshtastic_PositionLite *pos = nodeDB->getNodePosition(nodeDB->getNodeNum());
-            return pos ? pos->altitude : 0;
+            meshtastic_PositionLite pos;
+            return nodeDB->copyNodePosition(nodeDB->getNodeNum(), pos) ? pos.altitude : 0;
         } else {
             return p.altitude;
         }

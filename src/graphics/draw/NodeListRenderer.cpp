@@ -104,17 +104,17 @@ std::string getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node,
     // of NodeDB's per-NodeNum cache instead of scanning a FIFO.
     std::string composedFromStatus;
     if (config.display.use_long_node_name && nodeInfoLiteHasUser(node) && nodeDB) {
-        const meshtastic_StatusMessage *cachedStatus = nodeDB->getNodeStatus(node->num);
-        if (cachedStatus && cachedStatus->status[0]) {
+        meshtastic_StatusMessage cachedStatus;
+        if (nodeDB->copyNodeStatus(node->num, cachedStatus) && cachedStatus.status[0]) {
             const char *shortName = node->short_name;
-            const size_t statusLen = std::strlen(cachedStatus->status);
+            const size_t statusLen = std::strlen(cachedStatus.status);
             composedFromStatus.reserve(4 + (shortName ? std::strlen(shortName) : 0) + 1 + statusLen);
             composedFromStatus += "(";
             if (shortName && *shortName) {
                 composedFromStatus += shortName;
             }
             composedFromStatus += ") ";
-            composedFromStatus += cachedStatus->status;
+            composedFromStatus += cachedStatus.status;
 
             raw = composedFromStatus.c_str(); // safe for now; we'll sanitize immediately into std::string
         }
@@ -399,13 +399,15 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     char distStr[10] = "";
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    const meshtastic_PositionLite *ourPos = ourNode ? nodeDB->getNodePosition(ourNode->num) : nullptr;
-    const meshtastic_PositionLite *theirPos = nodeDB->getNodePosition(node->num);
-    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node) && ourPos && theirPos) {
-        double lat1 = ourPos->latitude_i * 1e-7;
-        double lon1 = ourPos->longitude_i * 1e-7;
-        double lat2 = theirPos->latitude_i * 1e-7;
-        double lon2 = theirPos->longitude_i * 1e-7;
+    meshtastic_PositionLite ourPos;
+    meshtastic_PositionLite theirPos;
+    const bool haveOurPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ourPos);
+    const bool haveTheirPos = nodeDB->copyNodePosition(node->num, theirPos);
+    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node) && haveOurPos && haveTheirPos) {
+        double lat1 = ourPos.latitude_i * 1e-7;
+        double lon1 = ourPos.longitude_i * 1e-7;
+        double lat2 = theirPos.latitude_i * 1e-7;
+        double lon2 = theirPos.longitude_i * 1e-7;
 
         double earthRadiusKm = 6371.0;
         double dLat = (lat2 - lat1) * DEG_TO_RAD;
@@ -538,11 +540,11 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     int centerX = x + columnWidth - arrowXOffset;
     int centerY = y + FONT_HEIGHT_SMALL / 2;
 
-    const meshtastic_PositionLite *nodePos = nodeDB->getNodePosition(node->num);
-    if (!nodePos)
+    meshtastic_PositionLite nodePos;
+    if (!nodeDB->copyNodePosition(node->num, nodePos))
         return;
-    double nodeLat = nodePos->latitude_i * 1e-7;
-    double nodeLon = nodePos->longitude_i * 1e-7;
+    double nodeLat = nodePos.latitude_i * 1e-7;
+    double nodeLon = nodePos.longitude_i * 1e-7;
     float bearing = GeoCoord::bearing(userLat, userLon, nodeLat, nodeLon);
     float relativeBearing = CompassRenderer::adjustBearingForCompassMode(bearing, myHeadingRadian);
     float relativeBearingDeg = CompassRenderer::radiansToDegrees360(relativeBearing);
@@ -883,14 +885,14 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 {
     float headingRadian = 0.0f;
     auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    const meshtastic_PositionLite *ourSelfPos = ourNode ? nodeDB->getNodePosition(ourNode->num) : nullptr;
-    if (!ourNode || !nodeDB->hasValidPosition(ourNode) || !ourSelfPos) {
+    meshtastic_PositionLite ourSelfPos;
+    if (!ourNode || !nodeDB->hasValidPosition(ourNode) || !nodeDB->copyNodePosition(ourNode->num, ourSelfPos)) {
         drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassUnknown, headingRadian, 0.0, 0.0);
         return;
     }
 
-    double lat = DegD(ourSelfPos->latitude_i);
-    double lon = DegD(ourSelfPos->longitude_i);
+    double lat = DegD(ourSelfPos.latitude_i);
+    double lon = DegD(ourSelfPos.longitude_i);
 
 #if defined(M5STACK_UNITC6L)
     display->clear();

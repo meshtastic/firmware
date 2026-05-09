@@ -296,11 +296,8 @@ class NodeDB
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
-    // nullptr if absent or the corresponding DB is compiled out.
-    const meshtastic_PositionLite *getNodePosition(NodeNum n) const;
-    const meshtastic_DeviceMetrics *getNodeTelemetry(NodeNum n) const;
-    const meshtastic_EnvironmentMetrics *getNodeEnvironment(NodeNum n) const;
-    const meshtastic_StatusMessage *getNodeStatus(NodeNum n) const;
+    // Thread-safe satellite-map accessors. Return false if absent or the
+    // corresponding DB is compiled out.
     bool copyNodePosition(NodeNum n, meshtastic_PositionLite &out) const;
     bool copyNodeTelemetry(NodeNum n, meshtastic_DeviceMetrics &out) const;
     bool copyNodeEnvironment(NodeNum n, meshtastic_EnvironmentMetrics &out) const;
@@ -313,10 +310,26 @@ class NodeDB
     void setNodeStatus(NodeNum n, const meshtastic_StatusMessage &status);
     void touchNodePositionTime(NodeNum n, uint32_t time);
 
-    bool hasNodePosition(NodeNum n) const { return getNodePosition(n) != nullptr; }
-    bool hasNodeTelemetry(NodeNum n) const { return getNodeTelemetry(n) != nullptr; }
-    bool hasNodeEnvironment(NodeNum n) const { return getNodeEnvironment(n) != nullptr; }
-    bool hasNodeStatus(NodeNum n) const { return getNodeStatus(n) != nullptr; }
+    bool hasNodePosition(NodeNum n) const
+    {
+        meshtastic_PositionLite scratch;
+        return copyNodePosition(n, scratch);
+    }
+    bool hasNodeTelemetry(NodeNum n) const
+    {
+        meshtastic_DeviceMetrics scratch;
+        return copyNodeTelemetry(n, scratch);
+    }
+    bool hasNodeEnvironment(NodeNum n) const
+    {
+        meshtastic_EnvironmentMetrics scratch;
+        return copyNodeEnvironment(n, scratch);
+    }
+    bool hasNodeStatus(NodeNum n) const
+    {
+        meshtastic_StatusMessage scratch;
+        return copyNodeStatus(n, scratch);
+    }
 
     void eraseNodeSatellites(NodeNum n);
 

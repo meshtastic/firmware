@@ -251,9 +251,9 @@ int32_t SerialModule::runOnce()
                     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     while (tempNodeInfo != NULL) {
                         if (nodeInfoLiteHasUser(tempNodeInfo) && nodeDB->hasValidPosition(tempNodeInfo)) {
-                            const meshtastic_PositionLite *pos = nodeDB->getNodePosition(tempNodeInfo->num);
-                            if (pos) {
-                                printWPL(outbuf, sizeof(outbuf), *pos, tempNodeInfo->long_name, true);
+                            meshtastic_PositionLite pos;
+                            if (nodeDB->copyNodePosition(tempNodeInfo->num, pos)) {
+                                printWPL(outbuf, sizeof(outbuf), pos, tempNodeInfo->long_name, true);
                                 serialPrint->printf("%s", outbuf);
                             }
                         }

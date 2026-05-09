@@ -89,13 +89,13 @@ void InkHUD::HeardApplet::populateFromNodeDB()
             c.hopsAway = node->hops_away;
 
         if (nodeDB->hasValidPosition(node) && nodeDB->hasValidPosition(ourNode)) {
-            const meshtastic_PositionLite *ourPos = nodeDB->getNodePosition(ourNode->num);
-            const meshtastic_PositionLite *theirPos = nodeDB->getNodePosition(node->num);
-            if (ourPos && theirPos) {
-                float ourLat = ourPos->latitude_i * 1e-7;
-                float ourLong = ourPos->longitude_i * 1e-7;
-                float theirLat = theirPos->latitude_i * 1e-7;
-                float theirLong = theirPos->longitude_i * 1e-7;
+            meshtastic_PositionLite ourPos;
+            meshtastic_PositionLite theirPos;
+            if (nodeDB->copyNodePosition(ourNode->num, ourPos) && nodeDB->copyNodePosition(node->num, theirPos)) {
+                float ourLat = ourPos.latitude_i * 1e-7;
+                float ourLong = ourPos.longitude_i * 1e-7;
+                float theirLat = theirPos.latitude_i * 1e-7;
+                float theirLong = theirPos.longitude_i * 1e-7;
 
                 c.distanceMeters = (int32_t)GeoCoord::latLongToMeter(theirLat, theirLong, ourLat, ourLong);
             }

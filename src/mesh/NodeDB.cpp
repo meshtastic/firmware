@@ -1196,17 +1196,6 @@ void NodeDB::clearLocalPosition()
     localPositionUpdatedSinceBoot = false;
 }
 
-const meshtastic_PositionLite *NodeDB::getNodePosition(NodeNum n) const
-{
-#if MESHTASTIC_EXCLUDE_POSITIONDB
-    (void)n;
-    return nullptr;
-#else
-    auto it = nodePositions.find(n);
-    return (it == nodePositions.end()) ? nullptr : &it->second;
-#endif
-}
-
 bool NodeDB::copyNodePosition(NodeNum n, meshtastic_PositionLite &out) const
 {
 #if MESHTASTIC_EXCLUDE_POSITIONDB
@@ -1216,17 +1205,6 @@ bool NodeDB::copyNodePosition(NodeNum n, meshtastic_PositionLite &out) const
 #else
     concurrency::LockGuard guard(&satelliteMutex);
     return copySatelliteEntry(nodePositions, n, out);
-#endif
-}
-
-const meshtastic_DeviceMetrics *NodeDB::getNodeTelemetry(NodeNum n) const
-{
-#if MESHTASTIC_EXCLUDE_TELEMETRYDB
-    (void)n;
-    return nullptr;
-#else
-    auto it = nodeTelemetry.find(n);
-    return (it == nodeTelemetry.end()) ? nullptr : &it->second;
 #endif
 }
 
@@ -1242,17 +1220,6 @@ bool NodeDB::copyNodeTelemetry(NodeNum n, meshtastic_DeviceMetrics &out) const
 #endif
 }
 
-const meshtastic_EnvironmentMetrics *NodeDB::getNodeEnvironment(NodeNum n) const
-{
-#if MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-    (void)n;
-    return nullptr;
-#else
-    auto it = nodeEnvironment.find(n);
-    return (it == nodeEnvironment.end()) ? nullptr : &it->second;
-#endif
-}
-
 bool NodeDB::copyNodeEnvironment(NodeNum n, meshtastic_EnvironmentMetrics &out) const
 {
 #if MESHTASTIC_EXCLUDE_ENVIRONMENTDB
@@ -1262,17 +1229,6 @@ bool NodeDB::copyNodeEnvironment(NodeNum n, meshtastic_EnvironmentMetrics &out) 
 #else
     concurrency::LockGuard guard(&satelliteMutex);
     return copySatelliteEntry(nodeEnvironment, n, out);
-#endif
-}
-
-const meshtastic_StatusMessage *NodeDB::getNodeStatus(NodeNum n) const
-{
-#if MESHTASTIC_EXCLUDE_STATUSDB
-    (void)n;
-    return nullptr;
-#else
-    auto it = nodeStatus.find(n);
-    return (it == nodeStatus.end()) ? nullptr : &it->second;
 #endif
 }
 
@@ -2623,8 +2579,11 @@ bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
 {
     if (!n)
         return false;
-    const meshtastic_PositionLite *pos = getNodePosition(n->num);
-    return pos && (pos->latitude_i != 0 || pos->longitude_i != 0);
+    if (n->num == getNodeNum()) {
+        return localPosition.latitude_i != 0 || localPosition.longitude_i != 0;
+    }
+    meshtastic_PositionLite pos;
+    return copyNodePosition(n->num, pos) && (pos.latitude_i != 0 || pos.longitude_i != 0);
 }
 
 /// If we have a node / user and they report is_licensed = true

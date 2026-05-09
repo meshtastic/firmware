@@ -801,9 +801,9 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     // Display it directly under the username line (if we have one). The cache
     // lives on NodeDB now, keyed by NodeNum, so this is an O(1) lookup.
     if (nodeDB) {
-        const meshtastic_StatusMessage *cachedStatus = nodeDB->getNodeStatus(node->num);
-        if (cachedStatus && cachedStatus->status[0]) {
-            drawTruncatedStatusLine(display, x, getTextPositions(display)[line++], cachedStatus->status);
+        meshtastic_StatusMessage cachedStatus;
+        if (nodeDB->copyNodeStatus(node->num, cachedStatus) && cachedStatus.status[0]) {
+            drawTruncatedStatusLine(display, x, getTextPositions(display)[line++], cachedStatus.status);
         }
     }
 #endif
@@ -962,11 +962,11 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
 #if !defined(M5STACK_UNITC6L)
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
-    const meshtastic_DeviceMetrics *nodeMetrics = nodeDB->getNodeTelemetry(node->num);
-    if (nodeMetrics && nodeMetrics->has_uptime_seconds) {
+    meshtastic_DeviceMetrics nodeMetrics;
+    if (nodeDB->copyNodeTelemetry(node->num, nodeMetrics) && nodeMetrics.has_uptime_seconds) {
         char upPrefix[12]; // enough for leftSideSpacing + "Up:"
         snprintf(upPrefix, sizeof(upPrefix), "%sUp:", leftSideSpacing);
-        getUptimeStr(nodeMetrics->uptime_seconds * 1000, upPrefix, uptimeStr, sizeof(uptimeStr));
+        getUptimeStr(nodeMetrics.uptime_seconds * 1000, upPrefix, uptimeStr, sizeof(uptimeStr));
     }
     if (uptimeStr[0]) {
         display->drawString(x, getTextPositions(display)[line++], uptimeStr);
@@ -977,12 +977,15 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     char distStr[24] = ""; // Make buffer big enough for any string
     bool haveDistance = false;
 
-    const meshtastic_PositionLite *nodePos = nodeDB->getNodePosition(node->num);
-    const meshtastic_PositionLite *ourPos = ourNode ? nodeDB->getNodePosition(ourNode->num) : nullptr;
-    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node) && nodePos && ourPos) {
+    meshtastic_PositionLite nodePos;
+    meshtastic_PositionLite ourPos;
+    const bool haveNodePos = nodeDB->copyNodePosition(node->num, nodePos);
+    const bool haveOurPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ourPos);
+    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node) && haveNodePos && haveOurPos) {
         // Use shared meter conversion, then format display units with lightweight integer rounding.
-        const float distanceMeters = GeoCoord::latLongToMeter(DegD(nodePos->latitude_i), DegD(nodePos->longitude_i),
-                                                              DegD(ourPos->latitude_i), DegD(ourPos->longitude_i));
+        const float distanceMeters =
+            GeoCoord::latLongToMeter(DegD(nodePos.latitude_i), DegD(nodePos.longitude_i), DegD(ourPos.latitude_i),
+                                     DegD(ourPos.longitude_i));
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             const int feet = static_cast<int>((distanceMeters * METERS_TO_FEET) + 0.5f);
             if (feet > 0 && feet < 1000) {
@@ -1606,10 +1609,10 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             headingLat = DegD(gpsStatus->getLatitude());
             headingLon = DegD(gpsStatus->getLongitude());
         } else if (hasOwnPositionFix) {
-            const meshtastic_PositionLite *ownPos = nodeDB->getNodePosition(ourNode->num);
-            if (ownPos) {
-                headingLat = DegD(ownPos->latitude_i);
-                headingLon = DegD(ownPos->longitude_i);
+            meshtastic_PositionLite ownPos;
+            if (nodeDB->copyNodePosition(ourNode->num, ownPos)) {
+                headingLat = DegD(ownPos.latitude_i);
+                headingLon = DegD(ownPos.longitude_i);
             }
         }
         validHeading = CompassRenderer::getHeadingRadians(headingLat, headingLon, heading);

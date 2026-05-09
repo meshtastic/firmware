@@ -430,9 +430,9 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {
         LOG_WARN("Use fixed position");
-        const meshtastic_PositionLite *fixedSlot = nodeDB->getNodePosition(node->num);
-        if (fixedSlot)
-            pos = TypeConversions::ConvertToPosition(*fixedSlot);
+        meshtastic_PositionLite fixedSlot;
+        if (nodeDB->copyNodePosition(node->num, fixedSlot))
+            pos = TypeConversions::ConvertToPosition(fixedSlot);
     }
 
     // Add a fresh timestamp
