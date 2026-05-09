@@ -53,10 +53,8 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
 {
     meshtastic_PositionLite posScratch;
     meshtastic_DeviceMetrics dmScratch;
-    const meshtastic_PositionLite *pos =
-        (nodeDB && nodeDB->copyNodePosition(lite->num, posScratch)) ? &posScratch : nullptr;
-    const meshtastic_DeviceMetrics *dm =
-        (nodeDB && nodeDB->copyNodeTelemetry(lite->num, dmScratch)) ? &dmScratch : nullptr;
+    const meshtastic_PositionLite *pos = (nodeDB && nodeDB->copyNodePosition(lite->num, posScratch)) ? &posScratch : nullptr;
+    const meshtastic_DeviceMetrics *dm = (nodeDB && nodeDB->copyNodeTelemetry(lite->num, dmScratch)) ? &dmScratch : nullptr;
     return ConvertToNodeInfo(lite, pos, dm);
 }
 
@@ -113,8 +111,7 @@ void TypeConversions::CopyUserToNodeInfoLite(meshtastic_NodeInfoLite *lite, cons
 
     nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_IS_LICENSED_MASK, user.is_licensed);
     nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK, user.has_is_unmessagable);
-    nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK,
-                       user.has_is_unmessagable && user.is_unmessagable);
+    nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK, user.has_is_unmessagable && user.is_unmessagable);
     nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_USER_MASK, true);
 }
 

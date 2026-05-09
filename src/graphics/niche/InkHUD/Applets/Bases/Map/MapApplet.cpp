@@ -387,8 +387,8 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     assert(hasPos);
     Marker m = calculateMarker(pos.latitude_i * 1e-7,  // Lat, converted from Meshtastic's internal int32 style
                                pos.longitude_i * 1e-7, // Long, converted from Meshtastic's internal int32 style
-                               node->has_hops_away,     // Is the hopsAway number valid
-                               node->hops_away          // Hops away
+                               node->has_hops_away,    // Is the hopsAway number valid
+                               node->hops_away         // Hops away
     );
 
     // Convert to pixel coords
@@ -536,8 +536,8 @@ void InkHUD::MapApplet::calculateAllMarkers()
         // Calculate marker and store it
         markers.push_back(calculateMarker(pos.latitude_i * 1e-7,  // Lat, converted from Meshtastic's internal int32 style
                                           pos.longitude_i * 1e-7, // Long, converted from Meshtastic's internal int32 style
-                                          node->has_hops_away,     // Is the hopsAway number valid
-                                          node->hops_away          // Hops away
+                                          node->has_hops_away,    // Is the hopsAway number valid
+                                          node->hops_away         // Hops away
                                           ));
     }
 }
