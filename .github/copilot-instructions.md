@@ -135,6 +135,95 @@ On top of authorization, any remote admin message that **mutates** state (not a 
 - **Channel 0 PSK change** → every peer must re-learn the channel hash; cached NodeInfo becomes temporarily unreachable until the next broadcast.
 - **`security.private_key` blanked via admin** → regenerates both halves (unless in Ham mode) and propagates the new public key via NodeInfo.
 
+## NodeDB Layout (v25)
+
+`DEVICESTATE_CUR_VER = 25`, `DEVICESTATE_MIN_VER = 24`. The on-device NodeDB was split in v25 into a slim header table plus four optional satellite stores. Older v24 saves auto-migrate at boot. Old training-data instincts (`node->user.long_name`, `node->position.latitude_i`, `node->is_favorite`, `node->device_metrics.battery_level`) are wrong now — the fields aren't there. Read this section before touching anything that walks `nodeDB->meshNodes`.
+
+### Slim `NodeInfoLite`
+
+`UserLite` is flattened onto `NodeInfoLite` (no nested sub-message); `position` and `device_metrics` are removed entirely (tags reserved). MAC address is dropped. Long names are capped at 25 chars (`max_size:25` in `deviceonly.options`); `hw_model` and `role` are `int_size:8`. Encoded size dropped from ~166 B → ~105 B per node.
+
+Booleans are bit-packed into `NodeInfoLite.bitfield`. **Do not read or write the bits directly** — use the inline helpers in `src/mesh/NodeDB.h`:
+
+```cpp
+nodeInfoLiteHasUser(n)                  // bit 5 — user fields populated
+nodeInfoLiteIsFavorite(n)               // bit 3
+nodeInfoLiteIsIgnored(n)                // bit 4
+nodeInfoLiteIsMuted(n)                  // bit 1
+nodeInfoLiteIsLicensed(n)               // bit 6 — Ham mode peer
+nodeInfoLiteIsKeyManuallyVerified(n)    // bit 0
+nodeInfoLiteHasIsUnmessagable(n)        // bit 8 — "is_unmessagable was sent"
+nodeInfoLiteIsUnmessagable(n)           // bit 7
+// via_mqtt is bit 2 (mask exposed; predicate uses the mask directly)
+
+nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);  // setter
+```
+
+### Satellite stores
+
+Four `std::unordered_map<NodeNum, …>` members on `NodeDB`, each gated by its own build flag:
+
+| Map               | Value type                      | Build flag                         |
+| ----------------- | ------------------------------- | ---------------------------------- |
+| `nodePositions`   | `meshtastic_PositionLite`       | `MESHTASTIC_EXCLUDE_POSITIONDB`    |
+| `nodeTelemetry`   | `meshtastic_DeviceMetrics`      | `MESHTASTIC_EXCLUDE_TELEMETRYDB`   |
+| `nodeEnvironment` | `meshtastic_EnvironmentMetrics` | `MESHTASTIC_EXCLUDE_ENVIRONMENTDB` |
+| `nodeStatus`      | `meshtastic_StatusMessage`      | `MESHTASTIC_EXCLUDE_STATUSDB`      |
+
+Defaults are ON (i.e., maps **excluded**) for STM32WL only — see `src/mesh/mesh-pb-constants.h`. On every other arch all four maps are present. When excluded, the map member is absent and the corresponding accessors return `false`.
+
+All four maps are guarded by **`mutable concurrency::Lock satelliteMutex`** — concurrent access from receive threads, the phone API state machine, and the renderer is the rule, not the exception.
+
+### Accessor convention
+
+**Never hand out pointers into the maps.** Use the copy-out accessors on `NodeDB`:
+
+```cpp
+bool copyNodePosition(NodeNum, meshtastic_PositionLite &out)       const;
+bool copyNodeTelemetry(NodeNum, meshtastic_DeviceMetrics &out)     const;
+bool copyNodeEnvironment(NodeNum, meshtastic_EnvironmentMetrics &out) const;
+bool copyNodeStatus(NodeNum, meshtastic_StatusMessage &out)        const;
+```
+
+Each takes the lock, copies the value if present, returns `false` if the entry is absent or the DB is excluded. Pass-by-out-param is deliberate — pointer-style accessors would invite UAF and lock-leak bugs across the renderer. The "has any X" convenience predicates (`hasValidPosition` etc.) are implemented in terms of these.
+
+Writers go through `setNodeStatus`, `updatePosition`, `updateTelemetry` (which dispatches on `which_variant` for device vs environment metrics) — these own the lock and the eviction hooks.
+
+### Eviction
+
+Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly.
+
+### Gradient sync (opt-in via special nonces)
+
+`client_capabilities` is **not** a thing in this branch. Phone clients opt into the new sync flow by sending one of two values in the `ToRadio.want_config_id`:
+
+- `SPECIAL_NONCE_GRADIENT_SYNC` (69422) — full config + thin NodeInfo + replay phases.
+- `SPECIAL_NONCE_GRADIENT_ONLY_NODES` (69423) — skip config segments, NodeInfo + replay only.
+
+`PhoneAPI::clientWantsGradientSync()` is the single switch. When true, `STATE_SEND_OTHER_NODEINFOS` is followed by:
+
+```
+STATE_REPLAY_POSITIONS → STATE_REPLAY_TELEMETRY → STATE_REPLAY_ENVIRONMENT → STATE_REPLAY_STATUS
+```
+
+Each replay phase walks the corresponding satellite map and emits synthetic `MeshPacket`s on the matching portnum (`POSITION_APP`, `TELEMETRY_APP` for both device + environment variants, `STATUS_MESSAGE_APP`). Legacy clients (no special nonce) get the bundled-NodeInfo path with position/device_metrics joined back in by `ConvertToNodeInfo(lite, pos*, dm*)` — wire bytes are byte-identical to pre-v25 for them.
+
+`ConvertToNodeInfoThin(lite)` is the gradient-sync emitter (no position/telemetry).
+
+### v24 → v25 migration
+
+The legacy migration code lives in **`src/mesh/NodeDBLegacyMigration.cpp`**, not in `NodeDB.cpp`. It owns the `meshtastic_NodeDatabase_Legacy` callback and `NodeDB::migrateLegacyNodeDatabase()`. The legacy proto descriptor is `protobufs/meshtastic/deviceonly_legacy.proto` (only included by the migration TU). The boot path peeks the file's leading version tag, runs the migration if `version < 25`, then re-saves in v25 layout. The legacy descriptor is scheduled for removal once `DEVICESTATE_MIN_VER` is bumped.
+
+### Read-site rules of thumb
+
+- Never `node->position.X` / `node->device_metrics.X` — those fields no longer exist. Pull from the satellite map via `copyNodePosition` / `copyNodeTelemetry`.
+- Never `node->user.long_name` — `long_name`, `short_name`, `public_key`, `hw_model`, `role`, `macaddr` (gone), `is_licensed`, `is_unmessagable` are flat on `NodeInfoLite`.
+- Never `node->is_favorite` / `node->is_ignored` / `node->via_mqtt` / `node->is_key_manually_verified` — use the bitfield helpers.
+- Never assume `nodeDB->getMeshNode(num)->position.time` — call `copyNodePosition` and check the return.
+- Don't lock `satelliteMutex` yourself in renderer code; the copy-out accessors already do.
+
+Unit tests for the conversion layer live in `test/test_type_conversions/test_main.cpp` (Unity) — bitfield round-trips, `long_name` truncation, thin-vs-full conversions. Add cases there when extending the schema.
+
 ## Project Structure
 
 ```
