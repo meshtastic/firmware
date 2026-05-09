@@ -62,6 +62,8 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/DPS310Sensor.h"
 #endif
 
+#include "Sensor/QMP6988Sensor.h"
+
 #if __has_include(<Adafruit_MCP9808.h>)
 #include "Sensor/MCP9808Sensor.h"
 #endif
@@ -200,6 +202,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_DPS310.h>)
     addSensor<DPS310Sensor>(i2cScanner, ScanI2C::DeviceType::DPS310);
 #endif
+    addSensor<QMP6988Sensor>(i2cScanner, ScanI2C::DeviceType::QMP6988);
 #if __has_include(<Adafruit_MCP9808.h>)
     addSensor<MCP9808Sensor>(i2cScanner, ScanI2C::DeviceType::MCP9808);
 #endif
