@@ -329,7 +329,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             cn->reply_id = p->id;
             cn->level = meshtastic_LogRecord_Level_WARNING;
             cn->time = getValidTime(RTCQualityFromNet);
-            sprintf(cn->message, "Duty cycle limit exceeded. You can send again in %d mins", silentMinutes);
+            snprintf(cn->message, sizeof(cn->message), "Duty cycle limit exceeded. You can send again in %d mins", silentMinutes);
             service->sendClientNotification(cn);
 
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
