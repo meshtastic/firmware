@@ -80,8 +80,8 @@ void InkHUD::HeardApplet::populateFromNodeDB()
         ordered.resize(maxCards());
 
     // Create card info for these (stale) node observations
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    for (meshtastic_NodeInfoLite *node : ordered) {
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    for (const meshtastic_NodeInfoLite *node : ordered) {
         CardInfo c;
         c.nodeNum = node->num;
 

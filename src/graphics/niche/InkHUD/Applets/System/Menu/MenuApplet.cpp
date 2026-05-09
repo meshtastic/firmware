@@ -2098,7 +2098,7 @@ void InkHUD::MenuApplet::populateRecipientPage()
     // Don't want some monstrous list that takes 100 clicks to reach exit
     if (favoriteCount < 20) {
         for (uint32_t i = 0; i < nodeCount; i++) {
-            meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
 
             // Skip node if not a favorite
             if (!nodeInfoLiteIsFavorite(node))

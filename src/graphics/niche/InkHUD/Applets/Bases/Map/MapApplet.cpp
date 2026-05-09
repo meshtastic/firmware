@@ -136,7 +136,7 @@ void InkHUD::MapApplet::onRender(bool full)
     printAt(vertBarX + (bottomLabelW / 2) + 1, bottomLabelY + (bottomLabelH / 2), vertBottomLabel, CENTER, MIDDLE);
 
     // Draw our node LAST with full white fill + outline
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourSelfPos;
     if (ourNode && nodeDB->hasValidPosition(ourNode) && nodeDB->copyNodePosition(ourNode->num, ourSelfPos)) {
         Marker self = calculateMarker(ourSelfPos.latitude_i * 1e-7, ourSelfPos.longitude_i * 1e-7, false, 0);
@@ -169,7 +169,7 @@ void InkHUD::MapApplet::onRender(bool full)
 void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
 {
     // If we have a valid position for our own node, use that as the anchor
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourSelfPos;
     if (ourNode && nodeDB->hasValidPosition(ourNode) && nodeDB->copyNodePosition(ourNode->num, ourSelfPos)) {
         *lat = ourSelfPos.latitude_i * 1e-7;

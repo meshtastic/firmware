@@ -50,8 +50,8 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
     c.signal = getSignalStrength(mp.rx_snr, mp.rx_rssi);
 
     // Assemble info: from nodeDB (needed to detect changes)
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(c.nodeNum);
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(c.nodeNum);
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (node) {
         if (node->has_hops_away)
             c.hopsAway = node->hops_away;
