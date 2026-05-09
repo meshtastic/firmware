@@ -10,7 +10,8 @@
 
 KeyVerificationModule *keyVerificationModule;
 
-namespace {
+namespace
+{
 void copyNodeLongNameOrUnknown(char *dest, size_t destSize, const meshtastic_NodeInfoLite *node)
 {
     if (!dest || destSize == 0)
