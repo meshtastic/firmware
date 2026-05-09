@@ -23,6 +23,7 @@ resumed (we just have a gap). No queueing.
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
@@ -33,6 +34,7 @@ from . import parsers
 from .rotating import _RotatingJsonl
 
 _DEFAULT_DIR = Path(__file__).resolve().parents[3] / ".mtlog"
+log = logging.getLogger(__name__)
 
 
 class Recorder:
@@ -65,9 +67,9 @@ class Recorder:
             self._wire_pubsub()
             self._started = True
             self._started_at = time.time()
-        # Write the recorder_start marker AFTER releasing the lock —
-        # `_write_event` calls `_files_snapshot()` which re-acquires
-        # `self._lock`, and `threading.Lock` is not reentrant.
+        # Write the recorder_start marker after the initialization block.
+        # `_write_event()` re-checks recorder state via `_files_snapshot()`,
+        # so keeping this out of the setup block avoids nested lifecycle work.
         self._write_event(kind="recorder_start", label="recorder_started")
 
     def stop(self) -> None:
@@ -122,10 +124,10 @@ class Recorder:
             try:
                 pub.subscribe(handler, topic)
                 self._handlers.append((topic, handler))
-            except Exception:
+            except Exception as exc:
                 # If pubsub refuses one binding (signature mismatch on
                 # an old lib version), log it and keep the rest.
-                pass
+                log.warning("Recorder failed to subscribe to %s: %s", topic, exc)
 
     def _unwire_pubsub(self) -> None:
         from pubsub import pub  # type: ignore[import-untyped]

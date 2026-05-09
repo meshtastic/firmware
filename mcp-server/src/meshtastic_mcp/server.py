@@ -6,6 +6,7 @@ etc.). Business logic does not live here.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -24,14 +25,24 @@ from . import (
 from . import userprefs as userprefs_mod
 from .recorder import get_recorder
 
+log = logging.getLogger(__name__)
+
 app = FastMCP("meshtastic-mcp")
 
-# Persistent device-log capture. Starts on first import — pubsub fan-out
-# is process-global, so subscribing here captures every active interface
-# (whether opened by an MCP tool, a pytest fixture, or a serial_session).
-# Files land in mcp-server/.mtlog/ (gitignored). See recorder/recorder.py
-# for the full design.
-get_recorder().start()
+def _start_recorder() -> None:
+    # Persistent device-log capture. Starts on first import — pubsub fan-out
+    # is process-global, so subscribing here captures every active interface
+    # (whether opened by an MCP tool, a pytest fixture, or a serial_session).
+    # Files land in mcp-server/.mtlog/ (gitignored). See recorder/recorder.py
+    # for the full design. Recorder startup is best-effort: an unwritable
+    # log dir or pubsub mismatch should not take the MCP server down.
+    try:
+        get_recorder().start()
+    except Exception as exc:
+        log.warning("Persistent recorder disabled: %s", exc)
+
+
+_start_recorder()
 
 
 # ---------- Discovery & metadata ------------------------------------------

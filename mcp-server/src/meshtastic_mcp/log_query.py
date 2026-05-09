@@ -124,7 +124,13 @@ def logs_window(
     s = _parse_time(start)
     e = _parse_time(end)
     levels = _split_set(level)
-    grep_re = re.compile(grep) if grep else None
+    if grep:
+        try:
+            grep_re = re.compile(grep)
+        except re.error as exc:
+            raise ValueError(f"invalid grep regex: {grep!r}") from exc
+    else:
+        grep_re = None
 
     base = get_recorder().base_dir
     matched = 0

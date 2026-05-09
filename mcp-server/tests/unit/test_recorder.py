@@ -10,10 +10,14 @@ window filtering, downsampling, slope estimation, and gzip rotation
 from __future__ import annotations
 
 import gzip
+import importlib
 import json
+import logging
 import os
+import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from meshtastic_mcp import log_query
@@ -391,6 +395,11 @@ class TestLogQuery:
         out2 = log_query.logs_window(start="-1m", grep=r"failed$", max_lines=10)
         assert out2["total_matched"] == 2
 
+    def test_logs_window_invalid_regex(self, recorder: Recorder) -> None:
+        recorder._on_log_line("INFO  | 12:00:00 1 [A] alpha", _FakeIface())
+        with pytest.raises(ValueError, match="invalid grep regex"):
+            log_query.logs_window(start="-1m", grep="(")
+
     def test_telemetry_timeline_slope_and_downsample(self, recorder: Recorder) -> None:
         # Synthesize a downward leak: 100 points, free_heap drops 1 byte/sample.
         base_ts = time.time() - 60
@@ -521,3 +530,36 @@ class TestRecorderLocks:
         out = recorder.force_rotate_all()
         assert out["running"] is True
         assert out["files"]
+
+    def test_wire_pubsub_logs_subscription_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class FakePub:
+            def subscribe(self, handler: object, topic: str) -> None:
+                raise RuntimeError("boom")
+
+        monkeypatch.setitem(sys.modules, "pubsub", SimpleNamespace(pub=FakePub()))
+        recorder = Recorder(base_dir=tmp_path)
+        with caplog.at_level(logging.WARNING):
+            recorder._wire_pubsub()
+        assert "Recorder failed to subscribe to meshtastic.log.line: boom" in caplog.text
+
+
+class TestServerStartup:
+    def test_start_recorder_logs_warning(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setenv("MESHTASTIC_MCP_LOG_DIR", str(tmp_path))
+        server = importlib.import_module("meshtastic_mcp.server")
+        real_get_recorder = server.get_recorder
+
+        class BrokenRecorder:
+            def start(self) -> None:
+                raise RuntimeError("cannot write")
+
+        monkeypatch.setattr(server, "get_recorder", lambda: BrokenRecorder())
+        with caplog.at_level(logging.WARNING, logger=server.__name__):
+            server._start_recorder()
+        assert "Persistent recorder disabled: cannot write" in caplog.text
+
+        real_get_recorder().stop()
