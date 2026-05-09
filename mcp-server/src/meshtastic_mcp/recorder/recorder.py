@@ -78,16 +78,21 @@ class Recorder:
             self._started = False
 
     def pause(self, reason: str | None = None) -> None:
-        with self._lock:
-            self._paused = True
-            self._pause_reason = reason
+        # Write the pause marker BEFORE flipping the flag — `_write_event`
+        # short-circuits when paused, so the order matters for this event
+        # to actually land in events.jsonl.
         self._write_event(
             kind="recorder_pause",
             label="paused",
             note=reason,
         )
+        with self._lock:
+            self._paused = True
+            self._pause_reason = reason
 
     def resume(self) -> None:
+        # Mirror of `pause()`: clear the flag first, then write the marker
+        # so it isn't suppressed by the still-paused short-circuit.
         with self._lock:
             self._paused = False
             self._pause_reason = None
@@ -134,9 +139,26 @@ class Recorder:
     # Pubsub callbacks must never raise. Every handler is wrapped in a
     # try/except that swallows so a bug here can't take down the
     # SerialInterface receive thread.
+    #
+    # Threading: handlers fire on whatever thread the meshtastic library
+    # dispatches from (varies by interface), while `stop()` clears
+    # `self._files` under `self._lock`. We snapshot `_files` under the
+    # lock at the top of each handler so a concurrent stop can't
+    # KeyError us mid-write. The actual file write goes through
+    # `_RotatingJsonl` which has its own lock.
+
+    def _files_snapshot(self) -> dict[str, _RotatingJsonl] | None:
+        """Atomic-ish view of `self._files`. Returns None when the recorder
+        is paused or stopped, so handlers can early-exit cleanly without
+        racing `stop()`'s clear."""
+        with self._lock:
+            if not self._started or self._paused:
+                return None
+            return dict(self._files)
 
     def _on_log_line(self, line: str, interface: Any = None) -> None:
-        if self._paused or not self._started:
+        files = self._files_snapshot()
+        if files is None:
             return
         try:
             tags = parsers.interface_label(interface)
@@ -164,7 +186,7 @@ class Recorder:
             heap_event = parsed.get("heap_event")
             if heap_event:
                 record["heap_event"] = heap_event
-            self._files["logs"].write(record)
+            files["logs"].write(record)
 
             # If the line carried a heap snapshot, also write it as a
             # synthesized LocalStats-shaped row so telemetry_timeline
@@ -177,7 +199,7 @@ class Recorder:
                 heap_total = parsed.get("heap_total")
                 if isinstance(heap_total, int):
                     fields["heap_total_bytes"] = heap_total
-                self._files["telemetry"].write(
+                files["telemetry"].write(
                     {
                         "ts": ts,
                         "port": tags["port"],
@@ -201,7 +223,8 @@ class Recorder:
         heap data — far higher cadence than LocalStats, and works without
         protobuf API mode (no SerialInterface required).
         """
-        if self._paused or not self._started:
+        files = self._files_snapshot()
+        if files is None:
             return
         try:
             parsed = parsers.parse_log_line(str(line))
@@ -224,7 +247,7 @@ class Recorder:
             heap_event = parsed.get("heap_event")
             if heap_event:
                 record["heap_event"] = heap_event
-            self._files["logs"].write(record)
+            files["logs"].write(record)
 
             # Synthesize a heap_free telemetry sample whenever the line
             # carries one — same logic as _on_log_line, tagged source so
@@ -235,7 +258,7 @@ class Recorder:
                 heap_total = parsed.get("heap_total")
                 if isinstance(heap_total, int):
                     fields["heap_total_bytes"] = heap_total
-                self._files["telemetry"].write(
+                files["telemetry"].write(
                     {
                         "ts": ts,
                         "port": port,
@@ -250,7 +273,8 @@ class Recorder:
             pass
 
     def _on_telemetry(self, packet: dict[str, Any], interface: Any = None) -> None:
-        if self._paused or not self._started:
+        files = self._files_snapshot()
+        if files is None:
             return
         try:
             tags = parsers.interface_label(interface)
@@ -269,7 +293,7 @@ class Recorder:
                 "fields": extracted["fields"],
                 "device_time": extracted.get("time"),
             }
-            self._files["telemetry"].write(record)
+            files["telemetry"].write(record)
         except Exception:
             pass
 
@@ -278,7 +302,8 @@ class Recorder:
         # recorded twice (here and in _on_telemetry) — that's intentional:
         # packets.jsonl is the universal record, telemetry.jsonl is the
         # structured timeseries view.
-        if self._paused or not self._started:
+        files = self._files_snapshot()
+        if files is None:
             return
         try:
             tags = parsers.interface_label(interface)
@@ -289,7 +314,7 @@ class Recorder:
                 "role": tags["role"],
                 **summary,
             }
-            self._files["packets"].write(record)
+            files["packets"].write(record)
         except Exception:
             pass
 
@@ -341,9 +366,10 @@ class Recorder:
         """
         ts = self._write_event(kind="mark", label=label, note=note, data=data)
         # Mirror into logs so a single logs_window grep finds it.
-        if self._started and not self._paused:
+        files = self._files_snapshot()
+        if files is not None:
             try:
-                self._files["logs"].write(
+                files["logs"].write(
                     {
                         "ts": ts,
                         "port": None,
@@ -367,11 +393,17 @@ class Recorder:
         data: dict[str, Any] | None = None,
     ) -> float:
         ts = time.time()
-        if not self._started or self._paused:
+        # Lifecycle markers (recorder_start, recorder_pause, recorder_resume)
+        # arrive at choreographed moments — `pause()` writes BEFORE flipping
+        # the flag and `resume()` writes AFTER clearing it, so those calls
+        # see _paused=False here. Other event kinds short-circuit when
+        # paused via the snapshot guard below.
+        files = self._files_snapshot()
+        if files is None:
             return ts
         try:
             tags = parsers.interface_label(interface)
-            self._files["events"].write(
+            files["events"].write(
                 {
                     "ts": ts,
                     "kind": kind,

@@ -27,15 +27,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-# Levels the firmware emits as a 5-char prefix ("INFO ", "WARN ", "CRIT ",
-# "DEBUG", "ERROR", "TRACE", "HEAP "). DebugConfiguration.h defines them.
-_LEVELS = ("DEBUG", "INFO ", "WARN ", "ERROR", "CRIT ", "TRACE", "HEAP ")
-_LEVEL_PREFIXES = tuple(level + " |" for level in _LEVELS) + tuple(
-    level + "|" for level in _LEVELS
-)
-
 # Match: LEVEL | HH:MM:SS UPTIME [Thread] message
-# HH:MM:SS may be ??:??:?? when RTC isn't valid.
+# HH:MM:SS may be ??:??:?? when RTC isn't valid. The level alternation
+# below is the canonical list — DebugConfiguration.h's MESHTASTIC_LOG_LEVEL_*
+# macros must stay in sync with these strings.
 _LINE_RE = re.compile(
     r"""
     ^

@@ -22,7 +22,7 @@ import json
 import os
 import shutil
 import threading
-import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -107,8 +107,14 @@ class _RotatingJsonl:
         except Exception:
             pass
         self._fh = None
-        stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
-        archive = self.path.with_suffix(f".{stamp}.jsonl.gz")
+        # Microsecond-resolution timestamp + per-instance counter so back-
+        # to-back rotations (small max_bytes, repeated `force_rotate()`,
+        # or chatty test loops) get unique archive filenames. The lex
+        # sort order of `YYYYMMDD-HHMMSS-uuuuuu-NNNNN` is chronological,
+        # which `_prune_archives()` and `log_query._iter_jsonl()` both
+        # rely on.
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+        archive = self.path.with_suffix(f".{stamp}-{self._rotations:05d}.jsonl.gz")
         try:
             with self.path.open("rb") as src, gzip.open(archive, "wb") as dst:
                 shutil.copyfileobj(src, dst, length=1024 * 1024)

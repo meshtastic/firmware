@@ -10,8 +10,6 @@ The recorder is opt-in-by-import: importing this package is a no-op; call
 `get_recorder().start()` (which `server.py` does at FastMCP app init) to
 begin writing. `pause()` / `resume()` exist for the rare case the user
 wants a clean stretch of file (e.g. capturing a known-good baseline).
-
-See plan: /Users/benmeadors/.claude/plans/i-am-contemplating-ways-async-parasol.md
 """
 
 from __future__ import annotations

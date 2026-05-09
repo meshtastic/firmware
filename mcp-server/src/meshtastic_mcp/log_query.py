@@ -61,14 +61,18 @@ def _parse_time(value: Any, *, now: float | None = None) -> float:
 
 
 def _iter_jsonl(path: Path, *, since: float, until: float) -> Iterator[dict[str, Any]]:
-    """Stream records from one file, then any rotated .gz archives whose
-    timestamp footprint overlaps (since, until)."""
+    """Stream records in chronological order: rotated archives first
+    (oldest → newest by lex sort, which is chronological for our
+    `YYYYMMDD-HHMMSS-uuuuuu-NNNNN` archive naming), then the live file
+    last. The "keep last N" pop-front logic in the window queries
+    relies on records arriving in time order across files.
+    """
     files: list[Path] = []
-    if path.exists():
-        files.append(path)
-    # Gzipped archives are named "<stem>.YYYYMMDD-HHMMSS.jsonl.gz".
+    # Gzipped archives are named "<stem>.YYYYMMDD-HHMMSS-uuuuuu-NNNNN.jsonl.gz".
     for archive in sorted(path.parent.glob(f"{path.stem}.*.jsonl.gz")):
         files.append(archive)
+    if path.exists():
+        files.append(path)
     for f in files:
         opener = gzip.open if f.suffix == ".gz" else open
         try:
@@ -161,13 +165,17 @@ def telemetry_timeline(
     detector can read one number.
     """
     end = time.time()
-    if isinstance(window, (int, float)) or (
-        isinstance(window, str) and not window.startswith("-")
-    ):
-        # Allow "1h" as syntactic sugar for "-1h"
-        start = _parse_time(f"-{window}" if isinstance(window, str) else -float(window))
+    if isinstance(window, (int, float)):
+        # Numeric `window` is a duration in seconds — "last N seconds".
+        # Without this branch, `_parse_time(-N)` would treat -N as an
+        # absolute epoch timestamp (i.e., Jan 1 1970 minus N seconds),
+        # producing a wildly negative `start` and matching nothing.
+        start = end - float(window)
+    elif isinstance(window, str) and not window.startswith("-"):
+        # Bare string like "1h" is sugar for "-1h".
+        start = _parse_time(f"-{window}", now=end)
     else:
-        start = _parse_time(window)
+        start = _parse_time(window, now=end)
 
     base = get_recorder().base_dir
     raw: list[tuple[float, float]] = []
@@ -238,7 +246,7 @@ def packets_window(
     return {
         "packets": out,
         "total_matched": matched,
-        "dropped": max if matched > max else 0,
+        "dropped": matched - max if matched > max else 0,
         "window": {"start": s, "end": e},
     }
 
@@ -266,7 +274,7 @@ def events_window(
     return {
         "events": out,
         "total_matched": matched,
-        "dropped": max if matched > max else 0,
+        "dropped": matched - max if matched > max else 0,
         "window": {"start": s, "end": e},
     }
 
