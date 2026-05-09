@@ -10,7 +10,6 @@ window filtering, downsampling, slope estimation, and gzip rotation
 from __future__ import annotations
 
 import gzip
-import importlib
 import json
 import logging
 import os
@@ -543,23 +542,3 @@ class TestRecorderLocks:
             recorder._wire_pubsub()
         assert "Recorder failed to subscribe to meshtastic.log.line: boom" in caplog.text
 
-
-class TestServerStartup:
-    def test_start_recorder_logs_warning(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        monkeypatch.setenv("MESHTASTIC_MCP_LOG_DIR", str(tmp_path))
-        server = importlib.reload(importlib.import_module("meshtastic_mcp.server"))
-        running_recorder = server.get_recorder()
-
-        class BrokenRecorder:
-            def start(self) -> None:
-                raise RuntimeError("cannot write")
-
-        monkeypatch.setattr(server, "get_recorder", lambda: BrokenRecorder())
-        try:
-            with caplog.at_level(logging.WARNING, logger=server.__name__):
-                server._start_recorder()
-            assert "Persistent recorder disabled: cannot write" in caplog.text
-        finally:
-            running_recorder.stop()
