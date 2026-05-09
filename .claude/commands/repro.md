@@ -40,6 +40,8 @@ Re-run a single pytest node ID N times in isolation, track pass rate, and surfac
 
    Surface the top 3 differences as a "passes when / fails when" table. Don't dump full logs — pull specific lines with uptime timestamps.
 
+5a. **Archive recorder slices per attempt** (no extra device interaction; the recorder runs autouse). Right after each attempt finishes, capture its `(start_ts, end_ts)` and call `mcp__meshtastic__recorder_export(start=<start>, end=<end>, dest_dir="mcp-server/tests/repro_artifacts/<safe-test-id>/attempt_<n>/")`. This drops a `logs.jsonl`, `telemetry.jsonl`, `packets.jsonl`, and `events.jsonl` snapshot scoped to the attempt window. Use these for cross-attempt diffs in step 5: `jq '.line' logs.jsonl` is faster than re-running the test, and the telemetry slice lets you compare heap behavior across attempts.
+
 6. **Classify the flake** into one of:
    - **LoRa airtime collision** → pass rate improves with fewer concurrent transmitters; propose a `time.sleep` gap or retry bump in the test body.
    - **PKI key staleness** → fails on first attempt, passes after self-heal; existing retry loop in `test_direct_with_ack.py` handles this.
