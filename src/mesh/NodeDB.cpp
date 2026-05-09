@@ -250,27 +250,6 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
 }
 
-// Migration-only callback for the legacy NodeDatabase descriptor.
-bool meshtastic_NodeDatabase_Legacy_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
-{
-    if (ostream) {
-        const auto *vec = static_cast<const std::vector<meshtastic_NodeInfoLite_Legacy> *>(field->pData);
-        for (auto item : *vec) {
-            if (!pb_encode_tag_for_field(ostream, field))
-                return false;
-            if (!pb_encode_submessage(ostream, meshtastic_NodeInfoLite_Legacy_fields, &item))
-                return false;
-        }
-    }
-    if (istream) {
-        meshtastic_NodeInfoLite_Legacy node;
-        auto *vec = static_cast<std::vector<meshtastic_NodeInfoLite_Legacy> *>(field->pData);
-        if (istream->bytes_left && pb_decode(istream, meshtastic_NodeInfoLite_Legacy_fields, &node))
-            vec->push_back(node);
-    }
-    return true;
-}
-
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
@@ -1580,90 +1559,10 @@ void NodeDB::loadFromDisk()
         LOG_WARN("NodeDatabase %d is old, discard", nodeDatabase.version);
         installDefaultNodeDatabase();
     } else if (nodeDatabase.version < DEVICESTATE_CUR_VER) {
-        // The v25 read above dropped tag-3/6 (now reserved); reload via the
-        // legacy descriptor to recover position/device_metrics into the maps.
-        LOG_WARN("NodeDatabase v%u: migrating to v%u", nodeDatabase.version, DEVICESTATE_CUR_VER);
-        // _init_zero brace-inits the embedded std::vector via its explicit
-        // (size_type, allocator) ctor, so default-construct instead.
-        meshtastic_NodeDatabase_Legacy legacyDb{};
-        legacyDb.version = 0;
-        meshtastic_NodeDatabase_Legacy legacyEmpty{};
-        legacyEmpty.version = DEVICESTATE_CUR_VER;
-        size_t legacyEmptyEncoded = 0;
-        pb_get_encoded_size(&legacyEmptyEncoded, meshtastic_NodeDatabase_Legacy_fields, &legacyEmpty);
-        const size_t legacyBufSize = legacyEmptyEncoded + (MAX_NUM_NODES * meshtastic_NodeInfoLite_Legacy_size);
-        auto legacyState = loadProto(nodeDatabaseFileName, legacyBufSize, sizeof(meshtastic_NodeDatabase_Legacy),
-                                     &meshtastic_NodeDatabase_Legacy_msg, &legacyDb);
-        if (legacyState == LoadFileResult::LOAD_SUCCESS) {
-            nodeDatabase.nodes.clear();
-            const size_t maxToMigrate = std::min<size_t>(legacyDb.nodes.size(), MAX_NUM_NODES);
-            nodeDatabase.nodes.reserve(maxToMigrate);
-            size_t posCount = 0, telCount = 0;
-            {
-                concurrency::LockGuard guard(&satelliteMutex);
-                for (size_t i = 0; i < maxToMigrate; ++i) {
-                    const auto &legacy = legacyDb.nodes[i];
-                    meshtastic_NodeInfoLite slim = meshtastic_NodeInfoLite_init_default;
-                    slim.num = legacy.num;
-                    slim.snr = legacy.snr;
-                    slim.last_heard = legacy.last_heard;
-                    slim.channel = legacy.channel;
-                    slim.has_hops_away = legacy.has_hops_away;
-                    slim.hops_away = legacy.hops_away;
-                    slim.next_hop = legacy.next_hop;
-                    slim.bitfield = legacy.bitfield;
-                    if (legacy.via_mqtt)
-                        slim.bitfield |= NODEINFO_BITFIELD_VIA_MQTT_MASK;
-                    if (legacy.is_favorite)
-                        slim.bitfield |= NODEINFO_BITFIELD_IS_FAVORITE_MASK;
-                    if (legacy.is_ignored)
-                        slim.bitfield |= NODEINFO_BITFIELD_IS_IGNORED_MASK;
-                    if (legacy.has_user) {
-                        slim.bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK;
-                        strncpy(slim.long_name, legacy.user.long_name, sizeof(slim.long_name));
-                        slim.long_name[sizeof(slim.long_name) - 1] = '\0';
-                        strncpy(slim.short_name, legacy.user.short_name, sizeof(slim.short_name));
-                        slim.short_name[sizeof(slim.short_name) - 1] = '\0';
-                        slim.hw_model = legacy.user.hw_model;
-                        slim.role = legacy.user.role;
-                        if (legacy.user.is_licensed)
-                            slim.bitfield |= NODEINFO_BITFIELD_IS_LICENSED_MASK;
-                        slim.public_key.size = legacy.user.public_key.size;
-                        memcpy(slim.public_key.bytes, legacy.user.public_key.bytes, sizeof(slim.public_key.bytes));
-                        if (legacy.user.has_is_unmessagable) {
-                            slim.bitfield |= NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK;
-                            if (legacy.user.is_unmessagable)
-                                slim.bitfield |= NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK;
-                        }
-                        // macaddr deprecated since 1.2.11 - dropped from slim header.
-                    }
-                    nodeDatabase.nodes.push_back(slim);
-#if !MESHTASTIC_EXCLUDE_POSITIONDB
-                    if (legacy.has_position)
-                        nodePositions[legacy.num] = legacy.position;
-#endif
-#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-                    if (legacy.has_device_metrics)
-                        nodeTelemetry[legacy.num] = legacy.device_metrics;
-#endif
-                }
-#if !MESHTASTIC_EXCLUDE_POSITIONDB
-                posCount = nodePositions.size();
-#endif
-#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-                telCount = nodeTelemetry.size();
-#endif
-            }
-            nodeDatabase.version = DEVICESTATE_CUR_VER;
-            meshNodes = &nodeDatabase.nodes;
-            numMeshNodes = nodeDatabase.nodes.size();
-            LOG_INFO("Migrated %u nodes from legacy -> v%u (positions: %u, telemetry: %u)", (unsigned)numMeshNodes,
-                     DEVICESTATE_CUR_VER, (unsigned)posCount, (unsigned)telCount);
+        if (migrateLegacyNodeDatabase())
             saveNodeDatabaseToDisk();
-        } else {
-            LOG_ERROR("Failed to load NodeDatabase via legacy descriptor; installing default");
+        else
             installDefaultNodeDatabase();
-        }
     } else {
         meshNodes = &nodeDatabase.nodes;
         numMeshNodes = nodeDatabase.nodes.size();

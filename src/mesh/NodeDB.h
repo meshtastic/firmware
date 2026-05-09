@@ -411,6 +411,11 @@ class NodeDB
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
     void sortMeshDB();
+
+    // Defined in NodeDBLegacyMigration.cpp. Decodes /prefs/nodes.proto via
+    // the legacy descriptor and copies entries into the v25 layout. Caller
+    // is responsible for save / install-default on the result.
+    bool migrateLegacyNodeDatabase();
 };
 
 extern NodeDB *nodeDB;
