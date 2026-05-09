@@ -11,6 +11,7 @@
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
+#include "concurrency/Lock.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
@@ -300,8 +301,17 @@ class NodeDB
     const meshtastic_DeviceMetrics *getNodeTelemetry(NodeNum n) const;
     const meshtastic_EnvironmentMetrics *getNodeEnvironment(NodeNum n) const;
     const meshtastic_StatusMessage *getNodeStatus(NodeNum n) const;
+    bool copyNodePosition(NodeNum n, meshtastic_PositionLite &out) const;
+    bool copyNodeTelemetry(NodeNum n, meshtastic_DeviceMetrics &out) const;
+    bool copyNodeEnvironment(NodeNum n, meshtastic_EnvironmentMetrics &out) const;
+    bool copyNodeStatus(NodeNum n, meshtastic_StatusMessage &out) const;
+    std::vector<NodeNum> snapshotPositionNodeNums(NodeNum exclude) const;
+    std::vector<NodeNum> snapshotTelemetryNodeNums(NodeNum exclude) const;
+    std::vector<NodeNum> snapshotEnvironmentNodeNums(NodeNum exclude) const;
+    std::vector<NodeNum> snapshotStatusNodeNums(NodeNum exclude) const;
 
     void setNodeStatus(NodeNum n, const meshtastic_StatusMessage &status);
+    void touchNodePositionTime(NodeNum n, uint32_t time);
 
     bool hasNodePosition(NodeNum n) const { return getNodePosition(n) != nullptr; }
     bool hasNodeTelemetry(NodeNum n) const { return getNodeTelemetry(n) != nullptr; }
@@ -366,6 +376,7 @@ class NodeDB
     }
 
   private:
+    mutable concurrency::Lock satelliteMutex;
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash

@@ -270,7 +270,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     fileToAppend.printf("%d,", getFrom(&mp));          // From
     fileToAppend.printf("%s,", n ? n->long_name : ""); // Long Name
-    const meshtastic_PositionLite *senderPos = nodeDB->getNodePosition(n->num);
+    const meshtastic_PositionLite *senderPos = nodeDB->getNodePosition(getFrom(&mp));
     if (senderPos) {
         fileToAppend.printf("%f,", senderPos->latitude_i * 1e-7);  // Sender Lat
         fileToAppend.printf("%f,", senderPos->longitude_i * 1e-7); // Sender Long

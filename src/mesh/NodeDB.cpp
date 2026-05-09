@@ -542,7 +542,10 @@ NodeDB::NodeDB()
         fixedGPS.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
         config.has_position = true;
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-        nodePositions[info->num] = TypeConversions::ConvertToPositionLite(fixedGPS);
+        {
+            concurrency::LockGuard guard(&satelliteMutex);
+            nodePositions[info->num] = TypeConversions::ConvertToPositionLite(fixedGPS);
+        }
 #endif
         nodeDB->setLocalPosition(fixedGPS);
         config.position.fixed_position = true;
@@ -578,6 +581,28 @@ bool isBroadcast(uint32_t dest)
 {
     return dest == NODENUM_BROADCAST || dest == NODENUM_BROADCAST_NO_LORA;
 }
+
+namespace {
+template <typename Map, typename Value> bool copySatelliteEntry(const Map &map, NodeNum n, Value &out)
+{
+    auto it = map.find(n);
+    if (it == map.end())
+        return false;
+    out = it->second;
+    return true;
+}
+
+template <typename Map> std::vector<NodeNum> snapshotSatelliteNodeNums(const Map &map, NodeNum exclude)
+{
+    std::vector<NodeNum> result;
+    result.reserve(map.size());
+    for (const auto &kv : map) {
+        if (kv.first != exclude)
+            result.push_back(kv.first);
+    }
+    return result;
+}
+} // namespace
 
 void NodeDB::resetRadioConfig(bool is_fresh_install)
 {
@@ -648,6 +673,7 @@ void NodeDB::installDefaultNodeDatabase()
     nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
     numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
+    concurrency::LockGuard satelliteGuard(&satelliteMutex);
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
     nodePositions.clear();
 #endif
@@ -1183,6 +1209,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
 void NodeDB::clearLocalPosition()
 {
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
+    concurrency::LockGuard guard(&satelliteMutex);
     nodePositions.erase(getNodeNum());
 #endif
     setLocalPosition(meshtastic_Position_init_default);
@@ -1200,6 +1227,18 @@ const meshtastic_PositionLite *NodeDB::getNodePosition(NodeNum n) const
 #endif
 }
 
+bool NodeDB::copyNodePosition(NodeNum n, meshtastic_PositionLite &out) const
+{
+#if MESHTASTIC_EXCLUDE_POSITIONDB
+    (void)n;
+    (void)out;
+    return false;
+#else
+    concurrency::LockGuard guard(&satelliteMutex);
+    return copySatelliteEntry(nodePositions, n, out);
+#endif
+}
+
 const meshtastic_DeviceMetrics *NodeDB::getNodeTelemetry(NodeNum n) const
 {
 #if MESHTASTIC_EXCLUDE_TELEMETRYDB
@@ -1208,6 +1247,18 @@ const meshtastic_DeviceMetrics *NodeDB::getNodeTelemetry(NodeNum n) const
 #else
     auto it = nodeTelemetry.find(n);
     return (it == nodeTelemetry.end()) ? nullptr : &it->second;
+#endif
+}
+
+bool NodeDB::copyNodeTelemetry(NodeNum n, meshtastic_DeviceMetrics &out) const
+{
+#if MESHTASTIC_EXCLUDE_TELEMETRYDB
+    (void)n;
+    (void)out;
+    return false;
+#else
+    concurrency::LockGuard guard(&satelliteMutex);
+    return copySatelliteEntry(nodeTelemetry, n, out);
 #endif
 }
 
@@ -1222,6 +1273,18 @@ const meshtastic_EnvironmentMetrics *NodeDB::getNodeEnvironment(NodeNum n) const
 #endif
 }
 
+bool NodeDB::copyNodeEnvironment(NodeNum n, meshtastic_EnvironmentMetrics &out) const
+{
+#if MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    (void)n;
+    (void)out;
+    return false;
+#else
+    concurrency::LockGuard guard(&satelliteMutex);
+    return copySatelliteEntry(nodeEnvironment, n, out);
+#endif
+}
+
 const meshtastic_StatusMessage *NodeDB::getNodeStatus(NodeNum n) const
 {
 #if MESHTASTIC_EXCLUDE_STATUSDB
@@ -1233,18 +1296,87 @@ const meshtastic_StatusMessage *NodeDB::getNodeStatus(NodeNum n) const
 #endif
 }
 
+bool NodeDB::copyNodeStatus(NodeNum n, meshtastic_StatusMessage &out) const
+{
+#if MESHTASTIC_EXCLUDE_STATUSDB
+    (void)n;
+    (void)out;
+    return false;
+#else
+    concurrency::LockGuard guard(&satelliteMutex);
+    return copySatelliteEntry(nodeStatus, n, out);
+#endif
+}
+
+std::vector<NodeNum> NodeDB::snapshotPositionNodeNums(NodeNum exclude) const
+{
+#if MESHTASTIC_EXCLUDE_POSITIONDB
+    (void)exclude;
+    return {};
+#else
+    concurrency::LockGuard guard(&satelliteMutex);
+    return snapshotSatelliteNodeNums(nodePositions, exclude);
+#endif
+}
+
+std::vector<NodeNum> NodeDB::snapshotTelemetryNodeNums(NodeNum exclude) const
+{
+#if MESHTASTIC_EXCLUDE_TELEMETRYDB
+    (void)exclude;
+    return {};
+#else
+    concurrency::LockGuard guard(&satelliteMutex);
+    return snapshotSatelliteNodeNums(nodeTelemetry, exclude);
+#endif
+}
+
+std::vector<NodeNum> NodeDB::snapshotEnvironmentNodeNums(NodeNum exclude) const
+{
+#if MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    (void)exclude;
+    return {};
+#else
+    concurrency::LockGuard guard(&satelliteMutex);
+    return snapshotSatelliteNodeNums(nodeEnvironment, exclude);
+#endif
+}
+
+std::vector<NodeNum> NodeDB::snapshotStatusNodeNums(NodeNum exclude) const
+{
+#if MESHTASTIC_EXCLUDE_STATUSDB
+    (void)exclude;
+    return {};
+#else
+    concurrency::LockGuard guard(&satelliteMutex);
+    return snapshotSatelliteNodeNums(nodeStatus, exclude);
+#endif
+}
+
 void NodeDB::setNodeStatus(NodeNum n, const meshtastic_StatusMessage &status)
 {
 #if MESHTASTIC_EXCLUDE_STATUSDB
     (void)n;
     (void)status;
 #else
+    concurrency::LockGuard guard(&satelliteMutex);
     nodeStatus[n] = status;
+#endif
+}
+
+void NodeDB::touchNodePositionTime(NodeNum n, uint32_t time)
+{
+#if MESHTASTIC_EXCLUDE_POSITIONDB
+    (void)n;
+    (void)time;
+#else
+    concurrency::LockGuard guard(&satelliteMutex);
+    nodePositions[n].time = time;
 #endif
 }
 
 void NodeDB::eraseNodeSatellites(NodeNum n)
 {
+    concurrency::LockGuard guard(&satelliteMutex);
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
     nodePositions.erase(n);
 #endif
@@ -1372,7 +1504,8 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     if (f) {
         LOG_INFO("Load %s", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
-        if (fields != &meshtastic_NodeDatabase_msg) // contains a vector object
+        if (fields != &meshtastic_NodeDatabase_msg &&
+            fields != &meshtastic_NodeDatabase_Legacy_msg) // contains a vector object
             memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
             LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
@@ -1464,62 +1597,65 @@ void NodeDB::loadFromDisk()
             nodeDatabase.nodes.clear();
             const size_t maxToMigrate = std::min<size_t>(legacyDb.nodes.size(), MAX_NUM_NODES);
             nodeDatabase.nodes.reserve(maxToMigrate);
-            for (size_t i = 0; i < maxToMigrate; ++i) {
-                const auto &legacy = legacyDb.nodes[i];
-                meshtastic_NodeInfoLite slim = meshtastic_NodeInfoLite_init_default;
-                slim.num = legacy.num;
-                slim.snr = legacy.snr;
-                slim.last_heard = legacy.last_heard;
-                slim.channel = legacy.channel;
-                slim.has_hops_away = legacy.has_hops_away;
-                slim.hops_away = legacy.hops_away;
-                slim.next_hop = legacy.next_hop;
-                slim.bitfield = legacy.bitfield;
-                if (legacy.via_mqtt)
-                    slim.bitfield |= NODEINFO_BITFIELD_VIA_MQTT_MASK;
-                if (legacy.is_favorite)
-                    slim.bitfield |= NODEINFO_BITFIELD_IS_FAVORITE_MASK;
-                if (legacy.is_ignored)
-                    slim.bitfield |= NODEINFO_BITFIELD_IS_IGNORED_MASK;
-                if (legacy.has_user) {
-                    slim.bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK;
-                    strncpy(slim.long_name, legacy.user.long_name, sizeof(slim.long_name));
-                    slim.long_name[sizeof(slim.long_name) - 1] = '\0';
-                    strncpy(slim.short_name, legacy.user.short_name, sizeof(slim.short_name));
-                    slim.short_name[sizeof(slim.short_name) - 1] = '\0';
-                    slim.hw_model = legacy.user.hw_model;
-                    slim.role = legacy.user.role;
-                    if (legacy.user.is_licensed)
-                        slim.bitfield |= NODEINFO_BITFIELD_IS_LICENSED_MASK;
-                    slim.public_key.size = legacy.user.public_key.size;
-                    memcpy(slim.public_key.bytes, legacy.user.public_key.bytes, sizeof(slim.public_key.bytes));
-                    if (legacy.user.has_is_unmessagable) {
-                        slim.bitfield |= NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK;
-                        if (legacy.user.is_unmessagable)
-                            slim.bitfield |= NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK;
+            size_t posCount = 0, telCount = 0;
+            {
+                concurrency::LockGuard satelliteGuard(&satelliteMutex);
+                for (size_t i = 0; i < maxToMigrate; ++i) {
+                    const auto &legacy = legacyDb.nodes[i];
+                    meshtastic_NodeInfoLite slim = meshtastic_NodeInfoLite_init_default;
+                    slim.num = legacy.num;
+                    slim.snr = legacy.snr;
+                    slim.last_heard = legacy.last_heard;
+                    slim.channel = legacy.channel;
+                    slim.has_hops_away = legacy.has_hops_away;
+                    slim.hops_away = legacy.hops_away;
+                    slim.next_hop = legacy.next_hop;
+                    slim.bitfield = legacy.bitfield;
+                    if (legacy.via_mqtt)
+                        slim.bitfield |= NODEINFO_BITFIELD_VIA_MQTT_MASK;
+                    if (legacy.is_favorite)
+                        slim.bitfield |= NODEINFO_BITFIELD_IS_FAVORITE_MASK;
+                    if (legacy.is_ignored)
+                        slim.bitfield |= NODEINFO_BITFIELD_IS_IGNORED_MASK;
+                    if (legacy.has_user) {
+                        slim.bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK;
+                        strncpy(slim.long_name, legacy.user.long_name, sizeof(slim.long_name));
+                        slim.long_name[sizeof(slim.long_name) - 1] = '\0';
+                        strncpy(slim.short_name, legacy.user.short_name, sizeof(slim.short_name));
+                        slim.short_name[sizeof(slim.short_name) - 1] = '\0';
+                        slim.hw_model = legacy.user.hw_model;
+                        slim.role = legacy.user.role;
+                        if (legacy.user.is_licensed)
+                            slim.bitfield |= NODEINFO_BITFIELD_IS_LICENSED_MASK;
+                        slim.public_key.size = legacy.user.public_key.size;
+                        memcpy(slim.public_key.bytes, legacy.user.public_key.bytes, sizeof(slim.public_key.bytes));
+                        if (legacy.user.has_is_unmessagable) {
+                            slim.bitfield |= NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK;
+                            if (legacy.user.is_unmessagable)
+                                slim.bitfield |= NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK;
+                        }
+                        // macaddr deprecated since 1.2.11 - dropped from slim header.
                     }
-                    // macaddr deprecated since 1.2.11 - dropped from slim header.
-                }
-                nodeDatabase.nodes.push_back(slim);
+                    nodeDatabase.nodes.push_back(slim);
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-                if (legacy.has_position)
-                    nodePositions[legacy.num] = legacy.position;
+                    if (legacy.has_position)
+                        nodePositions[legacy.num] = legacy.position;
 #endif
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-                if (legacy.has_device_metrics)
-                    nodeTelemetry[legacy.num] = legacy.device_metrics;
+                    if (legacy.has_device_metrics)
+                        nodeTelemetry[legacy.num] = legacy.device_metrics;
+#endif
+                }
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+                posCount = nodePositions.size();
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+                telCount = nodeTelemetry.size();
 #endif
             }
             nodeDatabase.version = DEVICESTATE_CUR_VER;
             meshNodes = &nodeDatabase.nodes;
             numMeshNodes = nodeDatabase.nodes.size();
-            size_t posCount = 0, telCount = 0;
-#if !MESHTASTIC_EXCLUDE_POSITIONDB
-            posCount = nodePositions.size();
-#endif
-#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-            telCount = nodeTelemetry.size();
-#endif
             LOG_INFO("Migrated %u nodes from legacy -> v%u (positions: %u, telemetry: %u)", (unsigned)numMeshNodes,
                      DEVICESTATE_CUR_VER, (unsigned)posCount, (unsigned)telCount);
             saveNodeDatabaseToDisk();
@@ -1532,6 +1668,7 @@ void NodeDB::loadFromDisk()
         numMeshNodes = nodeDatabase.nodes.size();
         // Hydrate the satellite maps; the on-disk vectors stay empty in steady
         // state and are repopulated only at save time.
+        concurrency::LockGuard guard(&satelliteMutex);
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
         nodePositions.clear();
         nodePositions.reserve(nodeDatabase.positions.size());
@@ -1857,6 +1994,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
 #endif
     // Project the maps into the on-disk vectors just before encoding; cleared
     // again on the way out so we don't carry duplicate state.
+    concurrency::LockGuard guard(&satelliteMutex);
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
     nodeDatabase.positions.clear();
     nodeDatabase.positions.reserve(nodePositions.size());
@@ -2140,37 +2278,40 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
     updateGUIforNode = info;
     notifyObservers(true);
 #else
-    meshtastic_PositionLite &slot = nodePositions[nodeId]; // creates default-zero entry if missing
+    {
+        concurrency::LockGuard guard(&satelliteMutex);
+        meshtastic_PositionLite &slot = nodePositions[nodeId]; // creates default-zero entry if missing
 
-    if (src == RX_SRC_LOCAL) {
-        // Local packet, fully authoritative
-        LOG_INFO("updatePosition LOCAL pos@%x time=%u lat=%d lon=%d alt=%d", p.timestamp, p.time, p.latitude_i, p.longitude_i,
-                 p.altitude);
+        if (src == RX_SRC_LOCAL) {
+            // Local packet, fully authoritative
+            LOG_INFO("updatePosition LOCAL pos@%x time=%u lat=%d lon=%d alt=%d", p.timestamp, p.time, p.latitude_i,
+                     p.longitude_i, p.altitude);
 
-        setLocalPosition(p);
-        slot = TypeConversions::ConvertToPositionLite(p);
-    } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
-        // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
-        // (stop-gap fix for issue #900)
-        LOG_DEBUG("updatePosition SPECIAL time setting time=%u", p.time);
-        slot.time = p.time;
-    } else {
-        // Be careful to only update fields that have been set by the REMOTE sender
-        // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
-        // recorded based on the packet rxTime
-        //
-        // FIXME perhaps handle RX_SRC_USER separately?
-        LOG_INFO("updatePosition REMOTE node=0x%x time=%u lat=%d lon=%d", nodeId, p.time, p.latitude_i, p.longitude_i);
+            setLocalPosition(p);
+            slot = TypeConversions::ConvertToPositionLite(p);
+        } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
+            // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
+            // (stop-gap fix for issue #900)
+            LOG_DEBUG("updatePosition SPECIAL time setting time=%u", p.time);
+            slot.time = p.time;
+        } else {
+            // Be careful to only update fields that have been set by the REMOTE sender
+            // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
+            // recorded based on the packet rxTime
+            //
+            // FIXME perhaps handle RX_SRC_USER separately?
+            LOG_INFO("updatePosition REMOTE node=0x%x time=%u lat=%d lon=%d", nodeId, p.time, p.latitude_i, p.longitude_i);
 
-        // First, back up fields that we want to protect from overwrite
-        uint32_t tmp_time = slot.time;
+            // First, back up fields that we want to protect from overwrite
+            uint32_t tmp_time = slot.time;
 
-        // Next, update atomically
-        slot = TypeConversions::ConvertToPositionLite(p);
+            // Next, update atomically
+            slot = TypeConversions::ConvertToPositionLite(p);
 
-        // Last, restore any fields that may have been overwritten
-        if (!slot.time)
-            slot.time = tmp_time;
+            // Last, restore any fields that may have been overwritten
+            if (!slot.time)
+                slot.time = tmp_time;
+        }
     }
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
@@ -2191,11 +2332,13 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     if (t.which_variant == meshtastic_Telemetry_device_metrics_tag) {
         LOG_DEBUG(src == RX_SRC_LOCAL ? "updateTelemetry LOCAL device" : "updateTelemetry REMOTE device node=0x%x", nodeId);
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+        concurrency::LockGuard guard(&satelliteMutex);
         nodeTelemetry[nodeId] = t.variant.device_metrics;
 #endif
     } else if (t.which_variant == meshtastic_Telemetry_environment_metrics_tag) {
         LOG_DEBUG(src == RX_SRC_LOCAL ? "updateTelemetry LOCAL env" : "updateTelemetry REMOTE env node=0x%x", nodeId);
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+        concurrency::LockGuard guard(&satelliteMutex);
         nodeEnvironment[nodeId] = t.variant.environment_metrics;
 #endif
     } else {

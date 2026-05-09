@@ -401,8 +401,7 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
     // Make sure our own NodeNum has a slot in the position map so subsequent
     // updates (and the bundled NodeInfo emission to the phone) have somewhere
     // to read from. Insert a default-zero entry on first call.
-    auto &mySlot = nodeDB->nodePositions[node->num];
-    mySlot.time = getValidTime(RTCQualityFromNet);
+    nodeDB->touchNodePositionTime(node->num, getValidTime(RTCQualityFromNet));
 #endif
 
     if (powerStatus->getHasBattery() == 1) {

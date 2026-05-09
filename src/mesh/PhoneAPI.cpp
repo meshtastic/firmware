@@ -871,13 +871,7 @@ void PhoneAPI::beginReplayPositions()
     // Snapshot the keyset at phase start so concurrent inserts/erases on the
     // map don't invalidate iteration. Skip our own node - the phone already
     // got our position bundled in STATE_SEND_OWN_NODEINFO.
-    replayPositionOrder.clear();
-    NodeNum ourNum = nodeDB->getNodeNum();
-    replayPositionOrder.reserve(nodeDB->nodePositions.size());
-    for (const auto &kv : nodeDB->nodePositions) {
-        if (kv.first != ourNum)
-            replayPositionOrder.push_back(kv.first);
-    }
+    replayPositionOrder = nodeDB->snapshotPositionNodeNums(nodeDB->getNodeNum());
     replayPositionIndex = 0;
     LOG_INFO("Begin position replay: %u entries millis=%u", (unsigned)replayPositionOrder.size(), millis());
 #endif
@@ -897,10 +891,10 @@ void PhoneAPI::prefetchReplayPositions()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayPositionIndex < replayPositionOrder.size()) {
             NodeNum num = replayPositionOrder[replayPositionIndex++];
-            const meshtastic_PositionLite *pos = nodeDB->getNodePosition(num);
-            if (!pos)
+            meshtastic_PositionLite pos;
+            if (!nodeDB->copyNodePosition(num, pos))
                 continue; // entry was evicted between snapshot and now
-            replayQueue.push_back(makeReplayPositionPacket(num, *pos));
+            replayQueue.push_back(makeReplayPositionPacket(num, pos));
             added = true;
         }
     }
@@ -920,13 +914,7 @@ void PhoneAPI::beginReplayTelemetry()
         replayTelemetryIndex = 0;
         return;
     }
-    replayTelemetryOrder.clear();
-    NodeNum ourNum = nodeDB->getNodeNum();
-    replayTelemetryOrder.reserve(nodeDB->nodeTelemetry.size());
-    for (const auto &kv : nodeDB->nodeTelemetry) {
-        if (kv.first != ourNum)
-            replayTelemetryOrder.push_back(kv.first);
-    }
+    replayTelemetryOrder = nodeDB->snapshotTelemetryNodeNums(nodeDB->getNodeNum());
     replayTelemetryIndex = 0;
     LOG_INFO("Begin telemetry replay: %u entries millis=%u", (unsigned)replayTelemetryOrder.size(), millis());
 #endif
@@ -946,10 +934,10 @@ void PhoneAPI::prefetchReplayTelemetry()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayTelemetryIndex < replayTelemetryOrder.size()) {
             NodeNum num = replayTelemetryOrder[replayTelemetryIndex++];
-            const meshtastic_DeviceMetrics *dm = nodeDB->getNodeTelemetry(num);
-            if (!dm)
+            meshtastic_DeviceMetrics dm;
+            if (!nodeDB->copyNodeTelemetry(num, dm))
                 continue;
-            replayQueue.push_back(makeReplayTelemetryPacket(num, *dm));
+            replayQueue.push_back(makeReplayTelemetryPacket(num, dm));
             added = true;
         }
     }
@@ -989,13 +977,7 @@ void PhoneAPI::beginReplayEnvironment()
         replayEnvironmentIndex = 0;
         return;
     }
-    replayEnvironmentOrder.clear();
-    NodeNum ourNum = nodeDB->getNodeNum();
-    replayEnvironmentOrder.reserve(nodeDB->nodeEnvironment.size());
-    for (const auto &kv : nodeDB->nodeEnvironment) {
-        if (kv.first != ourNum)
-            replayEnvironmentOrder.push_back(kv.first);
-    }
+    replayEnvironmentOrder = nodeDB->snapshotEnvironmentNodeNums(nodeDB->getNodeNum());
     replayEnvironmentIndex = 0;
     LOG_INFO("Begin environment replay: %u entries millis=%u", (unsigned)replayEnvironmentOrder.size(), millis());
 #endif
@@ -1015,10 +997,10 @@ void PhoneAPI::prefetchReplayEnvironment()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayEnvironmentIndex < replayEnvironmentOrder.size()) {
             NodeNum num = replayEnvironmentOrder[replayEnvironmentIndex++];
-            const meshtastic_EnvironmentMetrics *env = nodeDB->getNodeEnvironment(num);
-            if (!env)
+            meshtastic_EnvironmentMetrics env;
+            if (!nodeDB->copyNodeEnvironment(num, env))
                 continue;
-            replayQueue.push_back(makeReplayEnvironmentPacket(num, *env));
+            replayQueue.push_back(makeReplayEnvironmentPacket(num, env));
             added = true;
         }
     }
@@ -1055,13 +1037,7 @@ void PhoneAPI::beginReplayStatus()
         replayStatusIndex = 0;
         return;
     }
-    replayStatusOrder.clear();
-    NodeNum ourNum = nodeDB->getNodeNum();
-    replayStatusOrder.reserve(nodeDB->nodeStatus.size());
-    for (const auto &kv : nodeDB->nodeStatus) {
-        if (kv.first != ourNum)
-            replayStatusOrder.push_back(kv.first);
-    }
+    replayStatusOrder = nodeDB->snapshotStatusNodeNums(nodeDB->getNodeNum());
     replayStatusIndex = 0;
     LOG_INFO("Begin status replay: %u entries millis=%u", (unsigned)replayStatusOrder.size(), millis());
 #endif
@@ -1081,10 +1057,10 @@ void PhoneAPI::prefetchReplayStatus()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayStatusIndex < replayStatusOrder.size()) {
             NodeNum num = replayStatusOrder[replayStatusIndex++];
-            const meshtastic_StatusMessage *status = nodeDB->getNodeStatus(num);
-            if (!status || status->status[0] == '\0')
+            meshtastic_StatusMessage status;
+            if (!nodeDB->copyNodeStatus(num, status) || status.status[0] == '\0')
                 continue;
-            replayQueue.push_back(makeReplayStatusPacket(num, *status));
+            replayQueue.push_back(makeReplayStatusPacket(num, status));
             added = true;
         }
     }
