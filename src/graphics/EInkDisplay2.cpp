@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#ifdef USE_EINK
+#if defined(USE_EINK) && !defined(USE_EINK_PARALLELDISPLAY)
 #include "EInkDisplay2.h"
 #include "SPILock.h"
 #include "main.h"
@@ -101,11 +101,16 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     return true;
 }
 
-// End the update process - virtual method, overriden in derived class
+// End the update process - virtual method, overridden in derived class
 void EInkDisplay::endUpdate()
 {
-    // Power off display hardware, then deep-sleep (Except Wireless Paper V1.1, no deep-sleep)
+#ifndef EINK_NOT_HIBERNATE
+    // By default, power off the E-Ink display hardware and enter hibernate().
+    // Boards/panels that define EINK_NOT_HIBERNATE intentionally skip this step.
+    // Skipping hibernate() can help avoid panel-specific wake/refresh or ghosting issues,
+    // but it typically trades lower power savings for that compatibility.
     adafruitDisplay->hibernate();
+#endif
 }
 
 // Write the buffer to the display memory
@@ -143,12 +148,16 @@ bool EInkDisplay::connect()
 #ifdef ELECROW_ThinkNode_M1
     // ThinkNode M1 has a hardware dimmable backlight. Start enabled
     digitalWrite(PIN_EINK_EN, HIGH);
+#elif defined(MINI_EPAPER_S3)
+    // T-Mini Epaper S3 requires panel power rail enabled before SPI transfer.
+    digitalWrite(PIN_EINK_EN, HIGH);
+    delay(10);
 #else
     digitalWrite(PIN_EINK_EN, LOW);
 #endif
 #endif
 
-#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE)
+#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(TTGO_T_ECHO_PLUS)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
 
@@ -202,7 +211,8 @@ bool EInkDisplay::connect()
     }
 
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) ||                 \
-    defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER)
+    defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) ||         \
+    defined(MINI_EPAPER_S3)
     {
         // Start HSPI
         hspi = new SPIClass(HSPI);
@@ -216,9 +226,13 @@ bool EInkDisplay::connect()
 
         // Init GxEPD2
         adafruitDisplay->init();
+#if defined(MINI_EPAPER_S3)
+        adafruitDisplay->setRotation(3);
+#else
         adafruitDisplay->setRotation(3);
 #if defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER)
         adafruitDisplay->setRotation(0);
+#endif
 #endif
     }
 #elif defined(PCA10059) || defined(ME25LS01)

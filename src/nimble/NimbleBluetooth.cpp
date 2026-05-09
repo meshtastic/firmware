@@ -20,12 +20,13 @@
 #include "PowerStatus.h"
 #endif
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
 #if defined(CONFIG_NIMBLE_CPP_IDF)
 #include "host/ble_gap.h"
 #else
 #include "nimble/nimble/host/include/host/ble_gap.h"
 #endif
+
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
 
 namespace
 {
@@ -50,6 +51,20 @@ NimBLEServer *bleServer;
 
 static bool passkeyShowing;
 static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
+
+static void clearPairingDisplay()
+{
+    if (!passkeyShowing) {
+        return;
+    }
+
+    passkeyShowing = false;
+#if HAS_SCREEN
+    if (screen) {
+        screen->endAlert();
+    }
+#endif
+}
 
 class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 {
@@ -308,15 +323,15 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
-    virtual void onNowHasData(uint32_t fromRadioNum)
+    virtual void onNowHasData(uint32_t fromRadioNum) override
     {
         PhoneAPI::onNowHasData(fromRadioNum);
+
+#ifdef DEBUG_NIMBLE_NOTIFY
 
         int currentNotifyCount = notifyCount.fetch_add(1);
 
         uint8_t cc = bleServer->getConnectedCount();
-
-#ifdef DEBUG_NIMBLE_NOTIFY
         // This logging slows things down when there are lots of packets going to the phone, like initial connection:
         LOG_DEBUG("BLE notify(%d) fromNum: %d connections: %d", currentNotifyCount, fromRadioNum, cc);
 #endif
@@ -335,7 +350,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() { return bleServer && bleServer->getConnectedCount() > 0; }
+    virtual bool checkIsConnected() override { return bleServer && bleServer->getConnectedCount() > 0; }
 
     void requestHighThroughputConnection(uint16_t conn_handle)
     {
@@ -397,9 +412,9 @@ static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
 #ifdef NIMBLE_TWO
-    virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
+    virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
 #else
-    virtual void onWrite(NimBLECharacteristic *pCharacteristic)
+    virtual void onWrite(NimBLECharacteristic *pCharacteristic) override
 
 #endif
     {
@@ -449,9 +464,9 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
 #ifdef NIMBLE_TWO
-    virtual void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
+    virtual void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
 #else
-    virtual void onRead(NimBLECharacteristic *pCharacteristic)
+    virtual void onRead(NimBLECharacteristic *pCharacteristic) override
 #endif
     {
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
@@ -567,9 +582,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
   private:
     NimbleBluetooth *ble;
 
-    virtual uint32_t onPassKeyDisplay()
+    virtual uint32_t onPassKeyDisplay() override
 #else
-    virtual uint32_t onPassKeyRequest()
+    virtual uint32_t onPassKeyRequest() override
 #endif
     {
         uint32_t passkey = config.bluetooth.fixed_pin;
@@ -620,22 +635,16 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     }
 
 #ifdef NIMBLE_TWO
-    virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo)
+    virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo) override
 #else
-    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc)
+    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc) override
 #endif
     {
         LOG_INFO("BLE authentication complete");
 
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
-
-        // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
-        if (passkeyShowing) {
-            passkeyShowing = false;
-            if (screen)
-                screen->endAlert();
-        }
+        clearPairingDisplay();
 
         // Store the connection handle for future use
 #ifdef NIMBLE_TWO
@@ -646,12 +655,12 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     }
 
 #ifdef NIMBLE_TWO
-    virtual void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo)
+    virtual void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
     {
         LOG_INFO("BLE incoming connection %s", connInfo.getAddress().toString().c_str());
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
         const uint16_t connHandle = connInfo.getConnHandle();
+#if NIMBLE_ENABLE_2M_PHY && (defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6))
         int phyResult =
             ble_gap_set_prefered_le_phy(connHandle, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_CODED_ANY);
         if (phyResult == 0) {
@@ -659,6 +668,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         } else {
             LOG_WARN("Failed to prefer 2M PHY for conn %u, rc=%d", connHandle, phyResult);
         }
+#endif
 
         int dataLenResult = ble_gap_set_data_len(connHandle, kPreferredBleTxOctets, kPreferredBleTxTimeUs);
         if (dataLenResult == 0) {
@@ -669,24 +679,29 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         LOG_INFO("BLE conn %u initial MTU %u (target %u)", connHandle, connInfo.getMTU(), kPreferredBleMtu);
         pServer->updateConnParams(connHandle, 6, 12, 0, 200);
-#endif
     }
+#endif
 
-    virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
+#ifdef NIMBLE_TWO
+    virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override
     {
         LOG_INFO("BLE disconnect reason: %d", reason);
 #else
-    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc) override
     {
         LOG_INFO("BLE disconnect");
 #endif
 #ifdef NIMBLE_TWO
         if (ble->isDeInit)
             return;
+#else
+        if (nimbleBluetooth && nimbleBluetooth->isDeInit)
+            return;
 #endif
 
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
+        clearPairingDisplay();
 
         if (bluetoothPhoneAPI) {
             bluetoothPhoneAPI->close();
@@ -751,11 +766,7 @@ void NimbleBluetooth::deinit()
     isDeInit = true;
 
 #ifdef BLE_LED
-#ifdef BLE_LED_INVERTED
-    digitalWrite(BLE_LED, HIGH);
-#else
-    digitalWrite(BLE_LED, LOW);
-#endif
+    digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
 #ifndef NIMBLE_TWO
     NimBLEDevice::deinit();
@@ -776,16 +787,35 @@ bool NimbleBluetooth::isConnected()
 
 int NimbleBluetooth::getRssi()
 {
-    if (bleServer && isConnected()) {
-        auto service = bleServer->getServiceByUUID(MESH_SERVICE_UUID);
-        uint16_t handle = service->getHandle();
-#ifdef NIMBLE_TWO
-        return NimBLEDevice::getClientByHandle(handle)->getRssi();
-#else
-        return NimBLEDevice::getClientByID(handle)->getRssi();
-#endif
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+    if (!bleServer || !isConnected()) {
+        return 0; // No active BLE connection
     }
-    return 0; // FIXME figure out where to source this
+
+    uint16_t connHandle = nimbleBluetoothConnHandle.load();
+
+    if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
+        const auto peers = bleServer->getPeerDevices();
+        if (!peers.empty()) {
+            connHandle = peers.front();
+            nimbleBluetoothConnHandle = connHandle;
+        }
+    }
+
+    if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
+        return 0; // Connection handle not available yet
+    }
+
+    int8_t rssi = 0;
+    const int rc = ble_gap_conn_rssi(connHandle, &rssi);
+
+    if (rc == 0) {
+        return rssi;
+    }
+    LOG_DEBUG("BLE RSSI read failed, rc=%d", rc);
+#endif
+
+    return 0;
 }
 
 void NimbleBluetooth::setup()
@@ -798,7 +828,7 @@ void NimbleBluetooth::setup()
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+#if NIMBLE_ENABLE_2M_PHY && (defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6))
     int mtuResult = NimBLEDevice::setMTU(kPreferredBleMtu);
     if (mtuResult == 0) {
         LOG_INFO("BLE MTU request set to %u", kPreferredBleMtu);
@@ -959,11 +989,4 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 #endif
 }
 
-void clearNVS()
-{
-    NimBLEDevice::deleteAllBonds();
-#ifdef ARCH_ESP32
-    ESP.restart();
-#endif
-}
 #endif

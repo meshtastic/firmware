@@ -1,5 +1,4 @@
 #include "PowerStressModule.h"
-#include "Led.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
@@ -78,10 +77,12 @@ int32_t PowerStressModule::runOnce()
 
             switch (p.cmd) {
             case meshtastic_PowerStressMessage_Opcode_LED_ON:
-                ledForceOn.set(true);
+                // FIXME - implement
+                // ledForceOn.set(true);
                 break;
             case meshtastic_PowerStressMessage_Opcode_LED_OFF:
-                ledForceOn.set(false);
+                // FIXME - implement
+                // ledForceOn.set(false);
                 break;
             case meshtastic_PowerStressMessage_Opcode_GPS_ON:
                 // FIXME - implement

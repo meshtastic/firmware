@@ -6,6 +6,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "TypeConversions.h"
 #include "airtime.h"
 #include "configuration.h"
@@ -27,6 +28,15 @@ PositionModule::PositionModule()
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 
+    // Seed throttle timer from persisted transmit history so we don't re-broadcast immediately after reboot
+    if (transmitHistory) {
+        uint32_t restored = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_POSITION_APP);
+        if (restored != 0) {
+            lastGpsSend = restored;
+            LOG_INFO("Position: restored lastGpsSend from transmit history");
+        }
+    }
+
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
         setIntervalFromNow(setStartDelay());
@@ -45,8 +55,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 {
     auto p = *pptr;
 
-    // If inbound message is a replay (or spoof!) of our own messages, we shouldn't process
-    // (why use second-hand sources for our own data?)
+    const auto transport = mp.transport_mechanism;
+    if (isFromUs(&mp) && !IS_ONE_OF(transport, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL,
+                                    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API)) {
+        LOG_WARN("Ignoring packet supposedly from us over external transport");
+        return true;
+    }
 
     // FIXME this can in fact happen with packets sent from EUD (src=RX_SRC_USER)
     // to set fixed location, EUD-GPS location or just the time (see also issue #900)
@@ -345,6 +359,11 @@ void PositionModule::sendOurPosition()
 
 void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
 {
+    if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot()) {
+        LOG_DEBUG("Skip position send; no fresh position since boot");
+        return;
+    }
+
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
@@ -416,13 +435,21 @@ int32_t PositionModule::runOnce()
         return RUNONCE_INTERVAL;
     }
 
+    bool waitingForFreshPosition = (lastGpsSend == 0) && !config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot();
+
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
-        if (nodeDB->hasValidPosition(node)) {
+        if (waitingForFreshPosition) {
+#ifdef GPS_DEBUG
+            LOG_DEBUG("Skip initial position send; no fresh position since boot");
+#endif
+        } else if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
             lastGpsLatitude = node->position.latitude_i;
             lastGpsLongitude = node->position.longitude_i;
 
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(meshtastic_PortNum_POSITION_APP);
             sendOurPosition();
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
                 sendLostAndFoundText();
@@ -440,7 +467,11 @@ int32_t PositionModule::runOnce()
             if (smartPosition.hasTraveledOverThreshold &&
                 Throttle::execute(
                     &lastGpsSend, minimumTimeThreshold, []() { positionModule->sendOurPosition(); },
-                    []() { LOG_DEBUG("Skip send smart broadcast due to time throttling"); })) {
+                    []() {
+#ifdef GPS_DEBUG
+                        LOG_DEBUG("Skip send smart broadcast due to time throttling");
+#endif
+                    })) {
 
                 LOG_DEBUG("Sent smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "
                           "minTimeInterval=%ims)",
@@ -461,30 +492,73 @@ void PositionModule::sendLostAndFoundText()
 {
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = NODENUM_BROADCAST;
-    char *message = new char[60];
-    sprintf(message, "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7), (lastGpsLongitude * 1e-7));
+    char message[128];
+    int written = snprintf(message, sizeof(message), "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7),
+                           (lastGpsLongitude * 1e-7));
     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     p->want_ack = false;
-    p->decoded.payload.size = strlen(message);
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+    if (written < 0) {
+        // snprintf encoding error — send an empty payload rather than uninitialized bytes.
+        p->decoded.payload.size = 0;
+    } else {
+        // Clamp to buffer capacity (snprintf returns "would-have-written" which can exceed the buffer).
+        const size_t msg_len = std::min(static_cast<size_t>(written), sizeof(message) - 1);
+        p->decoded.payload.size = msg_len;
+        if (msg_len > 0) {
+            memcpy(p->decoded.payload.bytes, message, msg_len);
+        }
+    }
 
     service->sendToMesh(p, RX_SRC_LOCAL, true);
-    delete[] message;
+}
+
+// Helper: return imprecise (truncated + centered) lat/lon as int32 using current precision
+static inline void computeImpreciseLatLon(int32_t inLat, int32_t inLon, uint8_t precisionBits, int32_t &outLat, int32_t &outLon)
+{
+    if (precisionBits > 0 && precisionBits < 32) {
+        // Build mask for top 'precisionBits' bits of a 32-bit unsigned field
+        const uint32_t mask = (precisionBits == 32) ? UINT32_MAX : (UINT32_MAX << (32 - precisionBits));
+        // Note: latitude_i/longitude_i are stored as signed 32-bit in meshtastic code but
+        // the bitmask logic used previously operated as unsigned—preserve that behavior by
+        // casting to uint32_t for masking, then back to int32_t.
+        uint32_t lat_u = static_cast<uint32_t>(inLat) & mask;
+        uint32_t lon_u = static_cast<uint32_t>(inLon) & mask;
+
+        // Add the "center of cell" offset used elsewhere:
+        // The code previously added (1 << (31 - precision)) to produce the middle of the possible location.
+        uint32_t center_offset = (1u << (31 - precisionBits));
+        lat_u += center_offset;
+        lon_u += center_offset;
+
+        outLat = static_cast<int32_t>(lat_u);
+        outLon = static_cast<int32_t>(lon_u);
+    } else {
+        // full precision: return input unchanged
+        outLat = inLat;
+        outLon = inLon;
+    }
 }
 
 struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition)
 {
-    // The minimum distance to travel before we are able to send a new position packet.
     const uint32_t distanceTravelThreshold =
         Default::getConfiguredOrDefault(config.position.broadcast_smart_minimum_distance, 100);
 
-    // Determine the distance in meters between two points on the globe
-    float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(
-        lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, currentPosition.latitude_i * 1e-7, currentPosition.longitude_i * 1e-7);
+    int32_t lastLatImprecise, lastLonImprecise;
+    int32_t currentLatImprecise, currentLonImprecise;
 
-    return SmartPosition{.distanceTraveled = abs(distanceTraveledSinceLastSend),
+    computeImpreciseLatLon(lastGpsLatitude, lastGpsLongitude, precision, lastLatImprecise, lastLonImprecise);
+    computeImpreciseLatLon(currentPosition.latitude_i, currentPosition.longitude_i, precision, currentLatImprecise,
+                           currentLonImprecise);
+
+    float distMeters = GeoCoord::latLongToMeter(lastLatImprecise * 1e-7, lastLonImprecise * 1e-7, currentLatImprecise * 1e-7,
+                                                currentLonImprecise * 1e-7);
+
+    float distanceTraveled = fabsf(distMeters);
+
+    return SmartPosition{.distanceTraveled = distanceTraveled,
                          .distanceThreshold = distanceTravelThreshold,
-                         .hasTraveledOverThreshold = abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold};
+                         .hasTraveledOverThreshold = distanceTraveled >= distanceTravelThreshold};
 }
 
 void PositionModule::handleNewPosition()
@@ -498,7 +572,11 @@ void PositionModule::handleNewPosition()
         if (smartPosition.hasTraveledOverThreshold &&
             Throttle::execute(
                 &lastGpsSend, minimumTimeThreshold, []() { positionModule->sendOurPosition(); },
-                []() { LOG_DEBUG("Skip send smart broadcast due to time throttling"); })) {
+                []() {
+#ifdef GPS_DEBUG
+                    LOG_DEBUG("Skip send smart broadcast due to time throttling");
+#endif
+                })) {
             LOG_DEBUG("Sent smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "
                       "minTimeInterval=%ims)",
                       localPosition.timestamp, smartPosition.distanceTraveled, smartPosition.distanceThreshold, msSinceLastSend,

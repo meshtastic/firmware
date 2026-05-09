@@ -29,12 +29,35 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif
-#if __has_include("pcf8563.h")
-#include "pcf8563.h"
+#if __has_include("SensorRtcHelper.hpp")
+#include "SensorRtcHelper.hpp"
 #endif
 
 /* Offer chance for variant-specific defines */
 #include "variant.h"
+
+// -----------------------------------------------------------------------------
+// Display feature overrides
+// -----------------------------------------------------------------------------
+
+// Allow build environments to opt-in explicitly to the E-Ink UI stack while
+// keeping headless targets slim by default. Existing variants that already
+// define USE_EINK continue to work without additional flags.
+#ifndef MESHTASTIC_USE_EINK_UI
+#ifdef USE_EINK
+#define MESHTASTIC_USE_EINK_UI 1
+#else
+#define MESHTASTIC_USE_EINK_UI 0
+#endif
+#endif
+
+#if MESHTASTIC_USE_EINK_UI
+#ifndef USE_EINK
+#define USE_EINK
+#endif
+#else
+#undef USE_EINK
+#endif
 
 // -----------------------------------------------------------------------------
 // Version
@@ -54,6 +77,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Configuration
 // -----------------------------------------------------------------------------
+
+// Pre-hop drop handling (compile-time flag).
+#ifndef MESHTASTIC_PREHOP_DROP
+#define MESHTASTIC_PREHOP_DROP 1
+#endif
 
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
@@ -126,14 +154,42 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7
 #endif
 
+#ifdef USE_KCT8103L_PA
+// Power Amps are often non-linear, so we can use an array of values for the power curve
+#if defined(HELTEC_WIRELESS_TRACKER_V2)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 13, 12, 12, 11, 10, 9, 8, 7
+#elif defined(HELTEC_MESH_NODE_T096)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 13, 12, 11, 10, 9, 8, 7
+#elif defined(HELTEC_V4_R8)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 12, 12, 11, 11, 10, 9, 8, 7
+#else
+// If a board enables USE_KCT8103L_PA but does not match a known variant and has
+// not already provided a PA curve, fail at compile time to avoid unsafe defaults.
+#if !defined(NUM_PA_POINTS) || !defined(TX_GAIN_LORA)
+#error "USE_KCT8103L_PA is defined, but no PA gain curve (NUM_PA_POINTS / TX_GAIN_LORA) is configured for this board."
+#endif
+#endif
+#endif
+
 #ifdef RAK13302
 #define NUM_PA_POINTS 22
 #define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
 #endif
 
 // Default system gain to 0 if not defined
+#ifndef NUM_PA_POINTS
+#define NUM_PA_POINTS 1
+#endif
+
 #ifndef TX_GAIN_LORA
 #define TX_GAIN_LORA 0
+#endif
+
+#ifndef HAS_LORA_FEM
+#define HAS_LORA_FEM 0
 #endif
 
 // -----------------------------------------------------------------------------
@@ -149,11 +205,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
+#define SSD1306_ADDRESS_L 0x3C // Addr = 0
+#define SSD1306_ADDRESS_H 0x3D // Addr = 1
+
 #if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
-#define SSD1306_ADDRESS 0x3D
+#define SSD1306_ADDRESS SSD1306_ADDRESS_H
 #define USE_SH1106
-#else
-#define SSD1306_ADDRESS 0x3C
 #endif
 #define ST7567_ADDRESS 0x3F
 
@@ -177,21 +234,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BME_ADDR 0x76
 #define BME_ADDR_ALTERNATE 0x77
 #define MCP9808_ADDR 0x18
-#define INA_ADDR 0x40
+#define INA_ADDR 0x40 // same as SHT2X
 #define INA_ADDR_ALTERNATE 0x41
 #define INA_ADDR_WAVESHARE_UPS 0x43
 #define INA3221_ADDR 0x42
 #define MAX1704X_ADDR 0x36
-#define QMC6310_ADDR 0x1C
+#define QMC6310U_ADDR 0x1C
 #define QMI8658_ADDR 0x6B
 #define QMC5883L_ADDR 0x0D
 #define HMC5883L_ADDR 0x1E
 #define SHTC3_ADDR 0x70
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
-#define SHT31_4x_ADDR 0x44
-#define SHT31_4x_ADDR_ALT 0x45
-#define PMSA0031_ADDR 0x12
+#define SFA30_ADDR 0x5D
+#define SHTXX_ADDR 0x44
+#define SHTXX_ADDR_ALT 0x45
+#define PMSA003I_ADDR 0x12
 #define QMA6100P_ADDR 0x12
 #define AHT10_ADDR 0x38
 #define RCWL9620_ADDR 0x57
@@ -205,6 +263,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define NAU7802_ADDR 0x2A
 #define MAX30102_ADDR 0x57
 #define SCD4X_ADDR 0x62
+#define CW2015_ADDR 0x62
 #define MLX90614_ADDR_DEF 0x5A
 #define CGRADSENS_ADDR 0x66
 #define LTR390UV_ADDR 0x53
@@ -213,6 +272,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BQ27220_ADDR 0x55 // same address as TDECK_KB
 #define BQ25896_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
+#define SEN5X_ADDR 0x69
+#define SCD30_ADDR 0x61
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -229,6 +290,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BHI260AP_ADDR 0x28
 #define BMM150_ADDR 0x13
 #define DA217_ADDR 0x26
+#define BMI270_ADDR 0x68
+#define BMI270_ADDR_ALT 0x69
 
 // -----------------------------------------------------------------------------
 // LED
@@ -250,8 +313,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
-#define CST328_ADDR 0x1A
+#define CST328_ADDR 0x1A // same address as CST226SE
 #define CHSC6X_ADDR 0x2E
+#define CST226SE_ADDR_ALT 0x5A
 
 // -----------------------------------------------------------------------------
 // RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
@@ -361,14 +425,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_RADIO
 #define HAS_RADIO 0
 #endif
-#ifndef HAS_RTC
-#define HAS_RTC 0
-#endif
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 0
 #endif
 #ifndef HAS_BLUETOOTH
 #define HAS_BLUETOOTH 0
+#endif
+#ifndef USE_TFTDISPLAY
+#define USE_TFTDISPLAY 0
 #endif
 
 #ifndef HW_VENDOR
@@ -394,6 +458,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Support multiple RGB LED configuration
 #if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
 #define HAS_RGB_LED
+#endif
+
+#ifndef LED_STATE_ON
+#define LED_STATE_ON 1
+#endif
+#ifndef LED_STATE_OFF
+#define LED_STATE_OFF (LED_STATE_ON ^ 1)
+#endif
+
+#ifndef ledOff
+#define ledOff(pin) pinMode(pin, INPUT)
 #endif
 
 // default mapping of pins
@@ -427,6 +502,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_PKI 1
 #define MESHTASTIC_EXCLUDE_POWER_FSM 1
 #define MESHTASTIC_EXCLUDE_TZ 1
+#define MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH 1
 #endif
 
 // Turn off all optional modules
@@ -434,6 +510,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_AUDIO 1
 #define MESHTASTIC_EXCLUDE_DETECTIONSENSOR 1
 #define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1
+#define MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR 1
 #define MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY 1
 #define MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION 1
 #define MESHTASTIC_EXCLUDE_PAXCOUNTER 1
@@ -442,6 +519,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_REMOTEHARDWARE 1
 #define MESHTASTIC_EXCLUDE_STOREFORWARD 1
 #define MESHTASTIC_EXCLUDE_TEXTMESSAGE 1
+#define MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT 1
 #define MESHTASTIC_EXCLUDE_ATAK 1
 #define MESHTASTIC_EXCLUDE_CANNEDMESSAGES 1
 #define MESHTASTIC_EXCLUDE_NEIGHBORINFO 1

@@ -46,6 +46,16 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #endif
 }
 
+RadioLibInterface::~RadioLibInterface()
+{
+    // If the static `instance` pointer still references us, clear it.
+    // A later successful init() may have replaced `instance` with a newer
+    // interface — don't clobber that case.
+    if (instance == this) {
+        instance = nullptr;
+    }
+}
+
 #ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
@@ -109,7 +119,7 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
-bool RadioLibInterface::receiveDetected(uint16_t irq, ulong syncWordHeaderValidFlag, ulong preambleDetectedFlag)
+bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
     bool detected = (irq & (syncWordHeaderValidFlag | preambleDetectedFlag));
     // Handle false detections
@@ -244,6 +254,24 @@ bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
 bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
 {
     return txQueue.find(from, id);
+}
+
+bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
+{
+    if (!buffer || length == 0 || !iface) {
+        return false;
+    }
+
+    // Older RadioLib versions only expose random(min, max), so fill the buffer byte-by-byte.
+    for (size_t i = 0; i < length; ++i) {
+        int32_t value = iface->random(0, 255);
+        if (value < 0) {
+            return false;
+        }
+        buffer[i] = static_cast<uint8_t>(value & 0xFF);
+    }
+
+    return true;
 }
 
 /** radio helper thread callback.
@@ -453,8 +481,11 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 #endif
     if (state != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("Ignore received packet due to error=%d (maybe to=0x%08x, from=0x%08x, flags=0x%02x)", state,
-                  radioBuffer.header.to, radioBuffer.header.from, radioBuffer.header.flags);
+        // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
+        LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
+                  "nextHop=0x%x relay=0x%x)",
+                  state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
+                  iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
@@ -516,6 +547,27 @@ void RadioLibInterface::startReceive()
 {
     isReceiving = true;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
+}
+
+void RadioLibInterface::pollMissedIrqs()
+{
+    // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
+    if (isReceiving) {
+        checkRxDoneIrqFlag();
+    }
+}
+
+void RadioLibInterface::resetAGC()
+{
+    // Base implementation: no-op. Override in chip-specific subclasses.
+}
+
+void RadioLibInterface::checkRxDoneIrqFlag()
+{
+    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
+        LOG_WARN("caught missed RX_DONE");
+        notify(ISR_RX, true);
+    }
 }
 
 void RadioLibInterface::configHardwareForSend()

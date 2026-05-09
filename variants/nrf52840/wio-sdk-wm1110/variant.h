@@ -58,8 +58,6 @@ extern "C" {
 #define PIN_LED1 (0 + 13) // P0.13
 #define PIN_LED2 (0 + 14) // P0.14
 
-#define LED_BUILTIN PIN_LED1
-
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2 // Actually red
 

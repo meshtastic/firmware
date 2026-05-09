@@ -9,8 +9,10 @@
 #include "graphics/niche/InkHUD/InkHUD.h"
 
 // Applets
+#include "graphics/niche/InkHUD/Applets/Examples/UserAppletInputExample/UserAppletInputExample.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
@@ -19,7 +21,7 @@
 // Shared NicheGraphics components
 // --------------------------------
 #include "graphics/niche/Drivers/EInk/ZJY122250_0213BAAMFGN.h"
-#include "graphics/niche/Inputs/TwoButton.h"
+#include "graphics/niche/Inputs/TwoButtonExtended.h"
 
 void setupNicheGraphics()
 {
@@ -54,10 +56,16 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
-    inkhud->persistence->settings.rotation = 1;                        // 90 degrees clockwise
+    inkhud->persistence->settings.rotation = 1; // 90 degrees clockwise
+#if HAS_TRACKBALL
+    inkhud->persistence->settings.joystick.enabled = true;            // Device uses a joystick
+    inkhud->persistence->settings.joystick.alignment = 3;             // 270 degrees
+    inkhud->persistence->settings.optionalMenuItems.nextTile = false; // Use joystick instead
+#endif
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
     inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
     inkhud->persistence->settings.userTiles.maxCount = 2; // Two applets side-by-side
+    inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
@@ -69,19 +77,40 @@ void setupNicheGraphics()
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
 
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // -
     //  Start running InkHUD
     inkhud->begin();
 
     //  Buttons
     //  --------------------------
 
-    Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
+    Inputs::TwoButtonExtended *buttons = Inputs::TwoButtonExtended::getInstance(); // Shared NicheGraphics component
 
-    // #0: Main User Button
-    buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin());
+#if HAS_TRACKBALL
+    // #0: Exit Button
+    buttons->setWiring(0, Inputs::TwoButtonExtended::getUserButtonPin());
+    buttons->setTiming(0, 75, 500);
+    buttons->setHandlerShortPress(0, [inkhud]() { inkhud->exitShort(); });
+    buttons->setHandlerLongPress(0, [inkhud]() { inkhud->exitLong(); });
+
+    // #1: Joystick Center
+    buttons->setWiring(1, TB_PRESS);
+    buttons->setTiming(1, 75, 500);
+    buttons->setHandlerShortPress(1, [inkhud]() { inkhud->shortpress(); });
+    buttons->setHandlerLongPress(1, [inkhud]() { inkhud->longpress(); });
+
+    // Joystick Directions
+    buttons->setJoystickWiring(TB_UP, TB_DOWN, TB_LEFT, TB_RIGHT);
+    buttons->setJoystickDebounce(50);
+    buttons->setJoystickPressHandlers([inkhud]() { inkhud->navUp(); }, [inkhud]() { inkhud->navDown(); },
+                                      [inkhud]() { inkhud->navLeft(); }, [inkhud]() { inkhud->navRight(); });
+#else
+    // #0: User Button
+    buttons->setWiring(0, Inputs::TwoButtonExtended::getUserButtonPin());
     buttons->setTiming(0, 75, 500);
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
+#endif
 
     // Begin handling button events
     buttons->start();

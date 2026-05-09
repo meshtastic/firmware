@@ -26,7 +26,7 @@
 // #define GPS_RX_PIN 44
 // #define GPS_TX_PIN 43
 
-#define LED_PIN 41
+#define LED_POWER 41
 #define BUTTON_PIN 2
 #define BUTTON_NEED_PULLUP
 

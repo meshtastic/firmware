@@ -23,7 +23,7 @@ class BatteryIconApplet : public SystemApplet
   public:
     BatteryIconApplet();
 
-    void onRender() override;
+    void onRender(bool full) override;
     int onPowerStatusUpdate(const meshtastic::Status *status); // Called when new info about battery is available
 
   private:

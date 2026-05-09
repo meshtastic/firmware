@@ -24,7 +24,16 @@ PB_BIND(meshtastic_Data, meshtastic_Data, 2)
 PB_BIND(meshtastic_KeyVerification, meshtastic_KeyVerification, AUTO)
 
 
+PB_BIND(meshtastic_StoreForwardPlusPlus, meshtastic_StoreForwardPlusPlus, 2)
+
+
+PB_BIND(meshtastic_RemoteShell, meshtastic_RemoteShell, AUTO)
+
+
 PB_BIND(meshtastic_Waypoint, meshtastic_Waypoint, AUTO)
+
+
+PB_BIND(meshtastic_StatusMessage, meshtastic_StatusMessage, AUTO)
 
 
 PB_BIND(meshtastic_MqttClientProxyMessage, meshtastic_MqttClientProxyMessage, 2)
@@ -97,6 +106,10 @@ PB_BIND(meshtastic_resend_chunks, meshtastic_resend_chunks, AUTO)
 
 
 PB_BIND(meshtastic_ChunkedPayloadResponse, meshtastic_ChunkedPayloadResponse, AUTO)
+
+
+
+
 
 
 

@@ -1,9 +1,13 @@
 #include "SystemCommandsModule.h"
+#include "input/InputBroker.h"
 #include "meshUtils.h"
+
 #if HAS_SCREEN
+#include "MessageStore.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #endif
+
 #include "GPS.h"
 #include "MeshService.h"
 #include "Module.h"
@@ -22,15 +26,12 @@ SystemCommandsModule::SystemCommandsModule()
 
 int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 {
-    LOG_INFO("Input event %u! kb %u", event->inputEvent, event->kbchar);
+    LOG_INPUT("SystemCommands Input event %u! kb %u", event->inputEvent, event->kbchar);
     // System commands (all others fall through)
     switch (event->kbchar) {
     // Fn key symbols
     case INPUT_BROKER_MSG_FN_SYMBOL_ON:
-        IF_SCREEN(screen->setFunctionSymbol("Fn"));
-        return 0;
     case INPUT_BROKER_MSG_FN_SYMBOL_OFF:
-        IF_SCREEN(screen->removeFunctionSymbol("Fn"));
         return 0;
     // Brightness
     case INPUT_BROKER_MSG_BRIGHTNESS_UP:
@@ -44,10 +45,9 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     // Mute
     case INPUT_BROKER_MSG_MUTE_TOGGLE:
         if (moduleConfig.external_notification.enabled && externalNotificationModule) {
-            bool isMuted = externalNotificationModule->getMute();
-            externalNotificationModule->setMute(!isMuted);
-            IF_SCREEN(graphics::isMuted = !isMuted; if (!isMuted) externalNotificationModule->stopNow();
-                      screen->showSimpleBanner(isMuted ? "Notifications\nEnabled" : "Notifications\nDisabled", 3000);)
+            externalNotificationModule->setMute(!externalNotificationModule->getMute());
+            IF_SCREEN(if (!externalNotificationModule->getMute()) externalNotificationModule->stopNow(); screen->showSimpleBanner(
+                externalNotificationModule->getMute() ? "Notifications\nDisabled" : "Notifications\nEnabled", 3000);)
         }
         return 0;
     // Bluetooth
@@ -77,6 +77,9 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     case INPUT_BROKER_MSG_REBOOT:
         IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
         nodeDB->saveToDisk();
+#if HAS_SCREEN
+        messageStore.saveToFlash();
+#endif
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         return true;
@@ -85,10 +88,8 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     switch (event->inputEvent) {
         // GPS
     case INPUT_BROKER_GPS_TOGGLE:
-        LOG_WARN("GPS Toggle");
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps) {
-            LOG_WARN("GPS Toggle2");
             if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
                 config.position.fixed_position == false) {
                 nodeDB->clearLocalPosition();

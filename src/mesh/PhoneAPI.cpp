@@ -17,6 +17,7 @@
 #include "TypeConversions.h"
 #include "concurrency/LockGuard.h"
 #include "main.h"
+#include "modules/NodeInfoModule.h"
 #include "xmodem.h"
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -122,6 +123,8 @@ void PhoneAPI::close()
         }
         packetForPhone = NULL;
         filesManifest.clear();
+        filesManifest.shrink_to_fit();
+        lastPortNumToRadio.clear();
         fromRadioNum = 0;
         config_nonce = 0;
         config_state = 0;
@@ -188,8 +191,23 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
 #endif
         case meshtastic_ToRadio_heartbeat_tag:
-            LOG_DEBUG("Got client heartbeat");
-            heartbeatReceived = true;
+            // nonce==1 is a special "nodeinfo ping" trigger: force a fresh
+            // NodeInfo broadcast on the 60-second shorterTimeout path so
+            // peers can re-learn our public key after a reboot or
+            // factory_reset without waiting out the normal 10-minute
+            // NodeInfo send cooldown. Mirrors the TCP/UDP path in
+            // `src/mesh/api/PacketAPI.cpp:74-79` for serial clients.
+            // Default nonce (0) remains a plain keepalive that triggers
+            // a queue-status reply.
+            if (toRadioScratch.heartbeat.nonce == 1) {
+                if (nodeInfoModule) {
+                    LOG_INFO("Broadcasting nodeinfo ping (serial)");
+                    nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true);
+                }
+            } else {
+                LOG_DEBUG("Got client heartbeat");
+                heartbeatReceived = true;
+            }
             break;
         default:
             // Ignore nop messages
@@ -447,8 +465,18 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             fromRadioScratch.moduleConfig.payload_variant.paxcounter = moduleConfig.paxcounter;
             break;
+        case meshtastic_ModuleConfig_traffic_management_tag:
+            LOG_DEBUG("Send module config: traffic management");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
+            fromRadioScratch.moduleConfig.payload_variant.traffic_management = moduleConfig.traffic_management;
+            break;
+        case meshtastic_ModuleConfig_tak_tag:
+            LOG_DEBUG("Send module config: tak");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_tak_tag;
+            fromRadioScratch.moduleConfig.payload_variant.tak = moduleConfig.tak;
+            break;
         default:
-            LOG_ERROR("Unknown module config type %d", config_state);
+            LOG_DEBUG("Unhandled module config type %d", config_state);
         }
 
         config_state++;
@@ -493,11 +521,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // uncomment if you really need to:
             // LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
             // nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
-
-            // Occasional progress logging. (readIndex==2 will be true for the first non-us node)
-            if (readIndex == 2 || readIndex % 20 == 0) {
-                LOG_DEBUG("nodeinfo: %d/%d", readIndex, nodeDB->getNumMeshNodes());
-            }
 
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = infoToSend;
@@ -629,9 +652,11 @@ void PhoneAPI::releaseQueueStatusPhonePacket()
 void PhoneAPI::prefetchNodeInfos()
 {
     bool added = false;
+    bool wasEmpty = false;
     // Keep the queue topped up so BLE reads stay responsive even if DB fetches take a moment.
     {
         concurrency::LockGuard guard(&nodeInfoMutex);
+        wasEmpty = nodeInfoQueue.empty();
         while (nodeInfoQueue.size() < kNodePrefetchDepth) {
             auto nextNode = nodeDB->readNextMeshNode(readIndex);
             if (!nextNode)
@@ -645,11 +670,15 @@ void PhoneAPI::prefetchNodeInfos()
             info.via_mqtt = isUs ? false : info.via_mqtt;
             info.is_favorite = info.is_favorite || isUs;
             nodeInfoQueue.push_back(info);
+            // Log progress here (at fetch time) so readIndex is accurate and each value logs only once.
+            if (readIndex == 2 || readIndex % 20 == 0) {
+                LOG_DEBUG("nodeinfo: %d/%d", readIndex, nodeDB->getNumMeshNodes());
+            }
             added = true;
         }
     }
 
-    if (added)
+    if (added && wasEmpty)
         onNowHasData(0);
 }
 
