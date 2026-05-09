@@ -192,10 +192,61 @@ using namespace meshtastic;
  */
 static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level sensor
 
-#ifdef BATTERY_PIN
+#if defined(VOLTAIC_V25_RAK5811_BATTERY)
+#ifndef VOLTAIC_V25_RAK5811_POWER_PIN
+#define VOLTAIC_V25_RAK5811_POWER_PIN 17
+#endif
+#ifndef VOLTAIC_V25_RAK5811_BATTERY_PIN
+#define VOLTAIC_V25_RAK5811_BATTERY_PIN 31
+#endif
+#ifndef VOLTAIC_V25_RAK5811_DIVIDER_RATIO
+#define VOLTAIC_V25_RAK5811_DIVIDER_RATIO 0.6
+#endif
+#ifndef VOLTAIC_V25_PACK_DIVIDER_RATIO
+#define VOLTAIC_V25_PACK_DIVIDER_RATIO 0.5
+#endif
+#ifndef VOLTAIC_V25_SOC_0_MV
+#define VOLTAIC_V25_SOC_0_MV 2960
+#endif
+#ifndef VOLTAIC_V25_SOC_25_MV
+#define VOLTAIC_V25_SOC_25_MV 3296
+#endif
+#ifndef VOLTAIC_V25_SOC_50_MV
+#define VOLTAIC_V25_SOC_50_MV 3498
+#endif
+#ifndef VOLTAIC_V25_SOC_75_MV
+#define VOLTAIC_V25_SOC_75_MV 3699
+#endif
+#ifndef VOLTAIC_V25_SOC_100_MV
+#define VOLTAIC_V25_SOC_100_MV 3883
+#endif
+#ifndef VOLTAIC_V25_RAK5811_SETTLE_MS
+#define VOLTAIC_V25_RAK5811_SETTLE_MS 100
+#endif
+#ifndef VOLTAIC_V25_RAK5811_KEEP_POWER_ON
+#define VOLTAIC_V25_RAK5811_KEEP_POWER_ON 1
+#endif
+#ifndef VOLTAIC_V25_DISABLE_LOW_BATTERY_SHUTDOWN
+#define VOLTAIC_V25_DISABLE_LOW_BATTERY_SHUTDOWN 0
+#endif
+#ifndef VOLTAIC_V25_FORCE_BATTERY_POWER
+#define VOLTAIC_V25_FORCE_BATTERY_POWER 0
+#endif
+#define MESHTASTIC_ANALOG_BATTERY_PIN VOLTAIC_V25_RAK5811_BATTERY_PIN
+#define MESHTASTIC_ANALOG_BATTERY_DEFAULT_MULTIPLIER (1.0f / (VOLTAIC_V25_PACK_DIVIDER_RATIO * VOLTAIC_V25_RAK5811_DIVIDER_RATIO))
+#elif defined(BATTERY_PIN)
+#define MESHTASTIC_ANALOG_BATTERY_PIN BATTERY_PIN
+#endif
+
+#ifdef MESHTASTIC_ANALOG_BATTERY_PIN
 
 void battery_adcEnable()
 {
+#ifdef VOLTAIC_V25_RAK5811_BATTERY
+    pinMode(VOLTAIC_V25_RAK5811_POWER_PIN, OUTPUT);
+    digitalWrite(VOLTAIC_V25_RAK5811_POWER_PIN, HIGH);
+    delay(VOLTAIC_V25_RAK5811_SETTLE_MS);
+#endif
 #ifdef ADC_CTRL // enable adc voltage divider when we need to read
 #ifdef ADC_USE_PULLUP
     pinMode(ADC_CTRL, INPUT_PULLUP);
@@ -227,6 +278,9 @@ static void battery_adcDisable()
 #endif
 #endif
 #endif
+#if defined(VOLTAIC_V25_RAK5811_BATTERY) && !VOLTAIC_V25_RAK5811_KEEP_POWER_ON
+    digitalWrite(VOLTAIC_V25_RAK5811_POWER_PIN, LOW);
+#endif
 }
 
 #endif
@@ -252,6 +306,26 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
         if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
+
+#ifdef VOLTAIC_V25_RAK5811_BATTERY
+        const uint16_t voltagePoints[] = {VOLTAIC_V25_SOC_0_MV, VOLTAIC_V25_SOC_25_MV, VOLTAIC_V25_SOC_50_MV,
+                                          VOLTAIC_V25_SOC_75_MV, VOLTAIC_V25_SOC_100_MV};
+        const uint8_t percentPoints[] = {0, 25, 50, 75, 100};
+
+        if (v <= voltagePoints[0])
+            return percentPoints[0];
+
+        for (size_t i = 1; i < sizeof(voltagePoints) / sizeof(voltagePoints[0]); i++) {
+            if (v <= voltagePoints[i]) {
+                const float voltageRange = voltagePoints[i] - voltagePoints[i - 1];
+                const float percentRange = percentPoints[i] - percentPoints[i - 1];
+                return clamp((int)(percentPoints[i - 1] + (((v - voltagePoints[i - 1]) * percentRange) / voltageRange)), 0,
+                             100);
+            }
+        }
+
+        return percentPoints[sizeof(percentPoints) / sizeof(percentPoints[0]) - 1];
+#endif
 
 #ifdef NO_BATTERY_LEVEL_ON_CHARGE
         // This does not work on a RAK4631 with battery connected
@@ -303,15 +377,19 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #define ADC_MULTIPLIER 2.0
 #endif
 
+#ifndef MESHTASTIC_ANALOG_BATTERY_DEFAULT_MULTIPLIER
+#define MESHTASTIC_ANALOG_BATTERY_DEFAULT_MULTIPLIER ADC_MULTIPLIER
+#endif
+
 #ifndef BATTERY_SENSE_SAMPLES
 #define BATTERY_SENSE_SAMPLES                                                                                                    \
     15 // Set the number of samples, it has an effect of increasing sensitivity in complex electromagnetic environment.
 #endif
 
-#ifdef BATTERY_PIN
+#ifdef MESHTASTIC_ANALOG_BATTERY_PIN
         // Override variant or default ADC_MULTIPLIER if we have the override pref
-        float operativeAdcMultiplier =
-            config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
+        float operativeAdcMultiplier = config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override
+                                                                                : MESHTASTIC_ANALOG_BATTERY_DEFAULT_MULTIPLIER;
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
         if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
@@ -327,7 +405,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             scaled *= operativeAdcMultiplier;
 #else // block for all other platforms
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
-                raw += analogRead(BATTERY_PIN);
+                raw += analogRead(MESHTASTIC_ANALOG_BATTERY_PIN);
             }
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
@@ -344,11 +422,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
                 last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
             }
 
-            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u", BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t)
-            // (last_read_value));
+            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u", MESHTASTIC_ANALOG_BATTERY_PIN, raw,
+            // (uint32_t)(scaled), (uint32_t)(last_read_value));
         }
         return last_read_value;
-#endif // BATTERY_PIN
+#endif // MESHTASTIC_ANALOG_BATTERY_PIN
         return 0;
     }
 
@@ -603,11 +681,25 @@ bool Power::analogInit()
     pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
 #endif
 
-#ifdef BATTERY_PIN
-    LOG_DEBUG("Use analog input %d for battery level", BATTERY_PIN);
+#ifdef MESHTASTIC_ANALOG_BATTERY_PIN
+    LOG_DEBUG("Use analog input %d for battery level", MESHTASTIC_ANALOG_BATTERY_PIN);
+
+#ifdef VOLTAIC_V25_RAK5811_BATTERY
+    battery_adcEnable();
+    LOG_INFO("Voltaic V25 pack mode: RAK5811 power pin=%d, ADC pin=%d, pack divider=%0.3f, RAK5811 divider=%0.3f, "
+             "keep_power_on=%d, force_battery_power=%d",
+             VOLTAIC_V25_RAK5811_POWER_PIN, MESHTASTIC_ANALOG_BATTERY_PIN, (double)VOLTAIC_V25_PACK_DIVIDER_RATIO,
+             (double)VOLTAIC_V25_RAK5811_DIVIDER_RATIO, VOLTAIC_V25_RAK5811_KEEP_POWER_ON, VOLTAIC_V25_FORCE_BATTERY_POWER);
+    LOG_INFO("Voltaic V25 SOC table: 0%%=%dmV, 25%%=%dmV, 50%%=%dmV, 75%%=%dmV, 100%%=%dmV", VOLTAIC_V25_SOC_0_MV,
+             VOLTAIC_V25_SOC_25_MV, VOLTAIC_V25_SOC_50_MV, VOLTAIC_V25_SOC_75_MV, VOLTAIC_V25_SOC_100_MV);
+#endif
 
     // disable any internal pullups
-    pinMode(BATTERY_PIN, INPUT);
+#ifdef VOLTAIC_V25_RAK5811_BATTERY
+    pinMode(MESHTASTIC_ANALOG_BATTERY_PIN, INPUT_PULLDOWN);
+#else
+    pinMode(MESHTASTIC_ANALOG_BATTERY_PIN, INPUT);
+#endif
 
 #ifndef BATTERY_SENSE_RESOLUTION_BITS
 #define BATTERY_SENSE_RESOLUTION_BITS 10
@@ -837,6 +929,14 @@ void Power::readPowerStatus()
 
 #endif
 
+#if defined(VOLTAIC_V25_RAK5811_BATTERY) && VOLTAIC_V25_FORCE_BATTERY_POWER
+    if (batteryLevel) {
+        hasBattery = OptTrue;
+        usbPowered = OptFalse;
+        isChargingNow = OptFalse;
+    }
+#endif
+
     // Notify any status instances that are observing us
     const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
     if (millis() > lastLogTime + 50 * 1000) {
@@ -902,6 +1002,9 @@ void Power::readPowerStatus()
     //
 
     if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
+#if defined(VOLTAIC_V25_RAK5811_BATTERY) && VOLTAIC_V25_DISABLE_LOW_BATTERY_SHUTDOWN
+        low_voltage_counter = 0;
+#else
         if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
             low_voltage_counter++;
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
@@ -912,6 +1015,7 @@ void Power::readPowerStatus()
         } else {
             low_voltage_counter = 0;
         }
+#endif
     }
 }
 
