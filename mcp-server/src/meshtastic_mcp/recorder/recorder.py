@@ -65,7 +65,10 @@ class Recorder:
             self._wire_pubsub()
             self._started = True
             self._started_at = time.time()
-            self._write_event(kind="recorder_start", label="recorder_started")
+        # Write the recorder_start marker AFTER releasing the lock —
+        # `_write_event` calls `_files_snapshot()` which re-acquires
+        # `self._lock`, and `threading.Lock` is not reentrant.
+        self._write_event(kind="recorder_start", label="recorder_started")
 
     def stop(self) -> None:
         with self._lock:
@@ -434,9 +437,11 @@ class Recorder:
     def force_rotate_all(self) -> dict[str, Any]:
         """Test/admin hook: rotate every stream right now."""
         with self._lock:
-            for f in self._files.values():
-                f.force_rotate()
-            return self.status()
+            files = list(self._files.values())
+        for f in files:
+            f.force_rotate()
+        # `status()` re-acquires `self._lock`; release before calling it.
+        return self.status()
 
 
 # -- module-level singleton accessor ------------------------------------
