@@ -549,8 +549,8 @@ class TestServerStartup:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         monkeypatch.setenv("MESHTASTIC_MCP_LOG_DIR", str(tmp_path))
-        server = importlib.import_module("meshtastic_mcp.server")
-        real_get_recorder = server.get_recorder
+        server = importlib.reload(importlib.import_module("meshtastic_mcp.server"))
+        running_recorder = server.get_recorder()
 
         class BrokenRecorder:
             def start(self) -> None:
@@ -562,4 +562,4 @@ class TestServerStartup:
                 server._start_recorder()
             assert "Persistent recorder disabled: cannot write" in caplog.text
         finally:
-            real_get_recorder().stop()
+            running_recorder.stop()
