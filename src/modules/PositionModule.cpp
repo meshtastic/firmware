@@ -486,8 +486,8 @@ int32_t PositionModule::runOnce()
                           msSinceLastSend, minimumTimeThreshold);
 
                 // Set the current coords as our last ones, after we've compared distance with current and decided to send
-                lastGpsLatitude = selfPos->latitude_i;
-                lastGpsLongitude = selfPos->longitude_i;
+                lastGpsLatitude = selfPos.latitude_i;
+                lastGpsLongitude = selfPos.longitude_i;
             }
         }
     }
@@ -593,8 +593,8 @@ void PositionModule::handleNewPosition()
                       minimumTimeThreshold);
 
             // Set the current coords as our last ones, after we've compared distance with current and decided to send
-            lastGpsLatitude = selfPos->latitude_i;
-            lastGpsLongitude = selfPos->longitude_i;
+            lastGpsLatitude = selfPos.latitude_i;
+            lastGpsLongitude = selfPos.longitude_i;
         }
     }
 }

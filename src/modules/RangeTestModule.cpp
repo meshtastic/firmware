@@ -271,7 +271,8 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     fileToAppend.printf("%d,", getFrom(&mp));          // From
     fileToAppend.printf("%s,", n ? n->long_name : ""); // Long Name
     meshtastic_PositionLite senderPos;
-    if (nodeDB->copyNodePosition(getFrom(&mp), senderPos)) {
+    const bool haveSenderPos = nodeDB->copyNodePosition(getFrom(&mp), senderPos);
+    if (haveSenderPos) {
         fileToAppend.printf("%f,", senderPos.latitude_i * 1e-7);  // Sender Lat
         fileToAppend.printf("%f,", senderPos.longitude_i * 1e-7); // Sender Long
     } else {
@@ -295,8 +296,8 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     fileToAppend.printf("%f,", mp.rx_snr); // RX SNR
 
-    if (senderPos && senderPos->latitude_i && senderPos->longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
-        float distance = GeoCoord::latLongToMeter(senderPos->latitude_i * 1e-7, senderPos->longitude_i * 1e-7,
+    if (haveSenderPos && senderPos.latitude_i && senderPos.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
+        float distance = GeoCoord::latLongToMeter(senderPos.latitude_i * 1e-7, senderPos.longitude_i * 1e-7,
                                                   gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
         fileToAppend.printf("%f,", distance); // Distance in meters
     } else {

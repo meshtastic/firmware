@@ -963,7 +963,8 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
     meshtastic_DeviceMetrics nodeMetrics;
-    if (nodeDB->copyNodeTelemetry(node->num, nodeMetrics) && nodeMetrics.has_uptime_seconds) {
+    const bool haveNodeMetrics = nodeDB->copyNodeTelemetry(node->num, nodeMetrics);
+    if (haveNodeMetrics && nodeMetrics.has_uptime_seconds) {
         char upPrefix[12]; // enough for leftSideSpacing + "Up:"
         snprintf(upPrefix, sizeof(upPrefix), "%sUp:", leftSideSpacing);
         getUptimeStr(nodeMetrics.uptime_seconds * 1000, upPrefix, uptimeStr, sizeof(uptimeStr));
@@ -983,9 +984,8 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     const bool haveOurPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ourPos);
     if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node) && haveNodePos && haveOurPos) {
         // Use shared meter conversion, then format display units with lightweight integer rounding.
-        const float distanceMeters =
-            GeoCoord::latLongToMeter(DegD(nodePos.latitude_i), DegD(nodePos.longitude_i), DegD(ourPos.latitude_i),
-                                     DegD(ourPos.longitude_i));
+        const float distanceMeters = GeoCoord::latLongToMeter(DegD(nodePos.latitude_i), DegD(nodePos.longitude_i),
+                                                              DegD(ourPos.latitude_i), DegD(ourPos.longitude_i));
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             const int feet = static_cast<int>((distanceMeters * METERS_TO_FEET) + 0.5f);
             if (feet > 0 && feet < 1000) {
@@ -1020,19 +1020,19 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     char batLine[32] = "";
     bool haveBatLine = false;
 
-    if (nodeMetrics) {
-        bool hasPct = nodeMetrics->has_battery_level;
-        bool hasVolt = nodeMetrics->has_voltage && nodeMetrics->voltage > 0.001f;
+    if (haveNodeMetrics) {
+        bool hasPct = nodeMetrics.has_battery_level;
+        bool hasVolt = nodeMetrics.has_voltage && nodeMetrics.voltage > 0.001f;
 
         int pct = 0;
         float volt = 0.0f;
 
         if (hasPct) {
-            pct = (int)nodeMetrics->battery_level;
+            pct = (int)nodeMetrics.battery_level;
         }
 
         if (hasVolt) {
-            volt = nodeMetrics->voltage;
+            volt = nodeMetrics.voltage;
         }
 
         if (hasPct && pct > 0 && pct <= 100) {
@@ -1072,11 +1072,11 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     const bool hasNodePositionFix = nodeDB->hasValidPosition(node);
     const char *statusLine1 = nullptr;
     const char *statusLine2 = nullptr;
-    if (hasOwnPositionFix && hasNodePositionFix && ourPos && nodePos) {
-        const auto &op = *ourPos;
+    if (hasOwnPositionFix && hasNodePositionFix && haveOurPos && haveNodePos) {
+        const auto &op = ourPos;
         showCompass = CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
         if (showCompass) {
-            const auto &p = *nodePos;
+            const auto &p = nodePos;
             bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
             bearing = CompassRenderer::adjustBearingForCompassMode(bearing, myHeading);
         } else {
