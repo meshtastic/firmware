@@ -100,7 +100,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     char distStr[20] = "";
 
     // Get our node, to use our own position
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // Match compass sizing/placement to favorite node screen logic.
     const int w = display->getWidth();

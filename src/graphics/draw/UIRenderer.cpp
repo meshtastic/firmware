@@ -974,7 +974,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 
     // === 5. Distance (only if both nodes have GPS position) ===
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     char distStr[24] = ""; // Make buffer big enough for any string
     bool haveDistance = false;
 
@@ -1126,7 +1126,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // === Header ===
     if (currentResolution == ScreenResolution::UltraLow) {
@@ -1593,7 +1593,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     geoCoord.updateCoords(int32_t(gpsStatus->getLatitude()), int32_t(gpsStatus->getLongitude()),
                           int32_t(gpsStatus->getAltitude()));
 
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
     const bool hasLiveGpsFix =
         (gpsStatus && gpsStatus->getHasLock() && (gpsStatus->getLatitude() != 0 || gpsStatus->getLongitude() != 0));

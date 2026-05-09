@@ -398,7 +398,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     bool isMuted = nodeInfoLiteIsMuted(node);
     char distStr[10] = "";
 
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourPos;
     meshtastic_PositionLite theirPos;
     const bool haveOurPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ourPos);
@@ -884,7 +884,7 @@ void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     float headingRadian = 0.0f;
-    auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const auto *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourSelfPos;
     if (!ourNode || !nodeDB->hasValidPosition(ourNode) || !nodeDB->copyNodePosition(ourNode->num, ourSelfPos)) {
         drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassUnknown, headingRadian, 0.0, 0.0);

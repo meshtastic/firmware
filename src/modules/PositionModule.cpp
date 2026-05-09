@@ -183,7 +183,7 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
         return nullptr;
     }
 
-    meshtastic_NodeInfoLite *node = service->refreshLocalMeshNode(); // should guarantee there is now a position
+    const meshtastic_NodeInfoLite *node = service->refreshLocalMeshNode(); // should guarantee there is now a position
 
     // configuration of POSITION packet
     //   consider making this a function argument?
@@ -421,7 +421,7 @@ int32_t PositionModule::runOnce()
         doDeepSleep(nightyNightMs, false, false);
     }
 
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (node == nullptr)
         return RUNONCE_INTERVAL;
 
@@ -570,7 +570,7 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
 
 void PositionModule::handleNewPosition()
 {
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
     // We limit our GPS broadcasts to a max rate
     if (nodeDB->hasValidPosition(node2)) {

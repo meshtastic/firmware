@@ -845,7 +845,7 @@ void menuHandler::messageViewModeMenu()
     // Encode peers
     for (size_t i = 0; i < uniquePeers.size(); ++i) {
         uint32_t peer = uniquePeers[i];
-        auto node = nodeDB->getMeshNode(peer);
+        const auto *node = nodeDB->getMeshNode(peer);
         std::string name;
         if (nodeInfoLiteHasUser(node))
             name = sanitizeString(node->long_name).substr(0, 15);
@@ -2075,7 +2075,7 @@ void menuHandler::removeFavoriteMenu()
     static const char *optionsArray[] = {"Back", "Yes"};
     BannerOverlayOptions bannerOptions;
     std::string message = "Unfavorite This Node?\n";
-    auto node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
+    const auto *node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
     if (nodeInfoLiteHasUser(node)) {
         message += sanitizeString(node->long_name).substr(0, 15);
     }

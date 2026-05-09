@@ -2391,7 +2391,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
 void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
 {
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    const meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
     if (lite && nodeInfoLiteIsFavorite(lite) != is_favorite) {
         nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_IS_FAVORITE_MASK, is_favorite);
         sortMeshDB();
@@ -2407,7 +2407,7 @@ bool NodeDB::isFavorite(uint32_t nodeId)
     if (nodeId == NODENUM_BROADCAST)
         return false;
 
-    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    const meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
 
     if (lite) {
         return nodeInfoLiteIsFavorite(lite);
@@ -2542,16 +2542,16 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
                 const meshtastic_NodeInfoLite *cand = &meshNodes->at(i);
-                const bool isFavorite = nodeInfoLiteIsFavorite(cand);
+                const bool isFavoriteNode = nodeInfoLiteIsFavorite(cand);
                 const bool isIgnored = nodeInfoLiteIsIgnored(cand);
                 const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
                 // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!isFavorite && !isIgnored && !isVerified && cand->last_heard < oldest) {
+                if (!isFavoriteNode && !isIgnored && !isVerified && cand->last_heard < oldest) {
                     oldest = cand->last_heard;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!isFavorite && !isIgnored && cand->public_key.size == 0 && cand->last_heard < oldestBoring) {
+                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 && cand->last_heard < oldestBoring) {
                     oldestBoring = cand->last_heard;
                     oldestBoringIndex = i;
                 }
@@ -2599,7 +2599,7 @@ bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
 /// we consider them licensed
 UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(nodeNum);
+    const meshtastic_NodeInfoLite *info = getMeshNode(nodeNum);
     if (!nodeInfoLiteHasUser(info))
         return UserLicenseStatus::NotKnown;
     return nodeInfoLiteIsLicensed(info) ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;

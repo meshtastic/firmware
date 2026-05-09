@@ -444,7 +444,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     case meshtastic_AdminMessage_set_fixed_position_tag: {
         LOG_INFO("Client received set_fixed_position command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
         // Route the fixed position through updatePosition so it lands in the
         // satellite map (or, on builds with PositionDB excluded, just sets
         // localPosition for the local broadcast path).
