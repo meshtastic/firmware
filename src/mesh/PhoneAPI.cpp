@@ -276,6 +276,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
 
+retry_state:
     // Advance states as needed
     switch (state) {
     case STATE_SEND_NOTHING:
@@ -550,12 +551,17 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             nodeInfoMutex.unlock();
             // Replay states no-op for legacy clients / excluded DBs.
             state = STATE_REPLAY_POSITIONS;
-            return getFromRadio(buf);
+            goto retry_state;
         }
         break;
     }
 
     case STATE_REPLAY_POSITIONS: {
+        // Replay states only produce data when the client opted into gradient sync.
+        if (!clientWantsGradientSync()) {
+            state = STATE_SEND_FILEMANIFEST;
+            goto retry_state;
+        }
         if (replayPositionOrder.empty() && replayPositionIndex == 0)
             beginReplayPositions();
         prefetchReplayPositions();
@@ -577,7 +583,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         } else {
             LOG_DEBUG("Done replaying positions count=%u millis=%u", (unsigned)replayPositionIndex, millis());
             state = STATE_REPLAY_TELEMETRY;
-            return getFromRadio(buf);
+            goto retry_state;
         }
         break;
     }
@@ -604,7 +610,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         } else {
             LOG_DEBUG("Done replaying telemetry count=%u millis=%u", (unsigned)replayTelemetryIndex, millis());
             state = STATE_REPLAY_ENVIRONMENT;
-            return getFromRadio(buf);
+            goto retry_state;
         }
         break;
     }
@@ -631,7 +637,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         } else {
             LOG_DEBUG("Done replaying environment count=%u millis=%u", (unsigned)replayEnvironmentIndex, millis());
             state = STATE_REPLAY_STATUS;
-            return getFromRadio(buf);
+            goto retry_state;
         }
         break;
     }
@@ -666,7 +672,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             replayStatusOrder.clear();
             replayStatusOrder.shrink_to_fit();
             state = STATE_SEND_FILEMANIFEST;
-            return getFromRadio(buf);
+            goto retry_state;
         }
         break;
     }
