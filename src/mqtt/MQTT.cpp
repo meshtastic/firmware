@@ -140,7 +140,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         const meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
         // Only accept PKI messages to us, or if we have both the sender and receiver in our nodeDB, as then it's
         // likely they discovered each other via a channel we have downlink enabled for
-        if (isToUs(p.get()) || (tx && tx->has_user && rx && rx->has_user))
+        if (isToUs(p.get()) || (nodeInfoLiteHasUser(tx) && nodeInfoLiteHasUser(rx)))
             router->enqueueReceivedMessage(p.release());
     } else if (router &&
                perhapsDecode(p.get()) == DecodeState::DECODE_SUCCESS) // ignore messages if we don't have the channel key
@@ -408,6 +408,9 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
 
 void mqttInit()
 {
+    if (!moduleConfig.mqtt.enabled)
+        return;
+
     new MQTT();
 }
 
