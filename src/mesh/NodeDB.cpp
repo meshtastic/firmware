@@ -801,6 +801,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
+#if defined(USERPREFS_BUTTON_PIN)
+    config.device.button_gpio = USERPREFS_BUTTON_PIN;
+#endif
     config.security.serial_enabled = true;
     config.security.admin_channel_enabled = false;
     resetRadioConfig(true); // This also triggers NodeInfo/Position requests since we're fresh

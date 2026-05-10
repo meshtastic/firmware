@@ -158,11 +158,19 @@ static void lsIdle()
 
             default:
                 // We woke for some other reason (button press, device IRQ interrupt)
-
-#ifdef BUTTON_PIN
-                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-#else
                 bool pressed = false;
+
+#if HAS_BUTTON
+                int _buttonPin = -1;
+#if defined(BUTTON_PIN)
+                _buttonPin = BUTTON_PIN;
+#endif
+                if (config.device.button_gpio) {
+                    _buttonPin = config.device.button_gpio;
+                }
+                if (_buttonPin >= 0) {
+                    pressed = !digitalRead(_buttonPin);
+                }
 #endif
                 if (pressed) { // If we woke because of press, instead generate a PRESS event.
                     powerFSM.trigger(EVENT_PRESS);

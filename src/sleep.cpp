@@ -286,15 +286,23 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     if (shouldLoraWake(msecToWake)) {
         enableLoraInterrupt();
     }
+#if HAS_BUTTON
+    int _buttonPin = -1;
 #ifdef BUTTON_PIN
-    // Avoid leakage through button pin
-    if (GPIO_IS_VALID_OUTPUT_GPIO(BUTTON_PIN)) {
-#ifdef BUTTON_NEED_PULLUP
-        pinMode(BUTTON_PIN, INPUT_PULLUP);
-#else
-        pinMode(BUTTON_PIN, INPUT);
+    _buttonPin = BUTTON_PIN;
 #endif
-        gpio_hold_en((gpio_num_t)BUTTON_PIN);
+    if (config.device.button_gpio)
+        _buttonPin = config.device.button_gpio;
+    if (_buttonPin >= 0) {
+        // Avoid leakage through button pin
+        if (GPIO_IS_VALID_OUTPUT_GPIO(_buttonPin)) {
+#ifdef BUTTON_NEED_PULLUP
+            pinMode(_buttonPin, INPUT_PULLUP);
+#else
+            pinMode(_buttonPin, INPUT);
+#endif
+            gpio_hold_en((gpio_num_t)_buttonPin);
+        }
     }
 #endif
 #ifdef SENSECAP_INDICATOR
@@ -434,9 +442,17 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Side-key interrupt line from PCA9535 expander (active low).
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
 #endif
+#if HAS_BUTTON
+    int _buttonPin = -1;
 #ifdef BUTTON_PIN
-    gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-    gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
+    _buttonPin = BUTTON_PIN;
+#endif
+    if (config.device.button_gpio)
+        _buttonPin = config.device.button_gpio;
+    if (_buttonPin >= 0) {
+        gpio_num_t pin = (gpio_num_t)(_buttonPin);
+        gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
+    }
 #endif
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(INPUTDRIVER_ENCODER_BTN)
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
@@ -484,9 +500,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef BOARD_PCA9535_INT
     gpio_wakeup_disable((gpio_num_t)BOARD_PCA9535_INT);
 #endif
-#ifdef BUTTON_PIN
+#if HAS_BUTTON
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
-    gpio_wakeup_disable(pin);
+    if (_buttonPin >= 0) {
+        gpio_num_t pin = (gpio_num_t)(_buttonPin);
+        gpio_wakeup_disable(pin);
+    }
 #endif
 #ifdef INPUTDRIVER_WAKE_BTN_PIN
     gpio_wakeup_disable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN);
