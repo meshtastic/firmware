@@ -462,8 +462,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
     case ThreadMode::DIRECT: {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentPeer);
-        if (node && node->has_user && node->user.short_name[0]) {
-            snprintf(titleStr, sizeof(titleStr), "@%s", node->user.short_name);
+        if (nodeInfoLiteHasUser(node) && node->short_name[0]) {
+            snprintf(titleStr, sizeof(titleStr), "@%s", node->short_name);
         } else {
             snprintf(titleStr, sizeof(titleStr), "@%08x", currentPeer);
         }
@@ -585,11 +585,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         meshtastic_NodeInfoLite *node_recipient = nodeDB->getMeshNode(m.dest);
 
         char senderName[64] = "";
-        if (node && node->has_user) {
-            if (node->user.long_name[0]) {
-                strncpy(senderName, node->user.long_name, sizeof(senderName) - 1);
-            } else if (node->user.short_name[0]) {
-                strncpy(senderName, node->user.short_name, sizeof(senderName) - 1);
+        if (nodeInfoLiteHasUser(node)) {
+            if (node->long_name[0]) {
+                strncpy(senderName, node->long_name, sizeof(senderName) - 1);
+            } else if (node->short_name[0]) {
+                strncpy(senderName, node->short_name, sizeof(senderName) - 1);
             }
             senderName[sizeof(senderName) - 1] = '\0';
         }
@@ -599,18 +599,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // If this is *our own* message, override senderName to who the recipient was
         bool mine = (m.sender == nodeDB->getNodeNum());
-        if (mine && node_recipient && node_recipient->has_user) {
-            if (node_recipient->user.long_name[0]) {
-                strncpy(senderName, node_recipient->user.long_name, sizeof(senderName) - 1);
+        if (mine && nodeInfoLiteHasUser(node_recipient)) {
+            if (node_recipient->long_name[0]) {
+                strncpy(senderName, node_recipient->long_name, sizeof(senderName) - 1);
                 senderName[sizeof(senderName) - 1] = '\0';
-            } else if (node_recipient->user.short_name[0]) {
-                strncpy(senderName, node_recipient->user.short_name, sizeof(senderName) - 1);
+            } else if (node_recipient->short_name[0]) {
+                strncpy(senderName, node_recipient->short_name, sizeof(senderName) - 1);
                 senderName[sizeof(senderName) - 1] = '\0';
             }
         }
         // If recipient info is missing/empty, prefer a recipient identifier for outbound messages.
-        if (mine && (!node_recipient || !node_recipient->has_user ||
-                     (!node_recipient->user.long_name[0] && !node_recipient->user.short_name[0]))) {
+        if (mine && (!nodeInfoLiteHasUser(node_recipient) || (!node_recipient->long_name[0] && !node_recipient->short_name[0]))) {
             snprintf(senderName, sizeof(senderName), "(%08x)", m.dest);
         }
 
@@ -1073,12 +1072,12 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         // Banner logic
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
         char longName[64] = "?";
-        if (node && node->has_user) {
-            if (node->user.long_name[0]) {
-                strncpy(longName, node->user.long_name, sizeof(longName) - 1);
+        if (nodeInfoLiteHasUser(node)) {
+            if (node->long_name[0]) {
+                strncpy(longName, node->long_name, sizeof(longName) - 1);
                 longName[sizeof(longName) - 1] = '\0';
-            } else if (node->user.short_name[0]) {
-                strncpy(longName, node->user.short_name, sizeof(longName) - 1);
+            } else if (node->short_name[0]) {
+                strncpy(longName, node->short_name, sizeof(longName) - 1);
                 longName[sizeof(longName) - 1] = '\0';
             }
         }

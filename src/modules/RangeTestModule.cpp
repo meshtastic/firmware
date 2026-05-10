@@ -268,26 +268,36 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         fileToAppend.printf("??:??:??,"); // Time
     }
 
-    fileToAppend.printf("%d,", getFrom(&mp));                   // From
-    fileToAppend.printf("%s,", n->user.long_name);              // Long Name
-    fileToAppend.printf("%f,", n->position.latitude_i * 1e-7);  // Sender Lat
-    fileToAppend.printf("%f,", n->position.longitude_i * 1e-7); // Sender Long
+    fileToAppend.printf("%d,", getFrom(&mp));          // From
+    fileToAppend.printf("%s,", n ? n->long_name : ""); // Long Name
+    meshtastic_PositionLite senderPos;
+    const bool haveSenderPos = nodeDB->copyNodePosition(getFrom(&mp), senderPos);
+    if (haveSenderPos) {
+        fileToAppend.printf("%f,", senderPos.latitude_i * 1e-7);  // Sender Lat
+        fileToAppend.printf("%f,", senderPos.longitude_i * 1e-7); // Sender Long
+    } else {
+        fileToAppend.printf("0.0,0.0,");
+    }
     if (gpsStatus->getIsConnected() || config.position.fixed_position) {
         fileToAppend.printf("%f,", gpsStatus->getLatitude() * 1e-7);  // RX Lat
         fileToAppend.printf("%f,", gpsStatus->getLongitude() * 1e-7); // RX Long
         fileToAppend.printf("%d,", gpsStatus->getAltitude());         // RX Altitude
     } else {
         // When the phone API is in use, the node info will be updated with position
-        meshtastic_NodeInfoLite *us = nodeDB->getMeshNode(nodeDB->getNodeNum());
-        fileToAppend.printf("%f,", us->position.latitude_i * 1e-7);  // RX Lat
-        fileToAppend.printf("%f,", us->position.longitude_i * 1e-7); // RX Long
-        fileToAppend.printf("%d,", us->position.altitude);           // RX Altitude
+        meshtastic_PositionLite usPos;
+        if (nodeDB->copyNodePosition(nodeDB->getNodeNum(), usPos)) {
+            fileToAppend.printf("%f,", usPos.latitude_i * 1e-7);  // RX Lat
+            fileToAppend.printf("%f,", usPos.longitude_i * 1e-7); // RX Long
+            fileToAppend.printf("%d,", usPos.altitude);           // RX Altitude
+        } else {
+            fileToAppend.printf("0.0,0.0,0,");
+        }
     }
 
     fileToAppend.printf("%f,", mp.rx_snr); // RX SNR
 
-    if (n->position.latitude_i && n->position.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
-        float distance = GeoCoord::latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
+    if (haveSenderPos && senderPos.latitude_i && senderPos.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
+        float distance = GeoCoord::latLongToMeter(senderPos.latitude_i * 1e-7, senderPos.longitude_i * 1e-7,
                                                   gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
         fileToAppend.printf("%f,", distance); // Distance in meters
     } else {

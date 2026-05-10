@@ -241,7 +241,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
         text += msgIsBroadcast ? "From:" : "DM: ";
 
         // Sender id
-        if (node && node->has_user)
+        if (nodeInfoLiteHasUser(node))
             text += parseShortName(node);
         else
             text += hexifyNodeNum(message->sender);
@@ -255,7 +255,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
             text += msgIsBroadcast ? "Msg from " : "DM from ";
 
             // Sender id
-            if (node && node->has_user)
+            if (nodeInfoLiteHasUser(node))
                 text += parseShortName(node);
             else
                 text += hexifyNodeNum(message->sender);

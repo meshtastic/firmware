@@ -362,8 +362,8 @@ std::string InkHUD::Applet::parseShortName(meshtastic_NodeInfoLite *node)
     assert(node);
 
     // Use the true shortname if known, and doesn't contain any unprintable characters (emoji, etc.)
-    if (node->has_user) {
-        std::string parsed = parse(node->user.short_name);
+    if (nodeInfoLiteHasUser(node)) {
+        std::string parsed = parse(node->short_name);
         if (isPrintable(parsed))
             return parsed;
     }

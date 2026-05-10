@@ -8,7 +8,7 @@ using namespace NicheGraphics;
 bool InkHUD::FavoritesMapApplet::shouldDrawNode(meshtastic_NodeInfoLite *node)
 {
     // Keep our own node available as map anchor/center; all others must be favorited.
-    return node && (node->num == nodeDB->getNodeNum() || node->is_favorite);
+    return node && (node->num == nodeDB->getNodeNum() || nodeInfoLiteIsFavorite(node));
 }
 
 void InkHUD::FavoritesMapApplet::onRender(bool full)
@@ -25,7 +25,7 @@ void InkHUD::FavoritesMapApplet::onRender(bool full)
 
     // Draw our latest "node of interest" as a special marker.
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(lastFrom);
-    if (node && node->is_favorite && nodeDB->hasValidPosition(node) && enoughMarkers())
+    if (node && nodeInfoLiteIsFavorite(node) && nodeDB->hasValidPosition(node) && enoughMarkers())
         drawLabeledMarker(node);
 }
 
@@ -74,7 +74,7 @@ ProcessMessage InkHUD::FavoritesMapApplet::handleReceived(const meshtastic_MeshP
     } else {
         // For non-local packets, this applet only reacts to favorited nodes.
         const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
-        if (!sender || !sender->is_favorite)
+        if (!nodeInfoLiteIsFavorite(sender))
             return ProcessMessage::CONTINUE;
 
         // Check if this position is from someone different than our previous position packet.

@@ -58,7 +58,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
     const char *getSenderShortName(const meshtastic_MeshPacket &mp)
     {
         auto node = nodeDB->getMeshNode(getFrom(&mp));
-        const char *sender = (node) ? node->user.short_name : "???";
+        const char *sender = (node && nodeInfoLiteHasUser(node) && node->short_name[0]) ? node->short_name : "???";
         return sender;
     }
 
