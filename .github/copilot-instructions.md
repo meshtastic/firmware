@@ -196,6 +196,7 @@ firmware/
 - Prefer `LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR` for logging
 - Use `assert()` for invariants that should never fail
 - C++17 features are available (`std::optional`, structured bindings, `if constexpr`, etc.)
+- **Keep code comments minimal — one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
 
 ### Naming Conventions
 

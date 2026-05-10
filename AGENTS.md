@@ -66,6 +66,7 @@ Key rotation to never trigger casually: only the **full** factory reset (`factor
 - **Don't speculate about firmware root causes.** When evidence doesn't support a classification, say "unknown" and list what would disambiguate.
 - **Run `trunk fmt` before proposing a commit.** The `trunk_check` CI gate will reject unformatted code.
 - **`confirm=True` on destructive MCP tools is a real gate, not a formality.** Don't bypass it via auto-approve settings.
+- **Keep code comments minimal — one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
 
 ## Typical agent workflows
 
