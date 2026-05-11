@@ -231,7 +231,6 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     };
 
     std::vector<Entry> entries;
-    float maxDistM = 1.0f;
 
     const int numNodes = nodeDB->getNumMeshNodes();
     for (int i = 0; i < numNodes; i++) {
@@ -247,14 +246,23 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         const float brg = GeoCoord::bearing(myLat, myLon, nodeLat, nodeLon);
 
         entries.push_back({n, dist, brg});
-        if (dist > maxDistM)
-            maxDistM = dist;
     }
-
-    const float scale = niceScaleMeters(maxDistM, s_zoomLevel);
 
     // Sort by distance so entries[0] is always the closest node.
     std::sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) { return a.distM < b.distM; });
+
+    // Auto-scale from only the nodes we will actually plot, so a single
+    // far-away node can't push the scale into a high bucket and squash all
+    // the close nodes into an invisible cluster at the centre.
+    constexpr int kMaxPlotted = 5;
+    float maxDistM = 1.0f;
+    const int plottedCount = std::min((int)entries.size(), kMaxPlotted);
+    for (int i = 0; i < plottedCount; i++) {
+        if (entries[i].distM > maxDistM)
+            maxDistM = entries[i].distM;
+    }
+
+    const float scale = niceScaleMeters(maxDistM, s_zoomLevel);
 
     // -----------------------------------------------------------------------
     // Draw radar chrome: three concentric range rings.
@@ -279,14 +287,24 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     display->setPixel(radarCX, radarCY);
 
     // -----------------------------------------------------------------------
-    // Plot remote nodes — cap at 5 to match the list panel.
+    // Plot remote nodes — cap at kMaxPlotted to match the list panel.
     // -----------------------------------------------------------------------
-    const int maxRows = 5;
-    const int count = (int)entries.size();
-    for (int i = 0; i < count && i < maxRows; i++) {
+    for (int i = 0; i < plottedCount; i++) {
         const Entry &e = entries[i];
         plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad,
                  std::min(e.distM / scale, 1.0f), nodeMarkerIndex(e.node->num));
+    }
+
+    // -----------------------------------------------------------------------
+    // Scale label — outer-ring distance, drawn just inside the bottom of the
+    // radar circle so the user knows the current range at this zoom level.
+    // -----------------------------------------------------------------------
+    {
+        char scaleBuf[12] = "";
+        formatDistM(scaleBuf, sizeof(scaleBuf), scale);
+        display->setFont(FONT_SMALL);
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(radarCX, radarCY + radarRadius - FONT_HEIGHT_SMALL - 1, scaleBuf);
     }
 
     // -----------------------------------------------------------------------
@@ -297,9 +315,9 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
 
-    const int rowPitch = contentH / maxRows;
+    const int rowPitch = contentH / kMaxPlotted;
 
-    for (int i = 0; i < count && i < maxRows; i++) {
+    for (int i = 0; i < plottedCount; i++) {
         const Entry &e = entries[i];
         const int rowY = y + headerH + rowPitch * i;
         const int symCX = x + 3;
