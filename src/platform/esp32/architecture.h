@@ -146,6 +146,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M2
 #elif defined(ELECROW_ThinkNode_M5)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M5
+#elif defined(ELECROW_ThinkNode_M7)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M7
 #elif defined(ESP32_S3_PICO)
 #define HW_VENDOR meshtastic_HardwareModel_ESP32_S3_PICO
 #elif defined(SENSELORA_S3)

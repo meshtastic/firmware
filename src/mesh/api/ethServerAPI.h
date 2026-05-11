@@ -1,11 +1,12 @@
 #pragma once
 
 #include "ServerAPI.h"
-#if !defined(USE_WS5500)
+#if !defined(USE_WS5500) && !defined(USE_CH390D)
 #if defined(WIZNET_5500_EVB_PICO2)
 #include <Ethernet.h>
 #else
 #include <RAK13800_W5100S.h>
+#endif
 #endif
 
 /**

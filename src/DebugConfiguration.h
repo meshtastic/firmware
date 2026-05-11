@@ -13,6 +13,11 @@ extern MemGet memGet;
 #define LED_STATE_ON 1
 #endif
 
+// WIFI LED
+#ifndef WIFI_STATE_ON
+#define WIFI_STATE_ON 1
+#endif
+
 // -----------------------------------------------------------------------------
 // DEBUG
 // -----------------------------------------------------------------------------
@@ -149,6 +154,8 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...);
 
 #if HAS_ETHERNET && defined(WIZNET_5500_EVB_PICO2)
 #include <Ethernet.h> // arduino-libraries/Ethernet — supports W5500 auto-detect
+#elif HAS_ETHERNET && defined(USE_CH390D)
+#include <ESP32_CH390.h>
 #elif HAS_ETHERNET && !defined(USE_WS5500)
 #include <RAK13800_W5100S.h>
 #endif // HAS_ETHERNET
