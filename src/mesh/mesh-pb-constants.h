@@ -37,9 +37,43 @@
 #define MAX_RX_NOTIFICATION_TOPHONE 2
 #endif
 
-/// Verify baseline assumption of node size. If it increases, we need to reevaluate
-/// the impact of its memory footprint, notably on MAX_NUM_NODES.
-static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
+/// Tighten this when the slim header shrinks; loosen only with deliberate
+/// awareness of MAX_NUM_NODES impact per platform.
+static_assert(sizeof(meshtastic_NodeInfoLite) <= 130, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
+
+// Compile satellite NodeDBs out on STM32WL (and the status DB also follows
+// MESHTASTIC_EXCLUDE_STATUS).
+#ifndef MESHTASTIC_EXCLUDE_POSITIONDB
+#if defined(ARCH_STM32WL)
+#define MESHTASTIC_EXCLUDE_POSITIONDB 1
+#else
+#define MESHTASTIC_EXCLUDE_POSITIONDB 0
+#endif
+#endif
+
+#ifndef MESHTASTIC_EXCLUDE_TELEMETRYDB
+#if defined(ARCH_STM32WL)
+#define MESHTASTIC_EXCLUDE_TELEMETRYDB 1
+#else
+#define MESHTASTIC_EXCLUDE_TELEMETRYDB 0
+#endif
+#endif
+
+#ifndef MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+#if defined(ARCH_STM32WL)
+#define MESHTASTIC_EXCLUDE_ENVIRONMENTDB 1
+#else
+#define MESHTASTIC_EXCLUDE_ENVIRONMENTDB 0
+#endif
+#endif
+
+#ifndef MESHTASTIC_EXCLUDE_STATUSDB
+#if defined(ARCH_STM32WL) || defined(MESHTASTIC_EXCLUDE_STATUS)
+#define MESHTASTIC_EXCLUDE_STATUSDB 1
+#else
+#define MESHTASTIC_EXCLUDE_STATUSDB 0
+#endif
+#endif
 
 /// max number of nodes allowed in the nodeDB
 #ifndef MAX_NUM_NODES
