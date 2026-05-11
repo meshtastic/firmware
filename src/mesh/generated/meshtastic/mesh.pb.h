@@ -294,6 +294,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_THINKNODE_M4 = 119,
     /* Elecrow ThinkNode M6 */
     meshtastic_HardwareModel_THINKNODE_M6 = 120,
+    /* Elecrow ThinkNode M7, M8 and M9 */
+    meshtastic_HardwareModel_THINKNODE_M7 = 129,
+    meshtastic_HardwareModel_THINKNODE_M8 = 130,
+    meshtastic_HardwareModel_THINKNODE_M9 = 131,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
