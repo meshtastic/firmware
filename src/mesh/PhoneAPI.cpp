@@ -553,8 +553,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             prefetchNodeInfos();
         } else {
             LOG_DEBUG("Done sending %d of %d nodeinfos millis=%u", readIndex, nodeDB->getNumMeshNodes(), millis());
-            concurrency::LockGuard guard(&nodeInfoMutex);
+            nodeInfoMutex.lock();
             nodeInfoQueue.clear();
+            nodeInfoMutex.unlock();
             // Replay states no-op for legacy clients / excluded DBs.
             state = STATE_REPLAY_POSITIONS;
             return getFromRadio(buf);
