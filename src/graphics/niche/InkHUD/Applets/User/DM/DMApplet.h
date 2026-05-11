@@ -3,7 +3,7 @@
 /*
 
 Shows the latest incoming *Direct Message* (DM), as well as sender.
-This compliments the threaded message applets
+This complements the threaded message applets
 
 This module doesn't collect its own text message. Instead, the WindowManager stores the most recent incoming text message.
 This is available to any interested modules (SingeMessageApplet, NotificationApplet etc.) via InkHUD::latestMessage
