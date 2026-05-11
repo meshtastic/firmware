@@ -45,7 +45,7 @@ class MockNodeDB : public NodeDB
         node.num = num;
         node.has_hops_away = hasHops;
         node.hops_away = hopsAway;
-        node.via_mqtt = viaMqtt;
+        nodeInfoLiteSetBit(&node, NODEINFO_BITFIELD_VIA_MQTT_MASK, viaMqtt);
         node.last_heard = getTime() - ageSecs;
         testNodes.push_back(node);
         meshNodes = &testNodes;
