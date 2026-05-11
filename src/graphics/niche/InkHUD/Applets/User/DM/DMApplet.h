@@ -5,7 +5,6 @@
 Shows the latest incoming *Direct Message* (DM), as well as sender.
 This compliments the threaded message applets
 
-This module doesn't doesn't use the devicestate.rx_text_message,' as this is overwritten to contain outgoing messages
 This module doesn't collect its own text message. Instead, the WindowManager stores the most recent incoming text message.
 This is available to any interested modules (SingeMessageApplet, NotificationApplet etc.) via InkHUD::latestMessage
 
