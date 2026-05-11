@@ -3,6 +3,7 @@
 #include "CompassRenderer.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
+#include "RadarRenderer.h"
 #if !MESHTASTIC_EXCLUDE_STATUS
 #include "modules/StatusMessageModule.h"
 #endif
@@ -831,6 +832,17 @@ void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *st
         lastSwitchTime = now;
     }
 #endif
+
+    // === Radar overlay mode ===
+    // When bearings_view_radar is enabled (toggled via long-press menu →
+    // Tracking View), the bearings/distance frame is replaced by the
+    // circular radar minimap.
+    if (uiconfig.bearings_view_radar) {
+        graphics::drawCommonHeader(display, x, y, "Radar");
+        graphics::RadarRenderer::drawRadarOverlay(display, x, y);
+        graphics::drawCommonFooter(display, x, y);
+        return;
+    }
     // On very first call (on boot or state enter)
     if (lastRenderedMode == MODE_COUNT_LOCATION) {
         currentMode_Location = MODE_DISTANCE;

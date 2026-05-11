@@ -10,12 +10,11 @@ namespace graphics
 class Screen;
 
 /**
- * @brief Radar overlay for the compass/position screen.
+ * @brief Radar overlay shown in place of the bearings/distance frame.
  *
- * Draws a node list on the left and a circular radar minimap on the right,
- * replacing the GPS text shown in compass mode.  The user's node sits at the
- * centre; remote nodes with valid positions are plotted as small markers at
- * their true bearing and proportional distance.
+ * Draws a node list on the left and a circular radar minimap on the right.
+ * The user's node sits at the centre; remote nodes with valid positions are
+ * plotted as small markers at their true bearing and proportional distance.
  *
  * When the BMX160 (RAK12034) is connected the radar is heading-up (the
  * direction the device faces is at the top).  A "N" label rotates to show
@@ -26,10 +25,10 @@ class Screen;
 namespace RadarRenderer
 {
 
-// ---- Content-area renderer (called from drawCompassAndLocationScreen) -------
+// ---- Content-area renderer (called from drawDynamicListScreen_Location) -----
 void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y);
 
-// ---- Runtime state (controlled by radarPositionMenu) ------------------------
+// ---- Runtime state (controlled by radarBearingsMenu) ------------------------
 
 /** Returns true when forced north-up is active (overriding IMU). */
 bool isNorthUp();

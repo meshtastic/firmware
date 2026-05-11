@@ -18,7 +18,7 @@ namespace RadarRenderer
 {
 
 // ---------------------------------------------------------------------------
-// Runtime state (toggled by radarPositionMenu)
+// Runtime state (toggled by radarBearingsMenu)
 // ---------------------------------------------------------------------------
 
 static bool s_forceNorthUp = false; // override IMU → fixed north-up
@@ -160,7 +160,7 @@ static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bea
  *   - Right side: circular radar with 2 px padding on all sides
  *   - Left side: node list (up to 4 closest nodes, marker + name + distance)
  *
- * Called from UIRenderer::drawCompassAndLocationScreen when uiconfig.radar_mode
+ * Called from NodeListRenderer::drawDynamicListScreen_Location when uiconfig.bearings_view_radar
  * is true.  The caller draws the header and footer; this function handles the
  * content area only.
  */

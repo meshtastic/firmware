@@ -455,34 +455,35 @@ void menuHandler::showConfirmationBanner(const char *message, std::function<void
     screen->showOverlayBanner(confirmBanner);
 }
 
-// Where compassFacePicker should return when the user picks "Back".  Set by
-// the calling menu (PositionBaseMenu or the radar-mode banner) just before
-// queueing the picker, so back behaves like the Clock Face → Clock Menu flow.
-static menuHandler::screenMenus s_compassFacePickerReturn = menuHandler::MenuNone;
+// Where trackingViewPicker should return when the user picks "Back".  Set by
+// the calling menu (nodeListMenu or radarBearingsMenu) just before queueing
+// the picker, so back behaves like the Clock Face → Clock Menu flow.
+static menuHandler::screenMenus s_trackingViewPickerReturn = menuHandler::MenuNone;
 
-void menuHandler::setCompassFacePickerReturn(screenMenus target)
+void menuHandler::setTrackingViewPickerReturn(screenMenus target)
 {
-    s_compassFacePickerReturn = target;
+    s_trackingViewPickerReturn = target;
 }
 
-void menuHandler::compassFacePicker()
+void menuHandler::trackingViewPicker()
 {
-    // Mirrors clockFacePicker: pick between the standard Compass screen and the
-    // Radar overlay.  Stored in uiconfig.radar_mode (false=Compass, true=Radar).
-    static const ClockFaceOption compassFaceOptions[] = {
+    // Mirrors clockFacePicker: pick which view the bearings/distance frame
+    // shows.  Stored in uiconfig.bearings_view_radar (false=Bearings list,
+    // true=Radar overlay).
+    static const ClockFaceOption trackingOptions[] = {
         {"Back", OptionsAction::Back},
-        {"Compass", OptionsAction::Select, false},
+        {"Bearings", OptionsAction::Select, false},
         {"Radar", OptionsAction::Select, true},
     };
 
-    constexpr size_t compassFaceCount = sizeof(compassFaceOptions) / sizeof(compassFaceOptions[0]);
-    static std::array<const char *, compassFaceCount> compassFaceLabels{};
+    constexpr size_t trackingCount = sizeof(trackingOptions) / sizeof(trackingOptions[0]);
+    static std::array<const char *, trackingCount> trackingLabels{};
 
-    auto bannerOptions = createStaticBannerOptions("Which Face?", compassFaceOptions, compassFaceLabels,
+    auto bannerOptions = createStaticBannerOptions("Tracking View?", trackingOptions, trackingLabels,
                                                    [](const ClockFaceOption &option, int) -> void {
                                                        if (option.action == OptionsAction::Back) {
-                                                           menuHandler::menuQueue = s_compassFacePickerReturn;
-                                                           if (s_compassFacePickerReturn != MenuNone)
+                                                           menuHandler::menuQueue = s_trackingViewPickerReturn;
+                                                           if (s_trackingViewPickerReturn != MenuNone)
                                                                screen->runNow();
                                                            return;
                                                        }
@@ -491,17 +492,17 @@ void menuHandler::compassFacePicker()
                                                            return;
                                                        }
 
-                                                       if (uiconfig.radar_mode == option.value) {
+                                                       if (uiconfig.bearings_view_radar == option.value) {
                                                            return;
                                                        }
 
-                                                       uiconfig.radar_mode = option.value;
+                                                       uiconfig.bearings_view_radar = option.value;
                                                        menuHandler::saveUIConfig();
                                                        screen->setFrames(Screen::FOCUS_PRESERVE);
                                                        screen->runNow();
                                                    });
 
-    bannerOptions.InitialSelected = uiconfig.radar_mode ? 2 : 1;
+    bannerOptions.InitialSelected = uiconfig.bearings_view_radar ? 2 : 1;
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -1300,12 +1301,10 @@ void menuHandler::positionBaseMenu()
         GPSSmartPosition,
         GPSUpdateInterval,
         GPSPositionBroadcast,
-        CompassFace,
     };
 
     static const PositionMenuOption baseOptions[] = {
         {"Back", OptionsAction::Back},
-        {"Compass Face", OptionsAction::Select, static_cast<int>(PositionAction::CompassFace)},
         {"On/Off Toggle", OptionsAction::Select, static_cast<int>(PositionAction::GpsToggle)},
         {"Format", OptionsAction::Select, static_cast<int>(PositionAction::GpsFormat)},
         {"Smart Position", OptionsAction::Select, static_cast<int>(PositionAction::GPSSmartPosition)},
@@ -1316,7 +1315,6 @@ void menuHandler::positionBaseMenu()
 
     static const PositionMenuOption calibrateOptions[] = {
         {"Back", OptionsAction::Back},
-        {"Compass Face", OptionsAction::Select, static_cast<int>(PositionAction::CompassFace)},
         {"On/Off Toggle", OptionsAction::Select, static_cast<int>(PositionAction::GpsToggle)},
         {"Format", OptionsAction::Select, static_cast<int>(PositionAction::GpsFormat)},
         {"Smart Position", OptionsAction::Select, static_cast<int>(PositionAction::GPSSmartPosition)},
@@ -1375,11 +1373,6 @@ void menuHandler::positionBaseMenu()
             menuQueue = GpsPositionBroadcastMenu;
             screen->runNow();
             break;
-        case PositionAction::CompassFace:
-            setCompassFacePickerReturn(PositionBaseMenu);
-            menuQueue = CompassFacePicker;
-            screen->runNow();
-            break;
         }
     };
 
@@ -1397,18 +1390,18 @@ void menuHandler::positionBaseMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-void menuHandler::radarPositionMenu()
+void menuHandler::radarBearingsMenu()
 {
-    enum optionsNumbers { Back, CompassFace, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut };
+    enum optionsNumbers { Back, TrackingView, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut };
     static const char *optionsArray[] = {
         "Back",
-        "Compass Face",
+        "Tracking View",
         nullptr, // ToggleHeading — filled dynamically below
         nullptr, // ToggleFavorites — filled dynamically below
         "Zoom In",
         "Zoom Out",
     };
-    static int optionsEnumArray[] = {Back, CompassFace, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut};
+    static int optionsEnumArray[] = {Back, TrackingView, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut};
 
     optionsArray[ToggleHeading] = graphics::RadarRenderer::isNorthUp() ? "Switch to HDG-UP" : "Switch to N-UP";
     optionsArray[ToggleFavorites] = uiconfig.radar_favorites_only ? "Show: All Nodes" : "Show: Favorites Only";
@@ -1422,11 +1415,11 @@ void menuHandler::radarPositionMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             screen->setFrames(Screen::FOCUS_PRESERVE);
-        } else if (selected == CompassFace) {
-            // Radar menu has no own enum (invoked directly from input handler),
-            // so back from the picker just dismisses to the screen.
-            setCompassFacePickerReturn(MenuNone);
-            menuQueue = CompassFacePicker;
+        } else if (selected == TrackingView) {
+            // Radar bearings menu has no enum value (invoked directly from input
+            // handler), so back from the picker just dismisses to the screen.
+            setTrackingViewPickerReturn(MenuNone);
+            menuQueue = TrackingViewPicker;
             screen->runNow();
         } else if (selected == ToggleHeading) {
             graphics::RadarRenderer::toggleNorthUp();
@@ -1452,13 +1445,18 @@ void menuHandler::radarPositionMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, NodePicker, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
+    enum optionsNumbers { Back, NodePicker, TrackingView, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
     optionsArray[options] = "Node Actions / Settings";
     optionsEnumArray[options++] = NodePicker;
+
+#if HAS_GPS
+    optionsArray[options] = "Tracking View";
+    optionsEnumArray[options++] = TrackingView;
+#endif
 
     if (currentResolution != ScreenResolution::UltraLow) {
         optionsArray[options] = "Show Long/Short Name";
@@ -1475,6 +1473,10 @@ void menuHandler::nodeListMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == NodePicker) {
             menuQueue = NodePickerMenu;
+            screen->runNow();
+        } else if (selected == TrackingView) {
+            setTrackingViewPickerReturn(NodeBaseMenu);
+            menuQueue = TrackingViewPicker;
             screen->runNow();
         } else if (selected == Reset) {
             menuQueue = ResetNodeDbMenu;
@@ -2786,8 +2788,8 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case ClockMenu:
         clockMenu();
         break;
-    case CompassFacePicker:
-        compassFacePicker();
+    case TrackingViewPicker:
+        trackingViewPicker();
         break;
     case SystemBaseMenu:
         systemBaseMenu();
