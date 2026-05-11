@@ -7,7 +7,6 @@
 #else
 #include <RAK13800_W5100S.h>
 #endif
-#endif
 
 /**
  * Provides both debug printing and, if the client starts sending protobufs to us, switches to send/receive protobufs
