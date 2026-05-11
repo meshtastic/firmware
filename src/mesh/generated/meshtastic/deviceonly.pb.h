@@ -63,43 +63,35 @@ typedef struct _meshtastic_UserLite {
     bool is_unmessagable;
 } meshtastic_UserLite;
 
+typedef PB_BYTES_ARRAY_T(32) meshtastic_NodeInfoLite_public_key_t;
 typedef struct _meshtastic_NodeInfoLite {
     /* The node number */
     uint32_t num;
-    /* The user info for this node */
-    bool has_user;
-    meshtastic_UserLite user;
-    /* This position data. Note: before 1.2.14 we would also store the last time we've heard from this node in position.time, that is no longer true.
- Position.time now indicates the last time we received a POSITION from that node. */
-    bool has_position;
-    meshtastic_PositionLite position;
     /* Returns the Signal-to-noise ratio (SNR) of the last received message,
  as measured by the receiver. Return SNR of the last received message in dB */
     float snr;
     /* Set to indicate the last time we received a packet from this node */
     uint32_t last_heard;
-    /* The latest device metrics for the node. */
-    bool has_device_metrics;
-    meshtastic_DeviceMetrics device_metrics;
     /* local channel index we heard that node on. Only populated if its not the default channel. */
     uint8_t channel;
-    /* True if we witnessed the node over MQTT instead of LoRA transport */
-    bool via_mqtt;
     /* Number of hops away from us this node is (0 if direct neighbor) */
     bool has_hops_away;
     uint8_t hops_away;
-    /* True if node is in our favorites list
- Persists between NodeDB internal clean ups */
-    bool is_favorite;
-    /* True if node is in our ignored list
- Persists between NodeDB internal clean ups */
-    bool is_ignored;
     /* Last byte of the node number of the node that should be used as the next hop to reach this node. */
     uint8_t next_hop;
-    /* Bitfield for storing booleans.
- LSB 0 is_key_manually_verified
- LSB 1 is_muted */
+    /* Bitfield for storing booleans. See NODEINFO_BITFIELD_* in src/mesh/NodeDB.h. */
     uint32_t bitfield;
+    /* A full name for this user, i.e. "Kevin Hester". */
+    char long_name[25];
+    /* A VERY short name, ideally two characters or an emoji.
+ Suitable for a tiny OLED screen. */
+    char short_name[5];
+    /* Hardware model the user's device is running. */
+    meshtastic_HardwareModel hw_model;
+    /* The user's role in the mesh. */
+    meshtastic_Config_DeviceConfig_Role role;
+    /* The public key of the user's device, for PKI-based encrypted DMs. */
+    meshtastic_NodeInfoLite_public_key_t public_key;
 } meshtastic_NodeInfoLite;
 
 /* This message is never sent over the wire, but it is used for serializing DB
@@ -143,6 +135,30 @@ typedef struct _meshtastic_DeviceState {
     meshtastic_NodeRemoteHardwarePin node_remote_hardware_pins[12];
 } meshtastic_DeviceState;
 
+typedef struct _meshtastic_NodePositionEntry {
+    uint32_t num;
+    bool has_position;
+    meshtastic_PositionLite position;
+} meshtastic_NodePositionEntry;
+
+typedef struct _meshtastic_NodeTelemetryEntry {
+    uint32_t num;
+    bool has_device_metrics;
+    meshtastic_DeviceMetrics device_metrics;
+} meshtastic_NodeTelemetryEntry;
+
+typedef struct _meshtastic_NodeEnvironmentEntry {
+    uint32_t num;
+    bool has_environment_metrics;
+    meshtastic_EnvironmentMetrics environment_metrics;
+} meshtastic_NodeEnvironmentEntry;
+
+typedef struct _meshtastic_NodeStatusEntry {
+    uint32_t num;
+    bool has_status;
+    meshtastic_StatusMessage status;
+} meshtastic_NodeStatusEntry;
+
 typedef struct _meshtastic_NodeDatabase {
     /* A version integer used to invalidate old save files when we make
  incompatible changes This integer is set at build time and is private to
@@ -150,6 +166,12 @@ typedef struct _meshtastic_NodeDatabase {
     uint32_t version;
     /* New lite version of NodeDB to decrease memory footprint */
     std::vector<meshtastic_NodeInfoLite> nodes;
+    /* Per-NodeNum satellite arrays. Constrained platforms (e.g. STM32WL) omit
+ these via MESHTASTIC_EXCLUDE_*DB build flags. */
+    std::vector<meshtastic_NodePositionEntry> positions;
+    std::vector<meshtastic_NodeTelemetryEntry> telemetry;
+    std::vector<meshtastic_NodeStatusEntry> status;
+    std::vector<meshtastic_NodeEnvironmentEntry> environment;
 } meshtastic_NodeDatabase;
 
 /* The on-disk saved channels */
@@ -191,16 +213,24 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
 #define meshtastic_UserLite_init_default         {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
-#define meshtastic_NodeInfoLite_init_default     {0, false, meshtastic_UserLite_init_default, false, meshtastic_PositionLite_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0}
+#define meshtastic_NodeInfoLite_init_default     {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
 #define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
-#define meshtastic_NodeDatabase_init_default     {0, {0}}
+#define meshtastic_NodePositionEntry_init_default {0, false, meshtastic_PositionLite_init_default}
+#define meshtastic_NodeTelemetryEntry_init_default {0, false, meshtastic_DeviceMetrics_init_default}
+#define meshtastic_NodeEnvironmentEntry_init_default {0, false, meshtastic_EnvironmentMetrics_init_default}
+#define meshtastic_NodeStatusEntry_init_default  {0, false, meshtastic_StatusMessage_init_default}
+#define meshtastic_NodeDatabase_init_default     {0, {0}, {0}, {0}, {0}, {0}}
 #define meshtastic_ChannelFile_init_default      {0, {meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default}, 0}
 #define meshtastic_BackupPreferences_init_default {0, 0, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default, false, meshtastic_ChannelFile_init_default, false, meshtastic_User_init_default}
 #define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
 #define meshtastic_UserLite_init_zero            {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
-#define meshtastic_NodeInfoLite_init_zero        {0, false, meshtastic_UserLite_init_zero, false, meshtastic_PositionLite_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0}
+#define meshtastic_NodeInfoLite_init_zero        {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
 #define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
-#define meshtastic_NodeDatabase_init_zero        {0, {0}}
+#define meshtastic_NodePositionEntry_init_zero   {0, false, meshtastic_PositionLite_init_zero}
+#define meshtastic_NodeTelemetryEntry_init_zero  {0, false, meshtastic_DeviceMetrics_init_zero}
+#define meshtastic_NodeEnvironmentEntry_init_zero {0, false, meshtastic_EnvironmentMetrics_init_zero}
+#define meshtastic_NodeStatusEntry_init_zero     {0, false, meshtastic_StatusMessage_init_zero}
+#define meshtastic_NodeDatabase_init_zero        {0, {0}, {0}, {0}, {0}, {0}}
 #define meshtastic_ChannelFile_init_zero         {0, {meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero}, 0}
 #define meshtastic_BackupPreferences_init_zero   {0, 0, false, meshtastic_LocalConfig_init_zero, false, meshtastic_LocalModuleConfig_init_zero, false, meshtastic_ChannelFile_init_zero, false, meshtastic_User_init_zero}
 
@@ -219,18 +249,17 @@ extern "C" {
 #define meshtastic_UserLite_public_key_tag       7
 #define meshtastic_UserLite_is_unmessagable_tag  9
 #define meshtastic_NodeInfoLite_num_tag          1
-#define meshtastic_NodeInfoLite_user_tag         2
-#define meshtastic_NodeInfoLite_position_tag     3
 #define meshtastic_NodeInfoLite_snr_tag          4
 #define meshtastic_NodeInfoLite_last_heard_tag   5
-#define meshtastic_NodeInfoLite_device_metrics_tag 6
 #define meshtastic_NodeInfoLite_channel_tag      7
-#define meshtastic_NodeInfoLite_via_mqtt_tag     8
 #define meshtastic_NodeInfoLite_hops_away_tag    9
-#define meshtastic_NodeInfoLite_is_favorite_tag  10
-#define meshtastic_NodeInfoLite_is_ignored_tag   11
 #define meshtastic_NodeInfoLite_next_hop_tag     12
 #define meshtastic_NodeInfoLite_bitfield_tag     13
+#define meshtastic_NodeInfoLite_long_name_tag    14
+#define meshtastic_NodeInfoLite_short_name_tag   15
+#define meshtastic_NodeInfoLite_hw_model_tag     16
+#define meshtastic_NodeInfoLite_role_tag         17
+#define meshtastic_NodeInfoLite_public_key_tag   18
 #define meshtastic_DeviceState_my_node_tag       2
 #define meshtastic_DeviceState_owner_tag         3
 #define meshtastic_DeviceState_receive_queue_tag 5
@@ -240,8 +269,20 @@ extern "C" {
 #define meshtastic_DeviceState_did_gps_reset_tag 11
 #define meshtastic_DeviceState_rx_waypoint_tag   12
 #define meshtastic_DeviceState_node_remote_hardware_pins_tag 13
+#define meshtastic_NodePositionEntry_num_tag     1
+#define meshtastic_NodePositionEntry_position_tag 2
+#define meshtastic_NodeTelemetryEntry_num_tag    1
+#define meshtastic_NodeTelemetryEntry_device_metrics_tag 2
+#define meshtastic_NodeEnvironmentEntry_num_tag  1
+#define meshtastic_NodeEnvironmentEntry_environment_metrics_tag 2
+#define meshtastic_NodeStatusEntry_num_tag       1
+#define meshtastic_NodeStatusEntry_status_tag    2
 #define meshtastic_NodeDatabase_version_tag      1
 #define meshtastic_NodeDatabase_nodes_tag        2
+#define meshtastic_NodeDatabase_positions_tag    3
+#define meshtastic_NodeDatabase_telemetry_tag    4
+#define meshtastic_NodeDatabase_status_tag       5
+#define meshtastic_NodeDatabase_environment_tag  6
 #define meshtastic_ChannelFile_channels_tag      1
 #define meshtastic_ChannelFile_version_tag       2
 #define meshtastic_BackupPreferences_version_tag 1
@@ -275,23 +316,19 @@ X(a, STATIC,   OPTIONAL, BOOL,     is_unmessagable,   9)
 
 #define meshtastic_NodeInfoLite_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               4) \
 X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6) \
 X(a, STATIC,   SINGULAR, UINT32,   channel,           7) \
-X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,          8) \
 X(a, STATIC,   OPTIONAL, UINT32,   hops_away,         9) \
-X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10) \
-X(a, STATIC,   SINGULAR, BOOL,     is_ignored,       11) \
 X(a, STATIC,   SINGULAR, UINT32,   next_hop,         12) \
-X(a, STATIC,   SINGULAR, UINT32,   bitfield,         13)
+X(a, STATIC,   SINGULAR, UINT32,   bitfield,         13) \
+X(a, STATIC,   SINGULAR, STRING,   long_name,        14) \
+X(a, STATIC,   SINGULAR, STRING,   short_name,       15) \
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,         16) \
+X(a, STATIC,   SINGULAR, UENUM,    role,             17) \
+X(a, STATIC,   SINGULAR, BYTES,    public_key,       18)
 #define meshtastic_NodeInfoLite_CALLBACK NULL
 #define meshtastic_NodeInfoLite_DEFAULT NULL
-#define meshtastic_NodeInfoLite_user_MSGTYPE meshtastic_UserLite
-#define meshtastic_NodeInfoLite_position_MSGTYPE meshtastic_PositionLite
-#define meshtastic_NodeInfoLite_device_metrics_MSGTYPE meshtastic_DeviceMetrics
 
 #define meshtastic_DeviceState_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  my_node,           2) \
@@ -312,13 +349,49 @@ X(a, STATIC,   REPEATED, MESSAGE,  node_remote_hardware_pins,  13)
 #define meshtastic_DeviceState_rx_waypoint_MSGTYPE meshtastic_MeshPacket
 #define meshtastic_DeviceState_node_remote_hardware_pins_MSGTYPE meshtastic_NodeRemoteHardwarePin
 
+#define meshtastic_NodePositionEntry_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  position,          2)
+#define meshtastic_NodePositionEntry_CALLBACK NULL
+#define meshtastic_NodePositionEntry_DEFAULT NULL
+#define meshtastic_NodePositionEntry_position_MSGTYPE meshtastic_PositionLite
+
+#define meshtastic_NodeTelemetryEntry_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    2)
+#define meshtastic_NodeTelemetryEntry_CALLBACK NULL
+#define meshtastic_NodeTelemetryEntry_DEFAULT NULL
+#define meshtastic_NodeTelemetryEntry_device_metrics_MSGTYPE meshtastic_DeviceMetrics
+
+#define meshtastic_NodeEnvironmentEntry_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  environment_metrics,   2)
+#define meshtastic_NodeEnvironmentEntry_CALLBACK NULL
+#define meshtastic_NodeEnvironmentEntry_DEFAULT NULL
+#define meshtastic_NodeEnvironmentEntry_environment_metrics_MSGTYPE meshtastic_EnvironmentMetrics
+
+#define meshtastic_NodeStatusEntry_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  status,            2)
+#define meshtastic_NodeStatusEntry_CALLBACK NULL
+#define meshtastic_NodeStatusEntry_DEFAULT NULL
+#define meshtastic_NodeStatusEntry_status_MSGTYPE meshtastic_StatusMessage
+
 #define meshtastic_NodeDatabase_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   version,           1) \
-X(a, CALLBACK, REPEATED, MESSAGE,  nodes,             2)
+X(a, CALLBACK, REPEATED, MESSAGE,  nodes,             2) \
+X(a, CALLBACK, REPEATED, MESSAGE,  positions,         3) \
+X(a, CALLBACK, REPEATED, MESSAGE,  telemetry,         4) \
+X(a, CALLBACK, REPEATED, MESSAGE,  status,            5) \
+X(a, CALLBACK, REPEATED, MESSAGE,  environment,       6)
 extern bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field);
 #define meshtastic_NodeDatabase_CALLBACK meshtastic_NodeDatabase_callback
 #define meshtastic_NodeDatabase_DEFAULT NULL
 #define meshtastic_NodeDatabase_nodes_MSGTYPE meshtastic_NodeInfoLite
+#define meshtastic_NodeDatabase_positions_MSGTYPE meshtastic_NodePositionEntry
+#define meshtastic_NodeDatabase_telemetry_MSGTYPE meshtastic_NodeTelemetryEntry
+#define meshtastic_NodeDatabase_status_MSGTYPE meshtastic_NodeStatusEntry
+#define meshtastic_NodeDatabase_environment_MSGTYPE meshtastic_NodeEnvironmentEntry
 
 #define meshtastic_ChannelFile_FIELDLIST(X, a) \
 X(a, STATIC,   REPEATED, MESSAGE,  channels,          1) \
@@ -345,6 +418,10 @@ extern const pb_msgdesc_t meshtastic_PositionLite_msg;
 extern const pb_msgdesc_t meshtastic_UserLite_msg;
 extern const pb_msgdesc_t meshtastic_NodeInfoLite_msg;
 extern const pb_msgdesc_t meshtastic_DeviceState_msg;
+extern const pb_msgdesc_t meshtastic_NodePositionEntry_msg;
+extern const pb_msgdesc_t meshtastic_NodeTelemetryEntry_msg;
+extern const pb_msgdesc_t meshtastic_NodeEnvironmentEntry_msg;
+extern const pb_msgdesc_t meshtastic_NodeStatusEntry_msg;
 extern const pb_msgdesc_t meshtastic_NodeDatabase_msg;
 extern const pb_msgdesc_t meshtastic_ChannelFile_msg;
 extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
@@ -354,6 +431,10 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 #define meshtastic_UserLite_fields &meshtastic_UserLite_msg
 #define meshtastic_NodeInfoLite_fields &meshtastic_NodeInfoLite_msg
 #define meshtastic_DeviceState_fields &meshtastic_DeviceState_msg
+#define meshtastic_NodePositionEntry_fields &meshtastic_NodePositionEntry_msg
+#define meshtastic_NodeTelemetryEntry_fields &meshtastic_NodeTelemetryEntry_msg
+#define meshtastic_NodeEnvironmentEntry_fields &meshtastic_NodeEnvironmentEntry_msg
+#define meshtastic_NodeStatusEntry_fields &meshtastic_NodeStatusEntry_msg
 #define meshtastic_NodeDatabase_fields &meshtastic_NodeDatabase_msg
 #define meshtastic_ChannelFile_fields &meshtastic_ChannelFile_msg
 #define meshtastic_BackupPreferences_fields &meshtastic_BackupPreferences_msg
@@ -361,10 +442,14 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 /* Maximum encoded size of messages (where known) */
 /* meshtastic_NodeDatabase_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_BackupPreferences_size
-#define meshtastic_BackupPreferences_size        2429
+#define meshtastic_BackupPreferences_size        2432
 #define meshtastic_ChannelFile_size              718
 #define meshtastic_DeviceState_size              1737
-#define meshtastic_NodeInfoLite_size             196
+#define meshtastic_NodeEnvironmentEntry_size     170
+#define meshtastic_NodeInfoLite_size             105
+#define meshtastic_NodePositionEntry_size        36
+#define meshtastic_NodeStatusEntry_size          89
+#define meshtastic_NodeTelemetryEntry_size       35
 #define meshtastic_PositionLite_size             28
 #define meshtastic_UserLite_size                 98
 

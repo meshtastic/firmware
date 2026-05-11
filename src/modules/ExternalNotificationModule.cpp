@@ -203,6 +203,10 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
     default:
         if (output > 0)
             digitalWrite(output, (moduleConfig.external_notification.active ? on : !on));
+#ifdef PCA_LED_NOTIFICATION
+        io.digitalWrite(PCA_LED_NOTIFICATION, on);
+
+#endif
         break;
     }
 
@@ -368,7 +372,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             // If we receive a direct message and the receipent is us, apply DM mute setting
             // Else we just handle it as not muted.
             const bool isDmToUs = !isBroadcast(mp.to) && isToUs(&mp);
-            bool is_muted = isDmToUs ? (sender && ((sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0))
+            bool is_muted = isDmToUs ? nodeInfoLiteIsMuted(sender)
                                      : (ch.settings.has_module_settings && ch.settings.module_settings.is_muted);
 
             const bool buzzerModeIsDirectOnly =

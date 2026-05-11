@@ -136,7 +136,9 @@ bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint1
     return match;
 }
 
-/// for SEN5X detection
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+// FIXME Move to a separate file for detection of sensors that require more complex interactions?
+// For SEN5X detection
 // Note, this code needs to be called before setting the I2C bus speed
 // for the screen at high speed. The speed needs to be at 100kHz, otherwise
 // detection will not work
@@ -174,6 +176,46 @@ String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
 
     return String(productName);
 }
+#endif
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
+{
+
+    i2cBus->beginTransmission(address);
+    i2cBus->write(0xFA);
+    i2cBus->write(0x0F);
+
+    if (i2cBus->endTransmission() != 0)
+        return false;
+
+    if (i2cBus->requestFrom(address, (uint8_t)8) != 8)
+        return false;
+
+    // Just flush the data
+    while (i2cBus->available() < 8) {
+        i2cBus->read();
+    }
+
+    i2cBus->beginTransmission(address);
+    i2cBus->write(0xFC);
+    i2cBus->write(0xC9);
+
+    if (i2cBus->endTransmission() != 0)
+        return false;
+
+    if (i2cBus->requestFrom(address, (uint8_t)6) != 6)
+        return false;
+
+    // Just flush the data
+    while (i2cBus->available() < 6) {
+        i2cBus->read();
+    }
+
+    // Assume we detect the SHT21 if something came back from the request
+    return true;
+}
+#endif
 
 #define SCAN_SIMPLE_CASE(ADDR, T, ...)                                                                                           \
     case ADDR:                                                                                                                   \
@@ -371,27 +413,47 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 #endif
 #if !defined(M5STACK_UNITC6L)
-            case INA_ADDR:
+            case INA_ADDR: // Same as SHT2X
             case INA_ADDR_ALTERNATE:
-            case INA_ADDR_WAVESHARE_UPS:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
-                LOG_DEBUG("Register MFG_UID: 0x%x", registerValue);
-                if (registerValue == 0x5449) {
-                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2);
-                    LOG_DEBUG("Register DIE_UID: 0x%x", registerValue);
+            case INA_ADDR_WAVESHARE_UPS: {
+                uint16_t mfg = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
 
-                    if (registerValue == 0x2260) {
+                LOG_DEBUG("Register MFG_UID: 0x%x", mfg);
+
+                // Only read DIE_UID for vendors we recognize as INA-compatible to avoid
+                // an extra I2C transaction + delay on other devices sharing this address.
+                if (mfg == 0x5449 || mfg == 0x190F) {
+                    uint16_t die = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2);
+                    LOG_DEBUG("Register DIE_UID: 0x%x", die);
+
+                    // TI INA226 or fully compatible clones (e.g. TPA626)
+                    if (mfg == 0x5449 && die == 0x2260) {
                         logFoundDevice("INA226", (uint8_t)addr.address);
                         type = INA226;
-                    } else {
+                    }
+                    // Silergy SQ52201 (INA226-compatible with different IDs)
+                    else if (mfg == 0x190F && die == 0x0000) {
+                        logFoundDevice("INA226 (SQ52201)", (uint8_t)addr.address);
+                        type = INA226;
+                    }
+                    // TI INA260
+                    else if (mfg == 0x5449) {
                         logFoundDevice("INA260", (uint8_t)addr.address);
                         type = INA260;
                     }
-                } else { // Assume INA219 if INA260 ID is not found
+                }
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+                if (type == NONE && detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
+                    logFoundDevice("SHTXX (SHT2X)", (uint8_t)addr.address);
+                    type = SHTXX;
+                }
+#endif
+                else { // Assume INA219 if none of the above ones are found
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
                 }
                 break;
+            }
             case INA3221_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID FE: 0x%x", registerValue);
@@ -448,22 +510,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     }
                     break;
                 }
-            case SHT31_4x_ADDR:     // same as OPT3001_ADDR_ALT
-            case SHT31_4x_ADDR_ALT: // same as OPT3001_ADDR
+            case SHTXX_ADDR:     // same as OPT3001_ADDR_ALT
+            case SHTXX_ADDR_ALT: // same as OPT3001_ADDR
                 if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
                     type = OPT3001;
                     logFoundDevice("OPT3001", (uint8_t)addr.address);
-                } else if (i2cCommandResponseLength(addr, 0x89, 6)) { // SHT4x serial number (6 bytes inc. CRC)
-                    type = SHT4X;
-                    logFoundDevice("SHT4X", (uint8_t)addr.address);
-                } else {
-                    type = SHT31;
-                    logFoundDevice("SHT31", (uint8_t)addr.address);
+                } else { // SHTXX
+                    type = SHTXX;
+                    logFoundDevice("SHTXX", (uint8_t)addr.address);
                 }
 
                 break;
 
-                SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTC3, "SHTC3", (uint8_t)addr.address)
+                SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTXX, "SHTXX", (uint8_t)addr.address)
             case RCWL9620_ADDR:
                 // get MAX30102 PARTID
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 1);
@@ -585,7 +644,31 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(SCD30_ADDR, SCD30, "SCD30", (uint8_t)addr.address);
             case CST328_ADDR:
-                // Do we have the CST328 or the CST226SE
+                // Do we have the CST328 or the CST226SE,CST3530
+                {
+                    // T-Deck pro V1.1 new touch panel use CST3530
+                    int retry = 5;
+                    while (retry--) {
+                        uint8_t buffer[7];
+                        uint8_t r_cmd[] = {0x0d0, 0x03, 0x00, 0x00};
+                        i2cBus->beginTransmission(addr.address);
+                        i2cBus->write(r_cmd, sizeof(r_cmd));
+                        if (i2cBus->endTransmission() == 0) {
+                            i2cBus->requestFrom((int)addr.address, 7);
+                            i2cBus->readBytes(buffer, 7);
+                            if (buffer[2] == 0xCA && buffer[3] == 0xCA) {
+                                logFoundDevice("CST3530", (uint8_t)addr.address);
+                                type = CST3530;
+                                break;
+                            }
+                        }
+                        uint8_t cmd1[] = {0xD0, 0x00, 0x04, 0x00};
+                        i2cBus->beginTransmission(addr.address);
+                        i2cBus->write(cmd1, sizeof(cmd1));
+                        i2cBus->endTransmission();
+                        delay(50);
+                    }
+                }
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xAB), 1);
                 if (registerValue == 0xA9) {
                     type = CST226SE;
@@ -675,6 +758,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("BMX160", (uint8_t)addr.address);
                     break;
                 } else {
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
                     String prod = "";
                     prod = readSEN5xProductName(i2cBus, addr.address);
                     if (prod.startsWith("SEN55")) {
@@ -690,6 +774,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         logFoundDevice("Sensirion SEN50", addr.address);
                         break;
                     }
+#endif
                     if (addr.address == BMX160_ADDR) {
                         type = BMX160;
                         logFoundDevice("BMX160", (uint8_t)addr.address);

@@ -5,6 +5,7 @@
 #include "LR1110Interface.h"
 #include "LR1120Interface.h"
 #include "LR1121Interface.h"
+#include "LR2021Interface.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -152,8 +153,10 @@ const RegionInfo regions[] = {
 
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
+       https://standard.nbtc.go.th/getattachment/Standards/%E0%B8%A1%E0%B8%B2%E0%B8%95%E0%B8%A3%E0%B8%90%E0%B8%B2%E0%B8%99%E0%B8%97%E0%B8%B2%E0%B8%87%E0%B9%80%E0%B8%97%E0%B8%84%E0%B8%99%E0%B8%B4%E0%B8%84%E0%B8%82%E0%B8%AD%E0%B8%87%E0%B9%80%E0%B8%84%E0%B8%A3%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B9%82%E0%B8%97%E0%B8%A3%E0%B8%84%E0%B8%A1%E0%B8%99%E0%B8%B2%E0%B8%84%E0%B8%A1/1033-2565.pdf.aspx?lang=th-TH
+       Thailand 920–925 MHz set max TX power to 27 dBm and enforce 10% duty cycle, aligned with NBTC regulations.
     */
-    RDEF(TH, 920.0f, 925.0f, 100, 16, false, false, PROFILE_STD),
+    RDEF(TH, 920.0f, 925.0f, 10, 27, false, false, PROFILE_STD),
 
     /*
         433,05-434,7 Mhz 10 mW
@@ -472,6 +475,20 @@ std::unique_ptr<RadioInterface> initLoRa()
         } else {
             LOG_INFO("LR1121 init success");
             radioType = LR1121_RADIO;
+        }
+    }
+#endif
+
+#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+    if (!rIf) {
+        rIf = std::unique_ptr<LR2021Interface>(
+            new LR2021Interface(loraHal, LR2021_SPI_NSS_PIN, LR2021_IRQ_PIN, LR2021_NRESET_PIN, LR2021_BUSY_PIN));
+        if (!rIf->init()) {
+            LOG_WARN("No LR2021 radio");
+            rIf = nullptr;
+        } else {
+            LOG_INFO("LR2021 init success");
+            radioType = LR2021_RADIO;
         }
     }
 #endif
@@ -961,7 +978,7 @@ void RadioInterface::applyModemConfig()
             cr = loraConfig.coding_rate;
             LOG_INFO("Using custom Coding Rate %u", cr);
         } else {
-            cr = loraConfig.coding_rate;
+            cr = newcr;
         }
 
     } else { // if not using preset, then just use the custom settings
@@ -1035,6 +1052,13 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
     const char *channelName = channels.getName(channels.getPrimaryIndex());
+
+    if (newRegion->wideLora) {                          // clamp if wide freq range
+        preambleLength = wideLoraPreambleLengthDefault; // 12 is the default for operation above 2GHz
+    } else {
+        preambleLength =
+            preambleLengthDefault; // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    }
 
     slotTimeMsec = computeSlotTimeMsec();
     preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
