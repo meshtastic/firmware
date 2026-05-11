@@ -19,6 +19,7 @@ class menuHandler
         TwelveHourPicker,
         ClockFacePicker,
         ClockMenu,
+        CompassFacePicker,
         PositionBaseMenu,
         NodeBaseMenu,
         GpsToggleMenu,
@@ -72,6 +73,11 @@ class menuHandler
     static void TZPicker();
     static void twelveHourPicker();
     static void clockFacePicker();
+    static void compassFacePicker();
+    // Set the menu to re-open when the user picks "Back" from compassFacePicker.
+    // Caller invokes this immediately before queueing CompassFacePicker so the
+    // picker can return to its actual parent menu (or MenuNone to dismiss).
+    static void setCompassFacePickerReturn(screenMenus target);
     static void messageResponseMenu();
     static void messageViewModeMenu();
     static void replyMenu();

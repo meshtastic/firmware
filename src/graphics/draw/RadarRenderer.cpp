@@ -138,15 +138,6 @@ static void drawMarker(OLEDDisplay *display, int px, int py, uint8_t sym)
     }
 }
 
-/**
- * Stable marker index for a node.  The same node number always maps to the
- * same symbol regardless of distance ranking or screen refresh order.
- */
-static uint8_t nodeMarkerIndex(uint32_t nodeNum)
-{
-    return (uint8_t)(nodeNum % 5);
-}
-
 /** Plot a node on the radar at the correct bearing/distance position. */
 static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bearingRad, float headingRad, float norm,
                      uint8_t markerIdx)
@@ -232,10 +223,14 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 
     std::vector<Entry> entries;
 
+    const bool favoritesOnly = uiconfig.radar_favorites_only;
+
     const int numNodes = nodeDB->getNumMeshNodes();
     for (int i = 0; i < numNodes; i++) {
         meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
         if (!n || n->num == nodeDB->getNodeNum())
+            continue;
+        if (favoritesOnly && !n->is_favorite)
             continue;
         if (!nodeDB->hasValidPosition(n))
             continue;
@@ -288,11 +283,16 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 
     // -----------------------------------------------------------------------
     // Plot remote nodes — cap at kMaxPlotted to match the list panel.
+    //
+    // Marker symbol is the sort-position index (0..4) so every plotted node
+    // gets a unique shape and matches its row in the list panel.  Using the
+    // node number modulo 5 caused symbol collisions when several plotted
+    // nodes shared a residue.
     // -----------------------------------------------------------------------
     for (int i = 0; i < plottedCount; i++) {
         const Entry &e = entries[i];
         plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad,
-                 std::min(e.distM / scale, 1.0f), nodeMarkerIndex(e.node->num));
+                 std::min(e.distM / scale, 1.0f), (uint8_t)i);
     }
 
     // -----------------------------------------------------------------------
@@ -310,8 +310,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     // Node list (left panel) — up to 5 closest nodes.
     //
-    // Each row: stable marker symbol | short name | distance (right-aligned).
-    // The symbol matches the dot on the radar so the user can identify nodes.
+    // Each row: marker symbol (matches the radar dot) | short name | distance.
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
 
@@ -323,7 +322,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         const int symCX = x + 3;
         const int symCY = rowY + rowPitch / 2;
 
-        drawMarker(display, symCX, symCY, nodeMarkerIndex(e.node->num));
+        drawMarker(display, symCX, symCY, (uint8_t)i);
 
         char name[10] = "";
         if (e.node->has_user && e.node->user.short_name[0])
