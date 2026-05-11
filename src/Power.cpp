@@ -878,7 +878,16 @@ void Power::readPowerStatus()
 
     // Notify any status instances that are observing us
     const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
-    if (millis() > lastLogTime + 50 * 1000) {
+
+    // Log battery-presence transitions once; skip OptUnknown so we don't lie before the first probe.
+    static OptionalBool prevHasBattery = OptUnknown;
+    if (hasBattery != OptUnknown && hasBattery != prevHasBattery) {
+        LOG_INFO("Power: battery hardware %s", hasBattery == OptTrue ? "detected" : "absent (USB-only)");
+        prevHasBattery = hasBattery;
+    }
+
+    // Periodic telemetry only emits when a battery is actually present (otherwise values are constant -1/0).
+    if (hasBattery == OptTrue && !Throttle::isWithinTimespanMs(lastLogTime, 50 * 1000)) {
         LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(),
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
         lastLogTime = millis();
