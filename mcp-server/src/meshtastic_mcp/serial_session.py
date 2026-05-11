@@ -46,7 +46,23 @@ class SerialSession:
 
 
 def _drain(session: SerialSession) -> None:
-    """Reader thread: line-by-line pull stdout into buffer."""
+    """Reader thread: line-by-line pull stdout into buffer.
+
+    Each line is also published to the `meshtastic.serial.line` pubsub
+    topic so the persistent recorder can capture it without holding its
+    own port. This is the text-mode tap path: when no SerialInterface is
+    open, the firmware emits full formatted lines (level + clock + uptime
+    + thread + `[heap N]` prefix on DEBUG_HEAP builds + body), and we
+    fan them out to whoever is listening. Pubsub is best-effort —
+    publish failures must never block the reader.
+    """
+    # Lazy import: pubsub isn't required just to import this module
+    # (e.g., during static analysis), and we want a clean test surface.
+    try:
+        from pubsub import pub  # type: ignore[import-untyped]
+    except Exception:  # pragma: no cover - defensive
+        pub = None
+
     assert session.proc.stdout is not None
     try:
         for line in session.proc.stdout:
@@ -54,6 +70,16 @@ def _drain(session: SerialSession) -> None:
             with session.lock:
                 session.buffer.append(line_stripped)
                 session.total_lines += 1
+            if pub is not None:
+                try:
+                    pub.sendMessage(
+                        "meshtastic.serial.line",
+                        line=line_stripped,
+                        port=session.port,
+                    )
+                except Exception:
+                    # A subscriber raising must not break the reader.
+                    pass
     except Exception:  # pragma: no cover - defensive
         pass
     finally:
