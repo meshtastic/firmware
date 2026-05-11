@@ -151,7 +151,7 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
     if (!this->_enabled)
         return false;
 
-    if ((this->_server == NULL && this->_ip == INADDR_NONE) || this->_port == 0)
+    if ((this->_server == NULL && this->_ip == IPAddress(0, 0, 0, 0)) || this->_port == 0)
         return false;
 
     // Check priority against priMask values.
