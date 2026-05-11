@@ -115,7 +115,11 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* SHT family of sensors for temperature and humidity */
     meshtastic_TelemetrySensorType_SHTXX = 50,
     /* DS248X Bridge for one-wire temperature sensors */
-    meshtastic_TelemetrySensorType_DS248X = 51
+    meshtastic_TelemetrySensorType_DS248X = 51,
+    /* MMC5983MA 3-Axis Digital Magnetic Sensor */
+    meshtastic_TelemetrySensorType_MMC5983MA = 52,
+    /* ICM-42607-P 6‑Axis IMU */
+    meshtastic_TelemetrySensorType_ICM42607P = 53
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -496,8 +500,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_DS248X
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_DS248X+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_ICM42607P
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_ICM42607P+1))
 
 
 

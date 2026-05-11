@@ -108,18 +108,33 @@ def build(
     env: str,
     with_manifest: bool = True,
     userprefs_overrides: dict[str, Any] | None = None,
+    build_flags: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run `pio run -e <env>` and return artifact paths.
 
     `userprefs_overrides` (optional): dict of `USERPREFS_<KEY>: value` to inject
     into userPrefs.jsonc for this build only. File is restored byte-for-byte
     on exit. Use `userprefs_set()` for persistent changes.
+
+    `build_flags` (optional): dict of `-D<NAME>=<VALUE>` macros to set for
+    this build only via `PLATFORMIO_BUILD_FLAGS`. Common useful flag:
+    `{"DEBUG_HEAP": 1}` enables per-thread leak detection + `[heap N]`
+    prefix on every log line. Combines with the recorder so heap shows
+    up at log cadence (much higher resolution than the ~60 s LocalStats
+    packet) — see `recorder/parsers.py:_HEAP_PREFIX_RE`. Bool values
+    expand to bare `-D<NAME>` (presence-only flags).
     """
     args = ["run", "-e", env]
     if with_manifest:
         args.extend(["-t", "mtjson"])
+    extra_env = _build_flags_env(build_flags) if build_flags else None
     with userprefs.temporary_overrides(userprefs_overrides) as effective:
-        result = pio.run(args, timeout=pio.TIMEOUT_BUILD, check=False)
+        result = pio.run(
+            args,
+            timeout=pio.TIMEOUT_BUILD,
+            check=False,
+            extra_env=extra_env,
+        )
     return {
         "exit_code": result.returncode,
         "artifacts": [str(p) for p in _artifacts_for(env)],
@@ -127,7 +142,25 @@ def build(
         "stderr_tail": pio.tail_lines(result.stderr, 200),
         "duration_s": round(result.duration_s, 2),
         "userprefs": _userprefs_summary(effective),
+        "build_flags": dict(build_flags) if build_flags else None,
     }
+
+
+def _build_flags_env(build_flags: dict[str, Any]) -> dict[str, str]:
+    """Translate `{"DEBUG_HEAP": 1, "FOO": "bar"}` → `{"PLATFORMIO_BUILD_FLAGS":
+    "-DDEBUG_HEAP=1 -DFOO=bar"}`. Bool True → bare `-D<NAME>`; False/None drop
+    the flag entirely. Other types stringify."""
+    parts: list[str] = []
+    for key, value in build_flags.items():
+        if value is False or value is None:
+            continue
+        if value is True:
+            parts.append(f"-D{key}")
+        else:
+            parts.append(f"-D{key}={value}")
+    if not parts:
+        return {}
+    return {"PLATFORMIO_BUILD_FLAGS": " ".join(parts)}
 
 
 def clean(env: str) -> dict[str, Any]:
@@ -146,20 +179,29 @@ def flash(
     port: str,
     confirm: bool = False,
     userprefs_overrides: dict[str, Any] | None = None,
+    build_flags: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """`pio run -e <env> -t upload --upload-port <port>`. All architectures.
 
     `userprefs_overrides` (optional): see `build()` — the rebuild-before-upload
     that pio performs will pick up the injected values.
+
+    `build_flags` (optional): same shape as `build()` — `PLATFORMIO_BUILD_FLAGS`
+    is exported for the rebuild-before-upload, so the uploaded firmware
+    actually carries the flags. Without this propagation, `pio run -t upload`
+    would relink without the env var and silently drop them. Common use:
+    `build_flags={"DEBUG_HEAP": 1}` for the leak-hunt path.
     """
     _require_confirm(confirm, "flash")
     _reject_native_env(env, "flash")
     connection.reject_if_tcp(port, "flash")
+    extra_env = _build_flags_env(build_flags) if build_flags else None
     with userprefs.temporary_overrides(userprefs_overrides) as effective:
         result = pio.run(
             ["run", "-e", env, "-t", "upload", "--upload-port", port],
             timeout=pio.TIMEOUT_UPLOAD,
             check=False,
+            extra_env=extra_env,
         )
     return {
         "exit_code": result.returncode,
@@ -167,6 +209,7 @@ def flash(
         "stderr_tail": pio.tail_lines(result.stderr, 200),
         "duration_s": round(result.duration_s, 2),
         "userprefs": _userprefs_summary(effective),
+        "build_flags": dict(build_flags) if build_flags else None,
     }
 
 

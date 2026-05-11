@@ -92,12 +92,16 @@ def _run_capturing(
     cwd: Path | None = None,
     timeout: float | None = None,
     tee_header: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[int, str, str, float]:
     """Run a subprocess, capture stdout+stderr, optionally tee to the flash log.
 
     Returns `(returncode, stdout_str, stderr_str, duration_s)`. Raises
     `subprocess.TimeoutExpired` on timeout (callers map this to their own
     domain-specific error).
+
+    `extra_env` merges into the subprocess environment (parent env stays
+    intact). Used for `PLATFORMIO_BUILD_FLAGS=-DDEBUG_HEAP=1` and similar.
 
     Fast path: `subprocess.run(capture_output=True)` when no flash log is
     configured (unchanged behavior).
@@ -110,6 +114,9 @@ def _run_capturing(
     """
     log_path = _flash_log_path()
     t0 = time.monotonic()
+    env = None
+    if extra_env:
+        env = {**os.environ, **extra_env}
 
     if log_path is None:
         # Fast path — unchanged.
@@ -119,6 +126,7 @@ def _run_capturing(
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
         return (
             proc.returncode,
@@ -145,6 +153,7 @@ def _run_capturing(
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,  # line-buffered
+        env=env,
     )
     stdout_chunks: list[str] = []
     stderr_chunks: list[str] = []
@@ -232,11 +241,16 @@ def run(
     cwd: Path | None = None,
     timeout: float | None = TIMEOUT_DEFAULT,
     check: bool = True,
+    extra_env: dict[str, str] | None = None,
 ) -> PioResult:
     """Invoke `pio <args>` and return captured output.
 
     `cwd` defaults to the firmware root. `check=True` raises `PioError` on
     non-zero exit; set `check=False` to inspect `returncode` manually.
+
+    `extra_env` merges into the subprocess environment — used for
+    `PLATFORMIO_BUILD_FLAGS=-DDEBUG_HEAP=1` and similar build-time
+    toggles that can't be expressed as command-line args.
 
     If `MESHTASTIC_MCP_FLASH_LOG` is set, output is also tee'd to that file
     line-by-line as it arrives (for live flash progress in the TUI).
@@ -250,6 +264,7 @@ def run(
             cwd=work_dir,
             timeout=timeout,
             tee_header=f"pio {' '.join(args)}",
+            extra_env=extra_env,
         )
     except subprocess.TimeoutExpired as exc:
         raise PioTimeout(f"pio {' '.join(args)} timed out after {timeout}s") from exc

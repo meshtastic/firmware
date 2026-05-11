@@ -43,6 +43,9 @@ class StatusLEDModule : private concurrency::OSThread
   private:
     bool CHARGE_LED_state = LED_STATE_OFF;
     bool PAIRING_LED_state = LED_STATE_OFF;
+#if defined(LED_HEARTBEAT)
+    bool HEARTBEAT_LED_state = LED_STATE_OFF;
+#endif
 
     uint32_t PAIRING_LED_starttime = 0;
     uint32_t lastUserbuttonTime = 0;

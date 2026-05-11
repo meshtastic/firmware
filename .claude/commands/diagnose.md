@@ -49,11 +49,17 @@ Call the meshtastic MCP tool bundle and format a structured health report for on
    - Do the LoRa configs match? (region, channel_num, modem_preset should all agree; mismatch = no mesh)
    - Do the primary channel NAMES match? Mismatch = different PSK = no decode.
 
-7. **Suggest next actions only for specific, recognisable failure modes**:
+7. **Recorder slice (cheap, always available).** The mcp-server runs an autouse log recorder that's been collecting from every connected device. Pull two short slices to surface anything weird that's already happened:
+   - `mcp__meshtastic__logs_window(start="-2m", level="WARN|ERROR|CRIT", max_lines=20)` — recent firmware errors. If empty, say "no recent errors"; don't manufacture concern.
+   - `mcp__meshtastic__telemetry_timeline(window="1h", field="free_heap", max_points=60)` — heap trend. If `slope_per_min < -50`, flag it and recommend `/leakhunt window=6h` for a deeper read; otherwise just note the current free heap.
+   - If `recorder_status` shows `running:false` or `files.telemetry.last_ts` is null, note "recorder has no telemetry yet — enable `set_debug_log_api(True)` to populate" and skip this step gracefully.
+
+8. **Suggest next actions only for specific, recognisable failure modes**:
    - Stale PKI pubkey one-way → "run `/test tests/mesh/test_direct_with_ack.py` — the retry + nodeinfo-ping heals this in the test path."
    - Region mismatch → "re-bake one side via `./mcp-server/run-tests.sh --force-bake`."
    - Device unreachable, reachable via DFU → `touch_1200bps(port=...)` + `pio_flash`. If not even DFU responds AND the device is on a PPPS hub, escalate to `uhubctl_cycle(role=..., confirm=True)`.
    - CP2102-wedged-driver on macOS → see the note in `run-tests.sh`.
+   - Heap slope strongly negative → "run `/leakhunt window=6h` for a full timeline + classification."
 
 ## What NOT to do
 
