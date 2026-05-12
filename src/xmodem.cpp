@@ -119,7 +119,8 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     case meshtastic_XModem_Control_STX:
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
             // NULL packet has the destination filename
-            memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+            strncpy(filename, (const char *)xmodemPacket.buffer.bytes, sizeof(filename) - 1);
+            filename[sizeof(filename) - 1] = '\0';
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
                 spiLock->lock();
