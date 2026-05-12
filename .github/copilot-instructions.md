@@ -193,22 +193,26 @@ Writers go through `setNodeStatus`, `updatePosition`, `updateTelemetry` (which d
 
 Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly.
 
-### Gradient sync (opt-in via special nonces)
+### Sync flow: thin NodeInfo + post-COMPLETE_ID replay (no opt-in)
 
-`client_capabilities` is **not** a thing in this branch. Phone clients opt into the new sync flow by sending one of two values in the `ToRadio.want_config_id`:
+There is no capability flag and no special "gradient" nonce. The **default** sync flow is:
 
-- `SPECIAL_NONCE_GRADIENT_SYNC` (69422) — full config + thin NodeInfo + replay phases.
-- `SPECIAL_NONCE_GRADIENT_ONLY_NODES` (69423) — skip config segments, NodeInfo + replay only.
+1. Config / module-config / channel / metadata segments (same as before).
+2. `STATE_SEND_OWN_NODEINFO` — **our own** NodeInfo, still bundled with our position and device_metrics (because the replay snapshot excludes our own NodeNum). Emitted via `ConvertToNodeInfo(lite)`.
+3. `STATE_SEND_OTHER_NODEINFOS` — every other peer's NodeInfo, **always thin** (no `position`, no `device_metrics`). Emitted via `ConvertToNodeInfoThin(lite)`.
+4. `STATE_SEND_FILEMANIFEST` → `STATE_SEND_COMPLETE_ID` — the phone sees `config_complete_id` and treats sync as done.
+5. `STATE_SEND_PACKETS` — live mesh packets, with a trailing replay drain interleaved. The replay drain walks four cached satellite stores in order (positions → telemetry → environment → status) and emits each cached entry as an ordinary `MeshPacket` on the matching portnum (`POSITION_APP`, `TELEMETRY_APP` device + environment variants, `NODE_STATUS_APP`). These are indistinguishable on the wire from live mesh traffic, so clients need no special handling — any code that already updates UI on `POSITION_APP` etc. works.
 
-`PhoneAPI::clientWantsGradientSync()` is the single switch. When true, `STATE_SEND_OTHER_NODEINFOS` is followed by:
+`PhoneAPI::sendConfigComplete()` arms `replayPhase = REPLAY_PHASE_POSITIONS` for default/full sync and `SPECIAL_NONCE_ONLY_NODES`, while `SPECIAL_NONCE_ONLY_CONFIG` skips replay. The drain runs inside `STATE_SEND_PACKETS` via `popReplayPacket()`, lower priority than live traffic. When all four phases drain, `replayPhase` flips back to `REPLAY_PHASE_IDLE` and the snapshot vectors get `shrink_to_fit`ed.
 
-```text
-STATE_REPLAY_POSITIONS → STATE_REPLAY_TELEMETRY → STATE_REPLAY_ENVIRONMENT → STATE_REPLAY_STATUS
-```
+STM32WL and any other build with all four `MESHTASTIC_EXCLUDE_*DB` flags set produces zero replay packets — `popReplayPacket` advances through each phase in microseconds without emitting anything.
 
-Each replay phase walks the corresponding satellite map and emits synthetic `MeshPacket`s on the matching portnum (`POSITION_APP`, `TELEMETRY_APP` for both device + environment variants, `STATUS_MESSAGE_APP`). Legacy clients (no special nonce) get the bundled-NodeInfo path with position/device_metrics joined back in by `ConvertToNodeInfo(lite, pos*, dm*)` — wire bytes are byte-identical to pre-v25 for them.
+Special nonces that still mean something:
 
-`ConvertToNodeInfoThin(lite)` is the gradient-sync emitter (no position/telemetry).
+- `SPECIAL_NONCE_ONLY_CONFIG` (69420) — skip node sync entirely, just config.
+- `SPECIAL_NONCE_ONLY_NODES` (69421) — skip config segments, jump straight to `STATE_SEND_OWN_NODEINFO`. Still gets the post-COMPLETE_ID replay drain.
+
+There are no other reserved nonces; everything else is a fresh random `want_config_id` from the client.
 
 ### v24 → v25 migration
 

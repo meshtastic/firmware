@@ -21,9 +21,6 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     textPacketList[textPacketListIndex] = mp.id;
     textPacketListIndex = (textPacketListIndex + 1) % TEXT_PACKET_LIST_SIZE;
 
-    // We only store/display messages destined for us.
-    devicestate.rx_text_message = mp;
-    devicestate.has_rx_text_message = true;
     IF_SCREEN(
         // Guard against running in MeshtasticUI or with no screen
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {

@@ -6,7 +6,6 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "gps/RTC.h"
-#include "graphics/draw/MessageRenderer.h"
 #include <cstring> // memcpy
 
 #ifndef MESSAGE_TEXT_POOL_SIZE
@@ -181,13 +180,8 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
 
     bool isDM = (sm.dest != 0 && sm.dest != NODENUM_BROADCAST);
 
-    if (packet.from == 0) {
-        sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
-        sm.ackStatus = AckStatus::NONE;
-    } else {
-        sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
-        sm.ackStatus = AckStatus::ACKED;
-    }
+    sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
+    sm.ackStatus = (packet.from == 0) ? AckStatus::NONE : AckStatus::ACKED;
 
     addLiveMessage(sm);
 
@@ -372,26 +366,25 @@ void MessageStore::clearAllMessages()
 #endif
 }
 
-// Internal helper: erase first or last message matching a predicate
-template <typename Predicate> static void eraseIf(std::deque<StoredMessage> &deque, Predicate pred, bool fromBack = false)
+// Internal helpers for targeted erasure.
+template <typename Predicate> static bool eraseFirstMatch(std::deque<StoredMessage> &deque, Predicate pred)
 {
-    if (fromBack) {
-        // Iterate from the back and erase all matches from the end
-        for (auto it = deque.rbegin(); it != deque.rend();) {
-            if (pred(*it)) {
-                it = std::deque<StoredMessage>::reverse_iterator(deque.erase(std::next(it).base()));
-            } else {
-                ++it;
-            }
+    for (auto it = deque.begin(); it != deque.end(); ++it) {
+        if (pred(*it)) {
+            deque.erase(it);
+            return true;
         }
-    } else {
-        // Manual forward search to erase all matches
-        for (auto it = deque.begin(); it != deque.end();) {
-            if (pred(*it)) {
-                it = deque.erase(it);
-            } else {
-                ++it;
-            }
+    }
+    return false;
+}
+
+template <typename Predicate> static void eraseAllMatches(std::deque<StoredMessage> &deque, Predicate pred)
+{
+    for (auto it = deque.begin(); it != deque.end();) {
+        if (pred(*it)) {
+            it = deque.erase(it);
+        } else {
+            ++it;
         }
     }
 }
@@ -399,7 +392,9 @@ template <typename Predicate> static void eraseIf(std::deque<StoredMessage> &deq
 // Delete oldest message (RAM + persisted queue)
 void MessageStore::deleteOldestMessage()
 {
-    eraseIf(liveMessages, [](StoredMessage &) { return true; });
+    if (!liveMessages.empty()) {
+        liveMessages.pop_front();
+    }
     saveToFlash();
 }
 
@@ -407,14 +402,14 @@ void MessageStore::deleteOldestMessage()
 void MessageStore::deleteOldestMessageInChannel(uint8_t channel)
 {
     auto pred = [channel](const StoredMessage &m) { return m.type == MessageType::BROADCAST && m.channelIndex == channel; };
-    eraseIf(liveMessages, pred);
+    eraseFirstMatch(liveMessages, pred);
     saveToFlash();
 }
 
 void MessageStore::deleteAllMessagesInChannel(uint8_t channel)
 {
     auto pred = [channel](const StoredMessage &m) { return m.type == MessageType::BROADCAST && m.channelIndex == channel; };
-    eraseIf(liveMessages, pred, false /* delete ALL, not just first */);
+    eraseAllMatches(liveMessages, pred);
     saveToFlash();
 }
 
@@ -427,7 +422,7 @@ void MessageStore::deleteAllMessagesWithPeer(uint32_t peer)
         uint32_t other = (m.sender == local) ? m.dest : m.sender;
         return other == peer;
     };
-    eraseIf(liveMessages, pred, false);
+    eraseAllMatches(liveMessages, pred);
     saveToFlash();
 }
 
@@ -440,7 +435,7 @@ void MessageStore::deleteOldestMessageWithPeer(uint32_t peer)
         uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
         return other == peer;
     };
-    eraseIf(liveMessages, pred);
+    eraseFirstMatch(liveMessages, pred);
     saveToFlash();
 }
 
