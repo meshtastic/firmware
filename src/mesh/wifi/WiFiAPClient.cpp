@@ -291,9 +291,7 @@ static int32_t reconnectWiFi()
 #endif
         return 1000; // check once per second
     } else {
-#ifdef ARCH_RP2040
-        onNetworkConnected(); // will only do anything once
-#endif
+        onNetworkConnected(); // will only do anything once (guarded by APStartupComplete)
         return 300000; // every 5 minutes
     }
 }
@@ -343,9 +341,6 @@ bool initWifi()
         const char *wifiPsw = config.network.wifi_psk;
 
 #ifndef ARCH_RP2040
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
-        createSSLCert(); // For WebServer
-#endif
         WiFi.persistent(false); // Disable flash storage for WiFi credentials
 #endif
         if (!*wifiPsw) // Treat empty password as no password
@@ -370,6 +365,9 @@ bool initWifi()
 #endif
             }
 #ifdef ARCH_ESP32
+            // Register WiFi event handler BEFORE createSSLCert() to prevent race condition:
+            // Without this, WiFi can auto-reconnect during cert generation and fire GOT_IP
+            // before the handler is registered, causing onNetworkConnected() to never run.
             WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(true);
             WiFi.setSleep(false);
@@ -391,6 +389,12 @@ bool initWifi()
                     wifiDisconnectReason = info.wifi_sta_disconnected.reason;
                 },
                 WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+#endif
+
+#ifndef ARCH_RP2040
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+            createSSLCert(); // For WebServer - called after WiFi.onEvent() to avoid race condition
+#endif
 #endif
             LOG_DEBUG("JOINING WIFI soon: ssid=%s", wifiName);
             wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
