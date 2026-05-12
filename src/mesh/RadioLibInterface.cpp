@@ -5,6 +5,7 @@
 #include "SPILock.h"
 #include "Throttle.h"
 #include "configuration.h"
+#include "concurrency/LockGuard.h"
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -43,15 +44,25 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 {
     instance = this;
 
-    // Initialize noise floor samples array with 0
+    // Initialize unused sample slots to a sane default; sample count controls averaging.
     for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
-        noiseFloorSamples[i] = 0;
+        noiseFloorSamples[i] = NOISE_FLOOR_DEFAULT;
     }
 
 #if defined(ARCH_STM32WL) && defined(USE_SX1262)
     module.setCb_digitalWrite(stm32wl_emulate_digitalWrite);
     module.setCb_digitalRead(stm32wl_emulate_digitalRead);
 #endif
+}
+
+RadioLibInterface::~RadioLibInterface()
+{
+    // If the static `instance` pointer still references us, clear it.
+    // A later successful init() may have replaced `instance` with a newer
+    // interface — don't clobber that case.
+    if (instance == this) {
+        instance = nullptr;
+    }
 }
 
 #ifdef ARCH_ESP32
@@ -117,7 +128,7 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
-bool RadioLibInterface::receiveDetected(uint16_t irq, ulong syncWordHeaderValidFlag, ulong preambleDetectedFlag)
+bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
     bool detected = (irq & (syncWordHeaderValidFlag | preambleDetectedFlag));
     // Handle false detections
@@ -256,90 +267,116 @@ bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
 
 void RadioLibInterface::updateNoiseFloor()
 {
-    // Only sample when the radio is not actively transmitting or receiving
-    // This allows sampling both when truly idle and after transmitting (when isReceiving may be false)
-    bool busyTx = sendingPacket != NULL;
-    bool busyRx = isReceiving && isActivelyReceiving();
-
-    if (busyTx || busyRx) {
+    // Only sample from idle receive mode. TX/RX-critical paths must return to radio work quickly.
+    if (!isReceiving || sendingPacket != NULL || isActivelyReceiving() || isIRQPending()) {
         return;
     }
 
-    // Also check for pending interrupts
-    if (isIRQPending()) {
-        return;
-    }
-
-    // Rate limit updates
     uint32_t now = millis();
-    if (now - lastNoiseFloorUpdate < NOISE_FLOOR_UPDATE_INTERVAL_MS) {
-        return;
+    {
+        concurrency::LockGuard guard(&noiseFloorLock);
+        if (now - lastNoiseFloorUpdate < NOISE_FLOOR_UPDATE_INTERVAL_MS) {
+            return;
+        }
+        lastNoiseFloorUpdate = now;
     }
-    lastNoiseFloorUpdate = now;
 
-    // Get current RSSI from the radio
     int16_t rssi = getCurrentRSSI();
-
-    if (rssi >= 0 || rssi < NOISE_FLOOR_MIN) {
+    if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN) {
         LOG_DEBUG("Skipping invalid RSSI reading: %d", rssi);
         return;
     }
 
-    // Store the sample in the rolling window
-    noiseFloorSamples[currentSampleIndex] = (int32_t)rssi;
-    currentSampleIndex++;
+    uint8_t sampleCount = 0;
+    int32_t average = NOISE_FLOOR_DEFAULT;
+    {
+        concurrency::LockGuard guard(&noiseFloorLock);
+        noiseFloorSamples[currentSampleIndex] = (int32_t)rssi;
+        currentSampleIndex++;
 
-    // Wrap around when we reach the buffer size - this creates the rolling window
-    if (currentSampleIndex >= NOISE_FLOOR_SAMPLES) {
-        currentSampleIndex = 0;
-        isNoiseFloorBufferFull = true;
+        if (currentSampleIndex >= NOISE_FLOOR_SAMPLES) {
+            currentSampleIndex = 0;
+            isNoiseFloorBufferFull = true;
+        }
+
+        currentNoiseFloor = getAverageNoiseFloorLocked();
+        average = currentNoiseFloor;
+        sampleCount = getNoiseFloorSampleCountLocked();
     }
 
-    // Calculate the new average using the rolling window
-    currentNoiseFloor = getAverageNoiseFloor();
+    LOG_DEBUG("Noise floor: %d dBm (samples: %d, latest: %d dBm)", average, sampleCount, rssi);
+}
 
-    LOG_DEBUG("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCount(), rssi);
+uint8_t RadioLibInterface::getNoiseFloorSampleCountLocked() const
+{
+    return isNoiseFloorBufferFull ? NOISE_FLOOR_SAMPLES : currentSampleIndex;
+}
+
+int32_t RadioLibInterface::getAverageNoiseFloorLocked() const
+{
+    uint8_t sampleCount = getNoiseFloorSampleCountLocked();
+
+    if (sampleCount == 0) {
+        return NOISE_FLOOR_DEFAULT;
+    }
+
+    int32_t sum = 0;
+    for (uint8_t i = 0; i < sampleCount; i++) {
+        sum += noiseFloorSamples[i];
+    }
+
+    return sum / sampleCount;
 }
 
 int32_t RadioLibInterface::getAverageNoiseFloor()
 {
-    uint8_t sampleCount = getNoiseFloorSampleCount();
+    concurrency::LockGuard guard(&noiseFloorLock);
+    return getAverageNoiseFloorLocked();
+}
 
-    if (sampleCount == 0) {
-        return 0; // Return 0 if no samples
-    }
+int32_t RadioLibInterface::getNoiseFloor()
+{
+    concurrency::LockGuard guard(&noiseFloorLock);
+    return currentNoiseFloor;
+}
 
-    int32_t sum = 0;
+bool RadioLibInterface::hasNoiseFloorSamples()
+{
+    concurrency::LockGuard guard(&noiseFloorLock);
+    return getNoiseFloorSampleCountLocked() > 0;
+}
 
-    // Calculate sum using the rolling window
-    if (isNoiseFloorBufferFull) {
-        // Buffer is full - sum all samples
-        for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
-            sum += noiseFloorSamples[i];
-        }
-    } else {
-        // Buffer not yet full - sum only collected samples
-        for (uint8_t i = 0; i < currentSampleIndex; i++) {
-            sum += noiseFloorSamples[i];
-        }
-    }
-
-    int32_t average = sum / sampleCount;
-
-    // Clamp to minimum of -120 dBm
-    if (average < NOISE_FLOOR_MIN) {
-        average = NOISE_FLOOR_MIN;
-    }
-
-    return average;
+uint8_t RadioLibInterface::getNoiseFloorSampleCount()
+{
+    concurrency::LockGuard guard(&noiseFloorLock);
+    return getNoiseFloorSampleCountLocked();
 }
 
 void RadioLibInterface::resetNoiseFloor()
 {
+    concurrency::LockGuard guard(&noiseFloorLock);
     currentSampleIndex = 0;
     isNoiseFloorBufferFull = false;
-    currentNoiseFloor = NOISE_FLOOR_MIN;
+    currentNoiseFloor = NOISE_FLOOR_DEFAULT;
     LOG_INFO("Noise floor reset - rolling window collection will restart");
+}
+
+bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
+{
+    if (!buffer || length == 0 || !iface) {
+        return false;
+    }
+
+    // Older RadioLib versions only expose random(min, max), so fill the buffer byte-by-byte.
+    for (size_t i = 0; i < length; ++i) {
+        int32_t value = iface->random(0, 255);
+        if (value < 0) {
+            return false;
+        }
+        buffer[i] = static_cast<uint8_t>(value & 0xFF);
+    }
+
+    return true;
 }
 
 /** radio helper thread callback.
@@ -512,8 +549,6 @@ void RadioLibInterface::completeSending()
         // We are done sending that packet, release it
         packetPool.release(p);
 
-        // Update noise floor after transmitting (radio is now in a good state to sample)
-        updateNoiseFloor();
     }
 }
 
@@ -548,8 +583,11 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 #endif
     if (state != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("Ignore received packet due to error=%d (maybe to=0x%08x, from=0x%08x, flags=0x%02x)", state,
-                  radioBuffer.header.to, radioBuffer.header.from, radioBuffer.header.flags);
+        // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
+        LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
+                  "nextHop=0x%x relay=0x%x)",
+                  state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
+                  iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
@@ -611,9 +649,27 @@ void RadioLibInterface::startReceive()
 {
     isReceiving = true;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
+}
 
-    // Opportunistically update noise floor when entering receive mode
-    updateNoiseFloor();
+void RadioLibInterface::pollMissedIrqs()
+{
+    // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
+    if (isReceiving) {
+        checkRxDoneIrqFlag();
+    }
+}
+
+void RadioLibInterface::resetAGC()
+{
+    // Base implementation: no-op. Override in chip-specific subclasses.
+}
+
+void RadioLibInterface::checkRxDoneIrqFlag()
+{
+    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
+        LOG_WARN("caught missed RX_DONE");
+        notify(ISR_RX, true);
+    }
 }
 
 void RadioLibInterface::configHardwareForSend()

@@ -34,6 +34,7 @@ class ScanI2C
         SHT31,
         SHT4X,
         SHTC3,
+        SHTXX,
         LPS22HB,
         QMC6310U,
         QMC6310N,
@@ -88,7 +89,14 @@ class ScanI2C
         BH1750,
         DA217,
         CHSC6X,
-        CST226SE
+        CST226SE,
+        CST3530,
+        BMI270,
+        SEN5X,
+        SFA30,
+        CW2015,
+        SCD30,
+        ADS1115,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

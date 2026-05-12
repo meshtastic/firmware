@@ -2,6 +2,7 @@
 
 #include "MeshPacketQueue.h"
 #include "RadioInterface.h"
+#include "concurrency/Lock.h"
 #include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
@@ -18,6 +19,8 @@
 
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
+
+#define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
 
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
@@ -98,24 +101,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool isReceiving = false;
 
   protected:
-    // Noise floor tracking - rolling window of samples
+    // Noise floor tracking - rolling window of samples.
     static const uint8_t NOISE_FLOOR_SAMPLES = 20;
-    static const int32_t NOISE_FLOOR_MIN = -120; // Minimum noise floor clamp in dBm
+    static const int32_t NOISE_FLOOR_DEFAULT = -120;
+    static const int32_t NOISE_FLOOR_VALID_MIN = -127;
+    static const int32_t NOISE_FLOOR_INVALID = -128;
     int32_t noiseFloorSamples[NOISE_FLOOR_SAMPLES];
     uint8_t currentSampleIndex = 0;
     bool isNoiseFloorBufferFull = false;
     uint32_t lastNoiseFloorUpdate = 0;
     static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
-    int32_t currentNoiseFloor = NOISE_FLOOR_MIN;
+    int32_t currentNoiseFloor = NOISE_FLOOR_DEFAULT;
+    concurrency::Lock noiseFloorLock;
 
     /**
-     * Update the noise floor measurement by sampling RSSI when receiving
-     * Uses a rolling window approach to maintain recent samples
-     */
-    void updateNoiseFloor();
-
-    /**
-     * Override from NotifiedWorkerThread - called periodically by the thread
+     * Pure virtual hook for derived radio interfaces to provide instantaneous RSSI.
+     * Implementations should return dBm, or an invalid value that updateNoiseFloor()
+     * can reject.
      */
     virtual int16_t getCurrentRSSI() = 0;
 
@@ -128,11 +130,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Get the current calculated noise floor in dBm
      * Returns -120 dBm if not yet calibrated
      */
-    int32_t getNoiseFloor() { return currentNoiseFloor; }
+    int32_t getNoiseFloor();
 
     /**
      * Calculate the average noise floor from collected samples
-     * Clamps result to minimum of -120 dBm
      */
     int32_t getAverageNoiseFloor();
 
@@ -147,6 +148,18 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void enableInterrupt(void (*)()) = 0;
 
     /**
+     * Poll as a backup to catch missed edge-triggered interrupts.
+     */
+    void pollMissedIrqs();
+
+    /**
+     * Reset AGC by power-cycling the analog frontend.
+     * Subclasses override with chip-specific calibration sequences.
+     * Safe to call periodically — skips if currently sending or receiving.
+     */
+    virtual void resetAGC();
+
+    /**
      * Debugging counts
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
@@ -155,6 +168,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
+
+    /**
+     * Clear the static `instance` pointer if it still points at us, so callers
+     * that check `RadioLibInterface::instance != nullptr` don't dereference a
+     * freed object after a failed init() + unique_ptr reset.
+     */
+    virtual ~RadioLibInterface();
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
@@ -193,14 +213,20 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual bool findInTxQueue(NodeNum from, PacketId id) override;
 
     /**
+     * Update the noise floor measurement by sampling RSSI from a slow path.
+     * This should not be called from radio interrupt or TX/RX critical paths.
+     */
+    void updateNoiseFloor();
+
+    /**
      * Check if we have collected any noise floor samples
      */
-    bool hasNoiseFloorSamples() { return isNoiseFloorBufferFull || currentSampleIndex > 0; }
+    bool hasNoiseFloorSamples();
 
     /**
      * Get the number of samples in the rolling window
      */
-    uint8_t getNoiseFloorSampleCount() { return isNoiseFloorBufferFull ? NOISE_FLOOR_SAMPLES : currentSampleIndex; }
+    uint8_t getNoiseFloorSampleCount();
 
     /**
      * Reset the noise floor calibration
@@ -208,7 +234,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void resetNoiseFloor();
 
+    /**
+     * Request randomness sourced from the LoRa modem, if supported by the active RadioLib interface.
+     * @return true if len bytes were produced, false otherwise.
+     */
+    bool randomBytes(uint8_t *buffer, size_t length);
+
   private:
+    uint8_t getNoiseFloorSampleCountLocked() const;
+    int32_t getAverageNoiseFloorLocked() const;
+
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
      * doing the transmit */
     void setTransmitDelay();
@@ -243,7 +278,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   protected:
     uint32_t activeReceiveStart = 0;
 
-    bool receiveDetected(uint16_t irq, ulong syncWordHeaderValidFlag, ulong preambleDetectedFlag);
+    bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
     /** Do any hardware setup needed on entry into send configuration for the radio.
      * Subclasses can customize, but must also call this base method */
@@ -314,4 +349,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
 
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
+
+    void checkRxDoneIrqFlag();
 };

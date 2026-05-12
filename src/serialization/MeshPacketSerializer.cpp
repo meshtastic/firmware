@@ -149,17 +149,23 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     if (decoded->variant.air_quality_metrics.has_pm100_standard) {
                         msgPayload["pm100"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm100_standard);
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm10_environmental) {
-                        msgPayload["pm10_e"] =
-                            new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm10_environmental);
+                    if (decoded->variant.air_quality_metrics.has_co2) {
+                        msgPayload["co2"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.co2);
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm25_environmental) {
-                        msgPayload["pm25_e"] =
-                            new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm25_environmental);
+                    if (decoded->variant.air_quality_metrics.has_co2_temperature) {
+                        msgPayload["co2_temperature"] = new JSONValue(decoded->variant.air_quality_metrics.co2_temperature);
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm100_environmental) {
-                        msgPayload["pm100_e"] =
-                            new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm100_environmental);
+                    if (decoded->variant.air_quality_metrics.has_co2_humidity) {
+                        msgPayload["co2_humidity"] = new JSONValue(decoded->variant.air_quality_metrics.co2_humidity);
+                    }
+                    if (decoded->variant.air_quality_metrics.has_form_formaldehyde) {
+                        msgPayload["form_formaldehyde"] = new JSONValue(decoded->variant.air_quality_metrics.form_formaldehyde);
+                    }
+                    if (decoded->variant.air_quality_metrics.has_form_temperature) {
+                        msgPayload["form_temperature"] = new JSONValue(decoded->variant.air_quality_metrics.form_temperature);
+                    }
+                    if (decoded->variant.air_quality_metrics.has_form_humidity) {
+                        msgPayload["form_humidity"] = new JSONValue(decoded->variant.air_quality_metrics.form_humidity);
                     }
                 } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
                     if (decoded->variant.power_metrics.has_ch1_voltage) {
@@ -313,10 +319,14 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     // Lambda function for adding a long name to the route
                     auto addToRoute = [](JSONArray *route, NodeNum num) {
                         char long_name[40] = "Unknown";
-                        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(num);
-                        bool name_known = node ? node->has_user : false;
-                        if (name_known)
-                            memcpy(long_name, node->user.long_name, sizeof(long_name));
+                        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(num);
+                        bool name_known = nodeInfoLiteHasUser(node);
+                        if (name_known) {
+                            const size_t copy_len =
+                                (sizeof(node->long_name) < sizeof(long_name)) ? sizeof(node->long_name) : sizeof(long_name) - 1;
+                            memcpy(long_name, node->long_name, copy_len);
+                            long_name[copy_len] = '\0';
+                        }
                         route->push_back(new JSONValue(long_name));
                     };
                     addToRoute(&route, mp->to); // Started at the original transmitter (destination of response)

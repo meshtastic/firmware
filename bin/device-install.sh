@@ -131,14 +131,8 @@ if [[ -f "$FILENAME" && "$FILENAME" == *.factory.bin ]]; then
         exit 1
     fi
 
-    # Determine OTA filename based on MCU type
-    if [ "$MCU" == "esp32s3" ]; then
-        OTAFILE=bleota-s3.bin
-    elif [ "$MCU" == "esp32c3" ]; then
-        OTAFILE=bleota-c3.bin
-    else
-        OTAFILE=bleota.bin
-    fi
+    # Determine OTA filename based on MCU type (unified OTA format)
+    OTAFILE="mt-${MCU}-ota.bin"
 
     # Set SPIFFS filename with "littlefs-" prefix.
     SPIFFSFILE="littlefs-${PROGNAME/firmware-/}.bin"

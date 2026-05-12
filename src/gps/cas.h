@@ -37,7 +37,7 @@ static const uint8_t _message_CAS_CFG_RATE_1HZ[] = {
 
 // CFG-NAVX (0x06, 0x07)
 // Initial ATGM33H-5N configuration, Updates for Dynamic Mode, Fix Mode, and SV system
-// Qwirk: The ATGM33H-5N-31 should only support GPS+BDS, however it will happily enable
+// Quirk: The ATGM33H-5N-31 should only support GPS+BDS, however it will happily enable
 //  and use GPS+BDS+GLONASS iff the correct CFG_NAVX command is used.
 static const uint8_t _message_CAS_CFG_NAVX_CONF[] = {
     0x03, 0x01, 0x00, 0x00, // Update Mask: Dynamic Mode, Fix Mode, Nav Settings

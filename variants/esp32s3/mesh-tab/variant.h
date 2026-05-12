@@ -13,7 +13,7 @@
 #define ADC_CHANNEL ADC1_GPIO4_CHANNEL
 
 // LED
-#define LED_PIN 21
+#define LED_POWER 21
 
 // Button
 #define BUTTON_PIN 0

@@ -2,6 +2,8 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 
+#include <memory>
+
 #include "GPSStatus.h"
 #include "GpioLogic.h"
 #include "Observer.h"
@@ -118,7 +120,7 @@ class GPS : private concurrency::OSThread
 
     // Creates an instance of the GPS class.
     // Returns the new instance or null if the GPS is not present.
-    static GPS *createGps();
+    static std::unique_ptr<GPS> createGps();
 
     // Wake the GPS hardware - ready for an update
     void up();
@@ -256,5 +258,5 @@ class GPS : private concurrency::OSThread
     uint8_t fixeddelayCtr = 0;
 };
 
-extern GPS *gps;
+extern std::unique_ptr<GPS> gps;
 #endif // Exclude GPS

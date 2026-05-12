@@ -16,8 +16,7 @@ on:
         type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   pkg-pio-libdeps:
@@ -27,8 +26,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -54,9 +51,19 @@ jobs:
           PLATFORMIO_LIBDEPS_DIR: pio/libdeps
           PLATFORMIO_PACKAGES_DIR: pio/packages
           PLATFORMIO_CORE_DIR: pio/core
+          PLATFORMIO_SETTING_ENABLE_TELEMETRY: 0
+          PLATFORMIO_SETTING_CHECK_PLATFORMIO_INTERVAL: 3650
+          PLATFORMIO_SETTING_CHECK_PRUNE_SYSTEM_THRESHOLD: 10240
+
+      - name: Mangle platformio cache
+        # Add "1" to epoch-timestamps of all downloads in the cache.
+        # This is a hack to prevent internet access at build-time.
+        run: |
+          cp pio/core/.cache/downloads/usage.db pio/core/.cache/downloads/usage.db.bak
+          jq -c 'with_entries(.value |= (. | tostring + "1" | tonumber))' pio/core/.cache/downloads/usage.db.bak > pio/core/.cache/downloads/usage.db
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: platformio-deps-${{ inputs.pio_env }}-${{ steps.version.outputs.long }}
           overwrite: true

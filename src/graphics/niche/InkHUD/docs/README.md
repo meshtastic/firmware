@@ -464,7 +464,7 @@ Most recently received text message
 
 Collected here, so various user applets don't all have to store their own copy of this info.
 
-We are unable to use `devicestate.rx_text_message` for this purpose, because:
+We keep this separate latest-message cache for this purpose, because:
 
 - it is cleared by an outgoing text message
 - we want to store both a recent broadcast and a recent DM
@@ -733,7 +733,7 @@ To add support for additional encodings, add to the `AppletFont::Encodings` enum
 
 #### Custom Line Height
 
-Some fonts may have a handful of especially tall characters, especially extended-ASCII fonts with diacritcs. Ideally, the font should be modified to help resolve this, but if the problem remains, manual offsets to the automatically determined line height can be specified in the constructor.
+Some fonts may have a handful of especially tall characters, especially extended-ASCII fonts with diacritics. Ideally, the font should be modified to help resolve this, but if the problem remains, manual offsets to the automatically determined line height can be specified in the constructor.
 
 ```cpp
 // -2 px of padding above, +1 px of padding below

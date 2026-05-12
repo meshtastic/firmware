@@ -1,0 +1,31 @@
+# For use with Armbian luckfox-pico-max
+# Waveshare LoRa HAT for Raspberry Pi Pico
+# https://www.waveshare.com/wiki/Pico-LoRa-SX1262
+
+Meta:
+  name: luckfox-pico-max-ws-raspberry-pi-pico-hat
+  support: community
+  compatible:
+    - luckfox-pico-max # Armbian
+
+Lora:
+  Module: sx1262
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  spidev: spidev0.0
+  Busy: # GPIO1_C7 / GP2
+    pin: 55
+    gpiochip: 1
+    line: 23
+  CS: # GPIO1_C6 / GP3
+    pin: 54
+    gpiochip: 1
+    line: 22
+  Reset: # GPIO1_D1 / GP15
+    pin: 57
+    gpiochip: 1
+    line: 25
+  IRQ: # GPIO2_A2 / GP20
+    pin: 66
+    gpiochip: 2
+    line: 2

@@ -120,14 +120,23 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     if (decoded->variant.air_quality_metrics.has_pm100_standard) {
                         jsonObj["payload"]["pm100"] = (unsigned int)decoded->variant.air_quality_metrics.pm100_standard;
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm10_environmental) {
-                        jsonObj["payload"]["pm10_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm10_environmental;
+                    if (decoded->variant.air_quality_metrics.has_co2) {
+                        jsonObj["payload"]["co2"] = (unsigned int)decoded->variant.air_quality_metrics.co2;
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm25_environmental) {
-                        jsonObj["payload"]["pm25_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm25_environmental;
+                    if (decoded->variant.air_quality_metrics.has_co2_temperature) {
+                        jsonObj["payload"]["co2_temperature"] = decoded->variant.air_quality_metrics.co2_temperature;
                     }
-                    if (decoded->variant.air_quality_metrics.has_pm100_environmental) {
-                        jsonObj["payload"]["pm100_e"] = (unsigned int)decoded->variant.air_quality_metrics.pm100_environmental;
+                    if (decoded->variant.air_quality_metrics.has_co2_humidity) {
+                        jsonObj["payload"]["co2_humidity"] = decoded->variant.air_quality_metrics.co2_humidity;
+                    }
+                    if (decoded->variant.air_quality_metrics.has_form_formaldehyde) {
+                        jsonObj["payload"]["form_formaldehyde"] = decoded->variant.air_quality_metrics.form_formaldehyde;
+                    }
+                    if (decoded->variant.air_quality_metrics.has_form_temperature) {
+                        jsonObj["payload"]["form_temperature"] = decoded->variant.air_quality_metrics.form_temperature;
+                    }
+                    if (decoded->variant.air_quality_metrics.has_form_humidity) {
+                        jsonObj["payload"]["form_humidity"] = decoded->variant.air_quality_metrics.form_humidity;
                     }
                 } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
                     if (decoded->variant.power_metrics.has_ch1_voltage) {
@@ -282,10 +291,14 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
 
                     auto addToRoute = [](JsonArray *route, NodeNum num) {
                         char long_name[40] = "Unknown";
-                        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(num);
-                        bool name_known = node ? node->has_user : false;
-                        if (name_known)
-                            memcpy(long_name, node->user.long_name, sizeof(long_name));
+                        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(num);
+                        bool name_known = nodeInfoLiteHasUser(node);
+                        if (name_known) {
+                            const size_t copy_len =
+                                (sizeof(node->long_name) < sizeof(long_name)) ? sizeof(node->long_name) : sizeof(long_name) - 1;
+                            memcpy(long_name, node->long_name, copy_len);
+                            long_name[copy_len] = '\0';
+                        }
                         route->add(long_name);
                     };
 
