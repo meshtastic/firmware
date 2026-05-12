@@ -42,6 +42,7 @@
 #define DAC_I2S_MCLK -1
 
 #define HAS_AXP2101
+#define PMU_POWER_BUTTON_IS_CANCEL // maps a short click of the power button to a cancel action (turning off the screen)
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
