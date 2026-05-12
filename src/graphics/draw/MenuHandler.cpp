@@ -58,6 +58,70 @@ BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOp
     return bannerOptions;
 }
 
+const StoredMessage *getNewestMessageForActiveThread()
+{
+    const auto &messages = messageStore.getMessages();
+    if (messages.empty()) {
+        return nullptr;
+    }
+
+    const auto mode = graphics::MessageRenderer::getThreadMode();
+    const int channel = graphics::MessageRenderer::getThreadChannel();
+    const uint32_t peer = graphics::MessageRenderer::getThreadPeer();
+    const uint32_t localNode = nodeDB->getNodeNum();
+
+    if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+        return &messages.back();
+    }
+
+    for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+        const StoredMessage &m = *it;
+
+        if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+            if (m.type == MessageType::BROADCAST && static_cast<int>(m.channelIndex) == channel) {
+                return &m;
+            }
+            continue;
+        }
+
+        if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+            if (m.type != MessageType::DM_TO_US) {
+                continue;
+            }
+            const uint32_t other = (m.sender == localNode) ? m.dest : m.sender;
+            if (other == peer) {
+                return &m;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void launchReplyForMessage(const StoredMessage &message, bool freetext)
+{
+    if (message.type == MessageType::BROADCAST || message.dest == NODENUM_BROADCAST) {
+        if (freetext) {
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, message.channelIndex);
+        } else {
+            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, message.channelIndex);
+        }
+        return;
+    }
+
+    const uint32_t localNode = nodeDB->getNodeNum();
+    const uint32_t peer = (message.sender == localNode) ? message.dest : message.sender;
+    if (peer == 0 || peer == NODENUM_BROADCAST) {
+        return;
+    }
+
+    if (freetext) {
+        cannedMessageModule->LaunchFreetextWithDestination(peer);
+    } else {
+        cannedMessageModule->LaunchWithDestination(peer);
+    }
+}
+
 } // namespace
 
 menuHandler::screenMenus menuHandler::menuQueue = MenuNone;
@@ -620,9 +684,12 @@ void menuHandler::messageResponseMenu()
 
 #ifdef HAS_I2S
         } else if (selected == Aloud) {
-            const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-            const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
-            audioThread->readAloud(msg);
+            if (const StoredMessage *latest = getNewestMessageForActiveThread()) {
+                const char *msg = MessageStore::getText(*latest);
+                if (msg && msg[0]) {
+                    audioThread->readAloud(msg);
+                }
+            }
 #endif
         }
     };
@@ -682,20 +749,12 @@ void menuHandler::replyMenu()
 
         // Preset reply
         if (selected == ReplyPreset) {
-
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, ch);
-
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 cannedMessageModule->LaunchWithDestination(peer);
-
-            } else {
-                // Fallback for last received message
-                if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                    cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
-                } else {
-                    cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
-                }
+            } else if (const StoredMessage *latest = getNewestMessageForActiveThread()) {
+                launchReplyForMessage(*latest, false);
             }
 
             return;
@@ -703,20 +762,12 @@ void menuHandler::replyMenu()
 
         // Freetext reply
         if (selected == ReplyFreetext) {
-
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, ch);
-
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 cannedMessageModule->LaunchFreetextWithDestination(peer);
-
-            } else {
-                // Fallback for last received message
-                if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                    cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
-                } else {
-                    cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
-                }
+            } else if (const StoredMessage *latest = getNewestMessageForActiveThread()) {
+                launchReplyForMessage(*latest, true);
             }
 
             return;
@@ -871,10 +922,10 @@ void menuHandler::messageViewModeMenu()
     // Encode peers
     for (size_t i = 0; i < uniquePeers.size(); ++i) {
         uint32_t peer = uniquePeers[i];
-        auto node = nodeDB->getMeshNode(peer);
+        const auto *node = nodeDB->getMeshNode(peer);
         std::string name;
-        if (node && node->has_user)
-            name = sanitizeString(node->user.long_name).substr(0, 15);
+        if (nodeInfoLiteHasUser(node))
+            name = sanitizeString(node->long_name).substr(0, 15);
         else {
             char buf[20];
             snprintf(buf, sizeof(buf), "Node %08X", peer);
@@ -1381,14 +1432,14 @@ void menuHandler::manageNodeMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-    if (node->is_favorite) {
+    if (nodeInfoLiteIsFavorite(node)) {
         optionsArray[options] = "Unfavorite";
     } else {
         optionsArray[options] = "Favorite";
     }
     optionsEnumArray[options++] = Favorite;
 
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    bool isMuted = nodeInfoLiteIsMuted(node);
     if (isMuted) {
         optionsArray[options] = "Unmute Notifications";
     } else {
@@ -1402,7 +1453,7 @@ void menuHandler::manageNodeMenu()
     optionsArray[options] = "Key Verification";
     optionsEnumArray[options++] = KeyVerification;
 
-    if (node->is_ignored) {
+    if (nodeInfoLiteIsIgnored(node)) {
         optionsArray[options] = "Unignore Node";
     } else {
         optionsArray[options] = "Ignore Node";
@@ -1412,8 +1463,8 @@ void menuHandler::manageNodeMenu()
     BannerOverlayOptions bannerOptions;
 
     std::string title = "";
-    if (node->has_user && node->user.long_name && node->user.long_name[0]) {
-        title += sanitizeString(node->user.long_name).substr(0, 15);
+    if (nodeInfoLiteHasUser(node) && node->long_name[0]) {
+        title += sanitizeString(node->long_name).substr(0, 15);
     } else {
         char buf[20];
         snprintf(buf, sizeof(buf), "%08X", (unsigned int)node->num);
@@ -1435,7 +1486,7 @@ void menuHandler::manageNodeMenu()
             if (!n) {
                 return;
             }
-            if (n->is_favorite) {
+            if (nodeInfoLiteIsFavorite(n)) {
                 LOG_INFO("Removing node %08X from favorites", menuHandler::pickedNodeNum);
                 nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
             } else {
@@ -1452,13 +1503,9 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
-            if (n->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) {
-                n->bitfield &= ~NODEINFO_BITFIELD_IS_MUTED_MASK;
-                LOG_INFO("Unmuted node %08X", menuHandler::pickedNodeNum);
-            } else {
-                n->bitfield |= NODEINFO_BITFIELD_IS_MUTED_MASK;
-                LOG_INFO("Muted node %08X", menuHandler::pickedNodeNum);
-            }
+            const bool wasMuted = nodeInfoLiteIsMuted(n);
+            nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_MUTED_MASK, !wasMuted);
+            LOG_INFO(wasMuted ? "Unmuted node %08X" : "Muted node %08X", menuHandler::pickedNodeNum);
             nodeDB->notifyObservers(true);
             nodeDB->saveToDisk();
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -1487,11 +1534,11 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
-            if (n->is_ignored) {
-                n->is_ignored = false;
+            if (nodeInfoLiteIsIgnored(n)) {
+                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
                 LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
             } else {
-                n->is_ignored = true;
+                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
                 LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
             }
             nodeDB->notifyObservers(true);
@@ -2105,9 +2152,9 @@ void menuHandler::removeFavoriteMenu()
     static const char *optionsArray[] = {"Back", "Yes"};
     BannerOverlayOptions bannerOptions;
     std::string message = "Unfavorite This Node?\n";
-    auto node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
-    if (node && node->has_user) {
-        message += sanitizeString(node->user.long_name).substr(0, 15);
+    const auto *node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
+    if (nodeInfoLiteHasUser(node)) {
+        message += sanitizeString(node->long_name).substr(0, 15);
     }
     bannerOptions.message = message.c_str();
     bannerOptions.optionsArrayPtr = optionsArray;

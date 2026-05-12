@@ -267,7 +267,7 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
 template <typename T> void SX126xInterface<T>::disableInterrupt()

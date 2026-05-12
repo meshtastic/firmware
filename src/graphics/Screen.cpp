@@ -65,7 +65,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Default.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/ExternalNotificationModule.h"
-#include "modules/TextMessageModule.h"
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -1285,7 +1284,7 @@ void Screen::setFrames(FrameFocus focus)
 
         for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
             const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-            if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
+            if (n && n->num != nodeDB->getNodeNum() && nodeInfoLiteIsFavorite(n)) {
                 favoriteFrames.push_back(graphics::UIRenderer::drawFavoriteNode);
             }
         }
@@ -1638,138 +1637,6 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         }
         break;
     }
-    }
-
-    return 0;
-}
-
-// Handles when message is received; will jump to text message frame.
-int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
-{
-    if (showingNormalScreen) {
-        if (packet->from == 0) {
-            // Outgoing message (likely sent from phone)
-            devicestate.has_rx_text_message = false;
-            memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
-            hiddenFrames.textMessage = true;
-            hasUnreadMessage = false; // Clear unread state when user replies
-
-            setFrames(FOCUS_PRESERVE); // Stay on same frame, silently update frame list
-        } else {
-            // Incoming message
-            devicestate.has_rx_text_message = true; // Needed to include the message frame
-            hasUnreadMessage = true;                // Enables mail icon in the header
-            setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view (no-op during text_input)
-
-            // Only wake/force display if the configuration allows it
-            if (shouldWakeOnReceivedMessage()) {
-                setOn(true);    // Wake up the screen first
-                forceDisplay(); // Forces screen redraw
-            }
-            // === Prepare banner/popup content ===
-            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
-            const meshtastic_Channel channel =
-                channels.getByIndex(packet->channel ? packet->channel : channels.getPrimaryIndex());
-            const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
-
-            const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
-
-            char banner[256];
-
-            bool isAlert = false;
-
-            if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
-                moduleConfig.external_notification.alert_bell_buzzer)
-                // Check for bell character to determine if this message is an alert
-                for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-                    if (msgRaw[i] == ASCII_BELL) {
-                        isAlert = true;
-                        break;
-                    }
-                }
-
-            // Unlike generic messages, alerts (when enabled via the ext notif module) ignore any
-            // 'mute' preferences set to any specific node or channel.
-            // If on-screen keyboard is active, show a transient popup over keyboard instead of interrupting it
-            if (NotificationRenderer::current_notification_type == notificationTypeEnum::text_input) {
-                // Wake and force redraw so popup is visible immediately
-                if (shouldWakeOnReceivedMessage()) {
-                    setOn(true);
-                    forceDisplay();
-                }
-
-                // Build popup: title = message source name, content = message text (sanitized)
-                // Title
-                char titleBuf[64] = {0};
-                if (longName && longName[0]) {
-                    // Sanitize sender name
-                    std::string t = sanitizeString(longName);
-                    strncpy(titleBuf, t.c_str(), sizeof(titleBuf) - 1);
-                } else {
-                    strncpy(titleBuf, "Message", sizeof(titleBuf) - 1);
-                }
-
-                // Content: payload bytes may not be null-terminated, remove ASCII_BELL and sanitize
-                char content[256] = {0};
-                {
-                    std::string raw;
-                    raw.reserve(packet->decoded.payload.size);
-                    for (size_t i = 0; i < packet->decoded.payload.size; ++i) {
-                        char c = msgRaw[i];
-                        if (c == ASCII_BELL)
-                            continue; // strip bell
-                        raw.push_back(c);
-                    }
-                    std::string sanitized = sanitizeString(raw);
-                    strncpy(content, sanitized.c_str(), sizeof(content) - 1);
-                }
-
-                NotificationRenderer::showKeyboardMessagePopupWithTitle(titleBuf, content, 3000);
-
-// Maintain existing buzzer behavior on M5 if applicable
-#if defined(M5STACK_UNITC6L)
-                if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
-                    (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
-                    (!isBroadcast(packet->to) && isToUs(packet))) {
-                    playLongBeep();
-                }
-#endif
-            } else {
-                // No keyboard active: use regular banner flow, respecting mute settings
-                if (isAlert) {
-                    if (longName && longName[0]) {
-                        snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
-                    } else {
-                        strcpy(banner, "Alert Received");
-                    }
-                    screen->showSimpleBanner(banner, 3000);
-                } else if (!channel.settings.has_module_settings || !channel.settings.module_settings.is_muted) {
-                    if (longName && longName[0]) {
-                        if (currentResolution == ScreenResolution::UltraLow) {
-                            strcpy(banner, "New Message");
-                        } else {
-                            snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
-                        }
-                    } else {
-                        strcpy(banner, "New Message");
-                    }
-#if defined(M5STACK_UNITC6L)
-                    screen->setOn(true);
-                    screen->showSimpleBanner(banner, 1500);
-                    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY ||
-                        (isAlert && moduleConfig.external_notification.alert_bell_buzzer) ||
-                        (!isBroadcast(packet->to) && isToUs(packet))) {
-                        // Beep if not in DIRECT_MSG_ONLY mode or if in DIRECT_MSG_ONLY mode and either
-                        // - packet contains an alert and alert bell buzzer is enabled
-                        // - packet is a non-broadcast that is addressed to this node
-                        playLongBeep();
-                    }
-#else
-                    screen->showSimpleBanner(banner, 3000);
-#endif
-                }
-            }
-        }
     }
 
     return 0;

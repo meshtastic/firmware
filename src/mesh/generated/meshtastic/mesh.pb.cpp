@@ -57,6 +57,9 @@ PB_BIND(meshtastic_QueueStatus, meshtastic_QueueStatus, AUTO)
 PB_BIND(meshtastic_FromRadio, meshtastic_FromRadio, 2)
 
 
+PB_BIND(meshtastic_LockdownStatus, meshtastic_LockdownStatus, AUTO)
+
+
 PB_BIND(meshtastic_ClientNotification, meshtastic_ClientNotification, 2)
 
 
@@ -106,6 +109,8 @@ PB_BIND(meshtastic_resend_chunks, meshtastic_resend_chunks, AUTO)
 
 
 PB_BIND(meshtastic_ChunkedPayloadResponse, meshtastic_ChunkedPayloadResponse, AUTO)
+
+
 
 
 
