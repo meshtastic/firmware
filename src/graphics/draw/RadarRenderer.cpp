@@ -189,7 +189,8 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // so the header stays plain.
     // -----------------------------------------------------------------------
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    if (!ourNode || !nodeDB->hasValidPosition(ourNode)) {
+    meshtastic_PositionLite ourPos;
+    if (!ourNode || !nodeDB->hasValidPosition(ourNode) || !nodeDB->copyNodePosition(ourNode->num, ourPos)) {
         graphics::drawCommonHeader(display, x, y, "Radar");
         display->setFont(FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -197,8 +198,8 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         return;
     }
 
-    const double myLat = ourNode->position.latitude_i * 1e-7;
-    const double myLon = ourNode->position.longitude_i * 1e-7;
+    const double myLat = ourPos.latitude_i * 1e-7;
+    const double myLon = ourPos.longitude_i * 1e-7;
 
     // -----------------------------------------------------------------------
     // Heading.
@@ -233,13 +234,14 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
         if (!n || n->num == nodeDB->getNodeNum())
             continue;
-        if (favoritesOnly && !n->is_favorite)
+        if (favoritesOnly && !nodeInfoLiteIsFavorite(n))
             continue;
-        if (!nodeDB->hasValidPosition(n))
+        meshtastic_PositionLite nodePos;
+        if (!nodeDB->hasValidPosition(n) || !nodeDB->copyNodePosition(n->num, nodePos))
             continue;
 
-        const double nodeLat = n->position.latitude_i * 1e-7;
-        const double nodeLon = n->position.longitude_i * 1e-7;
+        const double nodeLat = nodePos.latitude_i * 1e-7;
+        const double nodeLon = nodePos.longitude_i * 1e-7;
         const float dist = GeoCoord::latLongToMeter(myLat, myLon, nodeLat, nodeLon);
         const float brg = GeoCoord::bearing(myLat, myLon, nodeLat, nodeLon);
 
@@ -329,8 +331,8 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         drawMarker(display, symCX, symCY, (uint8_t)i);
 
         char name[10] = "";
-        if (e.node->has_user && e.node->user.short_name[0])
-            strncpy(name, e.node->user.short_name, sizeof(name) - 1);
+        if (nodeInfoLiteHasUser(e.node) && e.node->short_name[0])
+            strncpy(name, e.node->short_name, sizeof(name) - 1);
         else
             snprintf(name, sizeof(name), "%04X", (uint16_t)(e.node->num & 0xFFFF));
 
