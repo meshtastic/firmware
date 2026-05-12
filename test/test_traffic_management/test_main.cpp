@@ -50,7 +50,7 @@ class MockNodeDB : public NodeDB
         hasCachedNode = true;
         cachedNodeNum = n;
         cachedNode.num = n;
-        cachedNode.has_user = true;
+        cachedNode.bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK;
     }
 
   private:
@@ -494,9 +494,9 @@ static void test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo(void)
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(result));
     TEST_ASSERT_NOT_NULL(requestor);
-    TEST_ASSERT_TRUE(requestor->has_user);
-    TEST_ASSERT_EQUAL_STRING("requester-long", requestor->user.long_name);
-    TEST_ASSERT_EQUAL_STRING("rq", requestor->user.short_name);
+    TEST_ASSERT_TRUE((requestor->bitfield & NODEINFO_BITFIELD_HAS_USER_MASK) != 0);
+    TEST_ASSERT_EQUAL_STRING("requester-long", requestor->long_name);
+    TEST_ASSERT_EQUAL_STRING("rq", requestor->short_name);
     TEST_ASSERT_EQUAL_UINT8(request.channel, requestor->channel);
 }
 

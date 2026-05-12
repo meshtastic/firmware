@@ -60,12 +60,12 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
-#if HAS_WIFI || defined(USE_WS5500)
+#if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D)
 #include "mesh/api/WiFiServerAPI.h"
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
 #include "mesh/api/ethServerAPI.h"
 #include "mesh/eth/ethClient.h"
 #endif
@@ -336,7 +336,7 @@ void setup()
 
 #ifdef WIFI_LED
     pinMode(WIFI_LED, OUTPUT);
-    digitalWrite(WIFI_LED, LOW);
+    digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
 
 #ifdef BLE_LED
@@ -769,8 +769,15 @@ void setup()
 #elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #else
-    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO) {
         screen_model = config.display.oled;
+
+        // Fix: update geometry for SH1107 128x128 selected via menu
+        if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128) {
+            screen_geometry = GEOMETRY_128_128;
+            screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // normalize
+        }
+    }
 #endif
 #endif
 
