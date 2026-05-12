@@ -737,6 +737,8 @@ meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const mesh
     pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     pkt.hop_start = pkt.hop_limit;
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    // Mark as if heard over the air, not internally generated — client filters
+    pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     pkt.decoded.portnum = meshtastic_PortNum_POSITION_APP;
     meshtastic_Position fullPos = TypeConversions::ConvertToPosition(pos);
@@ -759,6 +761,9 @@ meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(NodeNum num, const mes
     pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     pkt.hop_start = pkt.hop_limit;
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    // Mark as if heard over the air, not internally generated — iOS client filters
+    // TRANSPORT_INTERNAL packets out of broadcast peer state updates.
+    pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     pkt.decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
     meshtastic_Telemetry fullTel = meshtastic_Telemetry_init_default;
@@ -861,6 +866,9 @@ meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(uint32_t num, const 
     pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     pkt.hop_start = pkt.hop_limit;
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    // Mark as if heard over the air, not internally generated — iOS client filters
+    // TRANSPORT_INTERNAL packets out of broadcast peer state updates.
+    pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     pkt.decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
     meshtastic_Telemetry fullTel = meshtastic_Telemetry_init_default;
@@ -922,6 +930,9 @@ meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(uint32_t num, const mesht
     pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     pkt.hop_start = pkt.hop_limit;
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    // Mark as if heard over the air, not internally generated — iOS client filters
+    // TRANSPORT_INTERNAL packets out of broadcast peer state updates.
+    pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     pkt.decoded.portnum = meshtastic_PortNum_NODE_STATUS_APP;
     size_t len =
