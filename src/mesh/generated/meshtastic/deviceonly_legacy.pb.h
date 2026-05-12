@@ -115,7 +115,7 @@ extern const pb_msgdesc_t meshtastic_NodeDatabase_Legacy_msg;
 /* Maximum encoded size of messages (where known) */
 /* meshtastic_NodeDatabase_Legacy_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_LEGACY_PB_H_MAX_SIZE meshtastic_NodeInfoLite_Legacy_size
-#define meshtastic_NodeInfoLite_Legacy_size      196
+#define meshtastic_NodeInfoLite_Legacy_size      202
 
 #ifdef __cplusplus
 } /* extern "C" */
