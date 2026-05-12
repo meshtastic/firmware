@@ -1936,11 +1936,12 @@ bool NodeDB::saveNodeDatabaseToDisk()
         return false;
     }
 
-    // Don't race xmodem for the prefs file handle — would clobber an in-flight upload.
+    // Defer (don't fail) while xmodem holds the prefs file handle. Returning false
+    // would propagate through saveToDisk() and trigger fsFormat() mid-transfer.
 #ifdef FSCom
     if (xModem.isBusy()) {
-        LOG_DEBUG("Skipping NodeDB save: xmodem transfer in progress");
-        return false;
+        LOG_DEBUG("Deferring NodeDB save: xmodem transfer in progress");
+        return true;
     }
 #endif
 
