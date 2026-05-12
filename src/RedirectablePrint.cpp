@@ -230,9 +230,9 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             auto thread = concurrency::OSThread::currentThread;
             meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
             logRecord.level = getLogLevel(logLevel);
-            vsprintf(logRecord.message, format, arg);
+            vsnprintf(logRecord.message, sizeof(logRecord.message), format, arg);
             if (thread)
-                strcpy(logRecord.source, thread->ThreadName.c_str());
+                strlcpy(logRecord.source, thread->ThreadName.c_str(), sizeof(logRecord.source));
             logRecord.time = getValidTime(RTCQuality::RTCQualityDevice, true);
 
             auto buffer = std::unique_ptr<uint8_t[]>(new uint8_t[meshtastic_LogRecord_size]);
