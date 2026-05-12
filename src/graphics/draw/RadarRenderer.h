@@ -25,7 +25,9 @@ class Screen;
 namespace RadarRenderer
 {
 
-// ---- Content-area renderer (called from drawDynamicListScreen_Location) -----
+// ---- Header + content renderer (called from drawDynamicListScreen_Location).
+// Draws its own header ("Radar <scale>") so the title can carry the current
+// outer-ring range; the caller still draws the footer.
 void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y);
 
 // ---- Runtime state (controlled by radarBearingsMenu) ------------------------

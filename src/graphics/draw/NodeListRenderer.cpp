@@ -838,7 +838,6 @@ void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *st
     // Tracking View), the bearings/distance frame is replaced by the
     // circular radar minimap.
     if (uiconfig.bearings_view_radar) {
-        graphics::drawCommonHeader(display, x, y, "Radar");
         graphics::RadarRenderer::drawRadarOverlay(display, x, y);
         graphics::drawCommonFooter(display, x, y);
         return;

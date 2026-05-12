@@ -153,16 +153,17 @@ static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bea
 // ---------------------------------------------------------------------------
 
 /**
- * Draw the radar overlay into the content area of the compass/position screen.
+ * Draw the radar overlay (header + content) for the compass/position screen.
  *
  * Layout (128×64 OLED example):
- *   - Header row already drawn by the caller (FONT_HEIGHT_SMALL - 1 px)
+ *   - Header row: "Radar <scale>" — drawn here so the title can include the
+ *     current outer-ring range
  *   - Right side: circular radar with 2 px padding on all sides
- *   - Left side: node list (up to 4 closest nodes, marker + name + distance)
+ *   - Left side: node list (up to 5 closest nodes, marker + name + distance)
  *
- * Called from NodeListRenderer::drawDynamicListScreen_Location when uiconfig.bearings_view_radar
- * is true.  The caller draws the header and footer; this function handles the
- * content area only.
+ * Called from NodeListRenderer::drawDynamicListScreen_Location when
+ * uiconfig.bearings_view_radar is true.  The caller draws the footer; this
+ * function owns the header and content area.
  */
 void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 {
@@ -184,10 +185,12 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const int listRight = radarCX - radarRadius - 4; // 4 px gap between list and circle
 
     // -----------------------------------------------------------------------
-    // GPS — bail gracefully if unavailable.
+    // GPS — bail gracefully if unavailable.  No fix → no scale to report,
+    // so the header stays plain.
     // -----------------------------------------------------------------------
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (!ourNode || !nodeDB->hasValidPosition(ourNode)) {
+        graphics::drawCommonHeader(display, x, y, "Radar");
         display->setFont(FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->drawString(x + sw / 2, y + sh / 2 - FONT_HEIGHT_SMALL / 2, "No GPS fix");
@@ -260,6 +263,19 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const float scale = niceScaleMeters(maxDistM, s_zoomLevel);
 
     // -----------------------------------------------------------------------
+    // Header — "Radar <scale>", drawn now that we know the outer-ring range.
+    // Keeps the scale legible in the title bar instead of overlapping the
+    // inner ring.
+    // -----------------------------------------------------------------------
+    {
+        char scaleBuf[12] = "";
+        formatDistM(scaleBuf, sizeof(scaleBuf), scale);
+        char titleBuf[24];
+        snprintf(titleBuf, sizeof(titleBuf), "Radar %s", scaleBuf);
+        graphics::drawCommonHeader(display, x, y, titleBuf);
+    }
+
+    // -----------------------------------------------------------------------
     // Draw radar chrome: three concentric range rings.
     // -----------------------------------------------------------------------
     for (int ring = 1; ring <= 3; ring++)
@@ -293,18 +309,6 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         const Entry &e = entries[i];
         plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad,
                  std::min(e.distM / scale, 1.0f), (uint8_t)i);
-    }
-
-    // -----------------------------------------------------------------------
-    // Scale label — outer-ring distance, drawn just inside the bottom of the
-    // radar circle so the user knows the current range at this zoom level.
-    // -----------------------------------------------------------------------
-    {
-        char scaleBuf[12] = "";
-        formatDistM(scaleBuf, sizeof(scaleBuf), scale);
-        display->setFont(FONT_SMALL);
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(radarCX, radarCY + radarRadius - FONT_HEIGHT_SMALL - 1, scaleBuf);
     }
 
     // -----------------------------------------------------------------------
