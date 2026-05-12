@@ -639,17 +639,19 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 void PhoneAPI::sendConfigComplete()
 {
     LOG_INFO("Config Send Complete millis=%u", millis());
+    const bool shouldReplaySatellites = (config_nonce != SPECIAL_NONCE_ONLY_CONFIG);
     // The phone sees config_complete_id first (treats sync as done), then the cached
     // satellite-DB packets (positions / telemetry / environment / status) trickle in
-    // afterward as ordinary mesh packets. This applies unconditionally — any client
-    // that handles live POSITION_APP / TELEMETRY_APP / NODE_STATUS_APP packets handles
-    // these identically. STM32WL and other builds that compile the satellite DBs out
-    // produce no replay packets and the phase advances to IDLE in microseconds.
+    // afterward as ordinary mesh packets (except SPECIAL_NONCE_ONLY_CONFIG, which
+    // skips node/satellite sync entirely). Any client that handles live POSITION_APP /
+    // TELEMETRY_APP / NODE_STATUS_APP packets handles these identically. STM32WL and
+    // other builds that compile the satellite DBs out produce no replay packets and
+    // the phase advances to IDLE in microseconds.
     fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_complete_id_tag;
     fromRadioScratch.config_complete_id = config_nonce;
     config_nonce = 0;
     state = STATE_SEND_PACKETS;
-    replayPhase = REPLAY_PHASE_POSITIONS;
+    replayPhase = shouldReplaySatellites ? REPLAY_PHASE_POSITIONS : REPLAY_PHASE_IDLE;
     if (api_type == TYPE_BLE) {
         service->api_state = service->STATE_BLE;
     } else if (api_type == TYPE_WIFI) {
@@ -777,8 +779,7 @@ void PhoneAPI::beginReplayPositions()
     replayPositionOrder.clear();
     replayPositionIndex = 0;
 #else
-    // Caller (popReplayPacket) only invokes us when replayPhase is armed,
-    // which only happens for gradient-sync clients - so no nonce check here.
+    // Caller (popReplayPacket) only invokes us when replayPhase is armed.
     // Snapshot the keyset at phase start so concurrent inserts/erases on the
     // map don't invalidate iteration. Skip our own node - the phone already
     // got our position bundled in STATE_SEND_OWN_NODEINFO.
@@ -1132,8 +1133,8 @@ bool PhoneAPI::available()
         hasPacket = !!packetForPhone;
         if (hasPacket)
             return true;
-        // Trailing replay drain — feeds cached satellite-DB packets to gradient-sync
-        // clients alongside (lower priority than) live traffic.
+        // Trailing replay drain — feeds cached satellite-DB packets alongside
+        // (lower priority than) live traffic.
         return replayPending();
     }
     default:

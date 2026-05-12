@@ -195,7 +195,7 @@ Every code path that drops a node from the header table must also evict the sate
 
 ### Sync flow: thin NodeInfo + post-COMPLETE_ID replay (no opt-in)
 
-There is no capability flag and no special "gradient" nonce. **Every** client gets the same sync flow regardless of the `want_config_id` they sent — they don't have to know anything has changed:
+There is no capability flag and no special "gradient" nonce. The **default** sync flow is:
 
 1. Config / module-config / channel / metadata segments (same as before).
 2. `STATE_SEND_OWN_NODEINFO` — **our own** NodeInfo, still bundled with our position and device_metrics (because the replay snapshot excludes our own NodeNum). Emitted via `ConvertToNodeInfo(lite)`.
@@ -203,7 +203,7 @@ There is no capability flag and no special "gradient" nonce. **Every** client ge
 4. `STATE_SEND_FILEMANIFEST` → `STATE_SEND_COMPLETE_ID` — the phone sees `config_complete_id` and treats sync as done.
 5. `STATE_SEND_PACKETS` — live mesh packets, with a trailing replay drain interleaved. The replay drain walks four cached satellite stores in order (positions → telemetry → environment → status) and emits each cached entry as an ordinary `MeshPacket` on the matching portnum (`POSITION_APP`, `TELEMETRY_APP` device + environment variants, `NODE_STATUS_APP`). These are indistinguishable on the wire from live mesh traffic, so clients need no special handling — any code that already updates UI on `POSITION_APP` etc. works.
 
-`PhoneAPI::sendConfigComplete()` always arms `replayPhase = REPLAY_PHASE_POSITIONS`. The drain runs inside `STATE_SEND_PACKETS` via `popReplayPacket()`, lower priority than live traffic. When all four phases drain, `replayPhase` flips back to `REPLAY_PHASE_IDLE` and the snapshot vectors get `shrink_to_fit`ed.
+`PhoneAPI::sendConfigComplete()` arms `replayPhase = REPLAY_PHASE_POSITIONS` for default/full sync and `SPECIAL_NONCE_ONLY_NODES`, while `SPECIAL_NONCE_ONLY_CONFIG` skips replay. The drain runs inside `STATE_SEND_PACKETS` via `popReplayPacket()`, lower priority than live traffic. When all four phases drain, `replayPhase` flips back to `REPLAY_PHASE_IDLE` and the snapshot vectors get `shrink_to_fit`ed.
 
 STM32WL and any other build with all four `MESHTASTIC_EXCLUDE_*DB` flags set produces zero replay packets — `popReplayPacket` advances through each phase in microseconds without emitting anything.
 

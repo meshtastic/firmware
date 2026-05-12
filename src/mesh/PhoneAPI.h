@@ -118,7 +118,7 @@ class PhoneAPI
     size_t replayTelemetryIndex = 0;
     size_t replayEnvironmentIndex = 0;
     size_t replayStatusIndex = 0;
-    ReplayPhase replayPhase = REPLAY_PHASE_IDLE; // armed by sendConfigComplete() when gradient sync is in use
+    ReplayPhase replayPhase = REPLAY_PHASE_IDLE; // armed by sendConfigComplete() for full/default sync
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
