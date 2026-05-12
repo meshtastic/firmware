@@ -37,6 +37,7 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
         info.position.altitude = position->altitude;
         info.position.location_source = position->location_source;
         info.position.time = position->time;
+        info.position.precision_bits = position->precision_bits;
     }
     if (nodeInfoLiteHasUser(lite)) {
         info.has_user = true;

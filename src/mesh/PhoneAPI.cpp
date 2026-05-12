@@ -536,13 +536,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Just in case we stored a different user.id in the past, but should never happen going forward
             sprintf(infoToSend.user.id, "!%08x", infoToSend.num);
 
-            // TEMP: log the wire-shape of every NodeInfo we hand to the phone, so we can
-            // verify short_name / long_name / has_user are populated. Revert once verified.
-            LOG_INFO("nodeinfo->phone: num=0x%x has_user=%d id=%s long='%s' short='%s' ch=%u snr=%.1f hops_away=(has=%d,v=%u)",
-                     infoToSend.num, (int)infoToSend.has_user, infoToSend.user.id, infoToSend.user.long_name,
-                     infoToSend.user.short_name, (unsigned)infoToSend.channel, (double)infoToSend.snr,
-                     (int)infoToSend.has_hops_away, (unsigned)infoToSend.hops_away);
-
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = infoToSend;
             prefetchNodeInfos();
