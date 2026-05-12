@@ -52,10 +52,7 @@ class XModemAdapter
     meshtastic_XModem getForPhone();
     void resetForPhone();
 
-    // True while a file is being received from or transmitted to the phone.
-    // Callers (e.g. NodeDB::saveNodeDatabaseToDisk) consult this to avoid
-    // opening the same on-disk file for write in parallel, which races our
-    // long-lived xmodem `file` handle and ends up producing a 0-byte file.
+    // True while a file transfer is in flight; lets callers avoid racing our `file` handle.
     bool isBusy() const { return isReceiving || isTransmitting; }
 
   private:

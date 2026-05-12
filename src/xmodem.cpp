@@ -123,11 +123,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             filename[sizeof(filename) - 1] = '\0';
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
-                // Truncate the destination before opening. On Adafruit_LittleFS,
-                // `open(path, FILE_O_WRITE)` is *append* semantics (O_RDWR|O_CREAT +
-                // seek-to-EOF), so without a prior remove, our XModem-streamed
-                // payload would be concatenated onto whatever was there, producing
-                // a corrupt mixed file.
+                // FILE_O_WRITE on Adafruit_LittleFS is append, not truncate — remove first.
                 spiLock->lock();
                 if (FSCom.exists(filename))
                     FSCom.remove(filename);
