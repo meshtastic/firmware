@@ -164,7 +164,8 @@ void CryptoEngine::curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubk
     // need to convert the pubkey y = ( u - 1) * inv( u + 1) (mod p).
 }
 
-bool CryptoEngine::ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user){
+bool CryptoEngine::ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user)
+{
     if (user.is_licensed) {
         return false;
     }
