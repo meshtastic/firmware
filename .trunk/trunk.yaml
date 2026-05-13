@@ -11,7 +11,7 @@ lint:
     - checkov@3.2.528
     - renovate@43.150.0
     - prettier@3.8.3
-    - trufflehog@3.95.2
+    - trufflehog@3.95.3
     - yamllint@1.38.0
     - bandit@1.9.4
     - trivy@0.70.0
