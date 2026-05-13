@@ -91,8 +91,9 @@
 // nRF52 flash optimization: re-route FONT_LARGE_LOCAL to the 16pt glyph so
 // the display-tier dispatch below picks up 16pt everywhere it would have used
 // 24pt. Drops the ~9.6 KB ArialMT_Plain_24 table from the linked binary.
-// Set MESHTASTIC_LARGE_FONT_24PT=1 in build_flags to opt out per variant.
-#if defined(ARCH_NRF52) && !defined(MESHTASTIC_LARGE_FONT_24PT)
+// Set MESHTASTIC_LARGE_FONT_24PT=1 in build_flags to opt out per variant
+// (undefined or 0 keeps the optimization on).
+#if defined(ARCH_NRF52) && (!defined(MESHTASTIC_LARGE_FONT_24PT) || MESHTASTIC_LARGE_FONT_24PT == 0)
 #undef FONT_LARGE_LOCAL
 #define FONT_LARGE_LOCAL FONT_MEDIUM_LOCAL
 #endif
