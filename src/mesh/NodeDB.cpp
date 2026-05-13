@@ -2079,21 +2079,25 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 
 bool NodeDB::createNewIdentity()
 {
-    // Remove the old node from the NodeDB
     uint32_t oldNodeNum = getNodeNum();
+    uint32_t newNodeNum = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
+
+    // If the key hasn't changed, nothing to do
+    if (newNodeNum == oldNodeNum)
+        return false;
+
+    // Retire the old node entry
     meshtastic_NodeInfoLite *node = getMeshNode(oldNodeNum);
-
-    // Set my node num uint32 value to bytes from the new public key
-    myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
-
-    if (node != NULL && myNodeInfo.my_node_num != oldNodeNum) {
-        LOG_DEBUG("Old node num %u is now %u", oldNodeNum, myNodeInfo.my_node_num);
+    if (node != NULL) {
+        LOG_DEBUG("Old node num %u is now %u", oldNodeNum, newNodeNum);
         node->is_ignored = true;
         node->has_device_metrics = false;
         node->has_position = false;
         node->user.public_key.size = 0;
-        node->user.public_key.bytes[0] = 0;
+        memset(node->user.public_key.bytes, 0, sizeof(node->user.public_key.bytes));
     }
+
+    myNodeInfo.my_node_num = newNodeNum;
 
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = TypeConversions::ConvertToUserLite(owner);
