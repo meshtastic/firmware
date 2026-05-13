@@ -493,6 +493,8 @@ extern uint32_t error_address;
 #define NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_IS_UNMESSAGABLE_SHIFT)
 #define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT 8
 #define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT)
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 9
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1u << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
 // Bits 9..31 reserved for future single-bit flags.
 
 // Convenience accessors so call sites read like the old struct fields.
@@ -532,6 +534,10 @@ inline bool nodeInfoLiteIsKeyManuallyVerified(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK);
 }
+inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
+}
 
 inline void nodeInfoLiteSetBit(meshtastic_NodeInfoLite *n, uint32_t mask, bool value)
 {
@@ -542,9 +548,6 @@ inline void nodeInfoLiteSetBit(meshtastic_NodeInfoLite *n, uint32_t mask, bool v
     else
         n->bitfield &= ~mask;
 }
-
-#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 1
-#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1 << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
 
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \

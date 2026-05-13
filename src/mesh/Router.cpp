@@ -523,12 +523,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         if (p->decoded.has_bitfield)
             p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
-        if (p->decoded.has_xeddsa_signature) {
+        if (p->decoded.xeddsa_signature.size == XEDDSA_SIGNATURE_SIZE) {
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
-            if (node && node->user.public_key.size == 32) {
+            if (node && node->public_key.size == 32) {
                 p->xeddsa_signed =
-                    crypto->xeddsa_verify(node->user.public_key.bytes, p->from, p->id, p->decoded.portnum,
-                                          p->decoded.payload.bytes, p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
+                    crypto->xeddsa_verify(node->public_key.bytes, p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes,
+                                          p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
                 if (p->xeddsa_signed) {
                     // Mark this node as a signer so future unsigned packets from it are rejected
                     node->bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
@@ -543,7 +543,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         } else {
             // Unsigned packet — reject if this node previously sent signed packets
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
-            if (node && (node->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK)) {
+            if (node && nodeInfoLiteHasXeddsaSigned(node)) {
                 LOG_WARN("Dropping unsigned packet from 0x%08x that previously signed", p->from);
                 return DecodeState::DECODE_FAILURE;
             }
@@ -628,7 +628,6 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
                                         p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
-                    p->decoded.has_xeddsa_signature = true;
                     LOG_DEBUG("XEdDSA signed packet 0x%08x", p->id);
                 }
             }
