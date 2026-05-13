@@ -1,12 +1,10 @@
-/*
-Board Information: https://wiki.uniteng.com/en/meshtastic/station-g2
-*/
-
 #include "station_common.h"
 
 #ifdef USE_SX1262
-// Ensure the PA does not exceed the saturation output power. More
-// Info:https://wiki.uniteng.com/en/meshtastic/station-g2#summary-for-lora-power-amplifier-conduction-test
+// Station G3 reuses the same Fast-Transient DC-DC PA design as G2 (BQ35LORA900V1M).
+// PA Operating Mode is set in hardware via the PA-PL1 / PA-PL2 jumpers.
+// 19 matches the G2 cap (SX1262 19 dBm in → ~31 dBm PA out at Power Level 1, ISM compliant).
+// Raise (max 22) only if running a higher PA Power Level and you can stay within local band limits.
 #define SX126X_MAX_POWER 19
 #endif
 
