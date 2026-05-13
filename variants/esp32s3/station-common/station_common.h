@@ -26,7 +26,7 @@
 #define LORA_DIO1 48
 
 #ifdef USE_SX1262
-#define SX126X_CS LORA_CS // FIXME - we really should define LORA_CS instead
+#define SX126X_CS LORA_CS // Compatibility alias; prefer LORA_CS in board definitions.
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY 47
 #define SX126X_RESET LORA_RESET
