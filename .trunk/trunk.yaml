@@ -34,6 +34,13 @@ lint:
     - linters: [ALL]
       paths:
         - bin/**
+    # Fake-NodeDB fixture JSONL files contain deterministic synthetic
+    # public_key_hex (64-char hex) values that gitleaks misidentifies as
+    # generic-api-key. These are not secrets — they're test fixtures
+    # produced by bin/gen-fake-nodedb-seed.py with a fixed RNG seed.
+    - linters: [gitleaks]
+      paths:
+        - test/fixtures/nodedb/seed_v25_*.jsonl
 runtimes:
   enabled:
     - python@3.14.4

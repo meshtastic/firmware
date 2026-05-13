@@ -52,6 +52,9 @@ class XModemAdapter
     meshtastic_XModem getForPhone();
     void resetForPhone();
 
+    // True while a file transfer is in flight; lets callers avoid racing our `file` handle.
+    bool isBusy() const { return isReceiving || isTransmitting; }
+
   private:
     bool isReceiving = false;
     bool isTransmitting = false;

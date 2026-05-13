@@ -15,6 +15,7 @@ from . import (
     admin,
     boards,
     devices,
+    fixtures,
     flash,
     hw_tools,
     info,
@@ -962,4 +963,46 @@ def recorder_export(
         end=end,
         dest_dir=dest_dir,
         streams=streams,
+    )
+
+
+# ---------- Fixture / test-data push --------------------------------------
+
+
+@app.tool()
+def push_fake_nodedb(
+    size: int,
+    target: str = "portduino",
+    port: str | None = None,
+    portduino_config: str = "default",
+    backup_existing: bool = True,
+    confirm: bool = False,
+    reboot_after: bool = True,
+    custom_seed_jsonl: str | None = None,
+) -> dict[str, Any]:
+    """Push a fake-NodeDB v25 fixture (250/500/1000/2000 nodes) onto a device.
+
+    Two transports:
+      target="portduino" — file copy to ~/.portduino/<portduino_config>/prefs/nodes.proto.
+                            Fast, no device connection needed.
+      target="hardware"  — XModem upload over serial/BLE to /prefs/nodes.proto.
+                            Requires `port` + `confirm=True`. Triggers a reboot
+                            so loadFromDisk picks up the new file at next boot.
+
+    Compiles a fresh-timestamp proto from the committed JSONL seed under
+    test/fixtures/nodedb/seed_v25_<N>.jsonl each invocation, so the loaded
+    NodeDB always looks "recent" to the connecting phone. Structural data
+    (names, IDs, positions, telemetries) is deterministic per the seed.
+
+    Override the JSONL via `custom_seed_jsonl` to push a hand-edited scenario.
+    """
+    return fixtures.push_fake_nodedb(
+        size=size,
+        target=target,  # type: ignore[arg-type]
+        port=port,
+        portduino_config=portduino_config,
+        backup_existing=backup_existing,
+        confirm=confirm,
+        reboot_after=reboot_after,
+        custom_seed_jsonl=custom_seed_jsonl,
     )
