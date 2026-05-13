@@ -67,8 +67,14 @@ void c6l_init()
     i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_SET, 0b10000000); // 默认输出为0
     vTaskDelay(10 / portTICK_PERIOD_MS);
     i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_IRQ_STA, &in_data); // 读取IRQ_STA清除标志
+    vTaskDelay(10 / portTICK_PERIOD_MS);
 
     i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_SET, &in_data);
-    setbit(in_data, 6); // HIGH
+    setbit(in_data, 6); // enable SX_ANT_SW
+    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_SET, in_data);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+
+    i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_SET, &in_data);
+    setbit(in_data, 5); // enable SX_LNA_EN
     i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_SET, in_data);
 }
