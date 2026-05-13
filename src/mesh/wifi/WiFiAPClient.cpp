@@ -292,7 +292,7 @@ static int32_t reconnectWiFi()
         return 1000; // check once per second
     } else {
         onNetworkConnected(); // will only do anything once (guarded by APStartupComplete)
-        return 300000; // every 5 minutes
+        return 300000;        // every 5 minutes
     }
 }
 
