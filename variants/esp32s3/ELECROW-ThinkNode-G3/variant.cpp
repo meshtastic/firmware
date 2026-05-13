@@ -1,4 +1,4 @@
-#include "configuration.h"
+#include "NodeDB.h"
 
 void variantDefaultConfig()
 {
