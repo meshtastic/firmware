@@ -1,4 +1,4 @@
-#include "mesh/NodeDB.h"
+#include "configuration.h"
 
 void variantDefaultConfig()
 {
