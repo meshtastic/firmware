@@ -343,6 +343,9 @@ inline bool isConnectedToNetwork()
 #ifdef USE_WS5500
     if (ETH.connected())
         return true;
+#elif defined(USE_CH390D)
+    if (ETH.isConnected())
+        return true;
 #endif
 
 #if HAS_WIFI

@@ -4,9 +4,9 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <assert.h>
+#include <map>
 #include <pb_encode.h>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "MeshTypes.h"
@@ -170,19 +170,19 @@ class NodeDB
     Observable<const meshtastic::NodeStatus *> newStatus;
     pb_size_t numMeshNodes;
 
-    // Satellite per-NodeNum maps for data we used to inline into NodeInfoLite,
-    // gated by MESHTASTIC_EXCLUDE_*DB so STM32WL can omit them.
+    // Satellite per-NodeNum maps. std::map avoids unordered_map's bucket-array
+    // preallocation; O(log N) lookup is fine at these sizes.
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-    std::unordered_map<NodeNum, meshtastic_PositionLite> nodePositions;
+    std::map<NodeNum, meshtastic_PositionLite> nodePositions;
 #endif
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-    std::unordered_map<NodeNum, meshtastic_DeviceMetrics> nodeTelemetry;
+    std::map<NodeNum, meshtastic_DeviceMetrics> nodeTelemetry;
 #endif
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-    std::unordered_map<NodeNum, meshtastic_EnvironmentMetrics> nodeEnvironment;
+    std::map<NodeNum, meshtastic_EnvironmentMetrics> nodeEnvironment;
 #endif
 #if !MESHTASTIC_EXCLUDE_STATUSDB
-    std::unordered_map<NodeNum, meshtastic_StatusMessage> nodeStatus;
+    std::map<NodeNum, meshtastic_StatusMessage> nodeStatus;
 #endif
 
     bool keyIsLowEntropy = false;
@@ -429,6 +429,11 @@ class NodeDB
     // the legacy descriptor and copies entries into the v25 layout. Caller
     // is responsible for save / install-default on the result.
     bool migrateLegacyNodeDatabase();
+
+    // Route satellite-store decode entries straight into our maps instead of
+    // temp vectors. Must be paired — disarm before any other NodeDatabase decode.
+    void armNodeDatabaseDecodeTargets();
+    void disarmNodeDatabaseDecodeTargets();
 };
 
 extern NodeDB *nodeDB;

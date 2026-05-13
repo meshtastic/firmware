@@ -291,7 +291,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
 
                     auto addToRoute = [](JsonArray *route, NodeNum num) {
                         char long_name[40] = "Unknown";
-                        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(num);
+                        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(num);
                         bool name_known = nodeInfoLiteHasUser(node);
                         if (name_known) {
                             const size_t copy_len =
