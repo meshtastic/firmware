@@ -5,6 +5,7 @@
 
 #include "SafeBoot.h"
 #include "configuration.h"
+#include "power.h"
 
 #include <Arduino.h>
 #include <stdint.h>
@@ -26,27 +27,23 @@
 #endif
 
 // ---------------------------------------------------------------------------
-// Defaults (chemistry: LiIon single cell). See src/mesh/Default.h for
-// chemistry-aware overrides; per-board overrides come from variant.h.
-// USERPREFS_POWER_SAFE_BOOT_* take precedence over both.
+// Defaults: when a board does not define explicit SafeBoot thresholds, derive
+// them from the existing battery curve so the early-boot power guard matches
+// the same voltage model used for battery percentage and runtime low-battery
+// handling. Boards with weak regulators can still override the thresholds, but
+// the preferred long-term direction is to encode those constraints in a custom
+// OCV curve so 0% means "no longer safe to boot" for that hardware.
 //
-// Why these numbers (LiIon + AMS1117-style 3.3V LDO):
-//   - AMS1117 dropout is ~1.1V at 800 mA. With Vout=3.3V the LDO needs
-//     >=~3.4V at the input to keep regulation; below that the 3V3 rail
-//     sags during a LoRa TX peak and the SoC browns out.
-//   - 3.4V on the LiIon discharge curve is ~5-10% SOC (very depleted),
-//     leaving a small but real safety margin for solar recharge.
-//   - 3.7V wake leaves enough hysteresis (~300 mV) so a momentary solar
-//     surge cannot trick the node into booting again immediately.
+// Why the wake hysteresis stays separate from the curve:
+//   - the sleep threshold should align with the board's minimum stable point;
+//   - the wake threshold needs extra headroom so a transient solar surge does
+//     not immediately bounce the node back into another marginal boot.
 //   - 120 s initial recheck balances responsiveness vs. average current.
 //   - Backoff cap at 600 s prevents the node disappearing for too long
 //     once power has actually returned.
 // ---------------------------------------------------------------------------
-#ifndef DEFAULT_SAFE_BOOT_WAKE_MV
-#define DEFAULT_SAFE_BOOT_WAKE_MV 3700
-#endif
-#ifndef DEFAULT_SAFE_BOOT_SLEEP_MV
-#define DEFAULT_SAFE_BOOT_SLEEP_MV 3400
+#ifndef DEFAULT_SAFE_BOOT_WAKE_HYST_MV
+#define DEFAULT_SAFE_BOOT_WAKE_HYST_MV 300
 #endif
 #ifndef DEFAULT_SAFE_BOOT_RECHECK_SECS
 #define DEFAULT_SAFE_BOOT_RECHECK_SECS 120
@@ -82,15 +79,45 @@
 #define DEFAULT_SAFE_BOOT_RECHECK_SECS USERPREFS_POWER_SAFE_BOOT_RECHECK_SECS
 #endif
 
+namespace
+{
+constexpr uint16_t defaultSafeBootCurveSleepMv()
+{
+    constexpr uint16_t ocv[NUM_OCV_POINTS] = {OCV_ARRAY};
+    return static_cast<uint16_t>(ocv[NUM_OCV_POINTS - 1] * NUM_CELLS);
+}
+
+constexpr uint16_t defaultSafeBootWakeMv(uint16_t sleepMv)
+{
+    constexpr uint32_t hysteresisMv = DEFAULT_SAFE_BOOT_WAKE_HYST_MV;
+    constexpr uint32_t maxMv = 0xFFFFu;
+    const uint32_t wakeMv = static_cast<uint32_t>(sleepMv) + hysteresisMv;
+    return static_cast<uint16_t>(wakeMv > maxMv ? maxMv : wakeMv);
+}
+
+#ifdef USERPREFS_POWER_SAFE_BOOT_SLEEP_MV
+constexpr uint16_t kSafeBootSleepMv = USERPREFS_POWER_SAFE_BOOT_SLEEP_MV;
+#elif defined(DEFAULT_SAFE_BOOT_SLEEP_MV)
+constexpr uint16_t kSafeBootSleepMv = DEFAULT_SAFE_BOOT_SLEEP_MV;
+#else
+constexpr uint16_t kSafeBootSleepMv = defaultSafeBootCurveSleepMv();
+#endif
+
+#ifdef USERPREFS_POWER_SAFE_BOOT_WAKE_MV
+constexpr uint16_t kSafeBootWakeMv = USERPREFS_POWER_SAFE_BOOT_WAKE_MV;
+#elif defined(DEFAULT_SAFE_BOOT_WAKE_MV)
+constexpr uint16_t kSafeBootWakeMv = DEFAULT_SAFE_BOOT_WAKE_MV;
+#else
+constexpr uint16_t kSafeBootWakeMv = defaultSafeBootWakeMv(kSafeBootSleepMv);
+#endif
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Module state (process-local; not persisted)
 // ---------------------------------------------------------------------------
-namespace
-{
 bool g_settled = false;
 bool g_wokeFromSafeBoot = false;
 bool g_lastResetUnclean = false;
-} // namespace
 
 // ===========================================================================
 // SafeBoot real implementation (only on supported platforms)
@@ -545,7 +572,7 @@ void SafeBoot::checkAndMaybeSleep()
             g_settled = true;
             return;
         }
-        if (s >= DEFAULT_SAFE_BOOT_WAKE_MV)
+        if (s >= kSafeBootWakeMv)
             stable++;
         else
             stable = 0;
@@ -558,9 +585,9 @@ void SafeBoot::checkAndMaybeSleep()
     //   - Vbat above wake threshold (stable) and no forced cooldown -> proceed
     //   - Otherwise (between sleep & wake, or forced cooldown)      -> sleep
     bool proceed = false;
-    if (mv >= DEFAULT_SAFE_BOOT_WAKE_MV && stable >= DEFAULT_SAFE_BOOT_STABLE_SAMPLES && !forceCooldown) {
+    if (mv >= kSafeBootWakeMv && stable >= DEFAULT_SAFE_BOOT_STABLE_SAMPLES && !forceCooldown) {
         proceed = true;
-    } else if (mv < DEFAULT_SAFE_BOOT_SLEEP_MV) {
+    } else if (mv < kSafeBootSleepMv) {
         proceed = false;
     } else {
         // In hysteresis band: if we're a fresh boot (not from SafeBoot)
@@ -603,7 +630,7 @@ void SafeBoot::checkAndMaybeSleep()
 
     Serial.printf("[SafeBoot] Vbat=%u mV below safe threshold (wake=%u sleep=%u). "
                   "Sleep %us, attempt #%u, unclean=%d.\r\n",
-                  (unsigned)mv, (unsigned)DEFAULT_SAFE_BOOT_WAKE_MV, (unsigned)DEFAULT_SAFE_BOOT_SLEEP_MV, (unsigned)sleep_secs,
+                  (unsigned)mv, (unsigned)kSafeBootWakeMv, (unsigned)kSafeBootSleepMv, (unsigned)sleep_secs,
                   (unsigned)next.attempts, (int)g_lastResetUnclean);
     Serial.flush();
 

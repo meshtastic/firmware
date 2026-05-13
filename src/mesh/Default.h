@@ -20,12 +20,6 @@
 #define default_min_wake_secs 10
 #define default_screen_on_secs IF_ROUTER(1, 60 * 10)
 
-// SafeBoot defaults (LiIon single-cell). See src/SafeBoot.cpp for the
-// rationale behind these numbers; per-board overrides come from variant.h
-// (DEFAULT_SAFE_BOOT_*) or USERPREFS (USERPREFS_POWER_SAFE_BOOT_*).
-// These mirror the compile-time defaults in SafeBoot.cpp and exist here so
-// that other subsystems (e.g. UI, telemetry) can reuse the same numbers
-// without including SafeBoot.h directly.
 #ifndef default_safe_boot_wake_mv
 #define default_safe_boot_wake_mv 3700
 #endif
