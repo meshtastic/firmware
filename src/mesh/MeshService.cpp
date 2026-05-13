@@ -94,8 +94,9 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
         LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo");
         //  ignore our request for its NodeInfo
-    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
-               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
+    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+               !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp->from)) && nodeInfoModule && !isPreferredRebroadcaster &&
+               !nodeDB->isFull()) {
         if (airTime->isTxAllowedChannelUtil(true)) {
             const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
             if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
@@ -392,19 +393,16 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     assert(node);
 
-    // We might not have a position yet for our local node, in that case, at least try to send the time
-    if (!node->has_position) {
-        memset(&node->position, 0, sizeof(node->position));
-        node->has_position = true;
-    }
-
-    meshtastic_PositionLite &position = node->position;
-
     // Update our local node info with our time (even if we don't decide to update anyone else)
     node->last_heard =
         getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
 
-    position.time = getValidTime(RTCQualityFromNet);
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    // Make sure our own NodeNum has a slot in the position map so subsequent
+    // updates (and the bundled NodeInfo emission to the phone) have somewhere
+    // to read from. Insert a default-zero entry on first call.
+    nodeDB->touchNodePositionTime(node->num, getValidTime(RTCQualityFromNet));
+#endif
 
     if (powerStatus->getHasBattery() == 1) {
         updateBatteryLevel(powerStatus->getBatteryChargePercent());
@@ -432,7 +430,9 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {
         LOG_WARN("Use fixed position");
-        pos = TypeConversions::ConvertToPosition(node->position);
+        meshtastic_PositionLite fixedSlot;
+        if (nodeDB->copyNodePosition(node->num, fixedSlot))
+            pos = TypeConversions::ConvertToPosition(fixedSlot);
     }
 
     // Add a fresh timestamp

@@ -1226,9 +1226,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         // Fallback only when PSRAM cache is unavailable on this target.
         // In this mode we use the node-wide table maintained by NodeInfoModule.
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
-        if (!node || !node->has_user)
+        if (!nodeInfoLiteHasUser(node))
             return false;
-        cachedUser = TypeConversions::ConvertToUser(node->num, node->user);
+        cachedUser = TypeConversions::ConvertToUser(node);
     }
 
     if (!sendResponse)

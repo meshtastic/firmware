@@ -317,12 +317,12 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
         char tempName[48] = {0};
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i + 1);
-        if (node && node->has_user) {
+        if (nodeInfoLiteHasUser(node)) {
             const char *rawName = nullptr;
-            if (node->user.long_name[0]) {
-                rawName = node->user.long_name;
-            } else if (node->user.short_name[0]) {
-                rawName = node->user.short_name;
+            if (node->long_name[0]) {
+                rawName = node->long_name;
+            } else if (node->short_name[0]) {
+                rawName = node->short_name;
             }
             if (rawName) {
                 const int arrowWidth = (currentResolution == ScreenResolution::High)

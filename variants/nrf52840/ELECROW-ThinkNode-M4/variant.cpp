@@ -35,6 +35,9 @@ void initVariant()
     pinMode(LED_PAIRING, OUTPUT);
     ledOff(LED_PAIRING);
 
+    pinMode(LED_HEARTBEAT, OUTPUT);
+    ledOff(LED_HEARTBEAT);
+
     pinMode(Battery_LED_1, OUTPUT);
     ledOff(Battery_LED_1);
     pinMode(Battery_LED_2, OUTPUT);
