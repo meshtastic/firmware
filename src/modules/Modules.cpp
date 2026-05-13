@@ -38,6 +38,9 @@
 #include "modules/PowerStressModule.h"
 #endif
 #include "modules/RoutingModule.h"
+#if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -56,9 +59,13 @@
 #endif
 #if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "main.h"
-#include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #include "modules/Telemetry/HealthTelemetry.h"
+#include "modules/Telemetry/Sensor/TelemetrySensor.h"
+#endif
+#if HAS_SENSOR && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+#include "main.h"
+#include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/Sensor/TelemetrySensor.h"
 #endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
@@ -116,6 +123,14 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
     new ReplyBotModule();
 #endif
+
+#if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
+    // Instantiate only when enabled to avoid extra memory use and background work.
+    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled) {
+        trafficManagementModule = new TrafficManagementModule();
+    }
+#endif
+
 #if !MESHTASTIC_EXCLUDE_ADMIN
     adminModule = new AdminModule();
 #endif

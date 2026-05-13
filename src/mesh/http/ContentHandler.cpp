@@ -46,10 +46,6 @@ using namespace httpsserver;
 
 #include "mesh/http/ContentHandler.h"
 
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
-HTTPClient httpClient;
-
 #define DEST_FS_USES_LITTLEFS
 
 // We need to specify some content-type mapping, so the resources get delivered with the
@@ -344,11 +340,6 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->print(jsonString.c_str());
 
     delete value;
-
-    // Clean up the fileList to prevent memory leak
-    for (auto *val : fileList) {
-        delete val;
-    }
 }
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
@@ -543,6 +534,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         if (name != "file") {
             LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
+            delete parser;
             return;
         }
 
@@ -550,6 +542,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         if (filename == "") {
             LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
+            delete parser;
             return;
         }
 
@@ -736,7 +729,7 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     uint32_t readIndex = 0;
     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
     while (tempNodeInfo != NULL) {
-        if (tempNodeInfo->has_user) {
+        if (nodeInfoLiteHasUser(tempNodeInfo)) {
             JSONObject node;
 
             char id[16];
@@ -744,26 +737,26 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
 
             node["id"] = new JSONValue(id);
             node["snr"] = new JSONValue(tempNodeInfo->snr);
-            node["via_mqtt"] = new JSONValue(BoolToString(tempNodeInfo->via_mqtt));
+            node["via_mqtt"] = new JSONValue(BoolToString(nodeInfoLiteViaMqtt(tempNodeInfo)));
             node["last_heard"] = new JSONValue((int)tempNodeInfo->last_heard);
             node["position"] = new JSONValue();
 
             if (nodeDB->hasValidPosition(tempNodeInfo)) {
-                JSONObject position;
-                position["latitude"] = new JSONValue((float)tempNodeInfo->position.latitude_i * 1e-7);
-                position["longitude"] = new JSONValue((float)tempNodeInfo->position.longitude_i * 1e-7);
-                position["altitude"] = new JSONValue((int)tempNodeInfo->position.altitude);
-                node["position"] = new JSONValue(position);
+                meshtastic_PositionLite posLite;
+                if (nodeDB->copyNodePosition(tempNodeInfo->num, posLite)) {
+                    JSONObject position;
+                    position["latitude"] = new JSONValue((float)posLite.latitude_i * 1e-7);
+                    position["longitude"] = new JSONValue((float)posLite.longitude_i * 1e-7);
+                    position["altitude"] = new JSONValue((int)posLite.altitude);
+                    node["position"] = new JSONValue(position);
+                }
             }
 
-            node["long_name"] = new JSONValue(tempNodeInfo->user.long_name);
-            node["short_name"] = new JSONValue(tempNodeInfo->user.short_name);
-            char macStr[18];
-            snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", tempNodeInfo->user.macaddr[0],
-                     tempNodeInfo->user.macaddr[1], tempNodeInfo->user.macaddr[2], tempNodeInfo->user.macaddr[3],
-                     tempNodeInfo->user.macaddr[4], tempNodeInfo->user.macaddr[5]);
-            node["mac_address"] = new JSONValue(macStr);
-            node["hw_model"] = new JSONValue(tempNodeInfo->user.hw_model);
+            node["long_name"] = new JSONValue(tempNodeInfo->long_name);
+            node["short_name"] = new JSONValue(tempNodeInfo->short_name);
+            // mac_address dropped from NodeInfoLite as part of the slim refactor; emit zeros.
+            node["mac_address"] = new JSONValue("00:00:00:00:00:00");
+            node["hw_model"] = new JSONValue(tempNodeInfo->hw_model);
 
             nodesArray.push_back(new JSONValue(node));
         }
@@ -783,11 +776,6 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     std::string jsonString = value->Stringify();
     res->print(jsonString.c_str());
     delete value;
-
-    // Clean up the nodesArray to prevent memory leak
-    for (auto *val : nodesArray) {
-        delete val;
-    }
 }
 
 /*
@@ -941,10 +929,5 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
     std::string jsonString = value->Stringify();
     res->print(jsonString.c_str());
     delete value;
-
-    // Clean up the networkObjs to prevent memory leak
-    for (auto *val : networkObjs) {
-        delete val;
-    }
 }
 #endif

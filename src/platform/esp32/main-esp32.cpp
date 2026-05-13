@@ -32,7 +32,7 @@ void variant_shutdown() {}
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_CH390D)
     if ((config.bluetooth.enabled == true) && (config.network.wifi_enabled == false))
 #elif HAS_WIFI
     if (!isWifiAvailable() && config.bluetooth.enabled == true)
@@ -231,7 +231,9 @@ void cpuDeepSleep(uint32_t msecToWake)
 #if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
     uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
 #endif
-
+#ifdef ALT_BUTTON_WAKE
+    gpioMask |= (1ULL << BUTTON_PIN_ALT);
+#endif
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #endif

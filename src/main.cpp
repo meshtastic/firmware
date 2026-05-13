@@ -9,6 +9,7 @@
 #include "PowerMon.h"
 #include "RadioLibInterface.h"
 #include "ReliableRouter.h"
+#include "TransmitHistory.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "power/PowerHAL.h"
@@ -58,12 +59,12 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
-#if HAS_WIFI || defined(USE_WS5500)
+#if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D)
 #include "mesh/api/WiFiServerAPI.h"
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
 #include "mesh/api/ethServerAPI.h"
 #include "mesh/eth/ethClient.h"
 #endif
@@ -122,7 +123,7 @@ void printPartitionTable()
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
@@ -192,8 +193,6 @@ bool kb_found = false;
 // global bool to record that on-screen keyboard (OSK) is present
 bool osk_found = false;
 
-unsigned long last_listen = 0;
-
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the Accelerometer (if found)
@@ -246,9 +245,8 @@ const char *getDeviceName()
 uint32_t timeLastPowered = 0;
 
 static OSThread *powerFSMthread;
-OSThread *ambientLightingThread;
+AmbientLightingThread *ambientLightingThread;
 
-RadioInterface *rIf = NULL;
 RadioLibHal *RadioLibHAL = NULL;
 
 /**
@@ -337,7 +335,7 @@ void setup()
 
 #ifdef WIFI_LED
     pinMode(WIFI_LED, OUTPUT);
-    digitalWrite(WIFI_LED, LOW);
+    digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
 
 #ifdef BLE_LED
@@ -391,8 +389,8 @@ void setup()
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
 #ifndef SENSECAP_INDICATOR
-    // use PSRAM for malloc calls > 256 bytes
-    heap_caps_malloc_extmem_enable(256);
+    // use PSRAM for malloc calls > 2048 bytes
+    heap_caps_malloc_extmem_enable(2048);
 #endif
 #endif
 
@@ -659,7 +657,7 @@ void setup()
     }
 #endif
 
-#if !defined(ARCH_STM32WL)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
@@ -706,6 +704,9 @@ void setup()
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
+
+    // Initialize transmit history to persist broadcast throttle timers across reboots
+    TransmitHistory::getInstance()->loadFromDisk();
 #if HAS_TFT
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         tftSetup();
@@ -730,13 +731,20 @@ void setup()
 #elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #else
-    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO) {
         screen_model = config.display.oled;
+
+        // Fix: update geometry for SH1107 128x128 selected via menu
+        if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128) {
+            screen_geometry = GEOMETRY_128_128;
+            screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // normalize
+        }
+    }
 #endif
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-#if !defined(ARCH_STM32WL)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
@@ -1121,10 +1129,19 @@ void loop()
 #endif
     power->powerCommandsCheck();
 
-    if (RadioLibInterface::instance != nullptr && !Throttle::isWithinTimespanMs(last_listen, 1000 * 60) &&
-        !(RadioLibInterface::instance->isSending() || RadioLibInterface::instance->isActivelyReceiving())) {
-        RadioLibInterface::instance->startReceive();
-        LOG_DEBUG("attempting AGC reset");
+    if (RadioLibInterface::instance != nullptr) {
+        static uint32_t lastRadioMissedIrqPoll;
+        if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
+            lastRadioMissedIrqPoll = millis();
+            RadioLibInterface::instance->pollMissedIrqs();
+        }
+
+        // Periodic AGC reset — warm sleep + recalibrate to prevent stuck AGC gain
+        static uint32_t lastAgcReset;
+        if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
+            lastAgcReset = millis();
+            RadioLibInterface::instance->resetAGC();
+        }
     }
 
 #ifdef DEBUG_STACK

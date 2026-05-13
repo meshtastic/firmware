@@ -57,6 +57,9 @@ PB_BIND(meshtastic_ModuleConfig_AmbientLightingConfig, meshtastic_ModuleConfig_A
 PB_BIND(meshtastic_ModuleConfig_StatusMessageConfig, meshtastic_ModuleConfig_StatusMessageConfig, AUTO)
 
 
+PB_BIND(meshtastic_ModuleConfig_TAKConfig, meshtastic_ModuleConfig_TAKConfig, AUTO)
+
+
 PB_BIND(meshtastic_RemoteHardwarePin, meshtastic_RemoteHardwarePin, AUTO)
 
 

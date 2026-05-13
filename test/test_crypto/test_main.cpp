@@ -113,7 +113,7 @@ void test_DH25519(void)
 void test_PKC(void)
 {
     uint8_t private_key[32];
-    meshtastic_UserLite_public_key_t public_key;
+    meshtastic_NodeInfoLite_public_key_t public_key;
     uint8_t expected_shared[32];
     uint8_t expected_decrypted[32];
     uint8_t radioBytes[128] __attribute__((__aligned__));

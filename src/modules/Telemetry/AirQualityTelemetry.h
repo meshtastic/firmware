@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "BaseTelemetryModule.h"
+
 #ifndef AIR_QUALITY_TELEMETRY_MODULE_ENABLE
 #define AIR_QUALITY_TELEMETRY_MODULE_ENABLE 0
 #endif
@@ -17,6 +19,7 @@
 
 class AirQualityTelemetryModule : private concurrency::OSThread,
                                   public ScanI2CConsumer,
+                                  public BaseTelemetryModule,
                                   public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<AirQualityTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
@@ -65,7 +68,6 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     // uint32_t sendToPhoneIntervalMs = 1000; // Send to phone every minute
-    uint32_t lastSentToMesh = 0;
     uint32_t lastSentToPhone = 0;
 };
 

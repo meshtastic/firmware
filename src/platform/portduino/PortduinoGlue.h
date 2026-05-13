@@ -52,6 +52,7 @@ struct pinMapping {
     int gpiochip;
     int line;
     bool enabled = false;
+    bool default_high = false;
 };
 
 extern std::ofstream traceFile;
@@ -107,6 +108,7 @@ extern struct portduino_config_struct {
     pinMapping lora_txen_pin = {"Lora", "TXen"};
     pinMapping lora_rxen_pin = {"Lora", "RXen"};
     pinMapping lora_sx126x_ant_sw_pin = {"Lora", "SX126X_ANT_SW"};
+    pinMapping lora_pa_detect_pin = {"Lora", "GPIO_DETECT_PA"};
     std::vector<pinMapping> extra_pins = {};
 
     // GPS
@@ -163,6 +165,7 @@ extern struct portduino_config_struct {
     bool ascii_logs_explicit = false;
 
     std::string JSONFilename;
+    int JSONFileRotate = 0;
     meshtastic_PortNum JSONFilter = (_meshtastic_PortNum)0;
 
     // Webserver
@@ -194,13 +197,16 @@ extern struct portduino_config_struct {
     int maxtophone = 100;
     int MaxNodes = 200;
 
-    pinMapping *all_pins[20] = {&lora_cs_pin,
+    std::unordered_map<std::string, std::string> hat_plus_custom_fields;
+
+    pinMapping *all_pins[21] = {&lora_cs_pin,
                                 &lora_irq_pin,
                                 &lora_busy_pin,
                                 &lora_reset_pin,
                                 &lora_txen_pin,
                                 &lora_rxen_pin,
                                 &lora_sx126x_ant_sw_pin,
+                                &lora_pa_detect_pin,
                                 &displayDC,
                                 &displayCS,
                                 &displayBacklight,
@@ -255,18 +261,23 @@ extern struct portduino_config_struct {
             out << YAML::Key << "TX_GAIN_LORA" << YAML::Value << tx_gain_lora[0];
         }
 
-        out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
+        if (dio2_as_rf_switch)
+            out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
         if (lora_usb_pid != 0x5512)
             out << YAML::Key << "USB_PID" << YAML::Value << YAML::Hex << lora_usb_pid;
         if (lora_usb_vid != 0x1A86)
             out << YAML::Key << "USB_VID" << YAML::Value << YAML::Hex << lora_usb_vid;
-        if (lora_spi_dev != "")
+        if (lora_spi_dev != "" && !(lora_spi_dev == "/dev/spidev0.0" && lora_module == use_autoconf)) {
+            if (lora_spi_dev.find("/dev/") != std::string::npos)
+                lora_spi_dev = lora_spi_dev.substr(5);
             out << YAML::Key << "spidev" << YAML::Value << lora_spi_dev;
+        }
         if (lora_usb_serial_num != "")
             out << YAML::Key << "USB_Serialnum" << YAML::Value << lora_usb_serial_num;
-        out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
+        if (spiSpeed != 2000000)
+            out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
         if (rfswitch_dio_pins[0] != RADIOLIB_NC) {
             out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
@@ -462,6 +473,9 @@ extern struct portduino_config_struct {
             out << YAML::Key << "TraceFile" << YAML::Value << traceFilename;
         if (JSONFilename != "") {
             out << YAML::Key << "JSONFile" << YAML::Value << JSONFilename;
+            if (JSONFileRotate != 0)
+                out << YAML::Key << "JSONFileRotate" << YAML::Value << JSONFileRotate;
+
             if (JSONFilter == meshtastic_PortNum_TEXT_MESSAGE_APP)
                 out << YAML::Key << "JSONFilter" << YAML::Value << "textmessage";
             else if (JSONFilter == meshtastic_PortNum_TELEMETRY_APP)

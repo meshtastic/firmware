@@ -1,3 +1,9 @@
+Meta:
+  name: Pinedio USB SX1262
+  support: deprecated
+  compatible:
+    - usb
+
 Lora:
   Module: sx1262
   CS: 0 

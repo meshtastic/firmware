@@ -33,6 +33,7 @@ __pycache__
 *~
 
 venv/
+.venv/
 release/
 .vscode/extensions.json
 /compile_commands.json
@@ -53,3 +54,11 @@ CMakeLists.txt
 
 # PYTHONPATH used by the Nix shell
 .python3
+.claude/scheduled_tasks.lock
+userPrefs.jsonc.mcp-session-bak
+
+# Fake-NodeDB fixture pipeline (bin/regen-fake-nodedbs.sh)
+# JSONL seeds are committed (test/fixtures/nodedb/seed_v25_*.jsonl);
+# compiled .proto outputs are ephemeral build artifacts.
+build/fixtures/
+bin/_generated/

@@ -1,6 +1,7 @@
 #include "NRF52Bluetooth.h"
 #include "BLEDfuSecure.h"
 #include "BluetoothCommon.h"
+#include "HardwareRNG.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
@@ -32,6 +33,7 @@ static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 static uint16_t connectionHandle;
+static bool passkeyShowing;
 
 class BluetoothPhoneAPI : public PhoneAPI
 {
@@ -86,6 +88,16 @@ void onDisconnect(uint16_t conn_handle, uint8_t reason)
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
+
+#if HAS_SCREEN
+    // If a pairing prompt is active, make sure we dismiss it on disconnect/cancel/failure paths.
+    if (passkeyShowing) {
+        passkeyShowing = false;
+        if (screen) {
+            screen->endAlert();
+        }
+    }
+#endif
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
@@ -261,9 +273,13 @@ void NRF52Bluetooth::setup()
     Bluefruit.setTxPower(NRF52_BLE_TX_POWER);
 #endif
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
-        configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN
-                                ? config.bluetooth.fixed_pin
-                                : random(100000, 999999);
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
+            configuredPasskey = config.bluetooth.fixed_pin;
+        } else {
+            uint32_t hwrand = 0;
+            HardwareRNG::fill(reinterpret_cast<uint8_t *>(&hwrand), sizeof(hwrand));
+            configuredPasskey = hwrand % 900000u + 100000u;
+        }
         auto pinString = std::to_string(configuredPasskey);
         LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
         Bluefruit.Security.setPIN(pinString.c_str());
@@ -377,6 +393,8 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         screen->showSimpleBanner(ble_message.c_str(), 30000);
     }
 #endif
+    passkeyShowing = true;
+
     if (match_request) {
         uint32_t start_time = millis();
         while (millis() < start_time + 30000) {
@@ -428,6 +446,7 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
     }
 
     // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+    passkeyShowing = false;
     if (screen) {
         screen->endAlert();
     }

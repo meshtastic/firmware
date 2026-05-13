@@ -88,7 +88,7 @@ void TCA8418Keyboard::pressed(uint8_t key)
     // Check if the key is the same as the last one or if the time interval has passed
     if (next_key != last_key || tap_interval > _TCA8418_MULTI_TAP_THRESHOLD) {
         char_idx = 0;             // Reset char index if new key or long press
-        should_backspace = false; // dont backspace on new key
+        should_backspace = false; // don't backspace on new key
     } else {
         char_idx += 1;           // Cycle through characters if same key pressed
         should_backspace = true; // allow backspace on same key
