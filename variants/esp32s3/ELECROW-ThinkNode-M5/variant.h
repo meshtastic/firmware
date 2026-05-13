@@ -8,9 +8,9 @@
 
 // LED
 // Both of these are on the GPIO expander
-#define PCA_LED_USER 1   // the Blue LED
-#define PCA_LED_ENABLE 2 // the power supply to the LEDs, in an OR arrangement with VBUS power
-#define PCA_LED_POWER 3  // the Red LED? Seems to have hardware logic to blink when USB is plugged in.
+#define PCA_LED_NOTIFICATION 1 // the Blue LED
+#define PCA_LED_ENABLE 2       // the power supply to the LEDs, in an OR arrangement with VBUS power
+#define PCA_LED_POWER 3        // the Red LED? Seems to have hardware logic to blink when USB is plugged in.
 #define POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING
 
 // USB_CHECK
@@ -18,7 +18,7 @@
 #define BATTERY_PIN 8
 #define ADC_CHANNEL ADC1_GPIO8_CHANNEL
 
-#define ADC_MULTIPLIER 2.11 // 2.0 + 10% for correction of display undervoltage.
+#define ADC_MULTIPLIER 2.0 // 2.0 + 10% for correction of display undervoltage.
 
 #define PIN_BUZZER 9
 
@@ -86,6 +86,7 @@
 
 #define BUTTON_PIN PIN_BUTTON1
 #define BUTTON_PIN_ALT PIN_BUTTON2
+#define ALT_BUTTON_WAKE
 
 #define SERIAL_PRINT_PORT 0
 #endif

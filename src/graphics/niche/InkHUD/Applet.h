@@ -15,6 +15,7 @@
 
 #include <GFX.h> // GFXRoot drawing lib
 
+#include "mesh/MeshModule.h"
 #include "mesh/MeshTypes.h"
 
 #include "./AppletFont.h"
@@ -103,6 +104,15 @@ class Applet : public GFX
     virtual void onFreeText(char c) {}
     virtual void onFreeTextDone() {}
     virtual void onFreeTextCancel() {}
+    // Absolute display-space touch point, for touch-friendly UI interactions.
+    // Return true if consumed.
+    virtual bool onTouchPoint(uint16_t x, uint16_t y, bool longPress)
+    {
+        (void)x;
+        (void)y;
+        (void)longPress;
+        return false;
+    }
     // List of inputs which can be subscribed to
     enum InputMask {      // | No Joystick  |     With Joystick     |
         BUTTON_SHORT = 1, // | Button Click | Joystick Center Click |

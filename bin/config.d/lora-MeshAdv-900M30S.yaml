@@ -1,5 +1,11 @@
 # MeshAdv-Pi E22-900M30S
 # https://github.com/chrismyers2000/MeshAdv-Pi-Hat
+Meta:
+  name: MeshAdv-Pi E22-900M30S
+  support: community
+  compatible:
+    - raspberry-pi
+
 Lora:
   Module: sx1262
   CS: 21

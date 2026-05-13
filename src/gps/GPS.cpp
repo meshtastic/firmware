@@ -103,6 +103,14 @@ static int32_t gpsSwitch()
     if (gps) {
         int currentState = digitalRead(PIN_GPS_SWITCH);
 
+        // Respect explicit NOT_PRESENT mode and do not let the hardware switch re-enable GPS.
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            gps->disable();
+            lastState = currentState;
+            firstrun = false;
+            return 1000;
+        }
+
         // if the switch is set to zero, disable the GPS Thread
         if (firstrun)
             if (currentState == LOW)
@@ -1017,10 +1025,13 @@ void GPS::up()
     setPowerState(GPS_ACTIVE);
 }
 
-// We've got a GPS lock. Enter a low power state, potentially.
+// We've finished a GPS search cycle (lock or timeout). Enter a low power state, potentially.
 void GPS::down()
 {
-    scheduling.informGotLock();
+    if (hasValidLocation)
+        scheduling.informGotLock();
+    else
+        scheduling.informSearchFailed();
     uint32_t predictedSearchDuration = scheduling.predictedSearchDurationMs();
     uint32_t sleepTime = scheduling.msUntilNextSearch();
     uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);
@@ -1545,7 +1556,12 @@ std::unique_ptr<GPS> GPS::createGps()
         _en_gpio = PIN_GPS_EN;
 #endif
 #ifdef ARCH_PORTDUINO
-    if (!portduino_config.has_gps)
+    if (portduino_config.has_gps) {
+        // These need to set as flags so later checks will pass on native and GPS will work.
+        // They are not used for any hardware access.
+        _rx_gpio = 1;
+        _tx_gpio = 1;
+    } else
         return nullptr;
 #endif
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all

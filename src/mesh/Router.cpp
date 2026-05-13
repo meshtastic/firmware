@@ -120,17 +120,17 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         if (!node)
             continue;
 
-        // Check 1: is_favorite (cheapest - single bool)
-        if (!node->is_favorite)
+        // Check 1: is_favorite (cheapest - single bit test)
+        if (!nodeInfoLiteIsFavorite(node))
             continue;
 
-        // Check 2: has_user (cheap - single bool)
-        if (!node->has_user)
+        // Check 2: has_user (cheap - single bit test)
+        if (!nodeInfoLiteHasUser(node))
             continue;
 
         // Check 3: role check (moderate cost - multiple comparisons)
-        if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+        if (!IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
             continue;
         }
 
@@ -329,7 +329,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             cn->reply_id = p->id;
             cn->level = meshtastic_LogRecord_Level_WARNING;
             cn->time = getValidTime(RTCQualityFromNet);
-            sprintf(cn->message, "Duty cycle limit exceeded. You can send again in %d mins", silentMinutes);
+            snprintf(cn->message, sizeof(cn->message), "Duty cycle limit exceeded. You can send again in %d mins", silentMinutes);
             service->sendClientNotification(cn);
 
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
@@ -433,7 +433,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     concurrency::LockGuard g(cryptLock);
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
-        (nodeDB->getMeshNode(p->from) == NULL || !nodeDB->getMeshNode(p->from)->has_user)) {
+        !nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from))) {
         LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
         return DecodeState::DECODE_FAILURE;
     }
@@ -451,11 +451,11 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
-        nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
-        rawSize > MESHTASTIC_PKC_OVERHEAD) {
+        nodeDB->getMeshNode(p->from)->public_key.size > 0 && nodeDB->getMeshNode(p->to) != nullptr &&
+        nodeDB->getMeshNode(p->to)->public_key.size > 0 && rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes,
+        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->public_key, p->id, rawSize, p->encrypted.bytes,
                                       bytes)) {
             LOG_INFO("PKI Decryption worked!");
 
@@ -467,7 +467,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
-                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
+                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->public_key.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
@@ -499,9 +499,9 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 meshtastic_Data decodedtmp;
                 memset(&decodedtmp, 0, sizeof(decodedtmp));
                 if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
-                    LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!", p->id);
+                    LOG_DEBUG("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)", p->id);
                 } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
-                    LOG_ERROR("Invalid portnum (bad psk?)!");
+                    LOG_DEBUG("Invalid portnum (bad psk?)");
 #if !(MESHTASTIC_EXCLUDE_PKI)
                 } else if (!owner.is_licensed && isToUs(p) && decodedtmp.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
                     LOG_WARN("Rejecting legacy DM");
@@ -665,18 +665,18 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             // Check for a known public key for the destination
-            if (node == nullptr || node->user.public_key.size != 32) {
+            if (node == nullptr || node->public_key.size != 32) {
                 LOG_WARN("Unknown public key for destination node 0x%08x (portnum %d), refusing to send legacy DM", p->to,
                          p->decoded.portnum);
                 return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
             }
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
-                memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
+                memcmp(p->public_key.bytes, node->public_key.bytes, 32) != 0) {
                 LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,
-                         *node->user.public_key.bytes);
+                         *node->public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+            crypto->encryptCurve25519(p->to, getFrom(p), node->public_key, p->id, numbytes, bytes, p->encrypted.bytes);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
@@ -736,9 +736,13 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
 
-    // Store a copy of encrypted packet for MQTT
+    // Store a copy of the encrypted packet for MQTT.
+    // Local, not a class member: handleReceived re-enters itself when a module
+    // reply broadcast goes through MeshService::sendToMesh -> Router::sendLocal,
+    // and a member would be silently overwritten without release on the inner
+    // call. Each invocation now owns its own copy (issue #9632, #10101, #8729).
     DEBUG_HEAP_BEFORE;
-    p_encrypted = packetPool.allocCopy(*p);
+    meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
     DEBUG_HEAP_AFTER("Router::handleReceived", p_encrypted);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
@@ -832,8 +836,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 #endif
     }
 
-    packetPool.release(p_encrypted); // Release the encrypted packet
-    p_encrypted = nullptr;
+    packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
@@ -857,7 +860,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->from);
-    if (node != NULL && node->is_ignored) {
+    if (nodeInfoLiteIsIgnored(node)) {
         LOG_DEBUG("Ignore msg, 0x%x is ignored", p->from);
         packetPool.release(p);
         return;

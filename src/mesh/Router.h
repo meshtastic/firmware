@@ -58,14 +58,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
      * The returned packet is guaranteed to have a unique packet ID already assigned
      */
-    meshtastic_MeshPacket *allocForSending();
+    [[nodiscard]] meshtastic_MeshPacket *allocForSending();
 
     /** Return Underlying interface's TX queue status */
-    meshtastic_QueueStatus getQueueStatus();
+    [[nodiscard]] meshtastic_QueueStatus getQueueStatus();
 
     /**
      * @return our local nodenum */
-    NodeNum getNodeNum();
+    [[nodiscard]] NodeNum getNodeNum();
 
     /** Wake up the router thread ASAP, because we just queued a message for it.
      * FIXME, this is kinda a hack because we don't have a nice way yet to say 'wake us because we are 'blocked on this queue'
@@ -91,9 +91,6 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
-
-    // pointer to the encrypted packet
-    meshtastic_MeshPacket *p_encrypted = nullptr;
 
   protected:
     friend class RoutingModule;
