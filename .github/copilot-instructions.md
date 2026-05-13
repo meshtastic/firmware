@@ -481,6 +481,7 @@ Key defines in variant.h:
 - Regenerate with `bin/regen-protos.sh`
 - Message types prefixed with `meshtastic_`
 - Nanopb `.options` files control field sizes and encoding
+- **Never edit or commit files under `src/mesh/generated/`.** They are regenerated from the [`meshtastic/protobufs`](https://github.com/meshtastic/protobufs) submodule by the `update_protobufs.yml` GitHub Action and any hand edits will be overwritten — guaranteed merge conflict on the next sync. To change a wire format, open a PR against the protobufs repo first; the workflow then re-runs `bin/regen-protos.sh` and opens a PR here with the regenerated sources.
 
 ### Conditional Compilation
 
