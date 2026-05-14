@@ -1,5 +1,8 @@
 #pragma once
 
+#include "configuration.h"
+
+#if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D)
 #include "ServerAPI.h"
 #include <WiFi.h>
 
@@ -29,3 +32,4 @@ class WiFiServerPort : public APIServerPort<WiFiServerAPI, WiFiServer>
 
 void initApiServer(int port = SERVER_API_DEFAULT_PORT);
 void deInitApiServer();
+#endif

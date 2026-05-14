@@ -2,8 +2,18 @@
 #include "Throttle.h"
 #include "configuration.h"
 #include <Arduino.h>
+#include <algorithm>
 
-static constexpr uint32_t TCP_IDLE_TIMEOUT_MS = 15 * 60 * 1000UL;
+#ifndef MESHTASTIC_TCP_API_IDLE_TIMEOUT_MS
+#define MESHTASTIC_TCP_API_IDLE_TIMEOUT_MS (15 * 60 * 1000UL)
+#endif
+
+#ifndef MESHTASTIC_TCP_API_MAX_CLIENTS
+#define MESHTASTIC_TCP_API_MAX_CLIENTS 1
+#endif
+
+static constexpr uint32_t TCP_IDLE_TIMEOUT_MS = MESHTASTIC_TCP_API_IDLE_TIMEOUT_MS;
+static constexpr size_t TCP_API_MAX_CLIENTS = MESHTASTIC_TCP_API_MAX_CLIENTS;
 
 template <typename T>
 ServerAPI<T>::ServerAPI(T &_client) : StreamAPI(&client), concurrency::OSThread("ServerAPI"), client(_client)
@@ -55,9 +65,13 @@ template <class T, class U> void APIServerPort<T, U>::init()
 
 template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
 {
-    // Clean up previous connection if its client already disconnected
-    if (openAPI && !openAPI->checkIsConnected()) {
-        openAPI.reset();
+    // Clean up connections whose clients already disconnected.
+    for (auto api = openAPIs.begin(); api != openAPIs.end();) {
+        if (!(*api)->checkIsConnected()) {
+            api = openAPIs.erase(api);
+        } else {
+            ++api;
+        }
     }
 
 #ifdef ARCH_ESP32
@@ -72,12 +86,13 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
     auto client = U::available();
 #endif
     if (client) {
-        // Close any previous connection (see FIXME in header file)
-        if (openAPI) {
+        if (openAPIs.size() >= TCP_API_MAX_CLIENTS) {
+#if MESHTASTIC_TCP_API_MAX_CLIENTS <= 1
+            // Preserve historical single-client behavior unless a variant explicitly opts into a client pool.
 #if RAK_4631
-            // RAK13800 Ethernet requests periodically take more time
-            // This backoff addresses most cases keeping max wait < 1s
-            // Reconnections are delayed by full wait time
+            // RAK13800 Ethernet requests periodically take more time.
+            // This backoff addresses most cases keeping max wait < 1s.
+            // Reconnections are delayed by full wait time.
             if (waitTime < 400) {
                 waitTime *= 2;
                 LOG_INFO("Previous TCP connection still open, try again in %dms", waitTime);
@@ -85,10 +100,20 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
             }
 #endif
             LOG_INFO("Force close previous TCP connection");
-            openAPI.reset();
+            openAPIs.clear();
+#else
+            auto oldest =
+                std::min_element(openAPIs.begin(), openAPIs.end(), [](const std::unique_ptr<T> &a, const std::unique_ptr<T> &b) {
+                    return a->getLastContactMsec() < b->getLastContactMsec();
+                });
+            if (oldest != openAPIs.end()) {
+                LOG_WARN("TCP API client limit reached (%u), closing oldest connection", (unsigned)TCP_API_MAX_CLIENTS);
+                openAPIs.erase(oldest);
+            }
+#endif
         }
 
-        openAPI.reset(new T(client));
+        openAPIs.emplace_back(new T(client));
     }
 
 #if RAK_4631

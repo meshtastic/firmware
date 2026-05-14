@@ -2,6 +2,7 @@
 
 #include "StreamAPI.h"
 #include <memory>
+#include <vector>
 
 #define SERVER_API_DEFAULT_PORT 4403
 
@@ -25,6 +26,8 @@ template <class T> class ServerAPI : public StreamAPI, private concurrency::OSTh
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override;
 
+    uint32_t getLastContactMsec() const { return lastContactMsec; }
+
   protected:
     /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to
     /// stay in the POWERED state to prevent disabling wifi)
@@ -38,12 +41,11 @@ template <class T> class ServerAPI : public StreamAPI, private concurrency::OSTh
  */
 template <class T, class U> class APIServerPort : public U, private concurrency::OSThread
 {
-    /** The currently open port
-     *
-     * FIXME: We currently only allow one open TCP connection at a time, because we depend on the loop() call in this class to
-     * delegate to the worker.  Once coroutines are implemented we can relax this restriction.
-     */
-    std::unique_ptr<T> openAPI;
+    /// Active TCP API sessions for this listening port.
+    ///
+    /// The listener owns session lifetimes only: each ServerAPI instance is also an OSThread and services its own client from
+    /// the main controller. Keep this pool bounded because every active TCP API session consumes memory and scheduler time.
+    std::vector<std::unique_ptr<T>> openAPIs;
 #if defined(RAK_4631) || defined(RAK11310)
     // Track wait time for RAK13800 Ethernet requests
     int32_t waitTime = 100;

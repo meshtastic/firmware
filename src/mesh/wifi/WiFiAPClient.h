@@ -9,10 +9,17 @@
 #include <WiFi.h>
 #endif
 
-#if HAS_ETHERNET && defined(USE_WS5500)
+#if HAS_ETHERNET
+#if defined(ESP32) && defined(ETH_PHY_TYPE)
+#include <ETH.h>
+#elif defined(USE_WS5500)
 #include <ETHClass2.h>
 #define ETH ETH2
-#endif // HAS_ETHERNET
+#elif defined(USE_CH390D)
+#include <ESP32_CH390.h>
+#define ETH CH390
+#endif
+#endif
 
 extern bool needReconnect;
 extern concurrency::Periodic *wifiReconnect;
@@ -26,7 +33,7 @@ bool isWifiAvailable();
 
 uint8_t getWifiDisconnectReason();
 
-#if defined(USE_WS5500) || defined(USE_CH390D)
+#if HAS_ETHERNET && (defined(USE_WS5500) || defined(USE_CH390D) || defined(ETH_PHY_TYPE))
 // Startup Ethernet
 bool initEthernet();
 #endif
