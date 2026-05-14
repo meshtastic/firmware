@@ -88,6 +88,16 @@
 #endif
 #endif
 
+// nRF52 flash optimization: re-route FONT_LARGE_LOCAL to the 16pt glyph so
+// the display-tier dispatch below picks up 16pt everywhere it would have used
+// 24pt. Drops the ~9.6 KB ArialMT_Plain_24 table from the linked binary.
+// Set MESHTASTIC_LARGE_FONT_24PT=1 in build_flags to opt out per variant
+// (undefined or 0 keeps the optimization on).
+#if defined(ARCH_NRF52) && (!defined(MESHTASTIC_LARGE_FONT_24PT) || MESHTASTIC_LARGE_FONT_24PT == 0)
+#undef FONT_LARGE_LOCAL
+#define FONT_LARGE_LOCAL FONT_MEDIUM_LOCAL
+#endif
+
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) ||             \
      defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)) &&                                                                   \
