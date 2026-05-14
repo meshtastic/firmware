@@ -2784,18 +2784,15 @@ bool NodeDB::createNewIdentity()
     meshtastic_NodeInfoLite *node = getMeshNode(oldNodeNum);
     if (node != NULL) {
         LOG_DEBUG("Old node num %u is now %u", oldNodeNum, newNodeNum);
-        node->is_ignored = true;
-        node->has_device_metrics = false;
-        node->has_position = false;
-        node->user.public_key.size = 0;
-        memset(node->user.public_key.bytes, 0, sizeof(node->user.public_key.bytes));
+        nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+        node->public_key.size = 0;
+        memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
     }
 
     myNodeInfo.my_node_num = newNodeNum;
 
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    info->user = TypeConversions::ConvertToUserLite(owner);
-    info->has_user = true;
+    TypeConversions::CopyUserToNodeInfoLite(info, owner);
 
     return true;
 }
