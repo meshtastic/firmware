@@ -529,7 +529,7 @@ void test_sendPositionWithoutCoordinatesDoesNotCreateImpreciseCopy(void)
     TEST_ASSERT_FALSE(originalPosition.has_longitude_i);
 }
 
-// JSON position packets should follow the same imprecise-then-original order as protobuf MQTT.
+// JSON position packets should publish imprecise JSON only, while protobuf still preserves the original second publish.
 void test_sendJsonPositionToPublicServerIsImpreciseThenOriginal(void)
 {
     constexpr uint32_t precision = 15;
@@ -541,7 +541,7 @@ void test_sendJsonPositionToPublicServerIsImpreciseThenOriginal(void)
 
     mqtt->onSend(encrypted, positionPacket, 0);
 
-    TEST_ASSERT_EQUAL(4, pubsub->published_.size());
+    TEST_ASSERT_EQUAL(3, pubsub->published_.size());
     auto published = pubsub->published_.begin();
     ++published; // imprecise protobuf
     const auto &[impreciseTopic, imprecisePayload] = *published++;
@@ -556,13 +556,14 @@ void test_sendJsonPositionToPublicServerIsImpreciseThenOriginal(void)
     TEST_ASSERT_TRUE(json.find(expectedLongitude.str()) != std::string::npos);
     TEST_ASSERT_TRUE(json.find("\"precision_bits\":15") != std::string::npos);
 
-    ++published; // original protobuf
     const auto &[originalTopic, originalPayload] = *published;
-    TEST_ASSERT_EQUAL_STRING("msh/2/json/test/!12345678", originalTopic.c_str());
-    const std::string &originalJson = std::get<std::string>(originalPayload);
-    TEST_ASSERT_TRUE(originalJson.find("\"latitude_i\":416213022") != std::string::npos);
-    TEST_ASSERT_TRUE(originalJson.find("\"longitude_i\":415906392") != std::string::npos);
-    TEST_ASSERT_TRUE(originalJson.find("\"precision_bits\":32") != std::string::npos);
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", originalTopic.c_str());
+    const DecodedServiceEnvelope &originalEnv = std::get<DecodedServiceEnvelope>(originalPayload);
+    TEST_ASSERT_TRUE(originalEnv.validDecode);
+    const meshtastic_Position originalPosition = decodePositionPacket(*originalEnv.packet);
+    TEST_ASSERT_EQUAL(latitude, originalPosition.latitude_i);
+    TEST_ASSERT_EQUAL(longitude, originalPosition.longitude_i);
+    TEST_ASSERT_EQUAL(32, originalPosition.precision_bits);
 }
 
 // Encrypted MQTT should continue to publish the encrypted packet, not a decoded position.
@@ -582,9 +583,10 @@ void test_sendEncryptedPositionToPublicServerStaysEncrypted(void)
     TEST_ASSERT_EQUAL(encrypted.id, env.packet->id);
 }
 
-// Encrypted protobuf MQTT should still publish decoded JSON when JSON is enabled.
-void test_sendEncryptedJsonPositionUsesDecodedPacket(void)
+// Encrypted protobuf MQTT should only expose the imprecise public-safe decoded position through JSON.
+void test_sendEncryptedJsonPositionUsesImprecisePublicPacket(void)
 {
+    constexpr uint32_t precision = 15;
     constexpr uint32_t latitude = 416213022;
     constexpr uint32_t longitude = 415906392;
     moduleConfig.mqtt.encryption_enabled = true;
@@ -606,8 +608,15 @@ void test_sendEncryptedJsonPositionUsesDecodedPacket(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/json/test/!12345678", jsonTopic.c_str());
     const std::string &json = std::get<std::string>(jsonPayload);
     TEST_ASSERT_TRUE(json.find("\"type\":\"position\"") != std::string::npos);
-    TEST_ASSERT_TRUE(json.find("\"latitude_i\":416213022") != std::string::npos);
-    TEST_ASSERT_TRUE(json.find("\"longitude_i\":415906392") != std::string::npos);
+    std::stringstream expectedLatitude;
+    expectedLatitude << "\"latitude_i\":" << makeImpreciseCoordinate(latitude, precision);
+    std::stringstream expectedLongitude;
+    expectedLongitude << "\"longitude_i\":" << makeImpreciseCoordinate(longitude, precision);
+    TEST_ASSERT_TRUE(json.find(expectedLatitude.str()) != std::string::npos);
+    TEST_ASSERT_TRUE(json.find(expectedLongitude.str()) != std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"precision_bits\":15") != std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"latitude_i\":416213022") == std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"longitude_i\":415906392") == std::string::npos);
 }
 
 // Verify that the decoded MeshPacket is proxied through the MeshService when encryption_enabled = false.
@@ -1157,7 +1166,7 @@ void setup()
     RUN_TEST(test_sendPositionWithoutCoordinatesDoesNotCreateImpreciseCopy);
     RUN_TEST(test_sendJsonPositionToPublicServerIsImpreciseThenOriginal);
     RUN_TEST(test_sendEncryptedPositionToPublicServerStaysEncrypted);
-    RUN_TEST(test_sendEncryptedJsonPositionUsesDecodedPacket);
+    RUN_TEST(test_sendEncryptedJsonPositionUsesImprecisePublicPacket);
     RUN_TEST(test_proxyToMeshServiceDecoded);
     RUN_TEST(test_proxyToMeshServiceEncrypted);
     RUN_TEST(test_dontMqttMeOnPublicServer);

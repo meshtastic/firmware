@@ -58,16 +58,17 @@ static bool isConnected = false;
 
 static uint32_t lastPositionUnavailableWarning = 0;
 static const uint32_t POSITION_UNAVAILABLE_WARNING_INTERVAL_MS = 15000; // 15 seconds
+static constexpr uint32_t PUBLIC_MQTT_MAX_POSITION_PRECISION_BITS = 15;
 
-uint32_t getPublicMqttPositionPrecision()
+static uint32_t getPublicMqttPositionPrecision()
 {
-    // Public MQTT map reports currently accept precision bits up to 15.
+    // Public MQTT map reports currently accept precision bits up to PUBLIC_MQTT_MAX_POSITION_PRECISION_BITS.
     // Forwarded LoRa positions use that most precise public value as a cap so
     // an already-coarser source packet keeps its original privacy boundary.
-    return 15;
+    return PUBLIC_MQTT_MAX_POSITION_PRECISION_BITS;
 }
 
-bool makePublicMqttPositionPacket(meshtastic_MeshPacket &mqttPacket, const meshtastic_MeshPacket &sourcePacket)
+static bool makePublicMqttPositionPacket(meshtastic_MeshPacket &mqttPacket, const meshtastic_MeshPacket &sourcePacket)
 {
     if (sourcePacket.which_payload_variant != meshtastic_MeshPacket_decoded_tag ||
         sourcePacket.decoded.portnum != meshtastic_PortNum_POSITION_APP)
@@ -90,11 +91,18 @@ bool makePublicMqttPositionPacket(meshtastic_MeshPacket &mqttPacket, const mesht
     position.precision_bits = precision;
 
     mqttPacket = sourcePacket;
+    // Use a fresh id so downstream id-based MQTT consumers can receive the public-safe copy
+    // even when they already cached or deduplicated the precise source packet.
     mqttPacket.id = generatePacketId();
-    mqttPacket.decoded.payload.size =
+    const size_t positionSize =
         pb_encode_to_bytes(mqttPacket.decoded.payload.bytes, sizeof(mqttPacket.decoded.payload.bytes), &meshtastic_Position_msg,
                            &position);
-    return mqttPacket.decoded.payload.size > 0;
+    if (positionSize == 0) {
+        mqttPacket = meshtastic_MeshPacket_init_default;
+        return false;
+    }
+    mqttPacket.decoded.payload.size = positionSize;
+    return true;
 }
 
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
@@ -846,14 +854,14 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
     meshtastic_MeshPacket mqttPositionPacket = meshtastic_MeshPacket_init_default;
     const meshtastic_MeshPacket *publicMqttPositionPacket = nullptr;
     const meshtastic_MeshPacket *p;
+    if (isConfiguredForDefaultServer && !isMqttServerAddressPrivate &&
+        makePublicMqttPositionPacket(mqttPositionPacket, mp_decoded))
+        publicMqttPositionPacket = &mqttPositionPacket;
     if (moduleConfig.mqtt.encryption_enabled) {
         p = &mp_encrypted;
         LOG_DEBUG("encrypted message");
     } else if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         p = &mp_decoded;
-        if (isConfiguredForDefaultServer && !isMqttServerAddressPrivate &&
-            makePublicMqttPositionPacket(mqttPositionPacket, mp_decoded))
-            publicMqttPositionPacket = &mqttPositionPacket;
         LOG_DEBUG("portnum %i message", mp_decoded.decoded.portnum);
     } else {
         LOG_DEBUG("nothing, pkt not decrypted");
@@ -875,7 +883,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
 #if !defined(ARCH_NRF52) ||                                                                                                      \
     defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
-            if (moduleConfig.mqtt.json_enabled) {
+            if (moduleConfig.mqtt.json_enabled && jsonPacket != nullptr) {
                 auto jsonString = MeshPacketSerializer::JsonSerialize(jsonPacket);
                 if (jsonString.length() != 0) {
                     std::string topicJson = jsonTopic + channelId + "/" + nodeId;
@@ -906,13 +914,16 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
     // current filter accepts a location update, then preserve the original packet for brokers that accept it. When offline
     // and short on queue space, keep the public-usable copy instead of immediately evicting it with the precise original.
     const bool willQueuePacket = !(moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly());
-    if (publicMqttPositionPacket != nullptr && willQueuePacket && mqttQueue.numFree() < 2) {
+    const bool shouldDualPublishPublicPosition = publicMqttPositionPacket != nullptr && !moduleConfig.mqtt.encryption_enabled;
+    if (shouldDualPublishPublicPosition && willQueuePacket && mqttQueue.numFree() < 2) {
         publishPacket(publicMqttPositionPacket, publicMqttPositionPacket);
         return;
     }
-    if (publicMqttPositionPacket != nullptr)
+    if (shouldDualPublishPublicPosition)
         publishPacket(publicMqttPositionPacket, publicMqttPositionPacket);
-    publishPacket(p, &mp_decoded);
+    const meshtastic_MeshPacket *jsonPacket =
+        publicMqttPositionPacket != nullptr ? (moduleConfig.mqtt.encryption_enabled ? publicMqttPositionPacket : nullptr) : &mp_decoded;
+    publishPacket(p, jsonPacket);
 }
 
 void MQTT::perhapsReportToMap()
@@ -923,7 +934,7 @@ void MQTT::perhapsReportToMap()
 
     // Coerce the map position precision to be within the valid range
     // This removes obtusely large radius and privacy problematic ones from the map
-    if (map_position_precision < 12 || map_position_precision > 15) {
+    if (map_position_precision < 12 || map_position_precision > PUBLIC_MQTT_MAX_POSITION_PRECISION_BITS) {
         LOG_WARN("MQTT Map report position precision %u is out of range, using default %u", map_position_precision,
                  default_map_position_precision);
         map_position_precision = default_map_position_precision;
