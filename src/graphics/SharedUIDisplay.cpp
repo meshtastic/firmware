@@ -27,6 +27,12 @@ ScreenResolution determineScreenResolution(int16_t screenheight, int16_t screenw
         return ScreenResolution::UltraLow;
     }
 
+#ifdef DISPLAY_FORCE_SMALL_FONTS
+    if (screenwidth <= 160 && screenheight <= 80) {
+        return ScreenResolution::Low;
+    }
+#endif
+
     // Standard OLED screens
     if (screenwidth > 128 && screenheight <= 64) {
         return ScreenResolution::Low;
