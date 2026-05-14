@@ -175,8 +175,7 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
         return nullptr;
     }
 
-    meshtastic_NodeInfoLite *node = service->refreshLocalMeshNode(); // should guarantee there is now a position
-    assert(node->has_position);
+    const meshtastic_NodeInfoLite *node = service->refreshLocalMeshNode(); // should guarantee there is now a position
 
     // configuration of POSITION packet
     //   consider making this a function argument?
@@ -186,7 +185,9 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
     meshtastic_Position p = meshtastic_Position_init_default; //   Start with an empty structure
     // if localPosition is totally empty, put our last saved position (lite) in there
     if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
-        nodeDB->setLocalPosition(TypeConversions::ConvertToPosition(node->position));
+        meshtastic_PositionLite cachedSelf;
+        if (nodeDB->copyNodePosition(node->num, cachedSelf))
+            nodeDB->setLocalPosition(TypeConversions::ConvertToPosition(cachedSelf));
     }
     localPosition.seq_number++;
 
@@ -400,7 +401,7 @@ int32_t PositionModule::runOnce()
         doDeepSleep(nightyNightMs, false, false);
     }
 
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (node == nullptr)
         return RUNONCE_INTERVAL;
 
@@ -425,8 +426,11 @@ int32_t PositionModule::runOnce()
         } else if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
-            lastGpsLatitude = node->position.latitude_i;
-            lastGpsLongitude = node->position.longitude_i;
+            meshtastic_PositionLite selfPos;
+            if (nodeDB->copyNodePosition(node->num, selfPos)) {
+                lastGpsLatitude = selfPos.latitude_i;
+                lastGpsLongitude = selfPos.longitude_i;
+            }
 
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(meshtastic_PortNum_POSITION_APP);
@@ -441,7 +445,10 @@ int32_t PositionModule::runOnce()
         if (nodeDB->hasValidPosition(node2)) {
             // The minimum time (in seconds) that would pass before we are able to send a new position packet.
 
-            auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
+            meshtastic_PositionLite selfPos;
+            if (!nodeDB->copyNodePosition(node->num, selfPos))
+                return RUNONCE_INTERVAL; // Defensive: hasValidPosition should imply this is non-null
+            auto smartPosition = getDistanceTraveledSinceLastSend(selfPos);
             msSinceLastSend = now - lastGpsSend;
 
             if (smartPosition.hasTraveledOverThreshold &&
@@ -459,8 +466,8 @@ int32_t PositionModule::runOnce()
                           msSinceLastSend, minimumTimeThreshold);
 
                 // Set the current coords as our last ones, after we've compared distance with current and decided to send
-                lastGpsLatitude = node->position.latitude_i;
-                lastGpsLongitude = node->position.longitude_i;
+                lastGpsLatitude = selfPos.latitude_i;
+                lastGpsLongitude = selfPos.longitude_i;
             }
         }
     }
@@ -543,11 +550,14 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
 
 void PositionModule::handleNewPosition()
 {
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
     // We limit our GPS broadcasts to a max rate
     if (nodeDB->hasValidPosition(node2)) {
-        auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
+        meshtastic_PositionLite selfPos;
+        if (!nodeDB->copyNodePosition(node->num, selfPos))
+            return;
+        auto smartPosition = getDistanceTraveledSinceLastSend(selfPos);
         uint32_t msSinceLastSend = millis() - lastGpsSend;
         if (smartPosition.hasTraveledOverThreshold &&
             Throttle::execute(
@@ -563,8 +573,8 @@ void PositionModule::handleNewPosition()
                       minimumTimeThreshold);
 
             // Set the current coords as our last ones, after we've compared distance with current and decided to send
-            lastGpsLatitude = node->position.latitude_i;
-            lastGpsLongitude = node->position.longitude_i;
+            lastGpsLatitude = selfPos.latitude_i;
+            lastGpsLongitude = selfPos.longitude_i;
         }
     }
 }
