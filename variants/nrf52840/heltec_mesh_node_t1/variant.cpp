@@ -61,7 +61,7 @@ void variant_shutdown()
     nrf_gpio_cfg_default(PIN_SPI_MOSI);
     nrf_gpio_cfg_default(PIN_SPI_SCK);
 
-    nrf_gpio_cfg_default(PIN_SPI1_MISO);
+    // nrf_gpio_cfg_default(PIN_SPI1_MISO);// ST7735 doesn't support MISO, so we don't configure it at all
     nrf_gpio_cfg_default(PIN_SPI1_MOSI);
     nrf_gpio_cfg_default(PIN_SPI1_SCK);
 
