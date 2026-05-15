@@ -1,13 +1,15 @@
 #include "NRF52Bluetooth.h"
 #include "BLEDfuSecure.h"
 #include "BluetoothCommon.h"
-#include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/ble/BluetoothShared.h"
+#include "mesh/ble/BluetoothTransport.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
 #include <bluefruit.h>
 #include <utility/bonding.h>
+
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
 static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16));
@@ -28,11 +30,52 @@ static BLEDfuSecure bledfusecure;                                             //
 static uint8_t fromRadioBytes[meshtastic_FromRadio_size];
 static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 
-// Last ToRadio value received from the phone
-static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
+static void refreshSharedNodePasskey();
 
-static uint16_t connectionHandle;
-static bool passkeyShowing;
+#ifdef MODE_SHARED_NODE
+static SharedNode::PeerIdentity peerIdentityFromBondAddress(const ble_gap_addr_t &addr, uint32_t irkHash = 0)
+{
+    SharedNode::PeerIdentity identity;
+    if (bluetooth::addressIsEmpty(addr.addr, sizeof(addr.addr))) {
+        return identity;
+    }
+
+    char buffer[SharedNode::PEER_IDENTITY_SIZE] = {};
+    // Bluefruit/SoftDevice gives identity address + IRK in bond_keys_t. Prefix
+    // with "bf:" so these records never collide with NimBLE-formatted IDs.
+    snprintf(buffer, sizeof(buffer), "bf:%x%x%02x%02x%02x%02x%02x%02x%08lx", addr.addr_id_peer ? 1 : 0, addr.addr_type,
+             addr.addr[5], addr.addr[4], addr.addr[3], addr.addr[2], addr.addr[1], addr.addr[0],
+             static_cast<unsigned long>(irkHash));
+    identity = buffer;
+    return identity;
+}
+
+static SharedNode::PeerIdentity peerIdentityFromBondKeys(const bond_keys_t &bondKeys)
+{
+    // Prefer the peer identity record from the bond store. That is stable across
+    // resolvable private address rotation and normal reconnects.
+    return peerIdentityFromBondAddress(bondKeys.peer_id.id_addr_info,
+                                       bluetooth::fnv1a32(bondKeys.peer_id.id_info.irk, sizeof(bondKeys.peer_id.id_info.irk)));
+}
+
+static SharedNode::PeerIdentity getPeerIdentity(uint16_t connHandle)
+{
+    BLEConnection *connection = Bluefruit.Connection(connHandle);
+    if (!connection) {
+        return SharedNode::PeerIdentity{};
+    }
+
+    bond_keys_t bondKeys = {};
+    if (connection->loadBondKey(&bondKeys)) {
+        return peerIdentityFromBondKeys(bondKeys);
+    }
+
+    // Some Bluefruit callbacks can run before loadBondKey() succeeds. If the
+    // connection is already bonded, fall back to the peer identity address and
+    // resolve the richer IRK-backed form on the secured/completed callback.
+    return connection->bonded() ? peerIdentityFromBondAddress(connection->getPeerAddr()) : SharedNode::PeerIdentity{};
+}
+#endif
 
 class BluetoothPhoneAPI : public PhoneAPI
 {
@@ -43,31 +86,66 @@ class BluetoothPhoneAPI : public PhoneAPI
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
-        LOG_INFO("BLE notify fromNum");
-        fromNum.notify32(fromRadioNum);
+        if (Bluefruit.connected(connHandle)) {
+            LOG_INFO("BLE notify fromNum");
+            fromNum.notify32(connHandle, fromRadioNum);
+        }
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override { return Bluefruit.connected(connectionHandle); }
+    virtual bool checkIsConnected() override { return Bluefruit.connected(connHandle); }
 
   public:
-    BluetoothPhoneAPI() { api_type = TYPE_BLE; }
+    explicit BluetoothPhoneAPI(uint16_t connHandle_) : connHandle(connHandle_) { api_type = TYPE_BLE; }
+
+  private:
+    uint16_t connHandle;
 };
 
-static BluetoothPhoneAPI *bluetoothPhoneAPI;
+static bluetooth::PhoneApiPool<BluetoothPhoneAPI> bluetoothPhoneApis;
+static bluetooth::DuplicateToRadioTracker<> duplicateToRadioTracker;
+
+static BluetoothPhoneAPI* findBluetoothPhoneAPI(uint16_t connHandle)
+{
+    return bluetoothPhoneApis.find(connHandle);
+}
+
+static BluetoothPhoneAPI* ensureBluetoothPhoneAPI(uint16_t connHandle)
+{
+    return bluetoothPhoneApis.ensure(connHandle);
+}
+
+static void removeBluetoothPhoneAPI(uint16_t connHandle)
+{
+    bluetoothPhoneApis.remove(connHandle);
+    duplicateToRadioTracker.clear(connHandle);
+}
+
+static void closeAllBluetoothPhoneAPIs()
+{
+    bluetoothPhoneApis.closeAll();
+    duplicateToRadioTracker.clearAll();
+}
 
 void onConnect(uint16_t conn_handle)
 {
     // Get the reference to current connection
     BLEConnection *connection = Bluefruit.Connection(conn_handle);
-    connectionHandle = conn_handle;
+#ifdef MODE_SHARED_NODE
+    SharedNode::PeerIdentity identity = getPeerIdentity(conn_handle);
+    bluetooth::rememberKnownConnection(conn_handle, identity);
+    // Bluefruit stores one global passkey. Refresh it after each connection so
+    // the next pair request sees the latest admin/guest decision.
+    refreshSharedNodePasskey();
+#endif
+    ensureBluetoothPhoneAPI(conn_handle);
     char central_name[32] = {0};
-    connection->getPeerName(central_name, sizeof(central_name));
+    if (connection) {
+        connection->getPeerName(central_name, sizeof(central_name));
+    }
     LOG_INFO("BLE Connected to %s", central_name);
 
-    // Notify UI (or any other interested firmware components)
-    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
-    bluetoothStatus->updateStatus(&newStatus);
+    bluetooth::notifyConnected();
 }
 /**
  * Callback invoked when a connection is dropped
@@ -77,26 +155,15 @@ void onConnect(uint16_t conn_handle)
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
     LOG_INFO("BLE Disconnected, reason = 0x%x", reason);
-    if (bluetoothPhoneAPI) {
-        bluetoothPhoneAPI->close();
-    }
+    removeBluetoothPhoneAPI(conn_handle);
 
-    // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
-    memset(lastToRadio, 0, sizeof(lastToRadio));
-
-    // Notify UI (or any other interested firmware components)
-    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
-    bluetoothStatus->updateStatus(&newStatus);
-
-#if HAS_SCREEN
-    // If a pairing prompt is active, make sure we dismiss it on disconnect/cancel/failure paths.
-    if (passkeyShowing) {
-        passkeyShowing = false;
-        if (screen) {
-            screen->endAlert();
-        }
-    }
+    const bool anyConnected = Bluefruit.connected() > 0;
+    if (!anyConnected) {
+#ifdef MODE_SHARED_NODE
+        refreshSharedNodePasskey();
 #endif
+        bluetooth::notifyDisconnected();
+    }
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
@@ -154,9 +221,11 @@ static void authorizeRead(uint16_t conn_hdl)
  */
 void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
 {
+    (void)chr; // The characteristic is fixed by this callback registration.
+    BluetoothPhoneAPI *phoneApi = findBluetoothPhoneAPI(conn_hdl);
     if (request->offset == 0) {
         // If the read is long, we will get multiple authorize invocations - we only populate data on the first
-        size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
+        size_t numBytes = phoneApi ? phoneApi->getFromRadio(fromRadioBytes) : 0;
         // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
         // or make empty if the queue is empty
         fromRadio.write(fromRadioBytes, numBytes);
@@ -168,11 +237,23 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
 
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
+    (void)chr; // The characteristic is fixed by this callback registration.
+    BluetoothPhoneAPI *phoneApi = findBluetoothPhoneAPI(conn_hdl);
+    if (!phoneApi) {
+        LOG_WARN("Drop ToRadio packet for unknown conn=%u", conn_hdl);
+        return;
+    }
+    if (len > MAX_TO_FROM_RADIO_SIZE) {
+        LOG_WARN("Drop oversized ToRadio packet for conn=%u len=%u", conn_hdl, len);
+        return;
+    }
+
     LOG_INFO("toRadioWriteCb data %p, len %u", data, len);
-    if (memcmp(lastToRadio, data, len) != 0) {
+    if (duplicateToRadioTracker.rememberIfNew(conn_hdl, data, len)) {
+        // Duplicate filtering is per connection; otherwise one guest could
+        // suppress the first packet from another guest with identical bytes.
         LOG_DEBUG("New ToRadio packet");
-        memcpy(lastToRadio, data, len);
-        bluetoothPhoneAPI->handleToRadio(data, len);
+        phoneApi->handleToRadio(data, len);
     } else {
         LOG_DEBUG("Drop dup ToRadio packet we just saw");
     }
@@ -180,14 +261,17 @@ void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, ui
 
 void setupMeshService(void)
 {
-    bluetoothPhoneAPI = new BluetoothPhoneAPI();
     meshBleService.begin();
     // Note: You must call .begin() on the BLEService before calling .begin() on
     // any characteristic(s) within that service definition.. Calling .begin() on
     // a BLECharacteristic will cause it to be added to the last BLEService that
     // was 'begin()'ed!
+#ifdef MODE_SHARED_NODE
+    auto secMode = SECMODE_ENC_NO_MITM;
+#else
     auto secMode =
         config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN ? SECMODE_OPEN : SECMODE_ENC_NO_MITM;
+#endif
     fromNum.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     fromNum.setPermission(secMode, SECMODE_NO_ACCESS); // FIXME, secure this!!!
     fromNum.setFixedLen(
@@ -225,12 +309,44 @@ void setupMeshService(void)
     logRadio.write32(0);
     logRadio.begin();
 }
-static uint32_t configuredPasskey;
+static void setBluetoothPasskey(uint32_t passkey, const char *logLabel)
+{
+    char pinString[7] = {};
+    snprintf(pinString, sizeof(pinString), "%06u", passkey);
+    LOG_INFO("%s '%i'", logLabel, passkey);
+    Bluefruit.Security.setPIN(pinString);
+}
+
+static void configureSecurePairing()
+{
+    Bluefruit.Security.setIOCaps(true, false, false);
+    Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
+    Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
+    Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
+    meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
+}
+
+static void configureOpenPairing()
+{
+    Bluefruit.Security.setIOCaps(false, false, false);
+    meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
+}
+
+static void refreshSharedNodePasskey()
+{
+#ifdef MODE_SHARED_NODE
+    // Bluefruit can only hold one active passkey, so refresh it whenever the
+    // shared-node pairing state may have changed.
+    setBluetoothPasskey(bluetooth::choosePairingPasskey(), "Shared-node Bluetooth pin set to");
+#endif
+}
+
 void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth");
     Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
+    closeAllBluetoothPhoneAPIs();
     disconnect();
     Bluefruit.Advertising.stop();
 }
@@ -245,7 +361,7 @@ void NRF52Bluetooth::startDisabled()
 }
 bool NRF52Bluetooth::isConnected()
 {
-    return Bluefruit.connected(connectionHandle);
+    return Bluefruit.connected() > 0;
 }
 int NRF52Bluetooth::getRssi()
 {
@@ -259,6 +375,10 @@ int NRF52Bluetooth::getRssi()
 
 void NRF52Bluetooth::setup()
 {
+#ifdef MODE_SHARED_NODE
+    bluetooth::enforceSharedNodePairingMode();
+#endif
+
     // Initialise the Bluefruit module
     LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
@@ -271,21 +391,16 @@ void NRF52Bluetooth::setup()
 #if defined(NRF52_BLE_TX_POWER) && VALID_BLE_TX_POWER(NRF52_BLE_TX_POWER)
     Bluefruit.setTxPower(NRF52_BLE_TX_POWER);
 #endif
-    if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
-        configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN
-                                ? config.bluetooth.fixed_pin
-                                : random(100000, 999999);
-        auto pinString = std::to_string(configuredPasskey);
-        LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
-        Bluefruit.Security.setPIN(pinString.c_str());
-        Bluefruit.Security.setIOCaps(true, false, false);
-        Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
-        Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
-        Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
-        meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
+#ifdef MODE_SHARED_NODE
+    refreshSharedNodePasskey();
+#endif
+    if (bluetooth::requiresSecurePairing()) {
+#ifndef MODE_SHARED_NODE
+        setBluetoothPasskey(bluetooth::choosePairingPasskey(), "Bluetooth pin set to");
+#endif
+        configureSecurePairing();
     } else {
-        Bluefruit.Security.setIOCaps(false, false, false);
-        meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
+        configureOpenPairing();
     }
     // Set the advertised device name (keep it short!)
     Bluefruit.setName(getDeviceName());
@@ -354,7 +469,16 @@ void updateBatteryLevel(uint8_t level)
 }
 void NRF52Bluetooth::clearBonds()
 {
+#ifdef MODE_SHARED_NODE
+    if (!bluetooth::canClearKnownClients("clearBonds")) {
+        return;
+    }
+#endif
     LOG_INFO("Clear bluetooth bonds!");
+    closeAllBluetoothPhoneAPIs();
+#ifdef MODE_SHARED_NODE
+    bluetooth::clearKnownClients();
+#endif
     bond_print_list(BLE_GAP_ROLE_PERIPH);
     bond_print_list(BLE_GAP_ROLE_CENTRAL);
     Bluefruit.Periph.clearBonds();
@@ -363,55 +487,28 @@ void NRF52Bluetooth::clearBonds()
 void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 {
     LOG_INFO("BLE connection secured");
+#ifdef MODE_SHARED_NODE
+    SharedNode::PeerIdentity identity = getPeerIdentity(conn_handle);
+    // Secured can fire before pair-complete on some SoftDevice flows. It is
+    // safe to resolve here; the policy reuses known identity/pending slot.
+    bluetooth::resolveConnectionSlot(conn_handle, identity);
+    ensureBluetoothPhoneAPI(conn_handle);
+#endif
 }
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
     char passkey1[4] = {passkey[0], passkey[1], passkey[2], '\0'};
     char passkey2[4] = {passkey[3], passkey[4], passkey[5], '\0'};
     LOG_INFO("BLE pair process started with passkey %s %s", passkey1, passkey2);
-    powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 
     // Get passkey as string
     // Note: possible leading zeros
-    std::string textkey;
-    for (uint8_t i = 0; i < 6; i++)
-        textkey += (char)passkey[i];
-
-    // Notify UI (or other components) of pairing event and passkey
-    meshtastic::BluetoothStatus newStatus(textkey);
-    bluetoothStatus->updateStatus(&newStatus);
-
-#if HAS_SCREEN &&                                                                                                                \
-    !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
-    if (screen) {
-        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-            char btPIN[16] = "888888";
-            snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
-            int x_offset = display->width() / 2;
-            int y_offset = display->height() <= 80 ? 0 : 12;
-            display->setTextAlignment(TEXT_ALIGN_CENTER);
-            display->setFont(FONT_MEDIUM);
-            display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-
-            display->setFont(FONT_SMALL);
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-            display->drawString(x_offset + x, y_offset + y, "Enter this code");
-
-            display->setFont(FONT_LARGE);
-            String displayPin(btPIN);
-            String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-            display->drawString(x_offset + x, y_offset + y, pin);
-
-            display->setFont(FONT_SMALL);
-            String deviceName = "Name: ";
-            deviceName.concat(getDeviceName());
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-            display->drawString(x_offset + x, y_offset + y, deviceName);
-        });
+    char textkey[7] = {};
+    for (uint8_t i = 0; i < 6; i++) {
+        textkey[i] = static_cast<char>(passkey[i]);
     }
-#endif
-    passkeyShowing = true;
+
+    bluetooth::showPairingPrompt(textkey);
 
     if (match_request) {
         uint32_t start_time = millis();
@@ -454,20 +551,26 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
 {
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {
         LOG_INFO("BLE pair success");
-        meshtastic::BluetoothStatus newConnectedStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
-        bluetoothStatus->updateStatus(&newConnectedStatus);
+#ifdef MODE_SHARED_NODE
+        const SharedNode::PeerIdentity identity = getPeerIdentity(conn_handle);
+        // Pair-complete is the final chance to bind the passkey-reserved
+        // slot to the durable Bluefruit bond identity.
+        const uint8_t slot = bluetooth::resolveConnectionSlot(conn_handle, identity);
+        bluetooth::logResolvedPairingSlot(slot);
+        ensureBluetoothPhoneAPI(conn_handle);
+#endif
+        bluetooth::notifyConnected();
     } else {
         LOG_INFO("BLE pair failed");
-        // Notify UI (or any other interested firmware components)
-        meshtastic::BluetoothStatus newDisconnectedStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
-        bluetoothStatus->updateStatus(&newDisconnectedStatus);
+#ifdef MODE_SHARED_NODE
+        // Drop the reserved admin/guest decision so the next passkey request
+        // starts with a fresh slot choice.
+        bluetooth::consumePendingPairingSlot();
+#endif
+        bluetooth::notifyDisconnected();
     }
 
-    // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
-    passkeyShowing = false;
-    if (screen) {
-        screen->endAlert();
-    }
+    bluetooth::clearPairingPrompt();
 }
 
 void NRF52Bluetooth::sendLog(const uint8_t *logMessage, size_t length)

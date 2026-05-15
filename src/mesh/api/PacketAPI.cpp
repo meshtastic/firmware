@@ -62,7 +62,7 @@ bool PacketAPI::receivePacket(void)
             meshtastic_MeshPacket *mp = &mr->packet;
             mp->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API;
             printPacket("PACKET FROM QUEUE", mp);
-            service->handleToRadio(*mp);
+            service->handleToRadio(*mp, this);
             break;
         }
         case meshtastic_ToRadio_want_config_id_tag: {

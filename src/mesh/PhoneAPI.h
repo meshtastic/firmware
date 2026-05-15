@@ -2,6 +2,9 @@
 
 #include "Observer.h"
 #include "concurrency/Lock.h"
+#ifdef MODE_SHARED_NODE
+#include "mesh/sharedNode/Types.h"
+#endif
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
 #include <deque>
@@ -67,6 +70,12 @@ class PhoneAPI
     /// downloads it
     meshtastic_MeshPacket *packetForPhone = NULL;
 
+#ifdef MODE_SHARED_NODE
+    /// Per-connection virtual packet routed by VirtualNodeManager (not allocated from packetPool).
+    bool hasVirtualPacketForPhone = false;
+    meshtastic_MeshPacket virtualPacketForPhone = meshtastic_MeshPacket_init_zero;
+#endif
+
     // file transfer packets destined for phone. Push it to the queue then free it.
     meshtastic_XModem xmodemPacketForPhone = meshtastic_XModem_init_zero;
 
@@ -104,6 +113,16 @@ class PhoneAPI
 
     /// Destructor - calls close()
     virtual ~PhoneAPI();
+
+#ifdef MODE_SHARED_NODE
+    /// Shared-node slot is set by the BLE transport before the client starts
+    /// config. Role is derived from the slot when needed.
+    SharedNode::Role getConnectionMode() const { return SharedNode::roleForSlot(sharedNodeSlot); }
+    void setSharedNodeSlot(uint8_t slot) { sharedNodeSlot = slot; }
+    uint8_t getSharedNodeSlot() const { return sharedNodeSlot; }
+    bool isAdmin() const { return getConnectionMode() == SharedNode::Role::ADMIN; }
+    bool isGuest() const { return getConnectionMode() == SharedNode::Role::GUEST; }
+#endif
 
     // Call this when the client drops the connection, resets the state to STATE_SEND_NOTHING
     // Unregisters our observer.  A closed connection **can** be reopened by calling init again.
@@ -178,6 +197,12 @@ class PhoneAPI
     };
 
     APIType api_type = TYPE_NONE;
+
+#ifdef MODE_SHARED_NODE
+    /// INVALID_SLOT means a normal single-user API connection. Other values are
+    /// shared-node clients whose role is implied by the slot index.
+    uint8_t sharedNodeSlot = SharedNode::INVALID_SLOT;
+#endif
 
   private:
     void releasePhonePacket();

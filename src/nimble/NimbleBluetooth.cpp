@@ -2,17 +2,23 @@
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BluetoothCommon.h"
 #include "NimbleBluetooth.h"
-#include "PowerFSM.h"
-#include "StaticPointerQueue.h"
 
 #include "concurrency/OSThread.h"
 #include "main.h"
+#include "mesh/ble/BluetoothShared.h"
+#include "mesh/ble/BluetoothTransport.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
-#include "sleep.h"
 #include <NimBLEDevice.h>
+#include <array>
 #include <atomic>
 #include <mutex>
+
+#if defined(MODE_SHARED_NODE) && !defined(NIMBLE_TWO)
+// NimBLE 1.x exposes only a single global connection path in this file. Shared
+// node needs per-connection callbacks and identity address access from 2.x.
+#error "MODE_SHARED_NODE over BLE requires NimBLE-Arduino 2.x with -D NIMBLE_TWO for per-connection routing"
+#endif
 
 #ifdef NIMBLE_TWO
 #include "NimBLEAdvertising.h"
@@ -49,22 +55,40 @@ NimBLECharacteristic *BatteryCharacteristic;
 NimBLECharacteristic *logRadioCharacteristic;
 NimBLEServer *bleServer;
 
-static bool passkeyShowing;
 static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
 
-static void clearPairingDisplay()
+#ifdef MODE_SHARED_NODE
+static SharedNode::PeerIdentity peerIdentityFromNimbleAddress(const NimBLEAddress &address)
 {
-    if (!passkeyShowing) {
-        return;
+    SharedNode::PeerIdentity identity;
+    const uint8_t *native = address.getNative();
+    if (!native) {
+        return identity;
     }
 
-    passkeyShowing = false;
-#if HAS_SCREEN
-    if (screen) {
-        screen->endAlert();
+    if (bluetooth::addressIsEmpty(native, 6)) {
+        return identity;
     }
-#endif
+
+    char buffer[SharedNode::PEER_IDENTITY_SIZE] = {};
+    // getIdAddress() is NimBLE's resolved identity address for bonded peers.
+    // Prefix with "nb:" so identities from different BLE backends cannot
+    // collide in the persisted shared-node table.
+    snprintf(buffer, sizeof(buffer), "nb:%u:%02x:%02x:%02x:%02x:%02x:%02x", address.getType(), native[5], native[4],
+             native[3], native[2], native[1], native[0]);
+    identity = buffer;
+    return identity;
 }
+
+#ifdef NIMBLE_TWO
+static SharedNode::PeerIdentity peerIdentityFromNimble(const NimBLEConnInfo &connInfo)
+{
+    // The current OTA address may be resolvable/private. The identity address is
+    // the stable value NimBLE derives from the bond/IRK state.
+    return peerIdentityFromNimbleAddress(connInfo.getIdAddress());
+}
+#endif
+#endif
 
 class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 {
@@ -133,8 +157,10 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     */
 
   public:
-    BluetoothPhoneAPI() : concurrency::OSThread("NimbleBluetooth") { api_type = TYPE_BLE; }
-
+    explicit BluetoothPhoneAPI(uint16_t connHandle_) : concurrency::OSThread("NimbleBluetooth"), connHandle(connHandle_)
+    {
+        api_type = TYPE_BLE;
+    }
     /* Packets from phone (BLE onWrite callback) */
     std::mutex fromPhoneMutex;
     std::atomic<size_t> fromPhoneQueueSize{0};
@@ -193,7 +219,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         // Prefer high throughput during config/setup, at the cost of high power consumption (for a few seconds)
         if (bleServer && isConnected()) {
-            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+            uint16_t conn_handle = connHandle;
             if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
                 requestHighThroughputConnection(conn_handle);
             }
@@ -206,7 +232,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         // Switch to lower power consumption BLE connection params for steady-state use after config/setup is complete
         if (bleServer && isConnected()) {
-            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+            uint16_t conn_handle = connHandle;
             if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
                 requestLowerPowerConnection(conn_handle);
             }
@@ -341,16 +367,32 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 
         fromNumCharacteristic->setValue(val, sizeof(val));
 #ifdef NIMBLE_TWO
-        // NOTE: I don't have any NIMBLE_TWO devices, but this line makes me suspicious, and I suspect it needs to just be
-        // notify().
-        fromNumCharacteristic->notify(val, sizeof(val), BLE_HS_CONN_HANDLE_NONE);
+        if (connHandle != BLE_HS_CONN_HANDLE_NONE) {
+            fromNumCharacteristic->notify(val, sizeof(val), connHandle);
+        } else {
+            fromNumCharacteristic->notify(val, sizeof(val), BLE_HS_CONN_HANDLE_NONE);
+        }
 #else
         fromNumCharacteristic->notify();
 #endif
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() { return bleServer && bleServer->getConnectedCount() > 0; }
+    virtual bool checkIsConnected()
+    {
+        if (!bleServer) {
+            return false;
+        }
+#ifdef NIMBLE_TWO
+        if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
+            return false;
+        }
+        ble_gap_conn_desc desc;
+        return ble_gap_conn_find(connHandle, &desc) == 0;
+#else
+        return bleServer->getConnectedCount() > 0;
+#endif
+    }
 
     void requestHighThroughputConnection(uint16_t conn_handle)
     {
@@ -399,15 +441,42 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         LOG_INFO("BLE requestLowerPowerConnection");
         bleServer->updateConnParams(conn_handle, 24, 40, 2, 600);
     }
+
+  private:
+    uint16_t connHandle = BLE_HS_CONN_HANDLE_NONE;
 };
 
-static BluetoothPhoneAPI *bluetoothPhoneAPI;
+static std::mutex bluetoothPhoneApisMutex;
+static bluetooth::PhoneApiPool<BluetoothPhoneAPI> bluetoothPhoneApis;
+static bluetooth::DuplicateToRadioTracker<> duplicateToRadioTracker;
+
+static BluetoothPhoneAPI *ensureBluetoothPhoneAPI(uint16_t connHandle)
+{
+    std::lock_guard<std::mutex> guard(bluetoothPhoneApisMutex);
+    // PhoneAPI instances are keyed by the BLE connection handle so multiple
+    // shared-node clients can progress through config independently.
+    return bluetoothPhoneApis.ensure(connHandle);
+}
+
+// TODO: Continue moving long-lived BLE helpers to fixed storage so shared-node
+// multi-client paths do not depend on heap availability.
+
+static void removeBluetoothPhoneAPI(uint16_t connHandle)
+{
+    std::lock_guard<std::mutex> guard(bluetoothPhoneApisMutex);
+    bluetoothPhoneApis.remove(connHandle);
+    duplicateToRadioTracker.clear(connHandle);
+}
+
+static void closeAllBluetoothPhoneAPIs()
+{
+    std::lock_guard<std::mutex> guard(bluetoothPhoneApisMutex);
+    bluetoothPhoneApis.closeAll();
+    duplicateToRadioTracker.clearAll();
+}
 /**
  * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
  */
-
-// Last ToRadio value received from the phone
-static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
@@ -421,7 +490,19 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
         // Assumption: onWrite is serialized by NimBLE, so we don't need to lock here against multiple concurrent onWrite calls.
 
-        int currentWriteCount = bluetoothPhoneAPI->writeCount.fetch_add(1);
+#ifdef NIMBLE_TWO
+        const uint16_t connHandle = connInfo.getConnHandle();
+#else
+        const uint16_t connHandle = BLE_HS_CONN_HANDLE_NONE;
+#endif
+
+        BluetoothPhoneAPI *phoneApi = ensureBluetoothPhoneAPI(connHandle);
+        if (!phoneApi) {
+            LOG_WARN("BLE onWrite: missing PhoneAPI for conn=%u", connHandle);
+            return;
+        }
+
+        int currentWriteCount = phoneApi->writeCount.fetch_add(1);
 
 #ifdef DEBUG_NIMBLE_ON_WRITE_TIMING
         int startMillis = millis();
@@ -429,22 +510,25 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 #endif
 
         auto val = pCharacteristic->getValue();
+        if (val.length() > MAX_TO_FROM_RADIO_SIZE) {
+            LOG_WARN("BLE onWrite(%d): Drop ToRadio packet larger than max (%u bytes)", currentWriteCount, val.length());
+            return;
+        }
 
-        if (memcmp(lastToRadio, val.data(), val.length()) != 0) {
-            if (bluetoothPhoneAPI->fromPhoneQueueSize < NIMBLE_BLUETOOTH_FROM_PHONE_QUEUE_SIZE) {
+        if (duplicateToRadioTracker.rememberIfNew(connHandle, val.data(), val.length())) {
+            if (phoneApi->fromPhoneQueueSize < NIMBLE_BLUETOOTH_FROM_PHONE_QUEUE_SIZE) {
                 // Note: the comparison above is safe without a mutex because we are the only method that *increases*
                 // fromPhoneQueueSize. (It's okay if fromPhoneQueueSize *decreases* in the main task meanwhile.)
-                memcpy(lastToRadio, val.data(), val.length());
 
                 { // scope for fromPhoneMutex mutex
                     // Append to fromPhoneQueue, protected by fromPhoneMutex. Hold the mutex as briefly as possible.
-                    std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->fromPhoneMutex);
-                    bluetoothPhoneAPI->fromPhoneQueue.at(bluetoothPhoneAPI->fromPhoneQueueSize) = val;
-                    bluetoothPhoneAPI->fromPhoneQueueSize++;
+                    std::lock_guard<std::mutex> guard(phoneApi->fromPhoneMutex);
+                    phoneApi->fromPhoneQueue.at(phoneApi->fromPhoneQueueSize) = val;
+                    phoneApi->fromPhoneQueueSize++;
                 }
 
                 // After releasing the mutex, schedule immediate processing of the new packet.
-                bluetoothPhoneAPI->setIntervalFromNow(0);
+                phoneApi->setIntervalFromNow(0);
                 concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
 
 #ifdef DEBUG_NIMBLE_ON_WRITE_TIMING
@@ -471,7 +555,20 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     {
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
 
-        int currentReadCount = bluetoothPhoneAPI->readCount.fetch_add(1);
+#ifdef NIMBLE_TWO
+        const uint16_t connHandle = connInfo.getConnHandle();
+#else
+        const uint16_t connHandle = BLE_HS_CONN_HANDLE_NONE;
+#endif
+        BluetoothPhoneAPI *phoneApi = ensureBluetoothPhoneAPI(connHandle);
+        if (!phoneApi) {
+            LOG_WARN("BLE onRead: missing PhoneAPI for conn=%u", connHandle);
+            uint8_t empty = 0;
+            pCharacteristic->setValue(&empty, 0);
+            return;
+        }
+
+        int currentReadCount = phoneApi->readCount.fetch_add(1);
         int tries = 0;
         int startMillis = millis();
 
@@ -480,7 +577,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 #endif
 
         // Is there a packet ready to go, or do we have to ask the main task to get one for us?
-        if (bluetoothPhoneAPI->toPhoneQueueSize > 0) {
+        if (phoneApi->toPhoneQueueSize > 0) {
             // Note: the comparison above is safe without a mutex because we are the only method that *decreases*
             // toPhoneQueueSize. (It's okay if toPhoneQueueSize *increases* in the main task meanwhile.)
 
@@ -490,17 +587,17 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 #endif
         } else {
             // Tell the main task that we'd like a packet.
-            bluetoothPhoneAPI->onReadCallbackIsWaitingForData = true;
+            phoneApi->onReadCallbackIsWaitingForData = true;
 
             // Wait for the main task to produce a packet for us, up to about 20 seconds.
             // It normally takes just a few milliseconds, but at initial startup, etc, the main task can get blocked for longer
             // doing various setup tasks.
-            while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && tries < 4000) {
+            while (phoneApi->onReadCallbackIsWaitingForData && tries < 4000) {
                 // Schedule the main task runOnce to run ASAP.
-                bluetoothPhoneAPI->setIntervalFromNow(0);
+                phoneApi->setIntervalFromNow(0);
                 concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
 
-                if (!bluetoothPhoneAPI->onReadCallbackIsWaitingForData) {
+                if (!phoneApi->onReadCallbackIsWaitingForData) {
                     // we may be able to break even before a delay, if the call to interrupt woke up the main loop and it ran
                     // already
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
@@ -527,17 +624,17 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
         uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0}; // Stack buffer for getFromRadio packet
         size_t numBytes = 0;
         { // scope for toPhoneMutex mutex
-            std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->toPhoneMutex);
-            size_t toPhoneQueueSize = bluetoothPhoneAPI->toPhoneQueueSize.load();
+            std::lock_guard<std::mutex> guard(phoneApi->toPhoneMutex);
+            size_t toPhoneQueueSize = phoneApi->toPhoneQueueSize.load();
             if (toPhoneQueueSize > 0) {
                 // Copy from the front of the toPhoneQueue
-                memcpy(fromRadioBytes, bluetoothPhoneAPI->toPhoneQueue[0].data(), bluetoothPhoneAPI->toPhoneQueueByteSizes[0]);
-                numBytes = bluetoothPhoneAPI->toPhoneQueueByteSizes[0];
+                memcpy(fromRadioBytes, phoneApi->toPhoneQueue[0].data(), phoneApi->toPhoneQueueByteSizes[0]);
+                numBytes = phoneApi->toPhoneQueueByteSizes[0];
 
                 // Shift the rest of the queue down
                 for (uint8_t i = 1; i < toPhoneQueueSize; i++) {
-                    memcpy(bluetoothPhoneAPI->toPhoneQueue[i - 1].data(), bluetoothPhoneAPI->toPhoneQueue[i].data(),
-                           bluetoothPhoneAPI->toPhoneQueueByteSizes[i]);
+                    memcpy(phoneApi->toPhoneQueue[i - 1].data(), phoneApi->toPhoneQueue[i].data(),
+                           phoneApi->toPhoneQueueByteSizes[i]);
                     // The above line is similar to:
                     //   bluetoothPhoneAPI->toPhoneQueue[i - 1] = bluetoothPhoneAPI->toPhoneQueue[i]
                     // but is usually faster because it doesn't have to copy all the trailing bytes beyond
@@ -546,12 +643,12 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
                     // We deliberately use an array here (and pay the CPU cost of some memcpy) to avoid synchronizing dynamic
                     // memory allocations and frees across FreeRTOS tasks.
 
-                    bluetoothPhoneAPI->toPhoneQueueByteSizes[i - 1] = bluetoothPhoneAPI->toPhoneQueueByteSizes[i];
+                    phoneApi->toPhoneQueueByteSizes[i - 1] = phoneApi->toPhoneQueueByteSizes[i];
                 }
 
                 // Safe decrement due to onDisconnect
-                if (bluetoothPhoneAPI->toPhoneQueueSize > 0)
-                    bluetoothPhoneAPI->toPhoneQueueSize--;
+                if (phoneApi->toPhoneQueueSize > 0)
+                    phoneApi->toPhoneQueueSize--;
             } else {
                 // nothing in the toPhoneQueue; that's fine, and we'll just have numBytes=0.
             }
@@ -567,7 +664,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
         // If we sent something, wake up the main loop if it's sleeping in case there are more packets ready to enqueue.
         if (numBytes != 0) {
-            bluetoothPhoneAPI->setIntervalFromNow(0);
+            phoneApi->setIntervalFromNow(0);
             concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
         }
     }
@@ -577,59 +674,19 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
 #ifdef NIMBLE_TWO
   public:
-    NimbleBluetoothServerCallback(NimbleBluetooth *ble) { this->ble = ble; }
+    void setOwner(NimbleBluetooth *owner) { ble = owner; }
 
   private:
-    NimbleBluetooth *ble;
+    NimbleBluetooth *ble = nullptr;
 
     virtual uint32_t onPassKeyDisplay()
 #else
     virtual uint32_t onPassKeyRequest()
 #endif
     {
-        uint32_t passkey = config.bluetooth.fixed_pin;
-
-        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
-            LOG_INFO("Use random passkey");
-            // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
-            passkey = random(100000, 999999);
-        }
+        const uint32_t passkey = bluetooth::choosePairingPasskey();
         LOG_INFO("*** Enter passkey %d on the peer side ***", passkey);
-
-        powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-        meshtastic::BluetoothStatus newStatus(std::to_string(passkey));
-        bluetoothStatus->updateStatus(&newStatus);
-
-#if HAS_SCREEN // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
-        if (screen) {
-            screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-                char btPIN[16] = "888888";
-                snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
-                int x_offset = display->width() / 2;
-                int y_offset = display->height() <= 80 ? 0 : 12;
-                display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->setFont(FONT_MEDIUM);
-                display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-#if !defined(M5STACK_UNITC6L)
-                display->setFont(FONT_SMALL);
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-                display->drawString(x_offset + x, y_offset + y, "Enter this code");
-#endif
-                display->setFont(FONT_LARGE);
-                char pin[8];
-                snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-                display->drawString(x_offset + x, y_offset + y, pin);
-
-                display->setFont(FONT_SMALL);
-                char deviceName[64];
-                snprintf(deviceName, sizeof(deviceName), "Name: %s", getDeviceName());
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-                display->drawString(x_offset + x, y_offset + y, deviceName);
-            });
-        }
-#endif
-        passkeyShowing = true;
+        bluetooth::showPairingPrompt(passkey);
 
         return passkey;
     }
@@ -642,24 +699,39 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         LOG_INFO("BLE authentication complete");
 
-        meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
-        bluetoothStatus->updateStatus(&newStatus);
-        clearPairingDisplay();
+        bluetooth::notifyConnected();
+        bluetooth::clearPairingPrompt();
 
         // Store the connection handle for future use
 #ifdef NIMBLE_TWO
         nimbleBluetoothConnHandle = connInfo.getConnHandle();
+#ifdef MODE_SHARED_NODE
+        // Authentication completion is the first reliable point where NimBLE has
+        // resolved the peer identity address from the bond.
+        bluetooth::resolveConnectionSlot(nimbleBluetoothConnHandle, peerIdentityFromNimble(connInfo));
+#endif
+        ensureBluetoothPhoneAPI(nimbleBluetoothConnHandle);
 #else
         nimbleBluetoothConnHandle = desc->conn_handle;
+        ensureBluetoothPhoneAPI(BLE_HS_CONN_HANDLE_NONE);
 #endif
     }
 
 #ifdef NIMBLE_TWO
     virtual void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo)
     {
+#ifdef MODE_SHARED_NODE
+        const SharedNode::PeerIdentity identity = peerIdentityFromNimble(connInfo);
+        LOG_INFO("BLE incoming connection identity %s", identity.c_str());
+#else
         LOG_INFO("BLE incoming connection %s", connInfo.getAddress().toString().c_str());
-
+#endif
         const uint16_t connHandle = connInfo.getConnHandle();
+        nimbleBluetoothConnHandle = connHandle;
+#ifdef MODE_SHARED_NODE
+        bluetooth::rememberKnownConnection(connHandle, identity);
+#endif
+        ensureBluetoothPhoneAPI(connHandle);
 #if NIMBLE_ENABLE_2M_PHY && (defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6))
         int phyResult =
             ble_gap_set_prefered_le_phy(connHandle, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_CODED_ANY);
@@ -686,10 +758,13 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
     {
         LOG_INFO("BLE disconnect reason: %d", reason);
+        const uint16_t connHandle = connInfo.getConnHandle();
 #else
     virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
     {
         LOG_INFO("BLE disconnect");
+        (void)desc;
+        const uint16_t connHandle = BLE_HS_CONN_HANDLE_NONE;
 #endif
 #ifdef NIMBLE_TWO
         if (ble->isDeInit)
@@ -699,33 +774,18 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             return;
 #endif
 
-        meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
-        bluetoothStatus->updateStatus(&newStatus);
-        clearPairingDisplay();
+        removeBluetoothPhoneAPI(connHandle);
 
-        if (bluetoothPhoneAPI) {
-            bluetoothPhoneAPI->close();
-
-            { // scope for fromPhoneMutex mutex
-                std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->fromPhoneMutex);
-                bluetoothPhoneAPI->fromPhoneQueueSize = 0;
+        const bool hasRemainingConnections = pServer && pServer->getConnectedCount() > 0;
+        if (hasRemainingConnections) {
+            const auto peers = pServer->getPeerDevices();
+            if (!peers.empty()) {
+                nimbleBluetoothConnHandle = peers.front();
             }
-
-            bluetoothPhoneAPI->onReadCallbackIsWaitingForData = false;
-            { // scope for toPhoneMutex mutex
-                std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->toPhoneMutex);
-                bluetoothPhoneAPI->toPhoneQueueSize = 0;
-            }
-
-            bluetoothPhoneAPI->readCount = 0;
-            bluetoothPhoneAPI->notifyCount = 0;
-            bluetoothPhoneAPI->writeCount = 0;
+        } else {
+            bluetooth::notifyDisconnected();
+            nimbleBluetoothConnHandle = BLE_HS_CONN_HANDLE_NONE; // BLE_HS_CONN_HANDLE_NONE means "no connection"
         }
-
-        // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
-        memset(lastToRadio, 0, sizeof(lastToRadio));
-
-        nimbleBluetoothConnHandle = BLE_HS_CONN_HANDLE_NONE; // BLE_HS_CONN_HANDLE_NONE means "no connection"
 
 #ifdef NIMBLE_TWO
         // Restart Advertising
@@ -743,8 +803,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     }
 };
 
-static NimbleBluetoothToRadioCallback *toRadioCallbacks;
-static NimbleBluetoothFromRadioCallback *fromRadioCallbacks;
+static NimbleBluetoothServerCallback serverCallbacks;
+static NimbleBluetoothToRadioCallback toRadioCallbacks;
+static NimbleBluetoothFromRadioCallback fromRadioCallbacks;
 
 void NimbleBluetooth::shutdown()
 {
@@ -752,6 +813,7 @@ void NimbleBluetooth::shutdown()
 #ifndef ARCH_ESP32
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable bluetooth");
+    closeAllBluetoothPhoneAPIs();
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->stop();
@@ -764,6 +826,7 @@ void NimbleBluetooth::deinit()
 #ifdef ARCH_ESP32
     LOG_INFO("Disable bluetooth until reboot");
     isDeInit = true;
+    closeAllBluetoothPhoneAPIs();
 
 #ifdef BLE_LED
     digitalWrite(BLE_LED, LED_STATE_OFF);
@@ -823,6 +886,10 @@ void NimbleBluetooth::setup()
     // Uncomment for testing
     // NimbleBluetooth::clearBonds();
 
+#ifdef MODE_SHARED_NODE
+    bluetooth::enforceSharedNodePairingMode();
+#endif
+
     LOG_INFO("Init the NimBLE bluetooth module");
 
     NimBLEDevice::init(getDeviceName());
@@ -852,7 +919,7 @@ void NimbleBluetooth::setup()
     }
 #endif
 
-    if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
+    if (bluetooth::requiresSecurePairing()) {
         NimBLEDevice::setSecurityAuth(BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM | BLE_SM_PAIR_AUTHREQ_SC);
         NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
         NimBLEDevice::setSecurityRespKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
@@ -860,11 +927,9 @@ void NimbleBluetooth::setup()
     }
     bleServer = NimBLEDevice::createServer();
 #ifdef NIMBLE_TWO
-    NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback(this);
-#else
-    NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback();
+    serverCallbacks.setOwner(this);
 #endif
-    bleServer->setCallbacks(serverCallbacks, true);
+    bleServer->setCallbacks(&serverCallbacks, false);
     setupService();
     startAdvertising();
 }
@@ -872,35 +937,30 @@ void NimbleBluetooth::setup()
 void NimbleBluetooth::setupService()
 {
     NimBLEService *bleService = bleServer->createService(MESH_SERVICE_UUID);
-    NimBLECharacteristic *ToRadioCharacteristic;
-    NimBLECharacteristic *FromRadioCharacteristic;
-    // Define the characteristics that the app is looking for
-    if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
-        ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
-        // Allow notifications so phones can stream FromRadio without polling.
-        FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
-        fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
-        logRadioCharacteristic =
-            bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 512U);
-    } else {
-        ToRadioCharacteristic = bleService->createCharacteristic(
-            TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
-        FromRadioCharacteristic = bleService->createCharacteristic(
-            FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-        fromNumCharacteristic =
-            bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
-                                                               NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-        logRadioCharacteristic = bleService->createCharacteristic(
-            LOGRADIO_UUID,
-            NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 512U);
+
+    uint32_t toRadioProperties = NIMBLE_PROPERTY::WRITE;
+    uint32_t fromRadioProperties = NIMBLE_PROPERTY::READ;
+    uint32_t fromNumProperties = NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ;
+    uint32_t logRadioProperties = NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ;
+    if (bluetooth::requiresSecurePairing()) {
+        toRadioProperties |= NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC;
+        fromRadioProperties |= NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC;
+        fromNumProperties |= NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC;
+        logRadioProperties |= NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC;
     }
-    bluetoothPhoneAPI = new BluetoothPhoneAPI();
 
-    toRadioCallbacks = new NimbleBluetoothToRadioCallback();
-    ToRadioCharacteristic->setCallbacks(toRadioCallbacks);
+    // Define the characteristics that the app is looking for.
+    NimBLECharacteristic *ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, toRadioProperties);
+    NimBLECharacteristic *FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, fromRadioProperties);
+    fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, fromNumProperties);
+    logRadioCharacteristic = bleService->createCharacteristic(LOGRADIO_UUID, logRadioProperties, 512U);
+#ifndef NIMBLE_TWO
+    ensureBluetoothPhoneAPI(BLE_HS_CONN_HANDLE_NONE);
+#endif
 
-    fromRadioCallbacks = new NimbleBluetoothFromRadioCallback();
-    FromRadioCharacteristic->setCallbacks(fromRadioCallbacks);
+    ToRadioCharacteristic->setCallbacks(&toRadioCallbacks);
+
+    FromRadioCharacteristic->setCallbacks(&fromRadioCallbacks);
 
     bleService->start();
 
@@ -973,7 +1033,16 @@ void updateBatteryLevel(uint8_t level)
 
 void NimbleBluetooth::clearBonds()
 {
+#ifdef MODE_SHARED_NODE
+    if (!bluetooth::canClearKnownClients("clearBonds")) {
+        return;
+    }
+#endif
     LOG_INFO("Clearing bluetooth bonds!");
+    closeAllBluetoothPhoneAPIs();
+#ifdef MODE_SHARED_NODE
+    bluetooth::clearKnownClients();
+#endif
     NimBLEDevice::deleteAllBonds();
 }
 
@@ -991,6 +1060,12 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 
 void clearNVS()
 {
+#ifdef MODE_SHARED_NODE
+    if (!bluetooth::canClearKnownClients("clearNVS")) {
+        return;
+    }
+    bluetooth::clearKnownClients();
+#endif
     NimBLEDevice::deleteAllBonds();
 #ifdef ARCH_ESP32
     ESP.restart();

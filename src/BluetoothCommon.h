@@ -1,6 +1,9 @@
 #pragma once
 
 #include <Arduino.h>
+#ifdef MODE_SHARED_NODE
+#include "mesh/sharedNode/Types.h"
+#endif
 
 /**
  * Common lib functions for all platforms that have bluetooth

@@ -3,6 +3,7 @@
 #include "Observer.h"
 #include <Arduino.h>
 #include <algorithm>
+#include <array>
 #include <assert.h>
 #include <pb_encode.h>
 #include <string>
@@ -13,6 +14,9 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
+#ifdef MODE_SHARED_NODE
+#include "mesh/sharedNode/Types.h"
+#endif
 
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
@@ -103,6 +107,11 @@ static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 static constexpr const char *channelFileName = "/prefs/channels.proto";
 static constexpr const char *backupFileName = "/backups/backup.proto";
+#ifdef MODE_SHARED_NODE
+/// Shared-node pairing table. Kept separate from nodes.proto so BLE bond/slot
+/// churn does not rewrite the full NodeDB.
+static constexpr const char *clientRecordsFileName = "/prefs/clients.proto";
+#endif
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
@@ -160,6 +169,7 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
 
   public:
+
     std::vector<meshtastic_NodeInfoLite> *meshNodes;
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
@@ -320,6 +330,14 @@ class NodeDB
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
+#ifdef MODE_SHARED_NODE
+    /// SharedNodePairingPolicy owns the slot semantics; NodeDB only snapshots
+    /// durable fields to disk and strips live connection state when loading.
+    const std::array<SharedNode::ClientRecord, SharedNode::MAX_CONNECTIONS> &listClients() const { return clientRecords; }
+    void copySharedNodeRecords(SharedNode::ClientRecord *dest, size_t maxRecords) const;
+    bool saveSharedNodeRecords(const SharedNode::ClientRecord *records, size_t recordCount);
+#endif
+
     /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)
     {
@@ -329,6 +347,12 @@ class NodeDB
     }
 
   private:
+#ifdef MODE_SHARED_NODE
+    /// Slot 0 is the admin record; later slots are guests. The array size is
+    /// compile-time fixed so shared-node mode can run without heap allocation.
+    std::array<SharedNode::ClientRecord, SharedNode::MAX_CONNECTIONS> clientRecords{};
+#endif
+
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
@@ -362,6 +386,10 @@ class NodeDB
     bool saveChannelsToDisk();
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
+#ifdef MODE_SHARED_NODE
+    void loadClientRecords();
+    bool saveClientRecords();
+#endif
     void sortMeshDB();
 };
 

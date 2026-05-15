@@ -5,6 +5,9 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#ifdef MODE_SHARED_NODE
+#include "mesh/sharedNode/VirtualNodeManager.h"
+#endif
 
 #include "configuration.h"
 #include "main.h"
@@ -258,8 +261,24 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
     if (p->to == 0) {
         LOG_ERROR("Packet received with to: of 0!");
     }
-    // No need to deliver externally if the destination is the local node
-    if (isToUs(p)) {
+    // No need to deliver externally if the destination is the physical local
+    // node or one of the live shared-node virtual guest IDs.
+#ifdef MODE_SHARED_NODE
+    const bool isLocalVirtualNode = virtualNodeManager.isLocalVirtualNode(p->to);
+#endif
+    if (isToUs(p)
+#ifdef MODE_SHARED_NODE
+    || isLocalVirtualNode
+#endif
+    ) {
+#ifdef MODE_SHARED_NODE
+        if (src == RX_SRC_RADIO) {
+            // Radio packets addressed to virtual guest IDs still go through the
+            // normal local queue, but guests need their own per-PhoneAPI copy.
+            virtualNodeManager.handleIncomingPacket(*p);
+        }
+#endif
+
         printPacket("Enqueued local", p);
         enqueueReceivedMessage(p);
         return ERRNO_OK;

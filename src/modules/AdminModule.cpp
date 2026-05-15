@@ -26,6 +26,10 @@
 #include "MeshRadio.h"
 #include "RadioInterface.h"
 #include "TypeConversions.h"
+#ifdef MODE_SHARED_NODE
+#include "mesh/sharedNode/PairingPolicy.h"
+#include "mesh/sharedNode/VirtualNodeManager.h"
+#endif
 #include "mesh/RadioLibInterface.h"
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -330,6 +334,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_factory_reset_device_tag: {
+#ifdef MODE_SHARED_NODE
+        // Factory reset must drop the stored admin/guest identities as well as
+        // the BLE bonds, otherwise old peers could reclaim stale slots.
+        SharedNode::pairingPolicy.clearAllKnownClients();
+#endif
         disableBluetooth();
         LOG_INFO("Initiate full factory reset");
         nodeDB->factoryReset(true);
@@ -884,6 +893,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         LOG_INFO("Set config: Bluetooth");
         config.has_bluetooth = true;
         config.bluetooth = c.payload_variant.bluetooth;
+#ifdef MODE_SHARED_NODE
+        // Shared-node auth is built on pairing callbacks. Keep random PIN
+        // enabled even if a remote admin tries to push another BT mode.
+        if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
+            LOG_WARN("Shared-node requires random Bluetooth pairing mode; keeping random mode");
+            config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN;
+        }
+#endif
         break;
     case meshtastic_Config_security_tag:
         LOG_INFO("Set config: Security");

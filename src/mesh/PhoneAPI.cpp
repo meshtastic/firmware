@@ -15,6 +15,10 @@
 #include "Router.h"
 #include "SPILock.h"
 #include "TypeConversions.h"
+#ifdef MODE_SHARED_NODE
+#include "mesh/sharedNode/VirtualNodeManager.h"
+#include "mesh/sharedNode/PairingPolicy.h"
+#endif
 #include "concurrency/LockGuard.h"
 #include "main.h"
 #include "xmodem.h"
@@ -35,6 +39,10 @@
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;
 
+#ifdef MODE_SHARED_NODE
+using SharedNode::Role;
+#endif
+
 PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
@@ -50,6 +58,25 @@ void PhoneAPI::handleStartConfig()
 {
     // Must be before setting state (because state is how we know !connected)
     if (!isConnected()) {
+#ifdef MODE_SHARED_NODE
+        bool authenticated = false;
+        // Transport layer has already chosen the slot via SharedNodePairingPolicy.
+        // Now we just need to register the session in VirtualNodeManager.
+        if (isAdmin()) {
+            // Admin role: already authenticated via BLE pairing
+            authenticated = virtualNodeManager.connectAsAdmin(this);
+        } else if (isGuest()) {
+            // Guest role: already authenticated by transport-level pairing
+            authenticated = virtualNodeManager.connectAsGuest(this);
+        }
+
+        if (!authenticated) {
+            LOG_WARN("Shared-node client rejected while starting config");
+            close();
+            return;
+        }
+#endif
+
         onConnectionChanged(true);
         observe(&service->fromNumChanged);
 #ifdef FSCom
@@ -87,6 +114,10 @@ void PhoneAPI::handleStartConfig()
 void PhoneAPI::close()
 {
     LOG_DEBUG("PhoneAPI::close()");
+#ifdef MODE_SHARED_NODE
+    virtualNodeManager.disconnect(this);
+#endif
+
     if (service->api_state == service->STATE_BLE && api_type == TYPE_BLE)
         service->api_state = service->STATE_DISCONNECTED;
     else if (service->api_state == service->STATE_WIFI && api_type == TYPE_WIFI)
@@ -114,6 +145,10 @@ void PhoneAPI::close()
         onConnectionChanged(false);
         fromRadioScratch = {};
         toRadioScratch = {};
+#ifdef MODE_SHARED_NODE
+        hasVirtualPacketForPhone = false;
+        virtualPacketForPhone = meshtastic_MeshPacket_init_zero;
+#endif
         // Clear cached node info under lock because NimBLE callbacks can still be draining it.
         {
             concurrency::LockGuard guard(&nodeInfoMutex);
@@ -165,6 +200,15 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
         case meshtastic_ToRadio_disconnect_tag:
             LOG_INFO("Disconnect from phone");
+#ifdef MODE_SHARED_NODE
+            if (sharedNodeSlot != SharedNode::INVALID_SLOT) {
+                // This protobuf is the app-level "I am done with this device"
+                // signal. Treat it as an explicit slot release, unlike a plain
+                // BLE disconnect where the same phone may reconnect later.
+                SharedNode::pairingPolicy.disconnectSlot(sharedNodeSlot);
+                sharedNodeSlot = SharedNode::INVALID_SLOT;
+            }
+#endif
             close();
             break;
         case meshtastic_ToRadio_xmodemPacket_tag:
@@ -546,6 +590,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         pauseBluetoothLogging = false;
         // Do we have a message from the mesh or packet from the local device?
         LOG_DEBUG("FromRadio=STATE_SEND_PACKETS");
+#ifdef MODE_SHARED_NODE
+        if (hasVirtualPacketForPhone) {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_packet_tag;
+            fromRadioScratch.packet = virtualPacketForPhone;
+            hasVirtualPacketForPhone = false;
+            virtualPacketForPhone = meshtastic_MeshPacket_init_zero;
+        } else
+#endif
         if (queueStatusPacketForPhone) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
             fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
@@ -707,6 +759,22 @@ bool PhoneAPI::available()
         prefetchNodeInfos();
         return true;
     case STATE_SEND_PACKETS: {
+#ifdef MODE_SHARED_NODE
+        if (!hasVirtualPacketForPhone) {
+            hasVirtualPacketForPhone = virtualNodeManager.popLocalPacketForApi(this, virtualPacketForPhone);
+        }
+        if (hasVirtualPacketForPhone) {
+            return true;
+        }
+
+        // Guests should not see real packets from the device,
+        // but instead only see virtual packets that the virtual node manager creates for them.
+        // So if we're a guest, don't even check for real packets.
+        if (isGuest()) {
+            return false;
+        }
+#endif
+
         if (!queueStatusPacketForPhone)
             queueStatusPacketForPhone = service->getQueueStatusForPhone();
         if (!mqttClientProxyMessageForPhone)
@@ -830,7 +898,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     }
 
     lastPortNumToRadio[p.decoded.portnum] = millis();
-    service->handleToRadio(p);
+    service->handleToRadio(p, this);
     return true;
 }
 

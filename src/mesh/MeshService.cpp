@@ -12,6 +12,9 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "TypeConversions.h"
+#ifdef MODE_SHARED_NODE
+#include "mesh/sharedNode/VirtualNodeManager.h"
+#endif
 #include "graphics/draw/MessageRenderer.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -25,6 +28,13 @@
 
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
+#endif
+
+// Shared-node mode requires a display for the admin UI
+#ifdef MODE_SHARED_NODE
+#ifndef HAS_SCREEN
+#error "Shared-node mode requires a display (HAS_SCREEN must be defined in variant.h)"
+#endif
 #endif
 
 /*
@@ -79,6 +89,15 @@ void MeshService::init()
 #if HAS_GPS
     if (gps)
         gpsObserver.observe(&gps->newStatus);
+#endif
+
+#ifdef MODE_SHARED_NODE
+    // Shared-node mode depends on pairing callbacks to assign admin/guest
+    // roles, so NO_PIN/FIXED_PIN modes would bypass the policy.
+    if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
+        LOG_WARN("Shared-node requires random Bluetooth pairing mode; forcing random mode");
+        config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN;
+    }
 #endif
 }
 
@@ -176,7 +195,7 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
  * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a
  * reference
  */
-void MeshService::handleToRadio(meshtastic_MeshPacket &p)
+void MeshService::handleToRadio(meshtastic_MeshPacket &p, PhoneAPI *sourcePhoneAPI)
 {
 #if defined(ARCH_PORTDUINO)
     if (SimRadio::instance && p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
@@ -191,6 +210,21 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
+
+#ifdef MODE_SHARED_NODE
+    // Let shared-node rewrite guest traffic before the normal mesh service
+    // stamps rx_time and forwards it. A local delivery result means the
+    // packet was queued directly to another PhoneAPI on this device.
+    VirtualNodeManager::OutgoingPacketDecision decision = virtualNodeManager.handleOutgoingPacket(p, sourcePhoneAPI);
+    if (decision == VirtualNodeManager::OUTGOING_REJECT) {
+        LOG_WARN("Shared-node policy rejected packet from API client");
+        sendRoutingErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &p);
+        return;
+    }
+    if (decision == VirtualNodeManager::OUTGOING_HANDLED_LOCAL) {
+        return;
+    }
+#endif
 
     p.rx_time = getValidTime(RTCQualityFromNet); // Record the time the packet arrived from the phone
 

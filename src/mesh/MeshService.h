@@ -28,6 +28,8 @@ extern Allocator<meshtastic_QueueStatus> &queueStatusPool;
 extern Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool;
 extern Allocator<meshtastic_ClientNotification> &clientNotificationPool;
 
+class PhoneAPI;
+
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
  *
@@ -144,9 +146,10 @@ class MeshService
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
      * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep
-     * a reference
+     * a reference. sourcePhoneAPI is optional for non-phone callers; shared-node
+     * mode uses it to apply per-client routing and guest authorization.
      */
-    void handleToRadio(meshtastic_MeshPacket &p);
+    void handleToRadio(meshtastic_MeshPacket &p, PhoneAPI *sourcePhoneAPI = nullptr);
 
     /** The radioConfig object just changed, call this to force the hw to change to the new settings
      * @return true if client devices should be sent a new set of radio configs

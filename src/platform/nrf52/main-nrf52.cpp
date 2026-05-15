@@ -22,6 +22,9 @@
 #include "PowerMon.h"
 #include "error.h"
 #include "main.h"
+#ifdef MODE_SHARED_NODE
+#include "mesh/ble/BluetoothShared.h"
+#endif
 #include "meshUtils.h"
 #include "power.h"
 #include <power/PowerHAL.h>
@@ -513,6 +516,11 @@ void cpuDeepSleep(uint32_t msecToWake)
 
 void clearBonds()
 {
+#ifdef MODE_SHARED_NODE
+    if (!bluetooth::canClearKnownClients("clearBonds")) {
+        return;
+    }
+#endif
     if (!nrf52Bluetooth) {
         nrf52Bluetooth = new NRF52Bluetooth();
         nrf52Bluetooth->setup();

@@ -21,10 +21,14 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#ifdef MODE_SHARED_NODE
+#include "mesh/sharedNode/PairingPolicy.h"
+#endif
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
+#include <cstring>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <power/PowerHAL.h>
@@ -59,6 +63,11 @@
 #endif
 
 NodeDB *nodeDB = nullptr;
+
+#ifdef MODE_SHARED_NODE
+using SharedNode::ClientRecord;
+using SharedNode::ConnectionState;
+#endif
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
 EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
@@ -519,6 +528,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     saveToDisk();
     if (eraseBleBonds) {
         LOG_INFO("Erase BLE bonds");
+#ifdef MODE_SHARED_NODE
+        SharedNode::pairingPolicy.clearAllKnownClients();
+#endif
 #ifdef ARCH_ESP32
         // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
         nvs_flash_erase();
@@ -541,6 +553,9 @@ void NodeDB::installDefaultNodeDatabase()
     nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
     numMeshNodes = 0;
     meshNodes = &nodeDatabase.nodes;
+#ifdef MODE_SHARED_NODE
+    clientRecords = {};
+#endif
 }
 
 void NodeDB::installDefaultConfig(bool preserveKey = false)
@@ -713,13 +728,23 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
 
+#ifdef MODE_SHARED_NODE
+    // Shared-node pairing must show a fresh admin passkey while keeping the
+    // configured fixed PIN available as the guest PIN.
+    config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN;
+    #ifdef MESHTASTIC_SHARED_NODE_GUEST_PIN
+        config.bluetooth.fixed_pin = MESHTASTIC_SHARED_NODE_GUEST_PIN;
+    #endif
+#else
 #ifdef USERPREFS_FIXED_BLUETOOTH
     config.bluetooth.fixed_pin = USERPREFS_FIXED_BLUETOOTH;
     config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
 #else
     config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
-                                      : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
+                                    : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
 #endif
+#endif
+
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
@@ -1395,6 +1420,12 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded UIConfig");
     }
 
+    // Guest/admin pairing records are stored beside the normal NodeDB but are
+    // loaded after preferences so the policy can resolve stable BLE identities.
+#ifdef MODE_SHARED_NODE
+    loadClientRecords();
+#endif
+
     // 2.4.X - configuration migration to update new default intervals
     if (moduleConfig.version < 23) {
         LOG_DEBUG("ModuleConfig version %d is stale, upgrading to new default intervals", moduleConfig.version);
@@ -1431,6 +1462,122 @@ void NodeDB::loadFromDisk()
 
 #endif
 }
+
+#ifdef MODE_SHARED_NODE
+void NodeDB::copySharedNodeRecords(SharedNode::ClientRecord *dest, size_t maxRecords) const
+{
+    if (!dest) {
+        return;
+    }
+
+    const size_t count = std::min(maxRecords, clientRecords.size());
+    for (size_t i = 0; i < count; i++) {
+        dest[i] = clientRecords[i];
+        // connHandle describes current RAM-only BLE state. After boot the
+        // transport must reconnect and prove the same peer identity again.
+        if (dest[i].connectionState == ConnectionState::ACTIVE) {
+            dest[i].connectionState = ConnectionState::NOT_ACTIVE;
+        }
+        dest[i].connHandle = 0;
+    }
+    for (size_t i = count; i < maxRecords; i++) {
+        dest[i] = SharedNode::ClientRecord{};
+        dest[i].connectionState = ConnectionState::EMPTY;
+    }
+}
+
+bool NodeDB::saveSharedNodeRecords(const SharedNode::ClientRecord *records, size_t recordCount)
+{
+    if (!records) {
+        return false;
+    }
+
+    const size_t count = std::min(recordCount, clientRecords.size());
+    for (size_t i = 0; i < count; i++) {
+        clientRecords[i] = records[i];
+    }
+    for (size_t i = count; i < clientRecords.size(); i++) {
+        clientRecords[i] = ClientRecord{};
+        clientRecords[i].connectionState = ConnectionState::EMPTY;
+    }
+    return saveClientRecords();
+}
+
+void NodeDB::loadClientRecords()
+{
+    clientRecords = {};
+    // Initialize defaults before loading so missing/truncated files still leave
+    // the in-memory table with correct defaults.
+    for (uint8_t i = 0; i < clientRecords.size(); i++) {
+        clientRecords[i].connectionState = ConnectionState::EMPTY;
+    }
+
+    meshtastic_SharedNodeClientStore store = meshtastic_SharedNodeClientStore_init_zero;
+    if (loadProto(clientRecordsFileName, meshtastic_SharedNodeClientStore_size, sizeof(meshtastic_SharedNodeClientStore),
+                  &meshtastic_SharedNodeClientStore_msg, &store) != LoadFileResult::LOAD_SUCCESS) {
+        return;
+    }
+
+    for (pb_size_t i = 0; i < store.clients_count && i < clientRecords.size(); ++i) {
+        const meshtastic_SharedNodeClient &raw = store.clients[i];
+        ClientRecord &record = clientRecords[i];
+        record.connHandle = 0;
+        record.virtualNodeId = raw.virtual_node_id;
+        strncpy(record.shortName, raw.short_name, sizeof(record.shortName) - 1);
+        strncpy(record.longName, raw.long_name, sizeof(record.longName) - 1);
+        record.peerIdentity = raw.peer_identity;
+        record.registerTime = raw.register_time;
+        record.lastSeen = raw.last_seen;
+
+        const bool hasPeerIdentity = raw.peer_identity[0] != '\0';
+        record.connectionState = SharedNode::connectionStateFromValue(raw.connection_state);
+        if (record.connectionState == ConnectionState::ACTIVE) {
+            record.connectionState = ConnectionState::NOT_ACTIVE;
+        }
+        if (!hasPeerIdentity &&
+            (record.connectionState == ConnectionState::NOT_ACTIVE || record.connectionState == ConnectionState::ACTIVE)) {
+            record.connectionState = ConnectionState::EMPTY;
+        }
+        if (record.connectionState == ConnectionState::EMPTY) {
+            record = ClientRecord{};
+            record.connectionState = ConnectionState::EMPTY;
+        } else if (!hasPeerIdentity) {
+            record.peerIdentity.clear();
+        }
+    }
+}
+
+bool NodeDB::saveClientRecords()
+{
+    if (!powerHAL_isPowerLevelSafe()) {
+        LOG_ERROR("Error: trying to saveClientRecords() on unsafe device power level.");
+        return false;
+    }
+
+    meshtastic_SharedNodeClientStore store = meshtastic_SharedNodeClientStore_init_zero;
+    for (const ClientRecord &record : clientRecords) {
+        if (store.clients_count >= sizeof(store.clients) / sizeof(store.clients[0])) {
+            LOG_WARN("Client record count exceeds protobuf capacity, truncating");
+            break;
+        }
+
+        // Save the whole slot table, including empty slots, to preserve stable
+        // slot indexes between firmware boots.
+        meshtastic_SharedNodeClient &raw = store.clients[store.clients_count++];
+        raw.virtual_node_id = record.virtualNodeId;
+        strncpy(raw.short_name, record.shortName, sizeof(raw.short_name) - 1);
+        strncpy(raw.long_name, record.longName, sizeof(raw.long_name) - 1);
+        strncpy(raw.peer_identity, record.peerIdentity.c_str(), sizeof(raw.peer_identity) - 1);
+        raw.register_time = record.registerTime;
+        raw.last_seen = record.lastSeen;
+        const ConnectionState storedState =
+            (record.connectionState == ConnectionState::ACTIVE) ? ConnectionState::NOT_ACTIVE : record.connectionState;
+        raw.connection_state = static_cast<uint32_t>(storedState);
+    }
+
+    return saveProto(clientRecordsFileName, meshtastic_SharedNodeClientStore_size, &meshtastic_SharedNodeClientStore_msg, &store);
+}
+#endif
 
 /** Save a protobuf from a file, return true for success */
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
@@ -1584,6 +1731,11 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
 
     if (saveWhat & SEGMENT_NODEDATABASE) {
         success &= saveNodeDatabaseToDisk();
+#ifdef MODE_SHARED_NODE
+        // Guest records are logically part of local node identity state, but
+        // they live in their own file to keep the normal NodeDB compact.
+        success &= saveClientRecords();
+#endif
     }
 
     return success;

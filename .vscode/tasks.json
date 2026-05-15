@@ -10,6 +10,45 @@
         "isDefault": true
       },
       "label": "PlatformIO: Build"
+    },
+    {
+      "label": "Build SharedNode: heltec-v3",
+      "type": "shell",
+      "command": "pio",
+      "args": ["run", "-e", "heltec-v3"],
+      "options": {
+        "env": {
+          "PLATFORMIO_BUILD_FLAGS": "-DMODE_SHARED_NODE"
+        }
+      },
+      "problemMatcher": ["$platformio"],
+      "group": "build"
+    },
+    {
+      "label": "Build SharedNode: heltec-v4",
+      "type": "shell",
+      "command": "pio",
+      "args": ["run", "-e", "heltec-v4"],
+      "options": {
+        "env": {
+          "PLATFORMIO_BUILD_FLAGS": "-DMODE_SHARED_NODE"
+        }
+      },
+      "problemMatcher": ["$platformio"],
+      "group": "build"
+    },
+    {
+      "label": "Build SharedNode: heltec-mesh-node-t114",
+      "type": "shell",
+      "command": "pio",
+      "args": ["run", "-e", "heltec-mesh-node-t114"],
+      "options": {
+        "env": {
+          "PLATFORMIO_BUILD_FLAGS": "-DMODE_SHARED_NODE"
+        }
+      },
+      "problemMatcher": ["$platformio"],
+      "group": "build"
     }
   ]
 }
