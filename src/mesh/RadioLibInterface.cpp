@@ -555,6 +555,17 @@ void RadioLibInterface::pollMissedIrqs()
     if (isReceiving) {
         checkRxDoneIrqFlag();
     }
+    if (sendingPacket != NULL) {
+        checkTxDoneIrqFlag();
+        // The stuck-TX guard in canSendImmediately only runs when the queue
+        // gets new packets. If the queue is empty, a wedged radio sits
+        // forever — fire the same reboot path here so it always trips.
+        if (!Throttle::isWithinTimespanMs(lastTxStart, 60000) && rebootAtMsec == 0) {
+            LOG_ERROR("Hardware Failure! TX stuck for more than 60s (poll)");
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_TRANSMIT_FAILED);
+            rebootAtMsec = lastTxStart + 65000;
+        }
+    }
 }
 
 void RadioLibInterface::resetAGC()
@@ -567,6 +578,14 @@ void RadioLibInterface::checkRxDoneIrqFlag()
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
         LOG_WARN("caught missed RX_DONE");
         notify(ISR_RX, true);
+    }
+}
+
+void RadioLibInterface::checkTxDoneIrqFlag()
+{
+    if (iface->checkIrq(RADIOLIB_IRQ_TX_DONE)) {
+        LOG_WARN("caught missed TX_DONE");
+        notify(ISR_TX, true);
     }
 }
 
