@@ -531,7 +531,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                                           p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
                 if (p->xeddsa_signed) {
                     // Mark this node as a signer so future unsigned packets from it are rejected
-                    node->bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+                    nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
                     LOG_DEBUG("Verified XEdDSA signature from 0x%08x", p->from);
                 } else {
                     LOG_WARN("XEdDSA signature verification failed from 0x%08x, dropping", p->from);
