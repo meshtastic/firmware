@@ -51,7 +51,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
     NodeNum sourceNum = getFrom(&mp);
     auto node = nodeDB->getMeshNode(sourceNum);
-    if (node && (node->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK) && !mp.xeddsa_signed) {
+    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed) {
         LOG_WARN("Dropping unsigned NodeInfo from node 0x%08x that previously signed", sourceNum);
         return true;
     }
