@@ -31,8 +31,10 @@
  * Pin numbering convention: P0.n = n, P1.n = 16+n, P2.n = 32+n.
  *
  * Reserved / do-not-use DK pins:
- *   P0.00-P0.03  UART30 debug console (IMCU VCOM)
- *   P0.04        BTN3
+ *   P0.00-P0.02  IMCU VCOM TX/RX/RTS pads (uart30 disabled; pads idle)
+ *   P0.03        I2C SDA (TWIM30) — sensor bus
+ *   P0.04        I2C SCL (TWIM30) — sensor bus; SW3 button on this pad,
+ *                DO NOT press SW3 while I2C is active
  *   P1.00-P1.01  32 kHz crystal
  *   P1.02-P1.03  NFC antenna
  *   P1.10        LED1 (status LED — keep)
@@ -68,7 +70,17 @@
 #define LED_STATE_ON 1
 
 // ── Buttons (active LOW, internal pull-up) ───────────────────────────────────
-// BTN1 (P1.09) and BTN2 (P1.08) deleted from DTS (no longer needed for LoRa).
-// Only BTN0 (P1.13) remains as the main user button.
+// BTN1 (P1.09), BTN2 (P1.08) and BTN3 (P0.04) deleted from DTS — only BTN0
+// remains. BTN3's pad (P0.04) is now I2C SCL.
 #define PIN_BUTTON1 29 // P1.13 — BTN0
 #define BUTTON_NEED_PULLUP
+
+// ── I2C bus (TWIM30, HP domain, 3.0 V) ──────────────────────────────────────
+// SDA=P0.03, SCL=P0.04. Pinctrl + clock-frequency live in the board overlay.
+// External 4.7 kΩ pull-ups required on both lines. Meshtastic's Arduino
+// TwoWire layer (src/platform/nrf54l15/Wire.cpp) resolves the device at
+// compile time via DT_NODELABEL(i2c30); these PIN_WIRE_* defines are kept
+// for parity with the Arduino convention used by other variants.
+#define PIN_WIRE_SDA 3 // P0.03
+#define PIN_WIRE_SCL 4 // P0.04
+#define WIRE_INTERFACES_COUNT 1

@@ -80,8 +80,13 @@ typedef uint16_t word;
 #define SERIAL_7E1 0x8000001cu
 
 // ── Integer order ────────────────────────────────────────────────────────────
-#define LSBFIRST 0
-#define MSBFIRST 1
+// Adafruit BusIO's SPIDevice.h has `typedef BitOrder BusIOBitOrder;` which
+// requires BitOrder to be a *type*, not a macro. Mirror the ArduinoCore-API
+// enum definition rather than #defines.
+enum BitOrder : uint8_t {
+    LSBFIRST = 0,
+    MSBFIRST = 1,
+};
 
 // ── pgmspace compatibility (no-ops on Cortex-M) ──────────────────────────────
 #define PROGMEM

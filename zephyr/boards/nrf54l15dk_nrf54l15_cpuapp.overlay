@@ -1,3 +1,5 @@
+#include <zephyr/dt-bindings/i2c/i2c.h>
+
 /*
  * Zephyr device tree overlay — Nordic nRF54L15-DK + EBYTE E22-900M30S (SX1262)
  *
@@ -31,28 +33,63 @@
     status = "disabled";
 };
 
-/* Enable uart30 — IMCU VCOM peripheral kept available so swapping the console
- * to UART (e.g. for boards without a J-Link RTT path) is a one-line prj.conf
- * change. We do NOT bind it as zephyr,console here: prj.conf disables
- * CONFIG_UART_CONSOLE and routes the console through RTT (segger_rtt0), so
- * setting zephyr,console = &uart30 would silently misroute output if the
- * Kconfig changed. RTT becomes the implicit console because RTT_CONSOLE=y. */
+/* Disable uart30 to free P0.00–P0.03 from the uart30_default pinctrl (which
+ * also reserves P0.03 as UART30 CTS). The peripheral instance 30 is shared
+ * with i2c30/spi30 — only one of {UARTE30, TWIM30, SPIM30} can be enabled at
+ * a time. We pick TWIM30 (i2c30) for sensors (SHT40 / INA3221 / SE050 on the
+ * custom PCB; BMP280 / INA228 on the DK for bring-up). Console stays on RTT
+ * via CONFIG_RTT_CONSOLE=y. */
 &uart30 {
+    status = "disabled";
+};
+
+/* I2C bus via TWIM30 (HP domain, 3.0 V), SDA=P0.03 / SCL=P0.04.
+ *   P0.03 was the UART30 CTS; freed by disabling uart30 above.
+ *   P0.04 was button SW3 on the DK; deleted below. The pad still routes to
+ *   the SW3 button on the board — DO NOT press SW3 during I2C use, it will
+ *   short SCL to GND mid-transaction.
+ * 400 kHz is the highest standard rate supported by all three target sensors
+ * (BMP280, INA228, SE050). External 4.7 kΩ pull-ups required on both lines. */
+&pinctrl {
+    i2c30_default: i2c30_default {
+        group1 {
+            psels = <NRF_PSEL(TWIM_SDA, 0, 3)>,
+                    <NRF_PSEL(TWIM_SCL, 0, 4)>;
+            bias-pull-up;
+        };
+    };
+
+    i2c30_sleep: i2c30_sleep {
+        group1 {
+            psels = <NRF_PSEL(TWIM_SDA, 0, 3)>,
+                    <NRF_PSEL(TWIM_SCL, 0, 4)>;
+            low-power-enable;
+        };
+    };
+};
+
+&i2c30 {
     status = "okay";
+    clock-frequency = <I2C_BITRATE_FAST>; /* 400 kHz */
+    pinctrl-0 = <&i2c30_default>;
+    pinctrl-1 = <&i2c30_sleep>;
+    pinctrl-names = "default", "sleep";
 };
 
 / {
     buttons {
         /* button1 (P1.09) and button2 (P1.08) no longer repurposed —
-         * E22 now uses P2. Restore them if needed, or leave deleted
-         * to keep the overlay minimal. */
+         * E22 now uses P2. button3 (P0.04) is now I2C SCL — its node
+         * must be removed before the i2c30 pinctrl can claim the pad. */
         /delete-node/ button_1;
         /delete-node/ button_2;
+        /delete-node/ button_3;
     };
 
     aliases {
         /delete-property/ sw1;
         /delete-property/ sw2;
+        /delete-property/ sw3;
     };
 };
 
