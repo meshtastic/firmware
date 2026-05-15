@@ -1,7 +1,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-#if HAS_WIFI
+#if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D)
 #include "WiFiServerAPI.h"
 
 static WiFiServerPort *apiPort;

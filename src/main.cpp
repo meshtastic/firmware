@@ -59,14 +59,16 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
-#if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D)
+#if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D) || defined(ETH_PHY_TYPE)
 #include "mesh/api/WiFiServerAPI.h"
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
 #if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
 #include "mesh/api/ethServerAPI.h"
+#if !defined(ETH_PHY_TYPE)
 #include "mesh/eth/ethClient.h"
+#endif
 #endif
 
 #if !MESHTASTIC_EXCLUDE_MQTT
