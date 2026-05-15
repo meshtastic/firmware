@@ -8,10 +8,10 @@
 #include "Wire.h"
 #include "configuration.h"
 
+#include <errno.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/kernel.h>
-#include <errno.h>
 
 // Resolve the i2c30 node at compile time. If the overlay has not enabled
 // i2c30, this evaluates to a NULL device pointer and every call short-circuits
@@ -31,7 +31,7 @@ static const struct device *getI2CDevice()
 // Wire/Wire1 instances are defined in nrf54l15_arduino.cpp alongside the
 // other Arduino singletons (Serial, SPI, …).
 
-TwoWire::TwoWire() : txAddr(0), txLen(0), rxLen(0), rxPos(0) {}
+TwoWire::TwoWire() : txAddr(0), txLen(0), txBuf{}, rxLen(0), rxPos(0), rxBuf{} {}
 
 void TwoWire::begin()
 {

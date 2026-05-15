@@ -15,8 +15,8 @@
 #pragma once
 
 #include "Arduino.h"
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifndef WIRE_BUFFER_LENGTH
 #define WIRE_BUFFER_LENGTH 256
@@ -53,14 +53,8 @@ class TwoWire
 
     // ── Master read ──────────────────────────────────────────────────
     uint8_t requestFrom(uint8_t addr, uint8_t quantity, bool stop = true);
-    uint8_t requestFrom(uint8_t addr, uint8_t quantity, uint8_t stop)
-    {
-        return requestFrom(addr, quantity, stop != 0);
-    }
-    uint8_t requestFrom(int addr, int quantity, int stop = 1)
-    {
-        return requestFrom((uint8_t)addr, (uint8_t)quantity, stop != 0);
-    }
+    uint8_t requestFrom(uint8_t addr, uint8_t quantity, uint8_t stop) { return requestFrom(addr, quantity, stop != 0); }
+    uint8_t requestFrom(int addr, int quantity, int stop = 1) { return requestFrom((uint8_t)addr, (uint8_t)quantity, stop != 0); }
 
     int available();
     int read();
