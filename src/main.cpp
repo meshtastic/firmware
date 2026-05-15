@@ -539,6 +539,7 @@ void setup()
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
     }
 #elif HAS_WIRE
+    delay(3000);  // Wait for I2C devices to initialize
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #endif
 
