@@ -160,7 +160,6 @@ void test_XEdDSA(void)
     uint8_t ed_private_key[32];
     uint8_t ed_public_key[32];
     uint8_t ed_public_key2[32];
-    meshtastic_UserLite_public_key_t public_key;
     uint8_t message[] = "This is a test!";
     uint8_t message2[] = "This is a test.";
     uint8_t signature[64];
