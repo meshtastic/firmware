@@ -91,6 +91,7 @@ class RadioInterface
     float bw = 125;
     uint8_t sf = 9;
     uint8_t cr = 5;
+    uint8_t activeCr = 5;
 
     static constexpr uint8_t NUM_SYM_CAD =
         2; // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
@@ -222,6 +223,13 @@ class RadioInterface
      */
     [[nodiscard]] uint32_t getPacketTime(const meshtastic_MeshPacket *p, bool received = false);
     [[nodiscard]] virtual uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) = 0;
+    [[nodiscard]] uint32_t getPacketLength(const meshtastic_MeshPacket *p) const;
+    [[nodiscard]] virtual uint32_t getPacketTimeForCodingRate(uint32_t totalPacketLen, uint8_t codingRate) = 0;
+
+    [[nodiscard]] uint8_t getBaseCodingRate() const { return cr; }
+    [[nodiscard]] uint8_t getActiveCodingRate() const { return activeCr; }
+    virtual bool setActiveCodingRate(uint8_t codingRate);
+    virtual bool restoreBaseCodingRate() { return setActiveCodingRate(cr); }
 
     /**
      * Get the channel we saved.
@@ -266,6 +274,15 @@ class RadioInterface
      * Used as the first step of
      */
     [[nodiscard]] size_t beginSending(meshtastic_MeshPacket *p);
+
+    /**
+     * Pick and apply the per-packet coding rate immediately before transmission.
+     *
+     * Keeping this in the common radio layer lets RadioLib radios and the
+     * Portduino simulator share one DCR flow instead of growing backend-local
+     * heuristics that diverge over time.
+     */
+    void chooseCodingRateForPacket(meshtastic_MeshPacket *p, size_t queueDepth);
 
     /**
      * Some regulatory regions limit xmit power.

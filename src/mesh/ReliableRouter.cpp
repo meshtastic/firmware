@@ -152,7 +152,9 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
             if (ackId) {
                 stopRetransmission(p->to, ackId);
             } else {
-                stopRetransmission(p->to, nakId);
+                // A NAK is a completed reliable exchange, but it is not a TX
+                // success for DCR's per-CR delivery accounting.
+                stopRetransmission(p->to, nakId, false);
             }
         }
     }

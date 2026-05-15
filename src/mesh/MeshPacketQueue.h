@@ -33,6 +33,9 @@ class MeshPacketQueue
     /** return total size of the Queue */
     size_t getMaxLen() { return maxLen; }
 
+    /** return amount of packets currently waiting in Queue */
+    size_t size() const { return queue.size(); }
+
     meshtastic_MeshPacket *dequeue();
 
     meshtastic_MeshPacket *getFront();

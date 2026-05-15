@@ -39,6 +39,9 @@ struct PendingPacket {
     /** Starts at NUM_RETRANSMISSIONS -1 and counts down.  Once zero it will be removed from the list */
     uint8_t numRetransmissions = 0;
 
+    /** The starting countdown value, used to derive the retransmission attempt without role assumptions */
+    uint8_t initialNumRetransmissions = 0;
+
     PendingPacket() {}
     explicit PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions);
 };
@@ -130,8 +133,8 @@ class NextHopRouter : public FloodingRouter
      *
      * @return true if we found and removed a transmission with this ID
      */
-    bool stopRetransmission(NodeNum from, PacketId id);
-    bool stopRetransmission(GlobalPacketId p);
+    bool stopRetransmission(NodeNum from, PacketId id, bool success = true);
+    bool stopRetransmission(GlobalPacketId p, bool success = true);
 
     /**
      * Do any retransmissions that are scheduled (FIXME - for the time being called from loop)
