@@ -112,6 +112,11 @@ typedef enum _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar {
     meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL = 24
 } meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar;
 
+typedef enum _meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode {
+    meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode_MODE_DEFAULT = 0,
+    meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode_MODE_SHARED_NODE = 1
+} meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode;
+
 /* Struct definitions */
 /* Settings for reporting unencrypted information about our node to a map via MQTT */
 typedef struct _meshtastic_ModuleConfig_MapReportSettings {
@@ -449,6 +454,21 @@ typedef struct _meshtastic_ModuleConfig_StatusMessageConfig {
     char node_status[80];
 } meshtastic_ModuleConfig_StatusMessageConfig;
 
+/* Shared node mode configuration.
+
+ Runtime pairing identity and client slot state are persisted in
+ SharedNodeClientStore; this message only contains user-facing mode limits
+ and PIN policy. */
+typedef struct _meshtastic_ModuleConfig_SharedNodeConfig {
+    /* Shared-node operating mode. */
+    meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode mode;
+    /* Guest PIN used to authenticate non-admin clients. The first admin pairing
+ still uses a random displayed passkey. */
+    uint32_t guest_pin;
+    /* Maximum number of concurrent guest clients. */
+    uint32_t max_guests;
+} meshtastic_ModuleConfig_SharedNodeConfig;
+
 /* TAK team/role configuration */
 typedef struct _meshtastic_ModuleConfig_TAKConfig {
     /* Team color.
@@ -516,6 +536,8 @@ typedef struct _meshtastic_ModuleConfig {
         meshtastic_ModuleConfig_TrafficManagementConfig traffic_management;
         /* TAK team/role configuration for TAK_TRACKER */
         meshtastic_ModuleConfig_TAKConfig tak;
+        /* Shared-node mode configuration */
+        meshtastic_ModuleConfig_SharedNodeConfig shared_node;
     } payload_variant;
 } meshtastic_ModuleConfig;
 
@@ -549,6 +571,10 @@ extern "C" {
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MAX meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_ARRAYSIZE ((meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar)(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK+1))
 
+#define _meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode_MIN meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode_MODE_DEFAULT
+#define _meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode_MAX meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode_MODE_SHARED_NODE
+#define _meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode_ARRAYSIZE ((meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode)(meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode_MODE_SHARED_NODE+1))
+
 
 
 
@@ -572,6 +598,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_event_press_ENUMTYPE meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar
 
 
+
+#define meshtastic_ModuleConfig_SharedNodeConfig_mode_ENUMTYPE meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode
 
 #define meshtastic_ModuleConfig_TAKConfig_team_ENUMTYPE meshtastic_Team
 #define meshtastic_ModuleConfig_TAKConfig_role_ENUMTYPE meshtastic_MemberRole
@@ -597,6 +625,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_default {""}
+#define meshtastic_ModuleConfig_SharedNodeConfig_init_default {_meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode_MIN, 0, 0}
 #define meshtastic_ModuleConfig_TAKConfig_init_default {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
@@ -616,6 +645,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_zero {""}
+#define meshtastic_ModuleConfig_SharedNodeConfig_init_zero {_meshtastic_ModuleConfig_SharedNodeConfig_SharedNodeMode_MIN, 0, 0}
 #define meshtastic_ModuleConfig_TAKConfig_init_zero {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
 #define meshtastic_RemoteHardwarePin_init_zero   {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 
@@ -735,6 +765,9 @@ extern "C" {
 #define meshtastic_ModuleConfig_AmbientLightingConfig_green_tag 4
 #define meshtastic_ModuleConfig_AmbientLightingConfig_blue_tag 5
 #define meshtastic_ModuleConfig_StatusMessageConfig_node_status_tag 1
+#define meshtastic_ModuleConfig_SharedNodeConfig_mode_tag 1
+#define meshtastic_ModuleConfig_SharedNodeConfig_guest_pin_tag 2
+#define meshtastic_ModuleConfig_SharedNodeConfig_max_guests_tag 3
 #define meshtastic_ModuleConfig_TAKConfig_team_tag 1
 #define meshtastic_ModuleConfig_TAKConfig_role_tag 2
 #define meshtastic_RemoteHardwarePin_gpio_pin_tag 1
@@ -759,6 +792,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_statusmessage_tag 14
 #define meshtastic_ModuleConfig_traffic_management_tag 15
 #define meshtastic_ModuleConfig_tak_tag          16
+#define meshtastic_ModuleConfig_shared_node_tag  17
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_ModuleConfig_FIELDLIST(X, a) \
@@ -777,7 +811,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,detection_sensor,payload_var
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,paxcounter,payload_variant.paxcounter),  13) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,statusmessage,payload_variant.statusmessage),  14) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,traffic_management,payload_variant.traffic_management),  15) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak,payload_variant.tak),  16)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak,payload_variant.tak),  16) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,shared_node,payload_variant.shared_node),  17)
 #define meshtastic_ModuleConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_DEFAULT NULL
 #define meshtastic_ModuleConfig_payload_variant_mqtt_MSGTYPE meshtastic_ModuleConfig_MQTTConfig
@@ -796,6 +831,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak,payload_variant.tak),  1
 #define meshtastic_ModuleConfig_payload_variant_statusmessage_MSGTYPE meshtastic_ModuleConfig_StatusMessageConfig
 #define meshtastic_ModuleConfig_payload_variant_traffic_management_MSGTYPE meshtastic_ModuleConfig_TrafficManagementConfig
 #define meshtastic_ModuleConfig_payload_variant_tak_MSGTYPE meshtastic_ModuleConfig_TAKConfig
+#define meshtastic_ModuleConfig_payload_variant_shared_node_MSGTYPE meshtastic_ModuleConfig_SharedNodeConfig
 
 #define meshtastic_ModuleConfig_MQTTConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -981,6 +1017,13 @@ X(a, STATIC,   SINGULAR, STRING,   node_status,       1)
 #define meshtastic_ModuleConfig_StatusMessageConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_StatusMessageConfig_DEFAULT NULL
 
+#define meshtastic_ModuleConfig_SharedNodeConfig_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    mode,              1) \
+X(a, STATIC,   SINGULAR, FIXED32,  guest_pin,         2) \
+X(a, STATIC,   SINGULAR, UINT32,   max_guests,        3)
+#define meshtastic_ModuleConfig_SharedNodeConfig_CALLBACK NULL
+#define meshtastic_ModuleConfig_SharedNodeConfig_DEFAULT NULL
+
 #define meshtastic_ModuleConfig_TAKConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    team,              1) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              2)
@@ -1011,6 +1054,7 @@ extern const pb_msgdesc_t meshtastic_ModuleConfig_TelemetryConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_CannedMessageConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_AmbientLightingConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_StatusMessageConfig_msg;
+extern const pb_msgdesc_t meshtastic_ModuleConfig_SharedNodeConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_TAKConfig_msg;
 extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 
@@ -1032,6 +1076,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_CannedMessageConfig_fields &meshtastic_ModuleConfig_CannedMessageConfig_msg
 #define meshtastic_ModuleConfig_AmbientLightingConfig_fields &meshtastic_ModuleConfig_AmbientLightingConfig_msg
 #define meshtastic_ModuleConfig_StatusMessageConfig_fields &meshtastic_ModuleConfig_StatusMessageConfig_msg
+#define meshtastic_ModuleConfig_SharedNodeConfig_fields &meshtastic_ModuleConfig_SharedNodeConfig_msg
 #define meshtastic_ModuleConfig_TAKConfig_fields &meshtastic_ModuleConfig_TAKConfig_msg
 #define meshtastic_RemoteHardwarePin_fields &meshtastic_RemoteHardwarePin_msg
 
@@ -1049,6 +1094,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_RangeTestConfig_size 12
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96
 #define meshtastic_ModuleConfig_SerialConfig_size 28
+#define meshtastic_ModuleConfig_SharedNodeConfig_size 13
 #define meshtastic_ModuleConfig_StatusMessageConfig_size 81
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TAKConfig_size   4

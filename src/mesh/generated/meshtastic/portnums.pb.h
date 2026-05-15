@@ -76,8 +76,6 @@ typedef enum _meshtastic_PortNum {
     meshtastic_PortNum_ALERT_APP = 11,
     /* Module/port for handling key verification requests. */
     meshtastic_PortNum_KEY_VERIFICATION_APP = 12,
-    /* Module/port for handling primitive remote shell access. */
-    meshtastic_PortNum_REMOTE_SHELL_APP = 13,
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module.
  ENCODING: ASCII Plaintext */

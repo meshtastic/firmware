@@ -21,6 +21,12 @@ PB_BIND(meshtastic_DeviceState, meshtastic_DeviceState, 2)
 PB_BIND(meshtastic_NodeDatabase, meshtastic_NodeDatabase, AUTO)
 
 
+PB_BIND(meshtastic_SharedNodeClient, meshtastic_SharedNodeClient, AUTO)
+
+
+PB_BIND(meshtastic_SharedNodeClientStore, meshtastic_SharedNodeClientStore, 2)
+
+
 PB_BIND(meshtastic_ChannelFile, meshtastic_ChannelFile, 2)
 
 
