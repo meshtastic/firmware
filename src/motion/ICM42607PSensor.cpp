@@ -23,21 +23,24 @@ ICM42607PSensor::ICM42607PSensor(ScanI2C::FoundDevice foundDevice) : MotionSenso
     wire = ScanI2CTwoWire::fetchI2CBus(foundDevice.address);
 }
 
+ICM42607PSensor::~ICM42607PSensor() = default;
+
 bool ICM42607PSensor::init()
 {
     bool addressLsb = deviceAddress() == ICM42607P_ADDR_ALT;
 
     LOG_DEBUG("ICM-42607-P begin on addr 0x%02X (port=%d)", deviceAddress(), devicePort());
-    sensor = new ICM42670(*wire, addressLsb);
+    sensor.reset();
+    auto newSensor = std::make_unique<ICM42670>(*wire, addressLsb);
 
-    int status = sensor->begin();
+    int status = newSensor->begin();
     // ICM42670P library returns -3 for ICM42607P because WHO_AM_I differs; the register map is compatible.
     if (status != 0 && status != -3) {
         LOG_DEBUG("ICM-42607-P init error %d", status);
         return false;
     }
 
-    status = sensor->startAccel(ICM42607P_ACCEL_ODR_HZ, ICM42607P_ACCEL_FSR_G);
+    status = newSensor->startAccel(ICM42607P_ACCEL_ODR_HZ, ICM42607P_ACCEL_FSR_G);
     if (status != 0) {
         LOG_DEBUG("ICM-42607-P accel start error %d", status);
         return false;
@@ -45,7 +48,7 @@ bool ICM42607PSensor::init()
 
 #ifdef ICM_42607P_INT_PIN
     ICM42607P_IRQ = false;
-    status = sensor->startWakeOnMotion(ICM_42607P_INT_PIN, ICM42607PSetInterrupt);
+    status = newSensor->startWakeOnMotion(ICM_42607P_INT_PIN, ICM42607PSetInterrupt);
     if (status != 0) {
         LOG_DEBUG("ICM-42607-P wake-on-motion start error %d", status);
         return false;
@@ -53,6 +56,7 @@ bool ICM42607PSensor::init()
     LOG_DEBUG("ICM-42607-P wake-on-motion interrupt ok pin=%d", ICM_42607P_INT_PIN);
 #endif
 
+    sensor = std::move(newSensor);
     LOG_DEBUG("ICM-42607-P init ok");
     return true;
 }

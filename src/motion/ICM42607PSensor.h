@@ -6,16 +6,19 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM42670P.h>)
 
+#include <memory>
+
 class ICM42670;
 
 class ICM42607PSensor : public MotionSensor
 {
   private:
-    ICM42670 *sensor = nullptr;
+    std::unique_ptr<ICM42670> sensor;
     TwoWire *wire = nullptr;
 
   public:
     explicit ICM42607PSensor(ScanI2C::FoundDevice foundDevice);
+    ~ICM42607PSensor() override;
     virtual bool init() override;
     virtual int32_t runOnce() override;
 };
