@@ -66,10 +66,11 @@ static uint8_t s_bootsRemaining = 0;
 static uint32_t s_validUntilEpoch = 0;
 
 // Uptime-based session limit. Set by setSession() at successful unlock.
-// s_sessionMaxMs = 0 means no limit (token-only enforcement). RAM-only —
-// reboot clears it, which is fine: a fresh boot's token-load doesn't call
-// setSession(), so token-auto-unlocked sessions have no session timer
-// (the session feature is a passphrase-unlock-only knob).
+// s_sessionMaxMs = 0 means no limit (token-only enforcement). RAM-only:
+// reboot clears these, but readAndConsumeToken() persists the
+// sessionMaxSeconds in the token file and re-calls setSession() from
+// the token-load path so token-auto-unlocked sessions inherit the
+// same cap. consumeSessionBoot() re-arms in place between sessions.
 static uint32_t s_sessionMaxMs = 0;
 static uint32_t s_sessionStartedMs = 0;
 
