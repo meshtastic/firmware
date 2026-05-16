@@ -93,6 +93,23 @@ void Channels::initDefaultLoraConfig()
 #ifdef USERPREFS_LORACONFIG_CHANNEL_NUM
     loraConfig.channel_num = USERPREFS_LORACONFIG_CHANNEL_NUM;
 #endif
+
+    // Apply any hardcoded USERPREFS overrides for custom modem config (e.g. region-locked boards)
+#ifdef USERPREFS_LORACONFIG_USE_PRESET
+    loraConfig.use_preset = USERPREFS_LORACONFIG_USE_PRESET;
+#endif
+#ifdef USERPREFS_LORACONFIG_BANDWIDTH
+    loraConfig.bandwidth = USERPREFS_LORACONFIG_BANDWIDTH;
+#endif
+#ifdef USERPREFS_LORACONFIG_SPREAD_FACTOR
+    loraConfig.spread_factor = USERPREFS_LORACONFIG_SPREAD_FACTOR;
+#endif
+#ifdef USERPREFS_LORACONFIG_CODING_RATE
+    loraConfig.coding_rate = USERPREFS_LORACONFIG_CODING_RATE;
+#endif
+#ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
+    loraConfig.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
+#endif
 }
 
 bool Channels::ensureLicensedOperation()
