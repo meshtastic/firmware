@@ -130,8 +130,10 @@ int InputBroker::handleInputEvent(const InputEvent *event)
     // latch set after idle) the screen content is hidden, but local input
     // would otherwise still flow into UI handlers — letting an operator
     // drive menus, fire canned messages, change settings etc. blind. Eat
-    // the event here so input is no-op until a client authenticates and
-    // unlockScreen() clears the latch (or storage is unlocked).
+    // the event here so input is no-op until the redaction clears.
+    // The latch is cleared only by unlockScreen() on a successful
+    // passphrase auth (see PhoneAPI::handleLockdownAuthInline) — local
+    // input does not clear it, even if storage happens to be unlocked.
     // PowerFSM was already triggered above, so the backlight still wakes
     // to show the LOCKED frame — the input just doesn't act on anything.
     if (meshtastic_security::shouldRedactDisplay()) {
