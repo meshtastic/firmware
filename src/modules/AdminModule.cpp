@@ -93,37 +93,26 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_DEBUG("Allow admin response message");
     } else if (mp.from == 0 && !mp.pki_encrypted) {
         // Plain (non-PKC) local admin from BLE/USB client.
-        // When locked: always allow through — passphrase delivery and LOCK NOW must work.
-        // When unlocked and is_managed: block unless this is a lockdown security command
-        //   (passphrase re-verify / LOCK NOW) or the connection is already passphrase-authorized.
-        // from=0 + pki_encrypted is NOT matched here and falls through to the PKC check below.
-#ifdef MESHTASTIC_ENCRYPTED_STORAGE
-        if (config.security.is_managed && EncryptedStorage::isUnlocked()) {
-            // Lockdown security commands carry a non-empty private_key — always let them through.
-            // The passphrase HMAC in EncryptedStorage is the security gate for those packets.
-            // Only the passphrase delivery command itself is whitelisted — it is its own auth gate.
-            // Destructive commands (factory reset, nodedb reset) require an already-authorized
-            // connection (passphrase verified or PKC admin key).
-            bool isLockdownSecurityCmd =
-                (r->which_payload_variant == meshtastic_AdminMessage_set_config_tag &&
-                 r->set_config.which_payload_variant == meshtastic_Config_security_tag &&
-                 r->set_config.payload_variant.security.private_key.size >= 1);
+        // When is_managed: only PKC-authorized connections (handled below in the
+        // pki_encrypted branch) or connections that have already authenticated
+        // via lockdown_auth may issue admin commands. The legacy
+        // set_config(SecurityConfig) "private_key as passphrase transport" path
+        // is gone — lockdown passphrase delivery now lives in
+        // PhoneAPI::handleLockdownAuthInline, which gates the originating
+        // connection before any admin message is dispatched here, so no
+        // allowlist is needed at this layer.
+        if (config.security.is_managed) {
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-            if (!isLockdownSecurityCmd && !PhoneAPI::isLocalAdminAuthorized()) {
-#else
-            if (!isLockdownSecurityCmd) {
-#endif
+            if (!PhoneAPI::isLocalAdminAuthorized()) {
                 LOG_INFO("Ignore local admin payload because is_managed");
                 myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
                 return handled;
             }
-        }
 #else
-        if (config.security.is_managed) {
             LOG_INFO("Ignore local admin payload because is_managed");
             return handled;
-        }
 #endif
+        }
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
             LOG_INFO("Ignore admin channel, legacy admin is disabled");
