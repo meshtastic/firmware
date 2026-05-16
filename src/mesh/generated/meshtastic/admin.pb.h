@@ -163,6 +163,41 @@ typedef struct _meshtastic_LockdownAuth {
  connection-level admin authorization, and reboot the device into
  the locked state. Always honoured regardless of current lock state. */
     bool lock_now;
+    /* Optional per-boot uptime cap on the unlocked session, in seconds.
+ 0 = unlimited (token-only enforcement, suitable for unattended
+ tower / infrastructure nodes).
+
+ When non-zero, the firmware arms an uptime timer at unlock. On
+ each expiry, while there is still boot-count budget, the firmware
+ decrements the on-flash boot count in place, revokes per-
+ connection admin auth (clients must re-authenticate to see
+ content), re-engages the screen lock, and re-arms the timer
+ without rebooting. Mesh routing keeps running across session
+ boundaries; only when the boot-count budget reaches zero does
+ the device hard-lock and reboot.
+
+ Total exposure ceiling = ((resolved boot count) + 1) * max_session_seconds.
+ The +1 accounts for the initial passphrase-unlocked session
+ itself, since boots_remaining is the number of subsequent
+ session rolls (each consuming one boot from the rollback ledger).
+ The resolved boot count is the value the firmware writes into the
+ token at unlock time: the client-supplied boots_remaining when
+ non-zero, otherwise the firmware default (TOKEN_DEFAULT_BOOTS).
+ Note that boots_remaining == 0 in this message means "use firmware
+ default", NOT "zero boots" — a client computing the ceiling for
+ display should mirror that resolution rather than multiplying the
+ raw request value.
+
+ The cap is persisted in the token, so it survives token-based
+ auto-unlock across reboots. Explicit operator Lock Now still
+ deletes the token and forces passphrase re-entry.
+
+ Uses millis() (CPU uptime), not wall-clock time, so the cap is
+ immune to GPS spoofing, RTC backup-battery removal, and Faraday
+ cage isolation — none of those move the uptime counter. The only
+ way to reset the session clock is a reboot, which costs a boot
+ from the on-flash, HMAC-bound counter. */
+    uint32_t max_session_seconds;
 } meshtastic_LockdownAuth;
 
 /* Parameters for setting up Meshtastic for ameteur radio usage */
@@ -486,7 +521,7 @@ extern "C" {
 #define meshtastic_AdminMessage_init_default     {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_default {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_default {_meshtastic_OTAMode_MIN, {0, {0}}}
-#define meshtastic_LockdownAuth_init_default     {{0, {0}}, 0, 0, 0}
+#define meshtastic_LockdownAuth_init_default     {{0, {0}}, 0, 0, 0, 0}
 #define meshtastic_HamParameters_init_default    {"", 0, 0, ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_default {0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
 #define meshtastic_SharedContact_init_default    {0, false, meshtastic_User_init_default, 0, 0}
@@ -499,7 +534,7 @@ extern "C" {
 #define meshtastic_AdminMessage_init_zero        {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_zero {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_zero {_meshtastic_OTAMode_MIN, {0, {0}}}
-#define meshtastic_LockdownAuth_init_zero        {{0, {0}}, 0, 0, 0}
+#define meshtastic_LockdownAuth_init_zero        {{0, {0}}, 0, 0, 0, 0}
 #define meshtastic_HamParameters_init_zero       {"", 0, 0, ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_zero {0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 #define meshtastic_SharedContact_init_zero       {0, false, meshtastic_User_init_zero, 0, 0}
@@ -521,6 +556,7 @@ extern "C" {
 #define meshtastic_LockdownAuth_boots_remaining_tag 2
 #define meshtastic_LockdownAuth_valid_until_epoch_tag 3
 #define meshtastic_LockdownAuth_lock_now_tag     4
+#define meshtastic_LockdownAuth_max_session_seconds_tag 5
 #define meshtastic_HamParameters_call_sign_tag   1
 #define meshtastic_HamParameters_tx_power_tag    2
 #define meshtastic_HamParameters_frequency_tag   3
@@ -717,7 +753,8 @@ X(a, STATIC,   SINGULAR, BYTES,    ota_hash,          2)
 X(a, STATIC,   SINGULAR, BYTES,    passphrase,        1) \
 X(a, STATIC,   SINGULAR, UINT32,   boots_remaining,   2) \
 X(a, STATIC,   SINGULAR, UINT32,   valid_until_epoch,   3) \
-X(a, STATIC,   SINGULAR, BOOL,     lock_now,          4)
+X(a, STATIC,   SINGULAR, BOOL,     lock_now,          4) \
+X(a, STATIC,   SINGULAR, UINT32,   max_session_seconds,   5)
 #define meshtastic_LockdownAuth_CALLBACK NULL
 #define meshtastic_LockdownAuth_DEFAULT NULL
 
@@ -832,7 +869,7 @@ extern const pb_msgdesc_t meshtastic_SHTXX_config_msg;
 #define meshtastic_AdminMessage_size             511
 #define meshtastic_HamParameters_size            31
 #define meshtastic_KeyVerificationAdmin_size     25
-#define meshtastic_LockdownAuth_size             48
+#define meshtastic_LockdownAuth_size             54
 #define meshtastic_NodeRemoteHardwarePinsResponse_size 496
 #define meshtastic_SCD30_config_size             27
 #define meshtastic_SCD4X_config_size             29
