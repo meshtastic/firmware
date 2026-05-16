@@ -1320,10 +1320,16 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
         }
 
         // L-1: upper-bound check to prevent OOM / integer overflow on corrupt or oversized files.
-        // Meshtastic proto files are well under 64 KB; anything larger is treated as corrupt.
-        static constexpr size_t MAX_PROTO_FILE_SIZE = 65536 + OVERHEAD;
-        if (fileSize > MAX_PROTO_FILE_SIZE) {
-            LOG_ERROR("EncryptedStorage: File %s too large (%d bytes), refusing", filename, fileSize);
+        // Derived from the caller's outBufSize: the ciphertext we accept here
+        // can never decode to more than outBufSize bytes of plaintext, plus
+        // OVERHEAD (nonce + HMAC framing). Anything larger is either corrupt
+        // or maliciously oversized. Avoids a hardcoded 64 KB cap that would
+        // wrongly reject legitimate large NodeDB files on variants where
+        // MAX_NUM_NODES pushes the serialised protobuf past that limit.
+        const size_t maxAcceptedFileSize = outBufSize + OVERHEAD;
+        if (fileSize > maxAcceptedFileSize) {
+            LOG_ERROR("EncryptedStorage: File %s too large (%d bytes, max %d), refusing", filename, fileSize,
+                      maxAcceptedFileSize);
             f.close();
             meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
             return false;
