@@ -34,6 +34,10 @@
 #include "STM32WLE5JCInterface.h"
 #endif
 
+#ifdef USE_HALOW_RADIO
+#include "halow/HaLowInterface.h"
+#endif
+
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
     meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
@@ -520,6 +524,22 @@ std::unique_ptr<RadioInterface> initLoRa()
             rebootAtMsec = millis() + 5000;
         }
     }
+
+#ifdef USE_HALOW_RADIO
+    // HaLow is the only radio on the dedicated XIAO+HaLow variant, so we only
+    // try it when no LoRa chip claimed the slot. The interface itself stubs
+    // out cleanly when USE_MM_IOT_ESP32 is not yet wired in (Phase 0 of plan).
+    if (!rIf) {
+        auto halowIf = std::unique_ptr<HaLowInterface>(new HaLowInterface());
+        if (!halowIf->init()) {
+            LOG_WARN("HaLow init failed (stub or SDK not present)");
+        } else {
+            LOG_INFO("HaLow init success");
+            rIf = std::move(halowIf);
+        }
+    }
+#endif
+
     return rIf;
 }
 

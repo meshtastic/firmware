@@ -62,3 +62,10 @@ userPrefs.jsonc.mcp-session-bak
 # compiled .proto outputs are ephemeral build artifacts.
 build/fixtures/
 bin/_generated/
+
+# Build artifacts: anything compiling .o/.a outside .pio/ is accidental.
+# Explicit exceptions for vendored binaries (Morse Micro mm-iot-esp32 SDK).
+*.o
+*.a
+!lib/MorseWlan/lib/**/*.a
+!lib/MorseWlan/src/*.mbin.o

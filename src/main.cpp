@@ -801,7 +801,15 @@ void setup()
 #endif
 #else
         // ESP32
-#if defined(HW_SPI1_DEVICE)
+#if defined(USE_HALOW_RADIO) && !defined(USE_SX1262) && !defined(USE_RF95) && !defined(USE_LR11X0)
+    // HaLow-only ESP32 variant: Morse's wlan_hal claims SPI2_HOST itself via
+    // ESP-IDF's spi_bus_initialize() (lib/MorseWlan/src/wlan_hal.c). Calling
+    // Arduino SPI.begin() on the default LORA_* pins both (a) collides on
+    // SPI2_HOST and (b) reconfigures GPIO 5 as SPI clock, clobbering the
+    // HaLow BUSY input. Skip Arduino's bus init — there's no LoRa, no
+    // display, no SD card on this board.
+    LOG_DEBUG("Skipping Arduino SPI.begin() — HaLow owns SPI2_HOST");
+#elif defined(HW_SPI1_DEVICE)
     SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI1.setFrequency(4000000);

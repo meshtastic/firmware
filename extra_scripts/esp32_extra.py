@@ -82,5 +82,18 @@ if esp32_kind == "esp32":
         ]
     )
 else:
-    # For newer ESP32 targets, using newlib nano works better.
-    env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
+    # For newer ESP32 targets, using newlib nano works better. Skip on
+    # variants that explicitly opt out — the IDF 5.1 framework override the
+    # HaLow variant uses already includes nano.specs, so re-adding it triggers
+    # a duplicate spec definition error at link time.
+    cppdefines = env.get("CPPDEFINES", [])
+    if not any(
+        (isinstance(d, str) and d == "MESHTASTIC_SKIP_NANO_SPECS")
+        or (
+            isinstance(d, (list, tuple))
+            and len(d) > 0
+            and d[0] == "MESHTASTIC_SKIP_NANO_SPECS"
+        )
+        for d in cppdefines
+    ):
+        env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
