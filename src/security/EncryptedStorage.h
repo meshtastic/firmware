@@ -43,15 +43,20 @@
  *   Total: 66 bytes.
  *   Legacy v1 DEK file is 29 bytes (no magic, no HMAC) and is migrated on first passphrase set.
  *
- * Unlock token format ("UTOK"):
+ * Unlock token format ("UTOK") — v2:
  *   [4B]  Magic 0x55544F4B ("UTOK")
- *   [1B]  Version 0x01
+ *   [1B]  Version 0x02
  *   [13B] Nonce (random per write)
  *   [16B] AES-128-CTR(ephemeralKEK, nonce, DEK)
  *   [1B]  boots_remaining
  *   [4B]  valid_until_epoch (LE uint32, 0 = no time limit)
+ *   [4B]  session_max_seconds (LE uint32, 0 = no session limit) — v2 addition
  *   [32B] HMAC-SHA256(ephemeralKEK, all above fields)
- *   Total: 71 bytes.
+ *   Total: 75 bytes.
+ *
+ *   v1 tokens (71 bytes, no session_max_seconds) are rejected at boot via
+ *   the version byte mismatch — the device boots locked and requires a
+ *   fresh passphrase, which writes a v2 token.
  */
 
 namespace EncryptedStorage {
@@ -76,9 +81,8 @@ static constexpr size_t DEK_V2_SIZE = 4 + 1 + NONCE_SIZE + AES_KEY_SIZE + HMAC_S
 
 static constexpr uint32_t TOKEN_MAGIC = 0x55544F4B;     // "UTOK"
 static constexpr uint8_t TOKEN_VERSION = 0x02; // v2 adds session_max_seconds field
-// Body = magic(4)+ver(1)+nonce(13)+encDEK(16)+boots(1)+epoch(4) = 39 bytes
-// magic(4) + version(1) + nonce(12) + encDek(16) + bootsRemaining(1)
-//   + validUntilEpoch(4) + sessionMaxSeconds(4)
+// magic(4) + version(1) + nonce(NONCE_SIZE=13) + encDek(AES_KEY_SIZE=16)
+//   + bootsRemaining(1) + validUntilEpoch(4) + sessionMaxSeconds(4) = 43 bytes
 static constexpr size_t TOKEN_BODY_SIZE = 4 + 1 + NONCE_SIZE + AES_KEY_SIZE + 1 + 4 + 4;
 static constexpr size_t TOKEN_TOTAL_SIZE = TOKEN_BODY_SIZE + HMAC_SIZE;                    // 75 bytes
 
