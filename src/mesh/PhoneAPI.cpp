@@ -45,8 +45,16 @@ bool heartbeatReceived = false;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 // File-scope pending LockdownStatus. Shared by all PhoneAPI instances —
 // see note in PhoneAPI.h re: why this isn't a class member.
+// Pending LockdownStatus drain slot. Writers (queueLockdownStatus, called
+// from PhoneAPI::handleLockdownAuthInline on the transport callback
+// thread, from AdminModule on the Router thread, and from the main loop
+// for session expiry) and the reader (getFromRadio() / available(),
+// called from whichever transport is draining FromRadio) can race
+// across FreeRTOS tasks. Same pattern as nodeInfoMutex — a small lock
+// around the slot.
 static meshtastic_LockdownStatus g_pendingLockdownStatus = {};
 static bool g_hasPendingLockdownStatus = false;
+static concurrency::Lock g_pendingLockdownStatusMutex;
 
 // Per-connection auth state table keyed by PhoneAPI*. Sized for the typical
 // SerialConsole + BluetoothPhoneAPI + room for WiFi/TCP transports. Searched
@@ -784,10 +792,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             }
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         } else if (g_hasPendingLockdownStatus) {
-            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_lockdown_status_tag;
-            fromRadioScratch.lockdown_status = g_pendingLockdownStatus;
-            memset(&g_pendingLockdownStatus, 0, sizeof(g_pendingLockdownStatus));
-            g_hasPendingLockdownStatus = false;
+            concurrency::LockGuard guard(&g_pendingLockdownStatusMutex);
+            // Re-check under the lock — a concurrent drain may have grabbed it.
+            if (g_hasPendingLockdownStatus) {
+                fromRadioScratch.which_payload_variant = meshtastic_FromRadio_lockdown_status_tag;
+                fromRadioScratch.lockdown_status = g_pendingLockdownStatus;
+                memset(&g_pendingLockdownStatus, 0, sizeof(g_pendingLockdownStatus));
+                g_hasPendingLockdownStatus = false;
+            }
 #endif
         } else if (clientNotification) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_clientNotification_tag;
@@ -1553,6 +1565,7 @@ void PhoneAPI::queueLockdownStatus(meshtastic_LockdownStatus_State state,
                                     uint32_t valid_until_epoch,
                                     uint32_t backoff_seconds)
 {
+    concurrency::LockGuard guard(&g_pendingLockdownStatusMutex);
     memset(&g_pendingLockdownStatus, 0, sizeof(g_pendingLockdownStatus));
     g_pendingLockdownStatus.state = state;
     if (lock_reason && lock_reason[0] != '\0')
