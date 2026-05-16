@@ -487,6 +487,40 @@ void setup()
         LOG_INFO("No I2C device configured, Skip");
     }
 #elif HAS_WIRE
+    // Bus recovery MUST run before Wire.begin(). On nRF52840 the TWIM peripheral
+    // takes ownership of SDA/SCL pins during Wire.begin(), after which GPIO writes
+    // are silently ignored. A device like the RCWL-9620 can hold SDA low during
+    // its own power-up, which causes the first TWIM transfer to hang indefinitely.
+    // Clocking SCL 9 times here (plain GPIO) frees any stuck slave before TWIM
+    // takes over, so Wire.begin() always sees an idle bus.
+#if defined(PIN_WIRE_SCL) && defined(PIN_WIRE_SDA)
+    {
+        pinMode(PIN_WIRE_SCL, OUTPUT);
+        pinMode(PIN_WIRE_SDA, INPUT_PULLUP);
+        digitalWrite(PIN_WIRE_SCL, HIGH);
+        delayMicroseconds(5);
+        for (int i = 0; i < 9; i++) {
+            digitalWrite(PIN_WIRE_SCL, LOW);
+            delayMicroseconds(5);
+            digitalWrite(PIN_WIRE_SCL, HIGH);
+            delayMicroseconds(5);
+            if (digitalRead(PIN_WIRE_SDA) == HIGH)
+                break; // slave released SDA
+        }
+        // STOP condition: SDA transitions LOW→HIGH while SCL is HIGH
+        pinMode(PIN_WIRE_SDA, OUTPUT);
+        digitalWrite(PIN_WIRE_SDA, LOW);
+        delayMicroseconds(5);
+        digitalWrite(PIN_WIRE_SCL, HIGH);
+        delayMicroseconds(5);
+        digitalWrite(PIN_WIRE_SDA, HIGH);
+        delayMicroseconds(5);
+        // Release pins so Wire.begin() can reconfigure them for TWIM
+        pinMode(PIN_WIRE_SCL, INPUT);
+        pinMode(PIN_WIRE_SDA, INPUT);
+        delay(10);
+    }
+#endif
     Wire.begin();
 #endif
 #endif
@@ -539,15 +573,6 @@ void setup()
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
     }
 #elif HAS_WIRE
-    // I2C bus reset - 9 clock pulses to free stuck device
-    pinMode(PIN_WIRE_SCL, OUTPUT);
-    for (int i = 0; i < 9; i++) {
-        digitalWrite(PIN_WIRE_SCL, HIGH);
-        delayMicroseconds(5);
-        digitalWrite(PIN_WIRE_SCL, LOW);
-        delayMicroseconds(5);
-    }
-    pinMode(PIN_WIRE_SCL, INPUT);
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #endif
 
