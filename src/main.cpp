@@ -539,9 +539,18 @@ void setup()
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
     }
 #elif HAS_WIRE
-    delay(10000);  // Wait for I2C devices to initialize
+    // I2C bus reset - 9 clock pulses to free stuck device
+    pinMode(PIN_WIRE_SCL, OUTPUT);
+    for (int i = 0; i < 9; i++) {
+        digitalWrite(PIN_WIRE_SCL, HIGH);
+        delayMicroseconds(5);
+        digitalWrite(PIN_WIRE_SCL, LOW);
+        delayMicroseconds(5);
+    }
+    pinMode(PIN_WIRE_SCL, INPUT);
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #endif
+
 
     auto i2cCount = i2cScanner->countDevices();
     if (i2cCount == 0) {
