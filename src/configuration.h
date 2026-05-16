@@ -572,17 +572,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 // nRF52 (CC310 hardware crypto required):
 //   MESHTASTIC_PHONEAPI_ACCESS_CONTROL — redact keys from unauthenticated clients;
-//                                        passphrase delivery via AdminModule
+//                                        passphrase delivery via AdminMessage.lockdown_auth,
+//                                        handled synchronously in
+//                                        PhoneAPI::handleLockdownAuthInline
 //   MESHTASTIC_ENCRYPTED_STORAGE       — AES-128-CTR + HMAC-SHA256 at-rest encryption
 //   MESHTASTIC_ENABLE_APPROTECT        — one-way UICR APPROTECT write to lock SWD/JTAG
 //   DEBUG_MUTE                         — suppress all serial/USB-CDC log output
 //
 // Non-nRF52 (degraded — no passphrase path without encrypted storage to gate it):
 //   DEBUG_MUTE only. Access control is intentionally NOT enabled here because
-//   the passphrase-delivery code in AdminModule is wrapped in
-//   MESHTASTIC_ENCRYPTED_STORAGE; turning on access control alone would leave
-//   non-PKC clients with no way to authorize, redacting them out of admin
-//   forever. Use PKC admin keys for hardened deployments on these platforms.
+//   PhoneAPI::handleLockdownAuthInline is wrapped in MESHTASTIC_ENCRYPTED_STORAGE;
+//   turning on access control alone would leave non-PKC clients with no way to
+//   authorize, redacting them out of admin forever. Use PKC admin keys for
+//   hardened deployments on these platforms.
 //
 // Add -DMESHTASTIC_LOCKDOWN_DEBUG=1 alongside MESHTASTIC_LOCKDOWN to keep the
 // irreversible bits (APPROTECT, DEBUG_MUTE) disabled while still exercising the
