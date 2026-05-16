@@ -390,7 +390,11 @@ class NodeDB
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     /// Re-run loadFromDisk() after the encrypted storage is unlocked at runtime.
-    /// Called by AdminModule after a successful provisionPassphrase / unlockWithPassphrase.
+    /// Trigger: PhoneAPI::handleLockdownAuthInline sets lockdownReloadPending
+    /// on a successful provisionPassphrase / unlockWithPassphrase; the main
+    /// loop in main.cpp services the flag and calls this method on the main
+    /// thread. The transport callback stack (BLE/USB) is too small for the
+    /// file IO + MAX_NUM_NODES vector reserve + proto decode this triggers.
     void reloadFromDisk();
 #endif
 
