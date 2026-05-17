@@ -1,0 +1,32 @@
+{
+  "build": {
+    "core": "esp32",
+    "extra_flags": [
+      "-DARDUINO_USB_CDC_ON_BOOT=1",
+      "-DARDUINO_USB_MODE=1",
+      "-DARDUINO_RUNNING_CORE=1",
+      "-DARDUINO_EVENT_RUNNING_CORE=0"
+    ],
+    "f_cpu": "160000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "qio",
+    "hwids": [["0x2886", "0x0048"], ["0x2886", "0x8048"]],
+    "mcu": "esp32c6",
+    "variant": "XIAO_ESP32C6"
+  },
+  "connectivity": ["wifi", "bluetooth", "zigbee", "thread"],
+  "debug": {
+    "openocd_target": "esp32c6.cfg"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "name": "seeed-xiao-c6",
+  "upload": {
+    "flash_size": "4MB",
+    "maximum_ram_size": 327680,
+    "maximum_size": 4194304,
+    "require_upload_port": true,
+    "speed": 921600
+  },
+  "url": "https://wiki.seeedstudio.com/XIAO_ESP32C6_Getting_Started/",
+  "vendor": "Seeed Studio"
+}
