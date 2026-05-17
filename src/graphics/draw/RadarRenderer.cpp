@@ -241,7 +241,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // GPS — bail gracefully if unavailable.  No fix → no scale to report,
     // so the header stays plain.
     // -----------------------------------------------------------------------
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourPos;
     if (!ourNode || !nodeDB->copyNodePosition(ourNode->num, ourPos) || (ourPos.latitude_i == 0 && ourPos.longitude_i == 0)) {
         graphics::drawCommonHeader(display, x, y, "Radar");
