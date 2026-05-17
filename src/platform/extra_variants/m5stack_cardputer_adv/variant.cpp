@@ -3,14 +3,57 @@
 #ifdef M5STACK_CARDPUTER_ADV
 
 #include "AudioBoard.h"
+#include <Wire.h>
 
 DriverPins PinsAudioBoardES8311;
 AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
+
+// PI4IOE5V6408 on the optional Cap LoRa-1262 (and Cap LoRa868).
+#define PI4IO_ADDR 0x43
+#define PI4IO_REG_IO_DIR 0x03
+#define PI4IO_REG_OUT_SET 0x05
+#define PI4IO_REG_OUT_H_IM 0x07
+
+static TwoWire *findLoraCapBus()
+{
+    TwoWire *candidates[] = {&Wire1, &Wire};
+    const char *names[] = {"Wire1", "Wire"};
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
+        candidates[i]->beginTransmission(PI4IO_ADDR);
+        if (candidates[i]->endTransmission() == 0) {
+            return candidates[i];
+        }
+    }
+    LOG_INFO("Cap LoRa-1262 not found");
+    return nullptr;
+}
+
+static void pi4ioWrite(TwoWire *bus, uint8_t reg, uint8_t val)
+{
+    bus->beginTransmission(PI4IO_ADDR);
+    bus->write(reg);
+    bus->write(val);
+    bus->endTransmission();
+}
+
+static void initLoraCap()
+{
+    TwoWire *bus = findLoraCapBus();
+    if (!bus) {
+        LOG_INFO("Cap LoRa-1262 PI4IO not detected; RF antenna switch left at reset state");
+        return;
+    }
+    pi4ioWrite(bus, PI4IO_REG_IO_DIR, 0b00000001);
+    pi4ioWrite(bus, PI4IO_REG_OUT_H_IM, 0b00000001);
+    pi4ioWrite(bus, PI4IO_REG_OUT_SET, 0b00000001);
+}
 
 // M5stack Cardputer ADV specific init
 
 void lateInitVariant()
 {
+    initLoraCap();
+
     // AudioDriverLogger.begin(Serial, AudioDriverLogLevel::Debug);
     //  I2C: function, scl, sda
     PinsAudioBoardES8311.addI2C(PinFunction::CODEC, Wire);
