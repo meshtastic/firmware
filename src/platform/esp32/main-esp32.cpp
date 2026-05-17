@@ -4,8 +4,12 @@
 #include "esp_task_wdt.h"
 #include "main.h"
 
-#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+#include "bluetooth/HostedBluetooth.h"
+#elif !defined(CONFIG_IDF_TARGET_ESP32S2)
 #include "nimble/NimbleBluetooth.h"
+#endif
 #endif
 
 #include <MeshtasticOTA.h>
@@ -40,16 +44,30 @@ void setBluetoothEnable(bool enable)
     if (config.bluetooth.enabled == true)
 #endif
     {
-        if (!nimbleBluetooth) {
-            nimbleBluetooth = new NimbleBluetooth();
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+        if (!enable) {
+            if (bluetoothApi && bluetoothApi->isActive()) {
+                bluetoothApi->shutdown();
+                powerMon->clearState(meshtastic_PowerMon_State_BT_On);
+            }
+            return;
         }
-        if (enable && !nimbleBluetooth->isActive()) {
+#endif
+
+        if (!bluetoothApi) {
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+            bluetoothApi = new HostedBluetooth();
+#else
+            bluetoothApi = new NimbleBluetooth();
+#endif
+        }
+        if (enable && !bluetoothApi->isActive()) {
             powerMon->setState(meshtastic_PowerMon_State_BT_On);
-            nimbleBluetooth->setup();
+            bluetoothApi->setup();
         }
         // For ESP32, no way to recover from bluetooth shutdown without reboot
         // BLE advertising automatically stops when MCU enters light-sleep(?)
-        // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
+        // For deep-sleep, shutdown hardware with bluetoothApi->deinit(). Requires reboot to reverse
     }
 }
 #else

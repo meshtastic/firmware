@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH && !defined(CONFIG_IDF_TARGET_ESP32P4)
 #include "BluetoothCommon.h"
 #include "NimbleBluetooth.h"
 #include "PowerFSM.h"
@@ -25,6 +25,9 @@
 
 namespace
 {
+// Maintainer note: this backend intentionally diverges from HostedBluetooth in a few platform-specific areas.
+// If you change shared BLE flow here (PhoneAPI queue/sync, security/pairing, mesh GATT/advertising,
+// connect/disconnect handling), review and update HostedBluetooth.cpp as needed.
 constexpr uint16_t kPreferredBleMtu = 517;
 constexpr uint16_t kPreferredBleTxOctets = 251;
 constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
@@ -879,7 +882,7 @@ void NimbleBluetooth::setupService()
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    if ((config.bluetooth.enabled == true) && bleServer && nimbleBluetooth->isConnected()) {
+    if ((config.bluetooth.enabled == true) && bleServer && bluetoothApi && bluetoothApi->isConnected()) {
         BatteryCharacteristic->setValue(&level, 1);
         BatteryCharacteristic->notify();
     }
@@ -909,4 +912,14 @@ void clearNVS()
     ESP.restart();
 #endif
 }
+
+#else
+
+void updateBatteryLevel(uint8_t level)
+{
+    (void)level;
+}
+
+void clearNVS() {}
+
 #endif

@@ -49,8 +49,7 @@
 #include "mesh/http/WebServer.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
-#include "nimble/NimbleBluetooth.h"
-NimbleBluetooth *nimbleBluetooth = nullptr;
+BluetoothApi *bluetoothApi = nullptr;
 #endif
 #endif
 

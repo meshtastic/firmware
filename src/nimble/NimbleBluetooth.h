@@ -1,18 +1,20 @@
 #pragma once
 #include "BluetoothCommon.h"
 
-class NimbleBluetooth : BluetoothApi
+class NimbleBluetooth : public BluetoothApi
 {
   public:
-    void setup();
-    void shutdown();
-    void deinit();
-    void clearBonds();
-    bool isActive();
-    bool isConnected();
-    int getRssi();
-    void sendLog(const uint8_t *logMessage, size_t length);
+    void setup() override;
+    void shutdown() override;
+    void deinit() override;
+    void clearBonds() override;
+    bool isActive() override;
+    bool isConnected() override;
+    int getRssi() override;
+    void sendLog(const uint8_t *logMessage, size_t length) override;
     void startAdvertising();
+    virtual ~NimbleBluetooth() {}
+
     bool isDeInit = false;
 
   private:
