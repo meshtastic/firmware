@@ -1,11 +1,13 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "RadarRenderer.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
 #include "gps/GeoCoord.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/images.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -170,7 +172,18 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const int headerH = FONT_HEIGHT_SMALL - 1;
     const int sw = SCREEN_WIDTH;
     const int sh = SCREEN_HEIGHT;
-    const int contentH = sh - headerH;
+
+    // Reserve space at the bottom for the BT/API connection icon footer.
+    // drawCommonFooter() paints a black bar across the full width when the API
+    // is connected, which would otherwise clip the last list row and the
+    // bottom of the radar circle.  Matches the footer height computed in
+    // SharedUIDisplay::drawCommonFooter.
+    const int footerScale = (currentResolution == ScreenResolution::High) ? 2 : 1;
+    const int footerH = isAPIConnected(service ? service->api_state : 0)
+                            ? (connection_icon_height * footerScale) + (2 * footerScale)
+                            : 0;
+
+    const int contentH = sh - headerH - footerH;
     const int pad = 2; // px padding around the radar circle
 
     // -----------------------------------------------------------------------
@@ -190,7 +203,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourPos;
-    if (!ourNode || !nodeDB->hasValidPosition(ourNode) || !nodeDB->copyNodePosition(ourNode->num, ourPos)) {
+    if (!ourNode || !nodeDB->copyNodePosition(ourNode->num, ourPos) || (ourPos.latitude_i == 0 && ourPos.longitude_i == 0)) {
         graphics::drawCommonHeader(display, x, y, "Radar");
         display->setFont(FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -237,7 +250,9 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         if (favoritesOnly && !nodeInfoLiteIsFavorite(n))
             continue;
         meshtastic_PositionLite nodePos;
-        if (!nodeDB->hasValidPosition(n) || !nodeDB->copyNodePosition(n->num, nodePos))
+        if (!nodeDB->copyNodePosition(n->num, nodePos))
+            continue;
+        if (nodePos.latitude_i == 0 && nodePos.longitude_i == 0)
             continue;
 
         const double nodeLat = nodePos.latitude_i * 1e-7;
