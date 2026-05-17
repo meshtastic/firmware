@@ -2,6 +2,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+#include "input/InputBroker.h"
+#endif
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -57,6 +60,12 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
+#endif
+
+#ifdef ARCH_NRF54L15
+void nrf54l15Setup();
+void nrf54l15Loop();
+NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 #endif
 
 #if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D)
@@ -245,7 +254,7 @@ const char *getDeviceName()
 uint32_t timeLastPowered = 0;
 
 static OSThread *powerFSMthread;
-OSThread *ambientLightingThread;
+AmbientLightingThread *ambientLightingThread;
 
 RadioLibHal *RadioLibHAL = NULL;
 
@@ -696,6 +705,9 @@ void setup()
 #ifdef ARCH_NRF52
     nrf52Setup();
 #endif
+#ifdef ARCH_NRF54L15
+    nrf54l15Setup();
+#endif
 
 #ifdef ARCH_RP2040
     rp2040Setup();
@@ -1126,6 +1138,9 @@ void loop()
 #endif
 #ifdef ARCH_NRF52
     nrf52Loop();
+#endif
+#ifdef ARCH_NRF54L15
+    nrf54l15Loop();
 #endif
     power->powerCommandsCheck();
 
