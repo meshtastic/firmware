@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "RadarRenderer.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
 #include "gps/GeoCoord.h"
@@ -147,6 +148,43 @@ static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bea
     const int px = cx + (int)(radius * norm * sinf(rel));
     const int py = cy - (int)(radius * norm * cosf(rel));
     drawMarker(display, px, py, markerIdx);
+}
+
+/**
+ * Draw just the BT/API connection icon glyph at the bottom-left, without the
+ * full-width black wipe that drawCommonFooter performs.  The wipe was erasing
+ * the radar circle's bottom arc and the descender of the last list row even
+ * though the icon's actual 5×5 footprint (x=0..4 at scale=1) doesn't overlap
+ * the radar (x≈80..126) or the list text (x≥7).
+ *
+ * Replicates the icon-rendering half of SharedUIDisplay::drawCommonFooter so
+ * this overlay can own its own footer behaviour without touching shared UI.
+ */
+static void drawConnectionIconNoWipe(OLEDDisplay *display)
+{
+    if (!isAPIConnected(service ? service->api_state : 0))
+        return;
+
+    const int scale = (currentResolution == ScreenResolution::High) ? 2 : 1;
+    const int iconX = 0;
+    const int iconY = SCREEN_HEIGHT - (connection_icon_height * scale);
+
+    display->setColor(WHITE);
+    if (currentResolution == ScreenResolution::High) {
+        const int bytesPerRow = (connection_icon_width + 7) / 8;
+        for (int yy = 0; yy < connection_icon_height; ++yy) {
+            const uint8_t *rowPtr = connection_icon + yy * bytesPerRow;
+            for (int xx = 0; xx < connection_icon_width; ++xx) {
+                const uint8_t byteVal = pgm_read_byte(rowPtr + (xx >> 3));
+                const uint8_t bitMask = 1U << (xx & 7); // XBM is LSB-first
+                if (byteVal & bitMask) {
+                    display->fillRect(iconX + xx * scale, iconY + yy * scale, scale, scale);
+                }
+            }
+        }
+    } else {
+        display->drawXbm(iconX, iconY, connection_icon_width, connection_icon_height, connection_icon);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -367,6 +405,11 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->drawString(x + listRight, rowY, dist);
         display->setTextAlignment(TEXT_ALIGN_LEFT);
     }
+
+    // BT/API connection icon — drawn here (no surrounding wipe) so the radar
+    // circle and the last list row stay intact.  NodeListRenderer's radar
+    // branch deliberately skips drawCommonFooter for the same reason.
+    drawConnectionIconNoWipe(display);
 }
 
 } // namespace RadarRenderer
