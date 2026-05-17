@@ -218,10 +218,13 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     // esp_wifi_stop();
     waitEnterSleep(skipPreflight);
 
-#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH && !MESHTASTIC_ENABLE_BLUETOOTHCLASSIC
     // Full shutdown of bluetooth hardware
     if (nimbleBluetooth)
         nimbleBluetooth->deinit();
+#elif defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH && MESHTASTIC_ENABLE_BLUETOOTHCLASSIC
+    if (bluetoothClassic)
+        bluetoothClassic->deinit();
 #endif
 
 #ifdef ARCH_ESP32

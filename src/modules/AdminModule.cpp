@@ -1337,7 +1337,12 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #if HAS_BLUETOOTH
     conn.has_bluetooth = true;
     conn.bluetooth.pin = config.bluetooth.fixed_pin;
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && MESHTASTIC_ENABLE_BLUETOOTHCLASSIC
+    if (config.bluetooth.enabled && bluetoothClassic) {
+        conn.bluetooth.is_connected = bluetoothClassic->isConnected();
+        conn.bluetooth.rssi = bluetoothClassic->getRssi();
+    }
+#elif defined(ARCH_ESP32)
     if (config.bluetooth.enabled && nimbleBluetooth) {
         conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
         conn.bluetooth.rssi = nimbleBluetooth->getRssi();
@@ -1605,8 +1610,13 @@ void disableBluetooth()
 {
 #if HAS_BLUETOOTH
 #ifdef ARCH_ESP32
+#if !MESHTASTIC_ENABLE_BLUETOOTHCLASSIC
     if (nimbleBluetooth)
         nimbleBluetooth->deinit();
+#else
+    if (bluetoothClassic)
+        bluetoothClassic->deinit();
+#endif
 #elif defined(ARCH_NRF52)
     if (nrf52Bluetooth)
         nrf52Bluetooth->shutdown();
