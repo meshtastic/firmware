@@ -72,10 +72,60 @@ int StatusLEDModule::handleInputEvent(const InputEvent *event)
 
 int32_t StatusLEDModule::runOnce()
 {
-    my_interval = 1000;
+    handleLedBlinking();
+// RGB LED section
+#if defined(RGB_LED_POWER) || defined(HAS_LP5562) || defined(HAS_NCP5623)
+    showDeviceStatusRGB();
+#endif
 
+// NonRGB LEDs sections
+#if not defined(RGB_LED_POWER) && not defined(HAS_LP5562) && not defined(HAS_NCP5623)
+    showDeviceStatus();
+#endif
+    return (my_interval);
+}
+
+void StatusLEDModule::setPowerLED(bool LEDon)
+{
+
+#if defined(HAS_PMU)
+    if (pmu_found && PMU) {
+        // blink the axp led
+        PMU->setChargingLedMode(LEDon ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
+    }
+#endif
+    uint8_t ledState = LEDon ? LED_STATE_ON : LED_STATE_OFF;
+#ifdef PCA_LED_POWER
+    io.digitalWrite(PCA_LED_POWER, ledState);
+#endif
+#ifdef PCA_LED_ENABLE
+    io.digitalWrite(PCA_LED_ENABLE, ledState);
+#endif
+#ifdef LED_POWER
+    digitalWrite(LED_POWER, ledState);
+#endif
+#ifdef LED_PAIRING
+    digitalWrite(LED_PAIRING, ledState);
+#endif
+
+#ifdef Battery_LED_1
+    digitalWrite(Battery_LED_1, ledState);
+#endif
+#ifdef Battery_LED_2
+    digitalWrite(Battery_LED_2, ledState);
+#endif
+#ifdef Battery_LED_3
+    digitalWrite(Battery_LED_3, ledState);
+#endif
+#ifdef Battery_LED_4
+    digitalWrite(Battery_LED_4, ledState);
+#endif
+}
+
+void StatusLEDModule::handleLedBlinking(){
+    my_interval = 1000;
     if (power_state == charging) {
-#ifndef POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING
+#ifdef POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING
         CHARGE_LED_state = !CHARGE_LED_state;
 #endif
     } else if (power_state == charged) {
@@ -95,6 +145,38 @@ int32_t StatusLEDModule::runOnce()
             }
         }
     }
+}
+
+void StatusLEDModule::showDeviceStatusRGB()
+{
+
+    if (CHARGE_LED_state == LED_STATE_ON) {
+        if (power_state == charging){
+            ambientLightingThread->setLighting(10, 200, 9, 197);    // battery charging -> breathing purple
+        }else if (power_state == charged){
+            ambientLightingThread->setLighting(10, 0, 255, 0);      // battery fully charged -> static green
+        }else if (power_state == critical){
+            ambientLightingThread->setLighting(10, 255, 0, 0);      // battery critical -> breathing red
+        }else if (config.bluetooth.enabled && ble_state == pairing){
+            ambientLightingThread->setLighting(10, 0, 0, 255);      // bluetooth pairing -> breathing blue
+        }
+    } else {
+        if (power_state == charging){
+            ambientLightingThread->setLighting(1, 200, 9, 197);     // battery charging -> breathing purple
+        }else if (power_state == charged){
+            ambientLightingThread->setLighting(10, 0, 255, 0);      // battery fully charged -> static green
+        }else if (power_state == critical){
+            ambientLightingThread->setLighting(1, 255, 0, 0);       // battery critical -> breathing red
+        }else if (config.bluetooth.enabled && ble_state == pairing){
+            ambientLightingThread->setLighting(10, 0, 0, 255);      // bluetooth pairing -> breathing blue
+        }else if (!moduleConfig.ambient_lighting.led_state){
+            ambientLightingThread->setLighting(0, 0, 0, 0);         // set off (to blink) if ambient_lighting IS NOT enabled
+        }
+    }
+}
+
+void StatusLEDModule::showDeviceStatus()
+{
 // If we want a LED to be dedicated to the simple hearbeat, we can use that instead of the charge LED
 #if defined(LED_HEARTBEAT)
     if (power_state != charging && power_state != charged && !doing_fast_blink && !config.device.led_heartbeat_disabled) {
@@ -137,7 +219,7 @@ int32_t StatusLEDModule::runOnce()
     }
 
     // Override if disabled in config
-    if (config.device.led_heartbeat_disabled) {
+    if (config.device.led_heartbeat_disabled && moduleConfig.ambient_lighting.led_state) {
         CHARGE_LED_state = LED_STATE_OFF;
     }
 #ifdef Battery_LED_1
@@ -177,16 +259,6 @@ int32_t StatusLEDModule::runOnce()
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif
 
-#ifdef RGB_LED_POWER
-    if (!config.device.led_heartbeat_disabled) {
-        if (CHARGE_LED_state == LED_STATE_ON) {
-            ambientLightingThread->setLighting(10, 255, 0, 0);
-        } else {
-            ambientLightingThread->setLighting(0, 0, 0, 0);
-        }
-    }
-#endif
-
 #ifdef Battery_LED_1
     digitalWrite(Battery_LED_1, chargeIndicatorLED1);
 #endif
@@ -198,44 +270,5 @@ int32_t StatusLEDModule::runOnce()
 #endif
 #ifdef Battery_LED_4
     digitalWrite(Battery_LED_4, chargeIndicatorLED4);
-#endif
-
-    return (my_interval);
-}
-
-void StatusLEDModule::setPowerLED(bool LEDon)
-{
-
-#if defined(HAS_PMU)
-    if (pmu_found && PMU) {
-        // blink the axp led
-        PMU->setChargingLedMode(LEDon ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
-    }
-#endif
-    uint8_t ledState = LEDon ? LED_STATE_ON : LED_STATE_OFF;
-#ifdef PCA_LED_POWER
-    io.digitalWrite(PCA_LED_POWER, ledState);
-#endif
-#ifdef PCA_LED_ENABLE
-    io.digitalWrite(PCA_LED_ENABLE, ledState);
-#endif
-#ifdef LED_POWER
-    digitalWrite(LED_POWER, ledState);
-#endif
-#ifdef LED_PAIRING
-    digitalWrite(LED_PAIRING, ledState);
-#endif
-
-#ifdef Battery_LED_1
-    digitalWrite(Battery_LED_1, ledState);
-#endif
-#ifdef Battery_LED_2
-    digitalWrite(Battery_LED_2, ledState);
-#endif
-#ifdef Battery_LED_3
-    digitalWrite(Battery_LED_3, ledState);
-#endif
-#ifdef Battery_LED_4
-    digitalWrite(Battery_LED_4, ledState);
 #endif
 }
