@@ -6,12 +6,36 @@
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
+#include <stdlib.h>
 
 #define NODENUM_TIPS 0x00000004
 
-static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset; // original modem preset
-static uint16_t originalLoraChannel;                                 // original frequency slot
-char originalChannelName[sizeof(MeshTipsModule_TXSettings)];         // original channel name
+static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;             // original modem preset
+static uint16_t originalLoraChannel;                                             // original frequency slot
+char originalChannelName[sizeof(((meshtastic_ChannelSettings *)nullptr)->name)]; // original channel name
+
+typedef struct {
+    bool inUse;
+    PacketId id;
+    MeshTipsModule_TXSettings settings;
+} MeshTipsModule_TargetRadioSettings;
+
+static MeshTipsModule_TargetRadioSettings targetRadioSettings[8];
+
+static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, MeshTipsModule_TXSettings *settings)
+{
+    if (!p)
+        return false;
+
+    for (auto &entry : targetRadioSettings) {
+        if (entry.inUse && entry.id == p->id) {
+            if (settings)
+                *settings = entry.settings;
+            return true;
+        }
+    }
+    return false;
+}
 
 MeshTipsModule::MeshTipsModule()
 {
@@ -20,18 +44,60 @@ MeshTipsModule::MeshTipsModule()
     strncpy(originalChannelName, channels.getPrimary().name, sizeof(originalChannelName));
 }
 
+void MeshTipsModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, MeshTipsModule_TXSettings settings)
+{
+    if (!p)
+        return;
+
+    MeshTipsModule_TargetRadioSettings *slot = nullptr;
+    for (auto &entry : targetRadioSettings) {
+        if (entry.inUse && entry.id == p->id) {
+            slot = &entry;
+            break;
+        }
+        if (!slot && !entry.inUse)
+            slot = &entry;
+    }
+
+    if (!slot)
+        slot = &targetRadioSettings[0];
+
+    slot->inUse = true;
+    slot->id = p->id;
+    slot->settings = settings;
+}
+
+bool MeshTipsModule::hasTargetRadioSettings(const meshtastic_MeshPacket *p)
+{
+    return getTargetRadioSettings(p, nullptr);
+}
+
+void MeshTipsModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
+{
+    if (!p)
+        return;
+
+    for (auto &entry : targetRadioSettings) {
+        if (entry.inUse && entry.id == p->id) {
+            entry.inUse = false;
+            return;
+        }
+    }
+}
+
 bool MeshTipsModule::configureRadioForPacket(RadioInterface *iface, meshtastic_MeshPacket *p)
 {
     meshtastic_ChannelSettings *c = (meshtastic_ChannelSettings *)&channels.getPrimary();
-    if (p && p->from == NODENUM_TIPS && p->nonstandard_radio_config &&
-        (p->modem_preset != config.lora.modem_preset || p->frequency_slot != config.lora.channel_num)) {
+    MeshTipsModule_TXSettings target;
+    if (p && p->from == NODENUM_TIPS && getTargetRadioSettings(p, &target) &&
+        (target.preset != config.lora.modem_preset || target.slot != config.lora.channel_num)) {
         LOG_INFO("Reconfiguring for TX of packet %#08lx (from=%#08lx size=%lu)", p->id, p->from, p->decoded.payload.size);
 
-        config.lora.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)p->modem_preset;
-        config.lora.channel_num = p->frequency_slot;
+        config.lora.modem_preset = target.preset;
+        config.lora.channel_num = target.slot;
         memset(c->name, 0, sizeof(c->name));
 
-        switch (p->modem_preset) {
+        switch (target.preset) {
         case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
             strncpy(c->name, "ShortTurbo", sizeof(c->name));
             break;
@@ -63,9 +129,12 @@ bool MeshTipsModule::configureRadioForPacket(RadioInterface *iface, meshtastic_M
         iface->reconfigure();
 
         return true;
-    } else if ((!p || !p->nonstandard_radio_config) &&
+    } else if ((!p || !getTargetRadioSettings(p, nullptr)) &&
                (config.lora.modem_preset != originalModemPreset || config.lora.channel_num != originalLoraChannel)) {
-        LOG_INFO("Reconfiguring for TX of packet %#08lx (from=%#08lx size=%lu)", p->id, p->from, p->decoded.payload.size);
+        if (p)
+            LOG_INFO("Reconfiguring for TX of packet %#08lx (from=%#08lx size=%lu)", p->id, p->from, p->decoded.payload.size);
+        else
+            LOG_INFO("Restoring radio config after tips TX");
 
         config.lora.modem_preset = originalModemPreset;
         config.lora.channel_num = originalLoraChannel;
@@ -86,14 +155,17 @@ MeshTipsModule_TXSettings MeshTipsModule::stripTargetRadioSettings(meshtastic_Me
         .slot = originalLoraChannel,
     };
 
-    // clamp final byte of payload, just in case, because I don't know if this is taken care of elsewhere
-    p->decoded.payload.bytes[p->decoded.payload.size] = 0;
-
-    if (!p || strlen((char *)p->decoded.payload.bytes) < 4 || p->decoded.payload.bytes[0] != '#')
+    if (!p || p->decoded.payload.size < 4 || p->decoded.payload.bytes[0] != '#')
         return s;
 
+    // Clamp final byte of payload while parsing the command prefix.
+    if (p->decoded.payload.size < sizeof(p->decoded.payload.bytes))
+        p->decoded.payload.bytes[p->decoded.payload.size] = 0;
+    else
+        p->decoded.payload.bytes[sizeof(p->decoded.payload.bytes) - 1] = 0;
+
     char *msg = strchr((char *)p->decoded.payload.bytes, ' ');
-    if (!*msg)
+    if (!msg || !*msg)
         return s;
     *msg++ = 0;
 
@@ -107,7 +179,6 @@ MeshTipsModule_TXSettings MeshTipsModule::stripTargetRadioSettings(meshtastic_Me
             return s;
     }
 
-    uint8_t preset = 0;
     if (!strncmp(presetString, "ST", 2))
         s.preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
     else if (!strncmp(presetString, "SF", 2))
@@ -127,7 +198,7 @@ MeshTipsModule_TXSettings MeshTipsModule::stripTargetRadioSettings(meshtastic_Me
     else
         return s;
 
-    s.slot = std::stoi(slotString);
+    s.slot = strtoul(slotString, nullptr, 10);
 
     p->decoded.payload.size = 1;
     // don't use strcpy, because strcpy has undefined behaviour if src & dst overlap
@@ -170,13 +241,14 @@ void MeshTipsNodeInfoModule::sendTipsNodeInfo()
     p->hop_limit = 0;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-    p->modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 
     meshtastic_MeshPacket *p_LF20 = packetPool.allocCopy(*p);
     service->sendToMesh(p, RX_SRC_LOCAL, false);
 
-    p_LF20->frequency_slot = 20;
-    p_LF20->nonstandard_radio_config = true;
+    setTargetRadioSettings(p_LF20, {
+                                       .preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                                       .slot = 20,
+                                   });
     service->sendToMesh(p_LF20, RX_SRC_LOCAL, false);
 }
 
@@ -220,10 +292,8 @@ ProcessMessage MeshTipsMessageModule::handleReceived(const meshtastic_MeshPacket
     p->rx_snr = 0;
     p->priority = meshtastic_MeshPacket_Priority_HIGH;
     p->want_ack = false;
-    p->modem_preset = s.preset;
-    p->frequency_slot = s.slot;
     if (s.preset != originalModemPreset || s.slot != originalLoraChannel) {
-        p->nonstandard_radio_config = true;
+        setTargetRadioSettings(p, s);
     }
     p->rx_time = getValidTime(RTCQualityFromNet);
     service->sendToMesh(p, RX_SRC_LOCAL, false);

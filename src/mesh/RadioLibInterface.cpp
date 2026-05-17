@@ -401,7 +401,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
 #endif
                 } else {
                     if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-                        if (!txp->nonstandard_radio_config) {
+#if !MESHTASTIC_EXCLUDE_TIPS
+                        if (!MeshTipsModule::hasTargetRadioSettings(txp))
+#endif
+                        {
                             startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
                         }
                         setTransmitDelay();
@@ -535,6 +538,9 @@ void RadioLibInterface::completeSending()
         if (!isFromUs(p))
             txRelay++;
         printPacket("Completed sending", p);
+#if !MESHTASTIC_EXCLUDE_TIPS
+        MeshTipsModule::clearTargetRadioSettings(p);
+#endif
 
         // We are done sending that packet, release it
         packetPool.release(p);
