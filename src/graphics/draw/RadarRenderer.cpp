@@ -176,9 +176,13 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // header (matches the dense layout from before any footer reservation
     // existed) so its size doesn't shift when the BT/API icon appears.  Only
     // the list rows on the left reserve space, since they live in the same
-    // column as the icon and would otherwise be clipped at the bottom.
+    // column as the icon and would otherwise be clipped at the bottom.  The
+    // reservation is icon-height + 1 px (the +1 leaves a single pixel of
+    // breathing room above the icon); most font glyphs don't fill the bottom
+    // of their bbox, so the last row's visible ink lands flush with the icon
+    // instead of leaving the previous 3-4 px of unused descender space.
     const int footerScale = (currentResolution == ScreenResolution::High) ? 2 : 1;
-    const int listFooterH = (connection_icon_height * footerScale) + 2 * footerScale;
+    const int listFooterH = (connection_icon_height * footerScale) + 1;
 
     const int contentH = sh - headerH;            // full-height area for the radar
     const int listContentH = contentH - listFooterH; // shorter area for list rows
@@ -335,11 +339,16 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 
     const int rowPitch = listContentH / kMaxPlotted;
 
+    // Marker centred to the visible text height (rowY is the top of the
+    // glyph bbox; centring on rowPitch/2 read as "top-aligned" because the
+    // font's bbox is taller than its visible ink).
+    const int symOffsetY = (FONT_HEIGHT_SMALL - 2) / 2;
+
     for (int i = 0; i < plottedCount; i++) {
         const Entry &e = entries[i];
         const int rowY = y + headerH + rowPitch * i;
         const int symCX = x + 3;
-        const int symCY = rowY + rowPitch / 2;
+        const int symCY = rowY + symOffsetY;
 
         drawMarker(display, symCX, symCY, (uint8_t)i);
 
