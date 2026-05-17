@@ -31,6 +31,7 @@
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
 
+#define LED_POWER 38 // green
 #define PIN_POWER_EN 42
 
 // GNSS
@@ -40,7 +41,7 @@
 #define PCF85063_RTC 0x51
 
 // SY6970 battery charger
-#define SY6970_ADDR 0x6A
+#define HAS_SY6970
 #define SY6970_INT 21
 
 // MAX98357A PCM amplifier
