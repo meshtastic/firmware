@@ -26,9 +26,6 @@
 
 #define SPECIAL_NONCE_ONLY_CONFIG 69420
 #define SPECIAL_NONCE_ONLY_NODES 69421 // ( ͡° ͜ʖ ͡°)
-// Gradient sync: phone sends one of these to opt into thin-header + replay.
-#define SPECIAL_NONCE_GRADIENT_SYNC 69422
-#define SPECIAL_NONCE_GRADIENT_ONLY_NODES 69423
 
 /**
  * Provides our protobuf based API which phone/PC clients can use to talk to our device
@@ -52,15 +49,22 @@ class PhoneAPI
         STATE_SEND_CONFIG,          // Replacement for the old Radioconfig
         STATE_SEND_MODULECONFIG,    // Send Module specific config
         STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to to the client
-        // Drain satellite DBs as synthetic POSITION_APP / TELEMETRY_APP /
-        // NODE_STATUS_APP packets when the phone opted into gradient sync.
-        STATE_REPLAY_POSITIONS,
-        STATE_REPLAY_TELEMETRY,
-        STATE_REPLAY_ENVIRONMENT,
-        STATE_REPLAY_STATUS,
-        STATE_SEND_FILEMANIFEST, // Send file manifest
+        STATE_SEND_FILEMANIFEST,    // Send file manifest
         STATE_SEND_COMPLETE_ID,
-        STATE_SEND_PACKETS // send packets or debug strings
+        STATE_SEND_PACKETS // live mesh packets + any cached satellite-DB replay that trails sync completion
+    };
+
+    // Satellite-DB replay (positions / telemetry / environment / status) used to live
+    // as four top-level states between STATE_SEND_OTHER_NODEINFOS and STATE_SEND_FILEMANIFEST.
+    // It now drains *after* config_complete_id has been emitted: the phone considers the
+    // initial sync done as soon as headers + manifest are delivered, and the cached
+    // position/telemetry/etc. trickle in alongside live mesh traffic inside STATE_SEND_PACKETS.
+    enum ReplayPhase : uint8_t {
+        REPLAY_PHASE_IDLE = 0, // not replaying (legacy clients, no-op DBs, or replay finished)
+        REPLAY_PHASE_POSITIONS,
+        REPLAY_PHASE_TELEMETRY,
+        REPLAY_PHASE_ENVIRONMENT,
+        REPLAY_PHASE_STATUS,
     };
 
     State state = STATE_SEND_NOTHING;
@@ -114,6 +118,7 @@ class PhoneAPI
     size_t replayTelemetryIndex = 0;
     size_t replayEnvironmentIndex = 0;
     size_t replayStatusIndex = 0;
+    ReplayPhase replayPhase = REPLAY_PHASE_IDLE; // armed by sendConfigComplete() for full/default sync
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
@@ -164,10 +169,6 @@ class PhoneAPI
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
     bool isSendingPackets() { return state == STATE_SEND_PACKETS; }
-    bool clientWantsGradientSync() const
-    {
-        return config_nonce == SPECIAL_NONCE_GRADIENT_SYNC || config_nonce == SPECIAL_NONCE_GRADIENT_ONLY_NODES;
-    }
 
   protected:
     /// Our fromradio packet while it is being assembled
@@ -228,6 +229,12 @@ class PhoneAPI
     meshtastic_MeshPacket makeReplayTelemetryPacket(uint32_t num, const meshtastic_DeviceMetrics &metrics);
     meshtastic_MeshPacket makeReplayEnvironmentPacket(uint32_t num, const meshtastic_EnvironmentMetrics &env);
     meshtastic_MeshPacket makeReplayStatusPacket(uint32_t num, const meshtastic_StatusMessage &status);
+
+    // Post-sync replay drain: pop one cached packet from the active phase, advancing
+    // through positions -> telemetry -> environment -> status until everything is drained.
+    bool popReplayPacket(meshtastic_MeshPacket &out);
+    void advanceReplayPhase();
+    bool replayPending() const { return replayPhase != REPLAY_PHASE_IDLE; }
 
     void releaseMqttClientProxyPhonePacket();
 

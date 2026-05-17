@@ -33,6 +33,8 @@ typedef struct _meshtastic_PositionLite {
     uint32_t time;
     /* TODO: REPLACE */
     meshtastic_Position_LocSource location_source;
+    /* Indicates the bits of precision set by the sending node */
+    uint32_t precision_bits;
 } meshtastic_PositionLite;
 
 typedef PB_BYTES_ARRAY_T(32) meshtastic_UserLite_public_key_t;
@@ -211,7 +213,7 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
+#define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0}
 #define meshtastic_UserLite_init_default         {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_NodeInfoLite_init_default     {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
 #define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
@@ -222,7 +224,7 @@ extern "C" {
 #define meshtastic_NodeDatabase_init_default     {0, {0}, {0}, {0}, {0}, {0}}
 #define meshtastic_ChannelFile_init_default      {0, {meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default}, 0}
 #define meshtastic_BackupPreferences_init_default {0, 0, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default, false, meshtastic_ChannelFile_init_default, false, meshtastic_User_init_default}
-#define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
+#define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0}
 #define meshtastic_UserLite_init_zero            {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_NodeInfoLite_init_zero        {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
 #define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
@@ -240,6 +242,7 @@ extern "C" {
 #define meshtastic_PositionLite_altitude_tag     3
 #define meshtastic_PositionLite_time_tag         4
 #define meshtastic_PositionLite_location_source_tag 5
+#define meshtastic_PositionLite_precision_bits_tag 6
 #define meshtastic_UserLite_macaddr_tag          1
 #define meshtastic_UserLite_long_name_tag        2
 #define meshtastic_UserLite_short_name_tag       3
@@ -298,7 +301,8 @@ X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
 X(a, STATIC,   SINGULAR, FIXED32,  time,              4) \
-X(a, STATIC,   SINGULAR, UENUM,    location_source,   5)
+X(a, STATIC,   SINGULAR, UENUM,    location_source,   5) \
+X(a, STATIC,   SINGULAR, UINT32,   precision_bits,    6)
 #define meshtastic_PositionLite_CALLBACK NULL
 #define meshtastic_PositionLite_DEFAULT NULL
 
@@ -444,13 +448,13 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_BackupPreferences_size
 #define meshtastic_BackupPreferences_size        2432
 #define meshtastic_ChannelFile_size              718
-#define meshtastic_DeviceState_size              1737
+#define meshtastic_DeviceState_size              1944
 #define meshtastic_NodeEnvironmentEntry_size     170
 #define meshtastic_NodeInfoLite_size             105
-#define meshtastic_NodePositionEntry_size        36
+#define meshtastic_NodePositionEntry_size        42
 #define meshtastic_NodeStatusEntry_size          89
 #define meshtastic_NodeTelemetryEntry_size       35
-#define meshtastic_PositionLite_size             28
+#define meshtastic_PositionLite_size             34
 #define meshtastic_UserLite_size                 98
 
 #ifdef __cplusplus
