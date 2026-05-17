@@ -59,6 +59,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 // Shared battery/time/mail header
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y);
 
+// Just the BT/API connection icon glyph, no background wipe.  drawCommonFooter
+// uses this after clearing the footer area; callers that want the icon without
+// erasing surrounding pixels (e.g. the radar overlay) can call this directly.
+void drawConnectionIcon(OLEDDisplay *display, int16_t x, int16_t y);
+
 const int *getTextPositions(OLEDDisplay *display);
 
 bool isAllowedPunctuation(char c);

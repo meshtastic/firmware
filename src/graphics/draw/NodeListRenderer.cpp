@@ -839,7 +839,13 @@ void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *st
     // circular radar minimap.
     if (uiconfig.bearings_view_radar) {
         graphics::RadarRenderer::drawRadarOverlay(display, x, y);
-        graphics::drawCommonFooter(display, x, y);
+        // Draw just the BT/API icon glyph without the full-width black wipe
+        // drawCommonFooter would normally do.  The wipe was erasing the
+        // bottom arc of the radar circle and a pixel of the last list row;
+        // the icon's actual 5x5 footprint (x=0..4 at scale=1) doesn't
+        // spatially overlap the radar or list content, so leaving the
+        // surrounding pixels alone is safe.
+        graphics::drawConnectionIcon(display, x, y);
         return;
     }
     // On very first call (on boot or state enter)

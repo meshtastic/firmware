@@ -553,14 +553,17 @@ const int *getTextPositions(OLEDDisplay *display)
 // *************************
 // * Common Footer Drawing *
 // *************************
-void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
+
+// Draw the BT/API connection icon glyph at the bottom-left, without any
+// surrounding background wipe.  Callers that want the canonical full-width
+// black bar use drawCommonFooter; callers like RadarRenderer that need to
+// preserve their own pixels under the icon's row call this directly.
+void drawConnectionIcon(OLEDDisplay *display, int16_t x, int16_t y)
 {
     if (!isAPIConnected(service->api_state))
         return;
 
     const int scale = (currentResolution == ScreenResolution::High) ? 2 : 1;
-    const int footerY = SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale);
-    const int footerH = (connection_icon_height * scale) + (2 * scale);
     const int iconX = 0;
     const int iconY = SCREEN_HEIGHT - (connection_icon_height * scale);
     const int iconW = connection_icon_width * scale;
@@ -571,8 +574,6 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
     setAndRegisterTFTColorRole(TFTColorRole::ConnectionIcon, TFTPalette::Blue, TFTPalette::Black, iconX, iconY, iconW, iconH);
 #endif
 
-    display->setColor(BLACK);
-    display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
     display->setColor(WHITE);
     if (currentResolution == ScreenResolution::High) {
         const int bytesPerRow = (connection_icon_width + 7) / 8;
@@ -591,6 +592,20 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
     } else {
         display->drawXbm(iconX, iconY, connection_icon_width, connection_icon_height, connection_icon);
     }
+}
+
+void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
+{
+    if (!isAPIConnected(service->api_state))
+        return;
+
+    const int scale = (currentResolution == ScreenResolution::High) ? 2 : 1;
+    const int footerY = SCREEN_HEIGHT - (1 * scale) - (connection_icon_height * scale);
+    const int footerH = (connection_icon_height * scale) + (2 * scale);
+
+    display->setColor(BLACK);
+    display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
+    drawConnectionIcon(display, x, y);
 }
 
 bool isAllowedPunctuation(char c)
