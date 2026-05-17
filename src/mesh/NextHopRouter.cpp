@@ -9,12 +9,27 @@
 #endif
 #include "NodeDB.h"
 
+namespace
+{
+
+// Returns how many retransmission attempts have been made so far (1-indexed).
+// numRetransmissions is decremented AFTER each send, so on the first retransmission
+// it still equals initialNumRetransmissions, giving attempt = 1.
+uint8_t getRetransmissionAttempt(const PendingPacket &pending)
+{
+    return (pending.initialNumRetransmissions - pending.numRetransmissions) + 1;
+}
+
+} // namespace
+
 NextHopRouter::NextHopRouter() {}
 
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions)
 {
     packet = p;
-    this->numRetransmissions = numRetransmissions - 1; // We subtract one, because we assume the user just did the first send
+    // Subtract one because the first send has already happened before this record is created.
+    initialNumRetransmissions = numRetransmissions > 0 ? numRetransmissions - 1 : 0;
+    this->numRetransmissions = initialNumRetransmissions;
 }
 
 /**
@@ -302,12 +317,18 @@ int32_t NextHopRouter::doRetransmissions()
                               p.packet->id);
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
+                txRetransmitFailed++;
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
                 stopRetransmission(it->first);
                 stillValid = false; // just deleted it
             } else {
-                LOG_DEBUG("Sending retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
-                          p.packet->id, p.numRetransmissions);
+                auto *retransmission = packetPool.allocCopy(*p.packet);
+                uint8_t desiredCodingRate =
+                    computeDesiredRetransmissionCodingRate(iface->getCodingRate(), getRetransmissionAttempt(p));
+                LOG_DEBUG("Sending retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d, cr=%u", p.packet->from, p.packet->to,
+                          p.packet->id, p.numRetransmissions, desiredCodingRate);
+                iface->setTransmitCodingRateOverride(getFrom(retransmission), retransmission->id, desiredCodingRate);
+                ErrorCode sendResult = ERRNO_UNKNOWN;
 
                 if (!isBroadcast(p.packet->to)) {
                     if (p.numRetransmissions == 1) {
@@ -319,14 +340,19 @@ int32_t NextHopRouter::doRetransmissions()
                             LOG_INFO("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
                             sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
                         }
-                        FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                        sendResult = FloodingRouter::send(retransmission);
                     } else {
-                        NextHopRouter::send(packetPool.allocCopy(*p.packet));
+                        sendResult = NextHopRouter::send(retransmission);
                     }
                 } else {
                     // Note: we call the superclass version because we don't want to have our version of send() add a new
                     // retransmission record
-                    FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                    sendResult = FloodingRouter::send(retransmission);
+                }
+
+                if (sendResult != ERRNO_OK) {
+                    LOG_DEBUG("Send failed (err=%d), discarding CR override for id=0x%x", sendResult, p.packet->id);
+                    iface->clearTransmitCodingRateOverride(getFrom(p.packet), p.packet->id);
                 }
 
                 // Queue again

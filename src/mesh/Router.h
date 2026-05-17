@@ -92,6 +92,10 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
 
+    /** Count of retransmission chains that exhausted all attempts without an ACK.
+     *  TODO: map to a LocalStats proto field when the telemetry proto gains a suitable field. */
+    uint32_t txRetransmitFailed = 0;
+
   protected:
     friend class RoutingModule;
 

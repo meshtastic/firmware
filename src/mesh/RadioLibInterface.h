@@ -5,7 +5,9 @@
 #include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
+#include <optional>
 #include <sys/types.h>
+#include <unordered_map>
 
 // ESP32 has special rules about ISR code
 #ifdef ARDUINO_ARCH_ESP32
@@ -52,6 +54,22 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
+    struct TxPacketId {
+        NodeNum from;
+        PacketId id;
+
+        bool operator==(const TxPacketId &other) const { return from == other.from && id == other.id; }
+    };
+
+    class TxPacketIdHash
+    {
+      public:
+        size_t operator()(const TxPacketId &packet) const
+        {
+            return (std::hash<NodeNum>()(packet.from)) ^ (std::hash<PacketId>()(packet.id));
+        }
+    };
+
     /// Used as our notification from the ISR
     enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };
 
@@ -61,6 +79,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     static void isrTxLevel0(), isrLevel0Common(PendingISR code);
 
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
+    std::unordered_map<TxPacketId, uint8_t, TxPacketIdHash> txCodingRateOverrides;
+    std::optional<uint8_t> activeTxCodingRateOverride;
 
   protected:
     ModemType_t modemType = RADIOLIB_MODEM_LORA;
@@ -179,6 +199,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) override;
 
+    void setTransmitCodingRateOverride(NodeNum from, PacketId id, uint8_t codingRate) override;
+    void clearTransmitCodingRateOverride(NodeNum from, PacketId id) override;
+
+#ifdef UNIT_TEST
+    friend class TestRadioLibInterface;
+#endif
+
     /**
      * Request randomness sourced from the LoRa modem, if supported by the active RadioLib interface.
      * @return true if len bytes were produced, false otherwise.
@@ -209,6 +236,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     virtual void onNotify(uint32_t notification) override;
 
+    std::optional<uint8_t> takeTransmitCodingRateOverride(NodeNum from, PacketId id);
+    bool applyTemporaryCodingRateOverride(const meshtastic_MeshPacket *packet);
+    void restoreTemporaryCodingRateOverride();
+
     /** start an immediate transmit
      *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
      *  @return true if packet was sent
@@ -219,6 +250,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     uint32_t activeReceiveStart = 0;
+
+    virtual int16_t applyCodingRate(uint8_t codingRate) = 0;
 
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 

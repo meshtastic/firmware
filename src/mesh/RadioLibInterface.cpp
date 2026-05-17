@@ -147,12 +147,14 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
     if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         if (disabled || !config.lora.tx_enabled) {
             LOG_WARN("send - !config.lora.tx_enabled");
+            clearTransmitCodingRateOverride(getFrom(p), p->id);
             packetPool.release(p);
             return ERRNO_DISABLED;
         }
 
     } else {
         LOG_WARN("send - lora tx disabled: Region unset");
+        clearTransmitCodingRateOverride(getFrom(p), p->id);
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
@@ -161,6 +163,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("send - !config.lora.tx_enabled");
+        clearTransmitCodingRateOverride(getFrom(p), p->id);
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
@@ -169,6 +172,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
     if (p->to == NODENUM_BROADCAST_NO_LORA) {
         LOG_DEBUG("Drop no-LoRa pkt");
+        clearTransmitCodingRateOverride(getFrom(p), p->id);
         return ERRNO_SHOULD_RELEASE;
     }
 
@@ -185,6 +189,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
     }
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
+        clearTransmitCodingRateOverride(getFrom(p), p->id);
         packetPool.release(p);
         return res;
     }
@@ -232,8 +237,10 @@ bool RadioLibInterface::isSending()
 bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
 {
     auto p = txQueue.remove(from, id);
-    if (p)
+    if (p) {
+        clearTransmitCodingRateOverride(getFrom(p), p->id);
         packetPool.release(p); // free the packet we just removed
+    }
 
     bool result = (p != NULL);
     LOG_DEBUG("cancelSending id=0x%x, removed=%d", id, result);
@@ -398,10 +405,72 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
     if (p) {
         LOG_DEBUG("Dropping pending-TX packet 0x%08x with hop limit %d", p->id, p->hop_limit);
+        clearTransmitCodingRateOverride(getFrom(p), p->id);
         packetPool.release(p);
         return true;
     }
     return false;
+}
+
+void RadioLibInterface::setTransmitCodingRateOverride(NodeNum from, PacketId id, uint8_t codingRate)
+{
+    txCodingRateOverrides[TxPacketId{from, id}] = codingRate;
+}
+
+void RadioLibInterface::clearTransmitCodingRateOverride(NodeNum from, PacketId id)
+{
+    txCodingRateOverrides.erase(TxPacketId{from, id});
+}
+
+std::optional<uint8_t> RadioLibInterface::takeTransmitCodingRateOverride(NodeNum from, PacketId id)
+{
+    auto it = txCodingRateOverrides.find(TxPacketId{from, id});
+    if (it == txCodingRateOverrides.end()) {
+        return std::nullopt;
+    }
+
+    uint8_t codingRate = it->second;
+    txCodingRateOverrides.erase(it);
+    return codingRate;
+}
+
+bool RadioLibInterface::applyTemporaryCodingRateOverride(const meshtastic_MeshPacket *packet)
+{
+    auto overrideCodingRate = takeTransmitCodingRateOverride(getFrom(packet), packet->id);
+    if (!overrideCodingRate || *overrideCodingRate == cr) {
+        return true;
+    }
+
+    setStandby();
+    int err = applyCodingRate(*overrideCodingRate);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_WARN("Temporary coding rate override failed for packet 0x%x, error=%d", packet->id, err);
+        int restoreErr = applyCodingRate(cr);
+        if (restoreErr != RADIOLIB_ERR_NONE) {
+            LOG_WARN("Restoring base coding rate %u failed, error=%d", cr, restoreErr);
+        }
+        return false;
+    }
+
+    activeTxCodingRateOverride = *overrideCodingRate;
+    LOG_DEBUG("Using temporary coding rate %u for packet 0x%x", *overrideCodingRate, packet->id);
+    return true;
+}
+
+void RadioLibInterface::restoreTemporaryCodingRateOverride()
+{
+    if (!activeTxCodingRateOverride) {
+        return;
+    }
+
+    int err = applyCodingRate(cr);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_WARN("Restoring base coding rate %u failed, error=%d", cr, err);
+    } else {
+        LOG_DEBUG("Restored coding rate to %u after retransmission", cr);
+    }
+
+    activeTxCodingRateOverride.reset();
 }
 
 /**
@@ -429,8 +498,13 @@ void RadioLibInterface::completeSending()
 #endif
 
     if (p) {
-        // Packet has been sent, count it toward our TX airtime utilization.
+        // Compute airtime before restoring the base coding rate so that getPacketTime
+        // queries the hardware with the CR that was actually used for this transmission
+        // (which may have been escalated for a retransmission).
         uint32_t xmitMsec = getPacketTime(p);
+        restoreTemporaryCodingRateOverride();
+
+        // Packet has been sent, count it toward our TX airtime utilization.
         airTime->logAirtime(TX_LOG, xmitMsec);
 
         txGood++;
@@ -440,6 +514,8 @@ void RadioLibInterface::completeSending()
 
         // We are done sending that packet, release it
         packetPool.release(p);
+    } else {
+        restoreTemporaryCodingRateOverride();
     }
 }
 
@@ -593,9 +669,11 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
              channel scan and actual transmit as low as possible to avoid collisions. */
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet because LoRa Tx disabled");
+        clearTransmitCodingRateOverride(getFrom(txp), txp->id);
         packetPool.release(txp);
         return false;
     } else {
+        applyTemporaryCodingRateOverride(txp);
         configHardwareForSend(); // must be after setStandby
 
         size_t numbytes = beginSending(txp);

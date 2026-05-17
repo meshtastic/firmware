@@ -174,6 +174,15 @@ class RadioInterface
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) { return false; }
 
+    /** Return the currently configured LoRa coding rate. */
+    [[nodiscard]] uint8_t getCodingRate() const { return cr; }
+
+    /** Best-effort per-packet transmit coding-rate override. Base implementation is a no-op. */
+    virtual void setTransmitCodingRateOverride(NodeNum from, PacketId id, uint8_t codingRate) {}
+
+    /** Clear any queued per-packet transmit coding-rate override. Base implementation is a no-op. */
+    virtual void clearTransmitCodingRateOverride(NodeNum from, PacketId id) {}
+
     // methods from radiohead
 
     /// Initialise the Driver transport hardware and software.

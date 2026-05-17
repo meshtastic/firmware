@@ -166,6 +166,11 @@ template <typename T> bool LR11x0Interface<T>::init()
     return res == RADIOLIB_ERR_NONE;
 }
 
+template <typename T> int16_t LR11x0Interface<T>::applyCodingRate(uint8_t codingRate)
+{
+    return lora.setCodingRate(codingRate, codingRate != 7);
+}
+
 template <typename T> bool LR11x0Interface<T>::reconfigure()
 {
     RadioLibInterface::reconfigure();
