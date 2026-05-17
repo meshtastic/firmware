@@ -151,6 +151,10 @@ def main():
 
     new_sizes = load_sizes(args.new_sizes)
 
+    # Silence output when no targets were built — repo maintainer choice
+    if not new_sizes:
+        return
+
     baselines = []
     for b in args.baseline:
         if ":" not in b:
