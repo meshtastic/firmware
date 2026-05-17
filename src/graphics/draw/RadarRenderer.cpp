@@ -1,8 +1,8 @@
 #include "configuration.h"
 #if HAS_SCREEN
-#include "RadarRenderer.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "RadarRenderer.h"
 #include "UIRenderer.h"
 #include "gps/GeoCoord.h"
 #include "graphics/ScreenFonts.h"
@@ -59,11 +59,7 @@ void zoomOut()
  */
 static float niceScaleMeters(float maxDistM, int zoomLevel)
 {
-    static const float scales[] = {
-        30,    60,    90,    150,   300,   600,   900,
-        1500,  3000,  6000,  9000,  15000, 30000, 90000,
-        300000
-    };
+    static const float scales[] = {30, 60, 90, 150, 300, 600, 900, 1500, 3000, 6000, 9000, 15000, 30000, 90000, 300000};
     constexpr int N = sizeof(scales) / sizeof(scales[0]);
 
     int idx = 0;
@@ -222,9 +218,9 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const int footerScale = (currentResolution == ScreenResolution::High) ? 2 : 1;
     const int listFooterH = (connection_icon_height * footerScale) + 1;
 
-    const int contentH = sh - headerH;            // full-height area for the radar
+    const int contentH = sh - headerH;               // full-height area for the radar
     const int listContentH = contentH - listFooterH; // shorter area for list rows
-    const int pad = 2;                            // px padding around the radar circle
+    const int pad = 2;                               // px padding around the radar circle
 
     // -----------------------------------------------------------------------
     // Radar circle — right side, 2 px padding on all sides.
@@ -266,8 +262,8 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     const bool imuAvailable = screen->hasHeading();
     const bool headingUp = imuAvailable && !s_forceNorthUp;
-    const float headingRad = headingUp ? screen->getHeading() * DEG_TO_RAD
-                                       : (s_forceNorthUp ? 0.0f : screen->estimatedHeading(myLat, myLon));
+    const float headingRad =
+        headingUp ? screen->getHeading() * DEG_TO_RAD : (s_forceNorthUp ? 0.0f : screen->estimatedHeading(myLat, myLon));
 
     // -----------------------------------------------------------------------
     // Collect remote nodes with valid positions.
@@ -364,8 +360,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     for (int i = 0; i < plottedCount; i++) {
         const Entry &e = entries[i];
-        plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad,
-                 std::min(e.distM / scale, 1.0f), (uint8_t)i);
+        plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad, std::min(e.distM / scale, 1.0f), (uint8_t)i);
     }
 
     // -----------------------------------------------------------------------
