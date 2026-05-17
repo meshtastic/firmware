@@ -566,6 +566,125 @@ void test_sendJsonPositionToPublicServerIsImpreciseThenOriginal(void)
     TEST_ASSERT_EQUAL(32, originalPosition.precision_bits);
 }
 
+// Queued public MQTT positions should not publish precise JSON after reconnect.
+void test_sendQueuedJsonPositionToPublicServerKeepsOriginalOutOfJson(void)
+{
+    constexpr uint32_t precision = 15;
+    constexpr uint32_t latitude = 416213022;
+    constexpr uint32_t longitude = 415906392;
+    moduleConfig.mqtt.json_enabled = true;
+    MQTTUnitTest::restart();
+    pubsub->connected_ = false;
+    pubsub->refuseConnection_ = true;
+    TEST_ASSERT_TRUE(loopUntil([] { return !unitTest->getPubSub().connected(); }));
+
+    meshtastic_MeshPacket positionPacket = makePositionPacket(latitude, longitude);
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(2, unitTest->queueSize());
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+
+    pubsub->refuseConnection_ = false;
+    unitTest->reconnect();
+    unitTest->drainQueue();
+
+    TEST_ASSERT_EQUAL(3, pubsub->published_.size());
+    size_t jsonPositionCount = 0;
+    for (const auto &[topic, payload] : pubsub->published_) {
+        if (topic.find("/json/") == std::string::npos)
+            continue;
+
+        jsonPositionCount++;
+        const std::string &json = std::get<std::string>(payload);
+        std::stringstream expectedLatitude;
+        expectedLatitude << "\"latitude_i\":" << makeImpreciseCoordinate(latitude, precision);
+        std::stringstream expectedLongitude;
+        expectedLongitude << "\"longitude_i\":" << makeImpreciseCoordinate(longitude, precision);
+        TEST_ASSERT_TRUE(json.find(expectedLatitude.str()) != std::string::npos);
+        TEST_ASSERT_TRUE(json.find(expectedLongitude.str()) != std::string::npos);
+        TEST_ASSERT_TRUE(json.find("\"precision_bits\":15") != std::string::npos);
+        TEST_ASSERT_TRUE(json.find("\"latitude_i\":416213022") == std::string::npos);
+        TEST_ASSERT_TRUE(json.find("\"longitude_i\":415906392") == std::string::npos);
+    }
+    TEST_ASSERT_EQUAL(1, jsonPositionCount);
+}
+
+// Queued encrypted public MQTT positions should publish imprecise JSON after reconnect.
+void test_sendQueuedEncryptedJsonPositionUsesImprecisePublicPacket(void)
+{
+    constexpr uint32_t precision = 15;
+    constexpr uint32_t latitude = 416213022;
+    constexpr uint32_t longitude = 415906392;
+    moduleConfig.mqtt.encryption_enabled = true;
+    moduleConfig.mqtt.json_enabled = true;
+    MQTTUnitTest::restart();
+    pubsub->connected_ = false;
+    pubsub->refuseConnection_ = true;
+    TEST_ASSERT_TRUE(loopUntil([] { return !unitTest->getPubSub().connected(); }));
+
+    meshtastic_MeshPacket positionPacket = makePositionPacket(latitude, longitude);
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(1, unitTest->queueSize());
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+
+    pubsub->refuseConnection_ = false;
+    unitTest->reconnect();
+    unitTest->drainQueue();
+
+    TEST_ASSERT_EQUAL(2, pubsub->published_.size());
+    auto published = pubsub->published_.begin();
+    const auto &[protoTopic, protoPayload] = *published++;
+    const DecodedServiceEnvelope &env = std::get<DecodedServiceEnvelope>(protoPayload);
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", protoTopic.c_str());
+    TEST_ASSERT_TRUE(env.validDecode);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, env.packet->which_payload_variant);
+
+    const auto &[jsonTopic, jsonPayload] = *published;
+    TEST_ASSERT_EQUAL_STRING("msh/2/json/test/!12345678", jsonTopic.c_str());
+    const std::string &json = std::get<std::string>(jsonPayload);
+    std::stringstream expectedLatitude;
+    expectedLatitude << "\"latitude_i\":" << makeImpreciseCoordinate(latitude, precision);
+    std::stringstream expectedLongitude;
+    expectedLongitude << "\"longitude_i\":" << makeImpreciseCoordinate(longitude, precision);
+    TEST_ASSERT_TRUE(json.find(expectedLatitude.str()) != std::string::npos);
+    TEST_ASSERT_TRUE(json.find(expectedLongitude.str()) != std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"precision_bits\":15") != std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"latitude_i\":416213022") == std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"longitude_i\":415906392") == std::string::npos);
+}
+
+// Reused queue entries should not carry stale JSON from an evicted packet.
+void test_sendQueuedOverflowClearsStaleJsonPayload(void)
+{
+    moduleConfig.mqtt.json_enabled = true;
+    MQTTUnitTest::restart();
+    pubsub->connected_ = false;
+    pubsub->refuseConnection_ = true;
+    TEST_ASSERT_TRUE(loopUntil([] { return !unitTest->getPubSub().connected(); }));
+
+    for (int i = 0; i < MAX_MQTT_QUEUE; i++)
+        mqtt->onSend(encrypted, decoded, 0);
+    TEST_ASSERT_EQUAL(MAX_MQTT_QUEUE, unitTest->queueSize());
+
+    moduleConfig.mqtt.json_enabled = false;
+    mqtt->onSend(encrypted, decoded, 0);
+    TEST_ASSERT_EQUAL(MAX_MQTT_QUEUE, unitTest->queueSize());
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+
+    moduleConfig.mqtt.json_enabled = true;
+    pubsub->refuseConnection_ = false;
+    unitTest->reconnect();
+    unitTest->drainQueue();
+
+    size_t jsonPublishCount = 0;
+    for (const auto &[topic, payload] : pubsub->published_) {
+        if (topic.find("/json/") != std::string::npos)
+            jsonPublishCount++;
+    }
+    TEST_ASSERT_EQUAL(MAX_MQTT_QUEUE - 1, jsonPublishCount);
+}
+
 // Encrypted MQTT should continue to publish the encrypted packet, not a decoded position.
 void test_sendEncryptedPositionToPublicServerStaysEncrypted(void)
 {
@@ -1165,6 +1284,9 @@ void setup()
     RUN_TEST(test_sendCoarserPositionToPublicServerPreservesPrecision);
     RUN_TEST(test_sendPositionWithoutCoordinatesDoesNotCreateImpreciseCopy);
     RUN_TEST(test_sendJsonPositionToPublicServerIsImpreciseThenOriginal);
+    RUN_TEST(test_sendQueuedJsonPositionToPublicServerKeepsOriginalOutOfJson);
+    RUN_TEST(test_sendQueuedEncryptedJsonPositionUsesImprecisePublicPacket);
+    RUN_TEST(test_sendQueuedOverflowClearsStaleJsonPayload);
     RUN_TEST(test_sendEncryptedPositionToPublicServerStaysEncrypted);
     RUN_TEST(test_sendEncryptedJsonPositionUsesImprecisePublicPacket);
     RUN_TEST(test_proxyToMeshServiceDecoded);

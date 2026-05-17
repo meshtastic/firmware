@@ -94,9 +94,8 @@ static bool makePublicMqttPositionPacket(meshtastic_MeshPacket &mqttPacket, cons
     // Use a fresh id so downstream id-based MQTT consumers can receive the public-safe copy
     // even when they already cached or deduplicated the precise source packet.
     mqttPacket.id = generatePacketId();
-    const size_t positionSize =
-        pb_encode_to_bytes(mqttPacket.decoded.payload.bytes, sizeof(mqttPacket.decoded.payload.bytes), &meshtastic_Position_msg,
-                           &position);
+    const size_t positionSize = pb_encode_to_bytes(mqttPacket.decoded.payload.bytes, sizeof(mqttPacket.decoded.payload.bytes),
+                                                   &meshtastic_Position_msg, &position);
     if (positionSize == 0) {
         mqttPacket = meshtastic_MeshPacket_init_default;
         return false;
@@ -788,16 +787,12 @@ void MQTT::publishQueuedMessages()
 
 #if !defined(ARCH_NRF52) ||                                                                                                      \
     defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
-    if (!moduleConfig.mqtt.json_enabled)
+    if (!moduleConfig.mqtt.json_enabled || entry->jsonPayload.empty())
         return;
 
     // handle json topic
     const DecodedServiceEnvelope env(entry->envBytes.data(), entry->envBytes.size());
     if (!env.validDecode || env.packet == NULL || env.channel_id == NULL)
-        return;
-
-    auto jsonString = MeshPacketSerializer::JsonSerialize(env.packet);
-    if (jsonString.length() == 0)
         return;
 
     // Generate node ID from nodenum for topic
@@ -809,8 +804,9 @@ void MQTT::publishQueuedMessages()
     } else {
         topicJson = jsonTopic + env.channel_id + "/" + nodeId;
     }
-    LOG_INFO("JSON publish message to %s, %u bytes: %s", topicJson.c_str(), jsonString.length(), jsonString.c_str());
-    publish(topicJson.c_str(), jsonString.c_str(), false);
+    LOG_INFO("JSON publish message to %s, %u bytes: %s", topicJson.c_str(), entry->jsonPayload.length(),
+             entry->jsonPayload.c_str());
+    publish(topicJson.c_str(), entry->jsonPayload.c_str(), false);
 #endif // ARCH_NRF52 NRF52_USE_JSON
 }
 
@@ -887,7 +883,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
                 auto jsonString = MeshPacketSerializer::JsonSerialize(jsonPacket);
                 if (jsonString.length() != 0) {
                     std::string topicJson = jsonTopic + channelId + "/" + nodeId;
-                    LOG_INFO("JSON publish message to %s, %u bytes: %s", topicJson.c_str(), jsonString.length(), jsonString.c_str());
+                    LOG_INFO("JSON publish message to %s, %u bytes: %s", topicJson.c_str(), jsonString.length(),
+                             jsonString.c_str());
                     publish(topicJson.c_str(), jsonString.c_str(), false);
                 }
             }
@@ -903,6 +900,12 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
             }
             entry->topic = topic;
             entry->envBytes.assign(bytes, numBytes);
+            entry->jsonPayload.clear();
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
+            if (moduleConfig.mqtt.json_enabled && jsonPacket != nullptr)
+                entry->jsonPayload = MeshPacketSerializer::JsonSerialize(jsonPacket);
+#endif // ARCH_NRF52 NRF52_USE_JSON
             if (mqttQueue.enqueue(entry, 0) == false) {
                 LOG_CRIT("Failed to add a message to mqttQueue!");
                 abort();
@@ -921,8 +924,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
     }
     if (shouldDualPublishPublicPosition)
         publishPacket(publicMqttPositionPacket, publicMqttPositionPacket);
-    const meshtastic_MeshPacket *jsonPacket =
-        publicMqttPositionPacket != nullptr ? (moduleConfig.mqtt.encryption_enabled ? publicMqttPositionPacket : nullptr) : &mp_decoded;
+    const meshtastic_MeshPacket *jsonPacket = publicMqttPositionPacket != nullptr
+                                                  ? (moduleConfig.mqtt.encryption_enabled ? publicMqttPositionPacket : nullptr)
+                                                  : &mp_decoded;
     publishPacket(p, jsonPacket);
 }
 
