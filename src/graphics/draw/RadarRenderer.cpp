@@ -1,7 +1,6 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "RadarRenderer.h"
-#include "MeshService.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
 #include "gps/GeoCoord.h"
@@ -173,15 +172,12 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const int sw = SCREEN_WIDTH;
     const int sh = SCREEN_HEIGHT;
 
-    // Reserve space at the bottom for the BT/API connection icon footer.
-    // drawCommonFooter() paints a black bar across the full width when the API
-    // is connected, which would otherwise clip the last list row and the
-    // bottom of the radar circle.  Matches the footer height computed in
-    // SharedUIDisplay::drawCommonFooter.
+    // Always reserve space for the BT/API connection icon at the bottom so
+    // the layout is identical whether or not a phone is connected.  The
+    // reservation is icon-height + 1 px, leaving exactly one pixel of
+    // breathing room between the content bottom and the icon top.
     const int footerScale = (currentResolution == ScreenResolution::High) ? 2 : 1;
-    const int footerH = isAPIConnected(service ? service->api_state : 0)
-                            ? (connection_icon_height * footerScale) + (2 * footerScale)
-                            : 0;
+    const int footerH = (connection_icon_height * footerScale) + 1;
 
     const int contentH = sh - headerH - footerH;
     const int pad = 2; // px padding around the radar circle
