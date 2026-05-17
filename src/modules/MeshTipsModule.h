@@ -26,6 +26,21 @@ class MeshTipsModule
     static bool configureRadioForPacket(RadioInterface *iface, meshtastic_MeshPacket *p);
 
     /**
+     * Remember per-packet target radio settings for locally generated tips packets.
+     */
+    static void setTargetRadioSettings(const meshtastic_MeshPacket *p, MeshTipsModule_TXSettings settings);
+
+    /**
+     * Check whether a packet has locally tracked target radio settings.
+     */
+    static bool hasTargetRadioSettings(const meshtastic_MeshPacket *p);
+
+    /**
+     * Forget locally tracked target radio settings for a packet.
+     */
+    static void clearTargetRadioSettings(const meshtastic_MeshPacket *p);
+
+    /**
      * Get target modem settings
      */
     MeshTipsModule_TXSettings stripTargetRadioSettings(meshtastic_MeshPacket *p);
