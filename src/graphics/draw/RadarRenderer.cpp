@@ -172,15 +172,17 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const int sw = SCREEN_WIDTH;
     const int sh = SCREEN_HEIGHT;
 
-    // Always reserve space for the BT/API connection icon at the bottom so
-    // the layout is identical whether or not a phone is connected.  The
-    // reservation is icon-height + 1 px, leaving exactly one pixel of
-    // breathing room between the content bottom and the icon top.
+    // Single layout — the radar circle always uses the full height below the
+    // header (matches the dense layout from before any footer reservation
+    // existed) so its size doesn't shift when the BT/API icon appears.  Only
+    // the list rows on the left reserve space, since they live in the same
+    // column as the icon and would otherwise be clipped at the bottom.
     const int footerScale = (currentResolution == ScreenResolution::High) ? 2 : 1;
-    const int footerH = (connection_icon_height * footerScale) + 1;
+    const int listFooterH = (connection_icon_height * footerScale) + 2 * footerScale;
 
-    const int contentH = sh - headerH - footerH;
-    const int pad = 2; // px padding around the radar circle
+    const int contentH = sh - headerH;            // full-height area for the radar
+    const int listContentH = contentH - listFooterH; // shorter area for list rows
+    const int pad = 2;                            // px padding around the radar circle
 
     // -----------------------------------------------------------------------
     // Radar circle — right side, 2 px padding on all sides.
@@ -331,7 +333,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
 
-    const int rowPitch = contentH / kMaxPlotted;
+    const int rowPitch = listContentH / kMaxPlotted;
 
     for (int i = 0; i < plottedCount; i++) {
         const Entry &e = entries[i];
