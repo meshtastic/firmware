@@ -212,6 +212,8 @@ static void waitEnterSleep(bool skipPreflight = false)
                 rp2040.reboot();
 #elif defined(ARCH_STM32WL)
                 HAL_NVIC_SystemReset();
+#elif defined(ARCH_PORTDUINO)
+                ::reboot();
 #else
                 assert(0); // fallback for archs without a clean restart primitive
 #endif
