@@ -7,7 +7,7 @@
     "extra_flags": [
       "-D CDEBYTE_EORA_S3",
       "-D ARDUINO_USB_CDC_ON_BOOT=1",
-      "-D ARDUINO_USB_MODE=0",
+      "-D ARDUINO_USB_MODE=1",
       "-D ARDUINO_RUNNING_CORE=1",
       "-D ARDUINO_EVENT_RUNNING_CORE=1",
       "-D BOARD_HAS_PSRAM"

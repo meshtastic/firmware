@@ -257,7 +257,7 @@ bool RF95Interface::reconfigure()
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
 /**
