@@ -464,7 +464,7 @@ Most recently received text message
 
 Collected here, so various user applets don't all have to store their own copy of this info.
 
-We are unable to use `devicestate.rx_text_message` for this purpose, because:
+We keep this separate latest-message cache for this purpose, because:
 
 - it is cleared by an outgoing text message
 - we want to store both a recent broadcast and a recent DM

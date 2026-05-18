@@ -121,8 +121,7 @@ class Persistence
 
     // Most recently received text message
     // Value is updated by InkHUD::WindowManager, as a courtesy to applets
-    // Note: different from devicestate.rx_text_message,
-    // which may contain an *outgoing message* to broadcast
+    // InkHUD keeps its own latest-message cache for applets.
     struct LatestMessage {
         MessageStore::Message broadcast; // Most recent message received broadcast
         MessageStore::Message dm;        // Most recent received DM

@@ -713,30 +713,12 @@ void test_sender_zero_substituted(void)
     TEST_ASSERT_TRUE(ph->wasSeenRecently(&p2, false));
 }
 
-void test_uninitialized_wasSeenRecently(void)
-{
-    // Simulate uninitialized state — create a PacketHistory that looks uninitialized
-    // We can't easily make allocation fail, but we can test the initOk guard with a destructed one
-    PacketHistory h(4);
-    TEST_ASSERT_TRUE(h.initOk()); // sanity check
-    h.~PacketHistory();
-
-    auto p = makePacket(0x1111, 100);
-    TEST_ASSERT_FALSE(h.wasSeenRecently(&p));
-
-    // Reconstruct in place to allow proper destruction
-    new (&h) PacketHistory(4);
-}
-
-void test_uninitialized_wasRelayer(void)
-{
-    PacketHistory h(4);
-    h.~PacketHistory();
-
-    TEST_ASSERT_FALSE(h.wasRelayer(0xAA, 100, 0x1111));
-
-    new (&h) PacketHistory(4);
-}
+// NOTE: Tests for the !initOk() short-circuit in wasSeenRecently / wasRelayer
+// were removed: the only way to drive that branch from a test is to destruct
+// the object and then call methods on it, which is UB and trips ASAN under
+// `pio test -e coverage`. In practice the guard can only fire if `new[]` throws
+// (in which case the constructor doesn't return), so the lost coverage is
+// purely defensive.
 
 void test_multiple_instances_independent(void)
 {
@@ -894,8 +876,6 @@ void setup()
     // Group 10 — Edge Cases
     RUN_TEST(test_packet_id_zero_not_stored);
     RUN_TEST(test_sender_zero_substituted);
-    RUN_TEST(test_uninitialized_wasSeenRecently);
-    RUN_TEST(test_uninitialized_wasRelayer);
     RUN_TEST(test_multiple_instances_independent);
 
     // Group 11 — Hash Table Stress
