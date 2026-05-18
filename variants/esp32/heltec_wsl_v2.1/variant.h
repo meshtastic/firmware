@@ -12,7 +12,7 @@
 #define ADC_CTRL 21
 #define ADC_CTRL_ENABLED LOW
 #define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_CHANNEL_1
+#define ADC_CHANNEL ADC_CHANNEL_1
 // ratio of voltage divider = 3.20 (R1=100k, R2=220k)
 #define ADC_MULTIPLIER 3.2
 
