@@ -985,6 +985,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.network.wifi_enabled = USERPREFS_NETWORK_WIFI_ENABLED;
 #endif
 
+#if USE_ETHERNET_DEFAULT
+    config.network.eth_enabled = true;
+#endif
+
 #ifdef USERPREFS_NETWORK_WIFI_SSID
     strncpy(config.network.wifi_ssid, USERPREFS_NETWORK_WIFI_SSID, sizeof(config.network.wifi_ssid));
 #endif
