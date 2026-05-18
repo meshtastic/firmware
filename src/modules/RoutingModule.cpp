@@ -17,13 +17,13 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
          config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
         if (!maybePKI)
             return false;
-        if ((nodeDB->getMeshNode(mp.from) == NULL || !nodeDB->getMeshNode(mp.from)->has_user) &&
-            (nodeDB->getMeshNode(mp.to) == NULL || !nodeDB->getMeshNode(mp.to)->has_user))
+        if (!nodeInfoLiteHasUser(nodeDB->getMeshNode(mp.from)) && !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp.to)))
             return false;
-    } else if (owner.is_licensed && nodeDB->getLicenseStatus(mp.from) == UserLicenseStatus::NotLicensed) {
-        // Don't let licensed users to rebroadcast packets from unlicensed users
+    } else if (owner.is_licensed && ((nodeDB->getLicenseStatus(mp.from) == UserLicenseStatus::NotLicensed) ||
+                                     (nodeDB->getLicenseStatus(mp.to) == UserLicenseStatus::NotLicensed))) {
+        // Don't let licensed users to rebroadcast packets to or from unlicensed users
         // If we know they are in-fact unlicensed
-        LOG_DEBUG("Packet from unlicensed user, ignoring packet");
+        LOG_DEBUG("Packet to or from unlicensed user, ignoring packet");
         return false;
     }
 
@@ -58,16 +58,17 @@ void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketI
     router->sendLocal(p); // we sometimes send directly to the local node
 }
 
-uint8_t RoutingModule::getHopLimitForResponse(uint8_t hopStart, uint8_t hopLimit)
+uint8_t RoutingModule::getHopLimitForResponse(const meshtastic_MeshPacket &mp)
 {
-    if (hopStart != 0) {
-        // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
-        uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
-        if (hopsUsed > config.lora.hop_limit) {
+    const int8_t hopsUsed = getHopsAway(mp);
+    if (hopsUsed >= 0) {
+        if (hopsUsed > (int32_t)(config.lora.hop_limit)) {
 // In event mode, we never want to send packets with more than our default 3 hops.
 #if !(EVENTMODE)             // This falls through to the default.
             return hopsUsed; // If the request used more hops than the limit, use the same amount of hops
 #endif
+        } else if (mp.hop_start == 0) {
+            return 0; // The requesting node wanted 0 hops, so the response also uses a direct/local path.
         } else if ((uint8_t)(hopsUsed + 2) < config.lora.hop_limit) {
             return hopsUsed + 2; // Use only the amount of hops needed with some margin as the way back may be different
         }

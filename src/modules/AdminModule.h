@@ -1,7 +1,9 @@
-#include <sys/types.h>
-
 #pragma once
+#ifdef ESP_PLATFORM
+#include <esp_ota_ops.h>
+#endif
 #include "ProtobufModule.h"
+#include <sys/types.h>
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -58,7 +60,11 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
      */
     void handleSetOwner(const meshtastic_User &o);
     void handleSetChannel(const meshtastic_Channel &cc);
-    void handleSetConfig(const meshtastic_Config &c);
+
+  protected:
+    void handleSetConfig(const meshtastic_Config &c, bool fromOthers);
+
+  private:
     bool handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
     void handleSetHamMode(const meshtastic_HamParameters &req);
@@ -71,7 +77,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
     bool messageIsResponse(const meshtastic_AdminMessage *r);
     bool messageIsRequest(const meshtastic_AdminMessage *r);
-    void sendWarning(const char *message);
+    void sendWarning(const char *format, ...) __attribute__((format(printf, 2, 3)));
+    void sendWarningAndLog(const char *format, ...) __attribute__((format(printf, 2, 3)));
 };
 
 static constexpr const char *licensedModeMessage =

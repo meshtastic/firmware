@@ -33,6 +33,7 @@ __pycache__
 *~
 
 venv/
+.venv/
 release/
 .vscode/extensions.json
 /compile_commands.json
@@ -41,3 +42,27 @@ src/mesh/raspihttp/private_key.pem
 
 # Ignore logo (set at build time with platformio-custom.py)
 data/boot/logo.*
+
+# pioarduino platform
+managed_components/*
+arduino-lib-builder*
+dependencies.lock
+
+# JLink / RTT debug artifacts (nRF SoCs)
+flash.jlink
+rtt_*.txt
+idf_component.yml
+CMakeLists.txt
+/sdkconfig.*
+.dummy/*
+
+# PYTHONPATH used by the Nix shell
+.python3
+.claude/scheduled_tasks.lock
+userPrefs.jsonc.mcp-session-bak
+
+# Fake-NodeDB fixture pipeline (bin/regen-fake-nodedbs.sh)
+# JSONL seeds are committed (test/fixtures/nodedb/seed_v25_*.jsonl);
+# compiled .proto outputs are ephemeral build artifacts.
+build/fixtures/
+bin/_generated/

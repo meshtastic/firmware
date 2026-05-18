@@ -1,5 +1,6 @@
 #include "TraceRouteModule.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -265,7 +266,7 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
     }
 }
 
-void TraceRouteModule::updateNextHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
+void TraceRouteModule::updateNextHops(const meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
     // E.g. if the route is A->B->C->D and we are B, we can set C as next-hop for C and D
     // Similarly, if we are C, we can set D as next-hop for D
@@ -359,10 +360,10 @@ void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_Ro
     }
 
     // Only insert unknown hops if hop_start is valid
-    if (p.hop_start != 0 && p.hop_limit <= p.hop_start) {
-        uint8_t hopsTaken = p.hop_start - p.hop_limit;
+    const int8_t hopsTaken = getHopsAway(p);
+    if (hopsTaken >= 0) {
         int8_t diff = hopsTaken - *route_count;
-        for (uint8_t i = 0; i < diff; i++) {
+        for (int8_t i = 0; i < diff; i++) {
             if (*route_count < ROUTE_SIZE) {
                 route[*route_count] = NODENUM_BROADCAST; // This will represent an unknown hop
                 *route_count += 1;
@@ -370,7 +371,7 @@ void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_Ro
         }
         // Add unknown SNR values if necessary
         diff = *route_count - *snr_count;
-        for (uint8_t i = 0; i < diff; i++) {
+        for (int8_t i = 0; i < diff; i++) {
             if (*snr_count < ROUTE_SIZE) {
                 snr_list[*snr_count] = INT8_MIN; // This will represent an unknown SNR
                 *snr_count += 1;
@@ -491,12 +492,12 @@ TraceRouteModule::TraceRouteModule()
 const char *TraceRouteModule::getNodeName(NodeNum node)
 {
     meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
-    if (info && info->has_user) {
-        if (strlen(info->user.short_name) > 0) {
-            return info->user.short_name;
+    if (nodeInfoLiteHasUser(info)) {
+        if (strlen(info->short_name) > 0) {
+            return info->short_name;
         }
-        if (strlen(info->user.long_name) > 0) {
-            return info->user.long_name;
+        if (strlen(info->long_name) > 0) {
+            return info->long_name;
         }
     }
 

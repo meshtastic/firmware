@@ -34,7 +34,7 @@ int InkHUD::AllMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *
     return 0;
 }
 
-void InkHUD::AllMessageApplet::onRender()
+void InkHUD::AllMessageApplet::onRender(bool full)
 {
     // Find newest message, regardless of whether DM or broadcast
     MessageStore::Message *message;
@@ -70,10 +70,10 @@ void InkHUD::AllMessageApplet::onRender()
     // - short name and long name, if available, or
     // - node id
     meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(message->sender);
-    if (sender && sender->has_user) {
+    if (nodeInfoLiteHasUser(sender)) {
         header += parseShortName(sender); // May be last-four of node if unprintable (emoji, etc)
         header += " (";
-        header += parse(sender->user.long_name);
+        header += parse(sender->long_name);
         header += ")";
     } else
         header += hexifyNodeNum(message->sender);

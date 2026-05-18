@@ -7,10 +7,6 @@ static File openFile(const char *filename, bool fullAtomic)
 {
     concurrency::LockGuard g(spiLock);
     LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
-#ifdef ARCH_NRF52
-    FSCom.remove(filename);
-    return FSCom.open(filename, FILE_O_WRITE);
-#endif
     if (!fullAtomic) {
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
     }
@@ -54,7 +50,7 @@ size_t SafeFile::write(const uint8_t *buffer, size_t size)
 }
 
 /**
- * Atomically close the file (deleting any old versions) and readback the contents to confirm the hash matches
+ * Atomically close the file (overwriting any old version) and readback the contents to confirm the hash matches
  *
  * @return false for failure
  */
@@ -67,21 +63,10 @@ bool SafeFile::close()
     f.close();
     spiLock->unlock();
 
-#ifdef ARCH_NRF52
-    return true;
-#endif
     if (!testReadback())
         return false;
 
-    { // Scope for lock
-        concurrency::LockGuard g(spiLock);
-        // brief window of risk here ;-)
-        if (fullAtomic && FSCom.exists(filename.c_str()) && !FSCom.remove(filename.c_str())) {
-            LOG_ERROR("Can't remove old pref file");
-            return false;
-        }
-    }
-
+    // Rename or overwrite (atomic operation)
     String filenameTmp = filename;
     filenameTmp += ".tmp";
     if (!renameFile(filenameTmp.c_str(), filename.c_str())) {

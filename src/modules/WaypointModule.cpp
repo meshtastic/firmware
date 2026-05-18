@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/CompassRenderer.h"
 
 #if HAS_SCREEN
@@ -52,31 +53,15 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 bool WaypointModule::shouldDraw()
 {
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
-    if (screen == nullptr)
-        return false;
-    // If no waypoint to show
-    if (!devicestate.has_rx_waypoint)
+    if (!screen || !devicestate.has_rx_waypoint)
         return false;
 
-    // Decode the message, to find the expiration time (is waypoint still valid)
-    // This handles "deletion" as well as expiration
-    meshtastic_Waypoint wp;
-    memset(&wp, 0, sizeof(wp));
+    meshtastic_Waypoint wp{}; // <- replaces memset
     if (pb_decode_from_bytes(devicestate.rx_waypoint.decoded.payload.bytes, devicestate.rx_waypoint.decoded.payload.size,
                              &meshtastic_Waypoint_msg, &wp)) {
-        // Valid waypoint
-        if (wp.expire > getTime())
-            return devicestate.has_rx_waypoint = true;
-
-        // Expired, or deleted
-        else
-            return devicestate.has_rx_waypoint = false;
+        return wp.expire > getTime();
     }
-
-    // If decoding failed
-    LOG_ERROR("Failed to decode waypoint");
-    devicestate.has_rx_waypoint = false;
-    return false;
+    return false; // no LOG_ERROR, no flag writes
 #else
     return false;
 #endif
@@ -85,118 +70,147 @@ bool WaypointModule::shouldDraw()
 /// Draw the last waypoint we received
 void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    if (screen == nullptr)
+    if (!screen)
         return;
-    // Prepare to draw
-    display->setFont(FONT_SMALL);
+    display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    int line = 1;
 
-    // Handle inverted display
-    // Unsure of expected behavior: for now, copy drawNodeInfo
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+    // === Set Title
+    const char *titleStr = "Waypoint";
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
+    const int *textPos = graphics::getTextPositions(display);
 
     // Decode the waypoint
     const meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
-    meshtastic_Waypoint wp;
-    memset(&wp, 0, sizeof(wp));
+    meshtastic_Waypoint wp{};
     if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &wp)) {
-        // This *should* be caught by shouldDrawWaypoint, but we'll short-circuit here just in case
-        display->drawStringMaxWidth(0 + x, 0 + y, x + display->getWidth(), "Couldn't decode waypoint");
         devicestate.has_rx_waypoint = false;
         return;
     }
 
     // Get timestamp info. Will pass as a field to drawColumns
-    static char lastStr[20];
+    char lastStr[20];
     getTimeAgoStr(sinceReceived(&mp), lastStr, sizeof(lastStr));
 
     // Will contain distance information, passed as a field to drawColumns
-    static char distStr[20];
+    char distStr[20] = "";
 
     // Get our node, to use our own position
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
-    // Text fields to draw (left of compass)
-    // Last element must be NULL. This signals the end of the char*[] to drawColumns
-    const char *fields[] = {"Waypoint", lastStr, wp.name, distStr, NULL};
+    // Match compass sizing/placement to favorite node screen logic.
+    const int w = display->getWidth();
+    int16_t compassRadius = 8;
+    int16_t compassX = x + w - compassRadius - 8;
+    int16_t compassY = y + display->getHeight() / 2;
 
-    // Dimensions / co-ordinates for the compass/circle
-    int16_t compassX = 0, compassY = 0;
-    uint16_t compassDiam = graphics::CompassRenderer::getCompassDiam(display->getWidth(), display->getHeight());
-
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        compassX = x + display->getWidth() - compassDiam / 2 - 5;
-        compassY = y + display->getHeight() / 2;
+    if (SCREEN_WIDTH > SCREEN_HEIGHT) {
+        const int16_t topY = textPos[1];
+        const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
+        const int16_t usableHeight = bottomY - topY - 5;
+        compassRadius = usableHeight / 2;
+        if (compassRadius < 8)
+            compassRadius = 8;
+        compassX = x + SCREEN_WIDTH - compassRadius - 8;
+        compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
     } else {
-        compassX = x + display->getWidth() - compassDiam / 2 - 5;
-        compassY = y + FONT_HEIGHT_SMALL + (display->getHeight() - FONT_HEIGHT_SMALL) / 2;
-    }
-
-    // If our node has a position:
-    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
-        const meshtastic_PositionLite &op = ourNode->position;
-        float myHeading;
-        if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
-            myHeading = 0;
-        } else {
-            if (screen->hasHeading())
-                myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
-            else
-                myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+        // Waypoint content uses rows 1..4, so place the compass below that block.
+        const int yBelowContent = textPos[4] + FONT_HEIGHT_SMALL + 2;
+        const int margin = 4;
+#if defined(USE_EINK)
+        const int iconSize = (graphics::currentResolution == graphics::ScreenResolution::High) ? 16 : 8;
+        const int navBarHeight = iconSize + 6;
+#else
+        const int navBarHeight = 0;
+#endif
+        const int availableHeight = SCREEN_HEIGHT - yBelowContent - navBarHeight - margin;
+        if (availableHeight > 0) {
+            compassRadius = availableHeight / 2;
+            if (compassRadius < 8)
+                compassRadius = 8;
+            if (compassRadius * 2 > SCREEN_WIDTH - 16)
+                compassRadius = (SCREEN_WIDTH - 16) / 2;
+            if (compassRadius < 8)
+                compassRadius = 8;
+            compassX = x + SCREEN_WIDTH / 2;
+            compassY = yBelowContent + availableHeight / 2;
         }
-        graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, (compassDiam / 2));
+    }
+    const uint16_t compassDiam = compassRadius * 2;
 
-        // Compass bearing to waypoint
-        float bearingToOther =
-            GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
-        // If the top of the compass is a static north then bearingToOther can be drawn on the compass directly
-        // If the top of the compass is not a static north we need adjust bearingToOther based on heading
-        if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
-            bearingToOther -= myHeading;
-        graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
+    const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
+    const char *statusLine1 = nullptr;
+    const char *statusLine2 = nullptr;
 
-        float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2 * PI : bearingToOther;
-        bearingToOtherDegrees = bearingToOtherDegrees * 180 / PI;
+    // Distance only needs our own position fix; compass/bearing additionally needs heading.
+    meshtastic_PositionLite ownPos;
+    const bool haveOwnPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ownPos);
+    if (hasOwnPositionFix && haveOwnPos) {
+        const meshtastic_PositionLite &op = ownPos;
+        const float d =
+            GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
 
-        // Distance to Waypoint
-        float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+        // Always show distance once we have an own-position fix, even without heading.
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            if (d < (2 * MILES_TO_FEET))
-                snprintf(distStr, sizeof(distStr), "%.0fft   %.0f°", d * METERS_TO_FEET, bearingToOtherDegrees);
-            else
-                snprintf(distStr, sizeof(distStr), "%.1fmi   %.0f°", d * METERS_TO_FEET / MILES_TO_FEET, bearingToOtherDegrees);
+            float feet = d * METERS_TO_FEET;
+            snprintf(distStr, sizeof(distStr), feet < (2 * MILES_TO_FEET) ? "%.0fft" : "%.1fmi",
+                     feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET);
         } else {
-            if (d < 2000)
-                snprintf(distStr, sizeof(distStr), "%.0fm   %.0f°", d, bearingToOtherDegrees);
-            else
-                snprintf(distStr, sizeof(distStr), "%.1fkm   %.0f°", d / 1000, bearingToOtherDegrees);
+            snprintf(distStr, sizeof(distStr), d < 2000 ? "%.0fm" : "%.1fkm", d < 2000 ? d : d / 1000);
         }
 
+        float myHeading = 0.0f;
+        const bool hasHeading =
+            graphics::CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
+        if (hasHeading) {
+            // Draw compass circle
+            display->drawCircle(compassX, compassY, compassRadius);
+            graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+
+            // Compass bearing to waypoint
+            float bearingToOther =
+                GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
+            bearingToOther = graphics::CompassRenderer::adjustBearingForCompassMode(bearingToOther, myHeading);
+            graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
+
+            const float bearingToOtherDegrees = graphics::CompassRenderer::radiansToDegrees360(bearingToOther);
+
+            // Distance to waypoint with relative bearing when heading is available.
+            if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+                float feet = d * METERS_TO_FEET;
+                snprintf(distStr, sizeof(distStr), feet < (2 * MILES_TO_FEET) ? "%.0fft   %.0f°" : "%.1fmi   %.0f°",
+                         feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET, bearingToOtherDegrees);
+            } else {
+                snprintf(distStr, sizeof(distStr), d < 2000 ? "%.0fm   %.0f°" : "%.1fkm   %.0f°", d < 2000 ? d : d / 1000,
+                         bearingToOtherDegrees);
+            }
+
+        } else {
+            statusLine1 = "No";
+            statusLine2 = "Heading";
+        }
+    } else {
+        // No own fix yet, so compass/bearing data would be misleading.
+        statusLine1 = "No";
+        statusLine2 = "Fix";
     }
 
-    // If our node doesn't have position
-    else {
-        // ? in the compass
-        display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
-
-        // ? in the distance field
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
-            strncpy(distStr, "? mi ?°", sizeof(distStr));
-        else
-            strncpy(distStr, "? km ?°", sizeof(distStr));
+    if (statusLine1) {
+        display->drawCircle(compassX, compassY, compassRadius);
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
+        display->drawString(compassX, compassY, statusLine2);
     }
 
-    // Draw compass circle
-    display->drawCircle(compassX, compassY, compassDiam / 2);
-
-    // Undo color-inversion, if set prior to drawing header
-    // Unsure of expected behavior? For now: copy drawNodeInfo
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->setColor(BLACK);
-    }
-
-    // Must be after distStr is populated
-    graphics::NodeListRenderer::drawColumns(display, x, y, fields);
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Something above me changes to a different alignment, forcing a fix here!
+    display->drawString(0, textPos[line++], lastStr);
+    display->drawString(0, textPos[line++], wp.name);
+    display->drawString(0, textPos[line++], wp.description);
+    if (distStr[0])
+        display->drawString(0, textPos[line++], distStr);
 }
 #endif

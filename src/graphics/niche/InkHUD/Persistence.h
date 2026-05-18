@@ -29,7 +29,7 @@ class Persistence
 
     // Used to invalidate old settings, if needed
     // Version 0 is reserved for testing, and will always load defaults
-    static constexpr uint32_t SETTINGS_VERSION = 2;
+    static constexpr uint32_t SETTINGS_VERSION = 3;
 
     struct Settings {
         struct Meta {
@@ -96,6 +96,19 @@ class Persistence
             bool safeShutdownSeen = false;
         } tips;
 
+        // Joystick settings for enabling and aligning to the screen
+        struct Joystick {
+            // Modifies the UI for joystick use
+            bool enabled = false;
+
+            // gets set to true when AlignStick applet is completed
+            bool aligned = false;
+
+            // Rotation of the joystick
+            // Multiples of 90 degrees clockwise
+            uint8_t alignment = 0;
+        } joystick;
+
         // Rotation of the display
         // Multiples of 90 degrees clockwise
         // Most commonly: rotation is 0 when flex connector is oriented below display
@@ -108,8 +121,7 @@ class Persistence
 
     // Most recently received text message
     // Value is updated by InkHUD::WindowManager, as a courtesy to applets
-    // Note: different from devicestate.rx_text_message,
-    // which may contain an *outgoing message* to broadcast
+    // InkHUD keeps its own latest-message cache for applets.
     struct LatestMessage {
         MessageStore::Message broadcast; // Most recent message received broadcast
         MessageStore::Message dm;        // Most recent received DM

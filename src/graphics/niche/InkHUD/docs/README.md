@@ -174,7 +174,7 @@ class BasicExampleApplet : public Applet
     // You must have an onRender() method
     // All drawing happens here
 
-    void onRender() override;
+    void onRender(bool full) override;
 };
 ```
 
@@ -183,7 +183,7 @@ The `onRender` method is called when the display image is redrawn. This can happ
 ```cpp
 // All drawing happens here
 // Our basic example doesn't do anything useful. It just passively prints some text.
-void InkHUD::BasicExampleApplet::onRender()
+void InkHUD::BasicExampleApplet::onRender(bool full)
 {
     printAt(0, 0, "Hello, world!");
 }
@@ -273,7 +273,7 @@ _(Example shows only config required by InkHUD. This is not a complete `env` def
 extends = esp32s3_base, inkhud ; or nrf52840_base, etc
 
 build_src_filter =
-${esp32_base.build_src_filter}
+${esp32s3_base.build_src_filter}
 ${inkhud.build_src_filter}
 
 build_flags =
@@ -464,7 +464,7 @@ Most recently received text message
 
 Collected here, so various user applets don't all have to store their own copy of this info.
 
-We are unable to use `devicestate.rx_text_message` for this purpose, because:
+We keep this separate latest-message cache for this purpose, because:
 
 - it is cleared by an outgoing text message
 - we want to store both a recent broadcast and a recent DM
@@ -733,7 +733,7 @@ To add support for additional encodings, add to the `AppletFont::Encodings` enum
 
 #### Custom Line Height
 
-Some fonts may have a handful of especially tall characters, especially extended-ASCII fonts with diacritcs. Ideally, the font should be modified to help resolve this, but if the problem remains, manual offsets to the automatically determined line height can be specified in the constructor.
+Some fonts may have a handful of especially tall characters, especially extended-ASCII fonts with diacritics. Ideally, the font should be modified to help resolve this, but if the problem remains, manual offsets to the automatically determined line height can be specified in the constructor.
 
 ```cpp
 // -2 px of padding above, +1 px of padding below
@@ -756,12 +756,12 @@ This mapping of emoji to control characters is fairly arbitrary. Selection was i
 | `0x03`     | 🙂                                             |
 | `0x04`     | 😆                                             |
 | `0x05`     | 👋                                             |
-| `0x06`     | ☀                                             |
+| `0x06`     | ☀                                              |
 | ~~`0x07`~~ | (bell char, unused)                            |
 | `0x08`     | 🌧                                             |
-| `0x09`     | ☁                                             |
+| `0x09`     | ☁                                              |
 | ~~`0x0A`~~ | (line feed, unused)                            |
-| `0x0B`     | ♥                                             |
+| `0x0B`     | ♥                                              |
 | `0x0C`     | 💩                                             |
 | ~~`0x0D`~~ | (carriage return, unused)                      |
 | `0x0E`     | 🔔                                             |

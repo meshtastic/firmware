@@ -1,4 +1,4 @@
-#define LED_PIN 18
+#define LED_POWER 18
 
 #define _VARIANT_HELTEC_WIRELESS_TRACKER
 #define HELTEC_TRACKER_V1_X
@@ -39,7 +39,7 @@
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_0
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.045
 #define ADC_CTRL 2     // active HIGH, powers the voltage divider. Only on 1.1

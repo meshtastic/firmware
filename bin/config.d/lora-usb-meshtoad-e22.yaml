@@ -1,3 +1,9 @@
+Meta:
+  name: meshtoad-e22
+  support: official
+  compatible:
+    - usb
+
 Lora:
   Module: sx1262
   CS: 0

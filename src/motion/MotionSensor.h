@@ -2,7 +2,7 @@
 #ifndef _MOTION_SENSOR_H_
 #define _MOTION_SENSOR_H_
 
-#define MOTION_SENSOR_CHECK_INTERVAL_MS 100
+#define MOTION_SENSOR_CHECK_INTERVAL_MS 50
 #define MOTION_SENSOR_CLICK_THRESHOLD 40
 
 #include "../configuration.h"
@@ -54,38 +54,26 @@ class MotionSensor
     static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #endif
 
+    bool saveMagnetometerCalibration(const char *filePath, float highestX, float lowestX, float highestY, float lowestY,
+                                     float highestZ, float lowestZ);
+    bool loadMagnetometerCalibration(const char *filePath, float &highestX, float &lowestX, float &highestY, float &lowestY,
+                                     float &highestZ, float &lowestZ);
+    void beginCalibrationDisplay(bool &showingScreen);
+    void finishCalibrationIfExpired(bool &showingScreen, const char *filePath, float highestX, float lowestX, float highestY,
+                                    float lowestY, float highestZ, float lowestZ);
+    void startCalibrationWindow(uint16_t forSeconds);
+    static void seedCalibrationExtrema(float x, float y, float z, float &highestX, float &lowestX, float &highestY,
+                                       float &lowestY, float &highestZ, float &lowestZ);
+    static void updateCalibrationExtrema(float x, float y, float z, float &highestX, float &lowestX, float &highestY,
+                                         float &lowestY, float &highestZ, float &lowestZ);
+    static float applyCompassOrientation(float heading);
+
     ScanI2C::FoundDevice device;
 
     // Do calibration if true
     bool doCalibration = false;
     uint32_t endCalibrationAt = 0;
 };
-
-namespace MotionSensorI2C
-{
-
-static inline int readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
-{
-    Wire.beginTransmission(address);
-    Wire.write(reg);
-    Wire.endTransmission();
-    Wire.requestFrom((uint8_t)address, (uint8_t)len);
-    uint8_t i = 0;
-    while (Wire.available()) {
-        data[i++] = Wire.read();
-    }
-    return 0; // Pass
-}
-
-static inline int writeRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
-{
-    Wire.beginTransmission(address);
-    Wire.write(reg);
-    Wire.write(data, len);
-    return (0 != Wire.endTransmission());
-}
-
-} // namespace MotionSensorI2C
 
 #endif
 

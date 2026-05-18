@@ -7,10 +7,12 @@
 #include "../concurrency/Periodic.h"
 #include "BluetoothCommon.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "TypeConversions.h"
+#include "graphics/draw/MessageRenderer.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
@@ -85,19 +87,19 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
     nodeDB->updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
-    bool isPreferredRebroadcaster = config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER;
+    bool isPreferredRebroadcaster =
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                  meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
         LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo");
         //  ignore our request for its NodeInfo
-    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
-               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
+    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+               !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp->from)) && nodeInfoModule && !isPreferredRebroadcaster &&
+               !nodeDB->isFull()) {
         if (airTime->isTxAllowedChannelUtil(true)) {
-            // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
-            auto hopStart = mp->hop_start;
-            auto hopLimit = mp->hop_limit;
-            uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
-            if (hopsUsed > config.lora.hop_limit + 2) {
+            const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
+            if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
                 LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
             } else {
                 LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
@@ -192,8 +194,14 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
 
     p.rx_time = getValidTime(RTCQualityFromNet); // Record the time the packet arrived from the phone
-                                                 // (so we update our nodedb for the local node)
 
+    IF_SCREEN(if (p.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && p.decoded.payload.size > 0 &&
+                  p.to != NODENUM_BROADCAST && p.to != 0) // DM only
+              {
+                  perhapsDecode(&p);
+                  const StoredMessage &sm = messageStore.addFromPacket(p);
+                  graphics::MessageRenderer::handleNewMessage(nullptr, sm, p); // notify UI
+              })
     // Send the packet into the mesh
     DEBUG_HEAP_BEFORE;
     auto a = packetPool.allocCopy(p);
@@ -276,6 +284,10 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
     if (nodeDB->hasValidPosition(node)) {
 #if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
         if (positionModule) {
+            if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot()) {
+                LOG_DEBUG("Skip position ping; no fresh position since boot");
+                return false;
+            }
             LOG_INFO("Send position ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
             positionModule->sendOurPosition(dest, wantReplies, node->channel);
             return true;
@@ -322,7 +334,9 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
     if (toPhoneQueue.enqueue(p, 0) == false) {
         LOG_CRIT("Failed to queue a packet into toPhoneQueue!");
-        abort();
+        releaseToPool(p);
+        fromNum++; // notify observers so phone can resync
+        return;
     }
     fromNum++;
 }
@@ -339,7 +353,8 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
 
     if (toPhoneMqttProxyQueue.enqueue(m, 0) == false) {
         LOG_CRIT("Failed to queue a packet into toPhoneMqttProxyQueue!");
-        abort();
+        releaseMqttClientProxyMessageToPool(m);
+        return;
     }
     fromNum++;
 }
@@ -371,7 +386,8 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 
     if (toPhoneClientNotificationQueue.enqueue(n, 0) == false) {
         LOG_CRIT("Failed to queue a notification into toPhoneClientNotificationQueue!");
-        abort();
+        releaseClientNotificationToPool(n);
+        return;
     }
     fromNum++;
 }
@@ -381,19 +397,16 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     assert(node);
 
-    // We might not have a position yet for our local node, in that case, at least try to send the time
-    if (!node->has_position) {
-        memset(&node->position, 0, sizeof(node->position));
-        node->has_position = true;
-    }
-
-    meshtastic_PositionLite &position = node->position;
-
     // Update our local node info with our time (even if we don't decide to update anyone else)
     node->last_heard =
         getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
 
-    position.time = getValidTime(RTCQualityFromNet);
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    // Make sure our own NodeNum has a slot in the position map so subsequent
+    // updates (and the bundled NodeInfo emission to the phone) have somewhere
+    // to read from. Insert a default-zero entry on first call.
+    nodeDB->touchNodePositionTime(node->num, getValidTime(RTCQualityFromNet));
+#endif
 
     if (powerStatus->getHasBattery() == 1) {
         updateBatteryLevel(powerStatus->getBatteryChargePercent());
@@ -421,7 +434,9 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {
         LOG_WARN("Use fixed position");
-        pos = TypeConversions::ConvertToPosition(node->position);
+        meshtastic_PositionLite fixedSlot;
+        if (nodeDB->copyNodePosition(node->num, fixedSlot))
+            pos = TypeConversions::ConvertToPosition(fixedSlot);
     }
 
     // Add a fresh timestamp

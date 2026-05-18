@@ -10,6 +10,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "UnitConversions.h"
 #include "main.h"
 #include "power.h"
@@ -32,6 +33,8 @@ MLX90614Sensor mlx90614Sensor;
 #include "graphics/ScreenFonts.h"
 #endif
 #include <Throttle.h>
+
+static constexpr uint16_t TX_HISTORY_KEY_HEALTH_TELEMETRY = 0x8003;
 
 int32_t HealthTelemetryModule::runOnce()
 {
@@ -69,14 +72,16 @@ int32_t HealthTelemetryModule::runOnce()
             return disable();
         }
 
-        if (((lastSentToMesh == 0) ||
-             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                               moduleConfig.telemetry.health_update_interval,
-                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+        uint32_t lastTelemetry = transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_HEALTH_TELEMETRY) : 0;
+        if (((lastTelemetry == 0) ||
+             !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
+                                                              moduleConfig.telemetry.health_update_interval,
+                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = millis();
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_HEALTH_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
@@ -136,12 +141,12 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     display->drawString(x, y += _fontHeight(FONT_SMALL), tempStr);
     if (lastMeasurement.variant.health_metrics.has_heart_bpm) {
         char heartStr[32];
-        snprintf(heartStr, sizeof(heartStr), "Heart Rate: %.0f bpm", lastMeasurement.variant.health_metrics.heart_bpm);
+        snprintf(heartStr, sizeof(heartStr), "Heart Rate: %u bpm", lastMeasurement.variant.health_metrics.heart_bpm);
         display->drawString(x, y += _fontHeight(FONT_SMALL), heartStr);
     }
     if (lastMeasurement.variant.health_metrics.has_spO2) {
         char spo2Str[32];
-        snprintf(spo2Str, sizeof(spo2Str), "spO2: %.0f %%", lastMeasurement.variant.health_metrics.spO2);
+        snprintf(spo2Str, sizeof(spo2Str), "spO2: %u %%", lastMeasurement.variant.health_metrics.spO2);
         display->drawString(x, y += _fontHeight(FONT_SMALL), spo2Str);
     }
 }
@@ -168,18 +173,21 @@ bool HealthTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 
 bool HealthTelemetryModule::getHealthTelemetry(meshtastic_Telemetry *m)
 {
-    bool valid = true;
+    bool valid = false;
     bool hasSensor = false;
+    bool get_metrics;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_health_metrics_tag;
     m->variant.health_metrics = meshtastic_HealthMetrics_init_zero;
 
     if (max30102Sensor.hasSensor()) {
-        valid = valid && max30102Sensor.getMetrics(m);
+        get_metrics = max30102Sensor.getMetrics(m);
+        valid = valid || get_metrics; // avoid short-circuit evaluation rules
         hasSensor = true;
     }
     if (mlx90614Sensor.hasSensor()) {
-        valid = valid && mlx90614Sensor.getMetrics(m);
+        get_metrics = mlx90614Sensor.getMetrics(m);
+        valid = valid || get_metrics;
         hasSensor = true;
     }
 
@@ -189,6 +197,10 @@ bool HealthTelemetryModule::getHealthTelemetry(meshtastic_Telemetry *m)
 meshtastic_MeshPacket *HealthTelemetryModule::allocReply()
 {
     if (currentRequest) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
         auto req = *currentRequest;
         const auto &p = req.decoded;
         meshtastic_Telemetry scratch;
