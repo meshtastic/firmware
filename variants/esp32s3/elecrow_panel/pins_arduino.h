@@ -15,9 +15,9 @@ static const uint8_t MOSI = 48;
 static const uint8_t MISO = 47;
 static const uint8_t SCK = 41;
 
-static const uint8_t SPI_MOSI = 6;
-static const uint8_t SPI_SCK = 5;
-static const uint8_t SPI_MISO = 4;
+// static const uint8_t SPI_MOSI = 6;
+// static const uint8_t SPI_SCK = 5;
+// static const uint8_t SPI_MISO = 4;
 
 static const uint8_t A0 = 1;
 static const uint8_t A1 = 2;
