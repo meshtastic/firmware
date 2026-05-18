@@ -34,3 +34,5 @@
 #define ETH_INT_PIN 10
 #define ETH_RST_PIN 9
 // #define ETH_ADDR 1
+
+#define USE_ETHERNET_DEFAULT 1

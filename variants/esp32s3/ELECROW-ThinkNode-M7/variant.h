@@ -41,3 +41,5 @@
 #define ETH_CS_PIN 21
 #define ETH_INT_PIN 45
 // #define ETH_ADDR 1
+
+#define USE_ETHERNET_DEFAULT 1

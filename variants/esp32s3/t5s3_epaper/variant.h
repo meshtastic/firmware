@@ -1,3 +1,4 @@
+#include "pins_arduino.h"
 
 // Display (E-Ink) ED047TC1 - 8bit parallel
 #define EPD_WIDTH 960

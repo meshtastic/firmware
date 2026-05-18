@@ -4,7 +4,7 @@
 // Battery
 #define BATTERY_PIN 3
 #define ADC_MULTIPLIER 2.0
-#define ADC_CHANNEL ADC1_GPIO3_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_2
 
 // Button on NanoVHF PCB
 #define BUTTON_PIN 39

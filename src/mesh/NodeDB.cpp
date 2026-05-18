@@ -987,6 +987,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #ifdef USERPREFS_NETWORK_ETH_ENABLED
     config.network.eth_enabled = USERPREFS_NETWORK_ETH_ENABLED;
+#elif USE_ETHERNET_DEFAULT
+    config.network.eth_enabled = true;
 #endif
 
 #ifdef USERPREFS_NETWORK_WIFI_SSID

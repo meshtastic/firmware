@@ -561,5 +561,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN 0
 #endif
 
+#ifndef USE_ETHERNET_DEFAULT
+#define USE_ETHERNET_DEFAULT 0
+#endif
+
 #include "DebugConfiguration.h"
 #include "RF95Configuration.h"

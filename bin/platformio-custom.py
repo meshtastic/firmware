@@ -293,9 +293,12 @@ if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
 board_arch = infer_architecture(env.BoardConfig())
 should_skip_manifest = board_arch is None
 
-# For host/native envs, avoid depending on 'buildprog' (some targets don't define it)
-mtjson_deps = [] if should_skip_manifest else ["buildprog"]
-if not should_skip_manifest and platform.name == "espressif32":
+# Most platforms can generate the manifest as part of the default 'buildprog' target.
+# Typically this passes success/failure properly.
+mtjson_deps = ["buildprog"]
+if platform.name == "espressif32":
+    # On ESP32, we need to explicitly depend upon the binary to prevent fake-success upon failure.
+    mtjson_deps = ["$BUILD_DIR/${PROGNAME}.bin"]
     # Build littlefs image as part of mtjson target
     # Equivalent to `pio run -t buildfs`
     target_lfs = env.DataToBin(
@@ -309,7 +312,8 @@ if should_skip_manifest:
 
     env.AddCustomTarget(
         name="mtjson",
-        dependencies=mtjson_deps,
+        # For host/native envs, avoid depending on 'buildprog' (some targets don't define it)
+        dependencies=[],
         actions=[skip_manifest],
         title="Meshtastic Manifest (skipped)",
         description="mtjson generation is skipped for native environments",
