@@ -59,10 +59,14 @@ class StatusLEDModule : private concurrency::OSThread
     enum BLEState { unpaired, pairing, connected };
 
     BLEState ble_state = unpaired;
+
+    void handleLedBlinking();
+    void showDeviceStatusRGB();
+    void showDeviceStatus();
 };
 
 extern StatusLEDModule *statusLEDModule;
-#ifdef RGB_LED_POWER
+#if defined(RGB_LED_POWER) || defined(HAS_LP5562) || defined(HAS_NCP5623)
 #include "AmbientLightingThread.h"
 extern AmbientLightingThread *ambientLightingThread;
 #endif
