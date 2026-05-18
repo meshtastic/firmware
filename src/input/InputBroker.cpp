@@ -2,6 +2,7 @@
 #include "PowerFSM.h" // needed for event trigger
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "input/HapticFeedback.h"
 #include "modules/ExternalNotificationModule.h"
 
 #if ARCH_PORTDUINO
@@ -237,6 +238,18 @@ void InputBroker::Init()
         }
         touchBacklightActive = false;
     };
+#endif
+#if defined(HAPTIC_FEEDBACK_PIN)
+    // Haptic feedback: short pulse on touch contact, and a second short
+    // pulse when the long-press fires (BACK). The delayed pulse delay
+    // matches touchConfig.longPressTime's default (500 ms).
+    touchConfig.suppressLeadUpSound = true;
+    initHapticFeedback();
+    touchConfig.onPress = []() {
+        hapticFeedback->pulse(30);
+        hapticFeedback->armDelayedPulse(500, 30);
+    };
+    touchConfig.onRelease = []() { hapticFeedback->cancelDelayedPulse(); };
 #endif
     TouchButtonThread->initButton(touchConfig);
 #endif
