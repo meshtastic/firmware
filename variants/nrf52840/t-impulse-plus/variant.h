@@ -158,6 +158,12 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define HAS_ICM20948
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Charger (SGM41562 on Wire1 @ 0x03)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#define HAS_SGM41562
+#define SGM41562_WIRE Wire1
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Compatibility Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #ifdef __cplusplus
