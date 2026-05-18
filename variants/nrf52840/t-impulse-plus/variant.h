@@ -147,9 +147,10 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define EXTERNAL_FLASH_USE_QSPI
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  Vibration Motor (active-low, used as notification output)
+//  Vibration Motor (GPIO active-high)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define LED_NOTIFICATION D19 // P0.22
+#define HAPTIC_FEEDBACK_PIN LED_NOTIFICATION
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  IMU (ICM20948 on Wire1)
