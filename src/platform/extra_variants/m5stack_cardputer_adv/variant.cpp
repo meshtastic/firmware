@@ -17,35 +17,41 @@ AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
 static TwoWire *findLoraCapBus()
 {
     TwoWire *candidates[] = {&Wire1, &Wire};
-    const char *names[] = {"Wire1", "Wire"};
     for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
         candidates[i]->beginTransmission(PI4IO_ADDR);
         if (candidates[i]->endTransmission() == 0) {
             return candidates[i];
         }
     }
-    LOG_INFO("Cap LoRa-1262 not found");
     return nullptr;
 }
 
-static void pi4ioWrite(TwoWire *bus, uint8_t reg, uint8_t val)
+static bool pi4ioWrite(TwoWire *bus, uint8_t reg, uint8_t val)
 {
     bus->beginTransmission(PI4IO_ADDR);
     bus->write(reg);
     bus->write(val);
-    bus->endTransmission();
+    uint8_t status = bus->endTransmission();
+    if (status != 0) {
+        LOG_DEBUG("PI4IO write reg=0x%02x val=0x%02x failed, I2C status=%u", reg, val, status);
+        return false;
+    }
+    return true;
 }
 
 static void initLoraCap()
 {
     TwoWire *bus = findLoraCapBus();
     if (!bus) {
-        LOG_INFO("Cap LoRa-1262 PI4IO not detected; RF antenna switch left at reset state");
+        LOG_ERROR("Cap LoRa-1262 not found");
         return;
     }
-    pi4ioWrite(bus, PI4IO_REG_IO_DIR, 0b00000001);
-    pi4ioWrite(bus, PI4IO_REG_OUT_H_IM, 0b00000001);
-    pi4ioWrite(bus, PI4IO_REG_OUT_SET, 0b00000001);
+    bool ok = pi4ioWrite(bus, PI4IO_REG_IO_DIR, 0b00000001);
+    ok &= pi4ioWrite(bus, PI4IO_REG_OUT_H_IM, 0b00000001);
+    ok &= pi4ioWrite(bus, PI4IO_REG_OUT_SET, 0b00000001);
+    if (!ok) {
+        LOG_ERROR("Antenna switch init failed");
+    }
 }
 
 // M5stack Cardputer ADV specific init
