@@ -88,7 +88,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define HAS_SCREEN 1
 #define USE_SSD1306 1
-#define DISPLAY_FORCE_SMALL_FONTS
+#define OLED_TINY
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  SPI Configuration (SX1262 LoRa)
