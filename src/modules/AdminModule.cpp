@@ -262,7 +262,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_ota_request_tag: {
-#if defined(ARCH_ESP32)
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
         LOG_INFO("OTA Requested");
 
         if (r->ota_request.ota_hash.size != 32) {
@@ -666,7 +666,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     bool requiresReboot = true;
 
     switch (c.which_payload_variant) {
-    case meshtastic_Config_device_tag:
+    case meshtastic_Config_device_tag: {
         LOG_INFO("Set config: Device");
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
@@ -720,6 +720,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
         break;
+    } // case meshtastic_Config_device_tag
     case meshtastic_Config_position_tag:
         LOG_INFO("Set config: Position");
         config.has_position = true;
@@ -1318,7 +1319,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     }
 #endif
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
     conn.has_ethernet = true;
     conn.ethernet.has_status = true;
     if (Ethernet.linkStatus() == LinkON) {
@@ -1344,6 +1345,10 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #elif defined(ARCH_NRF52)
     if (config.bluetooth.enabled && nrf52Bluetooth) {
         conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+    }
+#elif defined(ARCH_NRF54L15)
+    if (config.bluetooth.enabled && nrf54l15Bluetooth) {
+        conn.bluetooth.is_connected = nrf54l15Bluetooth->isConnected();
     }
 #endif
 #endif
@@ -1605,6 +1610,9 @@ void disableBluetooth()
 #elif defined(ARCH_NRF52)
     if (nrf52Bluetooth)
         nrf52Bluetooth->shutdown();
+#elif defined(ARCH_NRF54L15)
+    if (nrf54l15Bluetooth)
+        nrf54l15Bluetooth->shutdown();
 #endif
 #endif
 }

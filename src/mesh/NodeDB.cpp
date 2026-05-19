@@ -25,6 +25,7 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#include "xmodem.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
 #include <pb_decode.h>
@@ -80,6 +81,14 @@ static unsigned char userprefs_admin_key_1[] = USERPREFS_USE_ADMIN_KEY_1;
 #ifdef USERPREFS_USE_ADMIN_KEY_2
 static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
 #endif
+
+// Weak empty variant initialization function.
+// May be redefined by variant files.
+void variantDefaultConfig() __attribute__((weak));
+void variantDefaultConfig() {}
+
+void variantDefaultModuleConfig() __attribute__((weak));
+void variantDefaultModuleConfig() {}
 
 #ifdef HELTEC_MESH_NODE_T114
 
@@ -152,6 +161,25 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
 
 #endif
 
+// When armed by loadFromDisk, the decode callback writes satellite entries
+// straight into these maps instead of the temp vectors. Nullptr = legacy
+// push_back-to-vector path for backup/restore and other decoders.
+namespace
+{
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+std::map<NodeNum, meshtastic_PositionLite> *s_decodePositionsTarget = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+std::map<NodeNum, meshtastic_DeviceMetrics> *s_decodeTelemetryTarget = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+std::map<NodeNum, meshtastic_EnvironmentMetrics> *s_decodeEnvironmentTarget = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+std::map<NodeNum, meshtastic_StatusMessage> *s_decodeStatusTarget = nullptr;
+#endif
+} // namespace
+
 bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field)
 {
     const auto *iter = reinterpret_cast<const pb_field_iter_t *>(field);
@@ -166,10 +194,10 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
                     return false;
             }
         }
-        if (istream) {
-            meshtastic_NodeInfoLite node;
+        if (istream && istream->bytes_left) {
+            meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_zero;
             auto *vec = static_cast<std::vector<meshtastic_NodeInfoLite> *>(iter->pData);
-            if (istream->bytes_left && pb_decode(istream, meshtastic_NodeInfoLite_fields, &node))
+            if (pb_decode(istream, meshtastic_NodeInfoLite_fields, &node))
                 vec->push_back(node);
         }
         return true;
@@ -184,11 +212,19 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
                     return false;
             }
         }
-        if (istream) {
-            meshtastic_NodePositionEntry entry;
-            auto *vec = static_cast<std::vector<meshtastic_NodePositionEntry> *>(iter->pData);
-            if (istream->bytes_left && pb_decode(istream, meshtastic_NodePositionEntry_fields, &entry))
+        if (istream && istream->bytes_left) {
+            meshtastic_NodePositionEntry entry = meshtastic_NodePositionEntry_init_zero;
+            if (pb_decode(istream, meshtastic_NodePositionEntry_fields, &entry)) {
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+                if (s_decodePositionsTarget) {
+                    if (entry.has_position)
+                        (*s_decodePositionsTarget)[entry.num] = entry.position;
+                    return true;
+                }
+#endif
+                auto *vec = static_cast<std::vector<meshtastic_NodePositionEntry> *>(iter->pData);
                 vec->push_back(entry);
+            }
         }
         return true;
     }
@@ -202,11 +238,19 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
                     return false;
             }
         }
-        if (istream) {
-            meshtastic_NodeTelemetryEntry entry;
-            auto *vec = static_cast<std::vector<meshtastic_NodeTelemetryEntry> *>(iter->pData);
-            if (istream->bytes_left && pb_decode(istream, meshtastic_NodeTelemetryEntry_fields, &entry))
+        if (istream && istream->bytes_left) {
+            meshtastic_NodeTelemetryEntry entry = meshtastic_NodeTelemetryEntry_init_zero;
+            if (pb_decode(istream, meshtastic_NodeTelemetryEntry_fields, &entry)) {
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+                if (s_decodeTelemetryTarget) {
+                    if (entry.has_device_metrics)
+                        (*s_decodeTelemetryTarget)[entry.num] = entry.device_metrics;
+                    return true;
+                }
+#endif
+                auto *vec = static_cast<std::vector<meshtastic_NodeTelemetryEntry> *>(iter->pData);
                 vec->push_back(entry);
+            }
         }
         return true;
     }
@@ -220,11 +264,19 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
                     return false;
             }
         }
-        if (istream) {
-            meshtastic_NodeStatusEntry entry;
-            auto *vec = static_cast<std::vector<meshtastic_NodeStatusEntry> *>(iter->pData);
-            if (istream->bytes_left && pb_decode(istream, meshtastic_NodeStatusEntry_fields, &entry))
+        if (istream && istream->bytes_left) {
+            meshtastic_NodeStatusEntry entry = meshtastic_NodeStatusEntry_init_zero;
+            if (pb_decode(istream, meshtastic_NodeStatusEntry_fields, &entry)) {
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+                if (s_decodeStatusTarget) {
+                    if (entry.has_status)
+                        (*s_decodeStatusTarget)[entry.num] = entry.status;
+                    return true;
+                }
+#endif
+                auto *vec = static_cast<std::vector<meshtastic_NodeStatusEntry> *>(iter->pData);
                 vec->push_back(entry);
+            }
         }
         return true;
     }
@@ -238,17 +290,61 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
                     return false;
             }
         }
-        if (istream) {
-            meshtastic_NodeEnvironmentEntry entry;
-            auto *vec = static_cast<std::vector<meshtastic_NodeEnvironmentEntry> *>(iter->pData);
-            if (istream->bytes_left && pb_decode(istream, meshtastic_NodeEnvironmentEntry_fields, &entry))
+        if (istream && istream->bytes_left) {
+            meshtastic_NodeEnvironmentEntry entry = meshtastic_NodeEnvironmentEntry_init_zero;
+            if (pb_decode(istream, meshtastic_NodeEnvironmentEntry_fields, &entry)) {
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+                if (s_decodeEnvironmentTarget) {
+                    if (entry.has_environment_metrics)
+                        (*s_decodeEnvironmentTarget)[entry.num] = entry.environment_metrics;
+                    return true;
+                }
+#endif
+                auto *vec = static_cast<std::vector<meshtastic_NodeEnvironmentEntry> *>(iter->pData);
                 vec->push_back(entry);
+            }
         }
         return true;
     }
     default:
         return true;
     }
+}
+
+void NodeDB::armNodeDatabaseDecodeTargets()
+{
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    nodePositions.clear();
+    s_decodePositionsTarget = &nodePositions;
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    nodeTelemetry.clear();
+    s_decodeTelemetryTarget = &nodeTelemetry;
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    nodeEnvironment.clear();
+    s_decodeEnvironmentTarget = &nodeEnvironment;
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    nodeStatus.clear();
+    s_decodeStatusTarget = &nodeStatus;
+#endif
+}
+
+void NodeDB::disarmNodeDatabaseDecodeTargets()
+{
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    s_decodePositionsTarget = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    s_decodeTelemetryTarget = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    s_decodeEnvironmentTarget = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    s_decodeStatusTarget = nullptr;
+#endif
 }
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
@@ -297,6 +393,13 @@ NodeDB::NodeDB()
     } else {
         LOG_WARN("Failed to read unique id from efuse");
     }
+#elif defined(ARCH_NRF54L15)
+    // nRF54L15: DEVICEID is under FICR->INFO sub-struct (not top-level as on nRF52)
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->INFO.DEVICEID[1] << 32) | NRF_FICR->INFO.DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
+    memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    myNodeInfo.device_id.size = 16;
 #elif defined(ARCH_NRF52)
     // Nordic applies a FIPS compliant Random ID to each chip at the factory
     // We concatenate the device address to the Random ID to create a unique ID for now
@@ -731,6 +834,23 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 #endif
+#ifdef USERPREFS_LORACONFIG_USE_PRESET
+    config.lora.use_preset = USERPREFS_LORACONFIG_USE_PRESET;
+#else
+    config.lora.use_preset = true;
+#endif
+#ifdef USERPREFS_LORACONFIG_BANDWIDTH
+    config.lora.bandwidth = USERPREFS_LORACONFIG_BANDWIDTH;
+#endif
+#ifdef USERPREFS_LORACONFIG_SPREAD_FACTOR
+    config.lora.spread_factor = USERPREFS_LORACONFIG_SPREAD_FACTOR;
+#endif
+#ifdef USERPREFS_LORACONFIG_CODING_RATE
+    config.lora.coding_rate = USERPREFS_LORACONFIG_CODING_RATE;
+#endif
+#ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
+    config.lora.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
+#endif
     config.lora.hop_limit = HOP_RELIABLE;
 #ifdef USERPREFS_CONFIG_LORA_IGNORE_MQTT
     config.lora.ignore_mqtt = USERPREFS_CONFIG_LORA_IGNORE_MQTT;
@@ -865,6 +985,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.network.wifi_enabled = USERPREFS_NETWORK_WIFI_ENABLED;
 #endif
 
+#if USE_ETHERNET_DEFAULT
+    config.network.eth_enabled = true;
+#endif
+
 #ifdef USERPREFS_NETWORK_WIFI_SSID
     strncpy(config.network.wifi_ssid, USERPREFS_NETWORK_WIFI_SSID, sizeof(config.network.wifi_ssid));
 #endif
@@ -904,6 +1028,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 
     initConfigIntervals();
+    variantDefaultConfig();
+    variantDefaultModuleConfig();
 }
 
 void NodeDB::initConfigIntervals()
@@ -1119,7 +1245,14 @@ void NodeDB::initModuleConfigIntervals()
 #else
     moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
 #endif
+#ifdef USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL
+    moduleConfig.telemetry.environment_update_interval = USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL;
+#else
     moduleConfig.telemetry.environment_update_interval = 0;
+#endif
+#ifdef USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED
+    moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED;
+#endif
     moduleConfig.telemetry.air_quality_interval = 0;
     moduleConfig.telemetry.power_update_interval = 0;
     moduleConfig.telemetry.health_update_interval = 0;
@@ -1161,7 +1294,6 @@ void NodeDB::resetNodes(bool keepFavorites)
         std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     }
     (void)ourNum;
-    devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
     saveDeviceStateToDisk();
@@ -1368,7 +1500,6 @@ void NodeDB::installDefaultDeviceState()
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
     devicestate.has_rx_waypoint = false;
-    devicestate.has_rx_text_message = false;
 
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
@@ -1510,6 +1641,19 @@ void NodeDB::loadFromDisk()
     }
 
 #endif
+    // Arm the direct-into-map decode so satellite entries skip the temp vectors.
+    {
+        concurrency::LockGuard guard(&satelliteMutex);
+        armNodeDatabaseDecodeTargets();
+    }
+    struct Disarm {
+        NodeDB &self;
+        ~Disarm() { self.disarmNodeDatabaseDecodeTargets(); }
+    } disarm{*this};
+
+    // Avoid push_back's power-of-2 capacity growth wasting RAM at small N.
+    nodeDatabase.nodes.reserve(MAX_NUM_NODES);
+
     auto state = loadProto(nodeDatabaseFileName, getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
     if (nodeDatabase.version < DEVICESTATE_MIN_VER) {
@@ -1523,50 +1667,33 @@ void NodeDB::loadFromDisk()
     } else {
         meshNodes = &nodeDatabase.nodes;
         numMeshNodes = nodeDatabase.nodes.size();
-        // Hydrate the satellite maps; the on-disk vectors stay empty in steady
-        // state and are repopulated only at save time.
-        concurrency::LockGuard guard(&satelliteMutex);
+        // Counts computed outside LOG_INFO() so cppcheck doesn't choke on #if in macro args.
+        const unsigned posCount =
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-        nodePositions.clear();
-        nodePositions.reserve(nodeDatabase.positions.size());
-        for (const auto &entry : nodeDatabase.positions) {
-            if (entry.has_position)
-                nodePositions[entry.num] = entry.position;
-        }
-        nodeDatabase.positions.clear();
-        nodeDatabase.positions.shrink_to_fit();
+            (unsigned)nodePositions.size();
+#else
+            0u;
 #endif
+        const unsigned telCount =
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-        nodeTelemetry.clear();
-        nodeTelemetry.reserve(nodeDatabase.telemetry.size());
-        for (const auto &entry : nodeDatabase.telemetry) {
-            if (entry.has_device_metrics)
-                nodeTelemetry[entry.num] = entry.device_metrics;
-        }
-        nodeDatabase.telemetry.clear();
-        nodeDatabase.telemetry.shrink_to_fit();
+            (unsigned)nodeTelemetry.size();
+#else
+            0u;
 #endif
+        const unsigned envCount =
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-        nodeEnvironment.clear();
-        nodeEnvironment.reserve(nodeDatabase.environment.size());
-        for (const auto &entry : nodeDatabase.environment) {
-            if (entry.has_environment_metrics)
-                nodeEnvironment[entry.num] = entry.environment_metrics;
-        }
-        nodeDatabase.environment.clear();
-        nodeDatabase.environment.shrink_to_fit();
+            (unsigned)nodeEnvironment.size();
+#else
+            0u;
 #endif
+        const unsigned statusCount =
 #if !MESHTASTIC_EXCLUDE_STATUSDB
-        nodeStatus.clear();
-        nodeStatus.reserve(nodeDatabase.status.size());
-        for (const auto &entry : nodeDatabase.status) {
-            if (entry.has_status)
-                nodeStatus[entry.num] = entry.status;
-        }
-        nodeDatabase.status.clear();
-        nodeDatabase.status.shrink_to_fit();
+            (unsigned)nodeStatus.size();
+#else
+            0u;
 #endif
-        LOG_INFO("Loaded saved nodedatabase version %d, with nodes count: %d", nodeDatabase.version, nodeDatabase.nodes.size());
+        LOG_INFO("Loaded saved nodedatabase v%d: %d nodes, %u pos, %u tel, %u env, %u status", nodeDatabase.version,
+                 nodeDatabase.nodes.size(), posCount, telCount, envCount, statusCount);
     }
 
     if (numMeshNodes > MAX_NUM_NODES) {
@@ -1632,6 +1759,28 @@ void NodeDB::loadFromDisk()
 
 #if defined(USERPREFS_LORA_TX_DISABLED) && USERPREFS_LORA_TX_DISABLED
     config.lora.tx_enabled = false;
+#endif
+
+    // Always-apply LoRa overrides: applied after loading saved config so they
+    // take effect even when NVS already has a valid config (e.g. region-locked
+    // dev boards with no BLE/serial to set the region at runtime).
+#ifdef USERPREFS_CONFIG_LORA_REGION
+    config.lora.region = USERPREFS_CONFIG_LORA_REGION;
+#endif
+#ifdef USERPREFS_LORACONFIG_USE_PRESET
+    config.lora.use_preset = USERPREFS_LORACONFIG_USE_PRESET;
+#endif
+#ifdef USERPREFS_LORACONFIG_BANDWIDTH
+    config.lora.bandwidth = USERPREFS_LORACONFIG_BANDWIDTH;
+#endif
+#ifdef USERPREFS_LORACONFIG_SPREAD_FACTOR
+    config.lora.spread_factor = USERPREFS_LORACONFIG_SPREAD_FACTOR;
+#endif
+#ifdef USERPREFS_LORACONFIG_CODING_RATE
+    config.lora.coding_rate = USERPREFS_LORACONFIG_CODING_RATE;
+#endif
+#ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
+    config.lora.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
 #endif
 
     if (backupSecurity.private_key.size > 0) {
@@ -1843,6 +1992,15 @@ bool NodeDB::saveNodeDatabaseToDisk()
         LOG_ERROR("Error: trying to saveNodeDatabaseToDisk() on unsafe device power level.");
         return false;
     }
+
+    // Defer (don't fail) while xmodem holds the prefs file handle. Returning false
+    // would propagate through saveToDisk() and trigger fsFormat() mid-transfer.
+#ifdef FSCom
+    if (xModem.isBusy()) {
+        LOG_DEBUG("Deferring NodeDB save: xmodem transfer in progress");
+        return true;
+    }
+#endif
 
 #ifdef FSCom
     spiLock->lock();
