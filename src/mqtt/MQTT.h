@@ -68,6 +68,7 @@ class MQTT : private concurrency::OSThread
     struct QueueEntry {
         std::string topic;
         std::basic_string<uint8_t> envBytes; // binary/pb_encode_to_bytes ServiceEnvelope
+        std::string jsonPayload;
     };
     PointerQueue<QueueEntry> mqttQueue;
 
