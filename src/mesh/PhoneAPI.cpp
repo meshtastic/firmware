@@ -71,7 +71,15 @@ void PhoneAPI::handleStartConfig()
     }
     pauseBluetoothLogging = true;
     spiLock->lock();
+#if defined(MESHTASTIC_EXCLUDE_FILES_MANIFEST)
+    // Skip the recursive FS walk. Used by platforms whose Zephyr LittleFS
+    // backend can't safely traverse a deep tree (e.g. nRF54L15) and platforms
+    // that don't support OTA browsing — the manifest is only consumed by
+    // companion apps for those flows.
+    filesManifest.clear();
+#else
     filesManifest = getFiles("/", 10);
+#endif
     spiLock->unlock();
     LOG_DEBUG("Got %d files in manifest", filesManifest.size());
 
