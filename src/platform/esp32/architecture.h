@@ -158,6 +158,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_CHATTER_2
 #elif defined(STATION_G2)
 #define HW_VENDOR meshtastic_HardwareModel_STATION_G2
+#elif defined(STATION_G3)
+#define HW_VENDOR meshtastic_HardwareModel_STATION_G3
 #elif defined(UNPHONE)
 #define HW_VENDOR meshtastic_HardwareModel_UNPHONE
 #elif defined(WIPHONE)
