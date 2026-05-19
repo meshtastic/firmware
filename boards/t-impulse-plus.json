@@ -38,7 +38,14 @@
     "require_upload_port": true,
     "speed": 115200,
     "protocol": "nrfutil",
-    "protocols": ["jlink", "nrfjprog", "nrfutil", "stlink", "cmsis-dap", "blackmagic"]
+    "protocols": [
+      "jlink",
+      "nrfjprog",
+      "nrfutil",
+      "stlink",
+      "cmsis-dap",
+      "blackmagic"
+    ]
   },
   "url": "https://www.lilygo.cc/",
   "vendor": "Lilygo"

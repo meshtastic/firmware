@@ -43,10 +43,7 @@ class SGM41562
 
     // Status — cached from the most recent refresh().
     ChargeStatus chargeStatus() const { return chargeStatus_; }
-    bool isCharging() const
-    {
-        return chargeStatus_ == ChargeStatus::Precharge || chargeStatus_ == ChargeStatus::FastCharge;
-    }
+    bool isCharging() const { return chargeStatus_ == ChargeStatus::Precharge || chargeStatus_ == ChargeStatus::FastCharge; }
     bool isChargeDone() const { return chargeStatus_ == ChargeStatus::ChargeDone; }
     bool isInputPowerGood() const { return inputPowerGood_; }
     bool isThermalRegulation() const { return thermalReg_; }
@@ -91,7 +88,7 @@ class SGM41562
     // Bit positions in REG_SYSTEM_STATUS.
     static constexpr uint8_t SYS_STATUS_CHRG_SHIFT = 3;
     static constexpr uint8_t SYS_STATUS_CHRG_MASK = 0x03;
-    static constexpr uint8_t SYS_STATUS_PG = 0x02;       // bit 1: input power good
+    static constexpr uint8_t SYS_STATUS_PG = 0x02;        // bit 1: input power good
     static constexpr uint8_t SYS_STATUS_THERM_REG = 0x01; // bit 0: thermal regulation
 
     static constexpr uint8_t DEVICE_ID_EXPECTED = 0x04;
