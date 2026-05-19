@@ -35,9 +35,9 @@ void HapticFeedback::pulse(uint16_t durationMs)
 {
     motorWrite(true);
     pulseOffAt = millis() + durationMs;
-    if (pulseOffAt == 0) // disambiguate from "no pulse active" sentinel on millis() wrap
+    if (pulseOffAt == 0) // 0 is the "no pulse" sentinel
         pulseOffAt = 1;
-    setIntervalFromNow(durationMs);
+    scheduleNext();
 }
 
 void HapticFeedback::armDelayedPulse(uint16_t delayMs, uint16_t durationMs)
@@ -46,7 +46,7 @@ void HapticFeedback::armDelayedPulse(uint16_t delayMs, uint16_t durationMs)
     if (delayedPulseAt == 0)
         delayedPulseAt = 1;
     delayedPulseDuration = durationMs;
-    setIntervalFromNow(delayMs);
+    scheduleNext();
 }
 
 void HapticFeedback::cancelDelayedPulse()
@@ -54,31 +54,42 @@ void HapticFeedback::cancelDelayedPulse()
     delayedPulseAt = 0;
 }
 
-int32_t HapticFeedback::runOnce()
+void HapticFeedback::scheduleNext()
 {
     uint32_t now = millis();
-
-    // End an in-flight pulse if its time has come.
-    if (pulseOffAt != 0 && (int32_t)(now - pulseOffAt) >= 0) {
-        motorWrite(false);
-        pulseOffAt = 0;
-    }
-
-    // Fire an armed delayed pulse if its time has come.
-    if (delayedPulseAt != 0 && (int32_t)(now - delayedPulseAt) >= 0) {
-        uint16_t dur = delayedPulseDuration;
-        delayedPulseAt = 0;
-        pulse(dur);
-    }
-
-    // Sleep until the next scheduled event, or idle long if nothing pending.
     uint32_t next = 0;
     if (pulseOffAt != 0)
         next = pulseOffAt;
     if (delayedPulseAt != 0 && (next == 0 || (int32_t)(delayedPulseAt - next) < 0))
         next = delayedPulseAt;
     if (next == 0)
-        return 60 * 1000; // nothing pending — idle for a minute
+        return;
+    int32_t delay = (int32_t)(next - now);
+    setIntervalFromNow(delay > 0 ? (unsigned long)delay : 0);
+}
+
+int32_t HapticFeedback::runOnce()
+{
+    uint32_t now = millis();
+
+    if (pulseOffAt != 0 && (int32_t)(now - pulseOffAt) >= 0) {
+        motorWrite(false);
+        pulseOffAt = 0;
+    }
+
+    if (delayedPulseAt != 0 && (int32_t)(now - delayedPulseAt) >= 0) {
+        uint16_t dur = delayedPulseDuration;
+        delayedPulseAt = 0;
+        pulse(dur);
+    }
+
+    uint32_t next = 0;
+    if (pulseOffAt != 0)
+        next = pulseOffAt;
+    if (delayedPulseAt != 0 && (next == 0 || (int32_t)(delayedPulseAt - next) < 0))
+        next = delayedPulseAt;
+    if (next == 0)
+        return 60 * 1000;
     int32_t delay = (int32_t)(next - now);
     return delay > 0 ? delay : 0;
 }

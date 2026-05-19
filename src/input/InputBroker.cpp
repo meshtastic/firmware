@@ -240,14 +240,12 @@ void InputBroker::Init()
     };
 #endif
 #if defined(HAPTIC_FEEDBACK_PIN)
-    // Haptic feedback: short pulse on touch contact, and a second short
-    // pulse when the long-press fires (BACK). The delayed pulse delay
-    // matches touchConfig.longPressTime's default (500 ms).
+    // Blip on touch, second blip when long-press fires (500 ms = touchConfig.longPressTime default).
     touchConfig.suppressLeadUpSound = true;
     initHapticFeedback();
     touchConfig.onPress = []() {
-        hapticFeedback->pulse(30);
-        hapticFeedback->armDelayedPulse(500, 30);
+        hapticFeedback->pulse(80);
+        hapticFeedback->armDelayedPulse(500, 80);
     };
     touchConfig.onRelease = []() { hapticFeedback->cancelDelayedPulse(); };
 #endif
