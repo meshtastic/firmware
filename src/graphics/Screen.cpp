@@ -425,6 +425,11 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#if defined(OLED_Y_OFFSET_PAGES)
+    // Panels whose active window does not start at GDDRAM row 0 (e.g. 72x40
+    // modules on pages 3..7) need a fixed vertical page shift on every write.
+    static_cast<SSD1306Wire *>(dispdev)->setYOffset(OLED_Y_OFFSET_PAGES);
+#endif
 #elif defined(USE_SPISSD1306)
     dispdev = new SSD1306Spi(SSD1306_RESET, SSD1306_RS, SSD1306_NSS, GEOMETRY_64_48);
     if (!dispdev->init()) {
@@ -910,7 +915,7 @@ int32_t Screen::runOnce()
 
 #ifndef DISABLE_WELCOME_UNSET
     if (!NotificationRenderer::isOverlayBannerShowing() && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
         menuHandler::LoraRegionPicker();
 #else
         menuHandler::OnboardMessage();
@@ -1147,7 +1152,7 @@ void Screen::setFrames(FrameFocus focus)
 #if defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
         normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
 #else
         normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
@@ -1606,7 +1611,7 @@ void Screen::showFrame(FrameDirection direction)
 
 void Screen::setFastFramerate()
 {
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     dispdev->clear();
 #if GRAPHICS_TFT_COLORING_ENABLED
     prepareFrameColorRegions();

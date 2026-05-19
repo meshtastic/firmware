@@ -48,6 +48,9 @@ void c6l_init();
 #define SSD1306_RESET 15
 // #define OLED_DG 1
 #endif
+// Tiny OLED panel — opts into compile-time layout/font/feature substitutions
+// gated on OLED_TINY across the graphics stack.
+#define OLED_TINY
 #define SCREEN_TRANSITION_FRAMERATE 10
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
 

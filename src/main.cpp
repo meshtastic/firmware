@@ -753,6 +753,11 @@ void setup()
         }
     }
 #endif
+#ifdef OLED_GEOMETRY_OVERRIDE
+    // Per-variant geometry (e.g. 72x40 micro-OLEDs). Takes precedence over the
+    // default GEOMETRY_128_64 set at the top of setup().
+    screen_geometry = OLED_GEOMETRY_OVERRIDE;
+#endif
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C

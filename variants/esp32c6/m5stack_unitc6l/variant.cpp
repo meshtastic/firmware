@@ -52,23 +52,25 @@ void c6l_init()
     vTaskDelay(10 / portTICK_PERIOD_MS);
     i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_CHIP_RESET, &in_data);
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_IO_DIR, 0b11000000); // 0: input 1: output
+    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_IO_DIR, 0b11100000); // P5,P6,P7 as outputs
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_H_IM, 0b00111100); // 使用到的引脚关闭High-Impedance
+    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_H_IM, 0b00011100); // High-Impedance
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_PULL_SEL, 0b11000011); // pull up/down select, 0 down, 1 up
+    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_PULL_SEL, 0b11100011); // pull up/down select, 0 down, 1 up
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_PULL_EN, 0b11000011); // pull up/down enable, 0 disable, 1 enable
+    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_PULL_EN, 0b11100011); // pull up/down enable, 0 disable, 1 enable
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_IN_DEF_STA, 0b00000011); // P0 P1 默认高电平, 按键按下触发中断
+    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_IN_DEF_STA, 0b00000011); // P0 P1 default to high level; button press triggers the interrupt
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_INT_MASK, 0b11111100); // P0 P1 中断使能 0 enable, 1 disable
+    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_INT_MASK, 0b11111100); // P0 P1 interrupts enabled (0 = enable, 1 = disable)
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_SET, 0b10000000); // 默认输出为0
+    i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_SET, 0b10000000); // default output is 0
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_IRQ_STA, &in_data); // 读取IRQ_STA清除标志
+    i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_IRQ_STA, &in_data); // read IRQ_STA to clear the flag
+    vTaskDelay(10 / portTICK_PERIOD_MS);
 
     i2c_read_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_SET, &in_data);
-    setbit(in_data, 6); // HIGH
+    setbit(in_data, 6); // enable SX_ANT_SW
+    setbit(in_data, 5); // enable SX_LNA_EN
     i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_SET, in_data);
 }

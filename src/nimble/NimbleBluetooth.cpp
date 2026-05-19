@@ -572,7 +572,7 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
                 display->setFont(FONT_MEDIUM);
                 display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
                 display->setFont(FONT_SMALL);
                 y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
                 display->drawString(x_offset + x, y_offset + y, "Enter this code");
