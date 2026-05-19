@@ -10,7 +10,8 @@
     "hwids": [["0x239A", "0x8029"]],
     "usb_product": "T-Impulse-Plus-nRF52840",
     "mcu": "nrf52840",
-    "variant": "t_impulse_plus_nrf52840",
+    "variant": "t-impulse-plus",
+    "variants_dir": "variants",
     "bsp": {
       "name": "adafruit"
     },
