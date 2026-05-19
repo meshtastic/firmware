@@ -491,7 +491,7 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     static const char *optionsArray[] = {"Back", "Time Format", "Timezone"};
 #else
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
