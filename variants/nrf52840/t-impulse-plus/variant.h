@@ -28,9 +28,9 @@
 #define D6 6   // P0.28  SPI_MOSI
 #define D7 7   // P1.13  RF_VC1 (TXEN)
 #define D8 8   // P1.07  RF_VC2 (RXEN)
-#define D9 9   // P1.12  GPS_TX
-#define D10 10 // P1.11  GPS_RX
-#define D11 11 // P1.10  GPS_EN
+#define D9 9   // P1.12  GPS module TX → MCU RX
+#define D10 10 // P1.11  GPS module RX ← MCU TX
+#define D11 11 // P1.10  GPS_EN (active LOW)
 #define D12 12 // P0.20  SCREEN_SDA
 #define D13 13 // P0.15  SCREEN_SCL
 #define D14 14 // P1.08  IMU_SDA
@@ -124,11 +124,11 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define GPS_UBLOX
 #define HAS_GPS 1
-#define GPS_TX_PIN D9  // P1.12 MCU TX -> GPS RX
-#define GPS_RX_PIN D10 // P1.11 MCU RX <- GPS TX
-#define PIN_GPS_EN D11 // P1.10 GPS enable (active HIGH)
-#define GPS_EN_ACTIVE HIGH
-#define GPS_BAUDRATE 9600
+#define GPS_RX_PIN D9  // P1.12 — MCU RX, wired to GPS module TX
+#define GPS_TX_PIN D10 // P1.11 — MCU TX, wired to GPS module RX
+#define PIN_GPS_EN D11 // P1.10
+#define GPS_EN_ACTIVE LOW
+#define GPS_BAUDRATE 38400
 #define GPS_THREAD_INTERVAL 50
 #define PIN_SERIAL1_TX GPS_TX_PIN
 #define PIN_SERIAL1_RX GPS_RX_PIN
