@@ -47,7 +47,7 @@ static void initLoraCap()
         return;
     }
     bool ok = pi4ioWrite(bus, PI4IO_REG_IO_DIR, 0b00000001);
-    ok = ok && pi4ioWrite(bus, PI4IO_REG_OUT_H_IM, 0b00000001);
+    ok = ok && pi4ioWrite(bus, PI4IO_REG_OUT_H_IM, 0b00000000);
     ok = ok && pi4ioWrite(bus, PI4IO_REG_OUT_SET, 0b00000001);
     if (!ok) {
         LOG_ERROR("Antenna switch init failed");
