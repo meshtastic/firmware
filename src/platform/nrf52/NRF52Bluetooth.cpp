@@ -5,6 +5,7 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/ble/BleAdvertisementMeshPlatform.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
 #include <bluefruit.h>
@@ -343,6 +344,11 @@ void NRF52Bluetooth::setup()
     // Setup the advertising packet(s)
     LOG_INFO("Set up the advertising payload(s)");
     startAdv();
+#if HAS_BLE_MESH_ADVERTISING
+    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_ADVERTISEMENT_BROADCAST) {
+        initBleAdvertisementMeshPlatform();
+    }
+#endif
     LOG_INFO("Advertise");
 }
 void NRF52Bluetooth::resumeAdvertising()
