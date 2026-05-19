@@ -247,6 +247,12 @@ XPowersPPM *PPM = NULL;
 #include "bq27220.h"
 #endif
 
+#ifdef HAS_SY6970
+#include "hardware/Arduino_HWIIC.h"
+#include "power_chip/Arduino_SY6970.h"
+Arduino_SY6970 *SY6970 = NULL;
+#endif
+
 #ifdef HAS_PMU
 XPowersLibInterface *PMU = NULL;
 #else
@@ -1634,7 +1640,7 @@ bool Power::cw2015Init()
 }
 #endif
 
-#if defined(HAS_PPM) && HAS_PPM
+#ifdef HAS_PPM
 
 /**
  * Adapter class for BQ25896/BQ27220 Lipo battery charger.
@@ -1751,6 +1757,96 @@ class LipoCharger : public HasBatteryLevel
     }
 };
 
+#elif defined(HAS_SY6970)
+
+/**
+ * Adapter class for SY6970 battery charger.
+ */
+class LipoCharger : public HasBatteryLevel
+{
+  public:
+    /**
+     * Init the I2C SY6970 Lipo battery charger
+     */
+    bool runOnce()
+    {
+        if (SY6970 == nullptr) {
+            SY6970 = new Arduino_SY6970(std::make_shared<Arduino_HWIIC>(Arduino_HWIIC(SDA, SCL, &Wire)), SY6970_DEVICE_ADDRESS);
+            bool result = SY6970->begin();
+            if (result) {
+                // some boards can boot with HIZ set, which suppresses normal input/battery behavior
+                result |=
+                    SY6970->IIC_Write_Device_State(Arduino_IIC_Power::POWER_DEVICE_HIZ_MODE, Arduino_IIC_Power::POWER_DEVICE_OFF);
+                result |= SY6970->IIC_Write_Device_State(Arduino_IIC_Power::POWER_DEVICE_CHARGING_MODE,
+                                                         Arduino_IIC_Power::POWER_DEVICE_ON);
+                result |= SY6970->IIC_Write_Device_State(Arduino_IIC_Power::POWER_DEVICE_ADC_MEASURE,
+                                                         Arduino_IIC_Power::POWER_DEVICE_ON);
+                // clear watchdog timer once, then keep watchdog disabled
+                result |= SY6970->IIC_Write_Device_State(Arduino_IIC_Power::POWER_DEVICE_WATCHDOG_TIMER_RESET,
+                                                         Arduino_IIC_Power::POWER_DEVICE_ON);
+
+                if (result) {
+                    SY6970->IIC_Write_Device_Value(Arduino_IIC_Power::POWER_DEVICE_WATCHDOG_TIMER, 0);
+                    SY6970->IIC_Write_Device_Value(Arduino_IIC_Power::POWER_DEVICE_CHARGING_TARGET_VOLTAGE_LIMIT, 4284);
+                    SY6970->IIC_Write_Device_Value(Arduino_IIC_Power::POWER_DEVICE_MINIMUM_SYSTEM_VOLTAGE_LIMIT, 3300);
+                    SY6970->IIC_Write_Device_Value(Arduino_IIC_Power::POWER_DEVICE_INPUT_CURRENT_LIMIT, 500);
+                    SY6970->IIC_Write_Device_Value(Arduino_IIC_Power::POWER_DEVICE_FAST_CHARGING_CURRENT_LIMIT, 2112);
+                    SY6970->IIC_Write_Device_Value(Arduino_IIC_Power::POWER_DEVICE_PRECHARGE_CHARGING_CURRENT_LIMIT, 192);
+                    SY6970->IIC_Write_Device_Value(Arduino_IIC_Power::POWER_DEVICE_TERMINATION_CHARGING_CURRENT_LIMIT, 320);
+                    LOG_INFO("SY6970 init succeeded");
+                    return true;
+                }
+            }
+            LOG_WARN("SY6970 init failed");
+            delete SY6970;
+            SY6970 = nullptr;
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override { return -1; }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override
+    {
+        double battVoltage = SY6970->IIC_Read_Device_Value(Arduino_IIC_Power::POWER_BATTERY_VOLTAGE);
+        return (battVoltage > 0.0) ? static_cast<uint16_t>(battVoltage) : 0;
+    }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override { return true; }
+
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override { return SY6970->IIC_Read_Device_Value(Arduino_IIC_Power::POWER_SYSTEM_VOLTAGE) > 4200.0; }
+
+    /**
+     * return true if the battery is currently charging
+     */
+    virtual bool isCharging() override { return SY6970->IIC_Read_Device_Value(Arduino_IIC_Power::POWER_CHARGING_CURRENT) > 1.0; }
+};
+
+#else
+
+/**
+ * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
+ */
+bool Power::lipoChargerInit()
+{
+    return false;
+}
+#endif
+
+#if defined(HAS_PPM) || defined(HAS_SY6970)
 LipoCharger lipoCharger;
 
 /**
@@ -1759,20 +1855,11 @@ LipoCharger lipoCharger;
 bool Power::lipoChargerInit()
 {
     bool result = lipoCharger.runOnce();
-    LOG_DEBUG("Power::lipoChargerInit lipo sensor is %s", result ? "ready" : "not ready yet");
+    LOG_DEBUG("Power::lipoChargerInit lipo charger is %s", result ? "ready" : "not ready yet");
     if (!result)
         return false;
     batteryLevel = &lipoCharger;
     return true;
-}
-
-#else
-/**
- * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
- */
-bool Power::lipoChargerInit()
-{
-    return false;
 }
 #endif
 
