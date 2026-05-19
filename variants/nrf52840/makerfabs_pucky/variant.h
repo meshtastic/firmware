@@ -161,7 +161,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // #define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_11_16
 
 #define HOCKEY_PUCK 1
-#define TX_GAIN_LORA 0
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 13, 12, 12, 11, 10, 9, 8, 7
 
 #ifdef __cplusplus
 }
