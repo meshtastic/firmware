@@ -193,6 +193,7 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     }
 
     this->packetHistory[this->packetHistoryTotalCount].time = getTime();
+    this->packetHistory[this->packetHistoryTotalCount].sent_at = mp.sent_at;
     this->packetHistory[this->packetHistoryTotalCount].to = mp.to;
     this->packetHistory[this->packetHistoryTotalCount].channel = mp.channel;
     this->packetHistory[this->packetHistoryTotalCount].from = getFrom(&mp);
@@ -254,7 +255,7 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                 p->id = this->packetHistory[i].id;
                 p->channel = this->packetHistory[i].channel;
                 p->decoded.reply_id = this->packetHistory[i].reply_id;
-                p->rx_time = this->packetHistory[i].time;
+                p->rx_time = this->packetHistory[i].sent_at;
                 p->decoded.emoji = (uint32_t)this->packetHistory[i].emoji;
                 p->rx_rssi = this->packetHistory[i].rx_rssi;
                 p->rx_snr = this->packetHistory[i].rx_snr;
@@ -308,6 +309,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, const meshtastic_StoreAndForw
     p->to = dest;
 
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    p.sent_at = getTime();
 
     // Let's assume that if the server received the S&F request that the client is in range.
     //   TODO: Make this configurable.
