@@ -179,6 +179,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) override;
 
+    uint8_t packetsInTxQueue() { return txQueue.getMaxLen() - txQueue.getFree(); }
+
     /**
      * Request randomness sourced from the LoRa modem, if supported by the active RadioLib interface.
      * @return true if len bytes were produced, false otherwise.
