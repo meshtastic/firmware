@@ -141,6 +141,7 @@
 #elif defined(TINYLORA_MV)
 
 #define HAS_PCF8574_BUTTON
+#define HAS_QMC5883L
 #define PCF8574_ADDR 0x20        // A2=A1=A0=0
 #define PCF8574_INT_PIN 9
 
