@@ -120,7 +120,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define LR1121_SPI_MOSI_PIN PIN_SPI_MOSI
 #define LR1121_SPI_MISO_PIN PIN_SPI_MISO
 #define LR11X0_DIO3_TCXO_VOLTAGE 3.3
-// #define LR11X0_DIO_AS_RF_SWITCH
+#define LR11X0_DIO_AS_RF_SWITCH
 
 /*
  * Wire Interfaces
