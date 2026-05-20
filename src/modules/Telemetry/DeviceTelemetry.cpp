@@ -136,6 +136,8 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     }
 #ifdef ARCH_PORTDUINO
     if (SimRadio::instance) {
+        if (!RadioLibInterface::instance)
+            telemetry.variant.local_stats.noise_floor = SimRadio::instance->getCurrentRSSI();
         telemetry.variant.local_stats.num_packets_tx = SimRadio::instance->txGood;
         telemetry.variant.local_stats.num_packets_rx = SimRadio::instance->rxGood + SimRadio::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = SimRadio::instance->rxBad;
