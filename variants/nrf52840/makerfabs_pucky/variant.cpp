@@ -40,4 +40,7 @@ void initVariant()
     // Power latch
     pinMode(POWER_ON_OFF, OUTPUT);
     digitalWrite(POWER_ON_OFF, HIGH);
+
+    // Park the unconnected LNA_CTRL_MCU net so it does not float
+    pinMode(LNA_CTRL_PIN, INPUT_PULLDOWN);
 }
