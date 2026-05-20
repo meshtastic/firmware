@@ -220,10 +220,8 @@ template <typename T> bool LR11x0Interface<T>::setActiveCodingRate(uint8_t codin
     if (codingRate < 5 || codingRate > 8)
         return false;
 
-    // DCR keeps per-packet CR compatible by using normal interleaving.  The
-    // static LR11x0 configuration is restored after TX so existing presets keep
-    // their long-interleaving behavior.
-    int err = lora.setCodingRate(codingRate, false);
+    // Keep the preset's long-interleaving behavior while changing only the CR.
+    int err = lora.setCodingRate(codingRate, codingRate != 7);
     if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("LR11x0 set DCR coding rate %s%d", radioLibErr, err);
         return false;

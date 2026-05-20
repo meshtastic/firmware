@@ -248,10 +248,8 @@ template <typename T> bool LR20x0Interface<T>::setActiveCodingRate(uint8_t codin
     if (codingRate < 5 || codingRate > 8)
         return false;
 
-    // DCR packets use normal interleaving so the explicit header CR stays the
-    // only cross-node compatibility requirement. Restore the static modem
-    // setting after TX so existing presets keep long interleaving where valid.
-    int err = lora.setCodingRate(codingRate, false);
+    // Keep the preset's long-interleaving behavior while changing only the CR.
+    int err = lora.setCodingRate(codingRate, codingRate != 7);
     if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("LR20x0 set DCR coding rate %s%d", radioLibErr, err);
         return false;

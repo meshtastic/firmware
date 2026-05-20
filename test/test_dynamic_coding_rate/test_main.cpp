@@ -309,6 +309,26 @@ static void test_rx_observation_tracks_direct_sender()
     TEST_ASSERT_EQUAL_UINT32(1, policy.getCounters().rxCr[AirtimePolicy::crIndex(DCR_CR_ROBUST)]);
 }
 
+static void test_reused_packet_storage_does_not_reuse_stale_class()
+{
+    AirtimePolicy policy;
+    DcrSettings settings = onSettings();
+    auto packet = makePacket(meshtastic_PortNum_TEXT_MESSAGE_APP);
+
+    policy.rememberPacketClass(packet, 1000);
+
+    packet.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    packet.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    packet.id = 43;
+    packet.from = 0xabcdef01;
+
+    DcrDecision decision = choose(policy, packet, idleChannel(), settings);
+
+    TEST_ASSERT_EQUAL_UINT8(DCR_CR_NORMAL, decision.cr);
+    TEST_ASSERT_BITS_HIGH(DCR_REASON_PERIODIC, decision.reasonFlags);
+    TEST_ASSERT_EQUAL_UINT32(0, decision.reasonFlags & DCR_REASON_USER);
+}
+
 void setup()
 {
     delay(10);
@@ -329,6 +349,7 @@ void setup()
     RUN_TEST(test_min_cr_survives_busy_expendable_clamp);
     RUN_TEST(test_off_mode_keeps_base_cr);
     RUN_TEST(test_rx_observation_tracks_direct_sender);
+    RUN_TEST(test_reused_packet_storage_does_not_reuse_stale_class);
     exit(UNITY_END());
 }
 

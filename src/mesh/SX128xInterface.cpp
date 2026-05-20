@@ -161,10 +161,8 @@ template <typename T> bool SX128xInterface<T>::setActiveCodingRate(uint8_t codin
     if (codingRate < 5 || codingRate > 8)
         return false;
 
-    // DCR packets use normal interleaving so the explicit header CR stays the
-    // only cross-node compatibility requirement.  The static modem setting is
-    // restored once TX finishes.
-    int err = lora.setCodingRate(codingRate, false);
+    // Keep the preset's long-interleaving behavior while changing only the CR.
+    int err = lora.setCodingRate(codingRate, codingRate != 7);
     if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("SX128X set DCR coding rate %s%d", radioLibErr, err);
         return false;

@@ -115,12 +115,13 @@ void AirtimePolicy::rememberPacketClass(const meshtastic_MeshPacket &packet, uin
 
 const AirtimePolicy::PacketClassCache *AirtimePolicy::findPacketClass(const meshtastic_MeshPacket &packet) const
 {
+    NodeNum from = getFrom(&packet);
+
     for (const auto &slot : classCache) {
-        if (slot.packetPtr == &packet)
+        if (slot.packetPtr == &packet && slot.id == packet.id && slot.from == from)
             return &slot;
     }
 
-    NodeNum from = getFrom(&packet);
     if (packet.id == 0)
         return nullptr;
 
