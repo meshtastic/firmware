@@ -3,6 +3,7 @@
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "NodeDB.h"
 #include "RTC.h"
 #include "TelemetrySensor.h"
 
@@ -23,6 +24,11 @@ class PMSA003ISensor : public TelemetrySensor
     virtual bool canSleep() override;
     virtual int32_t wakeUpTimeMs() override;
     virtual int32_t pendingForReadyMs() override;
+
+    virtual bool allDisabled() override;
+    virtual void setDisables(const meshtastic_PMSA003IDisables setDisables);
+    AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                meshtastic_AdminMessage *response) override;
 
   private:
     enum class State { IDLE, ACTIVE };

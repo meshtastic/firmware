@@ -3,6 +3,7 @@
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "NodeDB.h"
 #include "RTC.h"
 #include "TelemetrySensor.h"
 #include "Wire.h"
@@ -162,6 +163,8 @@ See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
     virtual bool canSleep() override { return true; }
     virtual int32_t wakeUpTimeMs() override;
     virtual int32_t pendingForReadyMs() override;
+    virtual bool allDisabled() override;
+    virtual void setDisables(const meshtastic_SEN5XDisables setDisables);
 
     AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
                                                 meshtastic_AdminMessage *response) override;
