@@ -54,16 +54,6 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #endif
 }
 
-RadioLibInterface::~RadioLibInterface()
-{
-    // If the static `instance` pointer still references us, clear it.
-    // A later successful init() may have replaced `instance` with a newer
-    // interface — don't clobber that case.
-    if (instance == this) {
-        instance = nullptr;
-    }
-}
-
 #ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
@@ -519,6 +509,9 @@ void RadioLibInterface::completeSending()
     // that can take a long time
     auto p = sendingPacket;
     sendingPacket = NULL;
+#ifdef LED_LORA
+    digitalWrite(LED_LORA, LED_STATE_OFF);
+#endif
 
     if (p) {
         // Packet has been sent, count it toward our TX airtime utilization.
@@ -641,6 +634,9 @@ void RadioLibInterface::pollMissedIrqs()
     if (isReceiving) {
         checkRxDoneIrqFlag();
     }
+    if (sendingPacket) {
+        checkTxDoneIrqFlag();
+    }
 }
 
 void RadioLibInterface::resetAGC()
@@ -653,6 +649,14 @@ void RadioLibInterface::checkRxDoneIrqFlag()
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
         LOG_WARN("caught missed RX_DONE");
         notify(ISR_RX, true);
+    }
+}
+
+void RadioLibInterface::checkTxDoneIrqFlag()
+{
+    if (iface->checkIrq(RADIOLIB_IRQ_TX_DONE)) {
+        LOG_WARN("caught missed TX_DONE");
+        notify(ISR_TX, true);
     }
 }
 
@@ -697,6 +701,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             enableInterrupt(isrTxLevel0);
             lastTxStart = millis();
             printPacket("Started Tx", txp);
+#ifdef LED_LORA
+            digitalWrite(LED_LORA, LED_STATE_ON);
+#endif
         }
 
         return res == RADIOLIB_ERR_NONE;
