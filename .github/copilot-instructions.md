@@ -13,6 +13,7 @@ Meshtastic is an open-source LoRa mesh networking project for long-range, low-po
 - **RP2040/RP2350** - Raspberry Pi Pico variants
 - **STM32WL** - STM32 with integrated LoRa
 - **Linux/Portduino** - Native Linux builds (Raspberry Pi, etc.)
+- **macOS native** - Headless `meshtasticd` on Apple Silicon / x86_64; see `variants/native/portduino/platformio.ini` for Homebrew prereqs + CH341 LoRa setup
 
 ### Supported Radio Chips
 
@@ -134,6 +135,99 @@ On top of authorization, any remote admin message that **mutates** state (not a 
 - **Channel 0 PSK change** → every peer must re-learn the channel hash; cached NodeInfo becomes temporarily unreachable until the next broadcast.
 - **`security.private_key` blanked via admin** → regenerates both halves (unless in Ham mode) and propagates the new public key via NodeInfo.
 
+## NodeDB Layout (v25)
+
+`DEVICESTATE_CUR_VER = 25`, `DEVICESTATE_MIN_VER = 24`. The on-device NodeDB was split in v25 into a slim header table plus four optional satellite stores. Older v24 saves auto-migrate at boot. Old training-data instincts (`node->user.long_name`, `node->position.latitude_i`, `node->is_favorite`, `node->device_metrics.battery_level`) are wrong now — the fields aren't there. Read this section before touching anything that walks `nodeDB->meshNodes`.
+
+### Slim `NodeInfoLite`
+
+`UserLite` is flattened onto `NodeInfoLite` (no nested sub-message); `position` and `device_metrics` are removed entirely (tags reserved). MAC address is dropped. Long names are capped at 25 chars (`max_size:25` in `deviceonly.options`); `hw_model` and `role` are `int_size:8`. Encoded size dropped from ~166 B → ~105 B per node.
+
+Booleans are bit-packed into `NodeInfoLite.bitfield`. **Do not read or write the bits directly** — use the inline helpers in `src/mesh/NodeDB.h`:
+
+```cpp
+nodeInfoLiteHasUser(n)                  // bit 5 — user fields populated
+nodeInfoLiteIsFavorite(n)               // bit 3
+nodeInfoLiteIsIgnored(n)                // bit 4
+nodeInfoLiteIsMuted(n)                  // bit 1
+nodeInfoLiteIsLicensed(n)               // bit 6 — Ham mode peer
+nodeInfoLiteIsKeyManuallyVerified(n)    // bit 0
+nodeInfoLiteHasIsUnmessagable(n)        // bit 8 — "is_unmessagable was sent"
+nodeInfoLiteIsUnmessagable(n)           // bit 7
+// via_mqtt is bit 2 (mask exposed; predicate uses the mask directly)
+
+nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);  // setter
+```
+
+### Satellite stores
+
+Four `std::unordered_map<NodeNum, …>` members on `NodeDB`, each gated by its own build flag:
+
+| Map               | Value type                      | Build flag                         |
+| ----------------- | ------------------------------- | ---------------------------------- |
+| `nodePositions`   | `meshtastic_PositionLite`       | `MESHTASTIC_EXCLUDE_POSITIONDB`    |
+| `nodeTelemetry`   | `meshtastic_DeviceMetrics`      | `MESHTASTIC_EXCLUDE_TELEMETRYDB`   |
+| `nodeEnvironment` | `meshtastic_EnvironmentMetrics` | `MESHTASTIC_EXCLUDE_ENVIRONMENTDB` |
+| `nodeStatus`      | `meshtastic_StatusMessage`      | `MESHTASTIC_EXCLUDE_STATUSDB`      |
+
+Defaults are ON (i.e., maps **excluded**) for STM32WL only — see `src/mesh/mesh-pb-constants.h`. On every other arch all four maps are present. When excluded, the map member is absent and the corresponding accessors return `false`.
+
+All four maps are guarded by **`mutable concurrency::Lock satelliteMutex`** — concurrent access from receive threads, the phone API state machine, and the renderer is the rule, not the exception.
+
+### Accessor convention
+
+**Never hand out pointers into the maps.** Use the copy-out accessors on `NodeDB`:
+
+```cpp
+bool copyNodePosition(NodeNum, meshtastic_PositionLite &out)       const;
+bool copyNodeTelemetry(NodeNum, meshtastic_DeviceMetrics &out)     const;
+bool copyNodeEnvironment(NodeNum, meshtastic_EnvironmentMetrics &out) const;
+bool copyNodeStatus(NodeNum, meshtastic_StatusMessage &out)        const;
+```
+
+Each takes the lock, copies the value if present, returns `false` if the entry is absent or the DB is excluded. Pass-by-out-param is deliberate — pointer-style accessors would invite UAF and lock-leak bugs across the renderer. The "has any X" convenience predicates (`hasValidPosition` etc.) are implemented in terms of these.
+
+Writers go through `setNodeStatus`, `updatePosition`, `updateTelemetry` (which dispatches on `which_variant` for device vs environment metrics) — these own the lock and the eviction hooks.
+
+### Eviction
+
+Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly.
+
+### Sync flow: thin NodeInfo + post-COMPLETE_ID replay (no opt-in)
+
+There is no capability flag and no special "gradient" nonce. The **default** sync flow is:
+
+1. Config / module-config / channel / metadata segments (same as before).
+2. `STATE_SEND_OWN_NODEINFO` — **our own** NodeInfo, still bundled with our position and device_metrics (because the replay snapshot excludes our own NodeNum). Emitted via `ConvertToNodeInfo(lite)`.
+3. `STATE_SEND_OTHER_NODEINFOS` — every other peer's NodeInfo, **always thin** (no `position`, no `device_metrics`). Emitted via `ConvertToNodeInfoThin(lite)`.
+4. `STATE_SEND_FILEMANIFEST` → `STATE_SEND_COMPLETE_ID` — the phone sees `config_complete_id` and treats sync as done.
+5. `STATE_SEND_PACKETS` — live mesh packets, with a trailing replay drain interleaved. The replay drain walks four cached satellite stores in order (positions → telemetry → environment → status) and emits each cached entry as an ordinary `MeshPacket` on the matching portnum (`POSITION_APP`, `TELEMETRY_APP` device + environment variants, `NODE_STATUS_APP`). These are indistinguishable on the wire from live mesh traffic, so clients need no special handling — any code that already updates UI on `POSITION_APP` etc. works.
+
+`PhoneAPI::sendConfigComplete()` arms `replayPhase = REPLAY_PHASE_POSITIONS` for default/full sync and `SPECIAL_NONCE_ONLY_NODES`, while `SPECIAL_NONCE_ONLY_CONFIG` skips replay. The drain runs inside `STATE_SEND_PACKETS` via `popReplayPacket()`, lower priority than live traffic. When all four phases drain, `replayPhase` flips back to `REPLAY_PHASE_IDLE` and the snapshot vectors get `shrink_to_fit`ed.
+
+STM32WL and any other build with all four `MESHTASTIC_EXCLUDE_*DB` flags set produces zero replay packets — `popReplayPacket` advances through each phase in microseconds without emitting anything.
+
+Special nonces that still mean something:
+
+- `SPECIAL_NONCE_ONLY_CONFIG` (69420) — skip node sync entirely, just config.
+- `SPECIAL_NONCE_ONLY_NODES` (69421) — skip config segments, jump straight to `STATE_SEND_OWN_NODEINFO`. Still gets the post-COMPLETE_ID replay drain.
+
+There are no other reserved nonces; everything else is a fresh random `want_config_id` from the client.
+
+### v24 → v25 migration
+
+The legacy migration code lives in **`src/mesh/NodeDBLegacyMigration.cpp`**, not in `NodeDB.cpp`. It owns the `meshtastic_NodeDatabase_Legacy` callback and `NodeDB::migrateLegacyNodeDatabase()`. The legacy proto descriptor is `protobufs/meshtastic/deviceonly_legacy.proto` (only included by the migration TU). The boot path peeks the file's leading version tag, runs the migration if `version < 25`, then re-saves in v25 layout. The legacy descriptor is scheduled for removal once `DEVICESTATE_MIN_VER` is bumped.
+
+### Read-site rules of thumb
+
+- Never `node->position.X` / `node->device_metrics.X` — those fields no longer exist. Pull from the satellite map via `copyNodePosition` / `copyNodeTelemetry`.
+- Never `node->user.long_name` — `long_name`, `short_name`, `public_key`, `hw_model`, `role`, `macaddr` (gone), `is_licensed`, `is_unmessagable` are flat on `NodeInfoLite`.
+- Never `node->is_favorite` / `node->is_ignored` / `node->via_mqtt` / `node->is_key_manually_verified` — use the bitfield helpers.
+- Never assume `nodeDB->getMeshNode(num)->position.time` — call `copyNodePosition` and check the return.
+- Don't lock `satelliteMutex` yourself in renderer code; the copy-out accessors already do.
+
+Unit tests for the conversion layer live in `test/test_type_conversions/test_main.cpp` (Unity) — bitfield round-trips, `long_name` truncation, thin-vs-full conversions. Add cases there when extending the schema.
+
 ## Project Structure
 
 ```
@@ -195,6 +289,8 @@ firmware/
 - Prefer `LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR` for logging
 - Use `assert()` for invariants that should never fail
 - C++17 features are available (`std::optional`, structured bindings, `if constexpr`, etc.)
+- **Keep code comments minimal — one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
+- **Use `Throttle` for time-based rate limiting, not raw `millis()` math.** `src/mesh/Throttle.h` provides `Throttle::isWithinTimespanMs(lastMs, intervalMs)` (returns true while inside the cooldown) and `Throttle::execute(&lastMs, intervalMs, func)` (function-pointer form that updates the timestamp on fire). Use these for any "did N ms pass since X" check — raw `millis() > lastMs + N` is rollover-unsafe (breaks after ~49.7 days) and inconsistent with the rest of the codebase. The helpers compute `now - lastMs` with unsigned subtraction, which wraps correctly.
 
 ### Naming Conventions
 
@@ -369,7 +465,7 @@ To reduce avoidable agent mistakes, assume these tools are available (or install
 - **Required CLI basics**: `bash`, `git`, `find`, `grep`, `sed`, `awk`, `xargs`
 - **Strongly recommended**: `rg` (ripgrep) for fast file/text search, `jq` for JSON processing
 - **Build/test tools**: `python3`, `pip`, virtualenv (`python3 -m venv`), `platformio` (`pio`)
-- **Containerized native testing**: `docker` (especially important on macOS / non-Linux hosts)
+- **Containerized native testing**: `docker` (fallback for non-Linux hosts; macOS can also build natively via `pio run -e native-macos`)
 
 Fallback expectations for agents:
 
@@ -388,6 +484,7 @@ Build commands:
 pio run -e tbeam              # Build specific target
 pio run -e tbeam -t upload    # Build and upload
 pio run -e native             # Build native/Linux version
+pio run -e native-macos       # Build headless macOS meshtasticd (Homebrew prereqs in variants/native/portduino/platformio.ini)
 ```
 
 ### Build Manifest
@@ -572,6 +669,8 @@ Grouped by purpose. Full argument shapes in `mcp-server/README.md`; a few high-v
 - **Observability** (UI tier + operator ad-hoc): `capture_screen(role, ocr=True)` — grabs a USB-webcam frame of the device OLED and optionally OCRs it. Requires `mcp-server[ui]` extras (`opencv-python-headless`, `easyocr`) and `MESHTASTIC_UI_CAMERA_DEVICE_<ROLE>` env var; falls through to a 1×1 black PNG `NullBackend` when unconfigured.
 
 `confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve — it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `factory_reset`, `erase_and_flash`, `uhubctl_power(action='off')`, and `uhubctl_cycle`.
+
+**TCP / native-host nodes.** Setting `MESHTASTIC_MCP_TCP_HOST=<host[:port]>` makes `list_devices` surface a `meshtasticd` daemon (e.g. the `native-macos` build) as a synthetic `tcp://host:port` entry, and `connect()` routes through `meshtastic.tcp_interface.TCPInterface` instead of `SerialInterface`. Every read/write/admin tool that flows through `connect()` works against the daemon transparently. USB-only tools (`pio_flash`, `erase_and_flash`, `update_flash`, `touch_1200bps`, `serial_open`, `esptool_*`, `nrfutil_*`, `picotool_*`) raise a clear `ConnectionError` when handed a `tcp://` port; `pio_flash` against a `native*` env raises a `FlashError` (no upload step — use `build` and run the binary directly). The pytest harness still assumes USB-attached devices per role; TCP-aware fixtures are deferred. See `mcp-server/README.md` § "TCP / native-host nodes".
 
 ### Hardware test suite (`mcp-server/run-tests.sh`)
 

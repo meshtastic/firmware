@@ -1,6 +1,7 @@
 #pragma once
 
 #include "graphics/Screen.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
