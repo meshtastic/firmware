@@ -525,7 +525,6 @@ void RadioLibInterface::completeSending()
 
         // We are done sending that packet, release it
         packetPool.release(p);
-
     }
 }
 
