@@ -5,7 +5,6 @@
 #include "SPILock.h"
 #include "Throttle.h"
 #include "configuration.h"
-#include "concurrency/LockGuard.h"
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -273,13 +272,10 @@ void RadioLibInterface::updateNoiseFloor()
     }
 
     uint32_t now = millis();
-    {
-        concurrency::LockGuard guard(&noiseFloorLock);
-        if (now - lastNoiseFloorUpdate < NOISE_FLOOR_UPDATE_INTERVAL_MS) {
-            return;
-        }
-        lastNoiseFloorUpdate = now;
+    if (now - lastNoiseFloorUpdate < NOISE_FLOOR_UPDATE_INTERVAL_MS) {
+        return;
     }
+    lastNoiseFloorUpdate = now;
 
     int16_t rssi = getCurrentRSSI();
     if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN) {
@@ -287,34 +283,27 @@ void RadioLibInterface::updateNoiseFloor()
         return;
     }
 
-    uint8_t sampleCount = 0;
-    int32_t average = NOISE_FLOOR_DEFAULT;
-    {
-        concurrency::LockGuard guard(&noiseFloorLock);
-        noiseFloorSamples[currentSampleIndex] = (int32_t)rssi;
-        currentSampleIndex++;
+    noiseFloorSamples[currentSampleIndex] = (int32_t)rssi;
+    currentSampleIndex++;
 
-        if (currentSampleIndex >= NOISE_FLOOR_SAMPLES) {
-            currentSampleIndex = 0;
-            isNoiseFloorBufferFull = true;
-        }
-
-        currentNoiseFloor = getAverageNoiseFloorLocked();
-        average = currentNoiseFloor;
-        sampleCount = getNoiseFloorSampleCountLocked();
+    if (currentSampleIndex >= NOISE_FLOOR_SAMPLES) {
+        currentSampleIndex = 0;
+        isNoiseFloorBufferFull = true;
     }
 
-    LOG_DEBUG("Noise floor: %d dBm (samples: %d, latest: %d dBm)", average, sampleCount, rssi);
+    currentNoiseFloor = getAverageNoiseFloorInternal();
+
+    LOG_DEBUG("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCountInternal(), rssi);
 }
 
-uint8_t RadioLibInterface::getNoiseFloorSampleCountLocked() const
+uint8_t RadioLibInterface::getNoiseFloorSampleCountInternal() const
 {
     return isNoiseFloorBufferFull ? NOISE_FLOOR_SAMPLES : currentSampleIndex;
 }
 
-int32_t RadioLibInterface::getAverageNoiseFloorLocked() const
+int32_t RadioLibInterface::getAverageNoiseFloorInternal() const
 {
-    uint8_t sampleCount = getNoiseFloorSampleCountLocked();
+    uint8_t sampleCount = getNoiseFloorSampleCountInternal();
 
     if (sampleCount == 0) {
         return NOISE_FLOOR_DEFAULT;
@@ -330,31 +319,26 @@ int32_t RadioLibInterface::getAverageNoiseFloorLocked() const
 
 int32_t RadioLibInterface::getAverageNoiseFloor()
 {
-    concurrency::LockGuard guard(&noiseFloorLock);
-    return getAverageNoiseFloorLocked();
+    return getAverageNoiseFloorInternal();
 }
 
 int32_t RadioLibInterface::getNoiseFloor()
 {
-    concurrency::LockGuard guard(&noiseFloorLock);
     return currentNoiseFloor;
 }
 
 bool RadioLibInterface::hasNoiseFloorSamples()
 {
-    concurrency::LockGuard guard(&noiseFloorLock);
-    return getNoiseFloorSampleCountLocked() > 0;
+    return getNoiseFloorSampleCountInternal() > 0;
 }
 
 uint8_t RadioLibInterface::getNoiseFloorSampleCount()
 {
-    concurrency::LockGuard guard(&noiseFloorLock);
-    return getNoiseFloorSampleCountLocked();
+    return getNoiseFloorSampleCountInternal();
 }
 
 void RadioLibInterface::resetNoiseFloor()
 {
-    concurrency::LockGuard guard(&noiseFloorLock);
     currentSampleIndex = 0;
     isNoiseFloorBufferFull = false;
     currentNoiseFloor = NOISE_FLOOR_DEFAULT;

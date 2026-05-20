@@ -2,7 +2,6 @@
 
 #include "MeshPacketQueue.h"
 #include "RadioInterface.h"
-#include "concurrency/Lock.h"
 #include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
@@ -112,7 +111,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t lastNoiseFloorUpdate = 0;
     static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
     int32_t currentNoiseFloor = NOISE_FLOOR_DEFAULT;
-    concurrency::Lock noiseFloorLock;
 
     /**
      * Pure virtual hook for derived radio interfaces to provide instantaneous RSSI.
@@ -241,8 +239,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool randomBytes(uint8_t *buffer, size_t length);
 
   private:
-    uint8_t getNoiseFloorSampleCountLocked() const;
-    int32_t getAverageNoiseFloorLocked() const;
+    uint8_t getNoiseFloorSampleCountInternal() const;
+    int32_t getAverageNoiseFloorInternal() const;
 
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
      * doing the transmit */
