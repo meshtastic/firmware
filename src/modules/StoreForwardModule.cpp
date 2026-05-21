@@ -80,9 +80,9 @@ void StoreForwardModule::populatePSRAM()
         (this->records ? this->records : (((memGet.getFreePsram() / 4) * 3) / sizeof(PacketHistoryStruct)));
     this->records = numberOfPackets;
 #if defined(ARCH_ESP32)
-    this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
+    this->packetHistory.reset(static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct))));
 #elif defined(ARCH_PORTDUINO)
-    this->packetHistory = static_cast<PacketHistoryStruct *>(calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
+    this->packetHistory.reset(static_cast<PacketHistoryStruct *>(calloc(numberOfPackets, sizeof(PacketHistoryStruct))));
 
 #endif
 

@@ -25,7 +25,7 @@
 
 // External variables
 extern graphics::Screen *screen;
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
 static uint32_t lastSwitchTime = 0;
 #endif
 namespace graphics
@@ -464,11 +464,11 @@ static bool computeBottomCompassPlacement(OLEDDisplay *display, int16_t xOffset,
     return true;
 }
 
-static void drawTruncatedStatusLine(OLEDDisplay *display, int16_t x, int16_t y, const std::string &statusText)
+static void drawTruncatedStatusLine(OLEDDisplay *display, int16_t x, int16_t y, const char *statusText)
 {
     // Fixed-buffer truncate helper replaces iterative std::string chopping to keep code size down.
     char rawStatus[96];
-    snprintf(rawStatus, sizeof(rawStatus), " Status: %s", statusText.c_str());
+    snprintf(rawStatus, sizeof(rawStatus), " Status: %s", statusText ? statusText : "");
 
     char clippedStatus[96];
     UIRenderer::truncateStringWithEmotes(display, rawStatus, clippedStatus, sizeof(clippedStatus), display->getWidth());
@@ -495,7 +495,7 @@ void graphics::UIRenderer::rebuildFavoritedNodes()
         meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
         if (!n || n->num == nodeDB->getNodeNum())
             continue;
-        if (n->is_favorite)
+        if (nodeInfoLiteIsFavorite(n))
             favoritedNodes.push_back(n);
     }
 
@@ -750,10 +750,10 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
         return;
 
     meshtastic_NodeInfoLite *node = favoritedNodes[nodeIndex];
-    if (!node || node->num == nodeDB->getNodeNum() || !node->is_favorite)
+    if (!node || node->num == nodeDB->getNodeNum() || !nodeInfoLiteIsFavorite(node))
         return;
     display->clear();
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     uint32_t now = millis();
     if (now - lastSwitchTime >= 10000) // 10000 ms = 10 秒
     {
@@ -763,7 +763,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
 #endif
     currentFavoriteNodeNum = node->num;
     // === Create the shortName and title string ===
-    const char *shortName = (node->has_user && node->user.short_name[0]) ? node->user.short_name : "Node";
+    const char *shortName = (nodeInfoLiteHasUser(node) && node->short_name[0]) ? node->short_name : "Node";
     char titlestr[40];
     snprintf(titlestr, sizeof(titlestr), "*%s*", shortName);
 
@@ -781,9 +781,9 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     // === 1. Long Name (always try to show first) ===
     const char *username;
     if (currentResolution == ScreenResolution::UltraLow) {
-        username = (node->has_user && node->user.long_name[0]) ? node->user.short_name : nullptr;
+        username = (nodeInfoLiteHasUser(node) && node->long_name[0]) ? node->short_name : nullptr;
     } else {
-        username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
+        username = (nodeInfoLiteHasUser(node) && node->long_name[0]) ? node->long_name : nullptr;
     }
 
     // Print node's long name (e.g. "Backpack Node")
@@ -796,23 +796,14 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
         UIRenderer::drawStringWithEmotes(display, x, getTextPositions(display)[line++], username, FONT_HEIGHT_SMALL, 1, false);
     }
 
-#if !MESHTASTIC_EXCLUDE_STATUS
+#if !MESHTASTIC_EXCLUDE_STATUS && !MESHTASTIC_EXCLUDE_STATUSDB
     // === Optional: Last received StatusMessage line for this node ===
-    // Display it directly under the username line (if we have one).
-    if (statusMessageModule) {
-        const auto &recent = statusMessageModule->getRecentReceived();
-        const StatusMessageModule::RecentStatus *found = nullptr;
-
-        // Search newest-to-oldest
-        for (auto it = recent.rbegin(); it != recent.rend(); ++it) {
-            if (it->fromNodeId == node->num && !it->statusText.empty()) {
-                found = &(*it);
-                break;
-            }
-        }
-
-        if (found) {
-            drawTruncatedStatusLine(display, x, getTextPositions(display)[line++], found->statusText);
+    // Display it directly under the username line (if we have one). The cache
+    // lives on NodeDB now, keyed by NodeNum, so this is an O(1) lookup.
+    if (nodeDB) {
+        meshtastic_StatusMessage cachedStatus;
+        if (nodeDB->copyNodeStatus(node->num, cachedStatus) && cachedStatus.status[0]) {
+            drawTruncatedStatusLine(display, x, getTextPositions(display)[line++], cachedStatus.status);
         }
     }
 #endif
@@ -968,28 +959,33 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (seenStr[0]) {
         display->drawString(x, getTextPositions(display)[line++], seenStr);
     }
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
-    if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
+    meshtastic_DeviceMetrics nodeMetrics;
+    const bool haveNodeMetrics = nodeDB->copyNodeTelemetry(node->num, nodeMetrics);
+    if (haveNodeMetrics && nodeMetrics.has_uptime_seconds) {
         char upPrefix[12]; // enough for leftSideSpacing + "Up:"
         snprintf(upPrefix, sizeof(upPrefix), "%sUp:", leftSideSpacing);
-        getUptimeStr(node->device_metrics.uptime_seconds * 1000, upPrefix, uptimeStr, sizeof(uptimeStr));
+        getUptimeStr(nodeMetrics.uptime_seconds * 1000, upPrefix, uptimeStr, sizeof(uptimeStr));
     }
     if (uptimeStr[0]) {
         display->drawString(x, getTextPositions(display)[line++], uptimeStr);
     }
 
     // === 5. Distance (only if both nodes have GPS position) ===
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     char distStr[24] = ""; // Make buffer big enough for any string
     bool haveDistance = false;
 
-    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node)) {
+    meshtastic_PositionLite nodePos;
+    meshtastic_PositionLite ourPos;
+    const bool haveNodePos = nodeDB->copyNodePosition(node->num, nodePos);
+    const bool haveOurPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ourPos);
+    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node) && haveNodePos && haveOurPos) {
         // Use shared meter conversion, then format display units with lightweight integer rounding.
-        const float distanceMeters =
-            GeoCoord::latLongToMeter(DegD(node->position.latitude_i), DegD(node->position.longitude_i),
-                                     DegD(ourNode->position.latitude_i), DegD(ourNode->position.longitude_i));
+        const float distanceMeters = GeoCoord::latLongToMeter(DegD(nodePos.latitude_i), DegD(nodePos.longitude_i),
+                                                              DegD(ourPos.latitude_i), DegD(ourPos.longitude_i));
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             const int feet = static_cast<int>((distanceMeters * METERS_TO_FEET) + 0.5f);
             if (feet > 0 && feet < 1000) {
@@ -1024,19 +1020,19 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     char batLine[32] = "";
     bool haveBatLine = false;
 
-    if (node->has_device_metrics) {
-        bool hasPct = node->device_metrics.has_battery_level;
-        bool hasVolt = node->device_metrics.has_voltage && node->device_metrics.voltage > 0.001f;
+    if (haveNodeMetrics) {
+        bool hasPct = nodeMetrics.has_battery_level;
+        bool hasVolt = nodeMetrics.has_voltage && nodeMetrics.voltage > 0.001f;
 
         int pct = 0;
         float volt = 0.0f;
 
         if (hasPct) {
-            pct = (int)node->device_metrics.battery_level;
+            pct = (int)nodeMetrics.battery_level;
         }
 
         if (hasVolt) {
-            volt = node->device_metrics.voltage;
+            volt = nodeMetrics.voltage;
         }
 
         if (hasPct && pct > 0 && pct <= 100) {
@@ -1076,11 +1072,11 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     const bool hasNodePositionFix = nodeDB->hasValidPosition(node);
     const char *statusLine1 = nullptr;
     const char *statusLine2 = nullptr;
-    if (hasOwnPositionFix && hasNodePositionFix) {
-        const auto &op = ourNode->position;
+    if (hasOwnPositionFix && hasNodePositionFix && haveOurPos && haveNodePos) {
+        const auto &op = ourPos;
         showCompass = CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
         if (showCompass) {
-            const auto &p = node->position;
+            const auto &p = nodePos;
             bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
             bearing = CompassRenderer::adjustBearingForCompassMode(bearing, myHeading);
         } else {
@@ -1130,7 +1126,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // === Header ===
     if (currentResolution == ScreenResolution::UltraLow) {
@@ -1176,7 +1172,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 #endif
 
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     line += 1;
 
     // === Node Identity ===
@@ -1270,7 +1266,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int textWidth = 0;
     int nameX = 0;
     int yOffset = (currentResolution == ScreenResolution::High) ? 0 : 5;
-    const char *longName = (ourNode && ourNode->has_user && ourNode->user.long_name[0]) ? ourNode->user.long_name : "";
+    const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
     const char *shortName = owner.short_name ? owner.short_name : "";
     char combinedName[96];
     if (longName[0] && shortName[0]) {
@@ -1460,7 +1456,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     // needs to be drawn relative to x and y
 
     // draw centered icon left to right and centered above the one line of app text
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     display->drawXbm(x + (SCREEN_WIDTH - 50) / 2, y + (SCREEN_HEIGHT - 28) / 2, icon_width, icon_height, icon_bits);
     if (gBootSplashBoldPass) {
         display->drawXbm(x + (SCREEN_WIDTH - 50) / 2 + 1, y + (SCREEN_HEIGHT - 28) / 2, icon_width, icon_height, icon_bits);
@@ -1615,7 +1611,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     geoCoord.updateCoords(int32_t(gpsStatus->getLatitude()), int32_t(gpsStatus->getLongitude()),
                           int32_t(gpsStatus->getAltitude()));
 
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
     const bool hasLiveGpsFix =
         (gpsStatus && gpsStatus->getHasLock() && (gpsStatus->getLatitude() != 0 || gpsStatus->getLongitude() != 0));
@@ -1631,9 +1627,11 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             headingLat = DegD(gpsStatus->getLatitude());
             headingLon = DegD(gpsStatus->getLongitude());
         } else if (hasOwnPositionFix) {
-            const auto &op = ourNode->position;
-            headingLat = DegD(op.latitude_i);
-            headingLon = DegD(op.longitude_i);
+            meshtastic_PositionLite ownPos;
+            if (nodeDB->copyNodePosition(ourNode->num, ownPos)) {
+                headingLat = DegD(ownPos.latitude_i);
+                headingLon = DegD(ownPos.longitude_i);
+            }
         }
         validHeading = CompassRenderer::getHeadingRadians(headingLat, headingLon, heading);
     }
@@ -1686,7 +1684,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         }
         display->drawString(x, textPos[line++], altitudeLine);
     }
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
     // === Draw Compass ===
     if (validHeading || statusLine1) {
         // --- Compass Rendering: landscape (wide) screens use original side-aligned logic ---

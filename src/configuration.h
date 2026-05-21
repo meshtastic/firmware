@@ -80,7 +80,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Pre-hop drop handling (compile-time flag).
 #ifndef MESHTASTIC_PREHOP_DROP
-#define MESHTASTIC_PREHOP_DROP 0
+#define MESHTASTIC_PREHOP_DROP 1
 #endif
 
 /// Convert a preprocessor name into a quoted string
@@ -559,6 +559,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef MESHTASTIC_EXCLUDE_SCREEN
 #undef HAS_SCREEN
 #define HAS_SCREEN 0
+#endif
+
+#ifndef USE_ETHERNET_DEFAULT
+#define USE_ETHERNET_DEFAULT 0
 #endif
 
 #include "DebugConfiguration.h"
