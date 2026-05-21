@@ -133,11 +133,12 @@ bool AirTime::isTxAllowedChannelUtil(bool polite)
 
 bool AirTime::isTxAllowedAirUtil()
 {
-    if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
-        if (utilizationTXPercent() < myRegion->dutyCycle * polite_duty_cycle_percent / 100) {
+    float effectiveDutyCycle = getEffectiveDutyCycle();
+    if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
+        if (utilizationTXPercent() < effectiveDutyCycle * polite_duty_cycle_percent / 100) {
             return true;
         } else {
-            LOG_WARN("TX air util. >%f%%. Skip send", myRegion->dutyCycle * polite_duty_cycle_percent / 100);
+            LOG_WARN("TX air util. >%f%%. Skip send", effectiveDutyCycle * polite_duty_cycle_percent / 100);
             return false;
         }
     }

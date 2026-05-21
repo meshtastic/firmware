@@ -60,6 +60,26 @@ uint32_t Default::getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t d
     return base * coef;
 }
 
+uint32_t Default::getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes,
+                                                 TrafficType type)
+{
+    uint32_t baseMs = getConfiguredOrDefaultMsScaled(configured, defaultValue, numOnlineNodes);
+
+    if (!myRegion || !myRegion->profile)
+        return baseMs;
+
+    int8_t throttle =
+        (type == TrafficType::POSITION) ? myRegion->profile->positionThrottle : myRegion->profile->telemetryThrottle;
+
+    // throttle <= 0 means unset; 1 is the neutral multiplier — skip the multiply for performance
+    if (throttle <= 1)
+        return baseMs;
+
+    constexpr uint32_t MAX_MS = static_cast<uint32_t>(INT32_MAX);
+    uint64_t result = static_cast<uint64_t>(baseMs) * static_cast<uint64_t>(throttle);
+    return result >= static_cast<uint64_t>(MAX_MS) ? MAX_MS : static_cast<uint32_t>(result);
+}
+
 uint32_t Default::getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue)
 {
     // If zero, intervals should be coalesced later by getConfiguredOrDefault... methods

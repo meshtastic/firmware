@@ -333,6 +333,7 @@ jobs:
           prerelease: true
           name: Meshtastic Firmware ${{ needs.version.outputs.long }} Alpha
           tag_name: v${{ needs.version.outputs.long }}
+          target_commitish: ${{ github.sha }}
           body: ${{ steps.release_notes.outputs.notes }}
 
       - name: Download source deb

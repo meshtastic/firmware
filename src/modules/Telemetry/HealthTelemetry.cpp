@@ -74,9 +74,10 @@ int32_t HealthTelemetryModule::runOnce()
 
         uint32_t lastTelemetry = transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_HEALTH_TELEMETRY) : 0;
         if (((lastTelemetry == 0) ||
-             !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
-                                                              moduleConfig.telemetry.health_update_interval,
-                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+             !Throttle::isWithinTimespanMs(lastTelemetry,
+                                           Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.health_update_interval,
+                                                                                   default_telemetry_broadcast_interval_secs,
+                                                                                   numOnlineNodes, TrafficType::TELEMETRY))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
