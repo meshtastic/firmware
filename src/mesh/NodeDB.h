@@ -376,6 +376,12 @@ class NodeDB
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 #endif
 
+    /// Consolidate crypto key generation logic used across multiple modules
+    /// @param privateKey Optional 32-byte private key to use. If nullptr, generates new random keys.
+    bool generateCryptoKeyPair(const uint8_t *privateKey = nullptr);
+
+    bool createNewIdentity();
+
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
@@ -487,6 +493,8 @@ extern uint32_t error_address;
 #define NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_IS_UNMESSAGABLE_SHIFT)
 #define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT 8
 #define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT)
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 9
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1u << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
 // Bits 9..31 reserved for future single-bit flags.
 
 // Convenience accessors so call sites read like the old struct fields.
@@ -525,6 +533,10 @@ inline bool nodeInfoLiteIsMuted(const meshtastic_NodeInfoLite *n)
 inline bool nodeInfoLiteIsKeyManuallyVerified(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK);
+}
+inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
 }
 
 inline void nodeInfoLiteSetBit(meshtastic_NodeInfoLite *n, uint32_t mask, bool value)

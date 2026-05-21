@@ -2,6 +2,7 @@
 #include "CryptoEngine.h"
 
 #include "TestUtil.h"
+#include <XEdDSA.h>
 #include <unity.h>
 
 void HexToBytes(uint8_t *result, const std::string hex, size_t len = 0)
@@ -152,6 +153,48 @@ void test_PKC(void)
     TEST_ASSERT_EQUAL_MEMORY(expected_decrypted, decrypted, 10);
 }
 
+void test_XEdDSA(void)
+{
+    uint8_t private_key[32];
+    uint8_t x_public_key[32];
+    uint8_t ed_private_key[32];
+    uint8_t ed_public_key[32];
+    uint8_t ed_public_key2[32];
+    uint8_t message[] = "This is a test!";
+    uint8_t message2[] = "This is a test.";
+    uint8_t signature[64];
+    uint32_t fromNode = 0x1234;
+    uint32_t packetId = 0xDEADBEEF;
+    uint32_t portnum = 1;
+    for (int times = 0; times < 10; times++) {
+        printf("Start of time %u\n", times);
+        crypto->generateKeyPair(x_public_key, private_key);
+        XEdDSA::priv_curve_to_ed_keys(private_key, ed_private_key, ed_public_key);
+        crypto->curve_to_ed_pub(x_public_key, ed_public_key2);
+        TEST_ASSERT_EQUAL_MEMORY(ed_public_key, ed_public_key2, 32);
+
+        // Sign and verify with metadata
+        TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), signature));
+        TEST_ASSERT(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, message, sizeof(message), signature));
+
+        // Different payload fails
+        TEST_ASSERT_FALSE(
+            crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, message2, sizeof(message2), signature));
+
+        // Different fromNode fails
+        TEST_ASSERT_FALSE(
+            crypto->xeddsa_verify(x_public_key, fromNode + 1, packetId, portnum, message, sizeof(message), signature));
+
+        // Different packetId fails
+        TEST_ASSERT_FALSE(
+            crypto->xeddsa_verify(x_public_key, fromNode, packetId + 1, portnum, message, sizeof(message), signature));
+
+        // Different portnum fails
+        TEST_ASSERT_FALSE(
+            crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum + 1, message, sizeof(message), signature));
+    }
+}
+
 void test_AES_CTR(void)
 {
     uint8_t expected[32];
@@ -192,6 +235,7 @@ void setup()
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
     RUN_TEST(test_PKC);
+    RUN_TEST(test_XEdDSA);
     exit(UNITY_END()); // stop unit testing
 }
 
