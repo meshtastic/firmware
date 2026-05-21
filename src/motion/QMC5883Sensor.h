@@ -18,6 +18,10 @@ class QMC5883Sensor : public MotionSensor
     Adafruit_QMC5883P sensor;
     bool showingScreen = false;
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+    float magOffsetX = 0, magOffsetY = 0, magOffsetZ = 0;
+
+    void loadCalibration();
+    void saveCalibration();
 
   public:
     explicit QMC5883Sensor(ScanI2C::FoundDevice foundDevice);

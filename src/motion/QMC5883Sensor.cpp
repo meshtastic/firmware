@@ -1,6 +1,9 @@
 #include "QMC5883Sensor.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_QMC5883P.h>)
+
+#include <Preferences.h>
+
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
@@ -25,6 +28,10 @@ bool QMC5883Sensor::init()
     sensor.setMode(QMC5883P_MODE_CONTINUOUS);
     sensor.setODR(QMC5883P_ODR_50HZ);
     sensor.setRange(QMC5883P_RANGE_8G);
+
+    // Load previously saved calibration from NVS
+    loadCalibration();
+
     LOG_DEBUG("QMC5883P init ok");
     return true;
 }
@@ -43,10 +50,12 @@ int32_t QMC5883Sensor::runOnce()
         static uint8_t debugCounter = 0;
         if (++debugCounter >= 10) {
             debugCounter = 0;
-            float h = atan2(rawY, rawX) * 180.0f / M_PI;
+            float cx = rawX - magOffsetX;
+            float cy = rawY - magOffsetY;
+            float h = atan2(cy, cx) * 180.0f / M_PI;
             if (h < 0)
                 h += 360.0f;
-            LOG_DEBUG("QMC5883P raw: X=%d Y=%d Z=%d heading=%.0f", rawX, rawY, rawZ, h);
+            LOG_DEBUG("QMC5883P raw: X=%d Y=%d Z=%d heading=%.0f  cal=%.0f,%.0f", rawX, rawY, rawZ, h, magOffsetX, magOffsetY);
         }
     }
 
@@ -80,14 +89,20 @@ int32_t QMC5883Sensor::runOnce()
             if (screen)
                 screen->endAlert();
 
+            // Compute and persist hard-iron offsets
+            magOffsetX = (highestX + lowestX) / 2.0f;
+            magOffsetY = (highestY + lowestY) / 2.0f;
+            magOffsetZ = (highestZ + lowestZ) / 2.0f;
+            saveCalibration();
+
             LOG_DEBUG("QMC5883P calibration done: X=[%.0f..%.0f] Y=[%.0f..%.0f] Z=[%.0f..%.0f]", lowestX, highestX, lowestY,
                       highestY, lowestZ, highestZ);
         }
     }
 
     // Apply hard-iron calibration offset to X and Y
-    float cx = rawX - (highestX + lowestX) / 2.0f;
-    float cy = rawY - (highestY + lowestY) / 2.0f;
+    float cx = rawX - magOffsetX;
+    float cy = rawY - magOffsetY;
 
     float heading = atan2(cy, cx) * 180.0f / M_PI;
     if (heading < 0)
@@ -138,6 +153,35 @@ void QMC5883Sensor::calibrate(uint16_t forSeconds)
         screen->setEndCalibration(endCalibrationAt);
 
     LOG_DEBUG("QMC5883P calibration started for %is", forSeconds);
+#endif
+}
+
+void QMC5883Sensor::loadCalibration()
+{
+#ifdef ARCH_ESP32
+    Preferences prefs;
+    prefs.begin("meshtastic", true); // read-only mode
+    magOffsetX = prefs.getFloat("qmcOffX", 0);
+    magOffsetY = prefs.getFloat("qmcOffY", 0);
+    magOffsetZ = prefs.getFloat("qmcOffZ", 0);
+    prefs.end();
+
+    if (magOffsetX != 0 || magOffsetY != 0 || magOffsetZ != 0) {
+        LOG_DEBUG("QMC5883P loaded calibration: offset=(%.0f,%.0f,%.0f)", magOffsetX, magOffsetY, magOffsetZ);
+    }
+#endif
+}
+
+void QMC5883Sensor::saveCalibration()
+{
+#ifdef ARCH_ESP32
+    Preferences prefs;
+    prefs.begin("meshtastic", false); // read-write mode
+    prefs.putFloat("qmcOffX", magOffsetX);
+    prefs.putFloat("qmcOffY", magOffsetY);
+    prefs.putFloat("qmcOffZ", magOffsetZ);
+    prefs.end();
+    LOG_DEBUG("QMC5883P saved calibration: offset=(%.0f,%.0f,%.0f)", magOffsetX, magOffsetY, magOffsetZ);
 #endif
 }
 
