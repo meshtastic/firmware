@@ -26,7 +26,7 @@ int32_t DeviceTelemetryModule::runOnce()
     if (((lastTelemetry == 0) ||
          ((uptimeLastMs - lastTelemetry) >= Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.device_update_interval,
                                                                                     default_telemetry_broadcast_interval_secs,
-                                                                                    numOnlineNodes))) &&
+                                                                                    numOnlineNodes, TrafficType::TELEMETRY))) &&
         airTime->isTxAllowedChannelUtil(!isImpoliteRole) && airTime->isTxAllowedAirUtil() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN &&
         moduleConfig.telemetry.device_telemetry_enabled) {
