@@ -28,6 +28,38 @@ template <typename T> bool ServerAPI<T>::checkIsConnected()
     return client.connected();
 }
 
+template <typename T> bool ServerAPI<T>::canWriteFrame(size_t frameLen)
+{
+    if (!client.connected()) {
+        canWrite = false;
+        enabled = false;
+        LOG_WARN("TCP client disconnected before write, closing API service");
+        close();
+        return false;
+    }
+
+    int writable = stream_api::availableForWriteOrUnknown(client);
+    if (writable != -1 && writable <= 0) {
+        canWrite = false;
+        enabled = false;
+        LOG_WARN("TCP client not writable before write (%d/%lu bytes), closing API service", writable,
+                 (unsigned long)frameLen);
+        close();
+        return false;
+    }
+
+    return true;
+}
+
+template <typename T> void ServerAPI<T>::onFrameWriteFailed(size_t frameLen, size_t writtenLen)
+{
+    canWrite = false;
+    enabled = false;
+    LOG_WARN("TCP client write short (%lu/%lu bytes), closing API service", (unsigned long)writtenLen,
+             (unsigned long)frameLen);
+    close();
+}
+
 template <class T> int32_t ServerAPI<T>::runOnce()
 {
     if (client.connected()) {
