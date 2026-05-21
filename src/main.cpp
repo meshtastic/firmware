@@ -716,6 +716,11 @@ void setup()
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
+#ifdef ARCH_ESP32
+    // Config is loaded now, and Bluetooth has not been initialized yet. If the
+    // saved config will keep Bluetooth inactive, return its reserved memory early.
+    esp32ReleaseBluetoothMemoryIfUnused();
+#endif
 
     // Initialize transmit history to persist broadcast throttle timers across reboots
     TransmitHistory::getInstance()->loadFromDisk();

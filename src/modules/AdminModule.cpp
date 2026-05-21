@@ -1607,6 +1607,7 @@ void disableBluetooth()
 #ifdef ARCH_ESP32
     if (nimbleBluetooth)
         nimbleBluetooth->deinit();
+    esp32ReleaseBluetoothMemoryIfUnused();
 #elif defined(ARCH_NRF52)
     if (nrf52Bluetooth)
         nrf52Bluetooth->shutdown();
