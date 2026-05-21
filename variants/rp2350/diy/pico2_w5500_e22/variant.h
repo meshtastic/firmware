@@ -11,6 +11,9 @@
 //
 // See wiring.svg in this directory for a complete connection diagram.
 
+// Community/DIY board — no dedicated Meshtastic HardwareModel
+#define PRIVATE_HW
+
 #define ARDUINO_ARCH_AVR
 
 // Onboard LED (GP25 on Pico 2)
@@ -73,6 +76,8 @@
 
 // ---- W5500 Ethernet on SPI0 --------------------------------------------
 #define HAS_ETHERNET 1
+// Use the arduino-libraries/Ethernet stack (W5500) instead of RAK13800_W5100S
+#define USE_ARDUINO_ETHERNET 1
 
 #define ETH_SPI0_MISO 16
 #define ETH_SPI0_SCK 18

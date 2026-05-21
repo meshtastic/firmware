@@ -6,7 +6,7 @@
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
 #include "target_specific.h"
-#ifdef PICO2_W5500_E22
+#ifdef USE_ARDUINO_ETHERNET
 #include <Ethernet.h> // arduino-libraries/Ethernet — supports W5100/W5200/W5500
 // Shorter DHCP timeout so LoRa startup isn't blocked when no DHCP server is present.
 #define ETH_DHCP_TIMEOUT_MS 10000
@@ -75,7 +75,7 @@ static int32_t reconnectETH()
             delay(100);
 #endif
 
-#ifdef PICO2_W5500_E22 // Re-configure SPI0 for the W5500 module
+#ifdef USE_ARDUINO_ETHERNET // Re-configure SPI0 for the W5500 module
             SPI.setRX(ETH_SPI0_MISO);
             SPI.setSCK(ETH_SPI0_SCK);
             SPI.setTX(ETH_SPI0_MOSI);
@@ -200,7 +200,7 @@ bool initEthernet()
         digitalWrite(PIN_ETHERNET_RESET, HIGH); // Reset Time.
 #endif
 
-#ifdef PICO2_W5500_E22 // Configure SPI0 for the W5500 module
+#ifdef USE_ARDUINO_ETHERNET // Configure SPI0 for the W5500 module
         SPI.setRX(ETH_SPI0_MISO);
         SPI.setSCK(ETH_SPI0_SCK);
         SPI.setTX(ETH_SPI0_MOSI);
