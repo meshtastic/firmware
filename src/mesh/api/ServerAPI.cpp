@@ -30,15 +30,20 @@ template <typename T> bool ServerAPI<T>::checkIsConnected()
 
 template <typename T> bool ServerAPI<T>::canWriteFrame(size_t frameLen)
 {
-    int writable = stream_api::availableForWriteOrUnknown(client);
-    if (!stream_api::clientReadyForWrite(client)) {
+    if (!client.connected()) {
         canWrite = false;
         enabled = false;
-        if (writable == -1)
-            LOG_WARN("TCP client disconnected before write, closing API service");
-        else
-            LOG_WARN("TCP client not writable before write (%d/%lu bytes), closing API service", writable,
-                     (unsigned long)frameLen);
+        LOG_WARN("TCP client disconnected before write, closing API service");
+        close();
+        return false;
+    }
+
+    int writable = stream_api::availableForWriteOrUnknown(client);
+    if (writable != -1 && writable <= 0) {
+        canWrite = false;
+        enabled = false;
+        LOG_WARN("TCP client not writable before write (%d/%lu bytes), closing API service", writable,
+                 (unsigned long)frameLen);
         close();
         return false;
     }

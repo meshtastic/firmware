@@ -181,25 +181,20 @@ bool StreamAPI::writeFrame(uint8_t *buf, size_t len)
     buf[3] = len & 0xff;
 
     auto totalLen = len + HEADER_LEN;
+    // Serialize write-readiness checks, writes and write-failure handling
+    // against concurrent stream writes/close.
+    concurrency::LockGuard guard(&streamLock);
     if (!canWriteFrame(totalLen))
         return false;
 
-    size_t written;
-    {
-        // Serialize stream writes against `emitLogRecord` so a LOG_ firing
-        // mid-packet-emission can't interleave bytes on the wire.
-        concurrency::LockGuard guard(&streamLock);
-        written = stream->write(buf, totalLen);
-        if (written == totalLen)
-            stream->flush();
+    size_t written = stream->write(buf, totalLen);
+    if (written == totalLen) {
+        stream->flush();
+        return true;
     }
 
-    if (written != totalLen) {
-        onFrameWriteFailed(totalLen, written);
-        return false;
-    }
-
-    return true;
+    onFrameWriteFailed(totalLen, written);
+    return false;
 }
 
 bool StreamAPI::emitTxBuffer(size_t len)
