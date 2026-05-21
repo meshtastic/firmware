@@ -68,7 +68,10 @@ void unlockScreen();
 
 #else
 
-inline bool shouldRedactDisplay() { return false; }
+inline bool shouldRedactDisplay()
+{
+    return false;
+}
 inline void lockScreen() {}
 inline void unlockScreen() {}
 

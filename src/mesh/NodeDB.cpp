@@ -1991,7 +1991,6 @@ void NodeDB::loadFromDisk()
     }
 
 #endif
-
 }
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE

@@ -23,7 +23,8 @@ extern "C" {
 #include "nrf_cc310/include/ssi_aes_defs.h"
 }
 
-namespace EncryptedStorage {
+namespace EncryptedStorage
+{
 
 // ---------------------------------------------------------------------------
 // File paths and domain-separation strings
@@ -85,11 +86,13 @@ static uint32_t s_backoffSecondsRemaining = 0;
 // Schedule: 5, 10, 20, 40, 80, 160, 320, 900 (capped)
 static uint32_t backoffDelay(uint8_t attempts)
 {
-    if (attempts == 0) return 0;
+    if (attempts == 0)
+        return 0;
     uint32_t delay = 5u;
     for (uint8_t i = 1; i < attempts; i++) {
         delay *= 2;
-        if (delay >= 900) return 900;
+        if (delay >= 900)
+            return 900;
     }
     return delay;
 }
@@ -122,7 +125,8 @@ static void readBackoff(uint8_t &attempts, uint8_t &bootsSinceFail, uint32_t &la
 #ifdef FSCom
     concurrency::LockGuard g(spiLock);
     auto f = FSCom.open(BACKOFF_FILENAME, FILE_O_READ);
-    if (!f) return;
+    if (!f)
+        return;
     size_t sz = f.size();
     if (sz != BACKOFF_V1_SIZE && sz != BACKOFF_V2_SIZE) {
         f.close();
@@ -149,7 +153,8 @@ static void writeBackoff(uint8_t attempts, uint8_t bootsSinceFail, uint32_t last
     concurrency::LockGuard g(spiLock);
     FSCom.remove(BACKOFF_FILENAME);
     auto f = FSCom.open(BACKOFF_FILENAME, FILE_O_WRITE);
-    if (!f) return;
+    if (!f)
+        return;
     f.write(attempts);
     f.write(bootsSinceFail);
     uint8_t buf[4];
@@ -208,8 +213,8 @@ static void readFICR(uint8_t efuseData[16])
 // ---------------------------------------------------------------------------
 
 /// AES-128-CTR encrypt/decrypt (symmetric). Caller holds CC310.
-static bool aesCtr128(const uint8_t *key, const uint8_t *nonce, size_t nonceLen,
-                      const uint8_t *input, size_t inputLen, uint8_t *output)
+static bool aesCtr128(const uint8_t *key, const uint8_t *nonce, size_t nonceLen, const uint8_t *input, size_t inputLen,
+                      uint8_t *output)
 {
     if (inputLen == 0)
         return true;
@@ -258,8 +263,7 @@ static bool aesCtr128(const uint8_t *key, const uint8_t *nonce, size_t nonceLen,
 
     size_t remaining = inputLen - processed;
     size_t finishOutSize = remaining;
-    err = SaSi_AesFinish(&ctx, remaining, (uint8_t *)input + processed, remaining, output + processed,
-                         &finishOutSize);
+    err = SaSi_AesFinish(&ctx, remaining, (uint8_t *)input + processed, remaining, output + processed, &finishOutSize);
     if (err != 0) {
         LOG_ERROR("EncryptedStorage: AES finish failed: 0x%x", err);
         SaSi_AesFree(&ctx);
@@ -271,12 +275,10 @@ static bool aesCtr128(const uint8_t *key, const uint8_t *nonce, size_t nonceLen,
 }
 
 /// Compute HMAC-SHA256(key, data). Caller holds CC310.
-static bool computeHMAC(const uint8_t *key, size_t keyLen, const uint8_t *data, size_t dataLen,
-                        uint8_t *hmacOut)
+static bool computeHMAC(const uint8_t *key, size_t keyLen, const uint8_t *data, size_t dataLen, uint8_t *hmacOut)
 {
     CRYS_HASH_Result_t hmacResult;
-    CRYSError_t err =
-        CRYS_HMAC(CRYS_HASH_SHA256_mode, (uint8_t *)key, (uint16_t)keyLen, (uint8_t *)data, dataLen, hmacResult);
+    CRYSError_t err = CRYS_HMAC(CRYS_HASH_SHA256_mode, (uint8_t *)key, (uint16_t)keyLen, (uint8_t *)data, dataLen, hmacResult);
     if (err != 0) {
         LOG_ERROR("EncryptedStorage: CRYS_HMAC failed: 0x%x", err);
         return false;
@@ -697,8 +699,7 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
     meshtastic_security::secure_zero(body, sizeof(body));
     meshtastic_security::secure_zero(hmac, sizeof(hmac));
 
-    LOG_INFO("EncryptedStorage: Unlock token written (boots=%d, epoch=%u)", bootsRemaining,
-             validUntilEpoch);
+    LOG_INFO("EncryptedStorage: Unlock token written (boots=%d, epoch=%u)", bootsRemaining, validUntilEpoch);
     return true;
 #else
     return false;
@@ -992,8 +993,8 @@ uint8_t consumeSessionBoot()
     return newBoots;
 }
 
-bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_t bootsRemaining,
-                         uint32_t validUntilEpoch, uint32_t sessionMaxSeconds)
+bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_t bootsRemaining, uint32_t validUntilEpoch,
+                         uint32_t sessionMaxSeconds)
 {
     // MED-8: proto private_key field is 32 bytes; cap to match (was incorrectly 64)
     if (passphraseLen == 0 || passphraseLen > 32) {
@@ -1057,8 +1058,8 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_
     return true;
 }
 
-bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_t bootsRemaining,
-                          uint32_t validUntilEpoch, uint32_t sessionMaxSeconds)
+bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_t bootsRemaining, uint32_t validUntilEpoch,
+                          uint32_t sessionMaxSeconds)
 {
     // MED-8: proto private_key field is 32 bytes; cap to match (was incorrectly 64)
     if (passphraseLen == 0 || passphraseLen > 32) {
@@ -1093,7 +1094,8 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
                 uint32_t elapsedSec = (millis() - s_lastFailMillis) / 1000u;
                 if (elapsedSec < delay) {
                     uint32_t r = delay - elapsedSec;
-                    if (r > maxRemaining) maxRemaining = r;
+                    if (r > maxRemaining)
+                        maxRemaining = r;
                 }
             }
 
@@ -1104,7 +1106,8 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
                 uint32_t elapsed = now - lastFailEpoch;
                 if (elapsed < delay) {
                     uint32_t r = delay - elapsed;
-                    if (r > maxRemaining) maxRemaining = r;
+                    if (r > maxRemaining)
+                        maxRemaining = r;
                 }
             }
 
@@ -1113,11 +1116,13 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
             // and may leave the RTC unsynced). Conservative: assume ~5 s per
             // reboot cycle, so require ceil(delay / 5) boots to elapse.
             uint8_t bootsNeeded = (uint8_t)std::min<uint32_t>(255u, (delay + 4u) / 5u);
-            if (bootsNeeded == 0) bootsNeeded = 1;
+            if (bootsNeeded == 0)
+                bootsNeeded = 1;
             if (bootsSinceFail < bootsNeeded) {
                 // Estimate remaining seconds for client UX: missing boots * 5s.
                 uint32_t r = (uint32_t)(bootsNeeded - bootsSinceFail) * 5u;
-                if (r > maxRemaining) maxRemaining = r;
+                if (r > maxRemaining)
+                    maxRemaining = r;
             }
 
             if (maxRemaining > 0) {
@@ -1153,11 +1158,13 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
         uint8_t bootsSinceFail;
         uint32_t lastFailEpoch;
         readBackoff(attempts, bootsSinceFail, lastFailEpoch);
-        if (attempts < 255) attempts++;
+        if (attempts < 255)
+            attempts++;
         uint32_t now = getValidTime(RTCQualityDevice);
         writeBackoff(attempts, 0, now);
         s_lastFailMillis = millis();
-        if (s_lastFailMillis == 0) s_lastFailMillis = 1; // sentinel: never 0 after a real fail
+        if (s_lastFailMillis == 0)
+            s_lastFailMillis = 1; // sentinel: never 0 after a real fail
         s_backoffSecondsRemaining = backoffDelay(attempts);
         LOG_WARN("EncryptedStorage: Wrong passphrase (attempt %d, next in ~%us)", attempts, s_backoffSecondsRemaining);
     };
@@ -1413,16 +1420,15 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
     // length derived from the file size. For AES-CTR the two are always equal in a legitimate
     // file; a mismatch means the header field was tampered independently of the ciphertext.
     if (plaintextLen != ciphertextLen) {
-        LOG_ERROR("EncryptedStorage: plaintextLen (%d) != ciphertextLen (%d) in %s — header tampered",
-                  plaintextLen, (uint32_t)ciphertextLen, filename);
+        LOG_ERROR("EncryptedStorage: plaintextLen (%d) != ciphertextLen (%d) in %s — header tampered", plaintextLen,
+                  (uint32_t)ciphertextLen, filename);
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
     }
 
     // Decrypt using dekSnapshot — MED-1
     if (plaintextLen > outBufSize) {
-        LOG_ERROR("EncryptedStorage: Output buffer too small for %s (%d > %d)", filename, plaintextLen,
-                  outBufSize);
+        LOG_ERROR("EncryptedStorage: Output buffer too small for %s (%d > %d)", filename, plaintextLen, outBufSize);
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
     }

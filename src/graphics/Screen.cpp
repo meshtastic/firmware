@@ -40,8 +40,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/NotificationRenderer.h"
 #include "draw/UIRenderer.h"
 #include "graphics/TFTColorRegions.h"
-#include "security/LockdownDisplay.h"
 #include "modules/CannedMessageModule.h"
+#include "security/LockdownDisplay.h"
 
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"

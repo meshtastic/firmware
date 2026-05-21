@@ -59,32 +59,33 @@
  *   fresh passphrase, which writes a v2 token.
  */
 
-namespace EncryptedStorage {
+namespace EncryptedStorage
+{
 
 // ---------------------------------------------------------------------------
 // File format constants
 // ---------------------------------------------------------------------------
 
-static constexpr uint32_t MAGIC = 0x4D454E43;          // "MENC" — encrypted proto files
+static constexpr uint32_t MAGIC = 0x4D454E43; // "MENC" — encrypted proto files
 static constexpr uint8_t VERSION = 0x01;
 static constexpr size_t NONCE_SIZE = 13;
 static constexpr size_t HMAC_SIZE = 32;
 static constexpr size_t HEADER_SIZE = 4 + 1 + NONCE_SIZE + 4; // magic+version+nonce+plaintext_len
-static constexpr size_t OVERHEAD = HEADER_SIZE + HMAC_SIZE;    // 54 bytes
+static constexpr size_t OVERHEAD = HEADER_SIZE + HMAC_SIZE;   // 54 bytes
 static constexpr size_t AES_KEY_SIZE = 16;
 static constexpr size_t AES_BLOCK_SIZE = 16;
 
-static constexpr uint32_t DEK_MAGIC_V2 = 0x4D44454B;   // "MDEK"
+static constexpr uint32_t DEK_MAGIC_V2 = 0x4D44454B; // "MDEK"
 static constexpr uint8_t DEK_VERSION_V2 = 0x02;
-static constexpr size_t DEK_V1_SIZE = NONCE_SIZE + AES_KEY_SIZE;                           // 29 bytes
-static constexpr size_t DEK_V2_SIZE = 4 + 1 + NONCE_SIZE + AES_KEY_SIZE + HMAC_SIZE;      // 66 bytes
+static constexpr size_t DEK_V1_SIZE = NONCE_SIZE + AES_KEY_SIZE;                     // 29 bytes
+static constexpr size_t DEK_V2_SIZE = 4 + 1 + NONCE_SIZE + AES_KEY_SIZE + HMAC_SIZE; // 66 bytes
 
-static constexpr uint32_t TOKEN_MAGIC = 0x55544F4B;     // "UTOK"
-static constexpr uint8_t TOKEN_VERSION = 0x02; // v2 adds session_max_seconds field
+static constexpr uint32_t TOKEN_MAGIC = 0x55544F4B; // "UTOK"
+static constexpr uint8_t TOKEN_VERSION = 0x02;      // v2 adds session_max_seconds field
 // magic(4) + version(1) + nonce(NONCE_SIZE=13) + encDek(AES_KEY_SIZE=16)
 //   + bootsRemaining(1) + validUntilEpoch(4) + sessionMaxSeconds(4) = 43 bytes
 static constexpr size_t TOKEN_BODY_SIZE = 4 + 1 + NONCE_SIZE + AES_KEY_SIZE + 1 + 4 + 4;
-static constexpr size_t TOKEN_TOTAL_SIZE = TOKEN_BODY_SIZE + HMAC_SIZE;                    // 75 bytes
+static constexpr size_t TOKEN_TOTAL_SIZE = TOKEN_BODY_SIZE + HMAC_SIZE; // 75 bytes
 
 static constexpr uint8_t TOKEN_DEFAULT_BOOTS = 50;
 
@@ -114,9 +115,8 @@ void initLocked();
  *                          Persists in the token; cold-boot via token inherits the same cap.
  * @return true on success
  */
-bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen,
-                         uint8_t bootsRemaining = TOKEN_DEFAULT_BOOTS, uint32_t validUntilEpoch = 0,
-                         uint32_t sessionMaxSeconds = 0);
+bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_t bootsRemaining = TOKEN_DEFAULT_BOOTS,
+                         uint32_t validUntilEpoch = 0, uint32_t sessionMaxSeconds = 0);
 
 /**
  * Unlock after token expiry (or after lockNow()): derive KEK from passphrase,
@@ -130,9 +130,8 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen,
  *                          Persists in the new token; reboot starts a fresh session window.
  * @return true if passphrase was correct and DEK is now loaded
  */
-bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen,
-                          uint8_t bootsRemaining = TOKEN_DEFAULT_BOOTS, uint32_t validUntilEpoch = 0,
-                          uint32_t sessionMaxSeconds = 0);
+bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_t bootsRemaining = TOKEN_DEFAULT_BOOTS,
+                          uint32_t validUntilEpoch = 0, uint32_t sessionMaxSeconds = 0);
 
 /**
  * Immediately lock: delete the unlock token and zero the DEK from RAM.
@@ -225,8 +224,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
  * Encrypt plaintext and write to filename.
  * Returns true on success.
  */
-bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plaintextLen,
-                     bool fullAtomic = false);
+bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plaintextLen, bool fullAtomic = false);
 
 /**
  * Migrate a plaintext proto file to encrypted format in-place.

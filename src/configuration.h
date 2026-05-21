@@ -604,7 +604,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_ENABLE_APPROTECT 1
 #endif
 #else
-#warning "MESHTASTIC_LOCKDOWN: non-nRF52 target — only DEBUG_MUTE is active. Encrypted storage, APPROTECT, and access control are unavailable on this platform."
+#warning                                                                                                                         \
+    "MESHTASTIC_LOCKDOWN: non-nRF52 target — only DEBUG_MUTE is active. Encrypted storage, APPROTECT, and access control are unavailable on this platform."
 #endif
 
 // Per-boot uptime cap on unlocked sessions. 0 = unlimited (token-only

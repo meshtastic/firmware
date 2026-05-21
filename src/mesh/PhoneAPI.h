@@ -199,11 +199,8 @@ class PhoneAPI
     /// reason this isn't a class member (USB-CDC enumeration regression on
     /// nRF52 when ~50 bytes of struct sits on PhoneAPI per-instance).
     /// `lock_reason` may be nullptr / empty for non-LOCKED states.
-    static void queueLockdownStatus(meshtastic_LockdownStatus_State state,
-                                     const char *lock_reason,
-                                     uint8_t boots_remaining,
-                                     uint32_t valid_until_epoch,
-                                     uint32_t backoff_seconds);
+    static void queueLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
+                                    uint32_t valid_until_epoch, uint32_t backoff_seconds);
 #endif
 
   protected:

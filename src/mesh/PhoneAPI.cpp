@@ -83,9 +83,11 @@ static PhoneAPI *volatile g_currentContext = nullptr;
 // defensively handled (treated as "not authenticated").
 static PhoneAuthSlot *findOrAllocSlot(PhoneAPI *p)
 {
-    if (!p) return nullptr;
+    if (!p)
+        return nullptr;
     for (auto &s : g_authSlots)
-        if (s.who == p) return &s;
+        if (s.who == p)
+            return &s;
     for (auto &s : g_authSlots) {
         if (s.who == nullptr) {
             s.who = p;
@@ -233,7 +235,7 @@ void PhoneAPI::close()
         if (auto *slot = findOrAllocSlot(this)) {
             slot->authorized = false;
             slot->epoch = 0;
-            slot->who = nullptr;  // free the slot — destructor may not run
+            slot->who = nullptr; // free the slot — destructor may not run
         }
 #endif
     }
@@ -417,8 +419,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // for unauthenticated clients. my_node_num and the other public mesh
             // identity fields stay (they're broadcast on the mesh anyway).
             fromRadioScratch.my_info.device_id.size = 0;
-            memset(fromRadioScratch.my_info.device_id.bytes, 0,
-                   sizeof(fromRadioScratch.my_info.device_id.bytes));
+            memset(fromRadioScratch.my_info.device_id.bytes, 0, sizeof(fromRadioScratch.my_info.device_id.bytes));
         }
 #endif
         state = STATE_SEND_UIDATA;
@@ -688,15 +689,15 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 state = STATE_SEND_COMPLETE_ID;
             } else
 #endif
-            // Handle special nonce behaviors:
-            // - SPECIAL_NONCE_ONLY_CONFIG: Skip node info, go directly to file manifest
-            // - SPECIAL_NONCE_ONLY_NODES: After sending nodes, skip to complete
-            if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
-                state = STATE_SEND_FILEMANIFEST;
-            } else {
-                state = STATE_SEND_OTHER_NODEINFOS;
-                onNowHasData(0);
-            }
+                // Handle special nonce behaviors:
+                // - SPECIAL_NONCE_ONLY_CONFIG: Skip node info, go directly to file manifest
+                // - SPECIAL_NONCE_ONLY_NODES: After sending nodes, skip to complete
+                if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
+                    state = STATE_SEND_FILEMANIFEST;
+                } else {
+                    state = STATE_SEND_OTHER_NODEINFOS;
+                    onNowHasData(0);
+                }
             config_state = 0;
         }
         break;
@@ -1436,8 +1437,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
             handleLockdownAuthInline(admin.lockdown_auth);
             // Wipe the decoded passphrase scratch — the byte array in
             // p.decoded.payload.bytes is wiped by handleLockdownAuthInline.
-            volatile uint8_t *adminVol =
-                const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
+            volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
             for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
                 adminVol[i] = 0;
             return true;
@@ -1526,7 +1526,8 @@ bool PhoneAPI::getAdminAuthorized() const
 void PhoneAPI::setAdminAuthorized(bool authorized)
 {
     auto *slot = findOrAllocSlot(this);
-    if (!slot) return; // slot table full — fail-closed
+    if (!slot)
+        return; // slot table full — fail-closed
     if (authorized) {
         slot->epoch = g_authEpoch;
         slot->authorized = true;
@@ -1559,11 +1560,8 @@ void PhoneAPI::revokeAllAuth()
     LOG_INFO("Lockdown: All connection auth revoked (Lock Now)");
 }
 
-void PhoneAPI::queueLockdownStatus(meshtastic_LockdownStatus_State state,
-                                    const char *lock_reason,
-                                    uint8_t boots_remaining,
-                                    uint32_t valid_until_epoch,
-                                    uint32_t backoff_seconds)
+void PhoneAPI::queueLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
+                                   uint32_t valid_until_epoch, uint32_t backoff_seconds)
 {
     concurrency::LockGuard guard(&g_pendingLockdownStatusMutex);
     memset(&g_pendingLockdownStatus, 0, sizeof(g_pendingLockdownStatus));
@@ -1649,8 +1647,7 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         // latch — the operator has proven the passphrase, so the display
         // can show content again until the next idle timeout.
         meshtastic_security::unlockScreen();
-        queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCKED, "",
-                            EncryptedStorage::getBootsRemaining(),
+        queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCKED, "", EncryptedStorage::getBootsRemaining(),
                             EncryptedStorage::getValidUntilEpoch(), 0);
     } else {
         uint32_t backoff = EncryptedStorage::getBackoffSecondsRemaining();
