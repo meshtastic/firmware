@@ -45,20 +45,6 @@ int32_t QMC5883Sensor::runOnce()
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
-    // Log raw data every ~1 second (every 10th call at 100ms interval)
-    {
-        static uint8_t debugCounter = 0;
-        if (++debugCounter >= 10) {
-            debugCounter = 0;
-            float cx = rawX - magOffsetX;
-            float cy = rawY - magOffsetY;
-            float h = atan2(cy, cx) * 180.0f / M_PI;
-            if (h < 0)
-                h += 360.0f;
-            LOG_DEBUG("QMC5883P raw: X=%d Y=%d Z=%d heading=%.0f  cal=%.0f,%.0f", rawX, rawY, rawZ, h, magOffsetX, magOffsetY);
-        }
-    }
-
     if (doCalibration) {
 
         if (!showingScreen) {
