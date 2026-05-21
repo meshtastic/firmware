@@ -231,13 +231,13 @@ const RegionInfo regions[] = {
         Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
         via its own PA curve; the field here is just the legal upper bound.
     */
-    RDEF(ITU1_2M, 144.0f, 146.0f, 100, 30, false, false, PROFILE_HAM),
+    RDEF(ITU1_2M, 144.0f, 146.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST)),
 
     /*
         ITU Region 2 (Americas) and Region 3 (Asia/Pacific) amateur 2m allocation: 144.000 - 148.000 MHz.
         Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
     */
-    RDEF(ITU23_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM),
+    RDEF(ITU23_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST)),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
