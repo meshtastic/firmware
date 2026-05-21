@@ -4,9 +4,10 @@
 
 #include "MotionSensor.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<QMC5883LCompass.h>)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_QMC5883P.h>)
 
-#include <QMC5883LCompass.h>
+#include <Adafruit_QMC5883P.h>
+#include <Wire.h>
 
 // The I2C address of the Accelerometer (if found) from main.cpp
 extern ScanI2C::DeviceAddress accelerometer_found;
@@ -14,7 +15,7 @@ extern ScanI2C::DeviceAddress accelerometer_found;
 class QMC5883Sensor : public MotionSensor
 {
   private:
-    QMC5883LCompass sensor;
+    Adafruit_QMC5883P sensor;
     bool showingScreen = false;
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
