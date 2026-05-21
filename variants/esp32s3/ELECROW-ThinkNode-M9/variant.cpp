@@ -1,4 +1,5 @@
-#include "configuration.h"
+#include "variant.h"
+#include "Arduino.h"
 
 void earlyInitVariant()
 {

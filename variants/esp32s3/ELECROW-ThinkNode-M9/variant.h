@@ -48,7 +48,6 @@
 
 /*SD Card*/
 #define SDCARD_CS 48
-#define SD_SPI_FREQUENCY 80000000U
 
 /*Screen*/
 // #define USE_ST7789 1
@@ -62,7 +61,6 @@
 #define ST7789_BUSY -1
 #define ST7789_BL 17
 #define ST7789_SPI_HOST SPI3_HOST
-#define SPI_FREQUENCY 80000000
 #define SPI_READ_FREQUENCY 16000000
 
 #define USE_TFTDISPLAY 1
