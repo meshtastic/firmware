@@ -404,6 +404,52 @@ template <typename T> bool SX126xInterface<T>::sleep()
     return true;
 }
 
+#ifdef MESHTASTIC_RF_TEST_FIRMWARE
+template <typename T> int16_t SX126xInterface<T>::setRfTestParameters(float frequencyMhz, int8_t chipPowerDbm)
+{
+    setStandby();
+
+    int16_t err = lora.setFrequency(frequencyMhz);
+    if (err != RADIOLIB_ERR_NONE)
+        return err;
+
+    power = chipPowerDbm;
+    if (power < -9)
+        power = -9;
+    if (power > SX126X_MAX_POWER)
+        power = SX126X_MAX_POWER;
+
+    err = lora.setOutputPower(power);
+    if (err != RADIOLIB_ERR_NONE)
+        return err;
+
+    saveFreq(frequencyMhz);
+    return RADIOLIB_ERR_NONE;
+}
+
+template <typename T> int16_t SX126xInterface<T>::startRfTestContinuousWave()
+{
+    setStandby();
+    configHardwareForSend();
+    return lora.transmitDirect();
+}
+
+template <typename T> int16_t SX126xInterface<T>::startRfTestInfinitePreamble()
+{
+    constexpr uint16_t SET_TX_INFINITE_PREAMBLE = 0xD2;
+
+    setStandby();
+    configHardwareForSend();
+    module.setRfSwitchState(Module::MODE_TX);
+    return module.SPIwriteStream(SET_TX_INFINITE_PREAMBLE, nullptr, 0);
+}
+
+template <typename T> void SX126xInterface<T>::stopRfTest()
+{
+    setStandby();
+}
+#endif
+
 template <typename T> void SX126xInterface<T>::resetAGC()
 {
     // Safety: don't reset mid-packet

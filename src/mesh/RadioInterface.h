@@ -236,6 +236,13 @@ class RadioInterface
     /// Some boards (1st gen Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
     virtual bool isIRQPending() { return false; }
 
+#ifdef MESHTASTIC_RF_TEST_FIRMWARE
+    virtual int16_t setRfTestParameters(float frequencyMhz, int8_t chipPowerDbm) { return -1; }
+    virtual int16_t startRfTestContinuousWave() { return -1; }
+    virtual int16_t startRfTestInfinitePreamble() { return -1; }
+    virtual void stopRfTest() {}
+#endif
+
     // Whether we use the default frequency slot given our LoRa config (region and modem preset)
     static bool uses_default_frequency_slot;
 
