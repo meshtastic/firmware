@@ -132,8 +132,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
                     bool ackWantsAck = false);
 
     /** Publish a received packet to MQTT using the same receive-side publish rules as handleReceived(). */
-    void publishReceivedToMqtt(meshtastic_MeshPacket *p, DecodeState decodedState,
-                               meshtastic_MeshPacket *pEncrypted = nullptr);
+    void publishReceivedToMqtt(meshtastic_MeshPacket *p, DecodeState decodedState, meshtastic_MeshPacket *pEncrypted = nullptr);
 
   private:
     /**
