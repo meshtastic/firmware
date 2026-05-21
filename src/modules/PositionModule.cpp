@@ -4,6 +4,7 @@
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PositionPrecision.h"
 #include "RTC.h"
 #include "Router.h"
 #include "TransmitHistory.h"
@@ -107,13 +108,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     nodeDB->updatePosition(getFrom(&mp), p);
-    if (channels.getByIndex(mp.channel).settings.has_module_settings) {
-        precision = channels.getByIndex(mp.channel).settings.module_settings.position_precision;
-    } else if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
-        precision = 32;
-    } else {
-        precision = 0;
-    }
+    precision = getPositionPrecisionForChannel(mp.channel);
 
     return false; // Let others look at this message also if they want
 }
@@ -121,15 +116,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_Position *p)
 {
     // Phone position packets need to be truncated to the channel precision
-    if (isFromUs(&mp) && (precision < 32 && precision > 0)) {
-        LOG_DEBUG("Truncate phone position to channel precision %i", precision);
-        p->latitude_i = p->latitude_i & (UINT32_MAX << (32 - precision));
-        p->longitude_i = p->longitude_i & (UINT32_MAX << (32 - precision));
-
-        // We want the imprecise position to be the middle of the possible location, not
-        p->latitude_i += (1 << (31 - precision));
-        p->longitude_i += (1 << (31 - precision));
-
+    if (isFromUs(&mp)) {
+        if (precision == 0)
+            LOG_DEBUG("Strip phone position due to channel precision 0");
+        else if (precision < 32)
+            LOG_DEBUG("Truncate phone position to channel precision %i", precision);
+        applyPositionPrecision(*p, precision);
         mp.decoded.payload.size =
             pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_Position_msg, p);
     }
@@ -183,8 +175,7 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
         return nullptr;
     }
 
-    meshtastic_NodeInfoLite *node = service->refreshLocalMeshNode(); // should guarantee there is now a position
-    assert(node->has_position);
+    const meshtastic_NodeInfoLite *node = service->refreshLocalMeshNode(); // should guarantee there is now a position
 
     // configuration of POSITION packet
     //   consider making this a function argument?
@@ -194,7 +185,9 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
     meshtastic_Position p = meshtastic_Position_init_default; //   Start with an empty structure
     // if localPosition is totally empty, put our last saved position (lite) in there
     if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
-        nodeDB->setLocalPosition(TypeConversions::ConvertToPosition(node->position));
+        meshtastic_PositionLite cachedSelf;
+        if (nodeDB->copyNodePosition(node->num, cachedSelf))
+            nodeDB->setLocalPosition(TypeConversions::ConvertToPosition(cachedSelf));
     }
     localPosition.seq_number++;
 
@@ -205,20 +198,11 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
 
     // lat/lon are unconditionally included - IF AVAILABLE!
     LOG_DEBUG("Send location with precision %i", precision);
-    if (precision < 32 && precision > 0) {
-        p.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - precision));
-        p.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - precision));
-
-        // We want the imprecise position to be the middle of the possible location, not
-        p.latitude_i += (1 << (31 - precision));
-        p.longitude_i += (1 << (31 - precision));
-    } else {
-        p.latitude_i = localPosition.latitude_i;
-        p.longitude_i = localPosition.longitude_i;
-    }
-    p.precision_bits = precision;
+    p.latitude_i = localPosition.latitude_i;
+    p.longitude_i = localPosition.longitude_i;
     p.has_latitude_i = true;
     p.has_longitude_i = true;
+    applyPositionPrecision(p, precision);
     // Always use NTP / GPS time if available
     if (getValidTime(RTCQualityNTP) > 0) {
         p.time = getValidTime(RTCQualityNTP);
@@ -349,8 +333,7 @@ void PositionModule::sendOurPosition()
     // If we changed channels, ask everyone else for their latest info
     LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
     for (uint8_t channelNum = 0; channelNum < 8; channelNum++) {
-        if (channels.getByIndex(channelNum).settings.has_module_settings &&
-            channels.getByIndex(channelNum).settings.module_settings.position_precision != 0) {
+        if (getPositionPrecisionForChannel(channelNum) != 0) {
             sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
             return;
         }
@@ -368,10 +351,8 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
 
-    // Set's the class precision value for this particular packet
-    if (channels.getByIndex(channel).settings.has_module_settings) {
-        precision = channels.getByIndex(channel).settings.module_settings.position_precision;
-    }
+    // Set the class precision value for this particular packet.
+    precision = getPositionPrecisionForChannel(channel);
 
     meshtastic_MeshPacket *p = allocPositionPacket();
     if (p == nullptr) {
@@ -420,7 +401,7 @@ int32_t PositionModule::runOnce()
         doDeepSleep(nightyNightMs, false, false);
     }
 
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (node == nullptr)
         return RUNONCE_INTERVAL;
 
@@ -445,8 +426,11 @@ int32_t PositionModule::runOnce()
         } else if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
-            lastGpsLatitude = node->position.latitude_i;
-            lastGpsLongitude = node->position.longitude_i;
+            meshtastic_PositionLite selfPos;
+            if (nodeDB->copyNodePosition(node->num, selfPos)) {
+                lastGpsLatitude = selfPos.latitude_i;
+                lastGpsLongitude = selfPos.longitude_i;
+            }
 
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(meshtastic_PortNum_POSITION_APP);
@@ -461,7 +445,10 @@ int32_t PositionModule::runOnce()
         if (nodeDB->hasValidPosition(node2)) {
             // The minimum time (in seconds) that would pass before we are able to send a new position packet.
 
-            auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
+            meshtastic_PositionLite selfPos;
+            if (!nodeDB->copyNodePosition(node->num, selfPos))
+                return RUNONCE_INTERVAL; // Defensive: hasValidPosition should imply this is non-null
+            auto smartPosition = getDistanceTraveledSinceLastSend(selfPos);
             msSinceLastSend = now - lastGpsSend;
 
             if (smartPosition.hasTraveledOverThreshold &&
@@ -479,8 +466,8 @@ int32_t PositionModule::runOnce()
                           msSinceLastSend, minimumTimeThreshold);
 
                 // Set the current coords as our last ones, after we've compared distance with current and decided to send
-                lastGpsLatitude = node->position.latitude_i;
-                lastGpsLongitude = node->position.longitude_i;
+                lastGpsLatitude = selfPos.latitude_i;
+                lastGpsLongitude = selfPos.longitude_i;
             }
         }
     }
@@ -563,11 +550,14 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
 
 void PositionModule::handleNewPosition()
 {
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
     // We limit our GPS broadcasts to a max rate
     if (nodeDB->hasValidPosition(node2)) {
-        auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
+        meshtastic_PositionLite selfPos;
+        if (!nodeDB->copyNodePosition(node->num, selfPos))
+            return;
+        auto smartPosition = getDistanceTraveledSinceLastSend(selfPos);
         uint32_t msSinceLastSend = millis() - lastGpsSend;
         if (smartPosition.hasTraveledOverThreshold &&
             Throttle::execute(
@@ -583,8 +573,8 @@ void PositionModule::handleNewPosition()
                       minimumTimeThreshold);
 
             // Set the current coords as our last ones, after we've compared distance with current and decided to send
-            lastGpsLatitude = node->position.latitude_i;
-            lastGpsLongitude = node->position.longitude_i;
+            lastGpsLatitude = selfPos.latitude_i;
+            lastGpsLongitude = selfPos.longitude_i;
         }
     }
 }

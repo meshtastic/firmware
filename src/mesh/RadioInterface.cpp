@@ -5,6 +5,7 @@
 #include "LR1110Interface.h"
 #include "LR1120Interface.h"
 #include "LR1121Interface.h"
+#include "LR2021Interface.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -53,7 +54,7 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {PRESET
 const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 1, 1, 0};
 const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 1, 1, 0};
 const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1, 0};
-const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.375F, false, false, 0, 10, 10, 0};
+const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0, 10, 10, 0};
 const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1, 1};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset)   \
@@ -493,6 +494,20 @@ std::unique_ptr<RadioInterface> initLoRa()
     }
 #endif
 
+#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+    if (!rIf) {
+        rIf = std::unique_ptr<LR2021Interface>(
+            new LR2021Interface(loraHal, LR2021_SPI_NSS_PIN, LR2021_IRQ_PIN, LR2021_NRESET_PIN, LR2021_BUSY_PIN));
+        if (!rIf->init()) {
+            LOG_WARN("No LR2021 radio");
+            rIf = nullptr;
+        } else {
+            LOG_INFO("LR2021 init success");
+            radioType = LR2021_RADIO;
+        }
+    }
+#endif
+
 #if defined(USE_SX1280) && RADIOLIB_EXCLUDE_SX128X != 1
     if (!rIf) {
         rIf = std::unique_ptr<SX1280Interface>(new SX1280Interface(loraHal, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY));
@@ -914,12 +929,15 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     if (loraConfig.override_frequency == 0) {
 
         // Check if we use the default frequency slot
+        // overrideSlot: 0 = channel hash, -1 = preset hash, >0 = explicit slot
         uses_default_frequency_slot =
             (loraConfig.channel_num == 0) || // user choice unset, no frequency override, so use default
-            (newRegion->profile->overrideSlot != 0 &&
-             loraConfig.channel_num == newRegion->profile->overrideSlot) || // user setting matches override
-            ((newRegion->profile->overrideSlot == 0) &&
-             ((uint32_t)(loraConfig.channel_num - 1) == presetNameHashSlot)); // user setting matches preset hash, no override
+            (newRegion->profile->overrideSlot > 0 &&
+             loraConfig.channel_num == newRegion->profile->overrideSlot) || // user setting matches explicit override slot
+            ((newRegion->profile->overrideSlot == OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH) &&
+             ((uint32_t)(loraConfig.channel_num - 1) == channelNameHashSlot)) || // user setting matches channel name hash
+            ((newRegion->profile->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) &&
+             ((uint32_t)(loraConfig.channel_num - 1) == presetNameHashSlot)); // user setting matches preset name hash
 
         // check if user setting different to preset name
         uses_custom_channel_name = (strcmp(channelName, presetNameDisplay) != 0);
@@ -934,10 +952,14 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             if (clamp) {
                 if (uses_custom_channel_name) { // clamp to channel name hash
                     loraConfig.channel_num =
-                        channelNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
-                } else if ((loraConfig.use_preset) && (newRegion->profile->overrideSlot != 0)) { // clamp to preset override slot
+                        channelNameHashSlot + 1;                   // channel_num is 1-based, but hash slot is 0-based, so add 1
+                } else if (newRegion->profile->overrideSlot > 0) { // clamp to explicit override slot
                     loraConfig.channel_num =
-                        newRegion->profile->overrideSlot; // use the override slot specified by the region profile
+                        newRegion->profile->overrideSlot; // use the explicit override slot specified by the region profile
+                    uses_default_frequency_slot = true;
+                } else if (newRegion->profile->overrideSlot == OVERRIDE_SLOT_PRESET_HASH && loraConfig.use_preset) {
+                    // clamp to preset name hash
+                    loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
                     uses_default_frequency_slot = true;
                 } else if (loraConfig.use_preset) {                  // clamp to preset slot
                     loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
@@ -1036,6 +1058,8 @@ void RadioInterface::applyModemConfig()
     // Calculate hash of channel name and preset name to pick a default frequency slot if user has not specified one.
     // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to
     // (numFreqSlots - 1).
+    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    uint32_t channelNameHashSlot = hash(channelName) % numFreqSlots;
     uint32_t presetNameHashSlot =
         hash(DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)) % numFreqSlots;
 
@@ -1052,11 +1076,13 @@ void RadioInterface::applyModemConfig()
         // (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to (numFreqSlots - 1).
         // NB: channel_num is also know as frequency slot but it's too late to fix now.
         if (uses_default_frequency_slot) {
-            // if there's an override slot, use that
-            if (newRegion->profile->overrideSlot != 0) {
-                channel_num = newRegion->profile->overrideSlot - 1;
+            // Handle three override slot cases: explicit slot (>0), preset hash (-1), or channel hash (0)
+            if (newRegion->profile->overrideSlot > 0) {
+                channel_num = newRegion->profile->overrideSlot - 1; // explicit override slot (1-based to 0-based)
+            } else if (newRegion->profile->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) {
+                channel_num = presetNameHashSlot; // use preset name hash
             } else {
-                channel_num = presetNameHashSlot;
+                channel_num = channelNameHashSlot; // use channel name hash (default case)
             }
         } else { // use the manually defined one
             channel_num = loraConfig.channel_num - 1;
@@ -1069,7 +1095,6 @@ void RadioInterface::applyModemConfig()
 
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
 
     // Get preamble length from the modem preset
     preambleLength = modemPresetToPreambleLength(loraConfig.modem_preset, newRegion->wideLora);
@@ -1082,9 +1107,11 @@ void RadioInterface::applyModemConfig()
              channel_num, power);
     LOG_INFO("newRegion->freqStart -> newRegion->freqEnd: %f -> %f (%f MHz)", newRegion->freqStart, newRegion->freqEnd,
              newRegion->freqEnd - newRegion->freqStart);
-    LOG_INFO("numFreqSlots: %d x %.3fkHz", numFreqSlots, bw);
-    if (newRegion->profile->overrideSlot != 0) {
-        LOG_INFO("Using region override slot: %d", newRegion->profile->overrideSlot);
+    LOG_INFO("numFreqSlots: %u x %.3fkHz", numFreqSlots, bw);
+    if (newRegion->profile->overrideSlot > 0) {
+        LOG_INFO("Using region explicit override slot: %d", newRegion->profile->overrideSlot);
+    } else if (newRegion->profile->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) {
+        LOG_INFO("Using region preset name hash for slot selection");
     }
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
