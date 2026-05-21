@@ -16,6 +16,7 @@
 #include "RadioInterface.h"
 #include "Router.h"
 #include "SPILock.h"
+#include "SafeBoot.h"
 #include "SafeFile.h"
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
@@ -1568,7 +1569,19 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 #ifdef FSCom
     concurrency::LockGuard g(spiLock);
 
+    // After an unclean reset (brownout/WDT) early-boot LittleFS reads can
+    // transiently fail (file appears missing) which would then trigger a
+    // factory reset and wipe the user's configuration. Retry a couple of
+    // times ONLY when SafeBoot flagged the previous reset as unclean, to
+    // avoid masking genuine FS corruption from other causes.
     auto f = FSCom.open(filename, FILE_O_READ);
+    if (!f && SafeBoot::lastResetWasUnclean()) {
+        for (int attempt = 1; attempt <= 3 && !f; attempt++) {
+            LOG_WARN("loadProto: open failed after unclean reset, retry %d/3 for %s", attempt, filename);
+            delay(250);
+            f = FSCom.open(filename, FILE_O_READ);
+        }
+    }
 
     if (f) {
         LOG_INFO("Load %s", filename);

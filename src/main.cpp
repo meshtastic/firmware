@@ -38,6 +38,7 @@
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
+#include "SafeBoot.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <memory>
@@ -410,6 +411,14 @@ void setup()
 #endif
 
     initDeepSleep();
+
+    // SafeBoot: pre-init power guard. Must run before any high-current
+    // peripheral rail is enabled (display, LoRa TCXO, sensors), before
+    // I2C scan, before LittleFS writes, before NodeDB load and before
+    // radio/BLE init. If the battery is too low or the previous reset
+    // was a brownout, this call does NOT return -- the MCU goes back
+    // into deep sleep with hysteresis + backoff.
+    SafeBoot::checkAndMaybeSleep();
 
 #if defined(MODEM_POWER_EN)
     pinMode(MODEM_POWER_EN, OUTPUT);
