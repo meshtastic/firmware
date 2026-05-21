@@ -27,6 +27,12 @@
 #include "RadioInterface.h"
 #include "TypeConversions.h"
 #include "mesh/RadioLibInterface.h"
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+#include "mesh/PhoneAPI.h"
+#endif
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
 
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -85,10 +91,27 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // and only allowing responses from that remote.
     if (messageIsResponse(r)) {
         LOG_DEBUG("Allow admin response message");
-    } else if (mp.from == 0) {
+    } else if (mp.from == 0 && !mp.pki_encrypted) {
+        // Plain (non-PKC) local admin from BLE/USB client.
+        // When is_managed: only PKC-authorized connections (handled below in the
+        // pki_encrypted branch) or connections that have already authenticated
+        // via lockdown_auth may issue admin commands. The legacy
+        // set_config(SecurityConfig) "private_key as passphrase transport" path
+        // is gone — lockdown passphrase delivery now lives in
+        // PhoneAPI::handleLockdownAuthInline, which gates the originating
+        // connection before any admin message is dispatched here, so no
+        // allowlist is needed at this layer.
         if (config.security.is_managed) {
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!PhoneAPI::isLocalAdminAuthorized()) {
+                LOG_INFO("Ignore local admin payload because is_managed");
+                myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+                return handled;
+            }
+#else
             LOG_INFO("Ignore local admin payload because is_managed");
             return handled;
+#endif
         }
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
@@ -104,6 +127,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             (config.security.admin_key[2].size == 32 &&
              memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
             LOG_INFO("PKC admin payload with authorized sender key");
+
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            // Only authorize local PhoneAPI connections when the PKC admin message
+            // came from a local client (from=0). A remote PKC admin (from!=0) has no
+            // business unlocking local BLE/USB config dumps.
+            if (mp.from == 0) {
+                PhoneAPI::authorizeLocalAdmin();
+            }
+#endif
 
             // Automatically favorite the node that is using the admin key
             auto remoteNode = nodeDB->getMeshNode(mp.from);
@@ -140,6 +172,17 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
     }
     switch (r->which_payload_variant) {
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // lockdown_auth is handled synchronously in
+    // PhoneAPI::handleToRadioPacket — see handleLockdownAuthInline. A
+    // packet should not normally reach AdminModule under that flag set,
+    // but if it ever does (e.g. injected via a non-PhoneAPI path), drop
+    // it silently rather than leaking a partial response.
+    case meshtastic_AdminMessage_lockdown_auth_tag:
+        LOG_WARN("AdminModule: lockdown_auth reached Router/AdminModule path; ignoring (should be handled in PhoneAPI)");
+        return handled;
+#endif // MESHTASTIC_ENCRYPTED_STORAGE
 
     /**
      * Getters

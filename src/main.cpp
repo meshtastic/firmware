@@ -68,6 +68,19 @@ void nrf54l15Loop();
 NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 #endif
 
+#ifdef MESHTASTIC_ENABLE_APPROTECT
+#include "security/APProtect.h"
+#endif
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+#include "mesh/PhoneAPI.h"
+#endif
+#ifdef MESHTASTIC_LOCKDOWN
+#include "security/LockdownDisplay.h"
+#endif
+
 #if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D)
 #include "mesh/api/WiFiServerAPI.h"
 #include "mesh/wifi/WiFiAPClient.h"
@@ -373,6 +386,10 @@ void setup()
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
 
+#ifdef MESHTASTIC_ENABLE_APPROTECT
+    enableAPProtect();
+#endif
+
 #ifdef UNPHONE
     unphone.printStore();
 #endif
@@ -469,6 +486,17 @@ void setup()
     OSThread::setup();
 
     fsInit();
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    EncryptedStorage::initLocked();
+    if (!EncryptedStorage::isUnlocked()) {
+        if (!EncryptedStorage::isProvisioned()) {
+            LOG_WARN("Lockdown: Device not provisioned — connect and set a passphrase to unlock storage");
+        } else {
+            LOG_WARN("Lockdown: Device locked — connect and provide passphrase to unlock storage");
+        }
+    }
+#endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #if defined(I2C_SDA1) && defined(ARCH_RP2040)
@@ -1054,6 +1082,10 @@ uint32_t rebootAtMsec;     // If not zero we will reboot at this time (used to r
 uint32_t shutdownAtMsec;   // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for OTA handoff)
 
+#if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
+volatile bool lockdownReloadPending; // see main.h — deferred NodeDB reload after lockdown unlock
+#endif
+
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
 // This will suppress the current delay and instead try to run ASAP.
 bool runASAP;
@@ -1137,6 +1169,54 @@ void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, Scan
 void loop()
 {
     runASAP = false;
+
+#if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
+    if (lockdownReloadPending) {
+        lockdownReloadPending = false;
+        LOG_INFO("Lockdown: reloading config from disk after unlock");
+        nodeDB->reloadFromDisk();
+    }
+
+    // Periodic session-expiry check. Cheap — millis() comparison. Don't
+    // hammer it every loop tick; once a second is plenty.
+    static uint32_t lastSessionCheckMs = 0;
+    if (millis() - lastSessionCheckMs > 1000) {
+        lastSessionCheckMs = millis();
+        if (rebootAtMsec == 0 && EncryptedStorage::isUnlocked() && EncryptedStorage::isSessionExpired()) {
+            // The session expired. Two paths:
+            //   1. Budget remains (bootsRemaining > 0): decrement the
+            //      on-flash boot count in place, revoke per-connection
+            //      auth, re-engage screen redaction, re-arm the uptime
+            //      timer — all WITHOUT rebooting. Storage stays unlocked
+            //      so the mesh keeps routing. Clients must re-authenticate
+            //      to see content again. The decrement is what enforces
+            //      the rollback ceiling — bootsRemaining ticks down
+            //      monotonically whether the device reboots or not.
+            //   2. Budget exhausted (bootsRemaining == 0): no more
+            //      sessions to grant. Hard lock (token deleted, DEK
+            //      zeroed) and reboot. Operator must re-enter passphrase.
+            if (EncryptedStorage::getBootsRemaining() == 0) {
+                LOG_WARN("Lockdown: session limit reached and boot budget exhausted, locking and rebooting");
+                EncryptedStorage::lockNow();
+                PhoneAPI::revokeAllAuth();
+                PhoneAPI::queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "session_budget_exhausted", 0, 0, 0);
+                rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            } else {
+                uint8_t newBoots = EncryptedStorage::consumeSessionBoot();
+                LOG_WARN("Lockdown: session expired, rolled to next budget slot (boots=%u remaining)", newBoots);
+                PhoneAPI::revokeAllAuth();
+                meshtastic_security::lockScreen();
+                // Signal clients that they need to re-auth on this
+                // connection. Storage is still unlocked (DEK in RAM,
+                // mesh keeps routing) but per-connection auth is gone.
+                // Reusing the LOCKED(needs_auth) post-config emission
+                // pattern so existing clients don't need a new state.
+                PhoneAPI::queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "needs_auth", newBoots,
+                                              EncryptedStorage::getValidUntilEpoch(), 0);
+            }
+        }
+    }
+#endif
 
 #ifdef ARCH_ESP32
     esp32Loop();

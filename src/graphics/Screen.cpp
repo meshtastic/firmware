@@ -41,6 +41,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/UIRenderer.h"
 #include "graphics/TFTColorRegions.h"
 #include "modules/CannedMessageModule.h"
+#include "security/LockdownDisplay.h"
 
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -118,8 +119,42 @@ static inline void prepareFrameColorRegions()
 }
 #endif
 
+#ifdef MESHTASTIC_LOCKDOWN
+// Static lock screen drawn in place of normal frames when
+// meshtastic_security::shouldRedactDisplay() returns true. Renders centered
+// "LOCKED" plus battery so the operator can see the device is alive and
+// charged without leaking any node/channel/message/position content.
+static void drawLockdownLockScreen(OLEDDisplay *display)
+{
+    display->clear();
+
+    const int w = display->getWidth();
+    const int h = display->getHeight();
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_LARGE);
+    display->drawString(w / 2, h / 2 - FONT_HEIGHT_LARGE, "LOCKED");
+
+    display->setFont(FONT_SMALL);
+    char status[32] = "Connect to unlock";
+    if (powerStatus && powerStatus->getHasBattery()) {
+        int pct = powerStatus->getBatteryChargePercent();
+        snprintf(status, sizeof(status), "Battery %d%%", pct);
+    }
+    display->drawString(w / 2, h / 2 + 2, status);
+
+    display->display();
+}
+#endif
+
 static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
+#ifdef MESHTASTIC_LOCKDOWN
+    if (meshtastic_security::shouldRedactDisplay() && screen != nullptr) {
+        drawLockdownLockScreen(screen->getDisplayDevice());
+        return;
+    }
+#endif
 #if GRAPHICS_TFT_COLORING_ENABLED
     prepareFrameColorRegions();
 #endif
@@ -804,10 +839,16 @@ void Screen::setOn(bool on, FrameCallback einkScreensaver)
     if (cardKbI2cImpl)
         cardKbI2cImpl->toggleBacklight(on);
 #endif
-    if (!on)
+    if (!on) {
+#ifdef MESHTASTIC_LOCKDOWN
+        // Screen powering off (idle timeout, shutdown, deep sleep) latches
+        // the screen-lock. Next time the display wakes it shows the LOCKED
+        // frame until a client authenticates with the passphrase.
+        meshtastic_security::lockScreen();
+#endif
         // We handle off commands immediately, because they might be called because the CPU is shutting down
         handleSetOn(false, einkScreensaver);
-    else
+    } else
         enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
 }
 

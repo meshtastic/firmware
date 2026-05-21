@@ -4,6 +4,7 @@
 #include "concurrency/Lock.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
+#include <atomic>
 #include <cstdint>
 #include <deque>
 #include <iterator>
@@ -170,6 +171,38 @@ class PhoneAPI
     bool isConnected() { return state != STATE_SEND_NOTHING; }
     bool isSendingPackets() { return state == STATE_SEND_PACKETS; }
 
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    /// Per-connection auth: tracked in a small file-scope slot table keyed
+    /// by PhoneAPI*. Adding state members directly to PhoneAPI broke
+    /// USB-CDC enumeration on current nRF52 framework — even one extra
+    /// per-instance uint32_t was enough. Keeping all state out-of-line
+    /// avoids the issue.
+    void setAdminAuthorized(bool authorized);
+    bool getAdminAuthorized() const;
+
+    /// Authorize the originating PhoneAPI connection. Used by AdminModule
+    /// on the PKC-admin auto-auth path (mp.from == 0 + valid admin key).
+    /// Best-effort: g_currentContext is null by the time the async
+    /// AdminModule handler runs, so this no-ops for admin messages routed
+    /// through the Router pipeline. The lockdown_auth passphrase path
+    /// avoids this entirely by being handled synchronously in
+    /// PhoneAPI::handleToRadioPacket (see handleLockdownAuthInline).
+    static void authorizeLocalAdmin();
+    static bool isLocalAdminAuthorized();
+    /// Lock Now: O(1) invalidation of every connection's auth by advancing
+    /// the global epoch. Subsequent gate checks see slot.myEpoch != epoch
+    /// and treat the connection as unauthenticated.
+    static void revokeAllAuth();
+
+    /// Queue a LockdownStatus FromRadio. Static because the underlying
+    /// storage is a file-scope static — see implementation file for the
+    /// reason this isn't a class member (USB-CDC enumeration regression on
+    /// nRF52 when ~50 bytes of struct sits on PhoneAPI per-instance).
+    /// `lock_reason` may be nullptr / empty for non-LOCKED states.
+    static void queueLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
+                                    uint32_t valid_until_epoch, uint32_t backoff_seconds);
+#endif
+
   protected:
     /// Our fromradio packet while it is being assembled
     meshtastic_FromRadio fromRadioScratch = {};
@@ -211,6 +244,20 @@ class PhoneAPI
 
     APIType api_type = TYPE_NONE;
 
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    // No per-instance auth members — see method-level note. All state lives
+    // in a file-scope slot table in PhoneAPI.cpp keyed by `this` pointer.
+
+    // Pending LockdownStatus storage is NOT a class member — having a
+    // meshtastic_LockdownStatus (~50 bytes with the char[33] lock_reason)
+    // as a PhoneAPI member broke USB-CDC enumeration on the nRF52 Adafruit
+    // framework. The exact mechanism wasn't pinned down, but moving the
+    // storage to a file-scope static in PhoneAPI.cpp side-steps it cleanly.
+    // Trade-off: all PhoneAPI instances share one pending slot. Acceptable
+    // because only one transport delivers a lockdown command at a time in
+    // any realistic scenario.
+#endif
+
   private:
     void releasePhonePacket();
 
@@ -247,6 +294,16 @@ class PhoneAPI
      * @return true true if a packet was queued for sending
      */
     bool handleToRadioPacket(meshtastic_MeshPacket &p);
+
+#if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
+    /// Synchronously handle a lockdown_auth AdminMessage from the local
+    /// client. Runs inside handleToRadioPacket so the originating
+    /// connection is reachable via `this` — avoids the async context
+    /// loss that broke the previous AdminModule path. Always consumes the
+    /// packet (returns true): lockdown_auth is local-only and must not be
+    /// forwarded to the mesh router.
+    bool handleLockdownAuthInline(const meshtastic_LockdownAuth &la);
+#endif
 
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue) override;
