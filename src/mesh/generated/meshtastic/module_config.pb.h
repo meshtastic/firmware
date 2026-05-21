@@ -144,7 +144,7 @@ typedef struct _meshtastic_ModuleConfig_MQTTConfig {
  (the default official mqtt.meshtastic.org server can handle encrypted packets)
  Decrypted packets may be useful for external systems that want to consume meshtastic packets */
     bool encryption_enabled;
-    /* Whether to send / consume json packets on MQTT */
+    /* Deprecated: JSON packet support on MQTT was removed, and this field is ignored. */
     bool json_enabled;
     /* If true, we attempt to establish a secure connection using TLS */
     bool tls_enabled;
