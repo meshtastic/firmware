@@ -125,7 +125,9 @@ def send_lockdown_auth(iface, la, label: str):
     sendLockdownPassphrase / sendLockNow exactly.
     """
     if iface.myInfo is None:
-        sys.exit("error: device never sent my_info; cannot determine destination nodenum")
+        sys.exit(
+            "error: device never sent my_info; cannot determine destination nodenum"
+        )
     my_node_num = iface.myInfo.my_node_num
 
     am = admin_pb2.AdminMessage()
@@ -146,7 +148,9 @@ def send_lockdown_auth(iface, la, label: str):
     tr = mesh_pb2.ToRadio()
     tr.packet.CopyFrom(mp)
 
-    print(f"[client] sending {label} (to=0x{my_node_num:08x}, id={mp.id}) ...", flush=True)
+    print(
+        f"[client] sending {label} (to=0x{my_node_num:08x}, id={mp.id}) ...", flush=True
+    )
     iface._sendToRadio(tr)
 
 
@@ -164,7 +168,10 @@ def cmd_lock(iface, _args):
 
 
 def cmd_watch(_iface, _args):
-    print("[client] watching for LockdownStatus notifications — Ctrl-C to exit", flush=True)
+    print(
+        "[client] watching for LockdownStatus notifications — Ctrl-C to exit",
+        flush=True,
+    )
 
 
 def main():
@@ -205,7 +212,9 @@ def main():
     p_lock = sub.add_parser("lock", help="send LOCK NOW; device reboots locked")
     p_lock.set_defaults(func=cmd_lock)
 
-    p_watch = sub.add_parser("watch", help="just listen for LockdownStatus notifications")
+    p_watch = sub.add_parser(
+        "watch", help="just listen for LockdownStatus notifications"
+    )
     p_watch.add_argument(
         "--seconds",
         type=float,
