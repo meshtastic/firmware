@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+#if RADIOLIB_EXCLUDE_LR2021 != 1
 #include "LR20x0Interface.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
@@ -80,7 +80,10 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     RadioLibInterface::init();
 
-#ifdef LR2021_IRQ_DIO_NUM
+#if ARCH_PORTDUINO
+    lora.irqDioNum = portduino_config.lr2021_irq_dio_num;
+    LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+#elif defined(LR2021_IRQ_DIO_NUM)
     lora.irqDioNum = LR2021_IRQ_DIO_NUM;
     LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
 #elif defined(IRQ_DIO_NUM)
