@@ -548,10 +548,14 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 LOG_DEBUG("No public key for 0x%08x, cannot verify XEdDSA signature", p->from);
             }
         } else {
-            // Unsigned packet — reject if this node previously sent signed packets
+            // Unsigned packet — only reject the class of packet a signing node always signs:
+            // an unencrypted broadcast small enough to also carry a signature (see perhapsEncode()).
+            // Unicast packets and oversized broadcasts are never signed, so they must not be
+            // hard-failed here even if this node has signed before.
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
-            if (node && nodeInfoLiteHasXeddsaSigned(node)) {
-                LOG_WARN("Dropping unsigned packet from 0x%08x that previously signed", p->from);
+            if (node && nodeInfoLiteHasXeddsaSigned(node) && isBroadcast(p->to) &&
+                p->decoded.payload.size + XEDDSA_SIGNATURE_SIZE < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+                LOG_WARN("Dropping unsigned broadcast from 0x%08x that previously signed", p->from);
                 return DecodeState::DECODE_FAILURE;
             }
         }

@@ -133,8 +133,9 @@ void CryptoEngine::curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubk
     // key from a Curve25519 public key. Because the serialization format of Curve25519 public keys only
     // contains the u coordinate, the x coordinate of the corresponding Ed25519 public key can't be uniquely
     // calculated as defined by the birational map. The x coordinate is represented in the serialization
-    // format of Ed25519 public keys only in a single sign bit. This function assumes that the sign bit is
-    // known to the user and is passed accordingly.
+    // format of Ed25519 public keys only in a single sign bit. XEdDSA always normalizes the Ed25519 public
+    // key to a sign bit of zero (the signer negates its key pair when needed), so this function clears the
+    // sign bit unconditionally below instead of taking it as an input.
     fe u, y;
     fe one;
     fe u_minus_one, u_plus_one, u_plus_one_inv;
