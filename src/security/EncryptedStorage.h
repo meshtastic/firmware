@@ -9,8 +9,8 @@
  * Encrypted storage layer for lockdown builds.
  *
  * Key hierarchy:
- *   FICR eFuse IDs + passphrase -> SHA-256 -> KEK_v2 (16 bytes, never stored)
- *   KEK_v2 wraps -> DEK (Data Encryption Key, 16 bytes, random, stored in /prefs/.dek)
+ *   FICR eFuse IDs + passphrase -> SHA-256 -> KEK (16 bytes, never stored)
+ *   KEK wraps -> DEK (Data Encryption Key, 16 bytes, random, stored in /prefs/.dek)
  *   DEK encrypts -> proto files via AES-128-CTR + HMAC-SHA256(DEK)
  *     (the DEK file itself is HMAC'd with KEK; only proto files use HMAC(DEK))
  *
@@ -25,38 +25,35 @@
  *   3. provisionPassphrase() / unlockWithPassphrase() complete the unlock
  *   4. lockNow() immediately invalidates the token and zeroes the DEK from RAM
  *
+ * On-disk formats carry a 4-byte magic but no version byte: this layer has
+ * never shipped, so there are no older files to stay compatible with. The
+ * magic alone identifies each format; a corrupt or foreign file fails the
+ * magic check (and, for the keyed formats, the HMAC).
+ *
  * Encrypted proto file format ("MENC"):
  *   [4B]  Magic 0x4D454E43 ("MENC")
- *   [1B]  Version 0x01
  *   [13B] Nonce (random per write)
  *   [4B]  Original plaintext length (LE uint32)
  *   [NB]  AES-128-CTR ciphertext
  *   [32B] HMAC-SHA256(DEK, nonce || ciphertext)
- *   Total overhead: 54 bytes per file.
+ *   Total overhead: 53 bytes per file.
  *
- * DEK file format v2 ("MDEK"):
+ * DEK file format ("MDEK"):
  *   [4B]  Magic 0x4D44454B ("MDEK")
- *   [1B]  Version 0x02
  *   [13B] Nonce (random per write)
- *   [16B] AES-128-CTR(KEK_v2, nonce, DEK)
- *   [32B] HMAC-SHA256(KEK_v2, "mdek-auth" || nonce || encrypted_DEK)
- *   Total: 66 bytes.
- *   Legacy v1 DEK file is 29 bytes (no magic, no HMAC) and is migrated on first passphrase set.
+ *   [16B] AES-128-CTR(KEK, nonce, DEK)
+ *   [32B] HMAC-SHA256(KEK, "mdek-auth" || nonce || encrypted_DEK)
+ *   Total: 65 bytes.
  *
- * Unlock token format ("UTOK") — v2:
+ * Unlock token format ("UTOK"):
  *   [4B]  Magic 0x55544F4B ("UTOK")
- *   [1B]  Version 0x02
  *   [13B] Nonce (random per write)
  *   [16B] AES-128-CTR(ephemeralKEK, nonce, DEK)
  *   [1B]  boots_remaining
  *   [4B]  valid_until_epoch (LE uint32, 0 = no time limit)
- *   [4B]  session_max_seconds (LE uint32, 0 = no session limit) — v2 addition
+ *   [4B]  session_max_seconds (LE uint32, 0 = no session limit)
  *   [32B] HMAC-SHA256(ephemeralKEK, all above fields)
- *   Total: 75 bytes.
- *
- *   v1 tokens (71 bytes, no session_max_seconds) are rejected at boot via
- *   the version byte mismatch — the device boots locked and requires a
- *   fresh passphrase, which writes a v2 token.
+ *   Total: 74 bytes.
  */
 
 namespace EncryptedStorage
@@ -67,25 +64,21 @@ namespace EncryptedStorage
 // ---------------------------------------------------------------------------
 
 static constexpr uint32_t MAGIC = 0x4D454E43; // "MENC" — encrypted proto files
-static constexpr uint8_t VERSION = 0x01;
 static constexpr size_t NONCE_SIZE = 13;
 static constexpr size_t HMAC_SIZE = 32;
-static constexpr size_t HEADER_SIZE = 4 + 1 + NONCE_SIZE + 4; // magic+version+nonce+plaintext_len
-static constexpr size_t OVERHEAD = HEADER_SIZE + HMAC_SIZE;   // 54 bytes
+static constexpr size_t HEADER_SIZE = 4 + NONCE_SIZE + 4;   // magic+nonce+plaintext_len
+static constexpr size_t OVERHEAD = HEADER_SIZE + HMAC_SIZE; // 53 bytes
 static constexpr size_t AES_KEY_SIZE = 16;
 static constexpr size_t AES_BLOCK_SIZE = 16;
 
-static constexpr uint32_t DEK_MAGIC_V2 = 0x4D44454B; // "MDEK"
-static constexpr uint8_t DEK_VERSION_V2 = 0x02;
-static constexpr size_t DEK_V1_SIZE = NONCE_SIZE + AES_KEY_SIZE;                     // 29 bytes
-static constexpr size_t DEK_V2_SIZE = 4 + 1 + NONCE_SIZE + AES_KEY_SIZE + HMAC_SIZE; // 66 bytes
+static constexpr uint32_t DEK_MAGIC = 0x4D44454B;                             // "MDEK"
+static constexpr size_t DEK_SIZE = 4 + NONCE_SIZE + AES_KEY_SIZE + HMAC_SIZE; // 65 bytes
 
 static constexpr uint32_t TOKEN_MAGIC = 0x55544F4B; // "UTOK"
-static constexpr uint8_t TOKEN_VERSION = 0x02;      // v2 adds session_max_seconds field
-// magic(4) + version(1) + nonce(NONCE_SIZE=13) + encDek(AES_KEY_SIZE=16)
-//   + bootsRemaining(1) + validUntilEpoch(4) + sessionMaxSeconds(4) = 43 bytes
-static constexpr size_t TOKEN_BODY_SIZE = 4 + 1 + NONCE_SIZE + AES_KEY_SIZE + 1 + 4 + 4;
-static constexpr size_t TOKEN_TOTAL_SIZE = TOKEN_BODY_SIZE + HMAC_SIZE; // 75 bytes
+// magic(4) + nonce(NONCE_SIZE=13) + encDek(AES_KEY_SIZE=16)
+//   + bootsRemaining(1) + validUntilEpoch(4) + sessionMaxSeconds(4) = 42 bytes
+static constexpr size_t TOKEN_BODY_SIZE = 4 + NONCE_SIZE + AES_KEY_SIZE + 1 + 4 + 4;
+static constexpr size_t TOKEN_TOTAL_SIZE = TOKEN_BODY_SIZE + HMAC_SIZE; // 74 bytes
 
 static constexpr uint8_t TOKEN_DEFAULT_BOOTS = 50;
 
@@ -103,9 +96,6 @@ void initLocked();
 /**
  * First-time provisioning: set the device passphrase, generate a fresh DEK,
  * save it wrapped with the passphrase-mixed KEK, and create an unlock token.
- *
- * If a legacy v1 DEK file already exists, it is migrated rather than replaced,
- * preserving all previously encrypted config files.
  *
  * @param passphrase        Raw passphrase bytes (need not be NUL-terminated)
  * @param passphraseLen     Length in bytes (1–32; matches the proto private_key field size)
@@ -150,7 +140,7 @@ bool isUnlocked();
  * Useful for client-side diagnostics. Examples:
  *   "token_missing"      — no unlock token file found
  *   "token_wrong_size"   — token file exists but is corrupt
- *   "token_bad_magic"    — wrong magic/version bytes
+ *   "token_bad_magic"    — wrong magic bytes
  *   "token_hmac_fail"    — HMAC mismatch (tampered or wrong device)
  *   "token_boots_zero"   — boot count exhausted
  *   "token_expired"      — TTL expired
@@ -231,16 +221,6 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
  * Returns true on success or if already encrypted.
  */
 bool migrateFile(const char *filename);
-
-// ---------------------------------------------------------------------------
-// Legacy init (FICR-only KEK, no passphrase, no token)
-// ---------------------------------------------------------------------------
-
-/**
- * Original init(): derives KEK from FICR only, loads or generates DEK.
- * Retained for non-lockdown builds and unit tests. Prefer initLocked() for lockdown builds.
- */
-bool init();
 
 } // namespace EncryptedStorage
 

@@ -34,13 +34,11 @@ static const char *DEK_FILENAME = "/prefs/.dek";
 static const char *TOKEN_FILENAME = "/prefs/.unlock_token";
 static const char *BACKOFF_FILENAME = "/prefs/.backoff";
 
-// v1 (legacy): FICR-only KEK, no passphrase
-static const char *KEK_DOMAIN_V1 = "meshtastic-tak-kek-v1";
-// v2: passphrase-mixed KEK
-static const char *KEK_DOMAIN_V2 = "meshtastic-tak-kek-v2";
+// Passphrase-mixed KEK
+static const char *KEK_DOMAIN = "meshtastic-tak-kek-v2";
 // Ephemeral: FICR-only, used only to wrap DEK inside the unlock token
 static const char *EPHEMERAL_KEK_DOMAIN = "meshtastic-tak-ephemeral-v1";
-// HMAC auth label for DEK v2 file
+// HMAC auth label for DEK file
 static const char *DEK_AUTH_LABEL = "mdek-auth";
 
 // ---------------------------------------------------------------------------
@@ -101,9 +99,7 @@ static uint32_t backoffDelay(uint8_t attempts)
 // enforce within-boot backoff without relying on RTC. Reset to 0 each boot.
 static uint32_t s_lastFailMillis = 0;
 
-// Backoff state file format:
-//   v1 (legacy, 5 bytes): attempts(1) + lastFailEpoch(4)
-//   v2 (current, 6 bytes): attempts(1) + bootsSinceFail(1) + lastFailEpoch(4)
+// Backoff state file format (6 bytes): attempts(1) + bootsSinceFail(1) + lastFailEpoch(4)
 //
 // bootsSinceFail is incremented once per boot in initLocked() (saturating at
 // 255). It provides a reliable monotonic across-reboot counter for backoff
@@ -111,11 +107,7 @@ static uint32_t s_lastFailMillis = 0;
 // attacker who reboots between failed attempts cannot fast-forward through
 // the backoff window because each reboot costs ~3-5 s of nRF52 boot time
 // and only advances bootsSinceFail by 1.
-//
-// v1 files are read as v2 with bootsSinceFail=0; the file is upgraded to v2
-// on the next write.
-static constexpr size_t BACKOFF_V1_SIZE = 5;
-static constexpr size_t BACKOFF_V2_SIZE = 6;
+static constexpr size_t BACKOFF_SIZE = 6;
 
 static void readBackoff(uint8_t &attempts, uint8_t &bootsSinceFail, uint32_t &lastFailEpoch)
 {
@@ -128,13 +120,12 @@ static void readBackoff(uint8_t &attempts, uint8_t &bootsSinceFail, uint32_t &la
     if (!f)
         return;
     size_t sz = f.size();
-    if (sz != BACKOFF_V1_SIZE && sz != BACKOFF_V2_SIZE) {
+    if (sz != BACKOFF_SIZE) {
         f.close();
         return;
     }
     attempts = f.read();
-    if (sz == BACKOFF_V2_SIZE)
-        bootsSinceFail = f.read();
+    bootsSinceFail = f.read();
     uint8_t buf[4] = {0, 0, 0, 0};
     size_t n = f.read(buf, 4);
     f.close();
@@ -301,11 +292,11 @@ static bool constTimeEq(const uint8_t *a, const uint8_t *b, size_t len)
 // ---------------------------------------------------------------------------
 
 /**
- * Derive the passphrase-mixed KEK (v2) and store in module-level kek[].
- * SHA-256("device-efuse-data" || FICR_16 || passphrase || KEK_DOMAIN_V2) → first 16 bytes.
+ * Derive the passphrase-mixed KEK and store in module-level kek[].
+ * SHA-256("device-efuse-data" || FICR_16 || passphrase || KEK_DOMAIN) → first 16 bytes.
  * Caller must hold CC310 (nRFCrypto.begin()).
  */
-static bool deriveKEKv2(const uint8_t *passphrase, size_t passphraseLen)
+static bool deriveKEK(const uint8_t *passphrase, size_t passphraseLen)
 {
     uint8_t efuseData[16];
     readFICR(efuseData);
@@ -315,46 +306,14 @@ static bool deriveKEKv2(const uint8_t *passphrase, size_t passphraseLen)
 
     nRFCrypto_Hash hash;
     if (!hash.begin(CRYS_HASH_SHA256_mode)) {
-        LOG_ERROR("EncryptedStorage: SHA-256 init failed (KEK v2)");
+        LOG_ERROR("EncryptedStorage: SHA-256 init failed (KEK)");
         meshtastic_security::secure_zero(efuseData, sizeof(efuseData));
         return false;
     }
     hash.update((uint8_t *)prefix, strlen(prefix));
     hash.update(efuseData, sizeof(efuseData));
     hash.update((uint8_t *)passphrase, passphraseLen);
-    hash.update((uint8_t *)KEK_DOMAIN_V2, strlen(KEK_DOMAIN_V2));
-    hash.end(sha256Result);
-
-    memcpy(kek, sha256Result, AES_KEY_SIZE);
-    meshtastic_security::secure_zero(sha256Result, sizeof(sha256Result));
-    meshtastic_security::secure_zero(efuseData, sizeof(efuseData));
-
-    kekDerived = true;
-    return true;
-}
-
-/**
- * Derive the legacy FICR-only KEK (v1) into the module-level kek[].
- * Used only for v1 DEK migration; prefer deriveKEKv2() for all new operations.
- * Caller must hold CC310.
- */
-static bool deriveKEKv1()
-{
-    uint8_t efuseData[16];
-    readFICR(efuseData);
-
-    static const char *prefix = "device-efuse-data";
-    uint8_t sha256Result[32];
-
-    nRFCrypto_Hash hash;
-    if (!hash.begin(CRYS_HASH_SHA256_mode)) {
-        LOG_ERROR("EncryptedStorage: SHA-256 init failed (KEK v1)");
-        meshtastic_security::secure_zero(efuseData, sizeof(efuseData));
-        return false;
-    }
-    hash.update((uint8_t *)prefix, strlen(prefix));
-    hash.update(efuseData, sizeof(efuseData));
-    hash.update((uint8_t *)KEK_DOMAIN_V1, strlen(KEK_DOMAIN_V1));
+    hash.update((uint8_t *)KEK_DOMAIN, strlen(KEK_DOMAIN));
     hash.end(sha256Result);
 
     memcpy(kek, sha256Result, AES_KEY_SIZE);
@@ -405,57 +364,10 @@ static bool deriveEphemeralKEK()
 // ---------------------------------------------------------------------------
 
 /**
- * Load the DEK from a legacy v1 DEK file using the given KEK (must be in kek[]).
- * Format: [13B nonce][16B AES-CTR(KEK, nonce, DEK)] — 29 bytes, no HMAC.
- * Returns true on read success (cannot verify correctness — no HMAC in v1 format).
- */
-static bool loadDEKv1()
-{
-#ifdef FSCom
-    concurrency::LockGuard g(spiLock);
-    auto f = FSCom.open(DEK_FILENAME, FILE_O_READ);
-    if (!f)
-        return false;
-
-    size_t fileSize = f.size();
-    if (fileSize != DEK_V1_SIZE) {
-        f.close();
-        return false;
-    }
-
-    uint8_t buf[DEK_V1_SIZE];
-    size_t bytesRead = f.read(buf, sizeof(buf));
-    f.close();
-
-    if (bytesRead != DEK_V1_SIZE) {
-        LOG_ERROR("EncryptedStorage: v1 DEK short read");
-        return false;
-    }
-
-    nRFCrypto.begin();
-    bool decOk = aesCtr128(kek, buf, NONCE_SIZE, buf + NONCE_SIZE, AES_KEY_SIZE, dek);
-    nRFCrypto.end();
-
-    if (!decOk) {
-        LOG_ERROR("EncryptedStorage: v1 DEK decrypt failed");
-        meshtastic_security::secure_zero(dek, sizeof(dek));
-        meshtastic_security::secure_zero(buf, sizeof(buf));
-        return false;
-    }
-
-    meshtastic_security::secure_zero(buf, sizeof(buf));
-    LOG_INFO("EncryptedStorage: v1 DEK loaded (migration candidate)");
-    return true;
-#else
-    return false;
-#endif
-}
-
-/**
- * Load DEK from v2 file using the current kek[].
+ * Load DEK from the DEK file using the current kek[].
  * Verifies HMAC before returning the DEK.
  */
-static bool loadDEKv2()
+static bool loadDEK()
 {
 #ifdef FSCom
     concurrency::LockGuard g(spiLock);
@@ -464,30 +376,30 @@ static bool loadDEKv2()
         return false;
 
     size_t fileSize = f.size();
-    if (fileSize != DEK_V2_SIZE) {
+    if (fileSize != DEK_SIZE) {
         f.close();
         return false;
     }
 
-    uint8_t buf[DEK_V2_SIZE];
+    uint8_t buf[DEK_SIZE];
     size_t bytesRead = f.read(buf, sizeof(buf));
     f.close();
 
-    if (bytesRead != DEK_V2_SIZE) {
-        LOG_ERROR("EncryptedStorage: v2 DEK short read");
+    if (bytesRead != DEK_SIZE) {
+        LOG_ERROR("EncryptedStorage: DEK short read");
         return false;
     }
 
-    // Check magic and version
+    // Check magic
     uint32_t magic;
     memcpy(&magic, buf, 4);
-    if (magic != DEK_MAGIC_V2 || buf[4] != DEK_VERSION_V2) {
-        LOG_ERROR("EncryptedStorage: v2 DEK bad magic/version");
+    if (magic != DEK_MAGIC) {
+        LOG_ERROR("EncryptedStorage: DEK bad magic");
         return false;
     }
 
-    uint8_t *nonce = buf + 5;
-    uint8_t *encDek = buf + 5 + NONCE_SIZE;
+    uint8_t *nonce = buf + 4;
+    uint8_t *encDek = buf + 4 + NONCE_SIZE;
 
     // Verify HMAC-SHA256(KEK, DEK_AUTH_LABEL || nonce || encDEK)
     size_t authLabelLen = strlen(DEK_AUTH_LABEL);
@@ -511,9 +423,9 @@ static bool loadDEKv2()
         return false;
     }
 
-    const uint8_t *storedHmac = buf + DEK_V2_SIZE - HMAC_SIZE;
+    const uint8_t *storedHmac = buf + DEK_SIZE - HMAC_SIZE;
     if (!constTimeEq(expectedHmac.data(), storedHmac, HMAC_SIZE)) {
-        LOG_ERROR("EncryptedStorage: v2 DEK HMAC mismatch — wrong passphrase or tampered file");
+        LOG_ERROR("EncryptedStorage: DEK HMAC mismatch — wrong passphrase or tampered file");
         return false;
     }
 
@@ -525,13 +437,13 @@ static bool loadDEKv2()
     nRFCrypto.end();
 
     if (!decOk) {
-        LOG_ERROR("EncryptedStorage: v2 DEK decrypt failed");
+        LOG_ERROR("EncryptedStorage: DEK decrypt failed");
         return false;
     }
 
     memcpy(dek, dekCandidate.data(), AES_KEY_SIZE);
 
-    LOG_INFO("EncryptedStorage: v2 DEK loaded and verified");
+    LOG_INFO("EncryptedStorage: DEK loaded and verified");
     return true;
 #else
     return false;
@@ -539,10 +451,10 @@ static bool loadDEKv2()
 }
 
 /**
- * Save the current in-RAM dek[] to disk as a v2 DEK file, wrapped with kek[].
+ * Save the current in-RAM dek[] to disk as a DEK file, wrapped with kek[].
  * Overwrites any existing DEK file.
  */
-static bool saveDEKv2()
+static bool saveDEK()
 {
 #ifdef FSCom
     // Generate random nonce
@@ -587,7 +499,7 @@ static bool saveDEKv2()
         return false;
     }
 
-    // Write file: magic(4)+version(1)+nonce(13)+encDEK(16)+hmac(32) = 66 bytes
+    // Write file: magic(4)+nonce(13)+encDEK(16)+hmac(32) = 65 bytes
     concurrency::LockGuard g(spiLock);
     FSCom.remove(DEK_FILENAME); // prevent O_APPEND accumulation on nRF52
     auto f = FSCom.open(DEK_FILENAME, FILE_O_WRITE);
@@ -597,10 +509,8 @@ static bool saveDEKv2()
         return false;
     }
 
-    uint32_t magic = DEK_MAGIC_V2;
-    uint8_t ver = DEK_VERSION_V2;
+    uint32_t magic = DEK_MAGIC;
     f.write((uint8_t *)&magic, 4);
-    f.write(&ver, 1);
     f.write(nonce, NONCE_SIZE);
     f.write(encDek, AES_KEY_SIZE);
     f.write(hmac, HMAC_SIZE);
@@ -611,7 +521,7 @@ static bool saveDEKv2()
     meshtastic_security::secure_zero(encDek, sizeof(encDek));
     meshtastic_security::secure_zero(hmac, sizeof(hmac));
 
-    LOG_INFO("EncryptedStorage: DEK saved (v2 format)");
+    LOG_INFO("EncryptedStorage: DEK saved");
     return true;
 #else
     return false;
@@ -660,7 +570,6 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
     uint32_t magic = TOKEN_MAGIC;
     memcpy(body + pos, &magic, 4);
     pos += 4;
-    body[pos++] = TOKEN_VERSION;
     memcpy(body + pos, nonce, NONCE_SIZE);
     pos += NONCE_SIZE;
     memcpy(body + pos, encDek, AES_KEY_SIZE);
@@ -741,11 +650,11 @@ static bool readAndConsumeToken()
         }
     }
 
-    // Verify magic and version
+    // Verify magic
     uint32_t magic;
     memcpy(&magic, buf, 4);
-    if (magic != TOKEN_MAGIC || buf[4] != TOKEN_VERSION) {
-        LOG_ERROR("EncryptedStorage: Token bad magic/version, deleting");
+    if (magic != TOKEN_MAGIC) {
+        LOG_ERROR("EncryptedStorage: Token bad magic, deleting");
         concurrency::LockGuard g(spiLock);
         FSCom.remove(TOKEN_FILENAME);
         lockReason = "token_bad_magic";
@@ -769,7 +678,7 @@ static bool readAndConsumeToken()
     meshtastic_security::secure_zero(computedHmac, sizeof(computedHmac));
 
     // Parse fields from body
-    size_t pos = 4 + 1; // skip magic + version
+    size_t pos = 4; // skip magic
     uint8_t *nonce = buf + pos;
     pos += NONCE_SIZE;
     uint8_t *encDek = buf + pos;
@@ -1010,36 +919,20 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_
             return false;
     }
 
-    // If a v1 DEK file exists, migrate it rather than generating a fresh DEK.
-    bool migrated = false;
-    if (isProvisioned()) {
-        nRFCrypto.begin();
-        bool v1ok = deriveKEKv1();
-        nRFCrypto.end();
-        if (v1ok && loadDEKv1()) {
-            migrated = true;
-            LOG_INFO("EncryptedStorage: Migrating v1 DEK to v2 under passphrase-mixed KEK");
-        } else {
-            LOG_WARN("EncryptedStorage: Could not load v1 DEK for migration, generating fresh DEK");
-        }
-    }
+    if (!generateDEK())
+        return false;
 
-    if (!migrated) {
-        if (!generateDEK())
-            return false;
-    }
-
-    // Derive v2 KEK from passphrase
+    // Derive KEK from passphrase
     nRFCrypto.begin();
-    bool kekOk = deriveKEKv2(passphrase, passphraseLen);
+    bool kekOk = deriveKEK(passphrase, passphraseLen);
     nRFCrypto.end();
     if (!kekOk) {
         meshtastic_security::secure_zero(dek, sizeof(dek));
         return false;
     }
 
-    // Save DEK in v2 format
-    if (!saveDEKv2()) {
+    // Save the DEK file
+    if (!saveDEK()) {
         meshtastic_security::secure_zero(dek, sizeof(dek));
         kekDerived = false;
         return false;
@@ -1054,7 +947,7 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_
     s_bootsRemaining = bootsRemaining;
     s_validUntilEpoch = validUntilEpoch;
     setSession(sessionMaxSeconds);
-    LOG_INFO("EncryptedStorage: Provisioning complete%s", migrated ? " (v1 migrated)" : "");
+    LOG_INFO("EncryptedStorage: Provisioning complete");
     return true;
 }
 
@@ -1142,9 +1035,9 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
             return false;
     }
 
-    // Derive v2 KEK
+    // Derive KEK
     nRFCrypto.begin();
-    bool kekOk = deriveKEKv2(passphrase, passphraseLen);
+    bool kekOk = deriveKEK(passphrase, passphraseLen);
     nRFCrypto.end();
     if (!kekOk)
         return false;
@@ -1169,51 +1062,12 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
         LOG_WARN("EncryptedStorage: Wrong passphrase (attempt %d, next in ~%us)", attempts, s_backoffSecondsRemaining);
     };
 
-    // Try loading the v2 DEK (verifies HMAC — wrong passphrase will fail here)
-    if (!loadDEKv2()) {
-        // Check if this is a v1 DEK file that hasn't been migrated yet.
-        // IMPORTANT: check the file size under lock, then release before calling any
-        // function that takes spiLock (loadDEKv1, saveDEKv2, recordFailure→readBackoff).
-        // spiLock is a binary (non-recursive) semaphore — re-entry deadlocks the task.
-#ifdef FSCom
-        bool isV1 = false;
-        {
-            concurrency::LockGuard g(spiLock);
-            auto f = FSCom.open(DEK_FILENAME, FILE_O_READ);
-            isV1 = f && (f.size() == DEK_V1_SIZE);
-            if (f)
-                f.close();
-        } // spiLock released before any further SPI operations
-
-        if (isV1) {
-            LOG_INFO("EncryptedStorage: Detected v1 DEK, migrating");
-            nRFCrypto.begin();
-            deriveKEKv1();
-            nRFCrypto.end();
-            if (!loadDEKv1()) {
-                LOG_ERROR("EncryptedStorage: v1 DEK load failed during migration");
-                meshtastic_security::secure_zero(dek, sizeof(dek));
-                kekDerived = false;
-                recordFailure();
-                return false;
-            }
-            // Re-derive v2 KEK (overwritten by deriveKEKv1 above)
-            nRFCrypto.begin();
-            deriveKEKv2(passphrase, passphraseLen);
-            nRFCrypto.end();
-            saveDEKv2();
-            LOG_INFO("EncryptedStorage: v1 DEK migrated to v2");
-        } else {
-            LOG_ERROR("EncryptedStorage: v2 DEK load failed — wrong passphrase?");
-            kekDerived = false;
-            recordFailure();
-            return false;
-        }
-#else
+    // Load the DEK (verifies HMAC — wrong passphrase will fail here)
+    if (!loadDEK()) {
+        LOG_ERROR("EncryptedStorage: DEK load failed — wrong passphrase?");
         kekDerived = false;
         recordFailure();
         return false;
-#endif
     }
 
     // Passphrase correct — clear backoff state
@@ -1372,13 +1226,6 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
         return false;
     }
 
-    uint8_t version = fileBuf[pos++];
-    if (version != VERSION) {
-        LOG_ERROR("EncryptedStorage: Unsupported version %d in %s", version, filename);
-        meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
-        return false;
-    }
-
     uint8_t nonce[NONCE_SIZE];
     memcpy(nonce, fileBuf.get() + pos, NONCE_SIZE);
     pos += NONCE_SIZE;
@@ -1523,8 +1370,6 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
 
     uint32_t magic = MAGIC;
     sf.write((uint8_t *)&magic, 4);
-    uint8_t ver = VERSION;
-    sf.write(&ver, 1);
     sf.write(nonce, NONCE_SIZE);
     uint32_t ptLen = (uint32_t)plaintextLen;
     sf.write((uint8_t *)&ptLen, 4);
@@ -1597,66 +1442,6 @@ bool migrateFile(const char *filename)
 #else
     return false;
 #endif
-}
-
-// ---------------------------------------------------------------------------
-// Legacy init() — FICR-only KEK, no passphrase, no token
-// ---------------------------------------------------------------------------
-
-bool init()
-{
-    nRFCrypto.begin();
-
-    if (!deriveKEKv1()) {
-        LOG_ERROR("EncryptedStorage: KEK derivation failed");
-        nRFCrypto.end();
-        return false;
-    }
-
-    // Also derive ephemeral KEK so token ops are available if needed
-    deriveEphemeralKEK();
-
-    nRFCrypto.end();
-
-    if (!loadDEKv1()) {
-        LOG_INFO("EncryptedStorage: No existing DEK, generating new one");
-        if (!generateDEK())
-            return false;
-        // Save in v1 format (legacy path: nonce + AES-CTR(KEK, nonce, DEK))
-        uint8_t nonce[NONCE_SIZE];
-        nRFCrypto.begin();
-        bool ok = nRFCrypto.Random.generate(nonce, NONCE_SIZE);
-        nRFCrypto.end();
-        if (!ok) {
-            LOG_ERROR("EncryptedStorage: TRNG failed");
-            meshtastic_security::secure_zero(dek, sizeof(dek));
-            return false;
-        }
-        uint8_t encDek[AES_KEY_SIZE];
-        nRFCrypto.begin();
-        ok = aesCtr128(kek, nonce, NONCE_SIZE, dek, AES_KEY_SIZE, encDek);
-        nRFCrypto.end();
-        if (!ok) {
-            meshtastic_security::secure_zero(dek, sizeof(dek));
-            return false;
-        }
-        concurrency::LockGuard g(spiLock);
-        auto f = FSCom.open(DEK_FILENAME, FILE_O_WRITE);
-        if (!f) {
-            meshtastic_security::secure_zero(dek, sizeof(dek));
-            return false;
-        }
-        f.write(nonce, NONCE_SIZE);
-        f.write(encDek, AES_KEY_SIZE);
-        f.flush();
-        f.close();
-        meshtastic_security::secure_zero(nonce, sizeof(nonce));
-        meshtastic_security::secure_zero(encDek, sizeof(encDek));
-    }
-
-    dekLoaded = true;
-    LOG_INFO("EncryptedStorage: Initialized (legacy mode)");
-    return true;
 }
 
 } // namespace EncryptedStorage
