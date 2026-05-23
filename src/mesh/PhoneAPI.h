@@ -185,13 +185,25 @@ class PhoneAPI
     /// and treat the connection as unauthenticated.
     static void revokeAllAuth();
 
-    /// Queue a LockdownStatus FromRadio. Static because the underlying
-    /// storage is a file-scope static — see implementation file for the
-    /// reason this isn't a class member (USB-CDC enumeration regression on
-    /// nRF52 when ~50 bytes of struct sits on PhoneAPI per-instance).
-    /// `lock_reason` may be nullptr / empty for non-LOCKED states.
-    static void queueLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
-                                    uint32_t valid_until_epoch, uint32_t backoff_seconds);
+    /// Queue a LockdownStatus FromRadio for THIS connection only. Each
+    /// PhoneAPI owns its own pending-status slot in a file-scope table
+    /// (file-scope because adding fields directly to PhoneAPI broke
+    /// USB-CDC enumeration on nRF52); a status produced here will not
+    /// be delivered to any other connection. `lock_reason` may be
+    /// nullptr / empty for non-LOCKED states.
+    void queueLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
+                             uint32_t valid_until_epoch, uint32_t backoff_seconds);
+
+    /// Queue the same LockdownStatus on every active connection's slot.
+    /// Use for events with no specific originating connection (session
+    /// expiry tick in main.cpp, broadcast revocations, etc.). Per-
+    /// connection callers should prefer the instance method above to
+    /// avoid leaking one client's auth state to another.
+    static void broadcastLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
+                                        uint32_t valid_until_epoch, uint32_t backoff_seconds);
+
+    /// True iff this connection has a pending lockdown_status drain.
+    bool hasPendingLockdownStatus() const;
 #endif
 
   protected:

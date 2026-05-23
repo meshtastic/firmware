@@ -420,7 +420,12 @@ void setup()
 #endif
 #endif
 
-#if defined(DEBUG_MUTE) && defined(DEBUG_PORT)
+    // The DEBUG_MUTE "we are muted, FYI" banner spills APP_VERSION / APP_ENV /
+    // APP_REPO out the USB CDC even with logging otherwise suppressed — a free
+    // firmware-fingerprinting primitive for an attacker holding the cable.
+    // Under MESHTASTIC_LOCKDOWN we want the device to look uniformly silent
+    // until the operator authenticates, so skip the banner entirely there.
+#if defined(DEBUG_MUTE) && defined(DEBUG_PORT) && !defined(MESHTASTIC_LOCKDOWN)
     DEBUG_PORT.printf("\r\n\r\n//\\ E S H T /\\ S T / C\r\n");
     DEBUG_PORT.printf("Version %s for %s from %s\r\n", optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
     DEBUG_PORT.printf("Debug mute is enabled, there will be no serial output.\r\n");
@@ -1199,7 +1204,7 @@ void loop()
                 LOG_WARN("Lockdown: session limit reached and boot budget exhausted, locking and rebooting");
                 EncryptedStorage::lockNow();
                 PhoneAPI::revokeAllAuth();
-                PhoneAPI::queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "session_budget_exhausted", 0, 0, 0);
+                PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "session_budget_exhausted", 0, 0, 0);
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
             } else {
                 uint8_t newBoots = EncryptedStorage::consumeSessionBoot();
@@ -1211,8 +1216,8 @@ void loop()
                 // mesh keeps routing) but per-connection auth is gone.
                 // Reusing the LOCKED(needs_auth) post-config emission
                 // pattern so existing clients don't need a new state.
-                PhoneAPI::queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "needs_auth", newBoots,
-                                              EncryptedStorage::getValidUntilEpoch(), 0);
+                PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "needs_auth", newBoots,
+                                                  EncryptedStorage::getValidUntilEpoch(), 0);
             }
         }
     }

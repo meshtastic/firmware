@@ -43,28 +43,108 @@
 bool heartbeatReceived = false;
 
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-// File-scope pending LockdownStatus. Shared by all PhoneAPI instances —
-// see note in PhoneAPI.h re: why this isn't a class member.
-// Pending LockdownStatus drain slot. Writers (queueLockdownStatus, called
-// from PhoneAPI::handleLockdownAuthInline on the transport callback
-// thread, from AdminModule on the Router thread, and from the main loop
-// for session expiry) and the reader (getFromRadio() / available(),
-// called from whichever transport is draining FromRadio) can race
-// across FreeRTOS tasks. Same pattern as nodeInfoMutex — a small lock
-// around the slot.
-static meshtastic_LockdownStatus g_pendingLockdownStatus = {};
-static bool g_hasPendingLockdownStatus = false;
-static concurrency::Lock g_pendingLockdownStatusMutex;
+// Auth-slot table and status-slot table are both sized to the typical
+// SerialConsole + BluetoothPhoneAPI footprint plus room for WiFi/TCP
+// transports. Sized together so both tables are keyed identically.
+static constexpr size_t MAX_AUTH_SLOTS = 6;
 
-// Per-connection auth state table keyed by PhoneAPI*. Sized for the typical
-// SerialConsole + BluetoothPhoneAPI + room for WiFi/TCP transports. Searched
-// linearly; cost is negligible compared to the redaction gates that call it.
+// Per-PhoneAPI pending LockdownStatus. One slot per connection so a
+// status produced for connection A (e.g. UNLOCKED with the active TTL,
+// or UNLOCK_FAILED with a backoff) cannot be drained by connection B,
+// which would otherwise learn that A just authenticated or just failed
+// — a real information leak across local clients.
+//
+// File-scope rather than a per-PhoneAPI member because adding any
+// non-trivial state directly to PhoneAPI broke USB-CDC enumeration on
+// the current nRF52 framework; the auth-slot table next door uses the
+// same workaround. Lifecycle is tied to the auth slot table — both are
+// keyed by PhoneAPI*, both are cleared together in clearAuthSlot_LH,
+// and both share g_authSlotsMutex.
+struct PendingStatusSlot {
+    PhoneAPI *who = nullptr;
+    meshtastic_LockdownStatus status = {};
+    bool hasPending = false;
+};
+static PendingStatusSlot g_statusSlots[MAX_AUTH_SLOTS];
+
+// Lock-held helpers ---------------------------------------------------------
+
+static PendingStatusSlot *findOrAllocStatusSlot_LH(PhoneAPI *p)
+{
+    if (!p)
+        return nullptr;
+    for (auto &s : g_statusSlots)
+        if (s.who == p)
+            return &s;
+    for (auto &s : g_statusSlots) {
+        if (s.who == nullptr) {
+            s.who = p;
+            s.hasPending = false;
+            memset(&s.status, 0, sizeof(s.status));
+            return &s;
+        }
+    }
+    // Mirror the auth-slot eviction policy: stale slots can be reused.
+    // A connection that lost its auth slot has nothing meaningful to be
+    // told via a pending status anyway.
+    for (auto &s : g_statusSlots) {
+        if (!s.hasPending) {
+            s.who = p;
+            memset(&s.status, 0, sizeof(s.status));
+            return &s;
+        }
+    }
+    return nullptr;
+}
+
+static void clearStatusSlot_LH(PhoneAPI *p)
+{
+    if (!p)
+        return;
+    for (auto &s : g_statusSlots) {
+        if (s.who == p) {
+            s.who = nullptr;
+            s.hasPending = false;
+            memset(&s.status, 0, sizeof(s.status));
+            return;
+        }
+    }
+}
+
+// Build a LockdownStatus message under lock from the supplied fields,
+// applying the audit's M13 redaction so token_* tamper-detection
+// strings are not leaked to unauth clients over the wire.
+static void buildStatus_LH(meshtastic_LockdownStatus &out, meshtastic_LockdownStatus_State state, const char *lock_reason,
+                           uint8_t boots_remaining, uint32_t valid_until_epoch, uint32_t backoff_seconds)
+{
+    memset(&out, 0, sizeof(out));
+    out.state = state;
+    // Collapse the specific token_* reasons to a generic "locked" over
+    // the wire — full detail still goes to local logs. An unauth client
+    // does not need to know whether HMAC failed vs the boot count
+    // hit zero vs the file was the wrong size; all of those mean the
+    // same thing to the client ("locked, ask for passphrase") but
+    // telling them apart over the network lets an attacker confirm
+    // that their tampering or rollback attempt was noticed.
+    const char *wireReason = lock_reason;
+    if (state == meshtastic_LockdownStatus_State_LOCKED && wireReason && wireReason[0] != '\0') {
+        if (strncmp(wireReason, "token_", 6) == 0)
+            wireReason = "locked";
+    }
+    if (wireReason && wireReason[0] != '\0')
+        strncpy(out.lock_reason, wireReason, sizeof(out.lock_reason) - 1);
+    out.boots_remaining = boots_remaining;
+    out.valid_until_epoch = valid_until_epoch;
+    out.backoff_seconds = backoff_seconds;
+}
+
+// Per-connection auth state table keyed by PhoneAPI*. Searched linearly;
+// cost is negligible compared to the redaction gates that call it.
 struct PhoneAuthSlot {
     PhoneAPI *who = nullptr;
     bool authorized = false;
     uint32_t epoch = 0;
 };
-static constexpr size_t MAX_AUTH_SLOTS = 6;
 static PhoneAuthSlot g_authSlots[MAX_AUTH_SLOTS];
 
 // Global auth epoch. Lock Now bumps it; per-slot `epoch` compared against
@@ -121,7 +201,8 @@ static PhoneAuthSlot *findOrAllocSlot_LH(PhoneAPI *p)
     return nullptr;
 }
 
-// Drop p's slot from the table. Lock-held variant.
+// Drop p's slot from both the auth table and the status-queue table.
+// Lock-held variant.
 static void clearAuthSlot_LH(PhoneAPI *p)
 {
     if (!p)
@@ -131,9 +212,10 @@ static void clearAuthSlot_LH(PhoneAPI *p)
             s.authorized = false;
             s.epoch = 0;
             s.who = nullptr;
-            return;
+            break;
         }
     }
+    clearStatusSlot_LH(p);
 }
 #endif
 
@@ -459,10 +541,15 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (!getAdminAuthorized()) {
             // device_id is a stable hardware identifier — useful for an attacker
             // to fingerprint / correlate the device across observations. Strip it
-            // for unauthenticated clients. my_node_num and the other public mesh
-            // identity fields stay (they're broadcast on the mesh anyway).
+            // for unauthenticated clients. my_node_num is kept (it's broadcast
+            // on the mesh anyway). pio_env / min_app_version reveal the exact
+            // build flavour, useful only for picking which known-CVE to try.
+            // nodedb_count stays — clients need it to decide whether to pull
+            // the node DB after unlocking.
             fromRadioScratch.my_info.device_id.size = 0;
             memset(fromRadioScratch.my_info.device_id.bytes, 0, sizeof(fromRadioScratch.my_info.device_id.bytes));
+            memset(fromRadioScratch.my_info.pio_env, 0, sizeof(fromRadioScratch.my_info.pio_env));
+            fromRadioScratch.my_info.min_app_version = 0;
         }
 #endif
         state = STATE_SEND_UIDATA;
@@ -517,6 +604,18 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         LOG_DEBUG("Send device metadata");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_metadata_tag;
         fromRadioScratch.metadata = getDeviceMetadata();
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+        if (!getAdminAuthorized()) {
+            // DeviceMetadata is one large fingerprint vector for an unauth
+            // client: firmware_version, device_state_version, hw_model,
+            // hw_model_string, has_bluetooth/has_wifi/has_ethernet, role,
+            // position_flags, excluded_modules, optionsCount. None of it
+            // is needed to drive lockdown_auth, and most of it tells an
+            // attacker which CVE / behavior quirks to probe. Wipe the
+            // whole struct — clients re-fetch once authenticated.
+            memset(&fromRadioScratch.metadata, 0, sizeof(fromRadioScratch.metadata));
+        }
+#endif
         state = STATE_SEND_CHANNELS;
         break;
 
@@ -583,7 +682,28 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         case meshtastic_Config_lora_tag:
             LOG_DEBUG("Send config: lora");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_lora_tag;
-            fromRadioScratch.config.payload_variant.lora = config.lora;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!getAdminAuthorized()) {
+                // Whitelist only the spec-mandated radio identity fields that
+                // are intrinsically observable on the air anyway: region,
+                // modem_preset, use_preset, channel_num, hop_limit. Operator-
+                // private knobs (ignore_incoming list, override_duty_cycle,
+                // override_frequency, sx126x_rx_boosted_gain, tx_power,
+                // ignore_mqtt, fem_lna_mode, config_ok_to_mqtt, ...) stay
+                // hidden — they tell an attacker how the operator has tuned
+                // the device but are not needed by an unauth client.
+                meshtastic_Config_LoRaConfig whitelist = {};
+                whitelist.use_preset = config.lora.use_preset;
+                whitelist.modem_preset = config.lora.modem_preset;
+                whitelist.region = config.lora.region;
+                whitelist.channel_num = config.lora.channel_num;
+                whitelist.hop_limit = config.lora.hop_limit;
+                fromRadioScratch.config.payload_variant.lora = whitelist;
+            } else
+#endif
+            {
+                fromRadioScratch.config.payload_variant.lora = config.lora;
+            }
             break;
         case meshtastic_Config_bluetooth_tag:
             LOG_DEBUG("Send config: bluetooth");
@@ -835,14 +955,17 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 xmodemPacketForPhone = meshtastic_XModem_init_zero;
             }
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-        } else if (g_hasPendingLockdownStatus) {
-            concurrency::LockGuard guard(&g_pendingLockdownStatusMutex);
-            // Re-check under the lock — a concurrent drain may have grabbed it.
-            if (g_hasPendingLockdownStatus) {
+        } else if (hasPendingLockdownStatus()) {
+            concurrency::LockGuard guard(&g_authSlotsMutex);
+            // Look up our own slot only — never another connection's. Re-check
+            // hasPending under the lock since a concurrent drain on the same
+            // connection (unlikely but possible if multiple transport
+            // callbacks race against one PhoneAPI) may have grabbed it.
+            if (auto *slot = findOrAllocStatusSlot_LH(this); slot && slot->hasPending) {
                 fromRadioScratch.which_payload_variant = meshtastic_FromRadio_lockdown_status_tag;
-                fromRadioScratch.lockdown_status = g_pendingLockdownStatus;
-                memset(&g_pendingLockdownStatus, 0, sizeof(g_pendingLockdownStatus));
-                g_hasPendingLockdownStatus = false;
+                fromRadioScratch.lockdown_status = slot->status;
+                memset(&slot->status, 0, sizeof(slot->status));
+                slot->hasPending = false;
             }
 #endif
         } else if (clientNotification) {
@@ -1391,7 +1514,7 @@ bool PhoneAPI::available()
             clientNotification = service->getClientNotificationForPhone();
         bool hasPacket = !!queueStatusPacketForPhone || !!mqttClientProxyMessageForPhone || !!clientNotification;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-        if (g_hasPendingLockdownStatus)
+        if (hasPendingLockdownStatus())
             hasPacket = true;
 #endif
         if (hasPacket)
@@ -1611,17 +1734,46 @@ void PhoneAPI::revokeAllAuth()
 void PhoneAPI::queueLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
                                    uint32_t valid_until_epoch, uint32_t backoff_seconds)
 {
-    concurrency::LockGuard guard(&g_pendingLockdownStatusMutex);
-    memset(&g_pendingLockdownStatus, 0, sizeof(g_pendingLockdownStatus));
-    g_pendingLockdownStatus.state = state;
-    if (lock_reason && lock_reason[0] != '\0')
-        strncpy(g_pendingLockdownStatus.lock_reason, lock_reason, sizeof(g_pendingLockdownStatus.lock_reason) - 1);
-    g_pendingLockdownStatus.boots_remaining = boots_remaining;
-    g_pendingLockdownStatus.valid_until_epoch = valid_until_epoch;
-    g_pendingLockdownStatus.backoff_seconds = backoff_seconds;
-    g_hasPendingLockdownStatus = true;
+    {
+        concurrency::LockGuard guard(&g_authSlotsMutex);
+        auto *slot = findOrAllocStatusSlot_LH(this);
+        if (!slot)
+            return; // slot table exhausted — fail-closed, no status delivered
+        buildStatus_LH(slot->status, state, lock_reason, boots_remaining, valid_until_epoch, backoff_seconds);
+        slot->hasPending = true;
+    }
     if (service)
         service->nudgeFromNum();
+}
+
+void PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
+                                       uint32_t valid_until_epoch, uint32_t backoff_seconds)
+{
+    bool anyOverwritten = false;
+    {
+        concurrency::LockGuard guard(&g_authSlotsMutex);
+        for (auto &s : g_statusSlots) {
+            if (s.who) {
+                buildStatus_LH(s.status, state, lock_reason, boots_remaining, valid_until_epoch, backoff_seconds);
+                s.hasPending = true;
+                anyOverwritten = true;
+            }
+        }
+    }
+    // Service nudge is shared across connections; one nudge wakes every
+    // drainer. Skip if no connection currently has a slot.
+    if (anyOverwritten && service)
+        service->nudgeFromNum();
+}
+
+bool PhoneAPI::hasPendingLockdownStatus() const
+{
+    concurrency::LockGuard guard(&g_authSlotsMutex);
+    for (auto &s : g_statusSlots) {
+        if (s.who == this && s.hasPending)
+            return true;
+    }
+    return false;
 }
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
@@ -1724,7 +1876,12 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
     } else {
         uint32_t backoff = EncryptedStorage::getBackoffSecondsRemaining();
         queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, backoff);
-        LOG_WARN("Lockdown: passphrase verification failed (backoff=%us)", backoff);
+        // Don't log backoff seconds — the client receives it in the
+        // UNLOCK_FAILED status anyway, and in non-DEBUG_MUTE builds the
+        // numeric value would otherwise spill onto a USB-attached
+        // attacker's serial terminal alongside other diagnostic noise.
+        LOG_WARN("Lockdown: passphrase verification failed");
+        (void)backoff;
     }
 
     zeroPassphrase();
