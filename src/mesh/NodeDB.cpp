@@ -1592,6 +1592,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
             if (!pb_decode(&stream, fields, dest_struct)) {
                 LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
                 state = LoadFileResult::DECODE_FAILED;
+                storageCorruptThisLoad = true;
             } else {
                 LOG_INFO("Loaded encrypted %s successfully", filename);
                 state = LoadFileResult::LOAD_SUCCESS;
@@ -1599,6 +1600,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
         } else {
             LOG_ERROR("Decrypt failed for %s, treating as corrupt", filename);
             state = LoadFileResult::DECODE_FAILED;
+            storageCorruptThisLoad = true;
         }
         return state;
     }
@@ -1638,6 +1640,13 @@ void NodeDB::loadFromDisk()
     // Mark the current device state as completely unusable, so that if we fail reading the entire file from
     // disk we will still factoryReset to restore things.
     devicestate.version = 0;
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Reset the per-load decrypt-failure tracker. Set by loadProto on any
+    // encrypted file that fails to decrypt or proto-decode; consumed by
+    // reloadFromDisk to surface storage corruption to the operator instead
+    // of silently falling back to defaults.
+    storageCorruptThisLoad = false;
+#endif
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -2008,14 +2017,55 @@ void NodeDB::loadFromDisk()
 }
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
+// Serializes reloadFromDisk against itself. Other readers of config /
+// channelFile / nodeDatabase don't take this lock today, so this only
+// prevents reload-vs-reload races (e.g. fast successive unlocks). It is
+// not a full data-race fix for those structs — that would require
+// thread-shared locking discipline across the whole codebase, beyond
+// the audit's M7 scope. The radio standby+reconfigure below keeps the
+// radio out of the window where SX12xx registers are mid-swap.
+static concurrency::Lock g_reloadFromDiskMutex;
+
 /**
  * Re-run loadFromDisk() after encrypted storage is unlocked at runtime.
- * Called by AdminModule after a successful provisionPassphrase / unlockWithPassphrase.
+ * Holds the radio in standby across the file IO + proto decode so the
+ * SX12xx is not mid-RX/TX when config.lora is overwritten, then calls
+ * reconfigure() to push the now-real settings to the chip.
+ *
+ * Returns true iff every encrypted file decrypted and decoded cleanly.
+ * On false the caller MUST treat storage as corrupt — see header.
  */
-void NodeDB::reloadFromDisk()
+bool NodeDB::reloadFromDisk()
 {
+    concurrency::LockGuard guard(&g_reloadFromDiskMutex);
     LOG_INFO("NodeDB: Reloading config from encrypted storage after unlock");
+
+    RadioInterface *rIface = router ? router->getRadioIface() : nullptr;
+
+    // Park the radio while config.lora / channelFile swap. Without this,
+    // a concurrent send or receive can read half-old / half-new state
+    // (channel keys, region, modem preset) and the SX12xx ends up in
+    // an inconsistent register set that only a reboot recovers from.
+    if (rIface)
+        rIface->sleep();
+
     loadFromDisk();
+
+    if (storageCorruptThisLoad) {
+        LOG_ERROR("NodeDB: storage decrypt/decode failed during reload — surfacing as corrupt");
+        // Leave the radio sleeping. Caller will lock storage and emit
+        // a LOCKED(storage_corrupt) status; we must not reconfigure
+        // the chip with the locked-default placeholder values still
+        // sitting in config.lora.
+        return false;
+    }
+
+    // Push the now-real config to the radio.
+    if (rIface) {
+        channels.onConfigChanged();
+        rIface->reconfigure();
+    }
+    return true;
 }
 #endif
 

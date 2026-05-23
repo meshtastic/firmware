@@ -395,7 +395,21 @@ class NodeDB
     /// loop in main.cpp services the flag and calls this method on the main
     /// thread. The transport callback stack (BLE/USB) is too small for the
     /// file IO + MAX_NUM_NODES vector reserve + proto decode this triggers.
-    void reloadFromDisk();
+    ///
+    /// Returns true iff every encrypted file decrypted and decoded cleanly.
+    /// On false the caller MUST treat the storage as corrupt: leave the
+    /// connection unauthenticated, emit a LOCKED(storage_corrupt) status,
+    /// and refuse to call setAdminAuthorized — otherwise a subsequent
+    /// set_config would re-encrypt a wrong baseline (the locked-default
+    /// values still resident in `config` / `channelFile` / `nodeDatabase`)
+    /// and overwrite the operator's persisted state.
+    bool reloadFromDisk();
+
+    /// Set by loadProto when any encrypted file fails to decrypt or decode.
+    /// Tracked across an entire loadFromDisk pass so reloadFromDisk can
+    /// surface the condition without callers re-walking each loadProto
+    /// result. Cleared at the top of every loadFromDisk run.
+    bool storageCorruptThisLoad = false;
 #endif
 
   private:

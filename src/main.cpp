@@ -1179,7 +1179,21 @@ void loop()
     if (lockdownReloadPending) {
         lockdownReloadPending = false;
         LOG_INFO("Lockdown: reloading config from disk after unlock");
-        nodeDB->reloadFromDisk();
+        bool reloadOk = nodeDB->reloadFromDisk();
+        if (!reloadOk) {
+            // Storage decrypt/decode failed during reload. Treat as
+            // unrecoverable for this boot: lock storage, revoke any
+            // auth that managed to slip through (defense in depth — the
+            // cold-unlock path doesn't authorize until completion, but
+            // a concurrent re-verify-path call from another connection
+            // might have), and notify clients. Storage will be locked
+            // on next boot anyway; deferring to the user-visible
+            // notification path is sufficient for now.
+            LOG_ERROR("Lockdown: reload failed — locking and notifying clients");
+            EncryptedStorage::lockNow();
+            PhoneAPI::revokeAllAuth();
+        }
+        PhoneAPI::completePendingUnlocks(reloadOk);
     }
 
     // Periodic session-expiry check. Cheap — millis() comparison. Don't

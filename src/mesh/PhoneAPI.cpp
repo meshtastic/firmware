@@ -64,6 +64,13 @@ struct PendingStatusSlot {
     PhoneAPI *who = nullptr;
     meshtastic_LockdownStatus status = {};
     bool hasPending = false;
+    // True between a successful passphrase verify and the main-loop
+    // reloadFromDisk that follows. While set, the connection is NOT
+    // yet authorized and no UNLOCKED status has been emitted — the
+    // client still sees LOCKED, and any admin op it tries is dropped
+    // by the existing unauth gates. Cleared either way by
+    // completePendingUnlocks once reload finishes.
+    bool pendingUnlockAfterReload = false;
 };
 static PendingStatusSlot g_statusSlots[MAX_AUTH_SLOTS];
 
@@ -80,15 +87,18 @@ static PendingStatusSlot *findOrAllocStatusSlot_LH(PhoneAPI *p)
         if (s.who == nullptr) {
             s.who = p;
             s.hasPending = false;
+            s.pendingUnlockAfterReload = false;
             memset(&s.status, 0, sizeof(s.status));
             return &s;
         }
     }
     // Mirror the auth-slot eviction policy: stale slots can be reused.
     // A connection that lost its auth slot has nothing meaningful to be
-    // told via a pending status anyway.
+    // told via a pending status anyway. Never evict a slot mid-unlock
+    // (pendingUnlockAfterReload set) — completing that flow on the
+    // wrong PhoneAPI would authorize the wrong connection.
     for (auto &s : g_statusSlots) {
-        if (!s.hasPending) {
+        if (!s.hasPending && !s.pendingUnlockAfterReload) {
             s.who = p;
             memset(&s.status, 0, sizeof(s.status));
             return &s;
@@ -105,6 +115,7 @@ static void clearStatusSlot_LH(PhoneAPI *p)
         if (s.who == p) {
             s.who = nullptr;
             s.hasPending = false;
+            s.pendingUnlockAfterReload = false;
             memset(&s.status, 0, sizeof(s.status));
             return;
         }
@@ -1731,6 +1742,56 @@ void PhoneAPI::revokeAllAuth()
     LOG_INFO("Lockdown: All connection auth revoked (Lock Now)");
 }
 
+void PhoneAPI::completePendingUnlocks(bool reloadOk)
+{
+    // Snapshot fields that we'll need outside the lock (we cannot call
+    // EncryptedStorage / setAdminAuthorized / unlockScreen while holding
+    // g_authSlotsMutex without risking re-entry — setAdminAuthorized
+    // itself takes the same lock).
+    constexpr size_t kMaxSnapshots = MAX_AUTH_SLOTS;
+    PhoneAPI *targets[kMaxSnapshots] = {};
+    size_t targetCount = 0;
+    {
+        concurrency::LockGuard guard(&g_authSlotsMutex);
+        for (auto &s : g_statusSlots) {
+            if (!s.pendingUnlockAfterReload || !s.who)
+                continue;
+            if (targetCount < kMaxSnapshots)
+                targets[targetCount++] = s.who;
+            // Clear the pending flag either way — failure path must not
+            // leave it set so a subsequent successful reload retries
+            // against the wrong PhoneAPI.
+            s.pendingUnlockAfterReload = false;
+        }
+    }
+
+    if (reloadOk) {
+        uint8_t boots = EncryptedStorage::getBootsRemaining();
+        uint32_t until = EncryptedStorage::getValidUntilEpoch();
+        for (size_t i = 0; i < targetCount; i++) {
+            PhoneAPI *p = targets[i];
+            p->setAdminAuthorized(true);
+            p->queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCKED, "", boots, until, 0);
+        }
+        // Screen-lock latch is cleared once any client successfully
+        // unlocks — the operator has proven the passphrase. Matches the
+        // re-verify path's behavior.
+        if (targetCount > 0)
+            meshtastic_security::unlockScreen();
+        LOG_INFO("Lockdown: post-reload completion: authorized %u connection(s)", (unsigned)targetCount);
+    } else {
+        // Storage corrupt — emit LOCKED(storage_corrupt) to every slot
+        // that was awaiting the unlock. setAdminAuthorized is NOT called
+        // so the connection stays redacted and any set_config it sends
+        // is dropped at the existing unauth gates. Caller (main.cpp) has
+        // already lockNow'd storage and broadcast-revoked.
+        for (size_t i = 0; i < targetCount; i++) {
+            targets[i]->queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "storage_corrupt", 0, 0, 0);
+        }
+        LOG_ERROR("Lockdown: post-reload completion: storage corrupt, notified %u connection(s)", (unsigned)targetCount);
+    }
+}
+
 void PhoneAPI::queueLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
                                    uint32_t valid_until_epoch, uint32_t backoff_seconds)
 {
@@ -1838,6 +1899,7 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         la.max_session_seconds != 0 ? la.max_session_seconds : MESHTASTIC_LOCKDOWN_SESSION_DEFAULT_SECONDS;
 
     bool ok = false;
+    bool needsReload = false;
     if (!EncryptedStorage::isUnlocked()) {
         if (!EncryptedStorage::isProvisioned()) {
             LOG_INFO("Lockdown: first-time provisioning with passphrase");
@@ -1849,30 +1911,49 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
                                                         sessionMaxSeconds);
         }
         if (ok) {
-            setAdminAuthorized(true);
-            // NodeDB::reloadFromDisk() is too heavy for this transport
-            // callback stack (file IO, MAX_NUM_NODES vector reserve,
-            // proto decode). Defer it to the main loop thread.
+            needsReload = true;
+            // Mark this slot for the main-loop completion handler. Don't
+            // authorize or emit UNLOCKED yet — `config` / `channelFile`
+            // / `nodeDatabase` still hold the locked-default placeholders
+            // installed by loadFromDisk()'s !isUnlocked() branch. If we
+            // flipped the connection to authorized here, the client could
+            // read those placeholders as if they were the operator's real
+            // settings, or set_config write a corrupted baseline that
+            // overwrites the real config when reloadFromDisk swaps them
+            // in. completePendingUnlocks() runs on the main thread after
+            // reloadFromDisk has populated the real values and the radio
+            // has been reconfigured.
+            {
+                concurrency::LockGuard guard(&g_authSlotsMutex);
+                if (auto *slot = findOrAllocStatusSlot_LH(this))
+                    slot->pendingUnlockAfterReload = true;
+            }
             lockdownReloadPending = true;
-            LOG_INFO("Lockdown: storage unlocked, this connection authorized, config reload queued");
+            LOG_INFO("Lockdown: storage unlocked, awaiting reload before client visibility");
         }
     } else {
         LOG_INFO("Lockdown: passphrase re-verify for admin authorization");
         ok = EncryptedStorage::unlockWithPassphrase(la.passphrase.bytes, la.passphrase.size, boots, validUntilEpoch,
                                                     sessionMaxSeconds);
         if (ok) {
+            // Storage was already unlocked — no reload needed. Authorize
+            // and surface UNLOCKED to the client immediately.
             setAdminAuthorized(true);
             LOG_INFO("Lockdown: passphrase verified, this connection authorized");
         }
     }
 
-    if (ok) {
-        // Authenticating over any transport also clears the screen-lock
-        // latch — the operator has proven the passphrase, so the display
-        // can show content again until the next idle timeout.
+    if (ok && !needsReload) {
+        // Re-verify path: storage was already unlocked. Clear the screen
+        // latch and emit UNLOCKED now. The cold-unlock path defers both
+        // of these to completePendingUnlocks() once reloadFromDisk finishes.
         meshtastic_security::unlockScreen();
         queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCKED, "", EncryptedStorage::getBootsRemaining(),
                             EncryptedStorage::getValidUntilEpoch(), 0);
+    } else if (ok && needsReload) {
+        // Cold-unlock path: deliberately no status emission yet — the
+        // client keeps seeing LOCKED until completePendingUnlocks()
+        // runs after a successful reload.
     } else {
         uint32_t backoff = EncryptedStorage::getBackoffSecondsRemaining();
         queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, backoff);

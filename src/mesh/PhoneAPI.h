@@ -185,6 +185,14 @@ class PhoneAPI
     /// and treat the connection as unauthenticated.
     static void revokeAllAuth();
 
+    /// Called from the main loop after NodeDB::reloadFromDisk() finishes.
+    /// On reloadOk=true: any connection marked pending-unlock-after-reload
+    /// is promoted to authorized and receives an UNLOCKED status; the
+    /// screen-lock latch clears. On reloadOk=false: those connections
+    /// receive a LOCKED(storage_corrupt) status and remain unauthorized
+    /// so they cannot drive set_config against the corrupt baseline.
+    static void completePendingUnlocks(bool reloadOk);
+
     /// Queue a LockdownStatus FromRadio for THIS connection only. Each
     /// PhoneAPI owns its own pending-status slot in a file-scope table
     /// (file-scope because adding fields directly to PhoneAPI broke
