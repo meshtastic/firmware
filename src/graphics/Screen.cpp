@@ -151,7 +151,19 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
 #ifdef MESHTASTIC_LOCKDOWN
     if (meshtastic_security::shouldRedactDisplay() && screen != nullptr) {
+        // Always paint the LOCKED frame first so the background underneath
+        // any banner overlay is the redacted view, never dashboard content.
         drawLockdownLockScreen(screen->getDisplayDevice());
+        // Special-case the BLE pairing PIN banner. The PIN is needed to
+        // complete first-pair against a locked device, but the lockdown
+        // short-circuit would otherwise swallow ui->update() and the PIN
+        // would never render — locking the operator out of BLE entirely.
+        // The PIN is an ephemeral pair-handshake artifact (regenerated per
+        // attempt, dies on banner timeout), not operator content. Letting
+        // ui->update() composite the banner over the LOCKED frame is safe.
+        if (NotificationRenderer::current_notification_type == notificationTypeEnum::pairing_pin) {
+            ui->update();
+        }
         return;
     }
 #endif
@@ -617,6 +629,21 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             setScreensaverFrames(einkScreensaver);
 #endif
 
+#ifdef MESHTASTIC_LOCKDOWN
+            // M19: before turning the panel off, paint a safe frame into the
+            // OLED's GDDRAM. The panel retains whatever was last written even
+            // while powered down, so when displayOn() is called later the
+            // screen would otherwise flash the previous frame's content for
+            // 16-50 ms before the next ui->update() lands. Painting the
+            // LOCKED frame now ensures the only thing the operator (or
+            // someone over their shoulder) can see on wake is the redacted
+            // view. Gated on lockdown — non-lockdown builds keep the
+            // previous frame as a UX cue that the display is just dimmed.
+            if (dispdev) {
+                drawLockdownLockScreen(dispdev);
+            }
+#endif
+
 #ifdef PIN_EINK_EN
             digitalWrite(PIN_EINK_EN, LOW);
 #elif defined(PCA_PIN_EINK_EN)
@@ -731,6 +758,27 @@ void Screen::setup()
     dispdev->setBrightness(brightness);
 #endif
     LOG_INFO("Applied screen brightness: %d", brightness);
+
+#if defined(MESHTASTIC_LOCKDOWN) && defined(USE_EINK)
+    // M20: e-ink panels physically retain the last-rendered image without
+    // power, so a power-cycled lockdown handheld would keep showing
+    // operator-identifying content (position, messages, node info) until
+    // the firmware's first natural refresh — which on e-ink can be seconds
+    // into boot. Force a full refresh to the LOCKED frame here, immediately
+    // after the display is initialised and before any other rendering, so
+    // the persistent pixels are wiped to the redacted view before an
+    // observer can see them.
+    if (meshtastic_security::shouldRedactDisplay()) {
+        drawLockdownLockScreen(dispdev);
+#if defined(USE_EINK_PARALLELDISPLAY)
+        // Parallel-display variants drive refresh through a different path;
+        // a bare drawLockdownLockScreen above lands the frame into the
+        // panel buffer and the next ui->update() commits it as normal.
+#else
+        static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#endif
+    }
+#endif
 
     // Set custom overlay callbacks
     static OverlayCallback overlays[] = {
@@ -1507,6 +1555,15 @@ void Screen::handleStartFirmwareUpdateScreen()
 
 void Screen::blink()
 {
+#ifdef MESHTASTIC_LOCKDOWN
+    // L4: defensive guard. blink() paints arbitrary geometry, not node
+    // data, so it doesn't actually leak today. But it bypasses the normal
+    // ui->update() path that the lockdown short-circuit gates, so any
+    // future change that puts content into blink would silently leak past
+    // redaction. Refuse to draw when the redaction latch is set.
+    if (meshtastic_security::shouldRedactDisplay())
+        return;
+#endif
     setFastFramerate();
     uint8_t count = 10;
     dispdev->setBrightness(254);

@@ -391,7 +391,15 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         std::string configuredPasskeyText = std::to_string(configuredPasskey);
         std::string ble_message =
             "Bluetooth\nPIN\n[M]" + configuredPasskeyText.substr(0, 3) + " " + configuredPasskeyText.substr(3, 6);
-        screen->showSimpleBanner(ble_message.c_str(), 30000);
+        // Use the pairing_pin notification type so the lockdown UI short-
+        // circuit (Screen.cpp updateUiFrame) allows the overlay through
+        // even on a locked device — see H13 audit fix. The banner content
+        // is the per-attempt ephemeral pair PIN, not operator content.
+        graphics::BannerOverlayOptions opts;
+        opts.message = ble_message.c_str();
+        opts.durationMs = 30000;
+        opts.notificationType = graphics::notificationTypeEnum::pairing_pin;
+        screen->showOverlayBanner(opts);
     }
 #endif
     passkeyShowing = true;
