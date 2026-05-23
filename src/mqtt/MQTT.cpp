@@ -19,9 +19,8 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
-#if HAS_ETHERNET && defined(USE_WS5500)
-#include <ETHClass2.h>
-#define ETH ETH2
+#if HAS_ETHERNET && defined(ARCH_ESP32)
+#include <ETH.h>
 #endif // HAS_ETHERNET
 #include "Default.h"
 #if !defined(ARCH_NRF52) || NRF52_USE_JSON
@@ -32,7 +31,7 @@
 #include <assert.h>
 #include <utility>
 
-#include <IPAddress.h>
+#include "IPAddress.h"
 #if defined(ARCH_PORTDUINO)
 #include <netinet/in.h>
 #elif !defined(ntohl)
@@ -141,7 +140,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         const meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
         // Only accept PKI messages to us, or if we have both the sender and receiver in our nodeDB, as then it's
         // likely they discovered each other via a channel we have downlink enabled for
-        if (isToUs(p.get()) || (tx && tx->has_user && rx && rx->has_user))
+        if (isToUs(p.get()) || (nodeInfoLiteHasUser(tx) && nodeInfoLiteHasUser(rx)))
             router->enqueueReceivedMessage(p.release());
     } else if (router &&
                perhapsDecode(p.get()) == DecodeState::DECODE_SUCCESS) // ignore messages if we don't have the channel key
@@ -322,8 +321,8 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
     pubSub.setClient(client);
     pubSub.setServer(config.serverAddr.c_str(), config.serverPort);
 
-    LOG_INFO("Connecting directly to MQTT server %s, port: %d, username: %s, password: %s", config.serverAddr.c_str(),
-             config.serverPort, config.mqttUsername, config.mqttPassword);
+    LOG_INFO("Connecting directly to MQTT server %s, port: %d, username: %s, password: ***", config.serverAddr.c_str(),
+             config.serverPort, config.mqttUsername);
 
     // Generate node ID from nodenum for client identification
     std::string nodeId = nodeDB->getNodeId();
@@ -344,12 +343,17 @@ inline bool isConnectedToNetwork()
 #ifdef USE_WS5500
     if (ETH.connected())
         return true;
+#elif defined(USE_CH390D)
+    if (ETH.isConnected())
+        return true;
 #endif
 
 #if HAS_WIFI
     return WiFi.isConnected();
 #elif HAS_ETHERNET
     return Ethernet.linkStatus() == LinkON;
+#elif defined(ARCH_PORTDUINO)
+    return true;
 #else
     return false;
 #endif
@@ -407,6 +411,9 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
 
 void mqttInit()
 {
+    if (!moduleConfig.mqtt.enabled)
+        return;
+
     new MQTT();
 }
 

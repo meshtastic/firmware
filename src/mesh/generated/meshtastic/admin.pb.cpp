@@ -15,6 +15,9 @@ PB_BIND(meshtastic_AdminMessage_InputEvent, meshtastic_AdminMessage_InputEvent, 
 PB_BIND(meshtastic_AdminMessage_OTAEvent, meshtastic_AdminMessage_OTAEvent, AUTO)
 
 
+PB_BIND(meshtastic_LockdownAuth, meshtastic_LockdownAuth, AUTO)
+
+
 PB_BIND(meshtastic_HamParameters, meshtastic_HamParameters, AUTO)
 
 

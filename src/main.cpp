@@ -2,6 +2,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+#include "input/InputBroker.h"
+#endif
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -59,12 +62,18 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
-#if HAS_WIFI || defined(USE_WS5500)
+#ifdef ARCH_NRF54L15
+void nrf54l15Setup();
+void nrf54l15Loop();
+NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
+#endif
+
+#if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D)
 #include "mesh/api/WiFiServerAPI.h"
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
 #include "mesh/api/ethServerAPI.h"
 #include "mesh/eth/ethClient.h"
 #endif
@@ -245,7 +254,7 @@ const char *getDeviceName()
 uint32_t timeLastPowered = 0;
 
 static OSThread *powerFSMthread;
-OSThread *ambientLightingThread;
+AmbientLightingThread *ambientLightingThread;
 
 RadioLibHal *RadioLibHAL = NULL;
 
@@ -335,7 +344,7 @@ void setup()
 
 #ifdef WIFI_LED
     pinMode(WIFI_LED, OUTPUT);
-    digitalWrite(WIFI_LED, LOW);
+    digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
 
 #ifdef BLE_LED
@@ -696,6 +705,9 @@ void setup()
 #ifdef ARCH_NRF52
     nrf52Setup();
 #endif
+#ifdef ARCH_NRF54L15
+    nrf54l15Setup();
+#endif
 
 #ifdef ARCH_RP2040
     rp2040Setup();
@@ -731,8 +743,20 @@ void setup()
 #elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #else
-    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO) {
         screen_model = config.display.oled;
+
+        // Fix: update geometry for SH1107 128x128 selected via menu
+        if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128) {
+            screen_geometry = GEOMETRY_128_128;
+            screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // normalize
+        }
+    }
+#endif
+#ifdef OLED_GEOMETRY_OVERRIDE
+    // Per-variant geometry (e.g. 72x40 micro-OLEDs). Takes precedence over the
+    // default GEOMETRY_128_64 set at the top of setup().
+    screen_geometry = OLED_GEOMETRY_OVERRIDE;
 #endif
 #endif
 
@@ -1119,6 +1143,9 @@ void loop()
 #endif
 #ifdef ARCH_NRF52
     nrf52Loop();
+#endif
+#ifdef ARCH_NRF54L15
+    nrf54l15Loop();
 #endif
     power->powerCommandsCheck();
 

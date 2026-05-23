@@ -299,6 +299,7 @@ void InputBroker::Init()
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
     UserButtonThread = new ButtonThread("UserButton");
+#if !MESHTASTIC_EXCLUDE_SCREEN
     if (screen) {
         ButtonConfig userConfig;
         userConfig.pinNumber = (uint8_t)_pinNum;
@@ -317,7 +318,9 @@ void InputBroker::Init()
         userConfig.longPressTime = 500;
         userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
         UserButtonThread->initButton(userConfig);
-    } else {
+    } else
+#endif
+    {
         ButtonConfig userConfigNoScreen;
         userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
         userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
@@ -330,6 +333,12 @@ void InputBroker::Init()
             BaseType_t higherWake = 0;
             concurrency::mainDelay.interruptFromISR(&higherWake);
         };
+#if defined(ELECROW_ThinkNode_M7)
+        userConfigNoScreen.longLongPressTime = 15 * 1000;
+        userConfigNoScreen.longLongPress = INPUT_BROKER_FACTORY_RST;
+#else
+        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+#endif
         userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
         userConfigNoScreen.longPress = INPUT_BROKER_NONE;
         userConfigNoScreen.longPressTime = 500;
@@ -379,14 +388,19 @@ void InputBroker::Init()
     }
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR && portduino_config.i2cdev != "") {
-        seesawRotary = new SeesawRotary("SeesawRotary");
-        if (!seesawRotary->init()) {
-            delete seesawRotary;
-            seesawRotary = nullptr;
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        if (portduino_config.i2cdev != "") {
+            seesawRotary = new SeesawRotary("SeesawRotary");
+            if (!seesawRotary->init()) {
+                delete seesawRotary;
+                seesawRotary = nullptr;
+            }
         }
+#ifdef __linux__
+        // Linux evdev keyboard input only — macOS has no <linux/input.h>.
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
+#endif
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL

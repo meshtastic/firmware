@@ -5,7 +5,6 @@
 
 class StatusMessageModule : public SinglePortModule, private concurrency::OSThread
 {
-
   public:
     /** Constructor
      * name is for debugging output
@@ -24,11 +23,10 @@ class StatusMessageModule : public SinglePortModule, private concurrency::OSThre
     virtual int32_t runOnce() override;
 
   protected:
-    /** Called to handle a particular incoming message
+    /** Called to handle a particular incoming message. The cached most-recent
+     * status for each node lives on NodeDB; use nodeDB->copyNodeStatus(num, ...).
      */
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
-
-  private:
 };
 
 extern StatusMessageModule *statusMessageModule;
