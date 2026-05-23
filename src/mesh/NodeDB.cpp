@@ -1692,6 +1692,20 @@ void NodeDB::loadFromDisk()
         installDefaultConfig();
         installDefaultModuleConfig();
         installDefaultChannels();
+
+        // Hold the radio silent until the operator unlocks. installDefaultConfig
+        // would otherwise honour USERPREFS_CONFIG_LORA_REGION (the common shape
+        // for managed deployments) and the LongFast default channel synthesised
+        // by installDefaultChannels, so the device would beacon nodeinfo /
+        // telemetry on the public default PSK before any unlock — and process
+        // incoming default-channel packets the same way. Forcing region=UNSET
+        // gates both TX and RX in RadioLibInterface (see the region==UNSET
+        // checks in startSend and readData); tx_enabled=false is belt-and-
+        // suspenders for any code path that does not consult region directly.
+        // reloadFromDisk() restores the persisted lora config when the
+        // operator unlocks.
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        config.lora.tx_enabled = false;
         return;
     }
 #endif
