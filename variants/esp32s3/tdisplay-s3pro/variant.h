@@ -43,6 +43,8 @@
 // SY6970 battery charger
 #define HAS_SY6970
 #define SY6970_INT 21
+#define HAS_PPM 1
+#define XPOWERS_CHIP_SY6970
 
 // MAX98357A PCM amplifier
 #define HAS_I2S
