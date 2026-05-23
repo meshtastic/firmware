@@ -8,6 +8,8 @@
 #include "security/EncryptedStorage.h"
 #endif
 
+#include <atomic>
+
 namespace meshtastic_security
 {
 
@@ -21,7 +23,13 @@ namespace meshtastic_security
 // device could simply power-cycle it (RAM latch resets) to get back to a
 // content screen. Operator must authenticate from a client to reveal
 // content after any boot.
-static bool s_screenLocked = true;
+//
+// std::atomic so cross-task reads (PowerFSM / Screen / InputBroker) see
+// writes immediately and the compiler is not free to speculate the load.
+// Plain bool happens to work on single-core Cortex-M4 today but breaks
+// silently the moment lockdown ports to ESP32 / RP2040 / LTO whole-program
+// elision.
+static std::atomic<bool> s_screenLocked{true};
 
 bool shouldRedactDisplay()
 {
@@ -29,17 +37,17 @@ bool shouldRedactDisplay()
     if (!EncryptedStorage::isUnlocked())
         return true;
 #endif
-    return s_screenLocked;
+    return s_screenLocked.load(std::memory_order_relaxed);
 }
 
 void lockScreen()
 {
-    s_screenLocked = true;
+    s_screenLocked.store(true, std::memory_order_relaxed);
 }
 
 void unlockScreen()
 {
-    s_screenLocked = false;
+    s_screenLocked.store(false, std::memory_order_relaxed);
 }
 
 } // namespace meshtastic_security

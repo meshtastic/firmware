@@ -68,26 +68,45 @@ static constexpr size_t MAX_AUTH_SLOTS = 6;
 static PhoneAuthSlot g_authSlots[MAX_AUTH_SLOTS];
 
 // Global auth epoch. Lock Now bumps it; per-slot `epoch` compared against
-// this. Plain volatile uint32_t — single-word writes are atomic at the HW
-// level on Cortex-M4; std::atomic as a class member broke USB-CDC on the
-// nRF52 framework so we use plain volatile globally for consistency.
-static volatile uint32_t g_authEpoch = 1;
+// this. Wraps at 2^32 revocations — practically unreachable; on wrap the
+// only behavioral effect is that any slot whose epoch happens to match the
+// new low value would be treated as authorized again, which requires a
+// pre-existing authorized slot to survive 2^32 lockNow events on the same
+// boot.
+static uint32_t g_authEpoch = 1;
 
 // Pointer to the PhoneAPI currently dispatching a ToRadio packet; set by
-// handleToRadio's ContextGuard. AdminModule's static authorize/check
-// helpers route to this connection.
-static PhoneAPI *volatile g_currentContext = nullptr;
+// handleToRadio's ContextGuard. Read by AdminModule's static authorize/check
+// helpers on the Router thread — note this is unreliable across the
+// dispatch→Router boundary (the dispatch task may have exited by the time
+// Router runs) and is removed in commit 2 of the audit remediation in
+// favour of per-packet authorization metadata.
+static PhoneAPI *g_currentContext = nullptr;
 
-// Find or allocate the auth slot for `p`. Returns nullptr only if all slots
-// are taken by other live PhoneAPIs — extremely unlikely in practice but
-// defensively handled (treated as "not authenticated").
-static PhoneAuthSlot *findOrAllocSlot(PhoneAPI *p)
+// Single mutex guarding g_authSlots, g_authEpoch, and g_currentContext.
+// All readers and writers — including const getters like getAdminAuthorized
+// — must take it. Granularity is fine because the critical sections are
+// short (a fixed-size linear scan over 6 entries) and contention is
+// dominated by getFromRadio's per-call redaction checks, which tolerate
+// brief blocking.
+static concurrency::Lock g_authSlotsMutex;
+
+// Find or allocate the auth slot for `p`. Caller must hold g_authSlotsMutex.
+// When the table is full of *unauthorized* slots from prior dead PhoneAPIs,
+// evicts the first unauthorized slot found. Refuses to evict an authorized
+// slot (those represent a live operator session and must outlive the table
+// pressure of reconnect churn). Returns nullptr only if every slot is
+// occupied by a different live, authorized PhoneAPI — practically only
+// reachable as a DoS via 7+ simultaneous authed connections, in which
+// case fail-closed and log.
+static PhoneAuthSlot *findOrAllocSlot_LH(PhoneAPI *p)
 {
     if (!p)
         return nullptr;
     for (auto &s : g_authSlots)
         if (s.who == p)
             return &s;
+    // First pass: free (who==nullptr) slot.
     for (auto &s : g_authSlots) {
         if (s.who == nullptr) {
             s.who = p;
@@ -96,7 +115,33 @@ static PhoneAuthSlot *findOrAllocSlot(PhoneAPI *p)
             return &s;
         }
     }
+    // Second pass: evict an unauthorized stale slot. Don't touch authorized
+    // ones — those still represent an operator-authenticated session.
+    for (auto &s : g_authSlots) {
+        if (!s.authorized) {
+            s.who = p;
+            s.epoch = 0;
+            LOG_WARN("Lockdown: auth slot table full, evicted stale unauthorized slot for new PhoneAPI %p", p);
+            return &s;
+        }
+    }
+    LOG_WARN("Lockdown: auth slot table full of authorized sessions, refusing new PhoneAPI %p (fail-closed)", p);
     return nullptr;
+}
+
+// Drop p's slot from the table. Lock-held variant.
+static void clearAuthSlot_LH(PhoneAPI *p)
+{
+    if (!p)
+        return;
+    for (auto &s : g_authSlots) {
+        if (s.who == p) {
+            s.authorized = false;
+            s.epoch = 0;
+            s.who = nullptr;
+            return;
+        }
+    }
 }
 #endif
 
@@ -109,6 +154,19 @@ PhoneAPI::PhoneAPI()
 PhoneAPI::~PhoneAPI()
 {
     close();
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    // Free the auth slot unconditionally, regardless of whether close()'s
+    // slot-clear branch ran (it skips when state == STATE_SEND_NOTHING).
+    // Leaving a stale slot.who pointing at freed memory lets a future
+    // PhoneAPI heap-allocated at the same address inherit the prior
+    // session's authorization through findOrAllocSlot.
+    {
+        concurrency::LockGuard g(&g_authSlotsMutex);
+        clearAuthSlot_LH(this);
+        if (g_currentContext == this)
+            g_currentContext = nullptr;
+    }
+#endif
 }
 
 void PhoneAPI::handleStartConfig()
@@ -125,9 +183,12 @@ void PhoneAPI::handleStartConfig()
         // new client must present a passphrase or PKC admin signature
         // before seeing full config. Do NOT reset on subsequent
         // want_config_id within the same connection.
-        if (auto *slot = findOrAllocSlot(this)) {
-            slot->authorized = false;
-            slot->epoch = 0;
+        {
+            concurrency::LockGuard g(&g_authSlotsMutex);
+            if (auto *slot = findOrAllocSlot_LH(this)) {
+                slot->authorized = false;
+                slot->epoch = 0;
+            }
         }
 #endif
     }
@@ -232,10 +293,9 @@ void PhoneAPI::close()
         pauseBluetoothLogging = false;
         heartbeatReceived = false;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-        if (auto *slot = findOrAllocSlot(this)) {
-            slot->authorized = false;
-            slot->epoch = 0;
-            slot->who = nullptr; // free the slot — destructor may not run
+        {
+            concurrency::LockGuard g(&g_authSlotsMutex);
+            clearAuthSlot_LH(this);
         }
 #endif
     }
@@ -262,12 +322,23 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
     // Mark this PhoneAPI as the active context for the duration of dispatch.
     // AdminModule's static authorize/check helpers consult g_currentContext
-    // to find the originating connection. Restored on return.
-    PhoneAPI *prev = g_currentContext;
-    g_currentContext = this;
+    // to find the originating connection. Restored on return. Note: this
+    // is only meaningful while dispatch is on the current task; if the
+    // packet is queued to Router for async handling, the value visible to
+    // Router is whatever happens to be set at that later moment.
+    PhoneAPI *prev;
+    {
+        concurrency::LockGuard g(&g_authSlotsMutex);
+        prev = g_currentContext;
+        g_currentContext = this;
+    }
     struct ContextGuard {
         PhoneAPI *prev;
-        ~ContextGuard() { g_currentContext = prev; }
+        ~ContextGuard()
+        {
+            concurrency::LockGuard g(&g_authSlotsMutex);
+            g_currentContext = prev;
+        }
     } guard{prev};
 #endif
 
@@ -284,9 +355,14 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
                 // AdminModule handles its own is_managed gate for those.
                 // Block everything else — unauthorized clients cannot inject mesh traffic.
                 // Require the packet to carry a decoded (not encrypted) payload so portnum is valid.
-                bool isLocalAdmin = toRadioScratch.packet.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-                                    toRadioScratch.packet.decoded.portnum == meshtastic_PortNum_ADMIN_APP &&
-                                    toRadioScratch.packet.to == nodeDB->getNodeNum();
+                // Refuse to match when our own node number is still 0 (NodeDB
+                // not yet loaded — happens during the locked-default boot path
+                // before reloadFromDisk). Otherwise a packet with to==0 would
+                // satisfy the equality and bypass the gate.
+                NodeNum ourNum = nodeDB->getNodeNum();
+                bool isLocalAdmin =
+                    ourNum != 0 && toRadioScratch.packet.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                    toRadioScratch.packet.decoded.portnum == meshtastic_PortNum_ADMIN_APP && toRadioScratch.packet.to == ourNum;
                 if (!isLocalAdmin) {
                     LOG_INFO("Lockdown: Dropping non-admin ToRadio packet from unauthorized client");
                     return false;
@@ -1517,15 +1593,17 @@ int PhoneAPI::onNotify(uint32_t newValue)
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 bool PhoneAPI::getAdminAuthorized() const
 {
-    // const_cast is safe — findOrAllocSlot only mutates the slot table, not
-    // the PhoneAPI itself, and the table key is just the pointer.
-    auto *slot = findOrAllocSlot(const_cast<PhoneAPI *>(this));
+    concurrency::LockGuard g(&g_authSlotsMutex);
+    // const_cast is safe — findOrAllocSlot_LH only mutates the slot table,
+    // not the PhoneAPI itself, and the table key is just the pointer.
+    auto *slot = findOrAllocSlot_LH(const_cast<PhoneAPI *>(this));
     return slot && slot->authorized && slot->epoch == g_authEpoch;
 }
 
 void PhoneAPI::setAdminAuthorized(bool authorized)
 {
-    auto *slot = findOrAllocSlot(this);
+    concurrency::LockGuard g(&g_authSlotsMutex);
+    auto *slot = findOrAllocSlot_LH(this);
     if (!slot)
         return; // slot table full — fail-closed
     if (authorized) {
@@ -1539,7 +1617,11 @@ void PhoneAPI::setAdminAuthorized(bool authorized)
 
 void PhoneAPI::authorizeLocalAdmin()
 {
-    PhoneAPI *ctx = g_currentContext;
+    PhoneAPI *ctx;
+    {
+        concurrency::LockGuard g(&g_authSlotsMutex);
+        ctx = g_currentContext;
+    }
     if (ctx) {
         ctx->setAdminAuthorized(true);
         LOG_INFO("Lockdown: connection authorized");
@@ -1550,13 +1632,20 @@ void PhoneAPI::authorizeLocalAdmin()
 
 bool PhoneAPI::isLocalAdminAuthorized()
 {
-    PhoneAPI *ctx = g_currentContext;
+    PhoneAPI *ctx;
+    {
+        concurrency::LockGuard g(&g_authSlotsMutex);
+        ctx = g_currentContext;
+    }
     return ctx && ctx->getAdminAuthorized();
 }
 
 void PhoneAPI::revokeAllAuth()
 {
-    g_authEpoch++;
+    {
+        concurrency::LockGuard g(&g_authSlotsMutex);
+        g_authEpoch++;
+    }
     LOG_INFO("Lockdown: All connection auth revoked (Lock Now)");
 }
 
@@ -1586,11 +1675,19 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
             ppVol[zi] = 0;
     };
 
-    // Lock Now — honoured regardless of unlock state. Revokes everyone's
-    // auth (O(1) via epoch bump) and schedules a reboot so the device
-    // comes back up in the locked state.
+    // Lock Now — only honored from a connection that has already proven
+    // the passphrase. Unauthenticated clients used to be able to trigger
+    // a reboot, which was a trivial local-presence DoS (any BLE/USB
+    // attacker could brick-loop the device). Now lock_now requires
+    // prior auth on this connection.
     if (la.lock_now) {
-        LOG_INFO("Lockdown: LOCK NOW command received");
+        if (!getAdminAuthorized()) {
+            LOG_WARN("Lockdown: LOCK NOW from unauthorized connection — denied");
+            queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, 0);
+            zeroPassphrase();
+            return true;
+        }
+        LOG_INFO("Lockdown: LOCK NOW command received from authorized connection");
         EncryptedStorage::lockNow();
         revokeAllAuth();
         queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "", 0, 0, 0);
@@ -1599,8 +1696,24 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         return true;
     }
 
+    // Empty-passphrase auth was previously a silent success — clients
+    // got no feedback and the device looked the same as it would after
+    // an actual no-op. Emit UNLOCK_FAILED with no backoff so honest
+    // clients can detect their own bug and an attacker still learns
+    // nothing they wouldn't from any other failed attempt.
     if (la.passphrase.size < 1) {
-        LOG_WARN("Lockdown: lockdown_auth with empty passphrase and lock_now=false");
+        LOG_WARN("Lockdown: lockdown_auth with empty passphrase and lock_now=false — rejecting");
+        queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, 0);
+        zeroPassphrase();
+        return true;
+    }
+
+    // boots_remaining is uint32 on the wire but the token field is uint8.
+    // Silently truncating (256 -> 0 -> default 50) hides a real client
+    // bug. Reject explicitly so the client can correct its request.
+    if (la.boots_remaining > 255) {
+        LOG_WARN("Lockdown: boots_remaining=%u exceeds uint8 cap, rejecting", la.boots_remaining);
+        queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, 0);
         zeroPassphrase();
         return true;
     }
