@@ -75,20 +75,12 @@ static PhoneAuthSlot g_authSlots[MAX_AUTH_SLOTS];
 // boot.
 static uint32_t g_authEpoch = 1;
 
-// Pointer to the PhoneAPI currently dispatching a ToRadio packet; set by
-// handleToRadio's ContextGuard. Read by AdminModule's static authorize/check
-// helpers on the Router thread — note this is unreliable across the
-// dispatch→Router boundary (the dispatch task may have exited by the time
-// Router runs) and is removed in commit 2 of the audit remediation in
-// favour of per-packet authorization metadata.
-static PhoneAPI *g_currentContext = nullptr;
-
-// Single mutex guarding g_authSlots, g_authEpoch, and g_currentContext.
-// All readers and writers — including const getters like getAdminAuthorized
-// — must take it. Granularity is fine because the critical sections are
-// short (a fixed-size linear scan over 6 entries) and contention is
-// dominated by getFromRadio's per-call redaction checks, which tolerate
-// brief blocking.
+// Single mutex guarding g_authSlots and g_authEpoch. All readers and
+// writers — including const getters like getAdminAuthorized — must take
+// it. Granularity is fine because the critical sections are short (a
+// fixed-size linear scan over 6 entries) and contention is dominated by
+// getFromRadio's per-call redaction checks, which tolerate brief
+// blocking.
 static concurrency::Lock g_authSlotsMutex;
 
 // Find or allocate the auth slot for `p`. Caller must hold g_authSlotsMutex.
@@ -163,8 +155,6 @@ PhoneAPI::~PhoneAPI()
     {
         concurrency::LockGuard g(&g_authSlotsMutex);
         clearAuthSlot_LH(this);
-        if (g_currentContext == this)
-            g_currentContext = nullptr;
     }
 #endif
 }
@@ -319,29 +309,6 @@ bool PhoneAPI::checkConnectionTimeout()
  */
 bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
-#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-    // Mark this PhoneAPI as the active context for the duration of dispatch.
-    // AdminModule's static authorize/check helpers consult g_currentContext
-    // to find the originating connection. Restored on return. Note: this
-    // is only meaningful while dispatch is on the current task; if the
-    // packet is queued to Router for async handling, the value visible to
-    // Router is whatever happens to be set at that later moment.
-    PhoneAPI *prev;
-    {
-        concurrency::LockGuard g(&g_authSlotsMutex);
-        prev = g_currentContext;
-        g_currentContext = this;
-    }
-    struct ContextGuard {
-        PhoneAPI *prev;
-        ~ContextGuard()
-        {
-            concurrency::LockGuard g(&g_authSlotsMutex);
-            g_currentContext = prev;
-        }
-    } guard{prev};
-#endif
-
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
     lastContactMsec = millis();
 
@@ -1499,25 +1466,42 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     printPacket("PACKET FROM PHONE", &p);
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
-    // Lockdown auth is handled synchronously here, before the message
-    // reaches the mesh router. Two reasons:
-    //   1. The passphrase never goes into a routed MeshPacket queue.
-    //   2. authorize-this-connection runs while `this` is still on the
-    //      call stack, so we don't need to chase a context pointer the
-    //      way the old AdminModule async path did.
+    // Local admin gating happens here, synchronously on the dispatching
+    // task. Two distinct cases:
+    //
+    //   (a) lockdown_auth: handled inline. Passphrase never enters the
+    //       routed MeshPacket queue, and authorize-this-connection
+    //       runs while `this` is still on the call stack.
+    //
+    //   (b) Any other admin payload from an unauthorized connection:
+    //       dropped here. The previous design relied on AdminModule
+    //       to apply isLocalAdminAuthorized() during dispatch, but
+    //       AdminModule runs on the Router task — by then the
+    //       PhoneAPI dispatching task has already exited and the
+    //       per-connection auth context is unrecoverable. Putting
+    //       the gate here closes that race and covers H6/H7 from the
+    //       audit: get_config_request and set_config from unauthed
+    //       clients no longer reach AdminModule at all.
     if (p.from == 0 && p.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         p.decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
         meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
-        if (pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin) &&
-            admin.which_payload_variant == meshtastic_AdminMessage_lockdown_auth_tag) {
-            handleLockdownAuthInline(admin.lockdown_auth);
-            // Wipe the decoded passphrase scratch — the byte array in
-            // p.decoded.payload.bytes is wiped by handleLockdownAuthInline.
-            volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
-            for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
-                adminVol[i] = 0;
-            return true;
+        if (pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin)) {
+            if (admin.which_payload_variant == meshtastic_AdminMessage_lockdown_auth_tag) {
+                handleLockdownAuthInline(admin.lockdown_auth);
+                // Wipe the decoded passphrase scratch — the byte array in
+                // p.decoded.payload.bytes is wiped by handleLockdownAuthInline.
+                volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
+                for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
+                    adminVol[i] = 0;
+                return true;
+            }
+            if (!getAdminAuthorized()) {
+                LOG_WARN("Lockdown: dropping admin payload variant=%d from unauthorized connection", admin.which_payload_variant);
+                return false;
+            }
         }
+        // pb_decode failure: fall through to normal handling so the
+        // regular Router/AdminModule reject path can respond.
     }
 #endif
 
@@ -1613,31 +1597,6 @@ void PhoneAPI::setAdminAuthorized(bool authorized)
         slot->authorized = false;
         slot->epoch = 0;
     }
-}
-
-void PhoneAPI::authorizeLocalAdmin()
-{
-    PhoneAPI *ctx;
-    {
-        concurrency::LockGuard g(&g_authSlotsMutex);
-        ctx = g_currentContext;
-    }
-    if (ctx) {
-        ctx->setAdminAuthorized(true);
-        LOG_INFO("Lockdown: connection authorized");
-    } else {
-        LOG_WARN("Lockdown: authorizeLocalAdmin() called with no active PhoneAPI context");
-    }
-}
-
-bool PhoneAPI::isLocalAdminAuthorized()
-{
-    PhoneAPI *ctx;
-    {
-        concurrency::LockGuard g(&g_authSlotsMutex);
-        ctx = g_currentContext;
-    }
-    return ctx && ctx->getAdminAuthorized();
 }
 
 void PhoneAPI::revokeAllAuth()

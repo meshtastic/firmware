@@ -180,15 +180,6 @@ class PhoneAPI
     void setAdminAuthorized(bool authorized);
     bool getAdminAuthorized() const;
 
-    /// Authorize the originating PhoneAPI connection. Used by AdminModule
-    /// on the PKC-admin auto-auth path (mp.from == 0 + valid admin key).
-    /// Best-effort: g_currentContext is null by the time the async
-    /// AdminModule handler runs, so this no-ops for admin messages routed
-    /// through the Router pipeline. The lockdown_auth passphrase path
-    /// avoids this entirely by being handled synchronously in
-    /// PhoneAPI::handleToRadioPacket (see handleLockdownAuthInline).
-    static void authorizeLocalAdmin();
-    static bool isLocalAdminAuthorized();
     /// Lock Now: O(1) invalidation of every connection's auth by advancing
     /// the global epoch. Subsequent gate checks see slot.myEpoch != epoch
     /// and treat the connection as unauthenticated.
