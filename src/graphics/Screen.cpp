@@ -124,7 +124,13 @@ static inline void prepareFrameColorRegions()
 // meshtastic_security::shouldRedactDisplay() returns true. Renders centered
 // "LOCKED" plus battery so the operator can see the device is alive and
 // charged without leaking any node/channel/message/position content.
-static void drawLockdownLockScreen(OLEDDisplay *display)
+// Draw the LOCKED frame into the host-side framebuffer. Does NOT commit
+// to the panel — the caller is responsible for calling display->display()
+// once it has composited any overlays on top. Committing here would cause
+// visible flicker between "just LOCKED" and "LOCKED + banner overlay" when
+// the pairing-PIN special-case in updateUiFrame paints the overlay after
+// this returns.
+static void drawLockdownLockScreenIntoBuffer(OLEDDisplay *display)
 {
     display->clear();
 
@@ -142,7 +148,13 @@ static void drawLockdownLockScreen(OLEDDisplay *display)
         snprintf(status, sizeof(status), "Battery %d%%", pct);
     }
     display->drawString(w / 2, h / 2 + 2, status);
+}
 
+// Convenience wrapper for callers that want the LOCKED frame committed
+// to the panel immediately and have no overlay to compose on top.
+static void drawLockdownLockScreen(OLEDDisplay *display)
+{
+    drawLockdownLockScreenIntoBuffer(display);
     display->display();
 }
 #endif
@@ -151,19 +163,29 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
 #ifdef MESHTASTIC_LOCKDOWN
     if (meshtastic_security::shouldRedactDisplay() && screen != nullptr) {
-        // Always paint the LOCKED frame first so the background underneath
-        // any banner overlay is the redacted view, never dashboard content.
-        drawLockdownLockScreen(screen->getDisplayDevice());
+        OLEDDisplay *display = screen->getDisplayDevice();
+        // Paint LOCKED into the framebuffer WITHOUT committing. We commit
+        // exactly once at the bottom — after any overlay has been composed
+        // on top — so the panel never visibly transitions from "just LOCKED"
+        // to "LOCKED + overlay" mid-frame. Committing twice per cycle was
+        // the source of the H13 flicker.
+        drawLockdownLockScreenIntoBuffer(display);
         // Special-case the BLE pairing PIN banner. The PIN is needed to
         // complete first-pair against a locked device, but the lockdown
-        // short-circuit would otherwise swallow ui->update() and the PIN
-        // would never render — locking the operator out of BLE entirely.
-        // The PIN is an ephemeral pair-handshake artifact (regenerated per
-        // attempt, dies on banner timeout), not operator content. Letting
-        // ui->update() composite the banner over the LOCKED frame is safe.
+        // short-circuit would otherwise hide the PIN entirely. The PIN is
+        // a per-attempt ephemeral pair-handshake artifact, not operator
+        // content, so compositing it over the LOCKED frame is safe.
+        //
+        // Calling ui->update() here would be wrong: it redraws the current
+        // carousel frame (the dashboard) into the framebuffer before the
+        // overlay paints, leaving operator content visible underneath the
+        // banner. Instead we invoke the banner overlay callback directly,
+        // which paints only the banner box on top of the LOCKED pixels we
+        // already have in the framebuffer.
         if (NotificationRenderer::current_notification_type == notificationTypeEnum::pairing_pin) {
-            ui->update();
+            NotificationRenderer::drawBannercallback(display, ui->getUiState());
         }
+        display->display();
         return;
     }
 #endif
