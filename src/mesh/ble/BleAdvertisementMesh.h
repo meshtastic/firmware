@@ -42,15 +42,25 @@ class BleAdvertisementMeshCodec
     bool receiveFrame(const uint8_t *frame, size_t frameLength, meshtastic_MeshPacket *out);
 
   private:
-    uint32_t currentFrom = 0;
-    uint32_t currentPacketId = 0;
-    uint16_t currentCrc = 0;
-    uint8_t expectedFragments = 0;
-    uint8_t lastFragmentLength = 0;
-    uint64_t receivedMask = 0;
-    uint8_t encodedPacket[meshtastic_MeshPacket_size] = {0};
+    static constexpr uint8_t REASSEMBLY_CONTEXTS = 4;
 
-    void reset(uint32_t from, uint32_t packetId, uint16_t crc, uint8_t fragmentCount);
+    struct ReassemblyContext
+    {
+        uint32_t from = 0;
+        uint32_t packetId = 0;
+        uint16_t crc = 0;
+        uint8_t expectedFragments = 0;
+        uint8_t lastFragmentLength = 0;
+        uint64_t receivedMask = 0;
+        uint8_t encodedPacket[meshtastic_MeshPacket_size] = {0};
+    };
+
+    ReassemblyContext contexts[REASSEMBLY_CONTEXTS];
+    uint8_t nextContext = 0;
+
+    ReassemblyContext *getContext(uint32_t from, uint32_t packetId, uint16_t crc, uint8_t fragmentCount);
+    void reset(ReassemblyContext &context, uint32_t from, uint32_t packetId, uint16_t crc, uint8_t fragmentCount);
+    void clear(ReassemblyContext &context);
 };
 
 #if HAS_BLE_MESH_ADVERTISING

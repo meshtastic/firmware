@@ -119,6 +119,42 @@ void test_ble_adv_codec_rejects_crc_mismatch()
     TEST_ASSERT_FALSE(complete);
 }
 
+void test_ble_adv_codec_handles_interleaved_packets()
+{
+    meshtastic_MeshPacket first = makePacket();
+    meshtastic_MeshPacket second = makePacket();
+    second.from = 0x99aabbcc;
+    second.id = 0x12345678;
+    for (uint8_t i = 0; i < second.encrypted.size; i++) {
+        second.encrypted.bytes[i] = 0xff - i;
+    }
+
+    Capture firstCapture;
+    Capture secondCapture;
+    TEST_ASSERT_TRUE(BleAdvertisementMeshCodec::forEachFrame(&first, captureFrame, &firstCapture));
+    TEST_ASSERT_TRUE(BleAdvertisementMeshCodec::forEachFrame(&second, captureFrame, &secondCapture));
+    TEST_ASSERT_EQUAL(firstCapture.count, secondCapture.count);
+
+    BleAdvertisementMeshCodec codec;
+    meshtastic_MeshPacket decoded = meshtastic_MeshPacket_init_zero;
+    bool sawFirst = false;
+    bool sawSecond = false;
+
+    for (size_t i = 0; i < firstCapture.count; i++) {
+        if (codec.receiveFrame(firstCapture.frames[i], firstCapture.lengths[i], &decoded)) {
+            TEST_ASSERT_EQUAL_UINT32(first.id, decoded.id);
+            sawFirst = true;
+        }
+        if (codec.receiveFrame(secondCapture.frames[i], secondCapture.lengths[i], &decoded)) {
+            TEST_ASSERT_EQUAL_UINT32(second.id, decoded.id);
+            sawSecond = true;
+        }
+    }
+
+    TEST_ASSERT_TRUE(sawFirst);
+    TEST_ASSERT_TRUE(sawSecond);
+}
+
 void setup()
 {
     delay(10);
@@ -126,6 +162,7 @@ void setup()
     RUN_TEST(test_ble_adv_codec_round_trips_fragmented_mesh_packet);
     RUN_TEST(test_ble_adv_codec_round_trips_max_encrypted_mesh_packet);
     RUN_TEST(test_ble_adv_codec_rejects_crc_mismatch);
+    RUN_TEST(test_ble_adv_codec_handles_interleaved_packets);
     exit(UNITY_END());
 }
 

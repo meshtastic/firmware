@@ -111,15 +111,44 @@ bool BleAdvertisementMeshCodec::forEachFrame(const meshtastic_MeshPacket *mp, Em
     return true;
 }
 
-void BleAdvertisementMeshCodec::reset(uint32_t from, uint32_t packetId, uint16_t crc, uint8_t fragmentCount)
+BleAdvertisementMeshCodec::ReassemblyContext *BleAdvertisementMeshCodec::getContext(uint32_t from, uint32_t packetId,
+                                                                                    uint16_t crc, uint8_t fragmentCount)
 {
-    currentFrom = from;
-    currentPacketId = packetId;
-    currentCrc = crc;
-    expectedFragments = fragmentCount;
-    lastFragmentLength = 0;
-    receivedMask = 0;
-    memset(encodedPacket, 0, sizeof(encodedPacket));
+    for (auto &context : contexts) {
+        if (context.expectedFragments != 0 && context.from == from && context.packetId == packetId && context.crc == crc &&
+            context.expectedFragments == fragmentCount) {
+            return &context;
+        }
+    }
+
+    for (auto &context : contexts) {
+        if (context.expectedFragments == 0) {
+            reset(context, from, packetId, crc, fragmentCount);
+            return &context;
+        }
+    }
+
+    ReassemblyContext &context = contexts[nextContext];
+    nextContext = (nextContext + 1) % REASSEMBLY_CONTEXTS;
+    reset(context, from, packetId, crc, fragmentCount);
+    return &context;
+}
+
+void BleAdvertisementMeshCodec::reset(ReassemblyContext &context, uint32_t from, uint32_t packetId, uint16_t crc,
+                                      uint8_t fragmentCount)
+{
+    context.from = from;
+    context.packetId = packetId;
+    context.crc = crc;
+    context.expectedFragments = fragmentCount;
+    context.lastFragmentLength = 0;
+    context.receivedMask = 0;
+    memset(context.encodedPacket, 0, sizeof(context.encodedPacket));
+}
+
+void BleAdvertisementMeshCodec::clear(ReassemblyContext &context)
+{
+    reset(context, 0, 0, 0, 0);
 }
 
 bool BleAdvertisementMeshCodec::receiveFrame(const uint8_t *frame, size_t frameLength, meshtastic_MeshPacket *out)
@@ -142,34 +171,32 @@ bool BleAdvertisementMeshCodec::receiveFrame(const uint8_t *frame, size_t frameL
     }
 
     size_t offset = fragment * MAX_FRAGMENT_PAYLOAD_SIZE;
-    if (offset + payloadLength > sizeof(encodedPacket)) {
+    if (offset + payloadLength > sizeof(contexts[0].encodedPacket)) {
         return false;
     }
 
-    if (from != currentFrom || packetId != currentPacketId || crc != currentCrc || fragmentCount != expectedFragments) {
-        reset(from, packetId, crc, fragmentCount);
-    }
+    ReassemblyContext *context = getContext(from, packetId, crc, fragmentCount);
 
-    memcpy(&encodedPacket[offset], &frame[FRAME_HEADER_SIZE], payloadLength);
-    receivedMask |= 1ULL << fragment;
+    memcpy(&context->encodedPacket[offset], &frame[FRAME_HEADER_SIZE], payloadLength);
+    context->receivedMask |= 1ULL << fragment;
     if (fragment == fragmentCount - 1) {
-        lastFragmentLength = payloadLength;
+        context->lastFragmentLength = payloadLength;
     }
 
     uint64_t completeMask = fragmentCount == 64 ? UINT64_MAX : ((1ULL << fragmentCount) - 1);
-    if (receivedMask != completeMask || lastFragmentLength == 0) {
+    if (context->receivedMask != completeMask || context->lastFragmentLength == 0) {
         return false;
     }
 
-    size_t encodedLength = (fragmentCount - 1) * MAX_FRAGMENT_PAYLOAD_SIZE + lastFragmentLength;
-    if (crc16ccitt(encodedPacket, encodedLength) != currentCrc) {
-        reset(0, 0, 0, 0);
+    size_t encodedLength = (fragmentCount - 1) * MAX_FRAGMENT_PAYLOAD_SIZE + context->lastFragmentLength;
+    if (crc16ccitt(context->encodedPacket, encodedLength) != context->crc) {
+        clear(*context);
         return false;
     }
 
     memset(out, 0, sizeof(*out));
-    bool decoded = pb_decode_from_bytes(encodedPacket, encodedLength, &meshtastic_MeshPacket_msg, out);
-    reset(0, 0, 0, 0);
+    bool decoded = pb_decode_from_bytes(context->encodedPacket, encodedLength, &meshtastic_MeshPacket_msg, out);
+    clear(*context);
     return decoded;
 }
 
@@ -262,7 +289,8 @@ void BleAdvertisementMesh::onAdvertisement(const uint8_t *frame, size_t frameLen
 
 bool BleAdvertisementMesh::enqueueFrame(const uint8_t *frame, size_t frameLength)
 {
-    if (!frame || frameLength == 0 || frameLength > BleAdvertisementMeshCodec::MAX_FRAME_SIZE || queuedFrames >= FRAME_QUEUE_SIZE) {
+    if (!frame || frameLength == 0 || frameLength > BleAdvertisementMeshCodec::MAX_FRAME_SIZE ||
+        queuedFrames >= FRAME_QUEUE_SIZE) {
         return false;
     }
 
