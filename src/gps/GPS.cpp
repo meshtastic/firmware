@@ -87,7 +87,6 @@ struct GPSProbeCacheRecord {
     uint16_t reserved;
     uint32_t baud;
     uint8_t model;
-    uint8_t padding[3];
 };
 
 bool isValidGnssModel(uint8_t model)
@@ -120,10 +119,10 @@ template <typename T> bool sawNmeaSentenceAtBaud(T *serialGps, uint32_t timeoutM
             if (c == ',') {
                 sawComma = true;
             }
-            if (c == '\n' && sawDollar && sawComma) {
-                return true;
-            }
             if (c == '\n' || c == '\r') {
+                if (sawDollar && sawComma) {
+                    return true;
+                }
                 sawDollar = false;
                 sawComma = false;
             }
@@ -612,8 +611,13 @@ bool GPS::saveProbeCache() const
     }
 
     FSCom.mkdir("/prefs");
-    GPSProbeCacheRecord record = {GPS_PROBE_CACHE_MAGIC, GPS_PROBE_CACHE_VERSION, 0, static_cast<uint32_t>(detectedBaud),
-                                  static_cast<uint8_t>(gnssModel), {0, 0, 0}};
+    GPSProbeCacheRecord record = {
+        GPS_PROBE_CACHE_MAGIC,
+        GPS_PROBE_CACHE_VERSION,
+        0,
+        static_cast<uint32_t>(detectedBaud),
+        static_cast<uint8_t>(gnssModel),
+    };
 
     auto file = SafeFile(GPS_PROBE_CACHE_FILE, true);
     const size_t written = file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
@@ -749,7 +753,7 @@ bool GPS::setup()
                     ++probeTries;
                 }
             }
-// Rare Serial Speeds
+            // Rare Serial Speeds
 #ifndef CONFIG_IDF_TARGET_ESP32C6
             else if (probeTries == GPS_PROBETRIES) {
                 // Then try less common baud rates before giving up.
