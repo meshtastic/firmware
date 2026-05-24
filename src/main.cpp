@@ -386,9 +386,13 @@ void setup()
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
 
-#ifdef MESHTASTIC_ENABLE_APPROTECT
-    enableAPProtect();
-#endif
+    // M23 (audit): APPROTECT engagement moved below fsInit() so we can gate
+    // on EncryptedStorage::isProvisioned(). Engaging on an unprovisioned dev
+    // board permanently locks SWD before the operator has even set a
+    // passphrase — a misconfigured CI build flashed to a developer device
+    // would brick its debug port on first boot. Now we only engage when the
+    // device has a DEK file on flash, i.e. the operator has explicitly
+    // committed to lockdown via passphrase provisioning.
 
 #ifdef UNPHONE
     unphone.printStore();
@@ -501,6 +505,27 @@ void setup()
             LOG_WARN("Lockdown: Device locked — connect and provide passphrase to unlock storage");
         }
     }
+#endif
+
+#if defined(MESHTASTIC_ENABLE_APPROTECT) && defined(MESHTASTIC_ENCRYPTED_STORAGE)
+    // M23 (audit): only engage the irreversible UICR APPROTECT lockout once
+    // the device has been provisioned with a passphrase. A misconfigured
+    // CI build of a lockdown variant flashed to a developer board would
+    // otherwise burn SWD on first boot before the operator has even set a
+    // passphrase, taking the board out of the dev/recovery workflow with
+    // no real security benefit (there's no DEK to protect yet). Once a
+    // DEK file exists, the operator has committed to lockdown — engaging
+    // APPROTECT then is the protection they asked for.
+    if (EncryptedStorage::isProvisioned()) {
+        enableAPProtect();
+    } else {
+        LOG_INFO("APPROTECT deferred: device not yet provisioned");
+    }
+#elif defined(MESHTASTIC_ENABLE_APPROTECT)
+    // Lockdown without encrypted storage shouldn't be reachable per
+    // configuration.h, but if it ever is, fall back to the unconditional
+    // engagement.
+    enableAPProtect();
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
