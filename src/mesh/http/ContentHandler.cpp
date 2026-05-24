@@ -656,6 +656,17 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     String wifiIPString = WiFi.localIP().toString();
     std::string wifiIP = wifiIPString.c_str();
     jsonObjWifi["ip"] = new JSONValue(wifiIP.c_str());
+#ifdef ARCH_ESP32
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+    String wifiIPv6LocalString = WiFi.linkLocalIPv6().toString();
+    String wifiIPv6GlobalString = WiFi.globalIPv6().toString();
+#else
+    String wifiIPv6LocalString = WiFi.localIPv6().toString();
+    String wifiIPv6GlobalString = GlobalIPv6().toString();
+#endif
+    jsonObjWifi["ipv6_local"] = new JSONValue(std::string(wifiIPv6LocalString.c_str()));
+    jsonObjWifi["ipv6_global"] = new JSONValue(std::string(wifiIPv6GlobalString.c_str()));
+#endif
 
     // data->memory
     JSONObject jsonObjMemory;
