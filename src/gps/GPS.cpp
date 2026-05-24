@@ -81,54 +81,54 @@ constexpr uint16_t GPS_PROBE_CACHE_VERSION = 1;
 constexpr const char *GPS_PROBE_CACHE_FILE = "/prefs/gps_probe_cache.dat";
 
 struct GPSProbeCacheRecord {
-  uint32_t magic;
-  uint16_t version;
-  uint16_t reserved;
-  uint32_t baud;
-  uint8_t model;
+    uint32_t magic;
+    uint16_t version;
+    uint16_t reserved;
+    uint32_t baud;
+    uint8_t model;
 };
 
 bool isValidGnssModel(uint8_t model) {
-  // Keep persisted values bounded to known enum range.
-  return model <= static_cast<uint8_t>(GNSS_MODEL_CM121);
+    // Keep persisted values bounded to known enum range.
+    return model <= static_cast<uint8_t>(GNSS_MODEL_CM121);
 }
 
 bool isValidProbeBaud(uint32_t baud) {
-  // Conservative sanity range for UART baud values.
-  return baud >= 1200 && baud <= 921600;
+    // Conservative sanity range for UART baud values.
+    return baud >= 1200 && baud <= 921600;
 }
 
 template <typename T>
 bool sawNmeaSentenceAtBaud(T *serialGps, uint32_t timeoutMs) {
-  // Lightweight passive check: look for at least one complete "$...,<field>\n"
-  // style NMEA sentence.
-  const uint32_t deadline = millis() + timeoutMs;
-  bool sawDollar = false;
-  bool sawComma = false;
+    // Lightweight passive check: look for at least one complete
+    // "$...,<field>\n" style NMEA sentence.
+    const uint32_t deadline = millis() + timeoutMs;
+    bool sawDollar = false;
+    bool sawComma = false;
 
-  while ((int32_t)(millis() - deadline) < 0) {
-    while (serialGps->available()) {
-      char c = static_cast<char>(serialGps->read());
-      if (c == '$') {
-        sawDollar = true;
-        sawComma = false;
-        continue;
-      }
-      if (c == ',') {
-        sawComma = true;
-      }
-      if (c == '\n' || c == '\r') {
-        if (sawDollar && sawComma) {
-          return true;
+    while ((int32_t)(millis() - deadline) < 0) {
+      while (serialGps->available()) {
+        char c = static_cast<char>(serialGps->read());
+        if (c == '$') {
+          sawDollar = true;
+          sawComma = false;
+          continue;
         }
-        sawDollar = false;
-        sawComma = false;
+        if (c == ',') {
+          sawComma = true;
+        }
+        if (c == '\n' || c == '\r') {
+          if (sawDollar && sawComma) {
+            return true;
+          }
+          sawDollar = false;
+          sawComma = false;
+        }
       }
+      delay(10);
     }
-    delay(10);
-  }
 
-  return false;
+    return false;
 }
 } // namespace
 
@@ -555,172 +555,172 @@ static const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
 
 bool GPS::loadProbeCache() {
 #ifdef FSCom
-  // Load the last known-good GPS model/baud pair so we can avoid a full probe
-  // sweep on every boot.
-  GPSProbeCacheRecord record = {};
-  size_t bytesRead = 0;
+    // Load the last known-good GPS model/baud pair so we can avoid a full probe
+    // sweep on every boot.
+    GPSProbeCacheRecord record = {};
+    size_t bytesRead = 0;
 
-  spiLock->lock();
-  auto file = FSCom.open(GPS_PROBE_CACHE_FILE, FILE_O_READ);
-  if (!file) {
+    spiLock->lock();
+    auto file = FSCom.open(GPS_PROBE_CACHE_FILE, FILE_O_READ);
+    if (!file) {
+        spiLock->unlock();
+        return false;
+    }
+    bytesRead = file.read(reinterpret_cast<uint8_t *>(&record), sizeof(record));
+    file.close();
     spiLock->unlock();
-    return false;
-  }
-  bytesRead = file.read(reinterpret_cast<uint8_t *>(&record), sizeof(record));
-  file.close();
-  spiLock->unlock();
 
-  const bool headerValid = (bytesRead == sizeof(record)) &&
-                           (record.magic == GPS_PROBE_CACHE_MAGIC) &&
-                           (record.version == GPS_PROBE_CACHE_VERSION) &&
-                           (record.reserved == 0U);
-  if (!headerValid || !isValidGnssModel(record.model) ||
-      !isValidProbeBaud(record.baud)) {
-    return false;
-  }
+    const bool headerValid = (bytesRead == sizeof(record)) &&
+                             (record.magic == GPS_PROBE_CACHE_MAGIC) &&
+                             (record.version == GPS_PROBE_CACHE_VERSION) &&
+                             (record.reserved == 0U);
+    if (!headerValid || !isValidGnssModel(record.model) ||
+        !isValidProbeBaud(record.baud)) {
+        return false;
+    }
 
-  cachedProbeBaud = static_cast<int32_t>(record.baud);
-  cachedProbeModel = static_cast<GnssModel_t>(record.model);
-  hasProbeCache = true;
-  triedProbeCache = false;
-  LOG_INFO("Loaded cached GPS probe: model=%u baud=%u", record.model,
-           record.baud);
-  return true;
+    cachedProbeBaud = static_cast<int32_t>(record.baud);
+    cachedProbeModel = static_cast<GnssModel_t>(record.model);
+    hasProbeCache = true;
+    triedProbeCache = false;
+    LOG_INFO("Loaded cached GPS probe: model=%u baud=%u", record.model,
+             record.baud);
+    return true;
 #else
-  return false;
+    return false;
 #endif
 }
 
 void GPS::clearProbeCache() {
-  // Invalidate in-memory and on-disk cache so next boot is forced to do a full
-  // probe.
-  hasProbeCache = false;
-  triedProbeCache = true;
-  cachedProbeBaud = 0;
-  cachedProbeModel = GNSS_MODEL_UNKNOWN;
+    // Invalidate in-memory and on-disk cache so next boot is forced to do a
+    // full probe.
+    hasProbeCache = false;
+    triedProbeCache = true;
+    cachedProbeBaud = 0;
+    cachedProbeModel = GNSS_MODEL_UNKNOWN;
 #ifdef FSCom
-  if (FSCom.exists(GPS_PROBE_CACHE_FILE)) {
-    FSCom.remove(GPS_PROBE_CACHE_FILE);
-  }
+    if (FSCom.exists(GPS_PROBE_CACHE_FILE)) {
+        FSCom.remove(GPS_PROBE_CACHE_FILE);
+    }
 #endif
 }
 
 bool GPS::saveProbeCache() const {
 #ifdef FSCom
-  if (gnssModel == GNSS_MODEL_UNKNOWN ||
-      !isValidGnssModel(static_cast<uint8_t>(gnssModel)) ||
-      !isValidProbeBaud(detectedBaud)) {
-    return false;
-  }
+    if (gnssModel == GNSS_MODEL_UNKNOWN ||
+        !isValidGnssModel(static_cast<uint8_t>(gnssModel)) ||
+        !isValidProbeBaud(detectedBaud)) {
+        return false;
+    }
 
-  FSCom.mkdir("/prefs");
-  GPSProbeCacheRecord record = {
-      GPS_PROBE_CACHE_MAGIC,
-      GPS_PROBE_CACHE_VERSION,
-      0,
-      static_cast<uint32_t>(detectedBaud),
-      static_cast<uint8_t>(gnssModel),
-  };
+    FSCom.mkdir("/prefs");
+    GPSProbeCacheRecord record = {
+        GPS_PROBE_CACHE_MAGIC,
+        GPS_PROBE_CACHE_VERSION,
+        0,
+        static_cast<uint32_t>(detectedBaud),
+        static_cast<uint8_t>(gnssModel),
+    };
 
-  auto file = SafeFile(GPS_PROBE_CACHE_FILE, true);
-  const size_t written =
-      file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
-  return (written == sizeof(record)) && file.close();
+    auto file = SafeFile(GPS_PROBE_CACHE_FILE, true);
+    const size_t written =
+        file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
+    return (written == sizeof(record)) && file.close();
 #else
-  return false;
+    return false;
 #endif
 }
 
 bool GPS::verifyCachedProbePresence() {
-  if (!hasProbeCache || cachedProbeModel == GNSS_MODEL_UNKNOWN ||
-      !isValidProbeBaud(cachedProbeBaud)) {
-    return false;
-  }
+    if (!hasProbeCache || cachedProbeModel == GNSS_MODEL_UNKNOWN ||
+        !isValidProbeBaud(cachedProbeBaud)) {
+        return false;
+    }
 
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
-  _serial_gps->end();
-  _serial_gps->begin(cachedProbeBaud);
+    _serial_gps->end();
+    _serial_gps->begin(cachedProbeBaud);
 #elif defined(ARCH_RP2040)
-  _serial_gps->end();
-  _serial_gps->setFIFOSize(256);
-  _serial_gps->begin(cachedProbeBaud);
+    _serial_gps->end();
+    _serial_gps->setFIFOSize(256);
+    _serial_gps->begin(cachedProbeBaud);
 #else
-  if (_serial_gps->baudRate() != cachedProbeBaud) {
-    LOG_DEBUG("Set GPS Baud to %i (cached verify)", cachedProbeBaud);
-    _serial_gps->updateBaudRate(cachedProbeBaud);
-  }
+    if (_serial_gps->baudRate() != cachedProbeBaud) {
+        LOG_DEBUG("Set GPS Baud to %i (cached verify)", cachedProbeBaud);
+        _serial_gps->updateBaudRate(cachedProbeBaud);
+    }
 #endif
 
-  // Before trusting cached model/baud, require either active model-specific
-  // response or passive NMEA flow.
-  clearBuffer();
-  bool present = false;
+    // Before trusting cached model/baud, require either active model-specific
+    // response or passive NMEA flow.
+    clearBuffer();
+    bool present = false;
 
-  // Model-specific "active ping" checks to avoid false stale decisions on
-  // modules that start streaming late.
-  switch (cachedProbeModel) {
-  case GNSS_MODEL_MTK:
-    _serial_gps->write("$PCAS06,0*1B\r\n");
-    present = (getACK("$GPTXT,01,01,02,SW=", 700) == GNSS_RESPONSE_OK);
-    break;
-  case GNSS_MODEL_MTK_L76B:
-  case GNSS_MODEL_MTK_PA1010D:
-  case GNSS_MODEL_MTK_PA1616S:
-  case GNSS_MODEL_LS20031:
-    _serial_gps->write("$PMTK605*31\r\n");
-    present = (getACK("$PMTK705", 900) == GNSS_RESPONSE_OK);
-    break;
-  case GNSS_MODEL_AG3335:
-  case GNSS_MODEL_AG3352:
-    _serial_gps->write("$PAIR021*39\r\n");
-    present = (getACK("$PAIR021,", 900) == GNSS_RESPONSE_OK);
-    break;
-  case GNSS_MODEL_ATGM336H:
-    _serial_gps->write("$PCAS06,1*1A\r\n");
-    present = (getACK("$GPTXT,01,01,02,HW=ATGM", 900) == GNSS_RESPONSE_OK);
-    break;
-  case GNSS_MODEL_UC6580:
-    _serial_gps->write("$PDTINFO\r\n");
-    present = (getACK("UC6580", 900) == GNSS_RESPONSE_OK) ||
-              (getACK("UM600", 900) == GNSS_RESPONSE_OK);
-    break;
-  case GNSS_MODEL_CM121:
-    _serial_gps->write("$PDTINFO\r\n");
-    present = (getACK("CM121", 900) == GNSS_RESPONSE_OK);
-    break;
-  case GNSS_MODEL_UBLOX6:
-  case GNSS_MODEL_UBLOX7:
-  case GNSS_MODEL_UBLOX8:
-  case GNSS_MODEL_UBLOX9:
-  case GNSS_MODEL_UBLOX10: {
-    uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
-    UBXChecksum(cfg_rate, sizeof(cfg_rate));
-    _serial_gps->write(cfg_rate, sizeof(cfg_rate));
-    present = (getACK(0x06, 0x08, 900) != GNSS_RESPONSE_NONE);
-    break;
-  }
-  default:
-    break;
-  }
+    // Model-specific "active ping" checks to avoid false stale decisions on
+    // modules that start streaming late.
+    switch (cachedProbeModel) {
+    case GNSS_MODEL_MTK:
+        _serial_gps->write("$PCAS06,0*1B\r\n");
+        present = (getACK("$GPTXT,01,01,02,SW=", 700) == GNSS_RESPONSE_OK);
+        break;
+    case GNSS_MODEL_MTK_L76B:
+    case GNSS_MODEL_MTK_PA1010D:
+    case GNSS_MODEL_MTK_PA1616S:
+    case GNSS_MODEL_LS20031:
+        _serial_gps->write("$PMTK605*31\r\n");
+        present = (getACK("$PMTK705", 900) == GNSS_RESPONSE_OK);
+        break;
+    case GNSS_MODEL_AG3335:
+    case GNSS_MODEL_AG3352:
+        _serial_gps->write("$PAIR021*39\r\n");
+        present = (getACK("$PAIR021,", 900) == GNSS_RESPONSE_OK);
+        break;
+    case GNSS_MODEL_ATGM336H:
+        _serial_gps->write("$PCAS06,1*1A\r\n");
+        present = (getACK("$GPTXT,01,01,02,HW=ATGM", 900) == GNSS_RESPONSE_OK);
+        break;
+    case GNSS_MODEL_UC6580:
+        _serial_gps->write("$PDTINFO\r\n");
+        present = (getACK("UC6580", 900) == GNSS_RESPONSE_OK) ||
+                  (getACK("UM600", 900) == GNSS_RESPONSE_OK);
+        break;
+    case GNSS_MODEL_CM121:
+        _serial_gps->write("$PDTINFO\r\n");
+        present = (getACK("CM121", 900) == GNSS_RESPONSE_OK);
+        break;
+    case GNSS_MODEL_UBLOX6:
+    case GNSS_MODEL_UBLOX7:
+    case GNSS_MODEL_UBLOX8:
+    case GNSS_MODEL_UBLOX9:
+    case GNSS_MODEL_UBLOX10: {
+        uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
+        UBXChecksum(cfg_rate, sizeof(cfg_rate));
+        _serial_gps->write(cfg_rate, sizeof(cfg_rate));
+        present = (getACK(0x06, 0x08, 900) != GNSS_RESPONSE_NONE);
+        break;
+    }
+    default:
+        break;
+    }
 
-  if (!present) {
-    // Some modules may not respond to probes while still streaming NMEA, so
-    // allow a passive fallback check.
-    present = sawNmeaSentenceAtBaud(_serial_gps, 3000);
-  }
-  if (!present) {
-    LOG_WARN("Cached GPS probe is stale (model=%u baud=%d), clearing cache",
-             static_cast<unsigned>(cachedProbeModel), cachedProbeBaud);
-    clearProbeCache();
-    cachedProbeFailedThisBoot = true;
-    return false;
-  }
+    if (!present) {
+        // Some modules may not respond to probes while still streaming NMEA, so
+        // allow a passive fallback check.
+        present = sawNmeaSentenceAtBaud(_serial_gps, 3000);
+    }
+    if (!present) {
+        LOG_WARN("Cached GPS probe is stale (model=%u baud=%d), clearing cache",
+                 static_cast<unsigned>(cachedProbeModel), cachedProbeBaud);
+        clearProbeCache();
+        cachedProbeFailedThisBoot = true;
+        return false;
+    }
 
-  detectedBaud = cachedProbeBaud;
-  gnssModel = cachedProbeModel;
-  LOG_INFO("Using cached GPS probe: model=%u baud=%d",
-           static_cast<unsigned>(gnssModel), detectedBaud);
-  return true;
+    detectedBaud = cachedProbeBaud;
+    gnssModel = cachedProbeModel;
+    LOG_INFO("Using cached GPS probe: model=%u baud=%d",
+             static_cast<unsigned>(gnssModel), detectedBaud);
+    return true;
 }
 
 /**
@@ -735,48 +735,49 @@ bool GPS::setup()
     if (!didSerialInit) {
         int msglen = 0;
         if (cachedProbeFailedThisBoot) {
-          // If cached verification failed, suppress further probing until
-          // reboot.
-          didSerialInit = true;
-          return true;
+            // If cached verification failed, suppress further probing until
+            // reboot.
+            didSerialInit = true;
+            return true;
         }
 
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
-          if (!hasProbeCache && !triedProbeCache) {
-            (void)loadProbeCache();
-          }
+            if (!hasProbeCache && !triedProbeCache) {
+                (void)loadProbeCache();
+            }
 
-          if (hasProbeCache && !triedProbeCache) {
-            triedProbeCache = true;
-            if (!verifyCachedProbePresence()) {
-              // Cache was stale and got wiped; skip scanning this boot and let
-              // next boot do a full probe.
-              didSerialInit = true;
-              return true;
+            if (hasProbeCache && !triedProbeCache) {
+                triedProbeCache = true;
+                if (!verifyCachedProbePresence()) {
+                    // Cache was stale and got wiped; skip scanning this boot
+                    // and let next boot do a full probe.
+                    didSerialInit = true;
+                    return true;
+                }
+            } else if (probeTries < GPS_PROBETRIES) {
+                // No usable cache: walk common baud rates first.
+                gnssModel = probe(serialSpeeds[speedSelect]);
+                if (gnssModel != GNSS_MODEL_UNKNOWN) {
+                    detectedBaud = serialSpeeds[speedSelect];
+                } else if (currentStep == 0 &&
+                           ++speedSelect == array_count(serialSpeeds)) {
+                    speedSelect = 0;
+                    ++probeTries;
+                }
             }
-          } else if (probeTries < GPS_PROBETRIES) {
-            // No usable cache: walk common baud rates first.
-            gnssModel = probe(serialSpeeds[speedSelect]);
-            if (gnssModel != GNSS_MODEL_UNKNOWN) {
-              detectedBaud = serialSpeeds[speedSelect];
-            } else if (currentStep == 0 &&
-                       ++speedSelect == array_count(serialSpeeds)) {
-              speedSelect = 0;
-              ++probeTries;
-            }
-          }
             // Rare Serial Speeds
 #ifndef CONFIG_IDF_TARGET_ESP32C6
-          else if (probeTries == GPS_PROBETRIES) {
-              // Then try less common baud rates before giving up.
-              gnssModel = probe(rareSerialSpeeds[speedSelect]);
-              if (gnssModel != GNSS_MODEL_UNKNOWN) {
-                detectedBaud = rareSerialSpeeds[speedSelect];
-              } else if (currentStep == 0 &&
-                         ++speedSelect == array_count(rareSerialSpeeds)) {
-                LOG_WARN("Give up on GPS probe and set to %d", GPS_BAUDRATE);
-                return true;
-              }
+            else if (probeTries == GPS_PROBETRIES) {
+                // Then try less common baud rates before giving up.
+                gnssModel = probe(rareSerialSpeeds[speedSelect]);
+                if (gnssModel != GNSS_MODEL_UNKNOWN) {
+                    detectedBaud = rareSerialSpeeds[speedSelect];
+                } else if (currentStep == 0 &&
+                           ++speedSelect == array_count(rareSerialSpeeds)) {
+                    LOG_WARN("Give up on GPS probe and set to %d",
+                             GPS_BAUDRATE);
+                    return true;
+                }
             }
 #endif
         }
@@ -1358,9 +1359,9 @@ int32_t GPS::runOnce()
             return currentDelay; // Setup failed, re-run in two seconds
 
         if (cachedProbeFailedThisBoot || gnssModel == GNSS_MODEL_UNKNOWN) {
-          LOG_WARN("GPS not detected at cached settings; marked not present "
-                   "for this boot");
-          return disable();
+            LOG_WARN("GPS not detected at cached settings; marked not present "
+                     "for this boot");
+            return disable();
         }
 
         // We have now loaded our saved preferences from flash
