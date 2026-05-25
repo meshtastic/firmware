@@ -14,6 +14,7 @@ class SCD30Sensor : public TelemetrySensor
     SensirionI2cScd30 scd30;
     TwoWire *_bus{};
     uint8_t _address{};
+    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
 
     bool performFRC(uint16_t targetCO2);
     bool setASC(bool ascEnabled);
