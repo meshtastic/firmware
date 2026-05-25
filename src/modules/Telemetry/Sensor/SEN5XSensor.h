@@ -62,6 +62,7 @@ class SEN5XSensor : public TelemetrySensor
   private:
     TwoWire *_bus{};
     uint8_t _address{};
+    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
 
     bool getVersion();
     float firmwareVer = -1;

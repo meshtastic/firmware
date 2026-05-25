@@ -17,6 +17,7 @@ class SCD4XSensor : public TelemetrySensor
     SensirionI2cScd4x scd4x;
     TwoWire *_bus{};
     uint8_t _address{};
+    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
 
     bool performFRC(uint32_t targetCO2);
     bool setASCBaseline(uint32_t targetCO2);
