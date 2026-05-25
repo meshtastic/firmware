@@ -495,7 +495,7 @@ extern uint32_t error_address;
 #define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT)
 #define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 9
 #define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1u << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
-// Bits 9..31 reserved for future single-bit flags.
+// Bits 10..31 reserved for future single-bit flags.
 
 // Convenience accessors so call sites read like the old struct fields.
 inline bool nodeInfoLiteHasUser(const meshtastic_NodeInfoLite *n)

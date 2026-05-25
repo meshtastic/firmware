@@ -2775,7 +2775,10 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
     }
 
     bool keygenSuccess = false;
-    bool lowEntropy = checkLowEntropyPublicKey(config.security.public_key);
+    // Record whether the stored key is a known compromised/low-entropy key so main.cpp can warn the
+    // user. A detected low-entropy key is regenerated below, but the flag stays set so the
+    // "Compromised keys were detected and regenerated" notification still fires.
+    keyIsLowEntropy = checkLowEntropyPublicKey(config.security.public_key);
 
     // If a specific private key was provided, use it
     if (privateKey != nullptr) {
@@ -2793,7 +2796,7 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         }
     }
     // Try to regenerate public key from existing private key if it's valid and not low entropy
-    else if (config.security.private_key.size == 32 && !lowEntropy) {
+    else if (config.security.private_key.size == 32 && !keyIsLowEntropy) {
         config.security.public_key.size = 32;
         LOG_DEBUG("Regenerate PKI public key from existing private key");
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
@@ -2812,9 +2815,6 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
     if (keygenSuccess) {
         owner.public_key.size = 32;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-
-        // Update global entropy flag for UI display
-        keyIsLowEntropy = false;
 
         // Set the DH private key for crypto operations
         LOG_DEBUG("Set DH private key for crypto operations");
@@ -2846,6 +2846,10 @@ bool NodeDB::createNewIdentity()
         node->public_key.size = 0;
         memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
     }
+
+    // Drop satellite-store entries (position/telemetry/environment/status) keyed by the retired
+    // node number so stale data isn't left attached to the old identity.
+    eraseNodeSatellites(oldNodeNum);
 
     myNodeInfo.my_node_num = newNodeNum;
 
