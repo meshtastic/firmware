@@ -107,6 +107,8 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t po
     size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
     if (sigLen == 0)
         return false;
+    // the XEdDSA::sign function requires at least the first 32 bytes of signature to be pre-filled with randomness
+    HardwareRNG::fill(signature, 32);
     XEdDSA::sign(signature, xeddsa_private_key, xeddsa_public_key, sigBuf, sigLen);
     return true;
 }
