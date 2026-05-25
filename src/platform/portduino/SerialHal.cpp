@@ -73,13 +73,13 @@ bool SerialHal::openPort()
         return false;
     }
 
+    // Force raw mode to avoid line discipline byte mangling on binary frames.
+    cfmakeraw(&tty);
+
     cfsetospeed(&tty, toTermiosBaud(baud));
     cfsetispeed(&tty, toTermiosBaud(baud));
 
     tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
-    tty.c_iflag &= ~(IGNBRK | IXON | IXOFF | IXANY);
-    tty.c_lflag = 0;
-    tty.c_oflag = 0;
     tty.c_cc[VMIN] = 0;
     tty.c_cc[VTIME] = 0;
     tty.c_cflag |= (CLOCAL | CREAD);
