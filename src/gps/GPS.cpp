@@ -583,8 +583,7 @@ bool GPS::loadProbeCache() {
     cachedProbeModel = static_cast<GnssModel_t>(record.model);
     hasProbeCache = true;
     triedProbeCache = false;
-    LOG_INFO("Loaded cached GPS probe: model=%u baud=%u", record.model,
-             record.baud);
+    LOG_INFO("Loaded cached GPS probe: baud=%u", record.baud);
     return true;
 #else
     return false;
@@ -658,33 +657,48 @@ bool GPS::verifyCachedProbePresence() {
 
     // Model-specific "active ping" checks to avoid false stale decisions on
     // modules that start streaming late.
+    const char *cachedProbeModelName = "UNKNOWN";
     switch (cachedProbeModel) {
     case GNSS_MODEL_MTK:
+        cachedProbeModelName = "L76K/MTK";
         _serial_gps->write("$PCAS06,0*1B\r\n");
         present = (getACK("$GPTXT,01,01,02,SW=", 700) == GNSS_RESPONSE_OK);
         break;
     case GNSS_MODEL_MTK_L76B:
+        cachedProbeModelName = "L76B";
     case GNSS_MODEL_MTK_PA1010D:
+        if (cachedProbeModel == GNSS_MODEL_MTK_PA1010D)
+            cachedProbeModelName = "PA1010D";
     case GNSS_MODEL_MTK_PA1616S:
+        if (cachedProbeModel == GNSS_MODEL_MTK_PA1616S)
+            cachedProbeModelName = "PA1616S";
     case GNSS_MODEL_LS20031:
+        if (cachedProbeModel == GNSS_MODEL_LS20031)
+            cachedProbeModelName = "LS20031";
         _serial_gps->write("$PMTK605*31\r\n");
         present = (getACK("$PMTK705", 900) == GNSS_RESPONSE_OK);
         break;
     case GNSS_MODEL_AG3335:
+        cachedProbeModelName = "AG3335";
     case GNSS_MODEL_AG3352:
+        if (cachedProbeModel == GNSS_MODEL_AG3352)
+            cachedProbeModelName = "AG3352";
         _serial_gps->write("$PAIR021*39\r\n");
         present = (getACK("$PAIR021,", 900) == GNSS_RESPONSE_OK);
         break;
     case GNSS_MODEL_ATGM336H:
+        cachedProbeModelName = "ATGM336H";
         _serial_gps->write("$PCAS06,1*1A\r\n");
         present = (getACK("$GPTXT,01,01,02,HW=ATGM", 900) == GNSS_RESPONSE_OK);
         break;
     case GNSS_MODEL_UC6580:
+        cachedProbeModelName = "UC6580/UM600";
         _serial_gps->write("$PDTINFO\r\n");
         present = (getACK("UC6580", 900) == GNSS_RESPONSE_OK) ||
                   (getACK("UM600", 900) == GNSS_RESPONSE_OK);
         break;
     case GNSS_MODEL_CM121:
+        cachedProbeModelName = "CM121";
         _serial_gps->write("$PDTINFO\r\n");
         present = (getACK("CM121", 900) == GNSS_RESPONSE_OK);
         break;
@@ -693,6 +707,17 @@ bool GPS::verifyCachedProbePresence() {
     case GNSS_MODEL_UBLOX8:
     case GNSS_MODEL_UBLOX9:
     case GNSS_MODEL_UBLOX10: {
+        if (cachedProbeModel == GNSS_MODEL_UBLOX6)
+            cachedProbeModelName = "U-blox 6";
+        else if (cachedProbeModel == GNSS_MODEL_UBLOX7)
+            cachedProbeModelName = "U-blox 7";
+        else if (cachedProbeModel == GNSS_MODEL_UBLOX8)
+            cachedProbeModelName = "U-blox 8";
+        else if (cachedProbeModel == GNSS_MODEL_UBLOX9)
+            cachedProbeModelName = "U-blox 9";
+        else if (cachedProbeModel == GNSS_MODEL_UBLOX10)
+            cachedProbeModelName = "U-blox 10";
+
         uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
         UBXChecksum(cfg_rate, sizeof(cfg_rate));
         _serial_gps->write(cfg_rate, sizeof(cfg_rate));
@@ -709,8 +734,8 @@ bool GPS::verifyCachedProbePresence() {
         present = sawNmeaSentenceAtBaud(_serial_gps, 3000);
     }
     if (!present) {
-        LOG_WARN("Cached GPS probe is stale (model=%u baud=%d), clearing cache",
-                 static_cast<unsigned>(cachedProbeModel), cachedProbeBaud);
+        LOG_WARN("Cached GPS probe is stale (%s @ %d), clearing cache",
+                 cachedProbeModelName, cachedProbeBaud);
         clearProbeCache();
         cachedProbeFailedThisBoot = true;
         return false;
@@ -718,8 +743,8 @@ bool GPS::verifyCachedProbePresence() {
 
     detectedBaud = cachedProbeBaud;
     gnssModel = cachedProbeModel;
-    LOG_INFO("Using cached GPS probe: model=%u baud=%d",
-             static_cast<unsigned>(gnssModel), detectedBaud);
+    LOG_INFO("Using cached GPS probe: %s @ %d",
+             cachedProbeModelName, detectedBaud);
     return true;
 }
 
