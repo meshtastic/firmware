@@ -557,6 +557,7 @@ bool GPS::loadProbeCache() {
 #ifdef FSCom
     // Load the last known-good GPS model/baud pair so we can avoid a full probe
     // sweep on every boot.
+    triedProbeCache = true; // Latch this boot's load attempt, even if no cache.
     GPSProbeCacheRecord record = {};
     size_t bytesRead = 0;
 
@@ -576,6 +577,7 @@ bool GPS::loadProbeCache() {
                              (record.reserved == 0U);
     if (!headerValid || !isValidGnssModel(record.model) ||
         !isValidProbeBaud(record.baud)) {
+        clearProbeCache(); // Drop corrupt/invalid cache so next boot can recover.
         return false;
     }
 
