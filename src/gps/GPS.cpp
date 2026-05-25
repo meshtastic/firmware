@@ -577,7 +577,8 @@ bool GPS::loadProbeCache() {
                              (record.reserved == 0U);
     if (!headerValid || !isValidGnssModel(record.model) ||
         !isValidProbeBaud(record.baud)) {
-        clearProbeCache(); // Drop corrupt/invalid cache so next boot can recover.
+        clearProbeCache(); // Drop corrupt/invalid cache so next boot can
+                           // recover.
         return false;
     }
 
@@ -751,8 +752,8 @@ bool GPS::verifyCachedProbePresence() {
 
     detectedBaud = cachedProbeBaud;
     gnssModel = cachedProbeModel;
-    LOG_INFO("Using cached GPS probe: %s @ %d",
-             cachedProbeModelName, detectedBaud);
+    LOG_INFO("Using cached GPS probe: %s @ %d", cachedProbeModelName,
+             detectedBaud);
     return true;
 }
 
