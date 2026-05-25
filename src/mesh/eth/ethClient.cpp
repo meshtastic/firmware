@@ -9,8 +9,10 @@
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
 #include "mesh/eth/ethOTA.h"
 #endif
-#ifdef WIZNET_5500_EVB_PICO2
+#ifdef USE_ARDUINO_ETHERNET
 #include <Ethernet.h> // arduino-libraries/Ethernet — supports W5100/W5200/W5500
+// Shorter DHCP timeout so LoRa startup isn't blocked when no DHCP server is present.
+#define ETH_DHCP_TIMEOUT_MS 10000
 #else
 #include <RAK13800_W5100S.h>
 #endif
@@ -76,7 +78,7 @@ static int32_t reconnectETH()
             delay(100);
 #endif
 
-#ifdef WIZNET_5500_EVB_PICO2 // Re-configure SPI0 for the on-board W5500
+#ifdef USE_ARDUINO_ETHERNET // Re-configure SPI0 for the W5500 module
             SPI.setRX(ETH_SPI0_MISO);
             SPI.setSCK(ETH_SPI0_SCK);
             SPI.setTX(ETH_SPI0_MOSI);
@@ -94,7 +96,11 @@ static int32_t reconnectETH()
 
             int status = 0;
             if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
+#ifdef ETH_DHCP_TIMEOUT_MS
+                status = Ethernet.begin(expectedMac, ETH_DHCP_TIMEOUT_MS);
+#else
                 status = Ethernet.begin(expectedMac);
+#endif
             } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
                 Ethernet.begin(expectedMac, config.network.ipv4_config.ip, config.network.ipv4_config.dns,
                                config.network.ipv4_config.gateway, config.network.ipv4_config.subnet);
@@ -205,7 +211,7 @@ bool initEthernet()
         digitalWrite(PIN_ETHERNET_RESET, HIGH); // Reset Time.
 #endif
 
-#ifdef WIZNET_5500_EVB_PICO2 // Configure SPI0 for the on-board W5500
+#ifdef USE_ARDUINO_ETHERNET // Configure SPI0 for the W5500 module
         SPI.setRX(ETH_SPI0_MISO);
         SPI.setSCK(ETH_SPI0_SCK);
         SPI.setTX(ETH_SPI0_MOSI);
@@ -232,7 +238,11 @@ bool initEthernet()
 
         if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
             LOG_INFO("Start Ethernet DHCP");
-            status = Ethernet.begin(mac, 10000); // 10s timeout instead of default 60s
+#ifdef ETH_DHCP_TIMEOUT_MS
+            status = Ethernet.begin(mac, ETH_DHCP_TIMEOUT_MS);
+#else
+            status = Ethernet.begin(mac);
+#endif
         } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
             LOG_INFO("Start Ethernet Static");
             Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
