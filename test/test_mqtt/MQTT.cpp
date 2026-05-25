@@ -469,7 +469,7 @@ void test_sendPositionToPublicServerIsImpreciseThenOriginal(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", impreciseTopic.c_str());
     TEST_ASSERT_TRUE(impreciseEnv.validDecode);
     TEST_ASSERT_EQUAL(meshtastic_PortNum_POSITION_APP, impreciseEnv.packet->decoded.portnum);
-    TEST_ASSERT_NOT_EQUAL(positionPacket.id, impreciseEnv.packet->id);
+    TEST_ASSERT_EQUAL(positionPacket.id, impreciseEnv.packet->id);
 
     const meshtastic_Position imprecisePosition = decodePositionPacket(*impreciseEnv.packet);
     TEST_ASSERT_EQUAL(makeImpreciseCoordinate(latitude, precision), imprecisePosition.latitude_i);

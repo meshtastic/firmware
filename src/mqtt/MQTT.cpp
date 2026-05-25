@@ -91,9 +91,9 @@ static bool makePublicMqttPositionPacket(meshtastic_MeshPacket &mqttPacket, cons
     position.precision_bits = precision;
 
     mqttPacket = sourcePacket;
-    // Use a fresh id so downstream id-based MQTT consumers can receive the public-safe copy
-    // even when they already cached or deduplicated the precise source packet.
-    mqttPacket.id = generatePacketId();
+    // Keep the original packet id so downstream consumers can correlate this
+    // public-safe copy with the precise packet it was derived from.
+    mqttPacket.id = sourcePacket.id;
     const size_t positionSize = pb_encode_to_bytes(mqttPacket.decoded.payload.bytes, sizeof(mqttPacket.decoded.payload.bytes),
                                                    &meshtastic_Position_msg, &position);
     if (positionSize == 0) {
