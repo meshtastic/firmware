@@ -84,7 +84,11 @@
 // ---- W5500 Ethernet on SPI0 --------------------------------------------
 // Hardware-fixed pins on the W5500-EVB-Pico2 PCB
 #define HAS_ETHERNET 1
-#define WIZNET_5500_EVB_PICO2 1
+// Use the arduino-libraries/Ethernet stack (W5500) instead of RAK13800_W5100S.
+// Renamed from WIZNET_5500_EVB_PICO2 upstream in PR #10135.
+#define USE_ARDUINO_ETHERNET 1
+// Community/DIY board — no dedicated Meshtastic HardwareModel
+#define PRIVATE_HW
 
 // SPI0 pin assignments (wired to W5500 on the PCB)
 #define ETH_SPI0_MISO 16
