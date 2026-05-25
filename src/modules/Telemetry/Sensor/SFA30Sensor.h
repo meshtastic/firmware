@@ -21,6 +21,8 @@ class SFA30Sensor : public TelemetrySensor
     SensirionI2cSfa3x sfa30;
     TwoWire *_bus{};
     uint8_t _address{};
+    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
+
     bool isError(uint16_t response);
 
   public:

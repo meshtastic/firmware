@@ -108,14 +108,8 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
     }
 
 #ifdef SEN5X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SEN5X_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, _port);
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
     // Transmit the data
@@ -126,9 +120,12 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
     size_t writtenBytes = _bus->write(toSend, bufferSize);
     uint8_t i2c_error = _bus->endTransmission();
 
-#if defined(SEN5X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SEN5X_I2C_CLOCK_SPEED
+    if (currentClock) {
+        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+        reClockI2C(currentClock, _bus, _port);
+    }
+#endif /* SEN5X_I2C_CLOCK_SPEED */
 
     if (writtenBytes != bufferSize) {
         LOG_ERROR("SEN5X: Error writting on I2C bus");
@@ -145,14 +142,8 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
 uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
 {
 #ifdef SEN5X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SEN5X_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, _port);
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
     size_t readBytes = _bus->requestFrom(_address, byteNumber);
@@ -175,9 +166,13 @@ uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
         readBytes -= 3;
         receivedBytes += 2;
     }
-#if defined(SEN5X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+
+#ifdef SEN5X_I2C_CLOCK_SPEED
+    if (currentClock) {
+        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+        reClockI2C(currentClock, _bus, _port);
+    }
+#endif /* SEN5X_I2C_CLOCK_SPEED */
 
     return receivedBytes;
 }
@@ -541,6 +536,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     _bus = bus;
     _address = dev->address.address;
+    _port = dev->address.port;
 
     delay(50); // without this there is an error on the deviceReset function
 
