@@ -2,7 +2,7 @@
 
 #include "ServerAPI.h"
 #if !defined(USE_WS5500) && !defined(USE_CH390D)
-#if defined(PICO2_W5500_E22)
+#if defined(USE_ARDUINO_ETHERNET)
 #include <Ethernet.h>
 #else
 #include <RAK13800_W5100S.h>

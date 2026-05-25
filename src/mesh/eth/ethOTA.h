@@ -4,7 +4,7 @@
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
 
-#ifdef PICO2_W5500_E22
+#ifdef USE_ARDUINO_ETHERNET
 #include <Ethernet.h>
 #else
 #include <RAK13800_W5100S.h>
