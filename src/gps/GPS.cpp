@@ -74,7 +74,8 @@ static struct uBloxGnssModelInfo {
 #define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
 
-namespace {
+namespace
+{
 // Versioned on-disk record for persisted GPS probe results.
 constexpr uint32_t GPS_PROBE_CACHE_MAGIC = 0x47504348UL; // "GPCH"
 constexpr uint16_t GPS_PROBE_CACHE_VERSION = 1;
@@ -88,18 +89,20 @@ struct GPSProbeCacheRecord {
     uint8_t model;
 };
 
-bool isValidGnssModel(uint8_t model) {
+bool isValidGnssModel(uint8_t model)
+{
     // Keep persisted values bounded to known enum range.
     return model <= static_cast<uint8_t>(GNSS_MODEL_CM121);
 }
 
-bool isValidProbeBaud(uint32_t baud) {
+bool isValidProbeBaud(uint32_t baud)
+{
     // Conservative sanity range for UART baud values.
     return baud >= 1200 && baud <= 921600;
 }
 
-template <typename T>
-bool sawNmeaSentenceAtBaud(T *serialGps, uint32_t timeoutMs) {
+template <typename T> bool sawNmeaSentenceAtBaud(T *serialGps, uint32_t timeoutMs)
+{
     // Lightweight passive check: look for at least one complete
     // "$...,<field>\n" style NMEA sentence.
     const uint32_t deadline = millis() + timeoutMs;
@@ -107,25 +110,25 @@ bool sawNmeaSentenceAtBaud(T *serialGps, uint32_t timeoutMs) {
     bool sawComma = false;
 
     while ((int32_t)(millis() - deadline) < 0) {
-      while (serialGps->available()) {
-        char c = static_cast<char>(serialGps->read());
-        if (c == '$') {
-          sawDollar = true;
-          sawComma = false;
-          continue;
+        while (serialGps->available()) {
+            char c = static_cast<char>(serialGps->read());
+            if (c == '$') {
+                sawDollar = true;
+                sawComma = false;
+                continue;
+            }
+            if (c == ',') {
+                sawComma = true;
+            }
+            if (c == '\n' || c == '\r') {
+                if (sawDollar && sawComma) {
+                    return true;
+                }
+                sawDollar = false;
+                sawComma = false;
+            }
         }
-        if (c == ',') {
-          sawComma = true;
-        }
-        if (c == '\n' || c == '\r') {
-          if (sawDollar && sawComma) {
-            return true;
-          }
-          sawDollar = false;
-          sawComma = false;
-        }
-      }
-      delay(10);
+        delay(10);
     }
 
     return false;
@@ -553,7 +556,8 @@ static const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
 #define GPS_PROBETRIES 2
 #endif
 
-bool GPS::loadProbeCache() {
+bool GPS::loadProbeCache()
+{
 #ifdef FSCom
     // Load the last known-good GPS model/baud pair so we can avoid a full probe
     // sweep on every boot.
@@ -571,12 +575,9 @@ bool GPS::loadProbeCache() {
     file.close();
     spiLock->unlock();
 
-    const bool headerValid = (bytesRead == sizeof(record)) &&
-                             (record.magic == GPS_PROBE_CACHE_MAGIC) &&
-                             (record.version == GPS_PROBE_CACHE_VERSION) &&
-                             (record.reserved == 0U);
-    if (!headerValid || !isValidGnssModel(record.model) ||
-        !isValidProbeBaud(record.baud)) {
+    const bool headerValid = (bytesRead == sizeof(record)) && (record.magic == GPS_PROBE_CACHE_MAGIC) &&
+                             (record.version == GPS_PROBE_CACHE_VERSION) && (record.reserved == 0U);
+    if (!headerValid || !isValidGnssModel(record.model) || !isValidProbeBaud(record.baud)) {
         clearProbeCache(); // Drop corrupt/invalid cache so next boot can
                            // recover.
         return false;
@@ -593,7 +594,8 @@ bool GPS::loadProbeCache() {
 #endif
 }
 
-void GPS::clearProbeCache() {
+void GPS::clearProbeCache()
+{
     // Invalidate in-memory and on-disk cache so next boot is forced to do a
     // full probe.
     hasProbeCache = false;
@@ -609,10 +611,10 @@ void GPS::clearProbeCache() {
 #endif
 }
 
-bool GPS::saveProbeCache() const {
+bool GPS::saveProbeCache() const
+{
 #ifdef FSCom
-    if (gnssModel == GNSS_MODEL_UNKNOWN ||
-        !isValidGnssModel(static_cast<uint8_t>(gnssModel)) ||
+    if (gnssModel == GNSS_MODEL_UNKNOWN || !isValidGnssModel(static_cast<uint8_t>(gnssModel)) ||
         !isValidProbeBaud(detectedBaud)) {
         return false;
     }
@@ -621,17 +623,12 @@ bool GPS::saveProbeCache() const {
     FSCom.mkdir("/prefs");
     spiLock->unlock();
     GPSProbeCacheRecord record = {
-        GPS_PROBE_CACHE_MAGIC,
-        GPS_PROBE_CACHE_VERSION,
-        0,
-        static_cast<uint32_t>(detectedBaud),
-        static_cast<uint8_t>(gnssModel),
+        GPS_PROBE_CACHE_MAGIC, GPS_PROBE_CACHE_VERSION, 0, static_cast<uint32_t>(detectedBaud), static_cast<uint8_t>(gnssModel),
     };
 
     auto file = SafeFile(GPS_PROBE_CACHE_FILE, true);
     spiLock->lock();
-    const size_t written =
-        file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
+    const size_t written = file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
     spiLock->unlock();
     return (written == sizeof(record)) && file.close();
 #else
@@ -639,9 +636,9 @@ bool GPS::saveProbeCache() const {
 #endif
 }
 
-bool GPS::verifyCachedProbePresence() {
-    if (!hasProbeCache || cachedProbeModel == GNSS_MODEL_UNKNOWN ||
-        !isValidProbeBaud(cachedProbeBaud)) {
+bool GPS::verifyCachedProbePresence()
+{
+    if (!hasProbeCache || cachedProbeModel == GNSS_MODEL_UNKNOWN || !isValidProbeBaud(cachedProbeBaud)) {
         return false;
     }
 
@@ -703,8 +700,7 @@ bool GPS::verifyCachedProbePresence() {
     case GNSS_MODEL_UC6580:
         cachedProbeModelName = "UC6580/UM600";
         _serial_gps->write("$PDTINFO\r\n");
-        present = (getACK("UC6580", 900) == GNSS_RESPONSE_OK) ||
-                  (getACK("UM600", 900) == GNSS_RESPONSE_OK);
+        present = (getACK("UC6580", 900) == GNSS_RESPONSE_OK) || (getACK("UM600", 900) == GNSS_RESPONSE_OK);
         break;
     case GNSS_MODEL_CM121:
         cachedProbeModelName = "CM121";
@@ -743,8 +739,7 @@ bool GPS::verifyCachedProbePresence() {
         present = sawNmeaSentenceAtBaud(_serial_gps, 3000);
     }
     if (!present) {
-        LOG_WARN("Cached GPS probe is stale (%s @ %d), clearing cache",
-                 cachedProbeModelName, cachedProbeBaud);
+        LOG_WARN("Cached GPS probe is stale (%s @ %d), clearing cache", cachedProbeModelName, cachedProbeBaud);
         clearProbeCache();
         cachedProbeFailedThisBoot = true;
         return false;
@@ -752,8 +747,7 @@ bool GPS::verifyCachedProbePresence() {
 
     detectedBaud = cachedProbeBaud;
     gnssModel = cachedProbeModel;
-    LOG_INFO("Using cached GPS probe: %s @ %d", cachedProbeModelName,
-             detectedBaud);
+    LOG_INFO("Using cached GPS probe: %s @ %d", cachedProbeModelName, detectedBaud);
     return true;
 }
 
@@ -793,8 +787,7 @@ bool GPS::setup()
                 gnssModel = probe(serialSpeeds[speedSelect]);
                 if (gnssModel != GNSS_MODEL_UNKNOWN) {
                     detectedBaud = serialSpeeds[speedSelect];
-                } else if (currentStep == 0 &&
-                           ++speedSelect == array_count(serialSpeeds)) {
+                } else if (currentStep == 0 && ++speedSelect == array_count(serialSpeeds)) {
                     speedSelect = 0;
                     ++probeTries;
                 }
@@ -806,10 +799,8 @@ bool GPS::setup()
                 gnssModel = probe(rareSerialSpeeds[speedSelect]);
                 if (gnssModel != GNSS_MODEL_UNKNOWN) {
                     detectedBaud = rareSerialSpeeds[speedSelect];
-                } else if (currentStep == 0 &&
-                           ++speedSelect == array_count(rareSerialSpeeds)) {
-                    LOG_WARN("Give up on GPS probe and set to %d",
-                             GPS_BAUDRATE);
+                } else if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
+                    LOG_WARN("Give up on GPS probe and set to %d", GPS_BAUDRATE);
                     return true;
                 }
             }
