@@ -20,16 +20,11 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     _bus = bus;
     _address = dev->address.address;
+    _port = dev->address.port;
 
 #ifdef PMSA003I_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, PMSA003I_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus, _port);
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     _bus->beginTransmission(_address);
@@ -38,9 +33,12 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         return false;
     }
 
-#if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef PMSA003I_I2C_CLOCK_SPEED
+    if (currentClock) {
+        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+        reClockI2C(currentClock, _bus, _port);
+    }
+#endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     status = 1;
     LOG_INFO("%s Enabled", sensorName);
@@ -57,14 +55,8 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     }
 
 #ifdef PMSA003I_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, PMSA003I_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus, _port);
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     _bus->requestFrom(_address, (uint8_t)PMSA003I_FRAME_LENGTH);
@@ -77,9 +69,12 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
         buffer[i] = _bus->read();
     }
 
-#if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef PMSA003I_I2C_CLOCK_SPEED
+    if (currentClock) {
+        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+        reClockI2C(currentClock, _bus, _port);
+    }
+#endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     if (buffer[0] != 0x42 || buffer[1] != 0x4D) {
         LOG_WARN("%s frame header invalid: 0x%02X 0x%02X", sensorName, buffer[0], buffer[1]);

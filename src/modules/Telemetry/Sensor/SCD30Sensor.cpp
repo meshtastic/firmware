@@ -16,25 +16,23 @@ bool SCD30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     _bus = bus;
     _address = dev->address.address;
+    _port = dev->address.port;
 
 #ifdef SCD30_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, _port);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     scd30.begin(*_bus, _address);
 
     if (!startMeasurement()) {
         LOG_ERROR("%s: Failed to start periodic measurement", sensorName);
-#if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD30_I2C_CLOCK_SPEED
+        if (currentClock) {
+            LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+            reClockI2C(currentClock, _bus, _port);
+        }
+#endif /* SCD30_I2C_CLOCK_SPEED */
         return false;
     }
 
@@ -42,9 +40,12 @@ bool SCD30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         LOG_WARN("%s: Could not determine ASC state", sensorName);
     }
 
-#if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD30_I2C_CLOCK_SPEED
+    if (currentClock) {
+        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+        reClockI2C(currentClock, _bus, _port);
+    }
+#endif /* SCD30_I2C_CLOCK_SPEED */
 
     if (state == SCD30_MEASUREMENT) {
         status = 1;
@@ -62,27 +63,28 @@ bool SCD30Sensor::getMetrics(meshtastic_Telemetry *measurement)
     float co2, temperature, humidity;
 
 #ifdef SCD30_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, _port);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     if (scd30.readMeasurementData(co2, temperature, humidity) != SCD30_NO_ERROR) {
         LOG_ERROR("SCD30: Failed to read measurement data.");
-#if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD30_I2C_CLOCK_SPEED
+        if (currentClock) {
+            LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+            reClockI2C(currentClock, _bus, _port);
+        }
+#endif /* SCD30_I2C_CLOCK_SPEED */
+
         return false;
     }
 
-#if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD30_I2C_CLOCK_SPEED
+    if (currentClock) {
+        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+        reClockI2C(currentClock, _bus, _port);
+    }
+#endif /* SCD30_I2C_CLOCK_SPEED */
 
     if (co2 == 0) {
         LOG_ERROR("SCD30: Invalid CO₂ reading.");
@@ -372,23 +374,19 @@ bool SCD30Sensor::isActive()
  */
 uint32_t SCD30Sensor::wakeUp()
 {
-
 #ifdef SCD30_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return 0;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, _port);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     startMeasurement();
 
-#if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD30_I2C_CLOCK_SPEED
+    if (currentClock) {
+        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+        reClockI2C(currentClock, _bus, _port);
+    }
+#endif /* SCD30_I2C_CLOCK_SPEED */
 
     return 0;
 }
@@ -400,21 +398,18 @@ uint32_t SCD30Sensor::wakeUp()
 void SCD30Sensor::sleep()
 {
 #ifdef SCD30_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, _port);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     stopMeasurement();
 
-#if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD30_I2C_CLOCK_SPEED
+    if (currentClock) {
+        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+        reClockI2C(currentClock, _bus, _port);
+    }
+#endif /* SCD30_I2C_CLOCK_SPEED */
 }
 
 bool SCD30Sensor::canSleep()
@@ -438,14 +433,8 @@ AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPa
     AdminMessageHandleResult result;
 
 #ifdef SCD30_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return AdminMessageHandleResult::NOT_HANDLED;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    uint32_t currentClock = reClockI2C(SCD30_I2C_CLOCK_SPEED, _bus, _port);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     switch (request->which_payload_variant) {
@@ -501,9 +490,12 @@ AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPa
         result = AdminMessageHandleResult::NOT_HANDLED;
     }
 
-#if defined(SCD30_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD30_I2C_CLOCK_SPEED
+    if (currentClock) {
+        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
+        reClockI2C(currentClock, _bus, _port);
+    }
+#endif /* SCD30_I2C_CLOCK_SPEED */
 
     return result;
 }

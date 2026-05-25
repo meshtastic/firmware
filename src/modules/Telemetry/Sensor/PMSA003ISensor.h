@@ -35,6 +35,7 @@ class PMSA003ISensor : public TelemetrySensor
     uint8_t buffer[PMSA003I_FRAME_LENGTH]{};
     TwoWire *_bus{};
     uint8_t _address{};
+    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
 };
 
 #endif
