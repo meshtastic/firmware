@@ -614,7 +614,9 @@ bool GPS::saveProbeCache() const {
         return false;
     }
 
+    spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
     GPSProbeCacheRecord record = {
         GPS_PROBE_CACHE_MAGIC,
         GPS_PROBE_CACHE_VERSION,
@@ -624,8 +626,10 @@ bool GPS::saveProbeCache() const {
     };
 
     auto file = SafeFile(GPS_PROBE_CACHE_FILE, true);
+    spiLock->lock();
     const size_t written =
         file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
+    spiLock->unlock();
     return (written == sizeof(record)) && file.close();
 #else
     return false;
