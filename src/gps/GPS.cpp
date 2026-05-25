@@ -598,9 +598,11 @@ void GPS::clearProbeCache() {
     cachedProbeBaud = 0;
     cachedProbeModel = GNSS_MODEL_UNKNOWN;
 #ifdef FSCom
+    spiLock->lock();
     if (FSCom.exists(GPS_PROBE_CACHE_FILE)) {
         FSCom.remove(GPS_PROBE_CACHE_FILE);
     }
+    spiLock->unlock();
 #endif
 }
 
