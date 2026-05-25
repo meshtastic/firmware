@@ -598,6 +598,107 @@ static bool saveDEK()
 // Internal helpers: unlock token I/O
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// M4 (audit): monotonic counter for token rollback protection
+// ---------------------------------------------------------------------------
+//
+// Each new unlock token carries a uint32 counter inside its MAC'd body that
+// strictly increases over the device's lifetime. The highest counter we've
+// ever seen is persisted to /prefs/.tokmono and MAC'd with the FICR-only
+// ephemeralKek under a distinct domain label, so a casual flash-write
+// attacker (no flash extraction, no FICR access) cannot forge it.
+//
+// Rollback attempt: attacker captures token T1 at time T, operator unlocks
+// later (token T2, counter > T1), attacker writes T1 back. readAndConsume
+// sees T1.counter < max_seen and rejects as rollback.
+
+static const char *MONO_FILENAME = "/prefs/.tokmono";
+static const char *MONO_AUTH_LABEL = "tokmono-auth";
+static constexpr size_t MONO_BODY_SIZE = 4;
+static constexpr size_t MONO_TOTAL_SIZE = MONO_BODY_SIZE + HMAC_SIZE; // 36 bytes
+
+// Compute HMAC-SHA256(ephemeralKek, MONO_AUTH_LABEL || body). Caller holds
+// CC310 (nRFCrypto.begin/end).
+static bool computeMonoHmac(const uint8_t body[MONO_BODY_SIZE], uint8_t out[HMAC_SIZE])
+{
+    if (!ephemeralKekDerived)
+        return false;
+    size_t labelLen = strlen(MONO_AUTH_LABEL);
+    meshtastic_security::ZeroizingBuffer<32 + MONO_BODY_SIZE> input;
+    memcpy(input.data(), MONO_AUTH_LABEL, labelLen);
+    memcpy(input.data() + labelLen, body, MONO_BODY_SIZE);
+    return computeHMAC(ephemeralKek, AES_KEY_SIZE, input.data(), labelLen + MONO_BODY_SIZE, out);
+}
+
+// Read the persisted max-counter-seen value. Missing/short/MAC-fail
+// returns 0 — the safe default that lets the next token write succeed and
+// re-seed the file. Unlike the backoff file, missing-here is not a tamper
+// signal: a fresh device or a device whose .tokmono got wiped (e.g. via
+// factory-erase) legitimately has no counter file.
+static uint32_t readMonoCounter()
+{
+#ifdef FSCom
+    meshtastic_security::ZeroizingBuffer<MONO_TOTAL_SIZE> buf;
+    {
+        concurrency::LockGuard g(spiLock);
+        auto f = FSCom.open(MONO_FILENAME, FILE_O_READ);
+        if (!f)
+            return 0;
+        size_t sz = f.size();
+        if (sz != MONO_TOTAL_SIZE) {
+            f.close();
+            return 0;
+        }
+        size_t n = f.read(buf.data(), MONO_TOTAL_SIZE);
+        f.close();
+        if (n != MONO_TOTAL_SIZE)
+            return 0;
+    }
+    uint8_t expected[HMAC_SIZE];
+    nRFCrypto.begin();
+    bool ok = computeMonoHmac(buf.data(), expected);
+    nRFCrypto.end();
+    if (!ok || !constTimeEq(expected, buf.data() + MONO_BODY_SIZE, HMAC_SIZE))
+        return 0;
+    uint32_t counter;
+    memcpy(&counter, buf.data(), 4);
+    return counter;
+#else
+    return 0;
+#endif
+}
+
+// Persist a new max-counter-seen value. Best-effort: log on failure but do
+// not abort the caller (the token write that incremented the counter has
+// already committed; a missing/stale .tokmono on the next read will be
+// quietly promoted by readAndConsumeToken when it sees a token whose
+// counter exceeds the persisted value).
+static bool writeMonoCounter(uint32_t counter)
+{
+#ifdef FSCom
+    meshtastic_security::ZeroizingBuffer<MONO_TOTAL_SIZE> buf;
+    memcpy(buf.data(), &counter, 4);
+    uint8_t mac[HMAC_SIZE];
+    nRFCrypto.begin();
+    bool ok = computeMonoHmac(buf.data(), mac);
+    nRFCrypto.end();
+    if (!ok) {
+        LOG_ERROR("EncryptedStorage: mono-counter HMAC failed");
+        return false;
+    }
+    memcpy(buf.data() + MONO_BODY_SIZE, mac, HMAC_SIZE);
+    SafeFile sf(MONO_FILENAME, /*fullAtomic=*/true);
+    sf.write(buf.data(), MONO_TOTAL_SIZE);
+    if (!sf.close()) {
+        LOG_ERROR("EncryptedStorage: mono-counter atomic write failed");
+        return false;
+    }
+    return true;
+#else
+    return false;
+#endif
+}
+
 /**
  * Write a new unlock token to TOKEN_FILENAME.
  * Wraps the current in-RAM dek[] with ephemeralKek[].
@@ -630,6 +731,13 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
         return false;
     }
 
+    // M4 (audit): claim a fresh monotonic-counter slot ABOVE the highest
+    // value previously persisted. The new counter is MAC'd into the token
+    // body below; after the token write succeeds we persist this value to
+    // /prefs/.tokmono so the next readAndConsumeToken can reject any older
+    // token that gets restored to disk later.
+    uint32_t newMonoCounter = readMonoCounter() + 1;
+
     // Build body for HMAC (everything before the trailing HMAC)
     uint8_t body[TOKEN_BODY_SIZE];
     size_t pos = 0;
@@ -644,6 +752,8 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
     memcpy(body + pos, &validUntilEpoch, 4);
     pos += 4;
     memcpy(body + pos, &sessionMaxSeconds, 4);
+    pos += 4;
+    memcpy(body + pos, &newMonoCounter, 4);
     pos += 4;
 
     uint8_t hmac[HMAC_SIZE];
@@ -676,7 +786,16 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
     meshtastic_security::secure_zero(body, sizeof(body));
     meshtastic_security::secure_zero(hmac, sizeof(hmac));
 
-    LOG_INFO("EncryptedStorage: Unlock token written (boots=%d, epoch=%u)", bootsRemaining, validUntilEpoch);
+    // M4: persist new max-counter-seen AFTER the token write committed.
+    // If this write fails the token is still valid (its counter is
+    // greater than the persisted value); readAndConsumeToken will
+    // promote .tokmono on the next read.
+    if (!writeMonoCounter(newMonoCounter)) {
+        LOG_WARN("EncryptedStorage: mono-counter persist failed (will self-heal on next read)");
+    }
+
+    LOG_INFO("EncryptedStorage: Unlock token written (boots=%d, epoch=%u, mono=%u)", bootsRemaining, validUntilEpoch,
+             (unsigned)newMonoCounter);
     return true;
 #else
     return false;
@@ -758,6 +877,33 @@ static bool readAndConsumeToken()
     pos += 4;
     uint32_t sessionMaxSeconds;
     memcpy(&sessionMaxSeconds, buf.data() + pos, 4);
+    pos += 4;
+    uint32_t tokenMonoCounter;
+    memcpy(&tokenMonoCounter, buf.data() + pos, 4);
+
+    // M4 (audit): reject any token whose monotonic counter is below the
+    // persisted max-seen. An attacker who once read disk could otherwise
+    // restore a higher-bootcount / weaker-policy token even after the
+    // operator unlocked again with tighter parameters; this check makes
+    // such a restore visible and fatal at boot.
+    //
+    // If the token's counter is GREATER than what we've persisted (e.g.
+    // the .tokmono file was lost via factory-erase, or the persist after
+    // a token write itself failed), accept and promote .tokmono to the
+    // current value. Equal is the normal case post-write.
+    uint32_t maxSeenCounter = readMonoCounter();
+    if (tokenMonoCounter < maxSeenCounter) {
+        LOG_ERROR("EncryptedStorage: Token rollback detected (counter=%u, max-seen=%u), deleting", (unsigned)tokenMonoCounter,
+                  (unsigned)maxSeenCounter);
+        concurrency::LockGuard g(spiLock);
+        FSCom.remove(TOKEN_FILENAME);
+        lockReason = "token_rollback";
+        return false;
+    }
+    if (tokenMonoCounter > maxSeenCounter) {
+        // Self-heal: this token is newer than what we knew, promote it.
+        writeMonoCounter(tokenMonoCounter);
+    }
 
     // Check boot count
     if (bootsRemaining == 0) {
@@ -1330,16 +1476,29 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
     const uint8_t *ciphertext = fileBuf.get() + pos;
     const uint8_t *storedHmac = fileBuf.get() + fileSize - HMAC_SIZE;
 
-    // Verify HMAC-SHA256(dekSnapshot, nonce || ciphertext) — MED-1: use snapshot
-    size_t hmacDataLen = NONCE_SIZE + ciphertextLen;
+    // M2 (audit): HMAC now covers the full on-disk header — magic +
+    // plaintext_len in addition to the nonce + ciphertext that the original
+    // design covered. Without this, the 4-byte magic and 4-byte plaintext_len
+    // bytes are integrity-protected only by the equality check
+    // `plaintextLen == ciphertextLen`, which silently breaks the moment we
+    // ever add padding, compression, or AAD to the format. Putting the
+    // header inside the MAC closes that pre-condition cleanly.
+    //
+    // HMAC = HMAC-SHA256(dekSnapshot, magic || nonce || plaintext_len || ciphertext)
+    //
+    // Format-breaking vs. pre-v1-cleanup files; this is acceptable because
+    // we haven't shipped a production lockdown release yet.
+    size_t hmacDataLen = 4 /*magic*/ + NONCE_SIZE + 4 /*plaintext_len*/ + ciphertextLen;
     auto hmacData = meshtastic_security::make_zeroizing_array(hmacDataLen);
     if (!hmacData) {
         LOG_ERROR("EncryptedStorage: OOM for HMAC data");
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
     }
-    memcpy(hmacData.get(), nonce, NONCE_SIZE);
-    memcpy(hmacData.get() + NONCE_SIZE, ciphertext, ciphertextLen);
+    memcpy(hmacData.get(), &magic, 4);
+    memcpy(hmacData.get() + 4, nonce, NONCE_SIZE);
+    memcpy(hmacData.get() + 4 + NONCE_SIZE, &plaintextLen, 4);
+    memcpy(hmacData.get() + 4 + NONCE_SIZE + 4, ciphertext, ciphertextLen);
 
     uint8_t computedHmac[HMAC_SIZE];
     nRFCrypto.begin();
@@ -1431,17 +1590,24 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
         return false;
     }
 
-    size_t hmacDataLen = NONCE_SIZE + ciphertextLen;
-    auto hmacData = meshtastic_security::make_zeroizing_array(hmacDataLen > 0 ? hmacDataLen : 1);
+    // M2 (audit): HMAC covers the full header (magic + plaintext_len) in
+    // addition to nonce + ciphertext. See readAndDecrypt for the rationale.
+    // Must match the read side exactly — keep both updates in lockstep.
+    uint32_t magicForMac = MAGIC;
+    uint32_t plaintextLenForMac = (uint32_t)plaintextLen;
+    size_t hmacDataLen = 4 + NONCE_SIZE + 4 + ciphertextLen;
+    auto hmacData = meshtastic_security::make_zeroizing_array(hmacDataLen);
     if (!hmacData) {
         LOG_ERROR("EncryptedStorage: OOM for HMAC data");
         nRFCrypto.end();
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
     }
-    memcpy(hmacData.get(), nonce, NONCE_SIZE);
+    memcpy(hmacData.get(), &magicForMac, 4);
+    memcpy(hmacData.get() + 4, nonce, NONCE_SIZE);
+    memcpy(hmacData.get() + 4 + NONCE_SIZE, &plaintextLenForMac, 4);
     if (ciphertextLen > 0)
-        memcpy(hmacData.get() + NONCE_SIZE, ciphertext.get(), ciphertextLen);
+        memcpy(hmacData.get() + 4 + NONCE_SIZE + 4, ciphertext.get(), ciphertextLen);
 
     uint8_t hmac[HMAC_SIZE];
     bool hmacOk = computeHMAC(dekSnapshot, AES_KEY_SIZE, hmacData.get(), hmacDataLen, hmac);

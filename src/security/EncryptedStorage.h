@@ -35,7 +35,7 @@
  *   [13B] Nonce (random per write)
  *   [4B]  Original plaintext length (LE uint32)
  *   [NB]  AES-128-CTR ciphertext
- *   [32B] HMAC-SHA256(DEK, nonce || ciphertext)
+ *   [32B] HMAC-SHA256(DEK, magic || nonce || plaintext_len || ciphertext)
  *   Total overhead: 53 bytes per file.
  *
  * DEK file format ("MDEK"):
@@ -52,8 +52,25 @@
  *   [1B]  boots_remaining
  *   [4B]  valid_until_epoch (LE uint32, 0 = no time limit)
  *   [4B]  session_max_seconds (LE uint32, 0 = no session limit)
+ *   [4B]  monotonic_counter (LE uint32) — see /prefs/.tokmono
  *   [32B] HMAC-SHA256(ephemeralKEK, all above fields)
- *   Total: 74 bytes.
+ *   Total: 78 bytes.
+ *
+ * Monotonic counter file (/prefs/.tokmono):
+ *   [4B]  highest counter ever issued (LE uint32)
+ *   [32B] HMAC-SHA256(ephemeralKEK, "tokmono-auth" || counter)
+ *   Total: 36 bytes.
+ *   readAndConsumeToken rejects any token whose body counter is less
+ *   than the persisted value, defeating a flash-write-only attacker who
+ *   tries to restore an older (e.g. higher-boot-count) token.
+ *
+ * Backoff state file (/prefs/.backoff):
+ *   [1B]  attempts
+ *   [1B]  bootsSinceFail
+ *   [4B]  lastFailEpoch (LE uint32)
+ *   [32B] HMAC-SHA256(ephemeralKEK, "backoff-auth" || body)
+ *   Total: 38 bytes. Missing / short / MAC-fail are all treated as
+ *   max-attempts so a tamper-delete can only increase the wait.
  */
 
 namespace EncryptedStorage
@@ -76,9 +93,10 @@ static constexpr size_t DEK_SIZE = 4 + NONCE_SIZE + AES_KEY_SIZE + HMAC_SIZE; //
 
 static constexpr uint32_t TOKEN_MAGIC = 0x55544F4B; // "UTOK"
 // magic(4) + nonce(NONCE_SIZE=13) + encDek(AES_KEY_SIZE=16)
-//   + bootsRemaining(1) + validUntilEpoch(4) + sessionMaxSeconds(4) = 42 bytes
-static constexpr size_t TOKEN_BODY_SIZE = 4 + NONCE_SIZE + AES_KEY_SIZE + 1 + 4 + 4;
-static constexpr size_t TOKEN_TOTAL_SIZE = TOKEN_BODY_SIZE + HMAC_SIZE; // 74 bytes
+//   + bootsRemaining(1) + validUntilEpoch(4) + sessionMaxSeconds(4)
+//   + monotonicCounter(4) = 46 bytes
+static constexpr size_t TOKEN_BODY_SIZE = 4 + NONCE_SIZE + AES_KEY_SIZE + 1 + 4 + 4 + 4;
+static constexpr size_t TOKEN_TOTAL_SIZE = TOKEN_BODY_SIZE + HMAC_SIZE; // 78 bytes
 
 static constexpr uint8_t TOKEN_DEFAULT_BOOTS = 50;
 
