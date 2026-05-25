@@ -99,7 +99,25 @@ static uint32_t backoffDelay(uint8_t attempts)
 // enforce within-boot backoff without relying on RTC. Reset to 0 each boot.
 static uint32_t s_lastFailMillis = 0;
 
-// Backoff state file format (6 bytes): attempts(1) + bootsSinceFail(1) + lastFailEpoch(4)
+// Forward declarations for the crypto helpers defined further down. The
+// backoff section (next) needs them and we want the backoff state next to
+// the rest of the boot/state machinery rather than buried after the crypto.
+static bool computeHMAC(const uint8_t *key, size_t keyLen, const uint8_t *data, size_t dataLen, uint8_t *hmacOut);
+static bool constTimeEq(const uint8_t *a, const uint8_t *b, size_t len);
+
+// HMAC domain label for the backoff file. Distinct from DEK_AUTH_LABEL so a
+// cross-file replay (use a DEK-MAC as a backoff-MAC or vice versa) fails.
+static const char *BACKOFF_AUTH_LABEL = "backoff-auth";
+
+// Backoff state file format (38 bytes): attempts(1) + bootsSinceFail(1) +
+// lastFailEpoch(4) + HMAC-SHA256(ephemeralKEK, BACKOFF_AUTH_LABEL || body)(32)
+//
+// H4 (audit): MAC the file with the FICR-derived ephemeralKek so an attacker
+// who can write LittleFS (DFU file inject, compromised firmware) cannot
+// forge a low-attempts file to bypass backoff. Atomic write via SafeFile
+// closes the power-glitch-during-write window. Missing/short/MAC-fail are
+// all treated as max-attempts (kBackoffMaxAttempts) so a tamper-delete can
+// only INCREASE the wait, never decrease it.
 //
 // bootsSinceFail is incremented once per boot in initLocked() (saturating at
 // 255). It provides a reliable monotonic across-reboot counter for backoff
@@ -107,76 +125,122 @@ static uint32_t s_lastFailMillis = 0;
 // attacker who reboots between failed attempts cannot fast-forward through
 // the backoff window because each reboot costs ~3-5 s of nRF52 boot time
 // and only advances bootsSinceFail by 1.
-static constexpr size_t BACKOFF_SIZE = 6;
+static constexpr size_t BACKOFF_BODY_SIZE = 6;
+static constexpr size_t BACKOFF_SIZE = BACKOFF_BODY_SIZE + HMAC_SIZE; // 38 bytes
+static constexpr uint8_t kBackoffMaxAttempts = 255;
+
+// Compute HMAC-SHA256(ephemeralKek, "backoff-auth" || body) into `out`.
+// Caller must already hold CC310 (nRFCrypto.begin/end).
+static bool computeBackoffHmac(const uint8_t body[BACKOFF_BODY_SIZE], uint8_t out[HMAC_SIZE])
+{
+    if (!ephemeralKekDerived)
+        return false;
+    size_t labelLen = strlen(BACKOFF_AUTH_LABEL);
+    meshtastic_security::ZeroizingBuffer<32 + BACKOFF_BODY_SIZE> input; // labelLen <= 32
+    memcpy(input.data(), BACKOFF_AUTH_LABEL, labelLen);
+    memcpy(input.data() + labelLen, body, BACKOFF_BODY_SIZE);
+    return computeHMAC(ephemeralKek, AES_KEY_SIZE, input.data(), labelLen + BACKOFF_BODY_SIZE, out);
+}
 
 static void readBackoff(uint8_t &attempts, uint8_t &bootsSinceFail, uint32_t &lastFailEpoch)
 {
+    // Default outputs: zero-attempts. Reassigned to "max" below if the file
+    // is missing OR present-but-tampered. The fresh-device (pre-provision)
+    // case is handled by bumpBootsSinceFailOnBoot's early-return; once
+    // provision has run, the file is always present and a missing file
+    // means something hostile deleted it.
     attempts = 0;
     bootsSinceFail = 0;
     lastFailEpoch = 0;
 #ifdef FSCom
-    concurrency::LockGuard g(spiLock);
-    auto f = FSCom.open(BACKOFF_FILENAME, FILE_O_READ);
-    if (!f)
-        return;
-    size_t sz = f.size();
-    if (sz != BACKOFF_SIZE) {
+    meshtastic_security::ZeroizingBuffer<BACKOFF_SIZE> buf;
+    {
+        concurrency::LockGuard g(spiLock);
+        auto f = FSCom.open(BACKOFF_FILENAME, FILE_O_READ);
+        if (!f) {
+            // Fresh device (no provision yet) OR an attacker deleted the
+            // file. Caller resolves the ambiguity via isProvisioned() —
+            // see bumpBootsSinceFailOnBoot and the unlock backoff gate.
+            return;
+        }
+        size_t sz = f.size();
+        if (sz != BACKOFF_SIZE) {
+            f.close();
+            attempts = kBackoffMaxAttempts;
+            return;
+        }
+        size_t n = f.read(buf.data(), BACKOFF_SIZE);
         f.close();
+        if (n != BACKOFF_SIZE) {
+            attempts = kBackoffMaxAttempts;
+            return;
+        }
+    }
+    // Verify HMAC under lock-free CC310 access (we hold no spiLock here).
+    uint8_t expected[HMAC_SIZE];
+    nRFCrypto.begin();
+    bool ok = computeBackoffHmac(buf.data(), expected);
+    nRFCrypto.end();
+    if (!ok || !constTimeEq(expected, buf.data() + BACKOFF_BODY_SIZE, HMAC_SIZE)) {
+        // Tampered or attacker-rewritten file. Fail closed.
+        attempts = kBackoffMaxAttempts;
         return;
     }
-    attempts = f.read();
-    bootsSinceFail = f.read();
-    uint8_t buf[4] = {0, 0, 0, 0};
-    size_t n = f.read(buf, 4);
-    f.close();
-    if (n != 4) {
-        attempts = 0;
-        bootsSinceFail = 0;
-        return;
-    }
-    memcpy(&lastFailEpoch, buf, 4);
+    attempts = buf.data()[0];
+    bootsSinceFail = buf.data()[1];
+    memcpy(&lastFailEpoch, buf.data() + 2, 4);
 #endif
 }
 
 static void writeBackoff(uint8_t attempts, uint8_t bootsSinceFail, uint32_t lastFailEpoch)
 {
 #ifdef FSCom
-    concurrency::LockGuard g(spiLock);
-    FSCom.remove(BACKOFF_FILENAME);
-    auto f = FSCom.open(BACKOFF_FILENAME, FILE_O_WRITE);
-    if (!f)
+    meshtastic_security::ZeroizingBuffer<BACKOFF_SIZE> buf;
+    buf.data()[0] = attempts;
+    buf.data()[1] = bootsSinceFail;
+    memcpy(buf.data() + 2, &lastFailEpoch, 4);
+    uint8_t mac[HMAC_SIZE];
+    nRFCrypto.begin();
+    bool ok = computeBackoffHmac(buf.data(), mac);
+    nRFCrypto.end();
+    if (!ok) {
+        LOG_ERROR("EncryptedStorage: backoff HMAC compute failed");
         return;
-    f.write(attempts);
-    f.write(bootsSinceFail);
-    uint8_t buf[4];
-    memcpy(buf, &lastFailEpoch, 4);
-    f.write(buf, 4);
-    f.close();
+    }
+    memcpy(buf.data() + BACKOFF_BODY_SIZE, mac, HMAC_SIZE);
+    SafeFile sf(BACKOFF_FILENAME, /*fullAtomic=*/true);
+    sf.write(buf.data(), BACKOFF_SIZE);
+    if (!sf.close()) {
+        LOG_ERROR("EncryptedStorage: backoff atomic write failed");
+    }
 #endif
 }
 
-// Called once per boot from initLocked(). If past failures are persisted,
-// advance bootsSinceFail (saturating at 255) and write back.
+// Called once per boot from initLocked(). Skip the bump on a fresh
+// (un-provisioned) device — there's no backoff file to MAC against yet and
+// readBackoff would return kBackoffMaxAttempts which would be wrong here.
 static void bumpBootsSinceFailOnBoot()
 {
+    if (!isProvisioned())
+        return;
     uint8_t attempts;
     uint8_t bootsSinceFail;
     uint32_t lastFailEpoch;
     readBackoff(attempts, bootsSinceFail, lastFailEpoch);
-    if (attempts == 0)
+    if (attempts == 0 || attempts == kBackoffMaxAttempts)
         return;
     if (bootsSinceFail < 255)
         bootsSinceFail++;
     writeBackoff(attempts, bootsSinceFail, lastFailEpoch);
 }
 
-// Delete the backoff file and clear in-RAM state on successful unlock.
+// On successful unlock, write a freshly-MAC'd attempts=0 sentinel so the
+// file always exists post-provision. Missing == hostile delete from there
+// on. (Removing the file instead would make "missing == fresh-cleared" and
+// re-open the delete-to-reset bypass that H4 exists to close.)
 static void clearBackoff()
 {
-#ifdef FSCom
-    concurrency::LockGuard g(spiLock);
-    FSCom.remove(BACKOFF_FILENAME);
-#endif
+    writeBackoff(0, 0, 0);
     s_backoffSecondsRemaining = 0;
     s_lastFailMillis = 0;
 }
@@ -500,27 +564,29 @@ static bool saveDEK()
     }
 
     // Write file: magic(4)+nonce(13)+encDEK(16)+hmac(32) = 65 bytes
-    concurrency::LockGuard g(spiLock);
-    FSCom.remove(DEK_FILENAME); // prevent O_APPEND accumulation on nRF52
-    auto f = FSCom.open(DEK_FILENAME, FILE_O_WRITE);
-    if (!f) {
-        LOG_ERROR("EncryptedStorage: Can't write DEK file");
-        meshtastic_security::secure_zero(encDek, sizeof(encDek));
-        return false;
-    }
-
+    // H12 (audit): atomic write via SafeFile. Power-loss between remove()
+    // and write() previously left a missing or partial DEK file, which
+    // bricked the device — the encrypted protos can't be decrypted with
+    // no DEK on flash. SafeFile writes a tmp file, reads it back to verify
+    // a content hash, then atomically renames over the target. Crash before
+    // rename → old DEK stays in place; crash after rename → new DEK is on
+    // disk and verified.
     uint32_t magic = DEK_MAGIC;
-    f.write((uint8_t *)&magic, 4);
-    f.write(nonce, NONCE_SIZE);
-    f.write(encDek, AES_KEY_SIZE);
-    f.write(hmac, HMAC_SIZE);
-    f.flush();
-    f.close();
+    SafeFile sf(DEK_FILENAME, /*fullAtomic=*/true);
+    sf.write((uint8_t *)&magic, 4);
+    sf.write(nonce, NONCE_SIZE);
+    sf.write(encDek, AES_KEY_SIZE);
+    sf.write(hmac, HMAC_SIZE);
+    bool ok = sf.close();
 
     meshtastic_security::secure_zero(nonce, sizeof(nonce));
     meshtastic_security::secure_zero(encDek, sizeof(encDek));
     meshtastic_security::secure_zero(hmac, sizeof(hmac));
 
+    if (!ok) {
+        LOG_ERROR("EncryptedStorage: DEK write/verify failed");
+        return false;
+    }
     LOG_INFO("EncryptedStorage: DEK saved");
     return true;
 #else
@@ -591,19 +657,21 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
         return false;
     }
 
-    concurrency::LockGuard g(spiLock);
-    FSCom.remove(TOKEN_FILENAME); // prevent O_APPEND accumulation on nRF52
-    auto f = FSCom.open(TOKEN_FILENAME, FILE_O_WRITE);
-    if (!f) {
-        LOG_ERROR("EncryptedStorage: Can't write token file");
+    // H12 (audit): atomic token write via SafeFile (see saveDEK note for
+    // the same rationale). Power-loss between remove and write previously
+    // left the token in an unreadable state, forcing the operator to re-
+    // enter the passphrase from a client. SafeFile rolls back to the
+    // previous token if the new write fails verification.
+    SafeFile sf(TOKEN_FILENAME, /*fullAtomic=*/true);
+    sf.write(body, TOKEN_BODY_SIZE);
+    sf.write(hmac, HMAC_SIZE);
+    bool tokOk = sf.close();
+    if (!tokOk) {
+        LOG_ERROR("EncryptedStorage: token write/verify failed");
         meshtastic_security::secure_zero(body, sizeof(body));
+        meshtastic_security::secure_zero(hmac, sizeof(hmac));
         return false;
     }
-
-    f.write(body, TOKEN_BODY_SIZE);
-    f.write(hmac, HMAC_SIZE);
-    f.flush();
-    f.close();
 
     meshtastic_security::secure_zero(body, sizeof(body));
     meshtastic_security::secure_zero(hmac, sizeof(hmac));
@@ -623,8 +691,11 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
 static bool readAndConsumeToken()
 {
 #ifdef FSCom
-    // Read the token file
-    uint8_t buf[TOKEN_TOTAL_SIZE];
+    // Read the token file. M10 (audit): the 74-byte buffer holds the entire
+    // wrapped DEK + HMAC; using ZeroizingBuffer ensures the destructor
+    // wipes it on every return path (success and all the error cases
+    // below) without needing one secure_zero per goto-label.
+    meshtastic_security::ZeroizingBuffer<TOKEN_TOTAL_SIZE> buf;
     {
         concurrency::LockGuard g(spiLock);
         auto f = FSCom.open(TOKEN_FILENAME, FILE_O_READ);
@@ -640,7 +711,7 @@ static bool readAndConsumeToken()
             return false;
         }
 
-        size_t bytesRead = f.read(buf, TOKEN_TOTAL_SIZE);
+        size_t bytesRead = f.read(buf.data(), TOKEN_TOTAL_SIZE);
         f.close();
 
         if (bytesRead != TOKEN_TOTAL_SIZE) {
@@ -652,7 +723,7 @@ static bool readAndConsumeToken()
 
     // Verify magic
     uint32_t magic;
-    memcpy(&magic, buf, 4);
+    memcpy(&magic, buf.data(), 4);
     if (magic != TOKEN_MAGIC) {
         LOG_ERROR("EncryptedStorage: Token bad magic, deleting");
         concurrency::LockGuard g(spiLock);
@@ -661,34 +732,32 @@ static bool readAndConsumeToken()
         return false;
     }
 
-    // Verify HMAC-SHA256(ephemeralKek, body)
-    uint8_t computedHmac[HMAC_SIZE];
+    // Verify HMAC-SHA256(ephemeralKek, body). M10: ZeroizingBuffer wipes on scope exit.
+    meshtastic_security::ZeroizingBuffer<HMAC_SIZE> computedHmac;
     nRFCrypto.begin();
-    bool hmacOk = computeHMAC(ephemeralKek, AES_KEY_SIZE, buf, TOKEN_BODY_SIZE, computedHmac);
+    bool hmacOk = computeHMAC(ephemeralKek, AES_KEY_SIZE, buf.data(), TOKEN_BODY_SIZE, computedHmac.data());
     nRFCrypto.end();
 
-    if (!hmacOk || !constTimeEq(computedHmac, buf + TOKEN_BODY_SIZE, HMAC_SIZE)) {
+    if (!hmacOk || !constTimeEq(computedHmac.data(), buf.data() + TOKEN_BODY_SIZE, HMAC_SIZE)) {
         LOG_ERROR("EncryptedStorage: Token HMAC failed — tampered or wrong device, deleting");
-        meshtastic_security::secure_zero(computedHmac, sizeof(computedHmac));
         concurrency::LockGuard g(spiLock);
         FSCom.remove(TOKEN_FILENAME);
         lockReason = "token_hmac_fail";
         return false;
     }
-    meshtastic_security::secure_zero(computedHmac, sizeof(computedHmac));
 
     // Parse fields from body
     size_t pos = 4; // skip magic
-    uint8_t *nonce = buf + pos;
+    uint8_t *nonce = buf.data() + pos;
     pos += NONCE_SIZE;
-    uint8_t *encDek = buf + pos;
+    uint8_t *encDek = buf.data() + pos;
     pos += AES_KEY_SIZE;
     uint8_t bootsRemaining = buf[pos++];
     uint32_t validUntilEpoch;
-    memcpy(&validUntilEpoch, buf + pos, 4);
+    memcpy(&validUntilEpoch, buf.data() + pos, 4);
     pos += 4;
     uint32_t sessionMaxSeconds;
-    memcpy(&sessionMaxSeconds, buf + pos, 4);
+    memcpy(&sessionMaxSeconds, buf.data() + pos, 4);
 
     // Check boot count
     if (bootsRemaining == 0) {
@@ -943,6 +1012,15 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_
         LOG_WARN("EncryptedStorage: Token write failed after provision (continuing unlocked)");
     }
 
+    // H4 (audit): seed an attempts=0 backoff sentinel so the file is
+    // present post-provision. From this point on, a missing backoff file
+    // means an attacker deleted it — readBackoff returns max-attempts and
+    // forces a full backoff window. Without this, the very first failed
+    // attempt would find a missing file and have to choose between fresh
+    // (no penalty, attacker bypass) and tamper (legitimate user locked
+    // out on first typo).
+    clearBackoff();
+
     dekLoaded = true;
     s_bootsRemaining = bootsRemaining;
     s_validUntilEpoch = validUntilEpoch;
@@ -1042,35 +1120,42 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
     if (!kekOk)
         return false;
 
-    // Helper: record a failed attempt for backoff tracking.
-    // Resets bootsSinceFail to 0 so the cross-reboot enforcement layer
-    // starts counting fresh. lastFailEpoch is only meaningful when the RTC
-    // is currently valid — when it isn't, persist 0 and rely on bootsSinceFail.
-    auto recordFailure = []() {
-        uint8_t attempts;
-        uint8_t bootsSinceFail;
-        uint32_t lastFailEpoch;
-        readBackoff(attempts, bootsSinceFail, lastFailEpoch);
-        if (attempts < 255)
-            attempts++;
+    // H3 (audit): RESERVE the attempt slot on disk BEFORE running the HMAC
+    // verify. The previous design wrote the failure record only after a
+    // failed verify, so pulling power between verify and the write left
+    // attempts unchanged — an attacker could glitch the chip mid-call to
+    // bypass the counter. Pre-incrementing means the attempt is durably
+    // recorded regardless of what happens to the chip during verify; the
+    // success path then writes attempts=0 to clear the reservation.
+    uint8_t reservedAttempts;
+    {
+        uint8_t bs;
+        uint32_t lfe;
+        readBackoff(reservedAttempts, bs, lfe);
+        if (reservedAttempts < 255)
+            reservedAttempts++;
         uint32_t now = getValidTime(RTCQualityDevice);
-        writeBackoff(attempts, 0, now);
+        writeBackoff(reservedAttempts, 0, now);
+    }
+    auto onFailure = [reservedAttempts]() {
         s_lastFailMillis = millis();
         if (s_lastFailMillis == 0)
             s_lastFailMillis = 1; // sentinel: never 0 after a real fail
-        s_backoffSecondsRemaining = backoffDelay(attempts);
-        LOG_WARN("EncryptedStorage: Wrong passphrase (attempt %d, next in ~%us)", attempts, s_backoffSecondsRemaining);
+        s_backoffSecondsRemaining = backoffDelay(reservedAttempts);
+        LOG_WARN("EncryptedStorage: Wrong passphrase (attempt %u, next in ~%us)", (unsigned)reservedAttempts,
+                 s_backoffSecondsRemaining);
     };
 
     // Load the DEK (verifies HMAC — wrong passphrase will fail here)
     if (!loadDEK()) {
         LOG_ERROR("EncryptedStorage: DEK load failed — wrong passphrase?");
         kekDerived = false;
-        recordFailure();
+        onFailure();
         return false;
     }
 
-    // Passphrase correct — clear backoff state
+    // Passphrase correct — clear the reserved attempt by writing an
+    // attempts=0 sentinel (NOT removing the file; see clearBackoff note).
     clearBackoff();
 
     // Create fresh unlock token (validUntilEpoch is an absolute Unix timestamp from the client; 0 = no limit)
@@ -1094,16 +1179,23 @@ void lockNow()
         FSCom.remove(TOKEN_FILENAME);
     }
 #endif
+    secureWipeKeys();
+    s_sessionMaxMs = 0;
+    s_sessionStartedMs = 0;
+    LOG_INFO("EncryptedStorage: Device locked — token deleted, DEK and KEK material zeroed");
+}
+
+void secureWipeKeys()
+{
+    // M11 (audit): callable from fault handlers. Do NOT take spiLock and do
+    // NOT log — interrupt-context safety. Just zero every byte of key
+    // material that the rest of the module might leave in BSS.
     meshtastic_security::secure_zero(dek, sizeof(dek));
     dekLoaded = false;
-    // HIGH-2: zero all derived key material so it is not recoverable from a RAM dump
     meshtastic_security::secure_zero(kek, sizeof(kek));
     kekDerived = false;
     meshtastic_security::secure_zero(ephemeralKek, sizeof(ephemeralKek));
     ephemeralKekDerived = false;
-    s_sessionMaxMs = 0;
-    s_sessionStartedMs = 0;
-    LOG_INFO("EncryptedStorage: Device locked — token deleted, DEK and KEK material zeroed");
 }
 
 bool isProvisioned()
@@ -1413,6 +1505,20 @@ bool migrateFile(const char *filename)
 
         fileSize = f.size();
         if (fileSize == 0) {
+            f.close();
+            return false;
+        }
+
+        // M25 (audit): refuse to allocate a buffer for an attacker-injected
+        // oversized file. The legitimate ceiling is the largest proto file
+        // we ever write — comfortably under 64 KiB on every supported
+        // variant. Anything significantly larger is either corrupt or
+        // hostile (e.g. DFU file inject); reading it into RAM would OOM
+        // the device.
+        constexpr size_t kMigrateMaxFileSize = 64 * 1024;
+        if (fileSize > kMigrateMaxFileSize) {
+            LOG_ERROR("EncryptedStorage: refusing to migrate %s — size %u exceeds %u-byte cap", filename, (unsigned)fileSize,
+                      (unsigned)kMigrateMaxFileSize);
             f.close();
             return false;
         }

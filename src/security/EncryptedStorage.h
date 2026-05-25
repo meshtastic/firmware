@@ -129,6 +129,18 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
  */
 void lockNow();
 
+/**
+ * Wipe in-RAM key material WITHOUT touching flash. Designed to be called
+ * from fault / watchdog handlers before any coredump or RAM-snapshot path
+ * runs, so the DEK / KEK / ephemeralKEK don't end up in crash reports.
+ *
+ * Safe to call from interrupt context: does not take any FreeRTOS locks
+ * and does not log. Equivalent to the RAM-wipe half of lockNow() with the
+ * token file left intact (so the device can still auto-unlock on the
+ * next normal boot via the token).
+ */
+void secureWipeKeys();
+
 /** Returns true if the DEK file exists (device has been provisioned). */
 bool isProvisioned();
 
