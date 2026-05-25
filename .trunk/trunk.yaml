@@ -16,7 +16,7 @@ lint:
     - bandit@1.9.4
     - trivy@0.70.0
     - taplo@0.10.0
-    - ruff@0.15.13
+    - ruff@0.15.14
     - isort@8.0.1
     - markdownlint@0.48.0
     - oxipng@10.1.1
