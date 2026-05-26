@@ -266,6 +266,33 @@ int32_t MPU9250Sensor::runOnce()
     ma.axis.y = mag.axis.x;
     ma.axis.z = -mag.axis.z;
 
+    // Compensate for non-flat case mounting. FusionCompassCalculateHeading()
+    // assumes Z is the up axis — when the baseboard is mounted vertically
+    // (e.g. a case where the LCD sits perpendicular to the board), chip Z is
+    // horizontal and the tilt-comp math becomes unstable. Override which chip
+    // axis is treated as world-up via the MPU9250_UP_AXIS_* defines.
+    //   _PZ (default) — chip +Z up (baseboard flat)
+    //   _PX           — chip +X up (vertical mount, silkscreen "north" up)
+    //   _NX           — chip -X up
+    //   _PY           — chip +Y up
+    //   _NY           — chip -Y up
+#ifndef MPU9250_UP_AXIS
+#define MPU9250_UP_AXIS MPU9250_UP_AXIS_PX // TEMP for testing user's vertical case
+#endif
+#if MPU9250_UP_AXIS == MPU9250_UP_AXIS_PX
+    ga = FusionAxesSwap(ga, FusionAxesAlignmentNZPYPX);
+    ma = FusionAxesSwap(ma, FusionAxesAlignmentNZPYPX);
+#elif MPU9250_UP_AXIS == MPU9250_UP_AXIS_NX
+    ga = FusionAxesSwap(ga, FusionAxesAlignmentPZPYNX);
+    ma = FusionAxesSwap(ma, FusionAxesAlignmentPZPYNX);
+#elif MPU9250_UP_AXIS == MPU9250_UP_AXIS_PY
+    ga = FusionAxesSwap(ga, FusionAxesAlignmentPXNZPY);
+    ma = FusionAxesSwap(ma, FusionAxesAlignmentPXNZPY);
+#elif MPU9250_UP_AXIS == MPU9250_UP_AXIS_NY
+    ga = FusionAxesSwap(ga, FusionAxesAlignmentPXPZNY);
+    ma = FusionAxesSwap(ma, FusionAxesAlignmentPXPZNY);
+#endif
+
     if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
         ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
         ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);

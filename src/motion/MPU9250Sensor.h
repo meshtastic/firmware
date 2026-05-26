@@ -9,6 +9,14 @@
 #include "Fusion/Fusion.h"
 #include <Wire.h>
 
+// Numeric IDs for selecting which chip axis maps to world-up.
+// Set MPU9250_UP_AXIS to one of these in variant.h or via build flags.
+#define MPU9250_UP_AXIS_PZ 0
+#define MPU9250_UP_AXIS_PX 1
+#define MPU9250_UP_AXIS_NX 2
+#define MPU9250_UP_AXIS_PY 3
+#define MPU9250_UP_AXIS_NY 4
+
 // InvenSense MPU-9250 (and MPU-9255) 9-axis IMU driver.
 // The package contains an MPU-6500 accel/gyro die plus an AK8963 magnetometer
 // die. We drive both directly over I2C: the MPU-6500 at deviceAddress() and the
