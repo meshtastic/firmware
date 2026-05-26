@@ -2,6 +2,7 @@
 #if HAS_SCREEN
 #include "ClockRenderer.h"
 #include "Default.h"
+#include "DisplayFormatters.h"
 #include "GPS.h"
 #include "MenuHandler.h"
 #include "MeshRadio.h"
@@ -11,6 +12,7 @@
 #include "buzz.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
@@ -29,8 +31,6 @@
 #include <cmath>
 #include <functional>
 #include <utility>
-
-extern uint16_t TFT_MESH;
 
 namespace graphics
 {
@@ -56,6 +56,70 @@ BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOp
     bannerOptions.optionsCount = static_cast<uint8_t>(N);
     bannerOptions.bannerCallback = [optionsPtr, callback](int selected) -> void { callback(optionsPtr[selected], selected); };
     return bannerOptions;
+}
+
+const StoredMessage *getNewestMessageForActiveThread()
+{
+    const auto &messages = messageStore.getMessages();
+    if (messages.empty()) {
+        return nullptr;
+    }
+
+    const auto mode = graphics::MessageRenderer::getThreadMode();
+    const int channel = graphics::MessageRenderer::getThreadChannel();
+    const uint32_t peer = graphics::MessageRenderer::getThreadPeer();
+    const uint32_t localNode = nodeDB->getNodeNum();
+
+    if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+        return &messages.back();
+    }
+
+    for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+        const StoredMessage &m = *it;
+
+        if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+            if (m.type == MessageType::BROADCAST && static_cast<int>(m.channelIndex) == channel) {
+                return &m;
+            }
+            continue;
+        }
+
+        if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+            if (m.type != MessageType::DM_TO_US) {
+                continue;
+            }
+            const uint32_t other = (m.sender == localNode) ? m.dest : m.sender;
+            if (other == peer) {
+                return &m;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void launchReplyForMessage(const StoredMessage &message, bool freetext)
+{
+    if (message.type == MessageType::BROADCAST || message.dest == NODENUM_BROADCAST) {
+        if (freetext) {
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, message.channelIndex);
+        } else {
+            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, message.channelIndex);
+        }
+        return;
+    }
+
+    const uint32_t localNode = nodeDB->getNodeNum();
+    const uint32_t peer = (message.sender == localNode) ? message.dest : message.sender;
+    if (peer == 0 || peer == NODENUM_BROADCAST) {
+        return;
+    }
+
+    if (freetext) {
+        cannedMessageModule->LaunchFreetextWithDestination(peer);
+    } else {
+        cannedMessageModule->LaunchWithDestination(peer);
+    }
 }
 
 } // namespace
@@ -117,6 +181,8 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"US", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_US},
         {"EU_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_433},
         {"EU_868", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_868},
+        {"EU_866", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_866},
+        {"EU_868_NARROW", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_N_868},
         {"CN", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_CN},
         {"JP", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_JP},
         {"ANZ", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ANZ},
@@ -140,6 +206,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"KZ_863", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_KZ_863},
         {"NP_865", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NP_865},
         {"BR_902", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_BR_902},
+
     };
 
     constexpr size_t regionCount = sizeof(regionOptions) / sizeof(regionOptions[0]);
@@ -163,9 +230,11 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 
             // Guard: without a reboot, reconfigure() applies the region directly.
             // Reject LORA_24 on sub-GHz-only hardware — getRadio() used to catch this post-reboot.
+            // TODO: change this to either use the validateLoraConfig() logic or at least check the region for wideLora
+            // rather than a hardcoded check for LORA_24.
             if (selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_LORA_24 &&
                 !(RadioLibInterface::instance && RadioLibInterface::instance->wideLora())) {
-                LOG_WARN("Radio hardware does not support 2.4 GHz; ignoring LORA_24 selection");
+                LOG_WARN("Radio hardware does not support 2.4 GHz; ignoring region selection");
                 return;
             }
 
@@ -179,7 +248,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 #endif
             config.lora.tx_enabled = true;
             initRegion();
-            if (myRegion->dutyCycle < 100) {
+            if (getEffectiveDutyCycle() < 100) {
                 config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
             }
 
@@ -313,42 +382,64 @@ void menuHandler::FrequencySlotPicker()
     screen->showOverlayBanner(bannerOptions);
 }
 
+// Maximum presets any region can have + 1 for Back
+static constexpr int MAX_PRESET_OPTIONS = 16;
+
+static BannerOverlayOptions buildRegionPresetBanner()
+{
+    // Static storage reused each call — safe because the banner is shown immediately after.
+    static const char *optionsArray[MAX_PRESET_OPTIONS];
+    static int optionsEnumArray[MAX_PRESET_OPTIONS];
+    static char presetLabelBuf[MAX_PRESET_OPTIONS][12]; // scratch space for name copies
+    int count = 0;
+
+    optionsArray[count] = "Back";
+    optionsEnumArray[count++] = -1;
+
+    if (myRegion && myRegion->profile) {
+        const meshtastic_Config_LoRaConfig_ModemPreset *presets = myRegion->getAvailablePresets();
+        size_t numPresets = myRegion->getNumPresets();
+        for (size_t i = 0; i < numPresets && count < MAX_PRESET_OPTIONS; ++i) {
+            const char *name = DisplayFormatters::getModemPresetDisplayName(presets[i], false, true);
+            strncpy(presetLabelBuf[count], name, sizeof(presetLabelBuf[count]) - 1);
+            presetLabelBuf[count][sizeof(presetLabelBuf[count]) - 1] = '\0';
+            optionsArray[count] = presetLabelBuf[count];
+            optionsEnumArray[count++] = static_cast<int>(presets[i]);
+        }
+    }
+
+    int initialSelection = 0;
+    for (int i = 1; i < count; ++i) {
+        if (optionsEnumArray[i] == static_cast<int>(config.lora.modem_preset)) {
+            initialSelection = i;
+            break;
+        }
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Radio Preset";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = static_cast<uint8_t>(count);
+    bannerOptions.InitialSelected = initialSelection;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == -1) {
+            menuHandler::menuQueue = menuHandler::LoraMenu;
+            screen->runNow();
+            return;
+        }
+        config.lora.use_preset = true;
+        config.lora.modem_preset = static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(selected);
+        config.lora.channel_num = 0;        // Reset to default channel for the preset
+        config.lora.override_frequency = 0; // Clear any custom frequency
+        service->reloadConfig(SEGMENT_CONFIG);
+    };
+    return bannerOptions;
+}
+
 void menuHandler::radioPresetPicker()
 {
-    static const RadioPresetOption presetOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"LongTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO},
-        {"LongModerate", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE},
-        {"LongFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
-        {"MediumSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW},
-        {"MediumFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST},
-        {"ShortSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW},
-        {"ShortFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST},
-        {"ShortTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO},
-    };
-
-    constexpr size_t presetCount = sizeof(presetOptions) / sizeof(presetOptions[0]);
-    static std::array<const char *, presetCount> presetLabels{};
-
-    auto bannerOptions =
-        createStaticBannerOptions("Radio Preset", presetOptions, presetLabels, [](const RadioPresetOption &option, int) -> void {
-            if (option.action == OptionsAction::Back) {
-                menuHandler::menuQueue = menuHandler::LoraMenu;
-                screen->runNow();
-                return;
-            }
-
-            if (!option.hasValue) {
-                return;
-            }
-
-            config.lora.modem_preset = option.value;
-            config.lora.channel_num = 0;        // Reset to default channel for the preset
-            config.lora.override_frequency = 0; // Clear any custom frequency
-            service->reloadConfig(SEGMENT_CONFIG);
-        });
-
-    screen->showOverlayBanner(bannerOptions);
+    screen->showOverlayBanner(buildRegionPresetBanner());
 }
 
 void menuHandler::twelveHourPicker()
@@ -490,7 +581,7 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     static const char *optionsArray[] = {"Back", "Time Format", "Timezone"};
 #else
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
@@ -593,9 +684,12 @@ void menuHandler::messageResponseMenu()
 
 #ifdef HAS_I2S
         } else if (selected == Aloud) {
-            const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-            const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
-            audioThread->readAloud(msg);
+            if (const StoredMessage *latest = getNewestMessageForActiveThread()) {
+                const char *msg = MessageStore::getText(*latest);
+                if (msg && msg[0]) {
+                    audioThread->readAloud(msg);
+                }
+            }
 #endif
         }
     };
@@ -655,20 +749,12 @@ void menuHandler::replyMenu()
 
         // Preset reply
         if (selected == ReplyPreset) {
-
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, ch);
-
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 cannedMessageModule->LaunchWithDestination(peer);
-
-            } else {
-                // Fallback for last received message
-                if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                    cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
-                } else {
-                    cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
-                }
+            } else if (const StoredMessage *latest = getNewestMessageForActiveThread()) {
+                launchReplyForMessage(*latest, false);
             }
 
             return;
@@ -676,20 +762,12 @@ void menuHandler::replyMenu()
 
         // Freetext reply
         if (selected == ReplyFreetext) {
-
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, ch);
-
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 cannedMessageModule->LaunchFreetextWithDestination(peer);
-
-            } else {
-                // Fallback for last received message
-                if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                    cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
-                } else {
-                    cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
-                }
+            } else if (const StoredMessage *latest = getNewestMessageForActiveThread()) {
+                launchReplyForMessage(*latest, true);
             }
 
             return;
@@ -844,10 +922,10 @@ void menuHandler::messageViewModeMenu()
     // Encode peers
     for (size_t i = 0; i < uniquePeers.size(); ++i) {
         uint32_t peer = uniquePeers[i];
-        auto node = nodeDB->getMeshNode(peer);
+        const auto *node = nodeDB->getMeshNode(peer);
         std::string name;
-        if (node && node->has_user)
-            name = sanitizeString(node->user.long_name).substr(0, 15);
+        if (nodeInfoLiteHasUser(node))
+            name = sanitizeString(node->long_name).substr(0, 15);
         else {
             char buf[20];
             snprintf(buf, sizeof(buf), "Node %08X", peer);
@@ -1354,14 +1432,14 @@ void menuHandler::manageNodeMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-    if (node->is_favorite) {
+    if (nodeInfoLiteIsFavorite(node)) {
         optionsArray[options] = "Unfavorite";
     } else {
         optionsArray[options] = "Favorite";
     }
     optionsEnumArray[options++] = Favorite;
 
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    bool isMuted = nodeInfoLiteIsMuted(node);
     if (isMuted) {
         optionsArray[options] = "Unmute Notifications";
     } else {
@@ -1375,7 +1453,7 @@ void menuHandler::manageNodeMenu()
     optionsArray[options] = "Key Verification";
     optionsEnumArray[options++] = KeyVerification;
 
-    if (node->is_ignored) {
+    if (nodeInfoLiteIsIgnored(node)) {
         optionsArray[options] = "Unignore Node";
     } else {
         optionsArray[options] = "Ignore Node";
@@ -1385,8 +1463,8 @@ void menuHandler::manageNodeMenu()
     BannerOverlayOptions bannerOptions;
 
     std::string title = "";
-    if (node->has_user && node->user.long_name && node->user.long_name[0]) {
-        title += sanitizeString(node->user.long_name).substr(0, 15);
+    if (nodeInfoLiteHasUser(node) && node->long_name[0]) {
+        title += sanitizeString(node->long_name).substr(0, 15);
     } else {
         char buf[20];
         snprintf(buf, sizeof(buf), "%08X", (unsigned int)node->num);
@@ -1408,7 +1486,7 @@ void menuHandler::manageNodeMenu()
             if (!n) {
                 return;
             }
-            if (n->is_favorite) {
+            if (nodeInfoLiteIsFavorite(n)) {
                 LOG_INFO("Removing node %08X from favorites", menuHandler::pickedNodeNum);
                 nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
             } else {
@@ -1425,13 +1503,9 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
-            if (n->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) {
-                n->bitfield &= ~NODEINFO_BITFIELD_IS_MUTED_MASK;
-                LOG_INFO("Unmuted node %08X", menuHandler::pickedNodeNum);
-            } else {
-                n->bitfield |= NODEINFO_BITFIELD_IS_MUTED_MASK;
-                LOG_INFO("Muted node %08X", menuHandler::pickedNodeNum);
-            }
+            const bool wasMuted = nodeInfoLiteIsMuted(n);
+            nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_MUTED_MASK, !wasMuted);
+            LOG_INFO(wasMuted ? "Unmuted node %08X" : "Muted node %08X", menuHandler::pickedNodeNum);
             nodeDB->notifyObservers(true);
             nodeDB->saveToDisk();
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -1460,11 +1534,11 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
-            if (n->is_ignored) {
-                n->is_ignored = false;
+            if (nodeInfoLiteIsIgnored(n)) {
+                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
                 LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
             } else {
-                n->is_ignored = true;
+                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
                 LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
             }
             nodeDB->notifyObservers(true);
@@ -2026,109 +2100,6 @@ void menuHandler::switchToMUIMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
-{
-    static const ScreenColorOption colorOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"Default", OptionsAction::Select, ScreenColor(0, 0, 0, true)},
-        {"Meshtastic Green", OptionsAction::Select, ScreenColor(0x67, 0xEA, 0x94)},
-        {"Yellow", OptionsAction::Select, ScreenColor(255, 255, 128)},
-        {"Red", OptionsAction::Select, ScreenColor(255, 64, 64)},
-        {"Orange", OptionsAction::Select, ScreenColor(255, 160, 20)},
-        {"Purple", OptionsAction::Select, ScreenColor(204, 153, 255)},
-        {"Blue", OptionsAction::Select, ScreenColor(0, 0, 255)},
-        {"Teal", OptionsAction::Select, ScreenColor(16, 102, 102)},
-        {"Cyan", OptionsAction::Select, ScreenColor(0, 255, 255)},
-        {"Ice", OptionsAction::Select, ScreenColor(173, 216, 230)},
-        {"Pink", OptionsAction::Select, ScreenColor(255, 105, 180)},
-        {"White", OptionsAction::Select, ScreenColor(255, 255, 255)},
-        {"Gray", OptionsAction::Select, ScreenColor(128, 128, 128)},
-    };
-
-    constexpr size_t colorCount = sizeof(colorOptions) / sizeof(colorOptions[0]);
-    static std::array<const char *, colorCount> colorLabels{};
-
-    auto bannerOptions = createStaticBannerOptions(
-        "Select Screen Color", colorOptions, colorLabels, [display](const ScreenColorOption &option, int) -> void {
-            if (option.action == OptionsAction::Back) {
-                menuQueue = SystemBaseMenu;
-                screen->runNow();
-                return;
-            }
-
-            if (!option.hasValue) {
-                return;
-            }
-
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
-    HAS_TFT || defined(HACKADAY_COMMUNICATOR)
-            const ScreenColor &color = option.value;
-            if (color.useVariant) {
-                LOG_INFO("Setting color to system default or defined variant");
-            } else {
-                LOG_INFO("Setting color to %s", option.label);
-            }
-
-            uint8_t r = color.r;
-            uint8_t g = color.g;
-            uint8_t b = color.b;
-
-            display->setColor(BLACK);
-            display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-            display->setColor(WHITE);
-
-            if (color.useVariant || (r == 0 && g == 0 && b == 0)) {
-#ifdef TFT_MESH_OVERRIDE
-                TFT_MESH = TFT_MESH_OVERRIDE;
-#else
-                TFT_MESH = COLOR565(255, 255, 128);
-#endif
-            } else {
-                TFT_MESH = COLOR565(r, g, b);
-            }
-
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-            static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
-#endif
-
-            screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
-            if (color.useVariant || (r == 0 && g == 0 && b == 0)) {
-                uiconfig.screen_rgb_color = 0;
-            } else {
-                uiconfig.screen_rgb_color =
-                    (static_cast<uint32_t>(r) << 16) | (static_cast<uint32_t>(g) << 8) | static_cast<uint32_t>(b);
-            }
-            LOG_INFO("Storing Value of %d to uiconfig.screen_rgb_color", uiconfig.screen_rgb_color);
-            saveUIConfig();
-#endif
-        });
-
-    int initialSelection = 0;
-    if (uiconfig.screen_rgb_color == 0) {
-        initialSelection = 1;
-    } else {
-        uint32_t currentColor = uiconfig.screen_rgb_color;
-        for (size_t i = 0; i < colorCount; ++i) {
-            if (!colorOptions[i].hasValue) {
-                continue;
-            }
-            const ScreenColor &color = colorOptions[i].value;
-            if (color.useVariant) {
-                continue;
-            }
-            uint32_t encoded =
-                (static_cast<uint32_t>(color.r) << 16) | (static_cast<uint32_t>(color.g) << 8) | static_cast<uint32_t>(color.b);
-            if (encoded == currentColor) {
-                initialSelection = static_cast<int>(i);
-                break;
-            }
-        }
-    }
-    bannerOptions.InitialSelected = initialSelection;
-
-    screen->showOverlayBanner(bannerOptions);
-}
-
 void menuHandler::rebootMenu()
 {
     static const char *optionsArray[] = {"Back", "Confirm"};
@@ -2181,9 +2152,9 @@ void menuHandler::removeFavoriteMenu()
     static const char *optionsArray[] = {"Back", "Yes"};
     BannerOverlayOptions bannerOptions;
     std::string message = "Unfavorite This Node?\n";
-    auto node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
-    if (node && node->has_user) {
-        message += sanitizeString(node->user.long_name).substr(0, 15);
+    const auto *node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
+    if (nodeInfoLiteHasUser(node)) {
+        message += sanitizeString(node->long_name).substr(0, 15);
     }
     bannerOptions.message = message.c_str();
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -2316,9 +2287,9 @@ void menuHandler::screenOptionsMenu()
     bool hasSupportBrightness = false;
 #endif
 
-    enum optionsNumbers { Back, Brightness, ScreenColor, FrameToggles, DisplayUnits, MessageBubbles };
-    static const char *optionsArray[6] = {"Back"};
-    static int optionsEnumArray[6] = {Back};
+    enum optionsNumbers { Back, Brightness, FrameToggles, DisplayUnits, MessageBubbles, Theme };
+    static const char *optionsArray[7] = {"Back"};
+    static int optionsEnumArray[7] = {Back};
     int options = 1;
 
     // Only show brightness for B&W displays
@@ -2326,13 +2297,6 @@ void menuHandler::screenOptionsMenu()
         optionsArray[options] = "Brightness";
         optionsEnumArray[options++] = Brightness;
     }
-
-    // Only show screen color for TFT displays
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) ||          \
-    HAS_TFT || defined(HACKADAY_COMMUNICATOR)
-    optionsArray[options] = "Screen Color";
-    optionsEnumArray[options++] = ScreenColor;
-#endif
 
     optionsArray[options] = "Frame Visibility";
     optionsEnumArray[options++] = FrameToggles;
@@ -2343,6 +2307,11 @@ void menuHandler::screenOptionsMenu()
     optionsArray[options] = "Message Bubbles";
     optionsEnumArray[options++] = MessageBubbles;
 
+#if GRAPHICS_TFT_COLORING_ENABLED
+    optionsArray[options] = "Theme";
+    optionsEnumArray[options++] = Theme;
+#endif
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Display Options";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -2352,9 +2321,6 @@ void menuHandler::screenOptionsMenu()
         if (selected == Brightness) {
             menuHandler::menuQueue = menuHandler::BrightnessPicker;
             screen->runNow();
-        } else if (selected == ScreenColor) {
-            menuHandler::menuQueue = menuHandler::TftColorMenuPicker;
-            screen->runNow();
         } else if (selected == FrameToggles) {
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
@@ -2363,6 +2329,9 @@ void menuHandler::screenOptionsMenu()
             screen->runNow();
         } else if (selected == MessageBubbles) {
             menuHandler::menuQueue = menuHandler::MessageBubblesMenu;
+            screen->runNow();
+        } else if (selected == Theme) {
+            menuHandler::menuQueue = menuHandler::ThemeMenu;
             screen->runNow();
         } else {
             menuQueue = SystemBaseMenu;
@@ -2647,6 +2616,53 @@ void menuHandler::messageBubblesMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::themeMenu()
+{
+    // Build menu dynamically from the theme table.
+    // Only visible themes appear!
+    // Slot budget: 1 for "Back" + up to kMaxThemesInMenu visible themes.
+    // Bump kMaxThemesInMenu if you add more themes than will fit here.
+    constexpr size_t kMaxThemesInMenu = 15;
+    const size_t visibleCount = getVisibleThemeCount();
+    static const char *optionsArray[kMaxThemesInMenu + 1] = {"Back"};
+    const size_t shownCount = (visibleCount < kMaxThemesInMenu) ? visibleCount : kMaxThemesInMenu;
+    const int options = static_cast<int>(shownCount) + 1; // +1 for Back
+
+    for (size_t i = 0; i < shownCount; i++) {
+        optionsArray[i + 1] = getVisibleThemeByIndex(i).name;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Theme";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+
+    // Highlight the currently active theme (visible index + 1 for the Back
+    // offset).  If the active theme is hidden, leave selection on "Back".
+    const size_t activeVisible = getActiveVisibleThemeIndex();
+    bannerOptions.InitialSelected = (activeVisible == SIZE_MAX) ? 0 : static_cast<int>(activeVisible) + 1;
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            // Back
+            menuHandler::menuQueue = menuHandler::ScreenOptionsMenu;
+            screen->runNow();
+        } else {
+            // Selection is an index into the VISIBLE themes (1-based, slot 0 is Back).
+            const size_t visibleIdx = static_cast<size_t>(selected - 1);
+            if (visibleIdx < getVisibleThemeCount()) {
+                // Persist the theme's uniqueIdentifier so boot-time
+                // resolveThemeIndex() can restore this theme on next startup.
+                uiconfig.screen_rgb_color = COLOR565(255, 255, (getVisibleThemeByIndex(visibleIdx).uniqueIdentifier & 0x1F) << 3);
+                loadThemeDefaults();
+                saveUIConfig();
+                screen->runNow();
+            }
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != MenuNone)
@@ -2722,9 +2738,6 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case MuiPicker:
         switchToMUIMenu();
         break;
-    case TftColorMenuPicker:
-        TFTColorPickerMenu(display);
-        break;
     case BrightnessPicker:
         BrightnessPickerMenu();
         break;
@@ -2796,6 +2809,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case MessageBubblesMenu:
         messageBubblesMenu();
+        break;
+    case ThemeMenu:
+        themeMenu();
         break;
     }
     menuQueue = MenuNone;

@@ -1,5 +1,9 @@
+#include "configuration.h"
+
 #include "LR11x0Interface.cpp"
 #include "LR11x0Interface.h"
+#include "LR20x0Interface.cpp"
+#include "LR20x0Interface.h"
 #include "SX126xInterface.cpp"
 #include "SX126xInterface.h"
 #include "SX128xInterface.cpp"
@@ -21,11 +25,14 @@ template class LR11x0Interface<LR1110>;
 template class LR11x0Interface<LR1120>;
 template class LR11x0Interface<LR1121>;
 #endif
+#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+template class LR20x0Interface<LR2021>;
+#endif
 #ifdef ARCH_STM32WL
 template class SX126xInterface<STM32WLx>;
 #endif
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
 #include "api/ethServerAPI.h"
 template class ServerAPI<EthernetClient>;
 template class APIServerPort<ethServerAPI, EthernetServer>;
