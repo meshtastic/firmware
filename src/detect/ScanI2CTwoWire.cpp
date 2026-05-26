@@ -796,11 +796,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = BMX160;
                         logFoundDevice("BMX160", (uint8_t)addr.address);
                         break;
-                    } else {
-                        type = MPU6050;
-                        logFoundDevice("MPU6050", (uint8_t)addr.address);
+                    }
+                    // MPU-6050 and MPU-9250/9255 share I2C addresses (0x68/0x69), and chip ID
+                    // register 0x00 reads 0x00 on MPU-9250. Disambiguate via WHO_AM_I (0x75):
+                    //   MPU-6050 -> 0x68, MPU-9250 -> 0x71, MPU-9255 -> 0x73
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x75), 1);
+                    if (registerValue == 0x71 || registerValue == 0x73) {
+                        type = MPU9250;
+                        logFoundDevice(registerValue == 0x73 ? "MPU9255" : "MPU9250", (uint8_t)addr.address);
                         break;
                     }
+                    type = MPU6050;
+                    logFoundDevice("MPU6050", (uint8_t)addr.address);
+                    break;
                 }
                 break;
 

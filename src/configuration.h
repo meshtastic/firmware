@@ -292,6 +292,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DA217_ADDR 0x26
 #define BMI270_ADDR 0x68
 #define BMI270_ADDR_ALT 0x69
+#define MPU9250_ADDR 0x68
+#define MPU9250_ADDR_ALT 0x69
+#define AK8963_ADDR 0x0C
 
 // -----------------------------------------------------------------------------
 // LED
