@@ -30,6 +30,16 @@ class MPU9250Sensor : public MotionSensor
     static constexpr const char *compassCalibrationFileName = "/prefs/compass_mpu9250.dat";
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
+    // Exponential moving average on raw accel + mag to keep the heading stable
+    // during device rotation. The compass-only fusion path is stateless, so any
+    // dynamic acceleration shows up immediately as heading noise; filtering the
+    // inputs is the cheapest mitigation.
+    static constexpr float accelFilterAlpha = 0.15f;
+    static constexpr float magFilterAlpha = 0.20f;
+    FusionVector accelFiltered = {{0, 0, 0}};
+    FusionVector magFiltered = {{0, 0, 0}};
+    bool filtersSeeded = false;
+
     // Pick the correct TwoWire instance for the detected device.
     TwoWire *resolveBus() const;
 

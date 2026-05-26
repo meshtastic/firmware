@@ -221,8 +221,8 @@ bool MPU9250Sensor::readSensors(FusionVector &accel, FusionVector &mag)
 int32_t MPU9250Sensor::runOnce()
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
-    FusionVector accel = {0, 0, 0};
-    FusionVector mag = {0, 0, 0};
+    FusionVector accel = {{0, 0, 0}};
+    FusionVector mag = {{0, 0, 0}};
     if (!readSensors(accel, mag)) {
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
@@ -238,6 +238,21 @@ int32_t MPU9250Sensor::runOnce()
     mag.axis.x -= (highestX + lowestX) / 2;
     mag.axis.y -= (highestY + lowestY) / 2;
     mag.axis.z -= (highestZ + lowestZ) / 2;
+
+    // Smooth raw inputs with a per-axis EMA to suppress dynamic acceleration
+    // noise during device rotation.
+    if (!filtersSeeded) {
+        accelFiltered = accel;
+        magFiltered = mag;
+        filtersSeeded = true;
+    } else {
+        for (int i = 0; i < 3; ++i) {
+            accelFiltered.array[i] = accelFilterAlpha * accel.array[i] + (1.0f - accelFilterAlpha) * accelFiltered.array[i];
+            magFiltered.array[i] = magFilterAlpha * mag.array[i] + (1.0f - magFilterAlpha) * magFiltered.array[i];
+        }
+    }
+    accel = accelFiltered;
+    mag = magFiltered;
 
     // The MPU-6500 accelerometer and AK8963 magnetometer dies sit inside the
     // same package but use different axis conventions (datasheet 7.4 vs 8.1).
