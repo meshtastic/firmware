@@ -85,8 +85,9 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
 
     return o_probe;
 }
+
 uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation &registerLocation,
-                                          ScanI2CTwoWire::ResponseWidth responseWidth, bool zeropad = false) const
+                                          ScanI2CTwoWire::ResponseWidth responseWidth, bool zeropad) const
 {
     uint16_t value = 0x00;
     TwoWire *i2cBus = fetchI2CBus(registerLocation.i2cAddress);
@@ -174,6 +175,62 @@ String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
 
     return String(productName);
 }
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+static uint8_t crcSHT2X(const uint8_t *data, uint8_t len)
+{
+    uint8_t crc = 0;
+    for (uint8_t i = 0; i < len; i++) {
+        crc ^= data[i];
+        for (uint8_t bit = 0; bit < 8; bit++) {
+            crc = (crc & 0x80) ? (crc << 1) ^ 0x31 : crc << 1;
+        }
+    }
+    return crc;
+}
+
+bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
+{
+    uint8_t serialA[8] = {0};
+    uint8_t serialB[6] = {0};
+
+    i2cBus->beginTransmission(address);
+    i2cBus->write(0xFA);
+    i2cBus->write(0x0F);
+
+    if (i2cBus->endTransmission() != 0)
+        return false;
+
+    if (i2cBus->requestFrom(address, (uint8_t)sizeof(serialA)) != sizeof(serialA))
+        return false;
+
+    for (uint8_t i = 0; i < sizeof(serialA); i++) {
+        if (!i2cBus->available())
+            return false;
+        serialA[i] = i2cBus->read();
+    }
+
+    i2cBus->beginTransmission(address);
+    i2cBus->write(0xFC);
+    i2cBus->write(0xC9);
+
+    if (i2cBus->endTransmission() != 0)
+        return false;
+
+    if (i2cBus->requestFrom(address, (uint8_t)sizeof(serialB)) != sizeof(serialB))
+        return false;
+
+    for (uint8_t i = 0; i < sizeof(serialB); i++) {
+        if (!i2cBus->available())
+            return false;
+        serialB[i] = i2cBus->read();
+    }
+
+    return crcSHT2X(&serialA[0], 1) == serialA[1] && crcSHT2X(&serialA[2], 1) == serialA[3] &&
+           crcSHT2X(&serialA[4], 1) == serialA[5] && crcSHT2X(&serialA[6], 1) == serialA[7] &&
+           crcSHT2X(&serialB[0], 2) == serialB[2] && crcSHT2X(&serialB[3], 2) == serialB[5];
+}
+#endif
 
 #define SCAN_SIMPLE_CASE(ADDR, T, ...)                                                                                           \
     case ADDR:                                                                                                                   \
