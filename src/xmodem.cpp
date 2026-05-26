@@ -119,18 +119,24 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     case meshtastic_XModem_Control_STX:
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
             // NULL packet has the destination filename
-            memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+            strncpy(filename, (const char *)xmodemPacket.buffer.bytes, sizeof(filename) - 1);
+            filename[sizeof(filename) - 1] = '\0';
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
+                // FILE_O_WRITE on Adafruit_LittleFS is append, not truncate — remove first.
                 spiLock->lock();
+                if (FSCom.exists(filename))
+                    FSCom.remove(filename);
                 file = FSCom.open(filename, FILE_O_WRITE);
                 spiLock->unlock();
                 if (file) {
+                    LOG_INFO("XModem: receiving %s", filename);
                     sendControl(meshtastic_XModem_Control_ACK);
                     isReceiving = true;
                     packetno = 1;
                     break;
                 }
+                LOG_WARN("XModem: open(%s, WRITE) failed", filename);
                 sendControl(meshtastic_XModem_Control_NAK);
                 isReceiving = false;
                 break;
@@ -168,8 +174,12 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                     check(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size, xmodemPacket.crc16)) {
                     // valid packet
                     spiLock->lock();
-                    file.write(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+                    size_t written = file.write(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
                     spiLock->unlock();
+                    if (written != xmodemPacket.buffer.size) {
+                        LOG_WARN("XModem: short write seq=%d expected=%d wrote=%d (LittleFS partition full?)",
+                                 (int)xmodemPacket.seq, (int)xmodemPacket.buffer.size, (int)written);
+                    }
                     sendControl(meshtastic_XModem_Control_ACK);
                     packetno++;
                     break;

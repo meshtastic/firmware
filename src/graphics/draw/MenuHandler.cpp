@@ -2,6 +2,7 @@
 #if HAS_SCREEN
 #include "ClockRenderer.h"
 #include "Default.h"
+#include "DisplayFormatters.h"
 #include "GPS.h"
 #include "MenuHandler.h"
 #include "MeshRadio.h"
@@ -55,6 +56,70 @@ BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOp
     bannerOptions.optionsCount = static_cast<uint8_t>(N);
     bannerOptions.bannerCallback = [optionsPtr, callback](int selected) -> void { callback(optionsPtr[selected], selected); };
     return bannerOptions;
+}
+
+const StoredMessage *getNewestMessageForActiveThread()
+{
+    const auto &messages = messageStore.getMessages();
+    if (messages.empty()) {
+        return nullptr;
+    }
+
+    const auto mode = graphics::MessageRenderer::getThreadMode();
+    const int channel = graphics::MessageRenderer::getThreadChannel();
+    const uint32_t peer = graphics::MessageRenderer::getThreadPeer();
+    const uint32_t localNode = nodeDB->getNodeNum();
+
+    if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+        return &messages.back();
+    }
+
+    for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+        const StoredMessage &m = *it;
+
+        if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
+            if (m.type == MessageType::BROADCAST && static_cast<int>(m.channelIndex) == channel) {
+                return &m;
+            }
+            continue;
+        }
+
+        if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
+            if (m.type != MessageType::DM_TO_US) {
+                continue;
+            }
+            const uint32_t other = (m.sender == localNode) ? m.dest : m.sender;
+            if (other == peer) {
+                return &m;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void launchReplyForMessage(const StoredMessage &message, bool freetext)
+{
+    if (message.type == MessageType::BROADCAST || message.dest == NODENUM_BROADCAST) {
+        if (freetext) {
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, message.channelIndex);
+        } else {
+            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, message.channelIndex);
+        }
+        return;
+    }
+
+    const uint32_t localNode = nodeDB->getNodeNum();
+    const uint32_t peer = (message.sender == localNode) ? message.dest : message.sender;
+    if (peer == 0 || peer == NODENUM_BROADCAST) {
+        return;
+    }
+
+    if (freetext) {
+        cannedMessageModule->LaunchFreetextWithDestination(peer);
+    } else {
+        cannedMessageModule->LaunchWithDestination(peer);
+    }
 }
 
 } // namespace
@@ -116,6 +181,8 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"US", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_US},
         {"EU_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_433},
         {"EU_868", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_868},
+        {"EU_866", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_866},
+        {"EU_868_NARROW", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_EU_N_868},
         {"CN", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_CN},
         {"JP", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_JP},
         {"ANZ", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ANZ},
@@ -139,6 +206,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"KZ_863", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_KZ_863},
         {"NP_865", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NP_865},
         {"BR_902", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_BR_902},
+
     };
 
     constexpr size_t regionCount = sizeof(regionOptions) / sizeof(regionOptions[0]);
@@ -180,7 +248,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 #endif
             config.lora.tx_enabled = true;
             initRegion();
-            if (myRegion->dutyCycle < 100) {
+            if (getEffectiveDutyCycle() < 100) {
                 config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
             }
 
@@ -314,42 +382,64 @@ void menuHandler::FrequencySlotPicker()
     screen->showOverlayBanner(bannerOptions);
 }
 
+// Maximum presets any region can have + 1 for Back
+static constexpr int MAX_PRESET_OPTIONS = 16;
+
+static BannerOverlayOptions buildRegionPresetBanner()
+{
+    // Static storage reused each call — safe because the banner is shown immediately after.
+    static const char *optionsArray[MAX_PRESET_OPTIONS];
+    static int optionsEnumArray[MAX_PRESET_OPTIONS];
+    static char presetLabelBuf[MAX_PRESET_OPTIONS][12]; // scratch space for name copies
+    int count = 0;
+
+    optionsArray[count] = "Back";
+    optionsEnumArray[count++] = -1;
+
+    if (myRegion && myRegion->profile) {
+        const meshtastic_Config_LoRaConfig_ModemPreset *presets = myRegion->getAvailablePresets();
+        size_t numPresets = myRegion->getNumPresets();
+        for (size_t i = 0; i < numPresets && count < MAX_PRESET_OPTIONS; ++i) {
+            const char *name = DisplayFormatters::getModemPresetDisplayName(presets[i], false, true);
+            strncpy(presetLabelBuf[count], name, sizeof(presetLabelBuf[count]) - 1);
+            presetLabelBuf[count][sizeof(presetLabelBuf[count]) - 1] = '\0';
+            optionsArray[count] = presetLabelBuf[count];
+            optionsEnumArray[count++] = static_cast<int>(presets[i]);
+        }
+    }
+
+    int initialSelection = 0;
+    for (int i = 1; i < count; ++i) {
+        if (optionsEnumArray[i] == static_cast<int>(config.lora.modem_preset)) {
+            initialSelection = i;
+            break;
+        }
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Radio Preset";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = static_cast<uint8_t>(count);
+    bannerOptions.InitialSelected = initialSelection;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == -1) {
+            menuHandler::menuQueue = menuHandler::LoraMenu;
+            screen->runNow();
+            return;
+        }
+        config.lora.use_preset = true;
+        config.lora.modem_preset = static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(selected);
+        config.lora.channel_num = 0;        // Reset to default channel for the preset
+        config.lora.override_frequency = 0; // Clear any custom frequency
+        service->reloadConfig(SEGMENT_CONFIG);
+    };
+    return bannerOptions;
+}
+
 void menuHandler::radioPresetPicker()
 {
-    static const RadioPresetOption presetOptions[] = {
-        {"Back", OptionsAction::Back},
-        {"LongTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO},
-        {"LongModerate", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE},
-        {"LongFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST},
-        {"MediumSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW},
-        {"MediumFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST},
-        {"ShortSlow", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW},
-        {"ShortFast", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST},
-        {"ShortTurbo", OptionsAction::Select, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO},
-    };
-
-    constexpr size_t presetCount = sizeof(presetOptions) / sizeof(presetOptions[0]);
-    static std::array<const char *, presetCount> presetLabels{};
-
-    auto bannerOptions =
-        createStaticBannerOptions("Radio Preset", presetOptions, presetLabels, [](const RadioPresetOption &option, int) -> void {
-            if (option.action == OptionsAction::Back) {
-                menuHandler::menuQueue = menuHandler::LoraMenu;
-                screen->runNow();
-                return;
-            }
-
-            if (!option.hasValue) {
-                return;
-            }
-
-            config.lora.modem_preset = option.value;
-            config.lora.channel_num = 0;        // Reset to default channel for the preset
-            config.lora.override_frequency = 0; // Clear any custom frequency
-            service->reloadConfig(SEGMENT_CONFIG);
-        });
-
-    screen->showOverlayBanner(bannerOptions);
+    screen->showOverlayBanner(buildRegionPresetBanner());
 }
 
 void menuHandler::twelveHourPicker()
@@ -491,7 +581,7 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     static const char *optionsArray[] = {"Back", "Time Format", "Timezone"};
 #else
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
@@ -594,9 +684,12 @@ void menuHandler::messageResponseMenu()
 
 #ifdef HAS_I2S
         } else if (selected == Aloud) {
-            const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-            const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
-            audioThread->readAloud(msg);
+            if (const StoredMessage *latest = getNewestMessageForActiveThread()) {
+                const char *msg = MessageStore::getText(*latest);
+                if (msg && msg[0]) {
+                    audioThread->readAloud(msg);
+                }
+            }
 #endif
         }
     };
@@ -656,20 +749,12 @@ void menuHandler::replyMenu()
 
         // Preset reply
         if (selected == ReplyPreset) {
-
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, ch);
-
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 cannedMessageModule->LaunchWithDestination(peer);
-
-            } else {
-                // Fallback for last received message
-                if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                    cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
-                } else {
-                    cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
-                }
+            } else if (const StoredMessage *latest = getNewestMessageForActiveThread()) {
+                launchReplyForMessage(*latest, false);
             }
 
             return;
@@ -677,20 +762,12 @@ void menuHandler::replyMenu()
 
         // Freetext reply
         if (selected == ReplyFreetext) {
-
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, ch);
-
             } else if (mode == graphics::MessageRenderer::ThreadMode::DIRECT) {
                 cannedMessageModule->LaunchFreetextWithDestination(peer);
-
-            } else {
-                // Fallback for last received message
-                if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                    cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
-                } else {
-                    cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
-                }
+            } else if (const StoredMessage *latest = getNewestMessageForActiveThread()) {
+                launchReplyForMessage(*latest, true);
             }
 
             return;
@@ -845,10 +922,10 @@ void menuHandler::messageViewModeMenu()
     // Encode peers
     for (size_t i = 0; i < uniquePeers.size(); ++i) {
         uint32_t peer = uniquePeers[i];
-        auto node = nodeDB->getMeshNode(peer);
+        const auto *node = nodeDB->getMeshNode(peer);
         std::string name;
-        if (node && node->has_user)
-            name = sanitizeString(node->user.long_name).substr(0, 15);
+        if (nodeInfoLiteHasUser(node))
+            name = sanitizeString(node->long_name).substr(0, 15);
         else {
             char buf[20];
             snprintf(buf, sizeof(buf), "Node %08X", peer);
@@ -1355,14 +1432,14 @@ void menuHandler::manageNodeMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-    if (node->is_favorite) {
+    if (nodeInfoLiteIsFavorite(node)) {
         optionsArray[options] = "Unfavorite";
     } else {
         optionsArray[options] = "Favorite";
     }
     optionsEnumArray[options++] = Favorite;
 
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+    bool isMuted = nodeInfoLiteIsMuted(node);
     if (isMuted) {
         optionsArray[options] = "Unmute Notifications";
     } else {
@@ -1376,7 +1453,7 @@ void menuHandler::manageNodeMenu()
     optionsArray[options] = "Key Verification";
     optionsEnumArray[options++] = KeyVerification;
 
-    if (node->is_ignored) {
+    if (nodeInfoLiteIsIgnored(node)) {
         optionsArray[options] = "Unignore Node";
     } else {
         optionsArray[options] = "Ignore Node";
@@ -1386,8 +1463,8 @@ void menuHandler::manageNodeMenu()
     BannerOverlayOptions bannerOptions;
 
     std::string title = "";
-    if (node->has_user && node->user.long_name && node->user.long_name[0]) {
-        title += sanitizeString(node->user.long_name).substr(0, 15);
+    if (nodeInfoLiteHasUser(node) && node->long_name[0]) {
+        title += sanitizeString(node->long_name).substr(0, 15);
     } else {
         char buf[20];
         snprintf(buf, sizeof(buf), "%08X", (unsigned int)node->num);
@@ -1409,7 +1486,7 @@ void menuHandler::manageNodeMenu()
             if (!n) {
                 return;
             }
-            if (n->is_favorite) {
+            if (nodeInfoLiteIsFavorite(n)) {
                 LOG_INFO("Removing node %08X from favorites", menuHandler::pickedNodeNum);
                 nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
             } else {
@@ -1426,13 +1503,9 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
-            if (n->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) {
-                n->bitfield &= ~NODEINFO_BITFIELD_IS_MUTED_MASK;
-                LOG_INFO("Unmuted node %08X", menuHandler::pickedNodeNum);
-            } else {
-                n->bitfield |= NODEINFO_BITFIELD_IS_MUTED_MASK;
-                LOG_INFO("Muted node %08X", menuHandler::pickedNodeNum);
-            }
+            const bool wasMuted = nodeInfoLiteIsMuted(n);
+            nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_MUTED_MASK, !wasMuted);
+            LOG_INFO(wasMuted ? "Unmuted node %08X" : "Muted node %08X", menuHandler::pickedNodeNum);
             nodeDB->notifyObservers(true);
             nodeDB->saveToDisk();
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -1461,11 +1534,11 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
-            if (n->is_ignored) {
-                n->is_ignored = false;
+            if (nodeInfoLiteIsIgnored(n)) {
+                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
                 LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
             } else {
-                n->is_ignored = true;
+                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
                 LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
             }
             nodeDB->notifyObservers(true);
@@ -2079,9 +2152,9 @@ void menuHandler::removeFavoriteMenu()
     static const char *optionsArray[] = {"Back", "Yes"};
     BannerOverlayOptions bannerOptions;
     std::string message = "Unfavorite This Node?\n";
-    auto node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
-    if (node && node->has_user) {
-        message += sanitizeString(node->user.long_name).substr(0, 15);
+    const auto *node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
+    if (nodeInfoLiteHasUser(node)) {
+        message += sanitizeString(node->long_name).substr(0, 15);
     }
     bannerOptions.message = message.c_str();
     bannerOptions.optionsArrayPtr = optionsArray;

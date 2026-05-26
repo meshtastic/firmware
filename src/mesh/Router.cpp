@@ -4,6 +4,7 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PositionPrecision.h"
 #include "RTC.h"
 
 #include "configuration.h"
@@ -120,17 +121,17 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         if (!node)
             continue;
 
-        // Check 1: is_favorite (cheapest - single bool)
-        if (!node->is_favorite)
+        // Check 1: is_favorite (cheapest - single bit test)
+        if (!nodeInfoLiteIsFavorite(node))
             continue;
 
-        // Check 2: has_user (cheap - single bool)
-        if (!node->has_user)
+        // Check 2: has_user (cheap - single bit test)
+        if (!nodeInfoLiteHasUser(node))
             continue;
 
         // Check 3: role check (moderate cost - multiple comparisons)
-        if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+        if (!IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
             continue;
         }
 
@@ -317,10 +318,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     } // should have already been handled by sendLocal
 
     // Abort sending if we are violating the duty cycle
-    if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
+    float effectiveDutyCycle = getEffectiveDutyCycle();
+    if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
         float hourlyTxPercent = airTime->utilizationTXPercent();
-        if (hourlyTxPercent > myRegion->dutyCycle) {
-            uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle);
+        if (hourlyTxPercent > effectiveDutyCycle) {
+            uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, effectiveDutyCycle);
 
             LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d mins", silentMinutes);
 
@@ -367,6 +369,15 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 
     fixPriority(p); // Before encryption, fix the priority if it's unset
+    // Position precision is an originator-only privacy policy. Relays keep
+    // p->from as the original sender, so do not rewrite their POSITION_APP payload.
+    if (isFromUs(p)) {
+        if (!applyPositionPrecisionForChannel(*p, p->channel)) {
+            LOG_ERROR("Dropping malformed position packet before send");
+            packetPool.release(p);
+            return meshtastic_Routing_Error_BAD_REQUEST;
+        }
+    }
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
@@ -433,7 +444,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     concurrency::LockGuard g(cryptLock);
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
-        (nodeDB->getMeshNode(p->from) == NULL || !nodeDB->getMeshNode(p->from)->has_user)) {
+        !nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from))) {
         LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
         return DecodeState::DECODE_FAILURE;
     }
@@ -451,11 +462,11 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
-        nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
-        rawSize > MESHTASTIC_PKC_OVERHEAD) {
+        nodeDB->getMeshNode(p->from)->public_key.size > 0 && nodeDB->getMeshNode(p->to) != nullptr &&
+        nodeDB->getMeshNode(p->to)->public_key.size > 0 && rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes,
+        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->public_key, p->id, rawSize, p->encrypted.bytes,
                                       bytes)) {
             LOG_INFO("PKI Decryption worked!");
 
@@ -467,7 +478,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
-                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
+                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->public_key.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
@@ -665,18 +676,18 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             // Check for a known public key for the destination
-            if (node == nullptr || node->user.public_key.size != 32) {
+            if (node == nullptr || node->public_key.size != 32) {
                 LOG_WARN("Unknown public key for destination node 0x%08x (portnum %d), refusing to send legacy DM", p->to,
                          p->decoded.portnum);
                 return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
             }
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
-                memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
+                memcmp(p->public_key.bytes, node->public_key.bytes, 32) != 0) {
                 LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,
-                         *node->user.public_key.bytes);
+                         *node->public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+            crypto->encryptCurve25519(p->to, getFrom(p), node->public_key, p->id, numbytes, bytes, p->encrypted.bytes);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
@@ -860,7 +871,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->from);
-    if (node != NULL && node->is_ignored) {
+    if (nodeInfoLiteIsIgnored(node)) {
         LOG_DEBUG("Ignore msg, 0x%x is ignored", p->from);
         packetPool.release(p);
         return;

@@ -525,7 +525,7 @@ int InkHUD::Events::beforeReboot(void *unused)
 // Callback when a new text message is received
 // Caches the most recently received message, for use by applets
 // Rx does not trigger a save to flash, however the data *will* be saved alongside other during shutdown, etc.
-// Note: this is different from devicestate.rx_text_message, which may contain an *outgoing* message
+// Note: this is intentionally separate from device-state message fields.
 int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
 {
     // Short circuit: don't store outgoing messages

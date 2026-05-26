@@ -317,6 +317,14 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_THINKNODE_M9 = 131,
     /* The Heltec-V4-R8 uses an ESP32S3R8 chip, plus an SX1262. */
     meshtastic_HardwareModel_HELTEC_V4_R8 = 132,
+    /* The HELTEC_MESH_NODE_T1 uses an NRF52840 chip, plus an SX1262. */
+    meshtastic_HardwareModel_HELTEC_MESH_NODE_T1 = 133,
+    /* B&Q Consulting Station G3: TBD */
+    meshtastic_HardwareModel_STATION_G3 = 134,
+    /* Lilygo T-Impulse-Plus */
+    meshtastic_HardwareModel_T_IMPULSE_PLUS = 135,
+    /* Lilygo T-Echo Card */
+    meshtastic_HardwareModel_T_ECHO_CARD = 136,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -634,6 +642,25 @@ typedef enum _meshtastic_LogRecord_Level {
     meshtastic_LogRecord_Level_TRACE = 5
 } meshtastic_LogRecord_Level;
 
+typedef enum _meshtastic_LockdownStatus_State {
+    /* Default; should not be sent. */
+    meshtastic_LockdownStatus_State_STATE_UNSPECIFIED = 0,
+    /* No passphrase has ever been provisioned on this device.
+ Client should prompt the operator to set one. */
+    meshtastic_LockdownStatus_State_NEEDS_PROVISION = 1,
+    /* Storage is locked or this client has not authenticated yet.
+ lock_reason carries a machine-readable detail string.
+ Client should present (or auto-replay) a passphrase via
+ AdminMessage.lockdown_auth. */
+    meshtastic_LockdownStatus_State_LOCKED = 2,
+    /* Passphrase accepted; client is now authorized for this connection.
+ boots_remaining and valid_until_epoch describe the active session
+ token's TTL. */
+    meshtastic_LockdownStatus_State_UNLOCKED = 3,
+    /* Passphrase rejected. backoff_seconds is non-zero when rate-limited. */
+    meshtastic_LockdownStatus_State_UNLOCK_FAILED = 4
+} meshtastic_LockdownStatus_State;
+
 /* Struct definitions */
 /* A GPS Position */
 typedef struct _meshtastic_Position {
@@ -797,6 +824,7 @@ typedef struct _meshtastic_Routing {
 } meshtastic_Routing;
 
 typedef PB_BYTES_ARRAY_T(233) meshtastic_Data_payload_t;
+typedef PB_BYTES_ARRAY_T(64) meshtastic_Data_xeddsa_signature_t;
 /* (Formerly called SubPacket)
  The payload portion fo a packet, this is the actual bytes that are sent
  inside a radio packet (because from/to are broken out by the comms library) */
@@ -830,6 +858,8 @@ typedef struct _meshtastic_Data {
     /* Bitfield for extra flags. First use is to indicate that user approves the packet being uploaded to MQTT. */
     bool has_bitfield;
     uint8_t bitfield;
+    /* XEdDSA signature for the payload */
+    meshtastic_Data_xeddsa_signature_t xeddsa_signature;
 } meshtastic_Data;
 
 typedef PB_BYTES_ARRAY_T(32) meshtastic_KeyVerification_hash1_t;
@@ -1034,6 +1064,8 @@ typedef struct _meshtastic_MeshPacket {
     uint32_t tx_after;
     /* Indicates which transport mechanism this packet arrived over */
     meshtastic_MeshPacket_TransportMechanism transport_mechanism;
+    /* Indicates whether the packet has a valid signature */
+    bool xeddsa_signed;
 } meshtastic_MeshPacket;
 
 /* The bluetooth to device link:
@@ -1090,6 +1122,10 @@ typedef struct _meshtastic_NodeInfo {
     /* True if node has been muted
  Persistes between NodeDB internal clean ups */
     bool is_muted;
+    /* True if node is signing its packets via XEdDSA
+ Persists between NodeDB internal clean ups
+ LSB 1 of the bitfield */
+    bool has_xeddsa_signed;
 } meshtastic_NodeInfo;
 
 typedef PB_BYTES_ARRAY_T(16) meshtastic_MyNodeInfo_device_id_t;
@@ -1143,6 +1179,38 @@ typedef struct _meshtastic_QueueStatus {
     /* What was mesh packet id that generated this response? */
     uint32_t mesh_packet_id;
 } meshtastic_QueueStatus;
+
+/* Lockdown state report from firmware to client (for hardened builds
+ with MESHTASTIC_LOCKDOWN). Sent immediately after config_complete_id
+ to inform a freshly-connected unauthorized client what it must do,
+ and again in response to each LockdownAuth admin command. */
+typedef struct _meshtastic_LockdownStatus {
+    /* Current lockdown state being reported. */
+    meshtastic_LockdownStatus_State state;
+    /* For LOCKED: machine-readable reason. Known values:
+   "needs_auth"        — storage already unlocked, client must auth
+   "token_missing"     — no boot token on flash
+   "token_expired"     — boot token wall-clock TTL elapsed
+   "token_boots_zero"  — boot token boot-count TTL exhausted
+   "token_hmac_fail"   — token tampered or wrong device
+   "token_dek_fail"    — token DEK decrypt failed
+   "token_wrong_size"  — token file corrupted
+   "token_bad_magic"   — token file corrupted
+   "not_provisioned"   — should generally use NEEDS_PROVISION state instead
+ Other values may be added; clients should treat unknown values as
+ "locked, ask for passphrase". */
+    char lock_reason[32];
+    /* For UNLOCKED: remaining boots on the issued session token.
+ Decrements by 1 on each subsequent boot. */
+    uint32_t boots_remaining;
+    /* For UNLOCKED: wall-clock expiry of the issued session token,
+ absolute Unix-epoch seconds. 0 = no time limit. */
+    uint32_t valid_until_epoch;
+    /* For UNLOCK_FAILED: seconds the client must wait before another
+ passphrase attempt will be accepted. 0 = wrong passphrase, no
+ backoff (immediate retry allowed but advisable to prompt user). */
+    uint32_t backoff_seconds;
+} meshtastic_LockdownStatus;
 
 typedef struct _meshtastic_KeyVerificationNumberInform {
     uint64_t nonce;
@@ -1317,6 +1385,12 @@ typedef struct _meshtastic_FromRadio {
         meshtastic_ClientNotification clientNotification;
         /* Persistent data for device-ui */
         meshtastic_DeviceUIConfig deviceuiConfig;
+        /* Lockdown state notification for hardened firmware builds.
+     Sent post-config (so unauthorized clients learn they must
+     provision/unlock) and after each LockdownAuth admin command
+     to report success or failure. Replaces the earlier scheme of
+     encoding state as magic-string prefixes inside ClientNotification. */
+        meshtastic_LockdownStatus lockdown_status;
     };
 } meshtastic_FromRadio;
 
@@ -1458,6 +1532,10 @@ extern "C" {
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
 #define _meshtastic_LogRecord_Level_ARRAYSIZE ((meshtastic_LogRecord_Level)(meshtastic_LogRecord_Level_CRITICAL+1))
 
+#define _meshtastic_LockdownStatus_State_MIN meshtastic_LockdownStatus_State_STATE_UNSPECIFIED
+#define _meshtastic_LockdownStatus_State_MAX meshtastic_LockdownStatus_State_UNLOCK_FAILED
+#define _meshtastic_LockdownStatus_State_ARRAYSIZE ((meshtastic_LockdownStatus_State)(meshtastic_LockdownStatus_State_UNLOCK_FAILED+1))
+
 #define meshtastic_Position_location_source_ENUMTYPE meshtastic_Position_LocSource
 #define meshtastic_Position_altitude_source_ENUMTYPE meshtastic_Position_AltSource
 
@@ -1488,6 +1566,8 @@ extern "C" {
 
 
 
+#define meshtastic_LockdownStatus_state_ENUMTYPE meshtastic_LockdownStatus_State
+
 #define meshtastic_ClientNotification_level_ENUMTYPE meshtastic_LogRecord_Level
 
 
@@ -1515,19 +1595,20 @@ extern "C" {
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
-#define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
+#define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0, {0, {0}}}
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_default      {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
-#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
+#define meshtastic_LockdownStatus_init_default   {_meshtastic_LockdownStatus_State_MIN, "", 0, 0, 0}
 #define meshtastic_ClientNotification_init_default {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", 0, {meshtastic_KeyVerificationNumberInform_init_default}}
 #define meshtastic_KeyVerificationNumberInform_init_default {0, "", 0}
 #define meshtastic_KeyVerificationNumberRequest_init_default {0, ""}
@@ -1549,19 +1630,20 @@ extern "C" {
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
-#define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
+#define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0, {0, {0}}}
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_zero         {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
-#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
+#define meshtastic_LockdownStatus_init_zero      {_meshtastic_LockdownStatus_State_MIN, "", 0, 0, 0}
 #define meshtastic_ClientNotification_init_zero  {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", 0, {meshtastic_KeyVerificationNumberInform_init_zero}}
 #define meshtastic_KeyVerificationNumberInform_init_zero {0, "", 0}
 #define meshtastic_KeyVerificationNumberRequest_init_zero {0, ""}
@@ -1629,6 +1711,7 @@ extern "C" {
 #define meshtastic_Data_reply_id_tag             7
 #define meshtastic_Data_emoji_tag                8
 #define meshtastic_Data_bitfield_tag             9
+#define meshtastic_Data_xeddsa_signature_tag     10
 #define meshtastic_KeyVerification_nonce_tag     1
 #define meshtastic_KeyVerification_hash1_tag     2
 #define meshtastic_KeyVerification_hash2_tag     3
@@ -1686,6 +1769,7 @@ extern "C" {
 #define meshtastic_MeshPacket_relay_node_tag     19
 #define meshtastic_MeshPacket_tx_after_tag       20
 #define meshtastic_MeshPacket_transport_mechanism_tag 21
+#define meshtastic_MeshPacket_xeddsa_signed_tag  22
 #define meshtastic_NodeInfo_num_tag              1
 #define meshtastic_NodeInfo_user_tag             2
 #define meshtastic_NodeInfo_position_tag         3
@@ -1699,6 +1783,7 @@ extern "C" {
 #define meshtastic_NodeInfo_is_ignored_tag       11
 #define meshtastic_NodeInfo_is_key_manually_verified_tag 12
 #define meshtastic_NodeInfo_is_muted_tag         13
+#define meshtastic_NodeInfo_has_xeddsa_signed_tag 14
 #define meshtastic_MyNodeInfo_my_node_num_tag    1
 #define meshtastic_MyNodeInfo_reboot_count_tag   8
 #define meshtastic_MyNodeInfo_min_app_version_tag 11
@@ -1714,6 +1799,11 @@ extern "C" {
 #define meshtastic_QueueStatus_free_tag          2
 #define meshtastic_QueueStatus_maxlen_tag        3
 #define meshtastic_QueueStatus_mesh_packet_id_tag 4
+#define meshtastic_LockdownStatus_state_tag      1
+#define meshtastic_LockdownStatus_lock_reason_tag 2
+#define meshtastic_LockdownStatus_boots_remaining_tag 3
+#define meshtastic_LockdownStatus_valid_until_epoch_tag 4
+#define meshtastic_LockdownStatus_backoff_seconds_tag 5
 #define meshtastic_KeyVerificationNumberInform_nonce_tag 1
 #define meshtastic_KeyVerificationNumberInform_remote_longname_tag 2
 #define meshtastic_KeyVerificationNumberInform_security_number_tag 3
@@ -1773,6 +1863,7 @@ extern "C" {
 #define meshtastic_FromRadio_fileInfo_tag        15
 #define meshtastic_FromRadio_clientNotification_tag 16
 #define meshtastic_FromRadio_deviceuiConfig_tag  17
+#define meshtastic_FromRadio_lockdown_status_tag 18
 #define meshtastic_Heartbeat_nonce_tag           1
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
@@ -1859,7 +1950,8 @@ X(a, STATIC,   SINGULAR, FIXED32,  source,            5) \
 X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6) \
 X(a, STATIC,   SINGULAR, FIXED32,  reply_id,          7) \
 X(a, STATIC,   SINGULAR, FIXED32,  emoji,             8) \
-X(a, STATIC,   OPTIONAL, UINT32,   bitfield,          9)
+X(a, STATIC,   OPTIONAL, UINT32,   bitfield,          9) \
+X(a, STATIC,   SINGULAR, BYTES,    xeddsa_signature,  10)
 #define meshtastic_Data_CALLBACK NULL
 #define meshtastic_Data_DEFAULT NULL
 
@@ -1944,7 +2036,8 @@ X(a, STATIC,   SINGULAR, BOOL,     pki_encrypted,    17) \
 X(a, STATIC,   SINGULAR, UINT32,   next_hop,         18) \
 X(a, STATIC,   SINGULAR, UINT32,   relay_node,       19) \
 X(a, STATIC,   SINGULAR, UINT32,   tx_after,         20) \
-X(a, STATIC,   SINGULAR, UENUM,    transport_mechanism,  21)
+X(a, STATIC,   SINGULAR, UENUM,    transport_mechanism,  21) \
+X(a, STATIC,   SINGULAR, BOOL,     xeddsa_signed,    22)
 #define meshtastic_MeshPacket_CALLBACK NULL
 #define meshtastic_MeshPacket_DEFAULT NULL
 #define meshtastic_MeshPacket_payload_variant_decoded_MSGTYPE meshtastic_Data
@@ -1962,7 +2055,8 @@ X(a, STATIC,   OPTIONAL, UINT32,   hops_away,         9) \
 X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10) \
 X(a, STATIC,   SINGULAR, BOOL,     is_ignored,       11) \
 X(a, STATIC,   SINGULAR, BOOL,     is_key_manually_verified,  12) \
-X(a, STATIC,   SINGULAR, BOOL,     is_muted,         13)
+X(a, STATIC,   SINGULAR, BOOL,     is_muted,         13) \
+X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa_signed,  14)
 #define meshtastic_NodeInfo_CALLBACK NULL
 #define meshtastic_NodeInfo_DEFAULT NULL
 #define meshtastic_NodeInfo_user_MSGTYPE meshtastic_User
@@ -2013,7 +2107,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,metadata,metadata),  13) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),  14) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,clientNotification,clientNotification),  16) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfig),  17)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfig),  17) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lockdown_status,lockdown_status),  18)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -2030,6 +2125,16 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfi
 #define meshtastic_FromRadio_payload_variant_fileInfo_MSGTYPE meshtastic_FileInfo
 #define meshtastic_FromRadio_payload_variant_clientNotification_MSGTYPE meshtastic_ClientNotification
 #define meshtastic_FromRadio_payload_variant_deviceuiConfig_MSGTYPE meshtastic_DeviceUIConfig
+#define meshtastic_FromRadio_payload_variant_lockdown_status_MSGTYPE meshtastic_LockdownStatus
+
+#define meshtastic_LockdownStatus_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    state,             1) \
+X(a, STATIC,   SINGULAR, STRING,   lock_reason,       2) \
+X(a, STATIC,   SINGULAR, UINT32,   boots_remaining,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   valid_until_epoch,   4) \
+X(a, STATIC,   SINGULAR, UINT32,   backoff_seconds,   5)
+#define meshtastic_LockdownStatus_CALLBACK NULL
+#define meshtastic_LockdownStatus_DEFAULT NULL
 
 #define meshtastic_ClientNotification_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, UINT32,   reply_id,          1) \
@@ -2190,6 +2295,7 @@ extern const pb_msgdesc_t meshtastic_MyNodeInfo_msg;
 extern const pb_msgdesc_t meshtastic_LogRecord_msg;
 extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
 extern const pb_msgdesc_t meshtastic_FromRadio_msg;
+extern const pb_msgdesc_t meshtastic_LockdownStatus_msg;
 extern const pb_msgdesc_t meshtastic_ClientNotification_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerificationNumberInform_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerificationNumberRequest_msg;
@@ -2226,6 +2332,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LogRecord_fields &meshtastic_LogRecord_msg
 #define meshtastic_QueueStatus_fields &meshtastic_QueueStatus_msg
 #define meshtastic_FromRadio_fields &meshtastic_FromRadio_msg
+#define meshtastic_LockdownStatus_fields &meshtastic_LockdownStatus_msg
 #define meshtastic_ClientNotification_fields &meshtastic_ClientNotification_msg
 #define meshtastic_KeyVerificationNumberInform_fields &meshtastic_KeyVerificationNumberInform_msg
 #define meshtastic_KeyVerificationNumberRequest_fields &meshtastic_KeyVerificationNumberRequest_msg
@@ -2251,7 +2358,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ChunkedPayload_size           245
 #define meshtastic_ClientNotification_size       482
 #define meshtastic_Compressed_size               239
-#define meshtastic_Data_size                     269
+#define meshtastic_Data_size                     335
 #define meshtastic_DeviceMetadata_size           54
 #define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
@@ -2261,14 +2368,15 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_KeyVerificationNumberInform_size 58
 #define meshtastic_KeyVerificationNumberRequest_size 52
 #define meshtastic_KeyVerification_size          79
+#define meshtastic_LockdownStatus_size           53
 #define meshtastic_LogRecord_size                426
 #define meshtastic_LowEntropyKey_size            0
-#define meshtastic_MeshPacket_size               381
+#define meshtastic_MeshPacket_size               450
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               83
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 325
+#define meshtastic_NodeInfo_size                 327
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
