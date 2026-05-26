@@ -2,7 +2,6 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && __has_include(<SensirionI2cScd4x.h>)
 
-#include "../detect/reClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "SCD4XSensor.h"
 
@@ -18,8 +17,11 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     _address = dev->address.address;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, _port);
+    _port = dev->address.port;
+    reClockI2C.setup(_bus, _port);
+
+    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     scd4x.begin(*_bus, _address);
@@ -30,10 +32,8 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     // Stop periodic measurement
     if (!stopMeasurement()) {
 #ifdef SCD4X_I2C_CLOCK_SPEED
-        if (currentClock) {
-            LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-            reClockI2C(currentClock, _bus, _port);
-        }
+        LOG_INFO("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
@@ -46,10 +46,8 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         if (!powerUp()) {
             LOG_ERROR("%s: Error trying to execute powerUp()", sensorName);
 #ifdef SCD4X_I2C_CLOCK_SPEED
-            if (currentClock) {
-                LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-                reClockI2C(currentClock, _bus, _port);
-            }
+            LOG_INFO("%s: restoring clock speed", sensorName);
+            reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
             return false;
         }
@@ -58,10 +56,8 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (!getASC(ascActive)) {
         LOG_ERROR("%s: Unable to check if ASC is enabled", sensorName);
 #ifdef SCD4X_I2C_CLOCK_SPEED
-        if (currentClock) {
-            LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-            reClockI2C(currentClock, _bus, _port);
-        }
+        LOG_INFO("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
@@ -70,19 +66,15 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (!startMeasurement()) {
         LOG_ERROR("%s: Couldn't start measurement", sensorName);
 #ifdef SCD4X_I2C_CLOCK_SPEED
-        if (currentClock) {
-            LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-            reClockI2C(currentClock, _bus, _port);
-        }
+        LOG_INFO("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    if (currentClock) {
-        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-        reClockI2C(currentClock, _bus, _port);
-    }
+    LOG_INFO("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (state == SCD4X_MEASUREMENT) {
@@ -108,18 +100,16 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     float temperature, humidity;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, _port);
+    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     bool dataReady;
     error = scd4x.getDataReadyStatus(dataReady);
     if (error != SCD4X_NO_ERROR || !dataReady) {
 #ifdef SCD4X_I2C_CLOCK_SPEED
-        if (currentClock) {
-            LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-            reClockI2C(currentClock, _bus, _port);
-        }
+        LOG_INFO("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
         LOG_ERROR("SCD4X: Data is not ready");
         return false;
@@ -128,10 +118,8 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     error = scd4x.readMeasurement(co2, temperature, humidity);
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    if (currentClock) {
-        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-        reClockI2C(currentClock, _bus, _port);
-    }
+    LOG_INFO("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     LOG_DEBUG("Got %s readings: co2=%u, co2_temp=%.2f, co2_hum%.2f", sensorName, co2, temperature, humidity);
@@ -646,16 +634,14 @@ bool SCD4XSensor::powerDown()
     }
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, _port);
+    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (!stopMeasurement()) {
 #ifdef SCD4X_I2C_CLOCK_SPEED
-        if (currentClock) {
-            LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-            reClockI2C(currentClock, _bus, _port);
-        }
+        LOG_INFO("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
@@ -663,19 +649,15 @@ bool SCD4XSensor::powerDown()
     if (scd4x.powerDown() != SCD4X_NO_ERROR) {
         LOG_ERROR("%s: Error trying to execute sleep()", sensorName);
 #ifdef SCD4X_I2C_CLOCK_SPEED
-        if (currentClock) {
-            LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-            reClockI2C(currentClock, _bus, _port);
-        }
+        LOG_INFO("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    if (currentClock) {
-        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-        reClockI2C(currentClock, _bus, _port);
-    }
+    LOG_INFO("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     state = SCD4X_OFF;
@@ -723,26 +705,22 @@ uint32_t SCD4XSensor::wakeUp()
 {
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, _port);
+    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (startMeasurement()) {
         co2MeasureStarted = getTime();
 #ifdef SCD4X_I2C_CLOCK_SPEED
-        if (currentClock) {
-            LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-            reClockI2C(currentClock, _bus, _port);
-        }
+        LOG_INFO("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
         return SCD4X_WARMUP_MS;
     }
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    if (currentClock) {
-        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-        reClockI2C(currentClock, _bus, _port);
-    }
+    LOG_INFO("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     return 0;
@@ -755,17 +733,15 @@ uint32_t SCD4XSensor::wakeUp()
 void SCD4XSensor::sleep()
 {
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, _port);
+    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     stopMeasurement();
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    if (currentClock) {
-        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-        reClockI2C(currentClock, _bus, _port);
-    }
+    LOG_INFO("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 }
 
@@ -806,8 +782,8 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
     AdminMessageHandleResult result;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, _port);
+    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     // TODO: potentially add selftest command?
@@ -911,10 +887,8 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
     this->startMeasurement();
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    if (currentClock) {
-        LOG_INFO("%s restoring clock speed to %uHz", sensorName, currentClock);
-        reClockI2C(currentClock, _bus, _port);
-    }
+    LOG_INFO("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     return result;
