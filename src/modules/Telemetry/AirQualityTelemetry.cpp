@@ -116,10 +116,10 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Wake up the sensors that need it
-        LOG_INFO("Waking up sensors...");
         uint32_t lastTelemetry =
             transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY) : 0;
         for (TelemetrySensor *sensor : sensors) {
+            LOG_DEBUG("Checking if %s needs to wake up", sensor->sensorName);
             if (!sensor->canSleep()) {
                 LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
             } else if (((lastTelemetry == 0) ||
@@ -160,8 +160,8 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Send to sleep sensors that consume power
-        LOG_DEBUG("Sending sensors to sleep");
         for (TelemetrySensor *sensor : sensors) {
+            LOG_DEBUG("Checking if %s can be sent to sleep", sensor->sensorName);
             if (sensor->isActive() && sensor->canSleep()) {
                 if (sensor->wakeUpTimeMs() <
                     (int32_t)Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
