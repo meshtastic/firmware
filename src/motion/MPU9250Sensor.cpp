@@ -277,7 +277,7 @@ int32_t MPU9250Sensor::runOnce()
     //   _PY           — chip +Y up
     //   _NY           — chip -Y up
 #ifndef MPU9250_UP_AXIS
-#define MPU9250_UP_AXIS MPU9250_UP_AXIS_PX // TEMP for testing user's vertical case
+#define MPU9250_UP_AXIS MPU9250_UP_AXIS_PZ
 #endif
 #if MPU9250_UP_AXIS == MPU9250_UP_AXIS_PX
     ga = FusionAxesSwap(ga, FusionAxesAlignmentNZPYPX);
