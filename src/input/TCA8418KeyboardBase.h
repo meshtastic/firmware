@@ -128,6 +128,7 @@ class TCA8418KeyboardBase
     };
 
     virtual void pressed(uint8_t key);
+    virtual void held(void);
     virtual void released(void);
 
     virtual void queueEvent(char);
