@@ -7,6 +7,7 @@
 #include "mesh/api/ethServerAPI.h"
 #include "target_specific.h"
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+#include "mesh/eth/ethHttpOTA.h"
 #include "mesh/eth/ethOTA.h"
 #endif
 #ifdef USE_ARDUINO_ETHERNET
@@ -159,6 +160,7 @@ static int32_t reconnectETH()
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
             initEthOTA();
+            initEthHttpOTA();
 #endif
 
             ethStartupComplete = true;
@@ -189,6 +191,7 @@ static int32_t reconnectETH()
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
     ethOTALoop();
+    ethHttpOTALoop();
 #endif
 
     return 5000; // every 5 seconds
