@@ -1115,6 +1115,55 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
                                    statusLine2);
     }
 #endif
+
+#if defined(NM_EPD_420)
+    {
+        int dashboardTop = getTextPositions(display)[line] + 8;
+        if (dashboardTop < 96)
+            dashboardTop = 96;
+        const int dashboardBottom = SCREEN_HEIGHT - FONT_HEIGHT_SMALL - 8;
+        const int leftX = x + 6;
+        const int rightX = x + (SCREEN_WIDTH / 2) + 8;
+
+        meshtastic_EnvironmentMetrics env = meshtastic_EnvironmentMetrics_init_zero;
+        const bool hasEnv = nodeDB->copyNodeEnvironment(nodeDB->getNodeNum(), env);
+
+        char tempStr[24] = "Indoor --.-C";
+        char humStr[20] = "Humidity --%";
+        if (hasEnv && env.has_temperature) {
+            snprintf(tempStr, sizeof(tempStr), "Indoor %.1fC", env.temperature);
+        }
+        if (hasEnv && env.has_relative_humidity) {
+            snprintf(humStr, sizeof(humStr), "Humidity %.0f%%", env.relative_humidity);
+        }
+
+        char addressStr[48] = "Addr: No GPS";
+        meshtastic_PositionLite position = meshtastic_PositionLite_init_zero;
+        if (ourNode && nodeDB->copyNodePosition(ourNode->num, position) && (position.latitude_i || position.longitude_i)) {
+            snprintf(addressStr, sizeof(addressStr), "Addr: %.4f, %.4f", DegD(position.latitude_i), DegD(position.longitude_i));
+        } else if (config.position.fixed_position) {
+            strncpy(addressStr, "Addr: fixed position", sizeof(addressStr) - 1);
+            addressStr[sizeof(addressStr) - 1] = '\0';
+        }
+
+        display->drawLine(x, dashboardTop - 5, x + SCREEN_WIDTH, dashboardTop - 5);
+        display->drawLine(x + SCREEN_WIDTH / 2, dashboardTop, x + SCREEN_WIDTH / 2, dashboardBottom);
+
+        display->setFont(FONT_MEDIUM);
+        display->drawString(leftX, dashboardTop, "Weather");
+        display->drawString(rightX, dashboardTop, "Local");
+
+        display->setFont(FONT_LARGE);
+        display->drawString(leftX, dashboardTop + 28, "--");
+        display->drawString(rightX, dashboardTop + 28, tempStr);
+
+        display->setFont(FONT_SMALL);
+        display->drawString(leftX, dashboardTop + 62, "Condition: --");
+        display->drawString(leftX, dashboardTop + 78, addressStr);
+        display->drawString(rightX, dashboardTop + 62, humStr);
+        display->drawString(rightX, dashboardTop + 78, hasEnv ? "Sensor: AHT20" : "Sensor: pending");
+    }
+#endif
     graphics::drawCommonFooter(display, x, y);
 }
 
