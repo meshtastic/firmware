@@ -321,6 +321,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_MESH_NODE_T1 = 133,
     /* B&Q Consulting Station G3: TBD */
     meshtastic_HardwareModel_STATION_G3 = 134,
+    /* Lilygo T-Impulse-Plus */
+    meshtastic_HardwareModel_T_IMPULSE_PLUS = 135,
+    /* Lilygo T-Echo Card */
+    meshtastic_HardwareModel_T_ECHO_CARD = 136,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
