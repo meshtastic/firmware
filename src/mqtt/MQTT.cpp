@@ -417,6 +417,33 @@ void mqttInit()
     new MQTT();
 }
 
+void MQTT::reinitTopics()
+{
+    cryptTopic = "/2/e/";
+    jsonTopic = "/2/json/";
+    mapTopic = "/2/map/";
+
+    if (*moduleConfig.mqtt.root) {
+        cryptTopic = moduleConfig.mqtt.root + cryptTopic;
+        jsonTopic = moduleConfig.mqtt.root + jsonTopic;
+        mapTopic = moduleConfig.mqtt.root + mapTopic;
+        isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
+    } else {
+        cryptTopic = "msh" + cryptTopic;
+        jsonTopic = "msh" + jsonTopic;
+        mapTopic = "msh" + mapTopic;
+        isConfiguredForDefaultRootTopic = true;
+    }
+
+#if HAS_NETWORKING
+    // Force a broker reconnect so subscriptions are refreshed with the new topic prefix
+    if (pubSub.connected()) {
+        pubSub.disconnect();
+    }
+    isConnected = false;
+#endif
+}
+
 #if HAS_NETWORKING
 MQTT::MQTT() : MQTT(std::unique_ptr<MQTTClient>(new MQTTClient())) {}
 MQTT::MQTT(std::unique_ptr<MQTTClient> _mqttClient)
@@ -431,17 +458,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         assert(!mqtt);
         mqtt = this;
 
-        if (*moduleConfig.mqtt.root) {
-            cryptTopic = moduleConfig.mqtt.root + cryptTopic;
-            jsonTopic = moduleConfig.mqtt.root + jsonTopic;
-            mapTopic = moduleConfig.mqtt.root + mapTopic;
-            isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
-        } else {
-            cryptTopic = "msh" + cryptTopic;
-            jsonTopic = "msh" + jsonTopic;
-            mapTopic = "msh" + mapTopic;
-            isConfiguredForDefaultRootTopic = true;
-        }
+        reinitTopics();
 
         if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
             map_position_precision = Default::getConfiguredOrDefault(moduleConfig.mqtt.map_report_settings.position_precision,
