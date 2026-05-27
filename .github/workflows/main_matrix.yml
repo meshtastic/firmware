@@ -290,7 +290,7 @@ jobs:
             if [ -n "$ARTIFACT_NAME" ]; then
               gh run download "$RUN_ID" -R "${{ github.repository }}" \
                 --name "$ARTIFACT_NAME" --dir ./baseline-develop/
-              cp ./baseline-develop/current-sizes.json ./develop-sizes.json
+              cp "./baseline-develop/${ARTIFACT_NAME}/current-sizes.json" ./develop-sizes.json
               echo "found=true" >> "$GITHUB_OUTPUT"
             else
               echo "found=false" >> "$GITHUB_OUTPUT"
@@ -315,7 +315,7 @@ jobs:
             if [ -n "$ARTIFACT_NAME" ]; then
               gh run download "$RUN_ID" -R "${{ github.repository }}" \
                 --name "$ARTIFACT_NAME" --dir ./baseline-master/
-              cp ./baseline-master/current-sizes.json ./master-sizes.json
+              cp "./baseline-master/${ARTIFACT_NAME}/current-sizes.json" ./master-sizes.json
               echo "found=true" >> "$GITHUB_OUTPUT"
             else
               echo "found=false" >> "$GITHUB_OUTPUT"
