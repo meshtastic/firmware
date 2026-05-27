@@ -4,10 +4,10 @@ Meshtastic support for the **WIZnet W5500-EVB-Pico2**, a Raspberry Pi Pico 2 dev
 
 This variant is hardware-twin of [`pico2_w5500_e22`](../diy/pico2_w5500_e22/) (same LoRa pinout, same W5500 pin mapping) but targets the WIZnet PCB rather than a standalone Pico 2 + external W5500 module. The two key differences are:
 
-| | `pico2_w5500_e22` | `wiznet_5500_evb_pico2_e22p` |
-|---|---|---|
-| Board target | `rpipico2` (4 MB flash) | `wiznet_5500_evb_pico2` (**2 MB flash**) |
-| W5500 PHY | External breakout module (you wire it) | Integrated on the PCB (hard-wired) |
+|              | `pico2_w5500_e22`                      | `wiznet_5500_evb_pico2_e22p`             |
+| ------------ | -------------------------------------- | ---------------------------------------- |
+| Board target | `rpipico2` (4 MB flash)                | `wiznet_5500_evb_pico2` (**2 MB flash**) |
+| W5500 PHY    | External breakout module (you wire it) | Integrated on the PCB (hard-wired)       |
 
 > ⚠️ Flashing a W5500-EVB-Pico2 with the `pico2_w5500_e22` env builds for a 4 MB flash target and can silently overflow the 2 MB available on the WIZnet PCB. Use this variant for the WIZnet board.
 
@@ -17,9 +17,9 @@ The LoRa wiring and `variant.h` are shared with `diy/pico2_w5500_e22` via `-I va
 
 ## Required Hardware
 
-| Component | Model                  | Notes                                                                |
-| --------- | ---------------------- | -------------------------------------------------------------------- |
-| Board     | WIZnet W5500-EVB-Pico2 | RP2350 @ 150 MHz, 512 KB RAM, **2 MB flash**, on-board W5500         |
+| Component | Model                  | Notes                                                                          |
+| --------- | ---------------------- | ------------------------------------------------------------------------------ |
+| Board     | WIZnet W5500-EVB-Pico2 | RP2350 @ 150 MHz, 512 KB RAM, **2 MB flash**, on-board W5500                   |
 | LoRa      | EBYTE E22P-868M30S     | SX1262 + 30 dBm PA, 868 MHz (Europe band); RFEN combines LNA + PA enable lines |
 
 The W5500-EVB-Pico2 carries a smaller Q-SPI flash (2 MB) than a stock Pi Pico 2 (4 MB). The board target `wiznet_5500_evb_pico2` selects the correct flash size so the linker fails fast if the image overflows, instead of producing a UF2 that gets truncated when flashed to the device.
@@ -53,19 +53,19 @@ The W5500-EVB-Pico2 carries a smaller Q-SPI flash (2 MB) than a stock Pi Pico 2 
 
 ### E22P-868M30S LoRa (SPI1, external)
 
-| E22P signal | RP2350 GPIO | Notes                                                  |
-| ----------- | ----------- | ------------------------------------------------------ |
-| SCK         | GP10        | SPI1 clock                                             |
-| MOSI        | GP11        | SPI1 TX                                                |
-| MISO        | GP12        | SPI1 RX                                                |
-| NSS / CS    | GP13        | Chip select                                            |
-| RESET       | GP15        | Active LOW reset                                       |
-| DIO1        | GP14        | IRQ interrupt                                          |
-| BUSY        | GP2         | Module busy indicator                                  |
-| RFEN        | GP3         | Combined LNA + PA enable — held HIGH at all times      |
-| TXEN        | ← DIO2      | Bridge on the module (see below)                       |
-| VCC         | 3.3V        | Add a 100 µF capacitor close to the module             |
-| GND         | GND         | —                                                      |
+| E22P signal | RP2350 GPIO | Notes                                             |
+| ----------- | ----------- | ------------------------------------------------- |
+| SCK         | GP10        | SPI1 clock                                        |
+| MOSI        | GP11        | SPI1 TX                                           |
+| MISO        | GP12        | SPI1 RX                                           |
+| NSS / CS    | GP13        | Chip select                                       |
+| RESET       | GP15        | Active LOW reset                                  |
+| DIO1        | GP14        | IRQ interrupt                                     |
+| BUSY        | GP2         | Module busy indicator                             |
+| RFEN        | GP3         | Combined LNA + PA enable — held HIGH at all times |
+| TXEN        | ← DIO2      | Bridge on the module (see below)                  |
+| VCC         | 3.3V        | Add a 100 µF capacitor close to the module        |
+| GND         | GND         | —                                                 |
 
 ---
 
