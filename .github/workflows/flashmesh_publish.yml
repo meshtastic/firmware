@@ -41,7 +41,7 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
           fetch-depth: 1
@@ -57,21 +57,37 @@ jobs:
 
       - name: Dedup check (skip if SHA already in catalog)
         id: dedup
+        env:
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+          PIO_ENV: ${{ matrix.pio_env }}
+          SHA7: ${{ steps.meta.outputs.sha7 }}
         run: |
-          if [ "${{ inputs.force_rebuild }}" = "true" ]; then
+          if [ "$FORCE_REBUILD" = "true" ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "::notice::force_rebuild=true — bypassing dedup"
             exit 0
           fi
-          EXISTS=$(curl -fsS "$FLASHMESH_ENDPOINT/api/firmwares?env=${{ matrix.pio_env }}" \
-            | jq --arg sha "${{ steps.meta.outputs.sha7 }}" \
-                 '[.[] | select(.sha==$sha)] | length')
+          EXISTS=$(curl -fsS "$FLASHMESH_ENDPOINT/api/firmwares?env=$PIO_ENV" \
+            | jq --arg sha "$SHA7" '[.[] | select(.sha==$sha)] | length')
           if [ "$EXISTS" -gt 0 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::SHA ${{ steps.meta.outputs.sha7 }} already in catalog for ${{ matrix.pio_env }} — skipping"
+            echo "::notice::SHA $SHA7 already in catalog for $PIO_ENV — skipping"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Cache PlatformIO packages
+        if: steps.dedup.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/packages
+            ~/.platformio/platforms
+            ~/.platformio/cache
+          key: pio-${{ runner.os }}-${{ matrix.pio_env }}-${{ hashFiles('platformio.ini', format('variants/**/{0}/platformio.ini', matrix.pio_env)) }}
+          restore-keys: |
+            pio-${{ runner.os }}-${{ matrix.pio_env }}-
+            pio-${{ runner.os }}-
 
       - name: Set up Python
         if: steps.dedup.outputs.skip != 'true'
