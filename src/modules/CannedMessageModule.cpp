@@ -512,9 +512,14 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             LaunchWithDestination(NODENUM_BROADCAST);
             return 1;
         }
-        // Space is reserved for advancing frames (handled by Screen), so it must not open the composer
-        if (event->kbchar == ' ')
-            return 0;
+        // Allow opening free text compose without printing a char
+        if (event->kbchar == INPUT_BROKER_MSG_OPEN_FREETEXT) {
+            updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            notifyObservers(&e);
+            return 1;
+        }
         // Printable char (ASCII) opens free text compose
         if (event->kbchar >= 32 && event->kbchar <= 126) {
             updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
