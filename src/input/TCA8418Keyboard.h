@@ -12,12 +12,16 @@ class TCA8418Keyboard : public TCA8418KeyboardBase
 
   protected:
     void pressed(uint8_t key) override;
+    void held(void) override;
     void released(void) override;
 
     uint8_t last_key;
     uint8_t next_key;
     uint32_t last_tap;
+    uint32_t press_started_at;
+    uint32_t last_repeat;
     uint8_t char_idx;
     int32_t tap_interval;
     bool should_backspace;
+    bool is_repeating_long_press;
 };
