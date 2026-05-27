@@ -564,6 +564,10 @@ std::unique_ptr<RadioInterface> initLoRa()
                             config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M;
 #ifdef HAS_HAM_2M_ONLY
     const bool mismatch = !is2mRegion && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+#elif defined(HAS_HAM_2M) && !defined(HAS_HAM_2M_ONLY)
+    // If hardware specifies HAS_HAM_2M without HAS_HAM_2M_ONLY, it supports 2m but isn't restricted to it.
+    // In this case, we allow any region.
+    const bool mismatch = false;
 #else
     const bool mismatch = is2mRegion;
 #endif

@@ -2,6 +2,9 @@
 #define ADC_CHANNEL ADC_CHANNEL_7
 #define BATTERY_SENSE_SAMPLES 30
 
+// A variant has 2M support
+#define HAS_HAM_2M 1
+
 // ratio of voltage divider = 2.0 (R42=100k, R43=100k)
 #define ADC_MULTIPLIER 2
 
