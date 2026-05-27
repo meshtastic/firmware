@@ -55,7 +55,7 @@ static unsigned char TCA8418NavMap[_TCA8418_NUM_KEYS] = {
     Key::NONE,  // 7
     Key::DOWN,  // 8
     Key::NONE,  // 9
-    Key::BT_TOGGLE,   // *
+    Key::NONE,   // *
     Key::GPS_TOGGLE,  // 0
     Key::MUTE_TOGGLE  // #
 };
