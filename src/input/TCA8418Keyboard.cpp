@@ -6,7 +6,7 @@
 #define _TCA8418_NUM_KEYS 12
 
 #define _TCA8418_LONG_PRESS_THRESHOLD 1000
-#define _TCA8418_LONG_PRESS_REPEAT_INTERVAL 125
+#define _TCA8418_LONG_PRESS_REPEAT_INTERVAL 250
 #define _TCA8418_MULTI_TAP_THRESHOLD 750
 
 using Key = TCA8418KeyboardBase::TCA8418Key;
@@ -55,7 +55,7 @@ static unsigned char TCA8418NavMap[_TCA8418_NUM_KEYS] = {
     Key::NONE,  // 7
     Key::DOWN,  // 8
     Key::NONE,  // 9
-    Key::BT_TOGGLE,   // *
+    Key::NONE,   // *
     Key::GPS_TOGGLE,  // 0
     Key::MUTE_TOGGLE  // #
 };
