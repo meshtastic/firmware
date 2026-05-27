@@ -13,6 +13,9 @@
 #if HAS_ETHERNET && defined(HAS_ETHERNET_API)
 #include "mesh/eth/ethApiServer.h"
 #endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API)
+#include "mesh/eth/ethCert.h"
+#endif
 #ifdef USE_ARDUINO_ETHERNET
 #include <Ethernet.h> // arduino-libraries/Ethernet — supports W5100/W5200/W5500
 // Shorter DHCP timeout so LoRa startup isn't blocked when no DHCP server is present.
@@ -167,6 +170,15 @@ static int32_t reconnectETH()
 #endif
 #if HAS_ETHERNET && defined(HAS_ETHERNET_API)
             initEthApiServer();
+#endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API)
+            {
+                // Phase 2.1 standalone validation — exercise the cert path so
+                // we see the gen + persist + reload cycle in RTT logs. Phase
+                // 2.2 will keep the cert in a long-lived TLS context.
+                EthCertMaterial cert;
+                ensureCertForIp(Ethernet.localIP(), cert);
+            }
 #endif
 
             ethStartupComplete = true;
