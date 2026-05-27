@@ -1,4 +1,5 @@
 #include "Router.h"
+#include "AirtimePolicy.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "MeshRadio.h"
@@ -378,6 +379,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             return meshtastic_Routing_Error_BAD_REQUEST;
         }
     }
+
+    // DCR needs portnum/priority while payload is still decoded, but selected
+    // CR is physical-layer metadata and does not belong in MeshPacket.
+    if (airtimePolicy && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
+        airtimePolicy->rememberPacketClass(*p, millis());
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {

@@ -243,6 +243,34 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     return true;
 }
 
+template <typename T> bool LR20x0Interface<T>::setActiveCodingRate(uint8_t codingRate)
+{
+    if (codingRate < 5 || codingRate > 8)
+        return false;
+
+    // Keep the preset's long-interleaving behavior while changing only the CR.
+    int err = lora.setCodingRate(codingRate, codingRate != 7);
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("LR20x0 set DCR coding rate %s%d", radioLibErr, err);
+        return false;
+    }
+
+    activeCr = codingRate;
+    return true;
+}
+
+template <typename T> bool LR20x0Interface<T>::restoreBaseCodingRate()
+{
+    int err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("LR20x0 restore coding rate %s%d", radioLibErr, err);
+        return false;
+    }
+
+    activeCr = cr;
+    return true;
+}
+
 template <typename T> void LR20x0Interface<T>::disableInterrupt()
 {
     lora.clearIrqAction();
