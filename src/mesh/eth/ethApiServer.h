@@ -6,10 +6,10 @@
 
 #define ETH_API_PORT 80
 
-/// Initialize the Ethernet HTTP API server (call after Ethernet is connected)
+/// Initialize the Ethernet HTTP API server (call after Ethernet is connected).
+/// Spawns an internal OSThread that polls accept() on a sub-second cadence,
+/// independent of the 5s Ethernet client periodic — needed because the web
+/// client makes many small back-to-back requests.
 void initEthApiServer();
-
-/// Poll for incoming HTTP API connections (call periodically from ethClient loop)
-void ethApiServerLoop();
 
 #endif // HAS_ETHERNET && HAS_ETHERNET_API
