@@ -1,0 +1,188 @@
+name: FlashMesh — Publish W5500 Variants
+
+# Manual trigger only. Run after merging upstream into develop.
+# Builds the two W5500 variants and POSTs each to /api/admin/upload on flasher.cvaldess.com.
+# Skips per-variant if the current SHA7 is already in the catalog (override with force_rebuild).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_prefix:
+        description: 'Upstream version prefix (final version = <prefix>.<sha7>)'
+        required: true
+        default: '2.8.0'
+        type: string
+      force_rebuild:
+        description: 'Rebuild + re-upload even if SHA already in catalog'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pio_env:
+          - wiznet_5500_evb_pico2_e22p
+          - pico2_w5500_e22
+    env:
+      FLASHMESH_ENDPOINT: https://flasher.cvaldess.com
+    steps:
+      - name: Mask secrets in logs
+        run: |
+          echo "::add-mask::${{ secrets.FLASHMESH_ADMIN_TOKEN }}"
+          if [ -n "${{ secrets.OTA_PSK_HEX }}" ]; then
+            echo "::add-mask::${{ secrets.OTA_PSK_HEX }}"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Compute SHA7 + version
+        id: meta
+        run: |
+          SHA7=$(git rev-parse --short=7 HEAD)
+          VERSION="${{ inputs.version_prefix }}.$SHA7"
+          echo "sha7=$SHA7" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "::notice::pio_env=${{ matrix.pio_env }}  sha7=$SHA7  version=$VERSION"
+
+      - name: Dedup check (skip if SHA already in catalog)
+        id: dedup
+        run: |
+          if [ "${{ inputs.force_rebuild }}" = "true" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::force_rebuild=true — bypassing dedup"
+            exit 0
+          fi
+          EXISTS=$(curl -fsS "$FLASHMESH_ENDPOINT/api/firmwares?env=${{ matrix.pio_env }}" \
+            | jq --arg sha "${{ steps.meta.outputs.sha7 }}" \
+                 '[.[] | select(.sha==$sha)] | length')
+          if [ "$EXISTS" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::SHA ${{ steps.meta.outputs.sha7 }} already in catalog for ${{ matrix.pio_env }} — skipping"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.dedup.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        if: steps.dedup.outputs.skip != 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
+
+      - name: Inject OTA PSK (optional secret)
+        if: steps.dedup.outputs.skip != 'true'
+        env:
+          OTA_PSK_HEX: ${{ secrets.OTA_PSK_HEX }}
+        run: |
+          if [ -z "${OTA_PSK_HEX:-}" ]; then
+            echo "::notice::OTA_PSK_HEX not set — using compiled fallback in otaShared.cpp"
+            exit 0
+          fi
+          if [ ${#OTA_PSK_HEX} -ne 64 ]; then
+            echo "::error::OTA_PSK_HEX must be 64 hex chars (32 bytes); got ${#OTA_PSK_HEX}"
+            exit 1
+          fi
+          if ! [[ "$OTA_PSK_HEX" =~ ^[0-9a-fA-F]+$ ]]; then
+            echo "::error::OTA_PSK_HEX must be hex only"
+            exit 1
+          fi
+          PSK_C=$(python3 -c "import sys;h=sys.argv[1];print('{'+','.join(f'0x{h[i:i+2]}' for i in range(0,len(h),2))+'}')" "$OTA_PSK_HEX")
+          # PSK_C is masked transitively (OTA_PSK_HEX is masked, derived value follows)
+          echo "::add-mask::$PSK_C"
+          echo "PLATFORMIO_BUILD_FLAGS=-D USERPREFS_OTA_PSK=$PSK_C" >> "$GITHUB_ENV"
+          echo "::notice::OTA PSK injected (32 bytes)"
+
+      - name: Build firmware
+        if: steps.dedup.outputs.skip != 'true'
+        run: pio run -e ${{ matrix.pio_env }}
+
+      - name: Sanity check — OTA flag survived sync
+        if: steps.dedup.outputs.skip != 'true'
+        run: |
+          ELF=.pio/build/${{ matrix.pio_env }}/firmware.elf
+          test -f "$ELF" || { echo "::error::firmware.elf missing"; exit 1; }
+          NM_BIN=$(find ~/.platformio/packages -name 'arm-none-eabi-nm' 2>/dev/null | head -1)
+          if [ -z "$NM_BIN" ]; then
+            echo "::warning::arm-none-eabi-nm not found — skipping symbol sanity check"
+            exit 0
+          fi
+          if ! "$NM_BIN" -C "$ELF" | grep -qE 'initEthOTA|initEthHttpOTA|OTAShared::'; then
+            echo "::error::HAS_ETHERNET_OTA symbols missing — flag lost in platformio.ini?"
+            exit 1
+          fi
+          echo "::notice::OTA symbols present in build"
+
+      - name: Gzip firmware
+        if: steps.dedup.outputs.skip != 'true'
+        run: |
+          gzip -9 -k -f .pio/build/${{ matrix.pio_env }}/firmware.bin
+          ls -la .pio/build/${{ matrix.pio_env }}/firmware.bin .pio/build/${{ matrix.pio_env }}/firmware.bin.gz
+
+      - name: Compute local CRC32
+        if: steps.dedup.outputs.skip != 'true'
+        id: crc
+        run: |
+          LOCAL_CRC=$(python3 -c "import sys,zlib;print(format(zlib.crc32(open(sys.argv[1],'rb').read()) & 0xffffffff, '08x'))" \
+            .pio/build/${{ matrix.pio_env }}/firmware.bin.gz)
+          echo "local_crc=$LOCAL_CRC" >> "$GITHUB_OUTPUT"
+          echo "::notice::local crc32(.bin.gz) = $LOCAL_CRC"
+
+      - name: Upload to FlashMesh admin endpoint
+        if: steps.dedup.outputs.skip != 'true'
+        env:
+          TOKEN: ${{ secrets.FLASHMESH_ADMIN_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::FLASHMESH_ADMIN_TOKEN secret not set"
+            exit 1
+          fi
+          RESP=$(mktemp)
+          HTTP=$(curl -sS -o "$RESP" -w '%{http_code}' \
+            -X POST "$FLASHMESH_ENDPOINT/api/admin/upload" \
+            -H "Authorization: Bearer $TOKEN" \
+            -F "pio_env=${{ matrix.pio_env }}" \
+            -F "version=${{ steps.meta.outputs.version }}" \
+            -F "sha=${{ steps.meta.outputs.sha7 }}" \
+            -F "firmware=@.pio/build/${{ matrix.pio_env }}/firmware.bin.gz;type=application/gzip")
+          echo "--- server response ---"
+          cat "$RESP"; echo
+          echo "--- end ---"
+          if [ "$HTTP" -ne 200 ]; then
+            echo "::error::upload failed HTTP $HTTP"
+            exit 1
+          fi
+          SERVER_CRC=$(jq -r '.entry.crc32_hex' < "$RESP")
+          if [ "$SERVER_CRC" != "${{ steps.crc.outputs.local_crc }}" ]; then
+            echo "::error::server CRC $SERVER_CRC != local ${{ steps.crc.outputs.local_crc }}"
+            exit 1
+          fi
+          echo "::notice::server CRC matches local: $SERVER_CRC"
+
+      - name: Verify round-trip download
+        if: steps.dedup.outputs.skip != 'true'
+        run: |
+          KEY="firmware/${{ matrix.pio_env }}/${{ steps.meta.outputs.version }}/${{ steps.meta.outputs.sha7 }}/firmware.bin.gz"
+          DL=$(mktemp)
+          curl -fsS "$FLASHMESH_ENDPOINT/api/firmware/$KEY" -o "$DL"
+          DL_CRC=$(python3 -c "import sys,zlib;print(format(zlib.crc32(open(sys.argv[1],'rb').read()) & 0xffffffff, '08x'))" "$DL")
+          if [ "$DL_CRC" != "${{ steps.crc.outputs.local_crc }}" ]; then
+            echo "::error::round-trip CRC $DL_CRC != local ${{ steps.crc.outputs.local_crc }}"
+            exit 1
+          fi
+          echo "::notice::round-trip OK ($DL_CRC, $(stat -c%s "$DL") bytes)"
