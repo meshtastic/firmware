@@ -3,6 +3,7 @@
 #if HAS_ETHERNET && defined(HAS_ETHERNET_API)
 
 #include "ethApiServer.h"
+#include "concurrency/OSThread.h"
 #include "mesh/PhoneAPI.h"
 #include <Arduino.h>
 
@@ -18,6 +19,13 @@ static constexpr size_t MAX_LINE_LEN = 256;
 static constexpr size_t MAX_HEADER_LINES = 32;
 static constexpr const char *PROTOBUF_SCHEMA =
     "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto";
+
+// Adaptive poll intervals (mirror mesh/http/WebServer.cpp ESP32 pattern).
+static constexpr uint32_t ACTIVE_THRESHOLD_MS = 5000;
+static constexpr uint32_t MEDIUM_THRESHOLD_MS = 30000;
+static constexpr int32_t ACTIVE_INTERVAL_MS = 20;
+static constexpr int32_t MEDIUM_INTERVAL_MS = 100;
+static constexpr int32_t IDLE_INTERVAL_MS = 500;
 
 // PhoneAPI subclass for the Ethernet HTTP transport. Mirrors mesh/http/HttpAPI
 // but lives outside the MESHTASTIC_EXCLUDE_WEBSERVER gate (which is ESP32-only).
@@ -282,25 +290,50 @@ static void handleClient(EthernetClient &client)
     }
 }
 
+// Dedicated OSThread so accept() runs on sub-second cadence. The Ethernet
+// client periodic ticks every 5s which is fine for NTP/MQTT but cripples a
+// chatty web client doing many small back-to-back requests (6.5s TTFB observed
+// before; W5500 sockets get exhausted faster than the periodic can drain).
+class EthApiServerThread : public concurrency::OSThread
+{
+  public:
+    EthApiServerThread() : concurrency::OSThread("EthApiServer") { lastActivityMs = millis(); }
+
+  protected:
+    int32_t runOnce() override
+    {
+        if (apiServer) {
+            EthernetClient client = apiServer->accept();
+            if (client) {
+                lastActivityMs = millis();
+                handleClient(client);
+                client.stop();
+            }
+        }
+
+        uint32_t since = millis() - lastActivityMs;
+        if (since < ACTIVE_THRESHOLD_MS)
+            return ACTIVE_INTERVAL_MS;
+        if (since < MEDIUM_THRESHOLD_MS)
+            return MEDIUM_INTERVAL_MS;
+        return IDLE_INTERVAL_MS;
+    }
+
+  private:
+    uint32_t lastActivityMs;
+};
+
+static EthApiServerThread *apiThread = nullptr;
+
 void initEthApiServer()
 {
     if (apiServer)
         return;
     apiServer = new EthernetServer(ETH_API_PORT);
     apiServer->begin();
-    LOG_INFO("ETH API: server listening on TCP port %d (phase 1 — fromradio/toradio live)",
+    apiThread = new EthApiServerThread(); // OSThread base auto-registers with the scheduler
+    LOG_INFO("ETH API: server listening on TCP port %d (phase 1, OSThread @ 20ms)",
              ETH_API_PORT);
-}
-
-void ethApiServerLoop()
-{
-    if (!apiServer)
-        return;
-    EthernetClient client = apiServer->accept();
-    if (client) {
-        handleClient(client);
-        client.stop();
-    }
 }
 
 #endif // HAS_ETHERNET && HAS_ETHERNET_API

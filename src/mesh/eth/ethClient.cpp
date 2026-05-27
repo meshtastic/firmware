@@ -199,9 +199,7 @@ static int32_t reconnectETH()
     ethOTALoop();
     ethHttpOTALoop();
 #endif
-#if HAS_ETHERNET && defined(HAS_ETHERNET_API)
-    ethApiServerLoop();
-#endif
+    // ethApiServer runs on its own OSThread (20ms ticks) — not polled here.
 
     return 5000; // every 5 seconds
 }
