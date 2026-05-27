@@ -234,10 +234,16 @@ const RegionInfo regions[] = {
     RDEF(ITU1_2M, 144.0f, 146.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST)),
 
     /*
-        ITU Region 2 (Americas) and Region 3 (Asia/Pacific) amateur 2m allocation: 144.000 - 148.000 MHz.
+        ITU Region 2 (Americas) amateur 2m allocation: 144.000 - 148.000 MHz.
         Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
     */
-    RDEF(ITU23_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST)),
+    RDEF(ITU2_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST)),
+
+    /*
+        ITU Region 3 (Asia/Pacific) amateur 2m allocation: 144.000 - 148.000 MHz.
+        Typical admin rules allow well above 30 dBm for licensed operators.
+    */
+    RDEF(ITU3_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST)),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
@@ -554,7 +560,8 @@ std::unique_ptr<RadioInterface> initLoRa()
     // and boards without 2m support must not run one. In either mismatch, drop to UNSET so the
     // first-start picker runs and the user re-selects a legal region for the hardware.
     const bool is2mRegion = config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M ||
-                            config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M;
+                            config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M ||
+                            config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M;
 #ifdef HAS_HAM_2M_ONLY
     const bool mismatch = !is2mRegion && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #else
@@ -882,7 +889,8 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
     }
 
     const bool is2mRegion = loraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M ||
-                            loraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M;
+                            loraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M ||
+                            loraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M;
 
 #ifdef HAS_HAM_2M_ONLY
     // This hardware's front-end / band-pass filter only passes 144-148 MHz. Any other region
@@ -897,7 +905,7 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
     }
 #else
     // Conversely, the 2m ham regions are illegal RF output for hardware not designed for that band
-    // (e.g. selecting ITU23_2M on a 915 MHz node would transmit at ~3x the expected frequency with
+    // (e.g. selecting ITU2_2M on a 915 MHz node would transmit at ~3x the expected frequency with
     // an untuned antenna and filter). Refuse the selection entirely.
     if (is2mRegion) {
         char err_string[160];

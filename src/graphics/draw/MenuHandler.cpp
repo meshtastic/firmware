@@ -177,12 +177,13 @@ void menuHandler::OnboardMessage()
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
 #ifdef HAS_HAM_2M_ONLY
-    // Hardware is restricted to the amateur 2m band — offer only the two 2m regions
+    // Hardware is restricted to the amateur 2m band — offer only the 2m regions
     // so the user cannot pick a sub-GHz region the RF path cannot emit or receive.
     static const LoraRegionOption regionOptions[] = {
         {"Back", OptionsAction::Back},
         {"ITU1_2M (144-146)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M},
-        {"ITU23_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M},
+        {"ITU2_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M},
+        {"ITU3_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M},
     };
 #else
     static const LoraRegionOption regionOptions[] = {
@@ -215,7 +216,9 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"KZ_863", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_KZ_863},
         {"NP_865", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NP_865},
         {"BR_902", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_BR_902},
-
+        {"ITU1_2M (144-146)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M},
+        {"ITU2_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M},
+        {"ITU3_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M},
     };
 #endif
 
