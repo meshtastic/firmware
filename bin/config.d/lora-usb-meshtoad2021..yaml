@@ -1,0 +1,26 @@
+Meta:
+  name: meshtoad2021
+  support: maybe
+  compatible:
+    - usb
+
+Lora:
+  Module: lr2021
+  CS: 0
+  IRQ: 6
+  Reset: 2
+  Busy: 4
+  DIO3_TCXO_VOLTAGE: 1.8
+  spidev: ch341
+  USB_PID: 0x5512
+  USB_VID: 0x1A86
+  # Optional: Set the serial number for multi-radio support
+  # USB_Serialnum: 13374201
+
+rfswitch_table:
+  pins: [DIO5, DIO6, DIO8]
+  MODE_STBY: [LOW, LOW, LOW]
+  MODE_RX: [LOW, LOW, LOW]
+  MODE_TX: [LOW, HIGH, LOW]
+  MODE_RX_HF: [HIGH, LOW, LOW]
+  MODE_TX_HF: [LOW, LOW, HIGH]
