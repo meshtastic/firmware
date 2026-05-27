@@ -325,6 +325,10 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_TAB;
                 break;
+            case TCA8418KeyboardBase::OPEN_FREETEXT:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_OPEN_FREETEXT;
+                break;
             case TCA8418KeyboardBase::FUNCTION_F1:
                 e.inputEvent = INPUT_BROKER_FN_F1;
                 e.kbchar = 0x00;

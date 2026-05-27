@@ -5,8 +5,8 @@
 #define _TCA8418_ROWS 4
 #define _TCA8418_NUM_KEYS 12
 
-#define _TCA8418_LONG_PRESS_THRESHOLD 1200
-#define _TCA8418_LONG_PRESS_REPEAT_INTERVAL 175
+#define _TCA8418_LONG_PRESS_THRESHOLD 1000
+#define _TCA8418_LONG_PRESS_REPEAT_INTERVAL 125
 #define _TCA8418_MULTI_TAP_THRESHOLD 750
 
 using Key = TCA8418KeyboardBase::TCA8418Key;
@@ -15,7 +15,7 @@ using Key = TCA8418KeyboardBase::TCA8418Key;
 static uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {13, 7, 7, 7, 7, 7, 9, 7, 9, 1, 2, 4};
 
 static unsigned char TCA8418TapMap[_TCA8418_NUM_KEYS][13] = {
-    {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'}, // 1
+    {'.', ',', '?', '!', '1', ':', ';', '-', '_', '\\', '/', '(', ')'}, // 1
     {'a', 'b', 'c', '2', 'A', 'B', 'C'},                                // 2
     {'d', 'e', 'f', '3', 'D', 'E', 'F'},                                // 3
     {'g', 'h', 'i', '4', 'G', 'H', 'I'},                                // 4
@@ -48,7 +48,7 @@ static unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
 static unsigned char TCA8418NavMap[_TCA8418_NUM_KEYS] = {
     Key::ESC,   // 1
     Key::UP,    // 2
-    Key::NONE,  // 3
+    Key::OPEN_FREETEXT,  // 3
     Key::LEFT,  // 4
     Key::SELECT,  // 5
     Key::RIGHT, // 6
@@ -61,18 +61,18 @@ static unsigned char TCA8418NavMap[_TCA8418_NUM_KEYS] = {
 };
 
 
-static bool isRepeatable(unsigned char key)
+static bool isRepeatable(Key key)
 {
     return key == Key::UP || key == Key::DOWN || key == Key::LEFT || key == Key::RIGHT || key == Key::BSP;
 }
 
-static unsigned char getDirectionalRepeatKey(uint8_t key_index, bool is_char_input_allowed)
+static Key getRepeatKey(uint8_t key_index, bool is_char_input_allowed)
 {
     if (key_index >= _TCA8418_NUM_KEYS) {
         return Key::NONE;
     }
 
-    unsigned char repeat_key = is_char_input_allowed ? TCA8418LongPressMap[key_index] : TCA8418NavMap[key_index];
+    Key repeat_key = static_cast<Key>(is_char_input_allowed ? TCA8418LongPressMap[key_index] : TCA8418NavMap[key_index]);
     return isRepeatable(repeat_key) ? repeat_key : Key::NONE;
 }
 
@@ -146,7 +146,7 @@ void TCA8418Keyboard::held()
     }
 
     bool is_char_input_allowed = cannedMessageModule && cannedMessageModule->isCharInputAllowed();
-    unsigned char repeat_key = getDirectionalRepeatKey(last_key, is_char_input_allowed);
+    unsigned char repeat_key = getRepeatKey(last_key, is_char_input_allowed);
     if (repeat_key == Key::NONE) {
         return;
     }
