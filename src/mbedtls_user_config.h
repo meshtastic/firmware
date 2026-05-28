@@ -37,3 +37,17 @@
 // PSA persistent storage: requires POSIX fopen. Unused.
 #undef MBEDTLS_PSA_ITS_FILE_C
 #undef MBEDTLS_PSA_CRYPTO_STORAGE_C
+
+// Compile out TLS 1.3 entirely. pico-sdk's mbedtls_config defines
+// MBEDTLS_SSL_PROTO_TLS1_3 but the server-side 1.3 plumbing in this
+// vendored build is fragile: capping max_tls_version=TLS1_2 at runtime
+// is enough for Firefox / openssl-3 (they downgrade cleanly), but
+// Chrome's ClientHello carries TLS 1.3 extensions (post-quantum key
+// shares, Encrypted ClientHello, etc.) that mbedtls tries to *parse*
+// during the initial ClientHello processing before deciding to
+// downgrade — and that parse crashes the board (no handshake state log
+// ever fires, the crash is inside the first mbedtls_ssl_handshake()
+// call). Removing the 1.3 code from the build sidesteps the parsers
+// entirely; mbedtls will tell Chrome "TLS 1.2 only" via the
+// ServerHello and ignore the 1.3 extensions.
+#undef MBEDTLS_SSL_PROTO_TLS1_3

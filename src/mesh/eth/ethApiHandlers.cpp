@@ -7,6 +7,10 @@
 #include <Arduino.h>
 #include <vector>
 
+#ifdef ARCH_RP2040
+#include <hardware/watchdog.h>
+#endif
+
 // HEADER_TIMEOUT_MS doubles as the keep-alive idle window: handleApiClient
 // loops reading requests on the same connection, and bails out if no new
 // request line arrives within this budget. 3 s is comfortable for browser
@@ -276,8 +280,23 @@ void handleApiClient(IStreamReadWrite &client)
     // connection eagerly via sendError; normal responses use Content-Length
     // framing + Connection: keep-alive so the loop can read the next request
     // on the same TLS session.
+    //
+    // MAX_REQUESTS_PER_SESSION caps the loop because while we're inside it
+    // the parent OSThread is not returning to mainController, and the
+    // RP2350 hardware watchdog (8 s default in arduino-pico) only gets
+    // pet by the main loop. A client.meshtastic.org sync produces ~80
+    // back-to-back requests over a single TLS session — well past the
+    // watchdog deadline. yield() between requests lets the rest of core0
+    // (Periodic ticks, NTP, MQTT, LoRa packet pump) run + pets the
+    // watchdog; the cap puts a hard ceiling so a chatty client can never
+    // monopolize the server indefinitely. After the cap the client just
+    // re-handshakes once and continues, which is cheap (one ECDSA cost
+    // every 64 requests is amortized well below the per-request
+    // handshake we had before keep-alive).
+    static constexpr int MAX_REQUESTS_PER_SESSION = 64;
+
     int requestsServed = 0;
-    while (client.connected()) {
+    while (client.connected() && requestsServed < MAX_REQUESTS_PER_SESSION) {
         const uint32_t deadline = millis() + HEADER_TIMEOUT_MS;
         Request req;
         if (!parseRequest(client, req, deadline)) {
@@ -300,7 +319,20 @@ void handleApiClient(IStreamReadWrite &client)
             return; // errors are terminal — Connection: close framing
         }
         requestsServed++;
+#ifdef ARCH_RP2040
+        // yield() ONLY cedes to the OSThread scheduler; it does not call
+        // rp2040Loop() where watchdog_update() lives. While we sit inside
+        // serveClient() looping over keep-alive requests, main loop() is
+        // not running and the 8 s hardware watchdog WILL fire. Pet it
+        // explicitly here.
+        watchdog_update();
+#endif
+        yield();
     }
+
+    if (requestsServed >= MAX_REQUESTS_PER_SESSION)
+        LOG_DEBUG("ETH API: session capped at %d requests (will redo handshake on next batch)",
+                  MAX_REQUESTS_PER_SESSION);
 }
 
 #endif // HAS_ETHERNET && HAS_ETHERNET_API
