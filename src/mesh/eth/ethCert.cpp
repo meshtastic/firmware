@@ -102,13 +102,25 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
     mbedtls_x509write_crt_init(&crt);
 
     bool ok = false;
+    // Buffers live on the heap so the OSThread stack stays small. Originally
+    // certBuf[2048] + keyBuf[1024] were locals; combined with mbedtls ECDSA's
+    // own deep call stack that pushed past the ~8 KB core0 stack budget on
+    // arduino-pico and the board reboot-looped between "starting cert
+    // pipeline" and the first "generated…" log.
+    std::vector<unsigned char> certBuf(2048);
+    std::vector<unsigned char> keyBuf(1024);
+
     do {
         // 1. ECDSA P-256 keypair
+        LOG_INFO("ETH CERT: step 1/8 pk_setup");
+        Serial.flush();
         ret = mbedtls_pk_setup(&pk, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY));
         if (ret != 0) {
             LOG_ERROR("ETH CERT: pk_setup failed -0x%04x", -ret);
             break;
         }
+        LOG_INFO("ETH CERT: step 2/8 ecp_gen_key (P-256)");
+        Serial.flush();
         ret = mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, mbedtls_pk_ec(pk), picoRand, nullptr);
         if (ret != 0) {
             LOG_ERROR("ETH CERT: ecp_gen_key failed -0x%04x", -ret);
@@ -116,6 +128,8 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
         }
 
         // 2. Cert fields
+        LOG_INFO("ETH CERT: step 3/8 subject/issuer/serial/validity/constraints");
+        Serial.flush();
         String subjectName = "CN=" + ip.toString() + ",O=Meshtastic,C=US";
         ret = mbedtls_x509write_crt_set_subject_name(&crt, subjectName.c_str());
         if (ret != 0) {
@@ -155,6 +169,8 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
 
         // SAN extension: IP address (4 bytes). Browsers require SAN match,
         // CN alone is ignored since RFC 6125 / Chrome 58.
+        LOG_INFO("ETH CERT: step 4/8 SAN(IP)");
+        Serial.flush();
         unsigned char ipBytes[4] = {ip[0], ip[1], ip[2], ip[3]};
         mbedtls_x509_san_list san;
         san.next = nullptr;
@@ -170,23 +186,31 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
 
         // 3. Serialize cert + key to DER. mbedtls writes DER at the END of
         // the buffer; ret = length, with the bytes living at (buf + size - len).
-        unsigned char certBuf[2048];
-        ret = mbedtls_x509write_crt_der(&crt, certBuf, sizeof(certBuf), picoRand, nullptr);
+        LOG_INFO("ETH CERT: step 5/8 x509write_crt_der (sign)");
+        Serial.flush();
+        ret = mbedtls_x509write_crt_der(&crt, certBuf.data(), certBuf.size(), picoRand, nullptr);
         if (ret < 0) {
             LOG_ERROR("ETH CERT: x509write_crt_der failed -0x%04x", -ret);
             break;
         }
         size_t certLen = (size_t)ret;
-        out.certDer.assign(certBuf + sizeof(certBuf) - certLen, certBuf + sizeof(certBuf));
+        LOG_INFO("ETH CERT: step 6/8 copy cert DER (%u B)", (unsigned)certLen);
+        Serial.flush();
+        out.certDer.assign(certBuf.data() + certBuf.size() - certLen,
+                           certBuf.data() + certBuf.size());
 
-        unsigned char keyBuf[1024];
-        ret = mbedtls_pk_write_key_der(&pk, keyBuf, sizeof(keyBuf));
+        LOG_INFO("ETH CERT: step 7/8 pk_write_key_der");
+        Serial.flush();
+        ret = mbedtls_pk_write_key_der(&pk, keyBuf.data(), keyBuf.size());
         if (ret < 0) {
             LOG_ERROR("ETH CERT: pk_write_key_der failed -0x%04x", -ret);
             break;
         }
         size_t keyLen = (size_t)ret;
-        out.keyDer.assign(keyBuf + sizeof(keyBuf) - keyLen, keyBuf + sizeof(keyBuf));
+        LOG_INFO("ETH CERT: step 8/8 copy key DER (%u B)", (unsigned)keyLen);
+        Serial.flush();
+        out.keyDer.assign(keyBuf.data() + keyBuf.size() - keyLen,
+                          keyBuf.data() + keyBuf.size());
 
         ok = true;
     } while (false);
