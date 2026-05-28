@@ -7,6 +7,10 @@
 #include <Arduino.h>
 #include <vector>
 
+#if defined(HAS_ETHERNET_OTA)
+#include "ethHttpOTA.h"
+#endif
+
 #ifdef ARCH_RP2040
 #include <hardware/watchdog.h>
 #endif
@@ -36,13 +40,6 @@ class EthHttpAPI : public PhoneAPI
 
 static EthHttpAPI webAPI;
 
-struct Request {
-    String method;
-    String path;
-    String query; // raw "key=val&..." (without leading '?'), empty if none
-    long contentLength = 0;
-};
-
 // Read up to one CRLF-terminated line; returns false on timeout or oversize.
 static bool readLine(IStreamReadWrite &client, String &out, uint32_t deadlineMs)
 {
@@ -68,7 +65,29 @@ static bool readLine(IStreamReadWrite &client, String &out, uint32_t deadlineMs)
     return false;
 }
 
-static bool parseRequest(IStreamReadWrite &client, Request &req, uint32_t deadlineMs)
+// Case-insensitive "header:" prefix test. Returns the value substring with
+// whitespace trimmed, or empty string if line doesn't start with prefix.
+static bool headerIs(const String &line, const char *prefix, String &valueOut)
+{
+    size_t prefixLen = strlen(prefix);
+    if (line.length() < prefixLen + 1) // need at least "prefix:"
+        return false;
+    for (size_t i = 0; i < prefixLen; i++) {
+        char a = line.charAt(i);
+        char b = prefix[i];
+        if (a >= 'A' && a <= 'Z') a += 32;
+        if (b >= 'A' && b <= 'Z') b += 32;
+        if (a != b)
+            return false;
+    }
+    if (line.charAt(prefixLen) != ':')
+        return false;
+    valueOut = line.substring(prefixLen + 1);
+    valueOut.trim();
+    return true;
+}
+
+bool parseRequest(IStreamReadWrite &client, Request &req, uint32_t deadlineMs)
 {
     String line;
     if (!readLine(client, line, deadlineMs) || line.length() == 0)
@@ -91,22 +110,26 @@ static bool parseRequest(IStreamReadWrite &client, Request &req, uint32_t deadli
         req.query.remove(0);
     }
 
-    // Headers until blank line. Only Content-Length is interesting for now.
+    // Headers until blank line. Capture Content-Length + X-OTA-* metadata
+    // in a single pass so OTA handlers don't need their own parser.
     size_t hdrCount = 0;
+    String val;
     while (hdrCount++ < MAX_HEADER_LINES) {
         if (!readLine(client, line, deadlineMs))
             return false;
         if (line.length() == 0)
             return true; // end of headers
-        if (line.length() >= 16) {
-            // Case-insensitive prefix match for "Content-Length:"
-            String head = line.substring(0, 15);
-            head.toLowerCase();
-            if (head == "content-length:") {
-                String v = line.substring(15);
-                v.trim();
-                req.contentLength = v.toInt();
-            }
+
+        if (headerIs(line, "Content-Length", val)) {
+            req.contentLength = val.toInt();
+        } else if (headerIs(line, "X-OTA-Nonce", val)) {
+            req.xOtaNonce = val;
+        } else if (headerIs(line, "X-OTA-Auth", val)) {
+            req.xOtaAuth = val;
+        } else if (headerIs(line, "X-OTA-Size", val)) {
+            req.xOtaSize = val.toInt();
+        } else if (headerIs(line, "X-OTA-CRC32", val)) {
+            req.xOtaCrc32 = val;
         }
     }
     return false; // too many headers
@@ -314,6 +337,37 @@ void handleApiClient(IStreamReadWrite &client)
             handleFromRadio(client, req);
         } else if (req.path == "/api/v1/toradio") {
             handleToRadio(client, req);
+#if defined(HAS_ETHERNET_OTA)
+        } else if (req.path == "/api/v1/info") {
+            if (req.method == "OPTIONS") {
+                handleOtaOptions(client, "GET, OPTIONS");
+            } else if (req.method == "GET") {
+                handleOtaInfo(client);
+            } else {
+                sendError(client, 405, "Method Not Allowed", "GET or OPTIONS");
+            }
+            return; // OTA helpers close-frame; don't loop on the same session
+        } else if (req.path == "/api/v1/ota/nonce") {
+            if (req.method == "OPTIONS") {
+                handleOtaOptions(client, "GET, OPTIONS");
+            } else if (req.method == "GET") {
+                handleOtaNonce(client);
+            } else {
+                sendError(client, 405, "Method Not Allowed", "GET or OPTIONS");
+            }
+            return;
+        } else if (req.path == "/api/v1/ota") {
+            if (req.method == "OPTIONS") {
+                handleOtaOptions(client, "PUT, OPTIONS");
+            } else if (req.method == "PUT") {
+                handleOtaUpload(client, req);
+                // handleOtaUpload reboots on success — won't return here.
+                // On failure it sends a JSON error with Connection: close.
+            } else {
+                sendError(client, 405, "Method Not Allowed", "PUT or OPTIONS");
+            }
+            return;
+#endif
         } else {
             sendError(client, 404, "Not Found", "unknown endpoint");
             return; // errors are terminal — Connection: close framing

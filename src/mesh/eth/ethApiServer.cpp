@@ -4,14 +4,9 @@
 
 #include "ethApiHandlers.h"
 #include "ethApiServer.h"
+#include "ethStreamAdapter.h"
 #include "concurrency/OSThread.h"
 #include <Arduino.h>
-
-#ifdef USE_ARDUINO_ETHERNET
-#include <Ethernet.h>
-#else
-#include <RAK13800_W5100S.h>
-#endif
 
 // Adaptive poll intervals (mirror mesh/http/WebServer.cpp ESP32 pattern).
 static constexpr uint32_t ACTIVE_THRESHOLD_MS = 5000;
@@ -21,29 +16,6 @@ static constexpr int32_t MEDIUM_INTERVAL_MS = 100;
 static constexpr int32_t IDLE_INTERVAL_MS = 500;
 
 static EthernetServer *apiServer = nullptr;
-
-// Adapter that exposes an EthernetClient through the transport-agnostic
-// IStreamReadWrite interface so the handlers in ethApiHandlers.cpp can drive
-// it the same way they drive the TLS transport.
-class EthernetClientStream : public IStreamReadWrite
-{
-  public:
-    explicit EthernetClientStream(EthernetClient &c) : c_(c) {}
-
-    size_t write(uint8_t b) override { return c_.write(b); }
-    size_t write(const uint8_t *buf, size_t len) override { return c_.write(buf, len); }
-
-    int available() override { return c_.available(); }
-    int read() override { return c_.read(); }
-    int read(uint8_t *buf, size_t len) override { return c_.read(buf, len); }
-
-    bool connected() override { return c_.connected(); }
-    void flush() override { c_.flush(); }
-    IPAddress remoteIP() override { return c_.remoteIP(); }
-
-  private:
-    EthernetClient &c_;
-};
 
 // Dedicated OSThread so accept() runs on sub-second cadence. The Ethernet
 // client periodic ticks every 5s which is fine for NTP/MQTT but cripples a
