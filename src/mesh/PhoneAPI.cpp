@@ -262,10 +262,19 @@ void PhoneAPI::handleStartConfig()
         observe(&xModem.packetReady);
 #endif
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-        // New physical connection: clear this PhoneAPI's auth slot so the
-        // new client must present a passphrase or PKC admin signature
-        // before seeing full config. Do NOT reset on subsequent
-        // want_config_id within the same connection.
+        // New physical connection: clear this PhoneAPI's auth slot so the new
+        // client must present a passphrase or PKC admin signature before
+        // seeing full config. Do NOT reset on a subsequent want_config_id
+        // within the same connection: after a successful unlock the client
+        // re-requests config to pull the now-unredacted values, and re-locking
+        // that same-link re-fetch would strip the auth it just earned (config
+        // comes back redacted and set_config writes get dropped).
+        //
+        // The security boundary is therefore the physical connection, not the
+        // want_config handshake. For BLE that boundary is enforced in
+        // onConnect() (which fires once per link and also resets the slot), so
+        // a reconnect re-locks even if this !isConnected() transition was
+        // missed because the prior link's close() raced the new config burst.
         {
             concurrency::LockGuard g(&g_authSlotsMutex);
             if (auto *slot = findOrAllocSlot_LH(this)) {

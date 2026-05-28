@@ -66,6 +66,14 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
 
+    // A new physical link must start unauthenticated. The auth slot is keyed by
+    // the (single, reused) bluetoothPhoneAPI instance, so a prior session's
+    // authorization can otherwise survive a quick reconnect. handleStartConfig()
+    // re-locks on every want_config too; this closes the window before that.
+    if (bluetoothPhoneAPI) {
+        bluetoothPhoneAPI->setAdminAuthorized(false);
+    }
+
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
