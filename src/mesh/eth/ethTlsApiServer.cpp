@@ -31,7 +31,11 @@ static constexpr uint32_t MEDIUM_THRESHOLD_MS = 30000;
 static constexpr int32_t ACTIVE_INTERVAL_MS = 20;
 static constexpr int32_t MEDIUM_INTERVAL_MS = 100;
 static constexpr int32_t IDLE_INTERVAL_MS = 500;
-static constexpr uint32_t RECV_TIMEOUT_MS = 10000;
+// Matches the keep-alive idle window in ethApiHandlers — if the handler
+// loop calls read() and netRecv blocked for 10 s, the 3 s idle deadline
+// inside parseRequest would be irrelevant and the OSThread would stay stuck
+// long after a quiet browser closed its end of the TCP socket.
+static constexpr uint32_t RECV_TIMEOUT_MS = 3000;
 
 // Reuse the picoRand callback semantics from ethCert.cpp. Local copy so we
 // don't have to expose it through a header; the cost is two trivial functions.
