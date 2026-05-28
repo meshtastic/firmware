@@ -333,6 +333,12 @@ void InputBroker::Init()
             BaseType_t higherWake = 0;
             concurrency::mainDelay.interruptFromISR(&higherWake);
         };
+#if defined(ELECROW_ThinkNode_M7)
+        userConfigNoScreen.longLongPressTime = 15 * 1000;
+        userConfigNoScreen.longLongPress = INPUT_BROKER_FACTORY_RST;
+#else
+        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+#endif
         userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
         userConfigNoScreen.longPress = INPUT_BROKER_NONE;
         userConfigNoScreen.longPressTime = 500;
@@ -390,8 +396,11 @@ void InputBroker::Init()
                 seesawRotary = nullptr;
             }
         }
+#ifdef __linux__
+        // Linux evdev keyboard input only — macOS has no <linux/input.h>.
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
+#endif
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL
