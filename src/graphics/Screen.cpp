@@ -1025,7 +1025,17 @@ int32_t Screen::runOnce()
 #endif
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (!NotificationRenderer::isOverlayBannerShowing() && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+    bool suppressRegionOnboard = false;
+#ifdef MESHTASTIC_LOCKDOWN
+    // While lockdown is active and storage is still locked, config.lora.region
+    // is a deliberate UNSET placeholder — the real region lives in encrypted
+    // storage and is restored on unlock (see NodeDB's locked-boot path). Don't
+    // pop the region picker over the lock screen: it would trap input, and the
+    // operator can't set a region until they unlock anyway.
+    suppressRegionOnboard = meshtastic_security::shouldRedactDisplay();
+#endif
+    if (!suppressRegionOnboard && !NotificationRenderer::isOverlayBannerShowing() &&
+        config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if defined(OLED_TINY)
         menuHandler::LoraRegionPicker();
 #else
