@@ -5,7 +5,13 @@
 #include "ethApiHandlers.h"
 #include "mesh/PhoneAPI.h"
 #include <Arduino.h>
+#include <vector>
 
+// HEADER_TIMEOUT_MS doubles as the keep-alive idle window: handleApiClient
+// loops reading requests on the same connection, and bails out if no new
+// request line arrives within this budget. 3 s is comfortable for browser
+// pipelining without leaving the OSThread blocked too long after a client
+// goes quiet.
 static constexpr uint32_t HEADER_TIMEOUT_MS = 3000;
 static constexpr uint32_t BODY_TIMEOUT_MS = 5000;
 static constexpr size_t MAX_LINE_LEN = 256;
@@ -146,7 +152,7 @@ static void sendPreflight(IStreamReadWrite &client, const char *allowMethods)
     writeStatusLine(client, 204, "No Content");
     writeCorsHeaders(client, allowMethods);
     client.print("Content-Length: 0\r\n");
-    client.print("Connection: close\r\n\r\n");
+    client.print("Connection: keep-alive\r\n\r\n");
     client.flush();
 }
 
@@ -177,27 +183,37 @@ static void handleFromRadio(IStreamReadWrite &client, const Request &req)
     String allParam;
     bool drainAll = getQueryParam(req.query, "all", allParam) && allParam == "true";
 
-    // We cannot pre-compute Content-Length without buffering everything, so use
-    // Connection: close (HTTP/1.0 framing). All Meshtastic clients tolerate this.
-    writeStatusLine(client, 200, "OK");
-    client.print("Content-Type: application/x-protobuf\r\n");
-    writeCorsHeaders(client, "GET, OPTIONS");
-    client.print("Connection: close\r\n\r\n");
-
+    // Buffer all packets first so we can emit an accurate Content-Length and
+    // keep the connection alive. Phase 2 used Connection: close framing, which
+    // forced clients to redo the TLS handshake (~625 ms) for every single
+    // /fromradio poll — client.meshtastic.org needs dozens of those during
+    // initial sync, so the user-visible load time was 15-30 s of pure
+    // handshakes. With Content-Length + keep-alive a whole sync rides one
+    // handshake. Buffer is dynamic (std::vector) so the common 1-packet case
+    // only allocates ~256 B; the ?all=true 64-packet cap stays at ~16 KB.
+    std::vector<uint8_t> body;
     uint8_t txBuf[MAX_TO_FROM_RADIO_SIZE];
-    size_t totalBytes = 0;
     int packets = 0;
     do {
         size_t len = webAPI.getFromRadio(txBuf);
         if (len == 0)
             break;
-        client.write(txBuf, len);
-        totalBytes += len;
+        body.insert(body.end(), txBuf, txBuf + len);
         packets++;
     } while (drainAll && packets < 64); // safety cap so a misbehaving client can't loop forever
+
+    writeStatusLine(client, 200, "OK");
+    client.print("Content-Type: application/x-protobuf\r\n");
+    writeCorsHeaders(client, "GET, OPTIONS");
+    client.print("Content-Length: ");
+    client.print((unsigned)body.size());
+    client.print("\r\n");
+    client.print("Connection: keep-alive\r\n\r\n");
+    if (!body.empty())
+        client.write(body.data(), body.size());
     client.flush();
     LOG_DEBUG("ETH API: fromradio sent %d packet(s), %u bytes (all=%d)", packets,
-              (unsigned)totalBytes, (int)drainAll);
+              (unsigned)body.size(), (int)drainAll);
 }
 
 static void handleToRadio(IStreamReadWrite &client, const Request &req)
@@ -247,7 +263,7 @@ static void handleToRadio(IStreamReadWrite &client, const Request &req)
     client.print("Content-Length: ");
     client.print((unsigned)got);
     client.print("\r\n");
-    client.print("Connection: close\r\n\r\n");
+    client.print("Connection: keep-alive\r\n\r\n");
     client.write(buf, got);
     client.flush();
     LOG_DEBUG("ETH API: toradio handled %u bytes", (unsigned)got);
@@ -255,23 +271,35 @@ static void handleToRadio(IStreamReadWrite &client, const Request &req)
 
 void handleApiClient(IStreamReadWrite &client)
 {
-    const uint32_t deadline = millis() + HEADER_TIMEOUT_MS;
-    Request req;
-    if (!parseRequest(client, req, deadline)) {
-        LOG_DEBUG("ETH API: bad/timeout request from %s", client.remoteIP().toString().c_str());
-        return;
-    }
+    // HTTP/1.1 keep-alive loop. parseRequest returns false on idle timeout
+    // (3 s) or peer close, which is also our exit signal. Errors close the
+    // connection eagerly via sendError; normal responses use Content-Length
+    // framing + Connection: keep-alive so the loop can read the next request
+    // on the same TLS session.
+    int requestsServed = 0;
+    while (client.connected()) {
+        const uint32_t deadline = millis() + HEADER_TIMEOUT_MS;
+        Request req;
+        if (!parseRequest(client, req, deadline)) {
+            if (requestsServed == 0)
+                LOG_DEBUG("ETH API: bad/timeout request from %s",
+                          client.remoteIP().toString().c_str());
+            return;
+        }
 
-    LOG_INFO("ETH API: %s %s%s%s (from %s)", req.method.c_str(), req.path.c_str(),
-             req.query.length() ? "?" : "", req.query.c_str(),
-             client.remoteIP().toString().c_str());
+        LOG_INFO("ETH API: %s %s%s%s (from %s)", req.method.c_str(), req.path.c_str(),
+                 req.query.length() ? "?" : "", req.query.c_str(),
+                 client.remoteIP().toString().c_str());
 
-    if (req.path == "/api/v1/fromradio") {
-        handleFromRadio(client, req);
-    } else if (req.path == "/api/v1/toradio") {
-        handleToRadio(client, req);
-    } else {
-        sendError(client, 404, "Not Found", "unknown endpoint");
+        if (req.path == "/api/v1/fromradio") {
+            handleFromRadio(client, req);
+        } else if (req.path == "/api/v1/toradio") {
+            handleToRadio(client, req);
+        } else {
+            sendError(client, 404, "Not Found", "unknown endpoint");
+            return; // errors are terminal — Connection: close framing
+        }
+        requestsServed++;
     }
 }
 
