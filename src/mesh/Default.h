@@ -62,7 +62,10 @@ class Default
   public:
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval);
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval);
+    // For legacy config fields where 0 means "use default", let max values request an actual zero interval.
+    static uint32_t getConfiguredOrDefaultMsWithZeroSentinel(uint32_t configuredInterval, uint32_t defaultInterval);
     static uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue);
+    static bool isZeroSentinel(uint32_t configured);
     // Note: numOnlineNodes uses uint32_t to match the public API and allow flexibility,
     // even though internal node counts use uint16_t (max 65535 nodes)
     static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes);
