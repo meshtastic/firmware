@@ -14,6 +14,7 @@
 #include <RAK13800_W5100S.h>
 #endif
 
+#include <mbedtls/asn1.h>
 #include <mbedtls/ecp.h>
 #include <mbedtls/error.h>
 #include <mbedtls/oid.h>
@@ -22,9 +23,12 @@
 
 #include <pico/rand.h>
 
-static constexpr const char *CERT_PATH = "/eth_cert.der";
-static constexpr const char *KEY_PATH = "/eth_key.der";
-static constexpr const char *IP_PATH = "/eth_cert_ip.txt";
+// v2: cert layout now includes KeyUsage + ExtendedKeyUsage(serverAuth).
+// Bumping the file names invalidates v1 caches (without EKU NSS / Firefox
+// rejects the cert with a non-overridable "Secure Connection Failed").
+static constexpr const char *CERT_PATH = "/eth_cert_v2.der";
+static constexpr const char *KEY_PATH = "/eth_key_v2.der";
+static constexpr const char *IP_PATH = "/eth_cert_ip_v2.txt";
 
 // Random callback for mbedtls — sources entropy from the RP2350 ROSC TRNG via
 // pico-sdk get_rand_64(). Used directly as f_rng in mbedtls calls so we don't
@@ -164,6 +168,31 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
         ret = mbedtls_x509write_crt_set_basic_constraints(&crt, 0, -1);
         if (ret != 0) {
             LOG_ERROR("ETH CERT: set_basic_constraints failed -0x%04x", -ret);
+            break;
+        }
+
+        // KeyUsage: digitalSignature lets the cert sign TLS handshake
+        // messages (ECDHE-ECDSA key exchange). keyEncipherment is required
+        // by NSS/Firefox even though TLS 1.2 ECDHE doesn't actually use it.
+        ret = mbedtls_x509write_crt_set_key_usage(
+            &crt, MBEDTLS_X509_KU_DIGITAL_SIGNATURE | MBEDTLS_X509_KU_KEY_ENCIPHERMENT);
+        if (ret != 0) {
+            LOG_ERROR("ETH CERT: set_key_usage failed -0x%04x", -ret);
+            break;
+        }
+
+        // ExtendedKeyUsage: serverAuth. NSS / Firefox refuse to treat a cert
+        // as a TLS server cert without this extension since 2023 — the error
+        // surfaces as a non-overridable "Secure Connection Failed" with no
+        // "Accept the Risk" path.
+        mbedtls_asn1_sequence ekuSeq;
+        ekuSeq.buf.tag = MBEDTLS_ASN1_OID;
+        ekuSeq.buf.p = (unsigned char *)MBEDTLS_OID_SERVER_AUTH;
+        ekuSeq.buf.len = MBEDTLS_OID_SIZE(MBEDTLS_OID_SERVER_AUTH);
+        ekuSeq.next = nullptr;
+        ret = mbedtls_x509write_crt_set_ext_key_usage(&crt, &ekuSeq);
+        if (ret != 0) {
+            LOG_ERROR("ETH CERT: set_ext_key_usage failed -0x%04x", -ret);
             break;
         }
 
