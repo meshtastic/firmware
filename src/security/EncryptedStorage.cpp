@@ -1359,6 +1359,21 @@ bool isUnlocked()
     return dekLoaded;
 }
 
+bool isLockdownActive()
+{
+    // Lockdown is "active" iff the device has been provisioned with a
+    // passphrase — i.e. a DEK exists on flash. A lockdown-capable build
+    // (MESHTASTIC_LOCKDOWN) that has never been provisioned, or that has
+    // been disabled via disableLockdown(), is NOT active and behaves like
+    // stock firmware: plaintext storage, no redaction, normal logging.
+    //
+    // Backed by isProvisioned() rather than a separate cached flag so there
+    // is a single source of truth (the .dek file) and no chicken-and-egg
+    // with reading a config bit out of the encrypted config. The filesystem
+    // existence check is cheap (LittleFS stat).
+    return isProvisioned();
+}
+
 // ---------------------------------------------------------------------------
 // Encrypted file I/O
 // ---------------------------------------------------------------------------
@@ -1714,6 +1729,85 @@ bool migrateFile(const char *filename)
 #else
     return false;
 #endif
+}
+
+bool migrateFileToPlaintext(const char *filename)
+{
+    // Inverse of migrateFile: decrypt an encrypted file and rewrite it as
+    // plaintext, atomically. Idempotent — a file that is already plaintext
+    // is a no-op success, which is what makes the disable flow re-runnable
+    // after a power-loss crash.
+#ifdef FSCom
+    if (!isEncrypted(filename)) {
+        LOG_DEBUG("EncryptedStorage: %s already plaintext, skip revert", filename);
+        return true;
+    }
+    if (!dekLoaded) {
+        LOG_ERROR("EncryptedStorage: cannot revert %s — not unlocked", filename);
+        return false;
+    }
+
+    // Determine the plaintext size so we can size the output buffer. The
+    // ciphertext length == plaintext length for AES-CTR, so file size minus
+    // OVERHEAD is the upper bound. Cap as in migrateFile (M25).
+    size_t fileSize = 0;
+    {
+        concurrency::LockGuard g(spiLock);
+        auto f = FSCom.open(filename, FILE_O_READ);
+        if (!f) {
+            LOG_WARN("EncryptedStorage: %s missing during revert", filename);
+            return false;
+        }
+        fileSize = f.size();
+        f.close();
+    }
+    if (fileSize < OVERHEAD || fileSize > 64 * 1024) {
+        LOG_ERROR("EncryptedStorage: %s bad size %u for revert", filename, (unsigned)fileSize);
+        return false;
+    }
+    size_t plaintextCap = fileSize - OVERHEAD;
+
+    auto plaintext = meshtastic_security::make_zeroizing_array(plaintextCap > 0 ? plaintextCap : 1);
+    if (!plaintext) {
+        LOG_ERROR("EncryptedStorage: OOM reverting %s", filename);
+        return false;
+    }
+    size_t plaintextLen = 0;
+    if (!readAndDecrypt(filename, plaintext.get(), plaintextCap, plaintextLen)) {
+        LOG_ERROR("EncryptedStorage: decrypt failed reverting %s", filename);
+        return false;
+    }
+
+    // Write the plaintext over the encrypted file. SafeFile (non-encrypted
+    // direct write — NOT encryptAndWrite) atomically replaces it.
+    SafeFile sf(filename, /*fullAtomic=*/true);
+    sf.write(plaintext.get(), plaintextLen);
+    if (!sf.close()) {
+        LOG_ERROR("EncryptedStorage: plaintext write failed for %s", filename);
+        return false;
+    }
+    LOG_INFO("EncryptedStorage: Reverted %s to plaintext (%u bytes)", filename, (unsigned)plaintextLen);
+    return true;
+#else
+    return false;
+#endif
+}
+
+void removeLockdownArtifacts()
+{
+#ifdef FSCom
+    {
+        concurrency::LockGuard g(spiLock);
+        FSCom.remove(DEK_FILENAME); // deleting this is the commit point: lockdown is now off
+        FSCom.remove(TOKEN_FILENAME);
+        FSCom.remove(MONO_FILENAME);
+        FSCom.remove(BACKOFF_FILENAME);
+    }
+#endif
+    secureWipeKeys();
+    s_sessionMaxMs = 0;
+    s_sessionStartedMs = 0;
+    LOG_INFO("EncryptedStorage: lockdown artifacts removed — device is no longer in lockdown");
 }
 
 } // namespace EncryptedStorage

@@ -1058,7 +1058,15 @@ void PhoneAPI::sendConfigComplete()
     }
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
-    if (!getAdminAuthorized()) {
+    if (!EncryptedStorage::isLockdownActive()) {
+        // Lockdown-capable firmware, but lockdown is not active on this
+        // device (never provisioned, or disabled). Tell the client so its
+        // "lockdown mode" toggle renders OFF. Note getAdminAuthorized()
+        // returns true in this state, so the redaction gates are no-ops and
+        // the client just received the full, unredacted config above.
+        queueLockdownStatus(meshtastic_LockdownStatus_State_DISABLED, "", 0, 0, 0);
+        LOG_INFO("PhoneAPI: DISABLED (lockdown not active) sent to client");
+    } else if (!getAdminAuthorized()) {
         if (!EncryptedStorage::isProvisioned()) {
             queueLockdownStatus(meshtastic_LockdownStatus_State_NEEDS_PROVISION, "", 0, 0, 0);
             LOG_INFO("PhoneAPI: NEEDS_PROVISION sent to client");
@@ -1711,6 +1719,17 @@ int PhoneAPI::onNotify(uint32_t newValue)
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 bool PhoneAPI::getAdminAuthorized() const
 {
+    // Runtime-toggle model: when lockdown is NOT active (a lockdown-capable
+    // build that hasn't been provisioned, or that was disabled), there is
+    // nothing to protect — every connection is implicitly authorized, so
+    // all the `if (!getAdminAuthorized())` redaction gates throughout
+    // getFromRadio() / handleToRadio() become no-ops and the device serves
+    // config exactly like stock firmware. Only once provisioned (lockdown
+    // active) do we consult the per-connection auth slot table.
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    if (!EncryptedStorage::isLockdownActive())
+        return true;
+#endif
     concurrency::LockGuard g(&g_authSlotsMutex);
     // const_cast is safe — findOrAllocSlot_LH only mutates the slot table,
     // not the PhoneAPI itself, and the table key is just the pointer.
@@ -1865,6 +1884,43 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "", 0, 0, 0);
         zeroPassphrase();
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        return true;
+    }
+
+    // Disable lockdown entirely. Requires the passphrase (must prove
+    // ownership before reverting at-rest encryption). We verify it here to
+    // load the DEK, then hand the heavy decrypt-revert work to the main
+    // loop via lockdownDisablePending — exactly like the unlock reload
+    // path, because decrypting + rewriting nodes.proto is too heavy for
+    // this transport-callback stack. APPROTECT is NOT reversed.
+    if (la.disable) {
+        if (la.passphrase.size < 1) {
+            LOG_WARN("Lockdown: disable with empty passphrase — rejecting");
+            queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, 0);
+            zeroPassphrase();
+            return true;
+        }
+        if (!EncryptedStorage::isLockdownActive()) {
+            // Already off — nothing to do; report DISABLED so the client UI settles.
+            LOG_INFO("Lockdown: disable requested but lockdown is not active");
+            queueLockdownStatus(meshtastic_LockdownStatus_State_DISABLED, "", 0, 0, 0);
+            zeroPassphrase();
+            return true;
+        }
+        // Re-verify the passphrase (loads the DEK needed to decrypt files).
+        bool ok = EncryptedStorage::unlockWithPassphrase(la.passphrase.bytes, la.passphrase.size,
+                                                         EncryptedStorage::TOKEN_DEFAULT_BOOTS, 0, 0);
+        if (!ok) {
+            uint32_t backoff = EncryptedStorage::getBackoffSecondsRemaining();
+            queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, backoff);
+            LOG_WARN("Lockdown: disable passphrase verification failed");
+            zeroPassphrase();
+            return true;
+        }
+        setAdminAuthorized(true);
+        lockdownDisablePending = true; // main loop runs nodeDB->disableLockdownToPlaintext() then reboots
+        LOG_INFO("Lockdown: disable authorized, deferring decrypt-revert to main loop");
+        zeroPassphrase();
         return true;
     }
 

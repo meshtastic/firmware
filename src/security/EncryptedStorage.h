@@ -166,6 +166,36 @@ bool isProvisioned();
 bool isUnlocked();
 
 /**
+ * Returns true when lockdown is active on this device (== isProvisioned()).
+ * The runtime gate for all access-control / redaction / locked-boot
+ * behavior. A lockdown-CAPABLE build that has not been provisioned (or has
+ * been disabled) returns false here and runs like stock firmware.
+ */
+bool isLockdownActive();
+
+/**
+ * Decrypt one encrypted file back to plaintext in place (the inverse of
+ * migrateFile). Idempotent: a file that is already plaintext returns true
+ * without touching it. Requires isUnlocked() (DEK in RAM). Used by the
+ * lockdown-disable flow; NodeDB drives the per-file iteration since it owns
+ * the proto filenames.
+ *
+ * @return true on success or if the file was already plaintext.
+ */
+bool migrateFileToPlaintext(const char *filename);
+
+/**
+ * Final step of disabling lockdown: remove the DEK, unlock token,
+ * monotonic-counter, and backoff files, then wipe the in-RAM keys.
+ * Call this ONLY after every encrypted file has been reverted to plaintext
+ * via migrateFileToPlaintext() — deleting the DEK first would make any
+ * remaining encrypted file permanently unreadable. After this returns,
+ * isProvisioned()/isLockdownActive() are false. APPROTECT is NOT touched
+ * (its lockout is permanent on silicon where it engaged).
+ */
+void removeLockdownArtifacts();
+
+/**
  * Returns a short string describing why the device is locked (set during initLocked()).
  * Useful for client-side diagnostics. Examples:
  *   "token_missing"      — no unlock token file found

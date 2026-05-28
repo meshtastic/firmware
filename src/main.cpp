@@ -1113,7 +1113,8 @@ uint32_t shutdownAtMsec;   // If not zero we will shutdown at this time (used to
 bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for OTA handoff)
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
-volatile bool lockdownReloadPending; // see main.h — deferred NodeDB reload after lockdown unlock
+volatile bool lockdownReloadPending;  // see main.h — deferred NodeDB reload after lockdown unlock
+volatile bool lockdownDisablePending; // see main.h — deferred decrypt-revert after lockdown disable
 #endif
 
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
@@ -1201,6 +1202,23 @@ void loop()
     runASAP = false;
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
+    if (lockdownDisablePending) {
+        lockdownDisablePending = false;
+        LOG_INFO("Lockdown: disabling — reverting encrypted storage to plaintext");
+        if (nodeDB->disableLockdownToPlaintext()) {
+            LOG_INFO("Lockdown: disabled, rebooting into normal mode");
+            PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_DISABLED, "", 0, 0, 0);
+            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        } else {
+            // Revert failed mid-way (a file couldn't be decrypted/rewritten).
+            // The DEK file is still present (it's deleted last), so the device
+            // stays in lockdown and the operator can retry disable. Surface
+            // the failure rather than leaving the client hanging.
+            LOG_ERROR("Lockdown: disable revert failed — device remains in lockdown");
+            PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "disable_failed", 0, 0, 0);
+        }
+    }
+
     if (lockdownReloadPending) {
         lockdownReloadPending = false;
         LOG_INFO("Lockdown: reloading config from disk after unlock");

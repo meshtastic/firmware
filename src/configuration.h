@@ -566,47 +566,57 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // -----------------------------------------------------------------------------
-// MESHTASTIC_LOCKDOWN — opt-in hardened build flag (nRF52 only)
+// MESHTASTIC_LOCKDOWN — runtime, client-toggleable hardening (nRF52 only)
 //
-// Add -DMESHTASTIC_LOCKDOWN=1 to any env's build_flags to enable hardening.
+// There is NO build flag to turn lockdown on or off. On nRF52 (CC310 hardware
+// crypto) the lockdown machinery is ALWAYS compiled in; whether it is ACTIVE
+// is decided entirely at runtime by EncryptedStorage::isLockdownActive()
+// (== a passphrase has been provisioned, i.e. /prefs/.dek exists). A device
+// that has never been provisioned — or that the operator disabled from the
+// client app — behaves exactly like stock firmware: plaintext storage, no
+// redaction, normal logging, normal display.
 //
-// nRF52 (CC310 hardware crypto required):
-//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL — redact keys from unauthenticated clients;
-//                                        passphrase delivery via AdminMessage.lockdown_auth,
-//                                        handled synchronously in
-//                                        PhoneAPI::handleLockdownAuthInline
-//   MESHTASTIC_ENCRYPTED_STORAGE       — AES-128-CTR + HMAC-SHA256 at-rest encryption
-//   MESHTASTIC_ENABLE_APPROTECT        — one-way UICR APPROTECT write to lock SWD/JTAG
-//   DEBUG_MUTE                         — suppress all serial/USB-CDC log output
+// The operator toggles lockdown from the client app:
+//   off -> on : provision a passphrase (AdminMessage.lockdown_auth). The
+//               firmware generates a DEK, encrypts the stored config, and
+//               authorizes the connection.
+//   on -> off : AdminMessage.lockdown_auth { disable=true } with the
+//               passphrase — decrypts storage back to plaintext and removes
+//               the DEK / token / monotonic-counter / backoff files, then
+//               reboots into normal mode. APPROTECT is the one thing that
+//               does NOT revert (see below).
 //
-// Non-nRF52 (degraded — no passphrase path without encrypted storage to gate it):
-//   DEBUG_MUTE only. Access control is intentionally NOT enabled here because
-//   PhoneAPI::handleLockdownAuthInline is wrapped in MESHTASTIC_ENCRYPTED_STORAGE;
-//   turning on access control alone would leave non-PKC clients with no way to
-//   authorize, redacting them out of admin forever. Use PKC admin keys for
-//   hardened deployments on these platforms.
+// MESHTASTIC_LOCKDOWN here is an INTERNAL capability marker, auto-defined for
+// nRF52. It gates the UI bits (lock screen, pairing-PIN handling). It is NOT
+// something a variant sets. Flash-constrained nRF52 variants that genuinely
+// cannot afford the ~tens-of-KB of crypto + access-control code may opt OUT
+// with -DMESHTASTIC_EXCLUDE_LOCKDOWN=1.
 //
-// Add -DMESHTASTIC_LOCKDOWN_DEBUG=1 alongside MESHTASTIC_LOCKDOWN to keep the
-// irreversible bits (APPROTECT, DEBUG_MUTE) disabled while still exercising the
-// access-control + encrypted-storage code paths. For development and hardware
-// bring-up only — production firmware should not ship with this set.
+//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL — per-connection auth + redaction,
+//                                        gated at runtime on isLockdownActive()
+//   MESHTASTIC_ENCRYPTED_STORAGE       — AES-128-CTR + HMAC-SHA256 at-rest
+//   MESHTASTIC_ENABLE_APPROTECT        — UICR APPROTECT capability. The actual
+//                                        one-way burn happens at runtime, only
+//                                        once provisioned, only on non-vulnerable
+//                                        silicon, and is STICKY: disabling
+//                                        lockdown does NOT (cannot) reverse it.
+//
+// DEBUG_MUTE is intentionally NOT coupled to lockdown — a capable-but-off
+// device must log normally. Define DEBUG_MUTE separately for a silent build.
+//
+// -DMESHTASTIC_LOCKDOWN_DEBUG=1 keeps the irreversible APPROTECT burn disabled
+// even when provisioned — for development so dev boards never lose SWD.
 // -----------------------------------------------------------------------------
-#ifdef MESHTASTIC_LOCKDOWN
-
-#ifndef MESHTASTIC_LOCKDOWN_DEBUG
-#define DEBUG_MUTE
-#endif
-
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) && !defined(MESHTASTIC_EXCLUDE_LOCKDOWN)
+#define MESHTASTIC_LOCKDOWN 1
 #define MESHTASTIC_PHONEAPI_ACCESS_CONTROL 1
 #define MESHTASTIC_ENCRYPTED_STORAGE 1
 #ifndef MESHTASTIC_LOCKDOWN_DEBUG
 #define MESHTASTIC_ENABLE_APPROTECT 1
 #endif
-#else
-#warning                                                                                                                         \
-    "MESHTASTIC_LOCKDOWN: non-nRF52 target — only DEBUG_MUTE is active. Encrypted storage, APPROTECT, and access control are unavailable on this platform."
 #endif
+
+#ifdef MESHTASTIC_LOCKDOWN
 
 // Per-boot uptime cap on unlocked sessions. 0 = unlimited (token-only
 // enforcement, the existing behavior). When non-zero, every passphrase

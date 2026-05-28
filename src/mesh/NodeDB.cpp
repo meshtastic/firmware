@@ -1691,7 +1691,11 @@ void NodeDB::loadFromDisk()
 
 #endif
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
-    if (!EncryptedStorage::isUnlocked()) {
+    // Only take the locked-boot defaults path when lockdown is ACTIVE (the
+    // device is provisioned) AND storage is still locked. A lockdown-capable
+    // build that has never been provisioned — or that was disabled — falls
+    // through to the normal plaintext load below and behaves like stock.
+    if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
         // Encrypted storage is locked. Install defaults and wait for the
         // passphrase over BLE/serial; PhoneAPI::handleLockdownAuthInline
         // calls reloadFromDisk() once the storage is unlocked.
@@ -1954,7 +1958,11 @@ void NodeDB::loadFromDisk()
     // Ensure all config segments are persisted to encrypted storage.
     // installDefaultConfig/installDefaultModuleConfig only set in-memory structs
     // without saving to disk, so we force a save here to ensure encrypted files exist.
-    {
+    //
+    // Only when lockdown is ACTIVE. A capable-but-off device must leave its
+    // files as plaintext — encryptAndWrite would fail anyway (no DEK), but
+    // skipping the whole block avoids the wasted attempts and error logs.
+    if (EncryptedStorage::isLockdownActive()) {
         const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
                                       nodeDatabaseFileName};
         int segments[] = {SEGMENT_CONFIG, SEGMENT_MODULECONFIG, SEGMENT_CHANNELS, SEGMENT_DEVICESTATE, SEGMENT_NODEDATABASE};
@@ -2065,6 +2073,34 @@ bool NodeDB::reloadFromDisk()
         channels.onConfigChanged();
         rIface->reconfigure();
     }
+    return true;
+}
+
+bool NodeDB::disableLockdownToPlaintext()
+{
+    concurrency::LockGuard guard(&g_reloadFromDiskMutex);
+    if (!EncryptedStorage::isUnlocked()) {
+        LOG_ERROR("NodeDB: disable requested but storage not unlocked");
+        return false;
+    }
+    LOG_INFO("NodeDB: reverting encrypted prefs to plaintext for lockdown disable");
+
+    // Decrypt each encrypted pref back to plaintext IN PLACE. Mirror of the
+    // plaintext->encrypted migrate loop above. Order does not matter here;
+    // EncryptedStorage::removeLockdownArtifacts() (which deletes the DEK,
+    // the commit point) only runs after every file is confirmed plaintext.
+    const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
+                                  nodeDatabaseFileName};
+    for (const char *fn : filesToCheck) {
+        if (!EncryptedStorage::migrateFileToPlaintext(fn)) {
+            LOG_ERROR("NodeDB: failed to revert %s to plaintext; aborting disable (device stays in lockdown)", fn);
+            return false;
+        }
+    }
+
+    // All files are plaintext now — remove the lockdown artifacts. Deleting
+    // /prefs/.dek is the atomic commit: after it, isLockdownActive() is false.
+    EncryptedStorage::removeLockdownArtifacts();
     return true;
 }
 #endif

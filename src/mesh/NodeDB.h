@@ -405,6 +405,14 @@ class NodeDB
     /// and overwrite the operator's persisted state.
     bool reloadFromDisk();
 
+    /// Disable lockdown: decrypt every encrypted pref file back to plaintext,
+    /// then remove the DEK / token / counter / backoff artifacts. Requires
+    /// EncryptedStorage to be unlocked (DEK in RAM). Returns false if any
+    /// file failed to revert — in which case the DEK is still present and the
+    /// device remains in lockdown so the operator can retry. APPROTECT is not
+    /// reversed. Called from the main loop via lockdownDisablePending.
+    bool disableLockdownToPlaintext();
+
     /// Set by loadProto when any encrypted file fails to decrypt or decode.
     /// Tracked across an entire loadFromDisk pass so reloadFromDisk can
     /// surface the condition without callers re-walking each loadProto

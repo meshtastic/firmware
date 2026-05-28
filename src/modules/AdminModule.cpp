@@ -93,7 +93,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // PKC-authorized peer (or a USERPREFS-baked admin_key) could drive
     // factory_reset / set_config against a locked device before the
     // operator has even unlocked it.
-    if (!EncryptedStorage::isUnlocked()) {
+    // Only gate when lockdown is ACTIVE. A lockdown-capable build that hasn't
+    // been provisioned (or was disabled) is not unlocked either, but must
+    // still serve admin normally — so check isLockdownActive() first.
+    if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
         LOG_WARN("AdminModule: dropping admin payload — storage locked");
         return handled;
     }
