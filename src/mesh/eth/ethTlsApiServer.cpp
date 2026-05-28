@@ -19,6 +19,7 @@
 #include <mbedtls/ssl.h>
 #include <mbedtls/x509_crt.h>
 
+#include <hardware/watchdog.h>
 #include <pico/rand.h>
 
 #ifndef ETH_TLS_API_PORT
@@ -67,11 +68,26 @@ static int netSend(void *ctx, const unsigned char *buf, size_t len)
 {
     auto *client = static_cast<EthernetClient *>(ctx);
     if (!client->connected())
-        return MBEDTLS_ERR_SSL_WANT_WRITE;
-    size_t w = client->write(buf, len);
-    if (w == 0)
-        return MBEDTLS_ERR_SSL_WANT_WRITE;
-    return (int)w;
+        return MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY;
+
+    // Block-with-yield until the W5500 TX buffer can absorb the chunk.
+    // Returning WANT_WRITE without delay made mbedtls_ssl_handshake() spin
+    // at ~180k iter/s when Chrome was slow to drain the socket during the
+    // ECDHE-ECDSA ServerKeyExchange — the original code logged exactly that
+    // signature (ret=-0x6880 / WANT_WRITE) tight-looping forever. Firefox
+    // happened to read fast enough that the buffer never filled.
+    uint32_t t0 = millis();
+    while (true) {
+        if (!client->connected())
+            return MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY;
+        size_t w = client->write(buf, len);
+        if (w > 0)
+            return (int)w;
+        if (millis() - t0 > RECV_TIMEOUT_MS)
+            return MBEDTLS_ERR_SSL_TIMEOUT;
+        watchdog_update();
+        delay(2);
+    }
 }
 
 static int netRecv(void *ctx, unsigned char *buf, size_t len)
@@ -81,12 +97,20 @@ static int netRecv(void *ctx, unsigned char *buf, size_t len)
     // exceed the per-recv budget. Pure non-blocking (return WANT_READ) would
     // require mbedtls_ssl_handshake to be driven from the runOnce dispatcher
     // — overkill for the Phase 2.2 skeleton with a single in-flight session.
+    //
+    // Pet the 8 s hardware watchdog from inside the poll loop. We sit here
+    // for up to RECV_TIMEOUT_MS waiting for the next keep-alive request, and
+    // a quiet client can string two such waits back-to-back (6 s) plus the
+    // earlier handshake/handler time — easily past the watchdog deadline.
+    // The main loop()'s watchdog_update() never runs while the OSThread is
+    // inside serveClient(), so it has to be done here.
     uint32_t t0 = millis();
     while (client->available() == 0) {
         if (!client->connected())
             return MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY;
         if (millis() - t0 > RECV_TIMEOUT_MS)
             return MBEDTLS_ERR_SSL_TIMEOUT;
+        watchdog_update();
         delay(2);
     }
     int n = client->read(buf, len);
@@ -289,8 +313,21 @@ class EthTlsApiServerThread : public concurrency::OSThread
 
         uint32_t t0 = millis();
         int ret;
+        int iters = 0;
         do {
             ret = mbedtls_ssl_handshake(&ssl);
+            iters++;
+            // Log every iteration during initial handshake debugging — Chrome
+            // crashes inside the first mbedtls_ssl_handshake() call (no
+            // log appears at all), so the granular per-iter trace is what we
+            // need. The 'state' getter isn't in this mbedtls header set, so
+            // ret + iter is the best we get without enabling MBEDTLS_DEBUG_C.
+            if (iters <= 20 || iters % 50 == 0) {
+                LOG_DEBUG("ETH TLS: handshake iter=%d ret=-0x%04x", iters,
+                          ret < 0 ? -ret : 0);
+                Serial.flush();
+            }
+            watchdog_update();
         } while (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
 
         if (ret != 0) {
