@@ -63,6 +63,12 @@ PB_BIND(meshtastic_TAKEnvironment, meshtastic_TAKEnvironment, AUTO)
 PB_BIND(meshtastic_SensorFov, meshtastic_SensorFov, AUTO)
 
 
+PB_BIND(meshtastic_TakTalkMessage, meshtastic_TakTalkMessage, AUTO)
+
+
+PB_BIND(meshtastic_TakTalkRoomData, meshtastic_TakTalkRoomData, AUTO)
+
+
 PB_BIND(meshtastic_TAKPacketV2, meshtastic_TAKPacketV2, 2)
 
 
