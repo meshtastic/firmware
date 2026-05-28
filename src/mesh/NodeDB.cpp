@@ -985,6 +985,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.network.wifi_enabled = USERPREFS_NETWORK_WIFI_ENABLED;
 #endif
 
+#if USE_ETHERNET_DEFAULT
+    config.network.eth_enabled = true;
+#endif
+
 #ifdef USERPREFS_NETWORK_WIFI_SSID
     strncpy(config.network.wifi_ssid, USERPREFS_NETWORK_WIFI_SSID, sizeof(config.network.wifi_ssid));
 #endif
@@ -1067,7 +1071,8 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
-#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION) || defined(PCA_LED_NOTIFICATION)
+#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION) || defined(PCA_LED_NOTIFICATION) ||               \
+    defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
     moduleConfig.external_notification.enabled = true;
 #endif
 #if defined(PIN_BUZZER)
@@ -1088,7 +1093,7 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #if defined(PIN_VIBRATION)
     moduleConfig.external_notification.nag_timeout = 2;
-#elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION)
+#elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 
