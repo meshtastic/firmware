@@ -2118,8 +2118,12 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     }
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
-    // Encrypt all files except uiconfig (no secrets) and the DEK file (self-encrypted)
-    if (strcmp(filename, uiconfigFileName) != 0) {
+    // Encrypt all files except uiconfig (no secrets) and the DEK file (self-encrypted).
+    // Only when lockdown is ACTIVE (provisioned). A lockdown-capable but DISABLED
+    // device has no DEK, so encryptAndWrite would fail and config would never
+    // persist — it must save plaintext exactly like stock firmware. Once enabled,
+    // the reloadFromDisk migrate pass re-saves these plaintext files encrypted.
+    if (EncryptedStorage::isLockdownActive() && strcmp(filename, uiconfigFileName) != 0) {
         // ZeroizingArrayPtr wipes the unencrypted protobuf encoding (which contains
         // config secrets — channel PSKs, security private_key, etc.) before delete[],
         // so plaintext copies aren't left in heap memory after encryption completes.
@@ -2313,10 +2317,16 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     }
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
-    // When encrypted storage is locked, encryptAndWrite() returns false for every file.
-    // That would cause saveToDisk()'s nRF52 retry path to call FSCom.format(), wiping all
-    // encrypted proto files from flash. Return true here — "nothing to save, not an error."
-    if (!EncryptedStorage::isUnlocked()) {
+    // When lockdown is ACTIVE but storage is still locked, encryptAndWrite()
+    // returns false for every file. That would cause saveToDisk()'s nRF52 retry
+    // path to call FSCom.format(), wiping all encrypted proto files from flash.
+    // Return true here — "nothing to save, not an error."
+    //
+    // Gate on isLockdownActive(): a lockdown-capable but DISABLED device (never
+    // provisioned) also has isUnlocked()==false, but it must persist plaintext
+    // normally — skipping here would silently drop every config write (e.g. the
+    // LoRa region) until the device is provisioned.
+    if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
         LOG_WARN("NodeDB: saveToDisk skipped — encrypted storage locked");
         return true;
     }
