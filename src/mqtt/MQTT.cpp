@@ -19,9 +19,8 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
-#if HAS_ETHERNET && defined(USE_WS5500)
-#include <ETHClass2.h>
-#define ETH ETH2
+#if HAS_ETHERNET && defined(ARCH_ESP32)
+#include <ETH.h>
 #endif // HAS_ETHERNET
 #include "Default.h"
 #if !defined(ARCH_NRF52) || NRF52_USE_JSON
@@ -32,7 +31,7 @@
 #include <assert.h>
 #include <utility>
 
-#include <IPAddress.h>
+#include "IPAddress.h"
 #if defined(ARCH_PORTDUINO)
 #include <netinet/in.h>
 #elif !defined(ntohl)
@@ -141,7 +140,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         const meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
         // Only accept PKI messages to us, or if we have both the sender and receiver in our nodeDB, as then it's
         // likely they discovered each other via a channel we have downlink enabled for
-        if (isToUs(p.get()) || (tx && tx->has_user && rx && rx->has_user))
+        if (isToUs(p.get()) || (nodeInfoLiteHasUser(tx) && nodeInfoLiteHasUser(rx)))
             router->enqueueReceivedMessage(p.release());
     } else if (router &&
                perhapsDecode(p.get()) == DecodeState::DECODE_SUCCESS) // ignore messages if we don't have the channel key
@@ -300,7 +299,9 @@ struct PubSubConfig {
         if (config.tls_enabled) {
             serverPort = 8883;
         }
-        std::tie(serverAddr, serverPort) = parseHostAndPort(serverAddr.c_str(), serverPort);
+        auto [parsedServerAddr, parsedServerPort] = parseHostAndPort(serverAddr.c_str(), serverPort);
+        serverAddr = std::move(parsedServerAddr);
+        serverPort = parsedServerPort;
     }
 
     // Defaults
@@ -320,8 +321,8 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
     pubSub.setClient(client);
     pubSub.setServer(config.serverAddr.c_str(), config.serverPort);
 
-    LOG_INFO("Connecting directly to MQTT server %s, port: %d, username: %s, password: %s", config.serverAddr.c_str(),
-             config.serverPort, config.mqttUsername, config.mqttPassword);
+    LOG_INFO("Connecting directly to MQTT server %s, port: %d, username: %s, password: ***", config.serverAddr.c_str(),
+             config.serverPort, config.mqttUsername);
 
     // Generate node ID from nodenum for client identification
     std::string nodeId = nodeDB->getNodeId();
@@ -342,12 +343,17 @@ inline bool isConnectedToNetwork()
 #ifdef USE_WS5500
     if (ETH.connected())
         return true;
+#elif defined(USE_CH390D)
+    if (ETH.isConnected())
+        return true;
 #endif
 
 #if HAS_WIFI
     return WiFi.isConnected();
 #elif HAS_ETHERNET
     return Ethernet.linkStatus() == LinkON;
+#elif defined(ARCH_PORTDUINO)
+    return true;
 #else
     return false;
 #endif
@@ -405,6 +411,9 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
 
 void mqttInit()
 {
+    if (!moduleConfig.mqtt.enabled)
+        return;
+
     new MQTT();
 }
 
@@ -441,7 +450,8 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
                 moduleConfig.mqtt.map_report_settings.publish_interval_secs, default_map_publish_interval_secs);
         }
 
-        String host = parseHostAndPort(moduleConfig.mqtt.address).first;
+        auto [host, parsedPort] = parseHostAndPort(moduleConfig.mqtt.address);
+        (void)parsedPort;
         isConfiguredForDefaultServer = isDefaultServer(host);
         IPAddress ip;
         isMqttServerAddressPrivate = ip.fromString(host.c_str()) && isPrivateIpAddress(ip);
@@ -648,22 +658,34 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
 
     if (config.enabled && !config.proxy_to_client_enabled) {
 #if HAS_NETWORKING
-        std::unique_ptr<MQTTClient> clientConnection;
         if (config.tls_enabled) {
-#if MQTT_SUPPORTS_TLS
-            MQTTClientTLS *tlsClient = new MQTTClientTLS;
-            clientConnection.reset(tlsClient);
-            tlsClient->setInsecure();
-#else
+#if !MQTT_SUPPORTS_TLS
             LOG_ERROR("Invalid MQTT config: tls_enabled is not supported on this node");
             return false;
 #endif
-        } else {
-            clientConnection.reset(new MQTTClient);
         }
-        std::unique_ptr<PubSubClient> pubSub(new PubSubClient);
+        // Perform a lightweight TCP connectivity check without using connectPubSub(),
+        // which mutates the module's isConnected state. This only checks if the server
+        // is reachable — it does not establish an MQTT session.
+        // Settings are always saved regardless of the result.
         if (isConnectedToNetwork()) {
-            return connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection);
+            MQTTClient testClient;
+            if (!testClient.connect(parsed.serverAddr.c_str(), parsed.serverPort)) {
+                const char *warning = "Could not reach the MQTT server. Settings will be saved, but please verify the server "
+                                      "address and credentials.";
+                LOG_WARN(warning);
+#if !IS_RUNNING_TESTS
+                meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+                if (cn) {
+                    cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->time = getValidTime(RTCQualityFromNet);
+                    strncpy(cn->message, warning, sizeof(cn->message) - 1);
+                    cn->message[sizeof(cn->message) - 1] = '\0';
+                    service->sendClientNotification(cn);
+                }
+#endif
+            }
+            testClient.stop();
         }
 #else
         const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";

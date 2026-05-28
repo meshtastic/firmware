@@ -19,6 +19,10 @@ extern NimbleBluetooth *nimbleBluetooth;
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
+#ifdef ARCH_NRF54L15
+#include "NRF54L15Bluetooth.h"
+extern NRF54L15Bluetooth *nrf54l15Bluetooth;
+#endif
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
 #endif
@@ -65,7 +69,7 @@ extern UdpMulticastHandler *udpHandler;
 // Global Screen singleton.
 extern graphics::Screen *screen;
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
 #endif

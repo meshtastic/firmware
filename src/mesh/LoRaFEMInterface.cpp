@@ -25,7 +25,7 @@ void LoRaFEMInterface::init(void)
         pinMode(LORA_KCT8103L_PA_CSD, OUTPUT);
         digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
         pinMode(LORA_KCT8103L_PA_CTX, OUTPUT);
-        digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
+        digitalWrite(LORA_KCT8103L_PA_CTX, LOW); // LNA enabled by default
         setLnaCanControl(true);
     } else if (digitalRead(LORA_KCT8103L_PA_CSD) == LOW) {
         // FEM is GC1109
@@ -66,7 +66,7 @@ void LoRaFEMInterface::init(void)
     pinMode(LORA_KCT8103L_PA_CSD, OUTPUT);
     digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
     pinMode(LORA_KCT8103L_PA_CTX, OUTPUT);
-    digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
+    digitalWrite(LORA_KCT8103L_PA_CTX, LOW); // LNA enabled by default
     setLnaCanControl(true);
 #endif
 }
@@ -173,13 +173,15 @@ void LoRaFEMInterface::setRxModeEnableWhenMCUSleep(void)
 #endif
 #elif defined(USE_KCT8103L_PA)
     digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
-    rtc_gpio_hold_en((gpio_num_t)LORA_KCT8103L_PA_CSD);
     if (lna_enabled) {
         digitalWrite(LORA_KCT8103L_PA_CTX, LOW);
     } else {
         digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
     }
+#if defined(ARCH_ESP32)
+    rtc_gpio_hold_en((gpio_num_t)LORA_KCT8103L_PA_CSD);
     rtc_gpio_hold_en((gpio_num_t)LORA_KCT8103L_PA_CTX);
+#endif
 #endif
 }
 

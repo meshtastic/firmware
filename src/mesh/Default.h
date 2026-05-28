@@ -13,12 +13,12 @@
 #define TEN_SECONDS_MS 10 * 1000
 #define MAX_INTERVAL INT32_MAX // FIXME: INT32_MAX to avoid overflow issues with Apple clients but should be UINT32_MAX
 
-#define min_default_telemetry_interval_secs 30 * 60
+#define min_default_telemetry_interval_secs IF_ROUTER(ONE_DAY / 2, 30 * 60)
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
 #define default_telemetry_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_smart_minimum_interval_secs 5 * 60
-#define min_default_broadcast_interval_secs 60 * 60
+#define min_default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define min_default_broadcast_smart_minimum_interval_secs 5 * 60
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
 #define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
@@ -31,9 +31,11 @@
 #define min_neighbor_info_broadcast_secs 4 * 60 * 60
 #define default_map_publish_interval_secs 60 * 60
 
+enum class TrafficType { POSITION, TELEMETRY };
+
 // Traffic management defaults
-#define default_traffic_mgmt_position_precision_bits 24         // ~10m grid cells
-#define default_traffic_mgmt_position_min_interval_secs ONE_DAY // 1 day between identical positions
+#define default_traffic_mgmt_position_precision_bits 24               // ~10m grid cells
+#define default_traffic_mgmt_position_min_interval_secs (ONE_DAY / 2) // 12 hours between identical positions
 
 #ifdef USERPREFS_RINGTONE_NAG_SECS
 #define default_ringtone_nag_secs USERPREFS_RINGTONE_NAG_SECS
@@ -64,6 +66,8 @@ class Default
     // Note: numOnlineNodes uses uint32_t to match the public API and allow flexibility,
     // even though internal node counts use uint16_t (max 65535 nodes)
     static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes);
+    static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes,
+                                                   TrafficType type);
     static uint8_t getConfiguredOrDefaultHopLimit(uint8_t configured);
     static uint32_t getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue);
 

@@ -26,7 +26,7 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
     p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // First set the relayer to us
     wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
-    p->next_hop = getNextHop(p->to, p->relay_node); // set the next hop
+    p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE); // set the next hop
     LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
@@ -101,9 +101,12 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
             if (origTx) {
                 // Either relayer of ACK was also a relayer of the packet, or we were the *only* relayer and the ACK came
                 // directly from the destination
-                bool wasAlreadyRelayer = wasRelayer(p->relay_node, p->decoded.request_id, p->to);
+                // Single lookup for both relayer checks on the same (request_id, to) pair
+                bool wasAlreadyRelayer = false;
                 bool weWereSoleRelayer = false;
-                bool weWereRelayer = wasRelayer(ourRelayID, p->decoded.request_id, p->to, &weWereSoleRelayer);
+                bool weWereRelayer = false;
+                checkRelayers(p->relay_node, ourRelayID, p->decoded.request_id, p->to, &wasAlreadyRelayer, &weWereRelayer,
+                              &weWereSoleRelayer);
                 if ((weWereRelayer && wasAlreadyRelayer) || (getHopsAway(*p) == 0 && weWereSoleRelayer)) {
                     if (origTx->next_hop != p->relay_node) { // Not already set
                         LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
@@ -186,10 +189,10 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
  * Get the next hop for a destination, given the relay node
  * @return the node number of the next hop, 0 if no preference (fallback to FloodingRouter)
  */
-uint8_t NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
+std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
 {
     if (isBroadcast(to))
-        return NO_NEXT_HOP_PREFERENCE;
+        return std::nullopt;
 
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(to);
     if (node && node->next_hop) {
@@ -200,7 +203,7 @@ uint8_t NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         } else
             LOG_WARN("Next hop for 0x%x is 0x%x, same as relayer; set no pref", to, node->next_hop);
     }
-    return NO_NEXT_HOP_PREFERENCE;
+    return std::nullopt;
 }
 
 PendingPacket *NextHopRouter::findPendingPacket(GlobalPacketId key)
