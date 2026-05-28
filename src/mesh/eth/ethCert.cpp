@@ -116,15 +116,11 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
 
     do {
         // 1. ECDSA P-256 keypair
-        LOG_INFO("ETH CERT: step 1/8 pk_setup");
-        Serial.flush();
         ret = mbedtls_pk_setup(&pk, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY));
         if (ret != 0) {
             LOG_ERROR("ETH CERT: pk_setup failed -0x%04x", -ret);
             break;
         }
-        LOG_INFO("ETH CERT: step 2/8 ecp_gen_key (P-256)");
-        Serial.flush();
         ret = mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, mbedtls_pk_ec(pk), picoRand, nullptr);
         if (ret != 0) {
             LOG_ERROR("ETH CERT: ecp_gen_key failed -0x%04x", -ret);
@@ -132,8 +128,6 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
         }
 
         // 2. Cert fields
-        LOG_INFO("ETH CERT: step 3/8 subject/issuer/serial/validity/constraints");
-        Serial.flush();
         String subjectName = "CN=" + ip.toString() + ",O=Meshtastic,C=US";
         ret = mbedtls_x509write_crt_set_subject_name(&crt, subjectName.c_str());
         if (ret != 0) {
@@ -198,8 +192,6 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
 
         // SAN extension: IP address (4 bytes). Browsers require SAN match,
         // CN alone is ignored since RFC 6125 / Chrome 58.
-        LOG_INFO("ETH CERT: step 4/8 SAN(IP)");
-        Serial.flush();
         unsigned char ipBytes[4] = {ip[0], ip[1], ip[2], ip[3]};
         mbedtls_x509_san_list san;
         san.next = nullptr;
@@ -215,29 +207,21 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
 
         // 3. Serialize cert + key to DER. mbedtls writes DER at the END of
         // the buffer; ret = length, with the bytes living at (buf + size - len).
-        LOG_INFO("ETH CERT: step 5/8 x509write_crt_der (sign)");
-        Serial.flush();
         ret = mbedtls_x509write_crt_der(&crt, certBuf.data(), certBuf.size(), picoRand, nullptr);
         if (ret < 0) {
             LOG_ERROR("ETH CERT: x509write_crt_der failed -0x%04x", -ret);
             break;
         }
         size_t certLen = (size_t)ret;
-        LOG_INFO("ETH CERT: step 6/8 copy cert DER (%u B)", (unsigned)certLen);
-        Serial.flush();
         out.certDer.assign(certBuf.data() + certBuf.size() - certLen,
                            certBuf.data() + certBuf.size());
 
-        LOG_INFO("ETH CERT: step 7/8 pk_write_key_der");
-        Serial.flush();
         ret = mbedtls_pk_write_key_der(&pk, keyBuf.data(), keyBuf.size());
         if (ret < 0) {
             LOG_ERROR("ETH CERT: pk_write_key_der failed -0x%04x", -ret);
             break;
         }
         size_t keyLen = (size_t)ret;
-        LOG_INFO("ETH CERT: step 8/8 copy key DER (%u B)", (unsigned)keyLen);
-        Serial.flush();
         out.keyDer.assign(keyBuf.data() + keyBuf.size() - keyLen,
                           keyBuf.data() + keyBuf.size());
 
@@ -316,24 +300,12 @@ class EthCertThread : public concurrency::OSThread
             return 250;
         }
 
-        LOG_INFO("ETH CERT: thread woke, IP=%s, starting cert pipeline", ip.toString().c_str());
-        Serial.flush();
-
-        uint32_t t0 = millis();
         bool ok = ensureCertForIp(ip, material_);
-        uint32_t dt = millis() - t0;
-
-        if (ok) {
-            LOG_INFO("ETH CERT: pipeline OK in %u ms (%u B cert + %u B key cached)",
-                     (unsigned)dt, (unsigned)material_.certDer.size(),
-                     (unsigned)material_.keyDer.size());
-        } else {
-            LOG_ERROR("ETH CERT: pipeline FAILED in %u ms — TLS server will not start", (unsigned)dt);
+        if (!ok) {
+            LOG_ERROR("ETH CERT: pipeline FAILED — TLS server will not start");
             material_.certDer.clear();
             material_.keyDer.clear();
         }
-        Serial.flush();
-
         ready_ = true;
         return INT32_MAX;
     }
