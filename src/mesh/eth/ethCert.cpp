@@ -4,8 +4,15 @@
 
 #include "ethCert.h"
 #include "FSCommon.h"
+#include "concurrency/OSThread.h"
 #include <Arduino.h>
 #include <string.h>
+
+#ifdef USE_ARDUINO_ETHERNET
+#include <Ethernet.h>
+#else
+#include <RAK13800_W5100S.h>
+#endif
 
 #include <mbedtls/ecp.h>
 #include <mbedtls/error.h>
@@ -230,6 +237,82 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
     }
 
     return true;
+}
+
+// One-shot worker that defers cert gen off the Periodic thread (which has a
+// tight stack and ticks every 5s alongside reconnect / NTP / MQTT). Polls for
+// a non-zero IP, then runs ensureCertForIp() once and goes idle forever.
+//
+// Phase 2.1-bis. The previous attempt called ensureCertForIp() inline from
+// reconnectETH() and reboot-looped the board: probable stack overflow during
+// ECDSA keygen + DER encoding + LittleFS write all on the Periodic stack.
+class EthCertThread : public concurrency::OSThread
+{
+  public:
+    EthCertThread() : concurrency::OSThread("EthCert") {}
+
+  protected:
+    int32_t runOnce() override
+    {
+        if (ready_)
+            return INT32_MAX;
+
+        IPAddress ip = Ethernet.localIP();
+        if (ip == IPAddress(0, 0, 0, 0)) {
+            // DHCP not yet bound; check again in 250 ms.
+            return 250;
+        }
+
+        LOG_INFO("ETH CERT: thread woke, IP=%s, starting cert pipeline", ip.toString().c_str());
+        Serial.flush();
+
+        uint32_t t0 = millis();
+        bool ok = ensureCertForIp(ip, material_);
+        uint32_t dt = millis() - t0;
+
+        if (ok) {
+            LOG_INFO("ETH CERT: pipeline OK in %u ms (%u B cert + %u B key cached)",
+                     (unsigned)dt, (unsigned)material_.certDer.size(),
+                     (unsigned)material_.keyDer.size());
+        } else {
+            LOG_ERROR("ETH CERT: pipeline FAILED in %u ms — TLS server will not start", (unsigned)dt);
+            material_.certDer.clear();
+            material_.keyDer.clear();
+        }
+        Serial.flush();
+
+        ready_ = true;
+        return INT32_MAX;
+    }
+
+  private:
+    bool ready_ = false;
+    EthCertMaterial material_;
+
+  public:
+    bool isReady() const { return ready_; }
+    const EthCertMaterial &cert() const { return material_; }
+};
+
+static EthCertThread *certThread = nullptr;
+static EthCertMaterial emptyMaterial;
+
+void initEthCertThread()
+{
+    if (certThread)
+        return;
+    certThread = new EthCertThread();
+    LOG_INFO("ETH CERT: deferred worker scheduled (waits for DHCP, runs once)");
+}
+
+bool isEthCertReady()
+{
+    return certThread && certThread->isReady();
+}
+
+const EthCertMaterial &getEthCert()
+{
+    return (certThread && certThread->isReady()) ? certThread->cert() : emptyMaterial;
 }
 
 #endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API

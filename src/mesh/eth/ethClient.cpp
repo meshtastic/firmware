@@ -172,13 +172,11 @@ static int32_t reconnectETH()
             initEthApiServer();
 #endif
 #if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API)
-            {
-                // Phase 2.1 standalone validation — exercise the cert path so
-                // we see the gen + persist + reload cycle in RTT logs. Phase
-                // 2.2 will keep the cert in a long-lived TLS context.
-                EthCertMaterial cert;
-                ensureCertForIp(Ethernet.localIP(), cert);
-            }
+            // Phase 2.1-bis — cert gen runs on its own OSThread so ECDSA keygen
+            // + DER encoding + LittleFS write don't share the Periodic stack
+            // (which overflowed in the original inline attempt). The thread
+            // polls for a non-zero IP itself and runs once.
+            initEthCertThread();
 #endif
 
             ethStartupComplete = true;

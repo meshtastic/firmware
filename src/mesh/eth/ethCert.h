@@ -22,4 +22,17 @@ struct EthCertMaterial {
 // rather fail closed than serve no encryption).
 bool ensureCertForIp(IPAddress ip, EthCertMaterial &out);
 
+// Spawn the one-shot OSThread that drives cert gen off the Periodic stack.
+// The Phase 2.1 inline call from reconnectETH() overflowed the Periodic
+// thread stack on RP2350; the dedicated OSThread uses the mainController
+// stack which is sized for protobuf work and comfortably handles ECDSA P-256
+// keygen + x509 sign + LittleFS write. Idempotent.
+void initEthCertThread();
+
+// True once the thread has finished (success or definitive failure).
+bool isEthCertReady();
+
+// Snapshot of the generated material once isEthCertReady(). Empty otherwise.
+const EthCertMaterial &getEthCert();
+
 #endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API
