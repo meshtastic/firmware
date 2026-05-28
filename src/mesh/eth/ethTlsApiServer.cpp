@@ -177,11 +177,6 @@ class MbedTlsStream : public IStreamReadWrite
     EthernetClient *client_;
 };
 
-// Optional mbedtls debug bridge — kept disabled by default to keep COM9
-// uncluttered. Flip MBEDTLS_DEBUG_C in mbedtls_config and call
-// mbedtls_ssl_conf_dbg(&sslConf, mbedtlsDebug, nullptr) to enable.
-// static void mbedtlsDebug(void *ctx, int level, const char *file, int line, const char *str) { ... }
-
 class EthTlsApiServerThread : public concurrency::OSThread
 {
   public:
@@ -223,9 +218,6 @@ class EthTlsApiServerThread : public concurrency::OSThread
 
     bool initTlsContext()
     {
-        LOG_INFO("ETH TLS: cert is ready, initializing TLS context");
-        Serial.flush();
-
         const EthCertMaterial &cert = getEthCert();
         if (cert.certDer.empty() || cert.keyDer.empty()) {
             LOG_ERROR("ETH TLS: cert material is empty, refusing to start TLS server");
@@ -239,16 +231,12 @@ class EthTlsApiServerThread : public concurrency::OSThread
 
         int ret;
 
-        LOG_INFO("ETH TLS: parsing cert chain (%u B DER)", (unsigned)cert.certDer.size());
-        Serial.flush();
         ret = mbedtls_x509_crt_parse_der(&certChain, cert.certDer.data(), cert.certDer.size());
         if (ret != 0) {
             LOG_ERROR("ETH TLS: x509_crt_parse_der failed -0x%04x", -ret);
             return false;
         }
 
-        LOG_INFO("ETH TLS: parsing key (%u B DER)", (unsigned)cert.keyDer.size());
-        Serial.flush();
         ret = mbedtls_pk_parse_key(&pkKey, cert.keyDer.data(), cert.keyDer.size(), nullptr, 0,
                                    picoRand, nullptr);
         if (ret != 0) {
@@ -256,8 +244,6 @@ class EthTlsApiServerThread : public concurrency::OSThread
             return false;
         }
 
-        LOG_INFO("ETH TLS: ssl_config_defaults (server, TLS, default preset)");
-        Serial.flush();
         ret = mbedtls_ssl_config_defaults(&sslConf, MBEDTLS_SSL_IS_SERVER,
                                           MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
         if (ret != 0) {
@@ -268,27 +254,19 @@ class EthTlsApiServerThread : public concurrency::OSThread
         mbedtls_ssl_conf_rng(&sslConf, picoRand, nullptr);
         mbedtls_ssl_conf_authmode(&sslConf, MBEDTLS_SSL_VERIFY_NONE);
 
-        // pico-sdk's mbedtls_config defines MBEDTLS_SSL_PROTO_TLS1_3, but the
-        // server-side TLS 1.3 plumbing in this vendored build is incomplete:
-        // Firefox / openssl s_client default to 1.3 and the handshake dies
-        // ~4 ms in with MBEDTLS_ERR_ERROR_GENERIC_ERROR (-0x0001). Capping
-        // max_version forces clients to negotiate down to 1.2 transparently,
-        // which is fully exercised (curl/SChannel: ECDHE-ECDSA + AES-GCM
-        // validated). Phase 3 can re-enable 1.3 once the missing handshake
-        // bits are sorted out.
+        // TLS 1.3 is compiled out via mbedtls_user_config.h (it would crash
+        // on Chrome's ClientHello extensions). These calls pin runtime to
+        // 1.2 too as a defense-in-depth: if a future user config flip
+        // re-enables 1.3 code, the config layer still won't negotiate it.
         mbedtls_ssl_conf_max_tls_version(&sslConf, MBEDTLS_SSL_VERSION_TLS1_2);
         mbedtls_ssl_conf_min_tls_version(&sslConf, MBEDTLS_SSL_VERSION_TLS1_2);
 
-        LOG_INFO("ETH TLS: conf_own_cert");
-        Serial.flush();
         ret = mbedtls_ssl_conf_own_cert(&sslConf, &certChain, &pkKey);
         if (ret != 0) {
             LOG_ERROR("ETH TLS: conf_own_cert failed -0x%04x", -ret);
             return false;
         }
 
-        LOG_INFO("ETH TLS: ssl_setup");
-        Serial.flush();
         ret = mbedtls_ssl_setup(&ssl, &sslConf);
         if (ret != 0) {
             LOG_ERROR("ETH TLS: ssl_setup failed -0x%04x", -ret);
@@ -297,36 +275,21 @@ class EthTlsApiServerThread : public concurrency::OSThread
 
         tlsServer = new EthernetServer(ETH_TLS_API_PORT);
         tlsServer->begin();
-        LOG_INFO("ETH TLS: server listening on TCP port %d (phase 2.2 skeleton)",
-                 ETH_TLS_API_PORT);
-        Serial.flush();
+        LOG_INFO("ETH TLS: server listening on TCP port %d", ETH_TLS_API_PORT);
         return true;
     }
 
     void serveClient(EthernetClient &client)
     {
         LOG_INFO("ETH TLS: client connected from %s", client.remoteIP().toString().c_str());
-        Serial.flush();
 
         mbedtls_ssl_session_reset(&ssl);
         mbedtls_ssl_set_bio(&ssl, &client, netSend, netRecv, nullptr);
 
         uint32_t t0 = millis();
         int ret;
-        int iters = 0;
         do {
             ret = mbedtls_ssl_handshake(&ssl);
-            iters++;
-            // Log every iteration during initial handshake debugging — Chrome
-            // crashes inside the first mbedtls_ssl_handshake() call (no
-            // log appears at all), so the granular per-iter trace is what we
-            // need. The 'state' getter isn't in this mbedtls header set, so
-            // ret + iter is the best we get without enabling MBEDTLS_DEBUG_C.
-            if (iters <= 20 || iters % 50 == 0) {
-                LOG_DEBUG("ETH TLS: handshake iter=%d ret=-0x%04x", iters,
-                          ret < 0 ? -ret : 0);
-                Serial.flush();
-            }
             watchdog_update();
         } while (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
 
@@ -339,7 +302,6 @@ class EthTlsApiServerThread : public concurrency::OSThread
         }
         LOG_INFO("ETH TLS: handshake OK in %u ms, ciphersuite=%s", (unsigned)(millis() - t0),
                  mbedtls_ssl_get_ciphersuite(&ssl));
-        Serial.flush();
 
         MbedTlsStream stream(&ssl, &client);
         handleApiClient(stream);
