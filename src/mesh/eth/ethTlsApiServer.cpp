@@ -240,6 +240,17 @@ class EthTlsApiServerThread : public concurrency::OSThread
         mbedtls_ssl_conf_rng(&sslConf, picoRand, nullptr);
         mbedtls_ssl_conf_authmode(&sslConf, MBEDTLS_SSL_VERIFY_NONE);
 
+        // pico-sdk's mbedtls_config defines MBEDTLS_SSL_PROTO_TLS1_3, but the
+        // server-side TLS 1.3 plumbing in this vendored build is incomplete:
+        // Firefox / openssl s_client default to 1.3 and the handshake dies
+        // ~4 ms in with MBEDTLS_ERR_ERROR_GENERIC_ERROR (-0x0001). Capping
+        // max_version forces clients to negotiate down to 1.2 transparently,
+        // which is fully exercised (curl/SChannel: ECDHE-ECDSA + AES-GCM
+        // validated). Phase 3 can re-enable 1.3 once the missing handshake
+        // bits are sorted out.
+        mbedtls_ssl_conf_max_tls_version(&sslConf, MBEDTLS_SSL_VERSION_TLS1_2);
+        mbedtls_ssl_conf_min_tls_version(&sslConf, MBEDTLS_SSL_VERSION_TLS1_2);
+
         LOG_INFO("ETH TLS: conf_own_cert");
         Serial.flush();
         ret = mbedtls_ssl_conf_own_cert(&sslConf, &certChain, &pkKey);
