@@ -11,6 +11,7 @@
 #endif
 #if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API)
 #include "mesh/eth/ethCert.h"
+#include "mesh/eth/ethTlsApiServer.h"
 #endif
 #ifdef USE_ARDUINO_ETHERNET
 #include <Ethernet.h> // arduino-libraries/Ethernet — supports W5100/W5200/W5500
@@ -169,6 +170,9 @@ static int32_t reconnectETH()
             // (which overflowed in the original inline attempt). The thread
             // polls for a non-zero IP itself and runs once.
             initEthCertThread();
+            // Phase 2.2 — TLS server skeleton on TCP/443. The worker waits
+            // until the cert thread signals isEthCertReady() before binding.
+            initEthTlsApiServer();
 #endif
 
             ethStartupComplete = true;
