@@ -190,11 +190,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         LOG_INFO("BLE onConfigStart");
 
         // Prefer high throughput during config/setup, at the cost of high power consumption (for a few seconds)
-        if (bleServer && isConnected()) {
-            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
-            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
-                requestHighThroughputConnection(conn_handle);
-            }
+        uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+        if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+            requestHighThroughputConnection(conn_handle);
         }
     }
 
@@ -203,11 +201,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         LOG_INFO("BLE onConfigComplete");
 
         // Switch to lower power consumption BLE connection params for steady-state use after config/setup is complete
-        if (bleServer && isConnected()) {
-            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
-            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
-                requestLowerPowerConnection(conn_handle);
-            }
+        uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+        if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+            requestLowerPowerConnection(conn_handle);
         }
     }
 
@@ -340,7 +336,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override { return bleServer && bleServer->getConnectedCount() > 0; }
+    virtual bool checkIsConnected() override { return nimbleBluetoothConnHandle.load() != BLE_HS_CONN_HANDLE_NONE; }
 
     void requestHighThroughputConnection(uint16_t conn_handle)
     {
@@ -575,7 +571,7 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
                 display->setFont(FONT_MEDIUM);
                 display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY) && !defined(M5STACK_UNITC6L)
                 display->setFont(FONT_SMALL);
                 y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
                 display->drawString(x_offset + x, y_offset + y, "Enter this code");
@@ -735,13 +731,14 @@ bool NimbleBluetooth::isActive()
 
 bool NimbleBluetooth::isConnected()
 {
-    return bleServer && bleServer->getConnectedCount() > 0;
+    return nimbleBluetoothConnHandle.load() != BLE_HS_CONN_HANDLE_NONE;
 }
 
 int NimbleBluetooth::getRssi()
 {
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
-    if (!bleServer || !isConnected()) {
+    uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+    if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
         return 0; // No active BLE connection
     }
 
@@ -758,9 +755,8 @@ int NimbleBluetooth::getRssi()
     if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
         return 0; // Connection handle not available yet
     }
-
     int8_t rssi = 0;
-    const int rc = ble_gap_conn_rssi(connHandle, &rssi);
+    const int rc = ble_gap_conn_rssi(conn_handle, &rssi);
 
     if (rc == 0) {
         return rssi;
@@ -882,7 +878,7 @@ void NimbleBluetooth::setupService()
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    if ((config.bluetooth.enabled == true) && bleServer && bluetoothApi && bluetoothApi->isConnected()) {
+    if ((config.bluetooth.enabled == true) && BatteryCharacteristic && nimbleBluetooth && nimbleBluetooth->isConnected()) {
         BatteryCharacteristic->setValue(&level, 1);
         BatteryCharacteristic->notify();
     }
@@ -897,7 +893,7 @@ void NimbleBluetooth::clearBonds()
 
 void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 {
-    if (!bleServer || !isConnected() || length > 512) {
+    if (!isConnected() || length > 512) {
         return;
     }
     logRadioCharacteristic->setValue(logMessage, length);
@@ -921,5 +917,4 @@ void updateBatteryLevel(uint8_t level)
 }
 
 void clearNVS() {}
-
 #endif

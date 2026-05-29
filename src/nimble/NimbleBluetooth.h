@@ -14,7 +14,6 @@ class NimbleBluetooth : public BluetoothApi
     void sendLog(const uint8_t *logMessage, size_t length) override;
     void startAdvertising();
     virtual ~NimbleBluetooth() {}
-
     bool isDeInit = false;
 
   private:
