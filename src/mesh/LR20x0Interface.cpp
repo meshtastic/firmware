@@ -136,34 +136,12 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
 
-        // Some basic info about the module's explicit firmware version - no other info available
-        // Currently requires radiolib godmode
-
-#if RADIOLIB_GODMODE
-    uint8_t fwMajor = 0;
-    uint8_t fwMinor = 0;
-    int versionRes = lora.getVersion(&fwMajor, &fwMinor);
-    if (versionRes == RADIOLIB_ERR_NONE)
-        LOG_DEBUG("LR20x0 FW %d.%d", fwMajor, fwMinor);
-#endif
-
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
     LOG_INFO("Power output set to %d", power);
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
-
-        // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
-        // Currently requires radiolib godmode
-#if RADIOLIB_GODMODE
-    if (res == RADIOLIB_ERR_NONE) {
-        uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
-        res = lora.setRegMode(RADIOLIB_LR2021_REG_MODE_SIMO_NORMAL, rampTimes);
-        if (res != RADIOLIB_ERR_NONE)
-            LOG_WARN("LR2021 setRegMode failed: %d", res);
-    }
-#endif
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
     bool dioAsRfSwitch = true;
@@ -395,5 +373,11 @@ template <typename T> bool LR20x0Interface<T>::sleep()
 #endif
 
     return true;
+}
+
+template <typename T> int16_t LR20x0Interface<T>::getCurrentRSSI()
+{
+    float rssi = lora.getRSSI(false, true);
+    return (int16_t)round(rssi);
 }
 #endif

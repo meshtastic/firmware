@@ -325,4 +325,10 @@ template <typename T> bool SX128xInterface<T>::sleep()
 
     return true;
 }
+
+template <typename T> int16_t SX128xInterface<T>::getCurrentRSSI()
+{
+    float rssi = lora.getRSSI(false);
+    return (int16_t)round(rssi);
+}
 #endif

@@ -37,6 +37,8 @@ template <class T> class LR20x0Interface : public RadioLibInterface
      */
     T lora;
 
+    int16_t getCurrentRSSI() override;
+
     /**
      * Glue functions called from ISR land
      */

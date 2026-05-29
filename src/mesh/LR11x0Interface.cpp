@@ -368,4 +368,10 @@ template <typename T> bool LR11x0Interface<T>::sleep()
 
     return true;
 }
+
+template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
+{
+    float rssi = lora.getRSSI(false, true);
+    return (int16_t)round(rssi);
+}
 #endif
