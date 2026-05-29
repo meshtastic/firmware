@@ -30,6 +30,9 @@ class Lock
   private:
 #ifdef HAS_FREE_RTOS
     SemaphoreHandle_t handle;
+#else
+    pthread_mutex_t mutex;
+    bool locked = false;
 #endif
 };
 
