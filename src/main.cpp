@@ -2,6 +2,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+#include "input/InputBroker.h"
+#endif
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -59,12 +62,18 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
-#if HAS_WIFI || defined(USE_WS5500)
+#ifdef ARCH_NRF54L15
+void nrf54l15Setup();
+void nrf54l15Loop();
+NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
+#endif
+
+#if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D)
 #include "mesh/api/WiFiServerAPI.h"
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
 #include "mesh/api/ethServerAPI.h"
 #include "mesh/eth/ethClient.h"
 #endif
@@ -126,6 +135,10 @@ void printPartitionTable()
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
+#endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#include "motion/MagnetometerThread.h"
+MagnetometerThread *magnetometerThread = nullptr;
 #endif
 
 #ifdef HAS_I2S
@@ -197,6 +210,8 @@ bool osk_found = false;
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the Accelerometer (if found)
 ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
+// The I2C address of the Magnetometer (if found)
+ScanI2C::DeviceAddress magnetometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the RGB LED (if found)
 ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 /// The I2C address of our Air Quality Indicator (if found)
@@ -245,7 +260,7 @@ const char *getDeviceName()
 uint32_t timeLastPowered = 0;
 
 static OSThread *powerFSMthread;
-OSThread *ambientLightingThread;
+AmbientLightingThread *ambientLightingThread;
 
 RadioLibHal *RadioLibHAL = NULL;
 
@@ -335,141 +350,12 @@ void setup()
 
 #ifdef WIFI_LED
     pinMode(WIFI_LED, OUTPUT);
-    digitalWrite(WIFI_LED, LOW);
+    digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
 
 #ifdef BLE_LED
     pinMode(BLE_LED, OUTPUT);
-#ifdef BLE_LED_INVERTED
-    digitalWrite(BLE_LED, HIGH);
-#else
-    digitalWrite(BLE_LED, LOW);
-#endif
-#endif
-
-#if defined(T_DECK)
-    // GPIO10 manages all peripheral power supplies
-    // Turn on peripheral power immediately after MUC starts.
-    // If some boards are turned on late, ESP32 will reset due to low voltage.
-    // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) ,
-    // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
-    pinMode(KB_POWERON, OUTPUT);
-    digitalWrite(KB_POWERON, HIGH);
-    // T-Deck has all three SPI peripherals (TFT, SD, LoRa) attached to the same SPI bus
-    // We need to initialize all CS pins in advance otherwise there will be SPI communication issues
-    // e.g. when detecting the SD card
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    delay(100);
-#elif defined(T_DECK_PRO)
-    pinMode(LORA_EN, OUTPUT);
-    digitalWrite(LORA_EN, HIGH);
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(PIN_EINK_CS, OUTPUT);
-    digitalWrite(PIN_EINK_CS, HIGH);
-#if PIN_EINK_RES >= 0
-    pinMode(PIN_EINK_RES, OUTPUT);
-    digitalWrite(PIN_EINK_RES, HIGH);
-#endif
-    pinMode(CST328_PIN_RST, OUTPUT);
-    digitalWrite(CST328_PIN_RST, HIGH);
-#elif defined(T_LORA_PAGER)
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    pinMode(KB_INT, INPUT_PULLUP);
-    // io expander
-    io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
-    io.pinMode(EXPANDS_DRV_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_DRV_EN, HIGH);
-    io.pinMode(EXPANDS_AMP_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_AMP_EN, LOW);
-    io.pinMode(EXPANDS_LORA_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_LORA_EN, HIGH);
-    io.pinMode(EXPANDS_GPS_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPS_EN, HIGH);
-    io.pinMode(EXPANDS_KB_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_KB_EN, HIGH);
-    io.pinMode(EXPANDS_SD_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_SD_EN, HIGH);
-    io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
-    io.pinMode(EXPANDS_SD_PULLEN, INPUT);
-#elif defined(HACKADAY_COMMUNICATOR)
-    pinMode(KB_INT, INPUT);
     digitalWrite(BLE_LED, LED_STATE_OFF);
-#endif
-
-#if defined(T_DECK)
-    // GPIO10 manages all peripheral power supplies
-    // Turn on peripheral power immediately after MUC starts.
-    // If some boards are turned on late, ESP32 will reset due to low voltage.
-    // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) ,
-    // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
-    pinMode(KB_POWERON, OUTPUT);
-    digitalWrite(KB_POWERON, HIGH);
-    // T-Deck has all three SPI peripherals (TFT, SD, LoRa) attached to the same SPI bus
-    // We need to initialize all CS pins in advance otherwise there will be SPI communication issues
-    // e.g. when detecting the SD card
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    delay(100);
-#elif defined(T_DECK_PRO)
-    pinMode(LORA_EN, OUTPUT);
-    digitalWrite(LORA_EN, HIGH);
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(PIN_EINK_CS, OUTPUT);
-    digitalWrite(PIN_EINK_CS, HIGH);
-#if PIN_EINK_RES >= 0
-    pinMode(PIN_EINK_RES, OUTPUT);
-    digitalWrite(PIN_EINK_RES, HIGH);
-#endif
-    pinMode(CST328_PIN_RST, OUTPUT);
-    digitalWrite(CST328_PIN_RST, HIGH);
-#elif defined(T_LORA_PAGER)
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    pinMode(KB_INT, INPUT_PULLUP);
-    // io expander
-    io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
-    io.pinMode(EXPANDS_DRV_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_DRV_EN, HIGH);
-    io.pinMode(EXPANDS_AMP_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_AMP_EN, LOW);
-    io.pinMode(EXPANDS_LORA_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_LORA_EN, HIGH);
-    io.pinMode(EXPANDS_GPS_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPS_EN, HIGH);
-    io.pinMode(EXPANDS_KB_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_KB_EN, HIGH);
-    io.pinMode(EXPANDS_SD_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_SD_EN, HIGH);
-    io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
-    io.pinMode(EXPANDS_SD_PULLEN, INPUT);
-#elif defined(HACKADAY_COMMUNICATOR)
-    pinMode(KB_INT, INPUT);
 #endif
 
     concurrency::hasBeenSetup = true;
@@ -549,6 +435,11 @@ void setup()
 #if defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE); // turn on the display power
+#endif
+
+#if defined(PIN_SENSOR_EN)
+    pinMode(PIN_SENSOR_EN, OUTPUT);
+    digitalWrite(PIN_SENSOR_EN, PIN_SENSOR_EN_ACTIVE); // turn on sensor power
 #endif
 
 #if defined(BIAS_T_ENABLE)
@@ -791,6 +682,11 @@ void setup()
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
 #endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+    auto mag_info = i2cScanner->firstMagnetometer();
+    magnetometer_found = mag_info.type != ScanI2C::DeviceType::NONE ? mag_info.address : magnetometer_found;
+    LOG_DEBUG("mag_info = %i", mag_info.type);
+#endif
 
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA226, meshtastic_TelemetrySensorType_INA226);
@@ -803,6 +699,8 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMI8658, meshtastic_TelemetrySensorType_QMI8658);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC5883L, meshtastic_TelemetrySensorType_QMC5883L);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::HMC5883L, meshtastic_TelemetrySensorType_QMC5883L);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MMC5983MA, meshtastic_TelemetrySensorType_MMC5983MA);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM42607P, meshtastic_TelemetrySensorType_ICM42607P);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
@@ -824,6 +722,9 @@ void setup()
 
 #ifdef ARCH_NRF52
     nrf52Setup();
+#endif
+#ifdef ARCH_NRF54L15
+    nrf54l15Setup();
 #endif
 
 #ifdef ARCH_RP2040
@@ -860,8 +761,20 @@ void setup()
 #elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #else
-    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO) {
         screen_model = config.display.oled;
+
+        // Fix: update geometry for SH1107 128x128 selected via menu
+        if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128) {
+            screen_geometry = GEOMETRY_128_128;
+            screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // normalize
+        }
+    }
+#endif
+#ifdef OLED_GEOMETRY_OVERRIDE
+    // Per-variant geometry (e.g. 72x40 micro-OLEDs). Takes precedence over the
+    // default GEOMETRY_128_64 set at the top of setup().
+    screen_geometry = OLED_GEOMETRY_OVERRIDE;
 #endif
 #endif
 
@@ -869,6 +782,11 @@ void setup()
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
+    }
+#endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+    if (mag_info.type != ScanI2C::DeviceType::NONE) {
+        magnetometerThread = new MagnetometerThread(mag_info.type);
     }
 #endif
 
@@ -1248,6 +1166,9 @@ void loop()
 #endif
 #ifdef ARCH_NRF52
     nrf52Loop();
+#endif
+#ifdef ARCH_NRF54L15
+    nrf54l15Loop();
 #endif
     power->powerCommandsCheck();
 

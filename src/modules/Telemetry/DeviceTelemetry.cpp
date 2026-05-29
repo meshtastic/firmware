@@ -20,13 +20,14 @@ static constexpr uint16_t TX_HISTORY_KEY_DEVICE_TELEMETRY = 0x8001;
 
 int32_t DeviceTelemetryModule::runOnce()
 {
+
     refreshUptime();
     uint32_t lastTelemetry = transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_DEVICE_TELEMETRY) : 0;
     bool isImpoliteRole = isSensorOrRouterRole();
     if (((lastTelemetry == 0) ||
          ((uptimeLastMs - lastTelemetry) >= Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.device_update_interval,
                                                                                     default_telemetry_broadcast_interval_secs,
-                                                                                    numOnlineNodes))) &&
+                                                                                    numOnlineNodes, TrafficType::TELEMETRY))) &&
         airTime->isTxAllowedChannelUtil(!isImpoliteRole) && airTime->isTxAllowedAirUtil() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN &&
         moduleConfig.telemetry.device_telemetry_enabled) {
@@ -99,17 +100,21 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     t.variant.device_metrics.has_air_util_tx = true;
     t.variant.device_metrics.has_battery_level = true;
     t.variant.device_metrics.has_channel_utilization = true;
-    t.variant.device_metrics.has_voltage = true;
     t.variant.device_metrics.has_uptime_seconds = true;
-
     t.variant.device_metrics.air_util_tx = airTime->utilizationTXPercent();
     t.variant.device_metrics.battery_level = (!powerStatus->getHasBattery() || powerStatus->getIsCharging())
                                                  ? MAGIC_USB_BATTERY_LEVEL
                                                  : powerStatus->getBatteryChargePercent();
     t.variant.device_metrics.channel_utilization = airTime->channelUtilizationPercent();
-    t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
+    // Only populate voltage when we actually have a battery reading. Previously this assigned
+    // -0.001 (from -1 mV / 1000) whenever the ADC returned -1, leaking a sentinel onto the wire
+    // that clients then displayed as a real negative voltage. See GH #7958.
+    int32_t batteryMv = powerStatus->getBatteryVoltageMv();
+    if (powerStatus->getHasBattery() && batteryMv > 0) {
+        t.variant.device_metrics.has_voltage = true;
+        t.variant.device_metrics.voltage = batteryMv / 1000.0f;
+    }
     t.variant.device_metrics.uptime_seconds = getUptimeSeconds();
-
     return t;
 }
 
@@ -125,6 +130,8 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     telemetry.variant.local_stats.num_online_nodes = numOnlineNodes;
     telemetry.variant.local_stats.num_total_nodes = nodeDB->getNumMeshNodes();
     if (RadioLibInterface::instance) {
+        RadioLibInterface::instance->updateNoiseFloor();
+        telemetry.variant.local_stats.noise_floor = RadioLibInterface::instance->getAverageNoiseFloor();
         telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instance->txGood;
         telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
@@ -133,6 +140,8 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     }
 #ifdef ARCH_PORTDUINO
     if (SimRadio::instance) {
+        if (!RadioLibInterface::instance)
+            telemetry.variant.local_stats.noise_floor = SimRadio::instance->getCurrentRSSI();
         telemetry.variant.local_stats.num_packets_tx = SimRadio::instance->txGood;
         telemetry.variant.local_stats.num_packets_rx = SimRadio::instance->rxGood + SimRadio::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = SimRadio::instance->rxBad;
@@ -148,10 +157,11 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_tx_relay_canceled = router->txRelayCanceled;
     }
 
-    LOG_INFO("Sending local stats: uptime=%i, channel_utilization=%f, air_util_tx=%f, num_online_nodes=%i, num_total_nodes=%i",
+    LOG_INFO("Sending local stats: uptime=%i, channel_utilization=%f, air_util_tx=%f, num_online_nodes=%i, num_total_nodes=%i, "
+             "noise_floor=%d",
              telemetry.variant.local_stats.uptime_seconds, telemetry.variant.local_stats.channel_utilization,
              telemetry.variant.local_stats.air_util_tx, telemetry.variant.local_stats.num_online_nodes,
-             telemetry.variant.local_stats.num_total_nodes);
+             telemetry.variant.local_stats.num_total_nodes, telemetry.variant.local_stats.noise_floor);
 
     LOG_INFO("num_packets_tx=%i, num_packets_rx=%i, num_packets_rx_bad=%i", telemetry.variant.local_stats.num_packets_tx,
              telemetry.variant.local_stats.num_packets_rx, telemetry.variant.local_stats.num_packets_rx_bad);

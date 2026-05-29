@@ -4,6 +4,7 @@
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PositionPrecision.h"
 #include "RTC.h"
 #include "Router.h"
 #include "TransmitHistory.h"
@@ -12,7 +13,6 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "main.h"
-#include "mesh/compression/unishox2.h"
 #include "meshUtils.h"
 #include "meshtastic/atak.pb.h"
 #include "sleep.h"
@@ -107,13 +107,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     nodeDB->updatePosition(getFrom(&mp), p);
-    if (channels.getByIndex(mp.channel).settings.has_module_settings) {
-        precision = channels.getByIndex(mp.channel).settings.module_settings.position_precision;
-    } else if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
-        precision = 32;
-    } else {
-        precision = 0;
-    }
+    precision = getPositionPrecisionForChannel(mp.channel);
 
     return false; // Let others look at this message also if they want
 }
@@ -121,15 +115,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_Position *p)
 {
     // Phone position packets need to be truncated to the channel precision
-    if (isFromUs(&mp) && (precision < 32 && precision > 0)) {
-        LOG_DEBUG("Truncate phone position to channel precision %i", precision);
-        p->latitude_i = p->latitude_i & (UINT32_MAX << (32 - precision));
-        p->longitude_i = p->longitude_i & (UINT32_MAX << (32 - precision));
-
-        // We want the imprecise position to be the middle of the possible location, not
-        p->latitude_i += (1 << (31 - precision));
-        p->longitude_i += (1 << (31 - precision));
-
+    if (isFromUs(&mp)) {
+        if (precision == 0)
+            LOG_DEBUG("Strip phone position due to channel precision 0");
+        else if (precision < 32)
+            LOG_DEBUG("Truncate phone position to channel precision %i", precision);
+        applyPositionPrecision(*p, precision);
         mp.decoded.payload.size =
             pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_Position_msg, p);
     }
@@ -183,8 +174,7 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
         return nullptr;
     }
 
-    meshtastic_NodeInfoLite *node = service->refreshLocalMeshNode(); // should guarantee there is now a position
-    assert(node->has_position);
+    const meshtastic_NodeInfoLite *node = service->refreshLocalMeshNode(); // should guarantee there is now a position
 
     // configuration of POSITION packet
     //   consider making this a function argument?
@@ -194,7 +184,9 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
     meshtastic_Position p = meshtastic_Position_init_default; //   Start with an empty structure
     // if localPosition is totally empty, put our last saved position (lite) in there
     if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
-        nodeDB->setLocalPosition(TypeConversions::ConvertToPosition(node->position));
+        meshtastic_PositionLite cachedSelf;
+        if (nodeDB->copyNodePosition(node->num, cachedSelf))
+            nodeDB->setLocalPosition(TypeConversions::ConvertToPosition(cachedSelf));
     }
     localPosition.seq_number++;
 
@@ -205,20 +197,11 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
 
     // lat/lon are unconditionally included - IF AVAILABLE!
     LOG_DEBUG("Send location with precision %i", precision);
-    if (precision < 32 && precision > 0) {
-        p.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - precision));
-        p.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - precision));
-
-        // We want the imprecise position to be the middle of the possible location, not
-        p.latitude_i += (1 << (31 - precision));
-        p.longitude_i += (1 << (31 - precision));
-    } else {
-        p.latitude_i = localPosition.latitude_i;
-        p.longitude_i = localPosition.longitude_i;
-    }
-    p.precision_bits = precision;
+    p.latitude_i = localPosition.latitude_i;
+    p.longitude_i = localPosition.longitude_i;
     p.has_latitude_i = true;
     p.has_longitude_i = true;
+    applyPositionPrecision(p, precision);
     // Always use NTP / GPS time if available
     if (getValidTime(RTCQualityNTP) > 0) {
         p.time = getValidTime(RTCQualityNTP);
@@ -307,37 +290,75 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
 meshtastic_MeshPacket *PositionModule::allocAtakPli()
 {
-    LOG_INFO("Send TAK PLI packet");
+    LOG_INFO("Send TAK V2 PLI packet");
     meshtastic_MeshPacket *mp = allocDataPacket();
-    mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN;
+    mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN_V2;
 
-    meshtastic_TAKPacket takPacket = {.is_compressed = true,
-                                      .has_contact = true,
-                                      .contact = meshtastic_Contact_init_default,
-                                      .has_group = true,
-                                      .group = {meshtastic_MemberRole_TeamMember, meshtastic_Team_Cyan},
-                                      .has_status = true,
-                                      .status =
-                                          {
-                                              .battery = powerStatus->getBatteryChargePercent(),
-                                          },
-                                      .which_payload_variant = meshtastic_TAKPacket_pli_tag,
-                                      .payload_variant = {.pli = {
-                                                              .latitude_i = localPosition.latitude_i,
-                                                              .longitude_i = localPosition.longitude_i,
-                                                              .altitude = localPosition.altitude_hae,
-                                                              .speed = localPosition.ground_speed,
-                                                              .course = static_cast<uint16_t>(localPosition.ground_track),
-                                                          }}};
+    meshtastic_TAKPacketV2 takPacket = meshtastic_TAKPacketV2_init_zero;
+    takPacket.cot_type_id = meshtastic_CotType_CotType_a_f_G_U_C;
 
-    auto length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign,
-                                          sizeof(takPacket.contact.device_callsign) - 1, USX_PSET_DFLT, NULL);
-    LOG_DEBUG("Uncompressed device_callsign '%s' - %d bytes", owner.long_name, strlen(owner.long_name));
-    LOG_DEBUG("Compressed device_callsign '%s' - %d bytes", takPacket.contact.device_callsign, length);
-    length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.callsign,
-                                     sizeof(takPacket.contact.callsign) - 1, USX_PSET_DFLT, NULL);
-    mp->decoded.payload.size =
-        pb_encode_to_bytes(mp->decoded.payload.bytes, sizeof(mp->decoded.payload.bytes), &meshtastic_TAKPacket_msg, &takPacket);
+    // Use TAK config for team/role if configured, otherwise use defaults (Cyan/TeamMember)
+    if (moduleConfig.has_tak && moduleConfig.tak.team != meshtastic_Team_Unspecifed_Color) {
+        takPacket.team = moduleConfig.tak.team;
+    } else {
+        takPacket.team = meshtastic_Team_Cyan;
+    }
+
+    if (moduleConfig.has_tak && moduleConfig.tak.role != meshtastic_MemberRole_Unspecifed) {
+        takPacket.role = moduleConfig.tak.role;
+    } else {
+        takPacket.role = meshtastic_MemberRole_TeamMember;
+    }
+    takPacket.latitude_i = localPosition.latitude_i;
+    takPacket.longitude_i = localPosition.longitude_i;
+    takPacket.altitude = localPosition.altitude_hae;
+    takPacket.speed = localPosition.ground_speed;
+    // ground_track is stored as degrees * 1e5, course field expects degrees * 100
+    int32_t course = localPosition.ground_track / 1000;
+    if (course < 0)
+        course = 0;
+    else if (course > 36000)
+        course = 36000;
+    takPacket.course = static_cast<uint16_t>(course);
+    takPacket.battery = powerStatus->getBatteryChargePercent();
+
+    // Map position source to CoT how/geo_src/alt_src
+    if (config.position.fixed_position || localPosition.location_source == meshtastic_Position_LocSource_LOC_MANUAL) {
+        takPacket.how = meshtastic_CotHow_CotHow_h_e;
+        takPacket.geo_src = meshtastic_GeoPointSource_GeoPointSource_USER;
+        takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_USER;
+    } else {
+        takPacket.how = meshtastic_CotHow_CotHow_m_g;
+        takPacket.geo_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
+        takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
+    }
+
+    // Callsign - stored as plain string (no compression, apps handle that)
+    strncpy(takPacket.callsign, owner.long_name, sizeof(takPacket.callsign) - 1);
+    takPacket.callsign[sizeof(takPacket.callsign) - 1] = '\0';
+    strncpy(takPacket.device_callsign, owner.long_name, sizeof(takPacket.device_callsign) - 1);
+    takPacket.device_callsign[sizeof(takPacket.device_callsign) - 1] = '\0';
+
+    // Encode TAKPacketV2 protobuf, leaving room for flags byte prefix
+    uint8_t protobuf_bytes[sizeof(mp->decoded.payload.bytes) - 1];
+    size_t proto_size = pb_encode_to_bytes(protobuf_bytes, sizeof(protobuf_bytes), &meshtastic_TAKPacketV2_msg, &takPacket);
+
+    if (proto_size == 0) {
+        LOG_ERROR("Failed to encode TAK V2 PLI packet");
+        packetPool.release(mp);
+        return nullptr;
+    }
+
+    // Wire format: [flags byte][protobuf bytes]
+    // Flags byte 0xFF is a reserved sentinel meaning the remainder is an
+    // uncompressed raw protobuf payload (that is, no zstd dictionary ID is
+    // encoded in the flags byte). Decoders must check for this sentinel before
+    // applying any dictionary-ID masking/interpretation.
+    mp->decoded.payload.bytes[0] = 0xFF;
+    memcpy(mp->decoded.payload.bytes + 1, protobuf_bytes, proto_size);
+    mp->decoded.payload.size = proto_size + 1;
+
+    LOG_DEBUG("TAK V2 PLI payload: %zu bytes (1 flags + %zu protobuf)", mp->decoded.payload.size, proto_size);
     return mp;
 }
 
@@ -349,8 +370,7 @@ void PositionModule::sendOurPosition()
     // If we changed channels, ask everyone else for their latest info
     LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
     for (uint8_t channelNum = 0; channelNum < 8; channelNum++) {
-        if (channels.getByIndex(channelNum).settings.has_module_settings &&
-            channels.getByIndex(channelNum).settings.module_settings.position_precision != 0) {
+        if (getPositionPrecisionForChannel(channelNum) != 0) {
             sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
             return;
         }
@@ -368,10 +388,8 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
 
-    // Set's the class precision value for this particular packet
-    if (channels.getByIndex(channel).settings.has_module_settings) {
-        precision = channels.getByIndex(channel).settings.module_settings.position_precision;
-    }
+    // Set the class precision value for this particular packet.
+    precision = getPositionPrecisionForChannel(channel);
 
     meshtastic_MeshPacket *p = allocPositionPacket();
     if (p == nullptr) {
@@ -420,14 +438,14 @@ int32_t PositionModule::runOnce()
         doDeepSleep(nightyNightMs, false, false);
     }
 
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (node == nullptr)
         return RUNONCE_INTERVAL;
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
-    uint32_t intervalMs = Default::getConfiguredOrDefaultMsScaled(config.position.position_broadcast_secs,
-                                                                  default_broadcast_interval_secs, numOnlineNodes);
+    uint32_t intervalMs = Default::getConfiguredOrDefaultMsScaled(
+        config.position.position_broadcast_secs, default_broadcast_interval_secs, numOnlineNodes, TrafficType::POSITION);
     uint32_t msSinceLastSend = now - lastGpsSend;
     // Only send packets if the channel util. is less than 25% utilized or we're a tracker with less than 40% utilized.
     if (!airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
@@ -445,8 +463,11 @@ int32_t PositionModule::runOnce()
         } else if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
-            lastGpsLatitude = node->position.latitude_i;
-            lastGpsLongitude = node->position.longitude_i;
+            meshtastic_PositionLite selfPos;
+            if (nodeDB->copyNodePosition(node->num, selfPos)) {
+                lastGpsLatitude = selfPos.latitude_i;
+                lastGpsLongitude = selfPos.longitude_i;
+            }
 
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(meshtastic_PortNum_POSITION_APP);
@@ -461,7 +482,10 @@ int32_t PositionModule::runOnce()
         if (nodeDB->hasValidPosition(node2)) {
             // The minimum time (in seconds) that would pass before we are able to send a new position packet.
 
-            auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
+            meshtastic_PositionLite selfPos;
+            if (!nodeDB->copyNodePosition(node->num, selfPos))
+                return RUNONCE_INTERVAL; // Defensive: hasValidPosition should imply this is non-null
+            auto smartPosition = getDistanceTraveledSinceLastSend(selfPos);
             msSinceLastSend = now - lastGpsSend;
 
             if (smartPosition.hasTraveledOverThreshold &&
@@ -479,8 +503,8 @@ int32_t PositionModule::runOnce()
                           msSinceLastSend, minimumTimeThreshold);
 
                 // Set the current coords as our last ones, after we've compared distance with current and decided to send
-                lastGpsLatitude = node->position.latitude_i;
-                lastGpsLongitude = node->position.longitude_i;
+                lastGpsLatitude = selfPos.latitude_i;
+                lastGpsLongitude = selfPos.longitude_i;
             }
         }
     }
@@ -492,15 +516,24 @@ void PositionModule::sendLostAndFoundText()
 {
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = NODENUM_BROADCAST;
-    char *message = new char[60];
-    sprintf(message, "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7), (lastGpsLongitude * 1e-7));
+    char message[128];
+    int written = snprintf(message, sizeof(message), "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7),
+                           (lastGpsLongitude * 1e-7));
     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     p->want_ack = false;
-    p->decoded.payload.size = strlen(message);
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+    if (written < 0) {
+        // snprintf encoding error — send an empty payload rather than uninitialized bytes.
+        p->decoded.payload.size = 0;
+    } else {
+        // Clamp to buffer capacity (snprintf returns "would-have-written" which can exceed the buffer).
+        const size_t msg_len = std::min(static_cast<size_t>(written), sizeof(message) - 1);
+        p->decoded.payload.size = msg_len;
+        if (msg_len > 0) {
+            memcpy(p->decoded.payload.bytes, message, msg_len);
+        }
+    }
 
     service->sendToMesh(p, RX_SRC_LOCAL, true);
-    delete[] message;
 }
 
 // Helper: return imprecise (truncated + centered) lat/lon as int32 using current precision
@@ -554,11 +587,14 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
 
 void PositionModule::handleNewPosition()
 {
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
     // We limit our GPS broadcasts to a max rate
     if (nodeDB->hasValidPosition(node2)) {
-        auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
+        meshtastic_PositionLite selfPos;
+        if (!nodeDB->copyNodePosition(node->num, selfPos))
+            return;
+        auto smartPosition = getDistanceTraveledSinceLastSend(selfPos);
         uint32_t msSinceLastSend = millis() - lastGpsSend;
         if (smartPosition.hasTraveledOverThreshold &&
             Throttle::execute(
@@ -574,8 +610,8 @@ void PositionModule::handleNewPosition()
                       minimumTimeThreshold);
 
             // Set the current coords as our last ones, after we've compared distance with current and decided to send
-            lastGpsLatitude = node->position.latitude_i;
-            lastGpsLongitude = node->position.longitude_i;
+            lastGpsLatitude = selfPos.latitude_i;
+            lastGpsLongitude = selfPos.longitude_i;
         }
     }
 }
