@@ -33,6 +33,17 @@ HEARTBEAT_IDLE_DELAY_SEC = 5.0
 HEARTBEAT_REPEAT_SEC = 15.0
 HEARTBEAT_POLL_INTERVAL_SEC = 0.25
 
+# --- Half-duplex turn-taking ("talking stick"), carried in RemoteShell.flags ---
+# On a 2-party LoRa link, Meshtastic's CSMA-CA collapses when both ends transmit at once
+# (synchronized same-slot collisions that CAD can't prevent). These flags let exactly one side
+# transmit at a time. The client is the master / idle-owner: it holds the token silently when
+# idle and grants it to the server whenever the server may need to respond.
+FLAG_GRANT = 0x01  # I am handing you the turn; you may transmit now
+FLAG_MORE = 0x02   # I yielded under a budget but still have data queued (grant back promptly)
+FLAG_RTS = 0x04    # (server->client) I have output but no turn; please grant me one
+CLIENT_TURN_BUDGET = 4   # max frames the client sends per turn before yielding
+TURN_RECLAIM_SEC = 8.0   # reclaim the token if a grant goes unanswered this long (anti-deadlock)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -62,6 +73,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--close-after", type=float, default=2.0, help="seconds to wait before closing in command mode")
     parser.add_argument("--timeout", type=float, default=10.0, help="seconds to wait for API/session events")
     parser.add_argument("--verbose", action="store_true", help="print extra protocol events")
+    parser.add_argument(
+        "--no-turn-taking",
+        dest="turn_taking",
+        action="store_false",
+        help="disable half-duplex turn-taking (revert to free-running send; needed for old peers)",
+    )
+    parser.add_argument(
+        "--turn-budget", type=int, default=CLIENT_TURN_BUDGET, help="max frames to send per turn before yielding"
+    )
+    parser.add_argument(
+        "--turn-reclaim", type=float, default=TURN_RECLAIM_SEC, help="seconds before reclaiming an unanswered turn grant"
+    )
+    parser.set_defaults(turn_taking=True)
     return parser.parse_args()
 
 
@@ -282,6 +306,24 @@ class SentShellFrame:
 
 
 @dataclass
+class TxIntent:
+    """A frame queued for transmission; the sender thread allocates seq and adds turn flags."""
+
+    op: int
+    payload: bytes = b""
+    cols: int = 0
+    rows: int = 0
+    session_id: Optional[int] = None
+    ack_seq: Optional[int] = None
+    seq: Optional[int] = None
+    flags: int = 0
+    last_tx_seq: int = 0
+    last_rx_seq: int = 0
+    remember: bool = True
+    heartbeat: bool = False
+
+
+@dataclass
 class SessionState:
     pb2: object  # ProtoModules with mesh and portnums attributes
     target: int
@@ -309,6 +351,38 @@ class SessionState:
     replay_log_path: Optional[Path] = None
     last_transport_activity_time: float = field(default_factory=time.monotonic)
     last_heartbeat_sent_time: float = 0.0
+
+    # --- Half-duplex turn-taking state ---
+    turn_taking: bool = True
+    turn_budget: int = CLIENT_TURN_BUDGET
+    turn_reclaim_sec: float = TURN_RECLAIM_SEC
+    has_token: bool = True  # client is the master / idle-owner: starts holding the turn
+    grant_requested: bool = False  # peer asked for a turn (FLAG_MORE / FLAG_RTS)
+    last_grant_time: float = 0.0  # when we last handed the turn to the peer
+    last_inbound_time: float = 0.0  # when we last heard anything (to detect an unanswered grant)
+    tx_intents: deque = field(default_factory=deque)
+    turn_cv: threading.Condition = field(default_factory=threading.Condition)
+
+    def enqueue_tx(self, intent: TxIntent) -> None:
+        with self.turn_cv:
+            self.tx_intents.append(intent)
+            self.turn_cv.notify_all()
+
+    def note_turn_flags(self, flags: int) -> None:
+        """Apply channel-access flags from an inbound frame (called by the reader thread)."""
+        if not self.turn_taking:
+            return
+        with self.turn_cv:
+            self.last_inbound_time = time.monotonic()
+            if flags & FLAG_GRANT:
+                self.has_token = True
+            if flags & (FLAG_MORE | FLAG_RTS):
+                self.grant_requested = True
+            self.turn_cv.notify_all()
+
+    def wake_sender(self) -> None:
+        with self.turn_cv:
+            self.turn_cv.notify_all()
 
     def alloc_seq(self) -> int:
         with self.tx_lock:
@@ -510,10 +584,40 @@ def send_shell_frame(
     remember: bool = True,
     heartbeat: bool = False,
 ) -> int:
+    """Queue a frame for transmission. The sender thread allocates seq, adds turn flags, and sends.
+
+    (transport is unused here — the sender thread owns the transport — but kept for call-site
+    compatibility.)
+    """
+    state.enqueue_tx(
+        TxIntent(
+            op=op,
+            payload=payload,
+            cols=cols,
+            rows=rows,
+            session_id=session_id,
+            ack_seq=ack_seq,
+            seq=seq,
+            flags=flags,
+            last_tx_seq=last_tx_seq,
+            last_rx_seq=last_rx_seq,
+            remember=remember,
+            heartbeat=heartbeat,
+        )
+    )
+    return seq if seq is not None else 0
+
+
+def transmit_frame(transport, state: SessionState, intent: TxIntent) -> int:
+    """Actually serialize and send one frame over the API socket. Only the sender thread calls this."""
+    op = intent.op
+    seq = intent.seq
     if seq is None:
         seq = 0 if op == state.pb2.mesh.RemoteShell.ACK else state.alloc_seq()
+    ack_seq = intent.ack_seq
     if ack_seq is None:
         ack_seq = state.current_ack_seq()
+    session_id = intent.session_id
     if session_id is None:
         session_id = state.session_id
 
@@ -522,32 +626,115 @@ def send_shell_frame(
     shell.session_id = session_id
     shell.seq = seq
     shell.ack_seq = ack_seq
-    shell.cols = cols
-    shell.rows = rows
-    shell.flags = flags
-    shell.last_tx_seq = last_tx_seq
-    shell.last_rx_seq = last_rx_seq
-    if payload:
-        shell.payload = payload
+    shell.cols = intent.cols
+    shell.rows = intent.rows
+    shell.flags = intent.flags
+    shell.last_tx_seq = intent.last_tx_seq
+    shell.last_rx_seq = intent.last_rx_seq
+    if intent.payload:
+        shell.payload = intent.payload
     with state.socket_lock:
         send_toradio(transport, make_toradio_packet(state.pb2, state, shell))
-    if remember:
+    if intent.remember:
         state.remember_sent_frame(
             SentShellFrame(
                 op=op,
                 session_id=session_id,
                 seq=seq,
                 ack_seq=ack_seq,
-                payload=payload,
-                cols=cols,
-                rows=rows,
-                flags=flags,
-                last_tx_seq=last_tx_seq,
-                last_rx_seq=last_rx_seq,
+                payload=intent.payload,
+                cols=intent.cols,
+                rows=intent.rows,
+                flags=intent.flags,
+                last_tx_seq=intent.last_tx_seq,
+                last_rx_seq=intent.last_rx_seq,
             )
         )
-    state.note_outbound_packet(heartbeat=heartbeat)
+    state.note_outbound_packet(heartbeat=intent.heartbeat)
     return seq
+
+
+def sender_loop(transport, state: SessionState) -> None:
+    """Single transmitter. Sends queued frames only while we hold the turn, then grants it away.
+
+    This is what makes the link half-duplex: with turn-taking on, only one side transmits at a
+    time, eliminating the synchronized collisions that wreck the CSMA-CA scheme on a 2-party link.
+    """
+    while not state.stopped:
+        burst: list[TxIntent] = []
+        send_bare_grant = False
+        more_after = False
+
+        with state.turn_cv:
+            while not state.stopped:
+                if not state.turn_taking:
+                    if state.tx_intents:
+                        break
+                    state.turn_cv.wait(timeout=1.0)
+                    continue
+                if state.has_token:
+                    if state.tx_intents or state.grant_requested:
+                        break
+                    # Hold the token and stay silent until we have work or the peer requests a turn.
+                    state.turn_cv.wait(timeout=1.0)
+                else:
+                    # We granted the turn away. Reclaim it only if we granted a while ago AND the
+                    # link has gone quiet (no inbound) for that long — i.e. the peer isn't mid-turn,
+                    # so either our grant or the peer's yield-grant was lost. Requiring quiet (not
+                    # just grant age) avoids reclaiming mid-stream, which would cause double-talk.
+                    now = time.monotonic()
+                    if (
+                        state.last_grant_time
+                        and (now - state.last_grant_time) > state.turn_reclaim_sec
+                        and (now - state.last_inbound_time) > state.turn_reclaim_sec
+                    ):
+                        state.has_token = True
+                        if state.verbose:
+                            state.event_queue.put("turn: reclaimed unanswered grant")
+                        continue
+                    ref = max(state.last_grant_time, state.last_inbound_time)
+                    timeout = max(0.05, state.turn_reclaim_sec - (now - ref)) if ref else state.turn_reclaim_sec
+                    state.turn_cv.wait(timeout=timeout)
+
+            if state.stopped:
+                return
+
+            # We hold the turn (or turn-taking is off). Pull a burst of intents to send.
+            budget = None if not state.turn_taking else max(1, state.turn_budget)
+            while state.tx_intents and (budget is None or len(burst) < budget):
+                burst.append(state.tx_intents.popleft())
+
+            if state.turn_taking:
+                more_after = bool(state.tx_intents)  # still queued beyond our budget
+                if burst:
+                    # The burst's last frame grants the turn, satisfying any pending request.
+                    state.grant_requested = False
+                    state.has_token = False
+                    state.last_grant_time = time.monotonic()
+                elif state.grant_requested:
+                    send_bare_grant = True
+                    state.grant_requested = False
+                    state.has_token = False
+                    state.last_grant_time = time.monotonic()
+
+        # Transmit outside the lock (socket I/O may block).
+        try:
+            if burst:
+                n = len(burst)
+                for i, intent in enumerate(burst):
+                    if state.turn_taking and i == n - 1:
+                        # Last frame of our turn: hand the token back to the peer.
+                        intent.flags |= FLAG_GRANT
+                        if more_after:
+                            intent.flags |= FLAG_MORE
+                    transmit_frame(transport, state, intent)
+            elif send_bare_grant:
+                transmit_frame(transport, state, TxIntent(op=state.pb2.mesh.RemoteShell.ACK, seq=0, remember=False, flags=FLAG_GRANT))
+        except Exception as exc:
+            if not state.stopped:
+                state.event_queue.put(f"sender error: {exc}")
+                state.closed_event.set()
+            return
 
 
 def send_ack_frame(transport, state: SessionState, replay_from: Optional[int] = None) -> None:
@@ -676,6 +863,9 @@ def reader_loop(transport, state: SessionState) -> None:
             if not shell:
                 continue
             state.note_inbound_packet()
+            # Honor channel-access flags (GRANT/MORE/RTS) on every inbound frame, regardless of
+            # payload ordering, so a granted turn is never lost to a gap.
+            state.note_turn_flags(shell.flags)
             #state.prune_sent_frames(shell.ack_seq)
             if shell.op == state.pb2.mesh.RemoteShell.ACK:
                 #state.event_queue.put("peer requested replay")
@@ -902,6 +1092,9 @@ def main() -> int:
         target=parse_node_num(args.to),
         channel=args.channel,
         verbose=args.verbose,
+        turn_taking=args.turn_taking,
+        turn_budget=args.turn_budget,
+        turn_reclaim_sec=args.turn_reclaim,
     )
 
     cols, rows = resolve_initial_terminal_size(args.cols, args.rows)
@@ -912,6 +1105,11 @@ def main() -> int:
 
         reader = threading.Thread(target=reader_loop, args=(transport, state), daemon=True)
         reader.start()
+
+        # The sender thread owns all transmission and the turn-taking token. Start it before OPEN
+        # so the queued OPEN goes out (with a GRANT so the server can reply OPEN_OK).
+        sender = threading.Thread(target=sender_loop, args=(transport, state), daemon=True)
+        sender.start()
 
         send_shell_frame(transport, state, pb2.mesh.RemoteShell.OPEN, cols=cols, rows=rows)
         if not state.opened_event.wait(timeout=args.timeout):
@@ -927,9 +1125,11 @@ def main() -> int:
             run_interactive_mode(transport, state)
 
         state.stopped = True
+        state.wake_sender()
         drain_events(state)
         reader.join(timeout=1.0)
         heartbeat.join(timeout=1.0)
+        sender.join(timeout=1.0)
         state.close_replay_log()
     finally:
         transport.close()
