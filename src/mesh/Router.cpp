@@ -318,10 +318,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     } // should have already been handled by sendLocal
 
     // Abort sending if we are violating the duty cycle
-    if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
+    float effectiveDutyCycle = getEffectiveDutyCycle();
+    if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
         float hourlyTxPercent = airTime->utilizationTXPercent();
-        if (hourlyTxPercent > myRegion->dutyCycle) {
-            uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle);
+        if (hourlyTxPercent > effectiveDutyCycle) {
+            uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, effectiveDutyCycle);
 
             LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d mins", silentMinutes);
 
@@ -368,10 +369,14 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 
     fixPriority(p); // Before encryption, fix the priority if it's unset
-    if (!applyPositionPrecisionForChannel(*p, p->channel)) {
-        LOG_ERROR("Dropping malformed position packet before send");
-        packetPool.release(p);
-        return meshtastic_Routing_Error_BAD_REQUEST;
+    // Position precision is an originator-only privacy policy. Relays keep
+    // p->from as the original sender, so do not rewrite their POSITION_APP payload.
+    if (isFromUs(p)) {
+        if (!applyPositionPrecisionForChannel(*p, p->channel)) {
+            LOG_ERROR("Dropping malformed position packet before send");
+            packetPool.release(p);
+            return meshtastic_Routing_Error_BAD_REQUEST;
+        }
     }
 
     // If the packet is not yet encrypted, do so now
