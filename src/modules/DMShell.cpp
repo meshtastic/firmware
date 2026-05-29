@@ -13,6 +13,7 @@
 #include "pb_encode.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <pty.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -29,6 +30,16 @@ namespace
 constexpr uint16_t PTY_COLS_DEFAULT = 120;
 constexpr uint16_t PTY_ROWS_DEFAULT = 40;
 constexpr size_t MAX_MESSAGE_SIZE = 200;
+
+// --- Half-duplex turn-taking ("talking stick") protocol, carried in RemoteShell.flags ---
+// On a 2-party LoRa link, Meshtastic's CSMA-CA breaks down when both ends transmit at once
+// (synchronized same-slot collisions that CAD can't prevent). These flags let exactly one
+// side transmit at a time, eliminating those collisions. The client is the master/idle-owner.
+constexpr uint32_t TURN_FLAG_GRANT = 0x01; // I am handing you the turn; you may transmit now
+constexpr uint32_t TURN_FLAG_MORE = 0x02;  // I yielded under a budget but still have data queued
+constexpr uint32_t TURN_FLAG_RTS = 0x04;   // I have output but no turn; please grant me one
+constexpr size_t TURN_BUDGET_FRAMES = 4;   // max output frames per granted turn before yielding
+constexpr uint32_t RTS_RETRY_MS = 1000;    // min interval between request-to-send frames
 } // namespace
 
 DMShellModule::DMShellModule()
@@ -51,8 +62,14 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
     }
 
     if (frame.op == meshtastic_RemoteShell_OpCode_ACK) {
-        if (session.active && frame.session_id == session.sessionId && getFrom(&mp) == session.peer && frame.last_rx_seq > 0) {
-            resendFramesFrom(frame.last_rx_seq + 1);
+        if (session.active && frame.session_id == session.sessionId && getFrom(&mp) == session.peer) {
+            applyTurnFlags(frame);
+            if (frame.last_rx_seq > 0) {
+                resendFramesFrom(frame.last_rx_seq + 1);
+            }
+            // A standalone grant (client re-granting for MORE, replying to our RTS, or a heartbeat
+            // poll) is our cue to flush any pending shell output during this turn.
+            serviceTurn();
         }
         return ProcessMessage::CONTINUE;
     }
@@ -88,7 +105,14 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::STOP;
     }
 
+    // Honor channel-access flags before ordering checks: a GRANT transfers the turn regardless of
+    // whether this frame's payload is in order.
+    applyTurnFlags(frame);
+
     if (!shouldProcessIncomingFrame(frame)) {
+        // We won't process the payload (gap/duplicate), but we may now hold the turn, so flush
+        // output and/or hand it back rather than stalling the link.
+        serviceTurn();
         return ProcessMessage::STOP;
     }
 
@@ -98,7 +122,9 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
     case meshtastic_RemoteShell_OpCode_INPUT:
         if (!writeSessionInput(frame)) {
             sendError("input_write_failed");
-        } else {
+        } else if (!session.turnManaged) {
+            // Legacy peer (no turn-taking): echo immediately as before. In managed mode the
+            // serviceTurn() call at the end of handleReceived drains the echo and yields the turn.
             uint8_t outBuf[MAX_MESSAGE_SIZE];
             const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
             if (bytesRead > 0) {
@@ -164,6 +190,9 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
         break;
     }
 
+    // If the peer granted us the turn, flush pending shell output and hand the turn back.
+    serviceTurn();
+
     return ProcessMessage::STOP;
 }
 
@@ -189,6 +218,19 @@ int32_t DMShellModule::runOnce()
         return 50;
     }
 
+    if (session.turnManaged) {
+        if (session.hasToken) {
+            // We hold the turn: flush output and hand it back.
+            serviceTurn();
+        } else if (ptyHasOutput() && !Throttle::isWithinTimespanMs(session.lastRtsMs, RTS_RETRY_MS)) {
+            // Unsolicited shell output but no turn: ask the client to grant us one.
+            sendRts();
+            session.lastRtsMs = millis();
+        }
+        return 50;
+    }
+
+    // Legacy free-send path (peer is not using turn-taking).
     uint8_t outBuf[MAX_MESSAGE_SIZE];
     while (session.masterFd >= 0) {
         const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
@@ -321,6 +363,12 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     session.nextExpectedRxSeq = frame.seq + 1;
     session.highestSeenRxSeq = frame.seq;
     session.lastActivityMs = millis();
+    session.turnManaged = false;
+    session.hasToken = false;
+    session.lastRtsMs = 0;
+
+    // Honor any GRANT the client put on OPEN (opts this session into turn-taking).
+    applyTurnFlags(frame);
 
     meshtastic_RemoteShell newFrame = {
         .op = meshtastic_RemoteShell_OpCode_OPEN_OK,
@@ -329,10 +377,14 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
         .ack_seq = frame.seq,
         .cols = ws.ws_col,
         .rows = ws.ws_row,
-        .flags = 0,
+        .flags = session.turnManaged ? TURN_FLAG_GRANT : 0u,
     };
     newFrame.payload.size = 0;
     sendFrameToPeer(session.peer, newFrame, true);
+    if (session.turnManaged) {
+        // OPEN_OK handed the turn back to the client; it is now the idle-owner.
+        session.hasToken = false;
+    }
 
     LOG_INFO("DMShell: opened session=0x%x peer=0x%x pid=%d", session.sessionId, session.peer, session.childPid);
     return true;
@@ -577,6 +629,130 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, 
     packet->pki_encrypted = true;
     packet->priority = meshtastic_MeshPacket_Priority_RELIABLE;
     service->sendToMesh(packet);
+}
+
+void DMShellModule::applyTurnFlags(const meshtastic_RemoteShell &frame)
+{
+    if (frame.flags & (TURN_FLAG_GRANT | TURN_FLAG_MORE | TURN_FLAG_RTS)) {
+        session.turnManaged = true; // peer speaks turn-taking; enable gating for this session
+    }
+    if (frame.flags & TURN_FLAG_GRANT) {
+        session.hasToken = true;
+    }
+}
+
+bool DMShellModule::ptyHasOutput()
+{
+    if (session.masterFd < 0) {
+        return false;
+    }
+    struct pollfd pfd = {};
+    pfd.fd = session.masterFd;
+    pfd.events = POLLIN;
+    return poll(&pfd, 1, 0) > 0 && (pfd.revents & POLLIN);
+}
+
+void DMShellModule::sendOutputFrame(const uint8_t *data, size_t len, uint32_t extraFlags)
+{
+    meshtastic_RemoteShell frame = {
+        .op = meshtastic_RemoteShell_OpCode_OUTPUT,
+        .session_id = session.sessionId,
+        .seq = session.nextTxSeq++,
+        .ack_seq = session.lastAckedRxSeq,
+        .cols = 0,
+        .rows = 0,
+        .flags = extraFlags,
+    };
+    assert(len <= sizeof(frame.payload.bytes));
+    memcpy(frame.payload.bytes, data, len);
+    frame.payload.size = len;
+    sendFrameToPeer(session.peer, frame, true);
+}
+
+void DMShellModule::sendTurnGrant(bool more)
+{
+    meshtastic_RemoteShell frame = {
+        .op = meshtastic_RemoteShell_OpCode_ACK,
+        .session_id = session.sessionId,
+        .seq = 0,
+        .ack_seq = session.lastAckedRxSeq,
+        .cols = 0,
+        .rows = 0,
+        .flags = TURN_FLAG_GRANT | (more ? TURN_FLAG_MORE : 0u),
+        .last_rx_seq = 0,
+    };
+    frame.payload.size = 0;
+    sendFrameToPeer(session.peer, frame, false);
+}
+
+void DMShellModule::sendRts()
+{
+    meshtastic_RemoteShell frame = {
+        .op = meshtastic_RemoteShell_OpCode_ACK,
+        .session_id = session.sessionId,
+        .seq = 0,
+        .ack_seq = session.lastAckedRxSeq,
+        .cols = 0,
+        .rows = 0,
+        .flags = TURN_FLAG_RTS,
+        .last_rx_seq = 0,
+    };
+    frame.payload.size = 0;
+    sendFrameToPeer(session.peer, frame, false);
+}
+
+// Called when we hold the turn: send up to TURN_BUDGET_FRAMES chunks of shell output, then hand
+// the turn back to the client. The grant is piggybacked on the last output frame (or sent as a
+// standalone ACK if there was nothing to send), so the token always settles back at the client.
+void DMShellModule::serviceTurn()
+{
+    if (!session.active || !session.turnManaged || !session.hasToken) {
+        return;
+    }
+
+    uint8_t chunks[TURN_BUDGET_FRAMES][MAX_MESSAGE_SIZE];
+    size_t chunkLen[TURN_BUDGET_FRAMES] = {0};
+    size_t nChunks = 0;
+    bool eof = false;
+    bool readError = false;
+
+    while (nChunks < TURN_BUDGET_FRAMES && session.masterFd >= 0) {
+        const ssize_t n = read(session.masterFd, chunks[nChunks], MAX_MESSAGE_SIZE);
+        if (n > 0) {
+            chunkLen[nChunks] = (size_t)n;
+            nChunks++;
+        } else if (n == 0) {
+            eof = true;
+            break;
+        } else {
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                readError = true;
+            }
+            break;
+        }
+    }
+
+    // If we filled the budget, there may still be more output waiting; ask for a prompt re-grant.
+    const bool more = (nChunks == TURN_BUDGET_FRAMES) && ptyHasOutput();
+
+    session.hasToken = false; // we are handing the turn back below
+    if (nChunks > 0) {
+        session.lastActivityMs = millis();
+        for (size_t i = 0; i < nChunks; i++) {
+            const uint32_t flags = (i + 1 == nChunks) ? (TURN_FLAG_GRANT | (more ? TURN_FLAG_MORE : 0u)) : 0u;
+            sendOutputFrame(chunks[i], chunkLen[i], flags);
+        }
+    } else {
+        // Nothing to send: hand the turn straight back so the link goes quiet at the client.
+        sendTurnGrant(false);
+    }
+
+    if (eof) {
+        closeSession("pty_eof", true);
+    } else if (readError) {
+        LOG_WARN("DMShell: PTY read error errno=%d", errno);
+        closeSession("pty_read_error", true);
+    }
 }
 
 void DMShellModule::sendError(const char *message, NodeNum peer)
