@@ -1,6 +1,7 @@
 #include "Lock.h"
 #include "configuration.h"
 #include <cassert>
+#include <logging.h>
 
 namespace concurrency
 {
@@ -38,18 +39,41 @@ void Lock::unlock()
     }
 }
 #else
-Lock::Lock() {}
+Lock::Lock()
+{
+    pthread_mutex_init(&mutex, NULL);
+}
 
-Lock::~Lock() {}
+void Lock::lock()
+{
+    if (locked) {
+        LOG_INFO("Attempt to lock an already locked Lock!");
+    }
+    pthread_mutex_lock(&mutex);
+    locked = true;
 
-void Lock::lock() {}
+    if (console)
+        LOG_WARN("Lock");
+}
 
 bool Lock::lock(uint32_t)
 {
+    // No portable timed pthread lock across Linux and macOS, so block instead: returning true
+    // without acquiring would leave callers such as SPILock unlocking a mutex they never took.
+    lock();
     return true;
 }
 
-void Lock::unlock() {}
+void Lock::unlock()
+{
+    pthread_mutex_unlock(&mutex);
+    locked = false;
+}
+
+Lock::~Lock()
+{
+    pthread_mutex_destroy(&mutex);
+}
 #endif
 
 } // namespace concurrency
