@@ -144,13 +144,26 @@ class MockPubSubServer : public WiFiClient
     size_t write(const uint8_t *buf, size_t size) override
     {
         command_ += std::string(reinterpret_cast<const char *>(buf), size);
-        if (command_.size() < 2)
-            return size;
-        const int len = (uint8_t)command_[1] + 2;
-        if (command_.size() < len)
-            return size;
-        handleCommand(command_[0], command_.substr(2, len));
-        command_ = command_.substr(len, command_.size());
+        while (command_.size() >= 2) {
+            size_t multiplier = 1;
+            size_t messageSize = 0;
+            size_t cursor = 1;
+            uint8_t encodedByte;
+            do {
+                if (cursor >= command_.size())
+                    return size;
+                encodedByte = static_cast<uint8_t>(command_[cursor++]);
+                messageSize += (encodedByte & 0x7f) * multiplier;
+                multiplier *= 128;
+            } while ((encodedByte & 0x80) != 0);
+
+            const size_t commandSize = cursor + messageSize;
+            if (command_.size() < commandSize)
+                return size;
+
+            handleCommand(command_[0], std::string_view(command_).substr(cursor, messageSize));
+            command_.erase(0, commandSize);
+        }
         return size;
     }
 
@@ -198,7 +211,7 @@ class MockPubSubServer : public WiFiClient
             std::string topic(message.data(), topicSize);
             message.remove_prefix(topicSize);
 
-            if (topic == kTextTopic) {
+            if (topic == kTextTopic || topic.find("/json/") != std::string::npos) {
                 published_.emplace_back(std::move(topic), std::string(message.data(), message.size()));
             } else {
                 published_.emplace_back(
@@ -262,6 +275,11 @@ class MQTTUnitTest : public MQTT
     using MQTT::isValidConfig;
     using MQTT::reconnect;
     int queueSize() { return mqttQueue.numUsed(); }
+    void drainQueue()
+    {
+        while (queueSize() > 0)
+            publishQueuedMessages();
+    }
     void reportToMap(std::optional<uint32_t> precision = std::nullopt)
     {
         if (precision.has_value())
@@ -325,6 +343,47 @@ const meshtastic_MeshPacket encrypted = {
     .encrypted = {.size = 0},
     .id = 3,
 };
+
+uint32_t makeImpreciseCoordinate(uint32_t coordinate, uint32_t precision)
+{
+    return (coordinate & (UINT32_MAX << (32 - precision))) + (1 << (31 - precision));
+}
+
+meshtastic_MeshPacket makePositionPacket(uint32_t latitude, uint32_t longitude, uint32_t precisionBits = 32)
+{
+    meshtastic_Position position = meshtastic_Position_init_default;
+    position.has_latitude_i = true;
+    position.latitude_i = latitude;
+    position.has_longitude_i = true;
+    position.longitude_i = longitude;
+    position.precision_bits = precisionBits;
+
+    meshtastic_MeshPacket packet = decoded;
+    packet.decoded.portnum = meshtastic_PortNum_POSITION_APP;
+    packet.decoded.payload.size = pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes),
+                                                     &meshtastic_Position_msg, &position);
+    return packet;
+}
+
+meshtastic_MeshPacket makePositionPacketWithoutCoordinates()
+{
+    meshtastic_Position position = meshtastic_Position_init_default;
+    position.time = 1234;
+
+    meshtastic_MeshPacket packet = decoded;
+    packet.decoded.portnum = meshtastic_PortNum_POSITION_APP;
+    packet.decoded.payload.size = pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes),
+                                                     &meshtastic_Position_msg, &position);
+    return packet;
+}
+
+meshtastic_Position decodePositionPacket(const meshtastic_MeshPacket &packet)
+{
+    meshtastic_Position position = meshtastic_Position_init_default;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(packet.decoded.payload.bytes, packet.decoded.payload.size, &meshtastic_Position_msg, &position));
+    return position;
+}
 } // namespace
 
 // Initialize mocks and configuration before running each test.
@@ -391,6 +450,292 @@ void test_sendDirectlyConnectedEncrypted(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", topic.c_str());
     TEST_ASSERT_TRUE(env.validDecode);
     TEST_ASSERT_EQUAL(encrypted.id, env.packet->id);
+}
+
+// Position packets decoded for the public MQTT server should publish an imprecise copy before the original.
+void test_sendPositionToPublicServerIsImpreciseThenOriginal(void)
+{
+    constexpr uint32_t precision = 15;
+    constexpr uint32_t latitude = 416213022;
+    constexpr uint32_t longitude = 415906392;
+    meshtastic_MeshPacket positionPacket = makePositionPacket(latitude, longitude);
+
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(2, pubsub->published_.size());
+    auto published = pubsub->published_.begin();
+    const auto &[impreciseTopic, imprecisePayload] = *published++;
+    const DecodedServiceEnvelope &impreciseEnv = std::get<DecodedServiceEnvelope>(imprecisePayload);
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", impreciseTopic.c_str());
+    TEST_ASSERT_TRUE(impreciseEnv.validDecode);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_POSITION_APP, impreciseEnv.packet->decoded.portnum);
+    TEST_ASSERT_EQUAL(positionPacket.id, impreciseEnv.packet->id);
+
+    const meshtastic_Position imprecisePosition = decodePositionPacket(*impreciseEnv.packet);
+    TEST_ASSERT_EQUAL(makeImpreciseCoordinate(latitude, precision), imprecisePosition.latitude_i);
+    TEST_ASSERT_EQUAL(makeImpreciseCoordinate(longitude, precision), imprecisePosition.longitude_i);
+    TEST_ASSERT_EQUAL(precision, imprecisePosition.precision_bits);
+
+    const auto &[originalTopic, originalPayload] = *published;
+    const DecodedServiceEnvelope &originalEnv = std::get<DecodedServiceEnvelope>(originalPayload);
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", originalTopic.c_str());
+    TEST_ASSERT_TRUE(originalEnv.validDecode);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_POSITION_APP, originalEnv.packet->decoded.portnum);
+    TEST_ASSERT_EQUAL(positionPacket.id, originalEnv.packet->id);
+
+    const meshtastic_Position originalPosition = decodePositionPacket(*originalEnv.packet);
+    TEST_ASSERT_EQUAL(latitude, originalPosition.latitude_i);
+    TEST_ASSERT_EQUAL(longitude, originalPosition.longitude_i);
+    TEST_ASSERT_EQUAL(32, originalPosition.precision_bits);
+}
+
+// A source packet that is already coarser than the public MQTT cap should stay coarser.
+void test_sendCoarserPositionToPublicServerPreservesPrecision(void)
+{
+    constexpr uint32_t precision = 12;
+    constexpr uint32_t latitude = 416213022;
+    constexpr uint32_t longitude = 415906392;
+    meshtastic_MeshPacket positionPacket = makePositionPacket(latitude, longitude, precision);
+
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(2, pubsub->published_.size());
+    const auto &[impreciseTopic, imprecisePayload] = pubsub->published_.front();
+    const DecodedServiceEnvelope &impreciseEnv = std::get<DecodedServiceEnvelope>(imprecisePayload);
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", impreciseTopic.c_str());
+    TEST_ASSERT_TRUE(impreciseEnv.validDecode);
+
+    const meshtastic_Position imprecisePosition = decodePositionPacket(*impreciseEnv.packet);
+    TEST_ASSERT_EQUAL(makeImpreciseCoordinate(latitude, precision), imprecisePosition.latitude_i);
+    TEST_ASSERT_EQUAL(makeImpreciseCoordinate(longitude, precision), imprecisePosition.longitude_i);
+    TEST_ASSERT_EQUAL(precision, imprecisePosition.precision_bits);
+}
+
+// Position packets without coordinates should not get a synthetic public MQTT coordinate.
+void test_sendPositionWithoutCoordinatesDoesNotCreateImpreciseCopy(void)
+{
+    meshtastic_MeshPacket positionPacket = makePositionPacketWithoutCoordinates();
+
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    const auto &[topic, payload] = pubsub->published_.front();
+    const DecodedServiceEnvelope &env = std::get<DecodedServiceEnvelope>(payload);
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", topic.c_str());
+    TEST_ASSERT_TRUE(env.validDecode);
+
+    const meshtastic_Position originalPosition = decodePositionPacket(*env.packet);
+    TEST_ASSERT_FALSE(originalPosition.has_latitude_i);
+    TEST_ASSERT_FALSE(originalPosition.has_longitude_i);
+}
+
+// JSON position packets should publish imprecise JSON only, while protobuf still preserves the original second publish.
+void test_sendJsonPositionToPublicServerIsImpreciseThenOriginal(void)
+{
+    constexpr uint32_t precision = 15;
+    constexpr uint32_t latitude = 416213022;
+    constexpr uint32_t longitude = 415906392;
+    moduleConfig.mqtt.json_enabled = true;
+    MQTTUnitTest::restart();
+    meshtastic_MeshPacket positionPacket = makePositionPacket(latitude, longitude);
+
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(3, pubsub->published_.size());
+    auto published = pubsub->published_.begin();
+    ++published; // imprecise protobuf
+    const auto &[impreciseTopic, imprecisePayload] = *published++;
+    TEST_ASSERT_EQUAL_STRING("msh/2/json/test/!12345678", impreciseTopic.c_str());
+
+    const std::string &json = std::get<std::string>(imprecisePayload);
+    std::stringstream expectedLatitude;
+    expectedLatitude << "\"latitude_i\":" << makeImpreciseCoordinate(latitude, precision);
+    std::stringstream expectedLongitude;
+    expectedLongitude << "\"longitude_i\":" << makeImpreciseCoordinate(longitude, precision);
+    TEST_ASSERT_TRUE(json.find(expectedLatitude.str()) != std::string::npos);
+    TEST_ASSERT_TRUE(json.find(expectedLongitude.str()) != std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"precision_bits\":15") != std::string::npos);
+
+    const auto &[originalTopic, originalPayload] = *published;
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", originalTopic.c_str());
+    const DecodedServiceEnvelope &originalEnv = std::get<DecodedServiceEnvelope>(originalPayload);
+    TEST_ASSERT_TRUE(originalEnv.validDecode);
+    const meshtastic_Position originalPosition = decodePositionPacket(*originalEnv.packet);
+    TEST_ASSERT_EQUAL(latitude, originalPosition.latitude_i);
+    TEST_ASSERT_EQUAL(longitude, originalPosition.longitude_i);
+    TEST_ASSERT_EQUAL(32, originalPosition.precision_bits);
+}
+
+// Queued public MQTT positions should not publish precise JSON after reconnect.
+void test_sendQueuedJsonPositionToPublicServerKeepsOriginalOutOfJson(void)
+{
+    constexpr uint32_t precision = 15;
+    constexpr uint32_t latitude = 416213022;
+    constexpr uint32_t longitude = 415906392;
+    moduleConfig.mqtt.json_enabled = true;
+    MQTTUnitTest::restart();
+    pubsub->connected_ = false;
+    pubsub->refuseConnection_ = true;
+    TEST_ASSERT_TRUE(loopUntil([] { return !unitTest->getPubSub().connected(); }));
+
+    meshtastic_MeshPacket positionPacket = makePositionPacket(latitude, longitude);
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(2, unitTest->queueSize());
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+
+    pubsub->refuseConnection_ = false;
+    unitTest->reconnect();
+    unitTest->drainQueue();
+
+    TEST_ASSERT_EQUAL(3, pubsub->published_.size());
+    size_t jsonPositionCount = 0;
+    for (const auto &[topic, payload] : pubsub->published_) {
+        if (topic.find("/json/") == std::string::npos)
+            continue;
+
+        jsonPositionCount++;
+        const std::string &json = std::get<std::string>(payload);
+        std::stringstream expectedLatitude;
+        expectedLatitude << "\"latitude_i\":" << makeImpreciseCoordinate(latitude, precision);
+        std::stringstream expectedLongitude;
+        expectedLongitude << "\"longitude_i\":" << makeImpreciseCoordinate(longitude, precision);
+        TEST_ASSERT_TRUE(json.find(expectedLatitude.str()) != std::string::npos);
+        TEST_ASSERT_TRUE(json.find(expectedLongitude.str()) != std::string::npos);
+        TEST_ASSERT_TRUE(json.find("\"precision_bits\":15") != std::string::npos);
+        TEST_ASSERT_TRUE(json.find("\"latitude_i\":416213022") == std::string::npos);
+        TEST_ASSERT_TRUE(json.find("\"longitude_i\":415906392") == std::string::npos);
+    }
+    TEST_ASSERT_EQUAL(1, jsonPositionCount);
+}
+
+// Queued encrypted public MQTT positions should publish imprecise JSON after reconnect.
+void test_sendQueuedEncryptedJsonPositionUsesImprecisePublicPacket(void)
+{
+    constexpr uint32_t precision = 15;
+    constexpr uint32_t latitude = 416213022;
+    constexpr uint32_t longitude = 415906392;
+    moduleConfig.mqtt.encryption_enabled = true;
+    moduleConfig.mqtt.json_enabled = true;
+    MQTTUnitTest::restart();
+    pubsub->connected_ = false;
+    pubsub->refuseConnection_ = true;
+    TEST_ASSERT_TRUE(loopUntil([] { return !unitTest->getPubSub().connected(); }));
+
+    meshtastic_MeshPacket positionPacket = makePositionPacket(latitude, longitude);
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(1, unitTest->queueSize());
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+
+    pubsub->refuseConnection_ = false;
+    unitTest->reconnect();
+    unitTest->drainQueue();
+
+    TEST_ASSERT_EQUAL(2, pubsub->published_.size());
+    auto published = pubsub->published_.begin();
+    const auto &[protoTopic, protoPayload] = *published++;
+    const DecodedServiceEnvelope &env = std::get<DecodedServiceEnvelope>(protoPayload);
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", protoTopic.c_str());
+    TEST_ASSERT_TRUE(env.validDecode);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, env.packet->which_payload_variant);
+
+    const auto &[jsonTopic, jsonPayload] = *published;
+    TEST_ASSERT_EQUAL_STRING("msh/2/json/test/!12345678", jsonTopic.c_str());
+    const std::string &json = std::get<std::string>(jsonPayload);
+    std::stringstream expectedLatitude;
+    expectedLatitude << "\"latitude_i\":" << makeImpreciseCoordinate(latitude, precision);
+    std::stringstream expectedLongitude;
+    expectedLongitude << "\"longitude_i\":" << makeImpreciseCoordinate(longitude, precision);
+    TEST_ASSERT_TRUE(json.find(expectedLatitude.str()) != std::string::npos);
+    TEST_ASSERT_TRUE(json.find(expectedLongitude.str()) != std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"precision_bits\":15") != std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"latitude_i\":416213022") == std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"longitude_i\":415906392") == std::string::npos);
+}
+
+// Reused queue entries should not carry stale JSON from an evicted packet.
+void test_sendQueuedOverflowClearsStaleJsonPayload(void)
+{
+    moduleConfig.mqtt.json_enabled = true;
+    MQTTUnitTest::restart();
+    pubsub->connected_ = false;
+    pubsub->refuseConnection_ = true;
+    TEST_ASSERT_TRUE(loopUntil([] { return !unitTest->getPubSub().connected(); }));
+
+    for (int i = 0; i < MAX_MQTT_QUEUE; i++)
+        mqtt->onSend(encrypted, decoded, 0);
+    TEST_ASSERT_EQUAL(MAX_MQTT_QUEUE, unitTest->queueSize());
+
+    moduleConfig.mqtt.json_enabled = false;
+    mqtt->onSend(encrypted, decoded, 0);
+    TEST_ASSERT_EQUAL(MAX_MQTT_QUEUE, unitTest->queueSize());
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+
+    moduleConfig.mqtt.json_enabled = true;
+    pubsub->refuseConnection_ = false;
+    unitTest->reconnect();
+    unitTest->drainQueue();
+
+    size_t jsonPublishCount = 0;
+    for (const auto &[topic, payload] : pubsub->published_) {
+        if (topic.find("/json/") != std::string::npos)
+            jsonPublishCount++;
+    }
+    TEST_ASSERT_EQUAL(MAX_MQTT_QUEUE - 1, jsonPublishCount);
+}
+
+// Encrypted MQTT should continue to publish the encrypted packet, not a decoded position.
+void test_sendEncryptedPositionToPublicServerStaysEncrypted(void)
+{
+    moduleConfig.mqtt.encryption_enabled = true;
+    meshtastic_MeshPacket positionPacket = makePositionPacket(416213022, 415906392);
+
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    const auto &[topic, payload] = pubsub->published_.front();
+    const DecodedServiceEnvelope &env = std::get<DecodedServiceEnvelope>(payload);
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", topic.c_str());
+    TEST_ASSERT_TRUE(env.validDecode);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, env.packet->which_payload_variant);
+    TEST_ASSERT_EQUAL(encrypted.id, env.packet->id);
+}
+
+// Encrypted protobuf MQTT should only expose the imprecise public-safe decoded position through JSON.
+void test_sendEncryptedJsonPositionUsesImprecisePublicPacket(void)
+{
+    constexpr uint32_t precision = 15;
+    constexpr uint32_t latitude = 416213022;
+    constexpr uint32_t longitude = 415906392;
+    moduleConfig.mqtt.encryption_enabled = true;
+    moduleConfig.mqtt.json_enabled = true;
+    MQTTUnitTest::restart();
+    meshtastic_MeshPacket positionPacket = makePositionPacket(latitude, longitude);
+
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(2, pubsub->published_.size());
+    auto published = pubsub->published_.begin();
+    const auto &[protoTopic, protoPayload] = *published++;
+    const DecodedServiceEnvelope &env = std::get<DecodedServiceEnvelope>(protoPayload);
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", protoTopic.c_str());
+    TEST_ASSERT_TRUE(env.validDecode);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, env.packet->which_payload_variant);
+
+    const auto &[jsonTopic, jsonPayload] = *published;
+    TEST_ASSERT_EQUAL_STRING("msh/2/json/test/!12345678", jsonTopic.c_str());
+    const std::string &json = std::get<std::string>(jsonPayload);
+    TEST_ASSERT_TRUE(json.find("\"type\":\"position\"") != std::string::npos);
+    std::stringstream expectedLatitude;
+    expectedLatitude << "\"latitude_i\":" << makeImpreciseCoordinate(latitude, precision);
+    std::stringstream expectedLongitude;
+    expectedLongitude << "\"longitude_i\":" << makeImpreciseCoordinate(longitude, precision);
+    TEST_ASSERT_TRUE(json.find(expectedLatitude.str()) != std::string::npos);
+    TEST_ASSERT_TRUE(json.find(expectedLongitude.str()) != std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"precision_bits\":15") != std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"latitude_i\":416213022") == std::string::npos);
+    TEST_ASSERT_TRUE(json.find("\"longitude_i\":415906392") == std::string::npos);
 }
 
 // Verify that the decoded MeshPacket is proxied through the MeshService when encryption_enabled = false.
@@ -511,6 +856,49 @@ void test_sendQueued(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", topic.c_str());
     TEST_ASSERT_TRUE(env.validDecode);
     TEST_ASSERT_EQUAL(decoded.id, env.packet->id);
+}
+
+// If the offline queue has room for only one more packet, keep the public-usable imprecise position.
+void test_sendQueuedPublicPositionKeepsImpreciseWhenQueueAlmostFull(void)
+{
+    // Cause a disconnect.
+    pubsub->connected_ = false;
+    pubsub->refuseConnection_ = true;
+    TEST_ASSERT_TRUE(loopUntil([] { return !unitTest->getPubSub().connected(); }));
+
+    for (int i = 0; i < MAX_MQTT_QUEUE - 1; i++)
+        mqtt->onSend(encrypted, decoded, 0);
+
+    constexpr uint32_t precision = 15;
+    constexpr uint32_t latitude = 416213022;
+    constexpr uint32_t longitude = 415906392;
+    meshtastic_MeshPacket positionPacket = makePositionPacket(latitude, longitude);
+    mqtt->onSend(encrypted, positionPacket, 0);
+
+    TEST_ASSERT_EQUAL(MAX_MQTT_QUEUE, unitTest->queueSize());
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+
+    // Allow reconnect to happen and drain the queued packets.
+    pubsub->refuseConnection_ = false;
+    unitTest->reconnect();
+    unitTest->drainQueue();
+    TEST_ASSERT_EQUAL(0, unitTest->queueSize());
+
+    size_t positionPacketCount = 0;
+    meshtastic_Position queuedPosition = meshtastic_Position_init_default;
+    for (const auto &[topic, payload] : pubsub->published_) {
+        const DecodedServiceEnvelope &env = std::get<DecodedServiceEnvelope>(payload);
+        if (env.packet->decoded.portnum != meshtastic_PortNum_POSITION_APP)
+            continue;
+
+        positionPacketCount++;
+        queuedPosition = decodePositionPacket(*env.packet);
+    }
+
+    TEST_ASSERT_EQUAL(1, positionPacketCount);
+    TEST_ASSERT_EQUAL(makeImpreciseCoordinate(latitude, precision), queuedPosition.latitude_i);
+    TEST_ASSERT_EQUAL(makeImpreciseCoordinate(longitude, precision), queuedPosition.longitude_i);
+    TEST_ASSERT_EQUAL(precision, queuedPosition.precision_bits);
 }
 
 // Verify reconnecting with the proxy enabled does not reconnect to a MQTT server.
@@ -892,6 +1280,15 @@ void setup()
     UNITY_BEGIN();
     RUN_TEST(test_sendDirectlyConnectedDecoded);
     RUN_TEST(test_sendDirectlyConnectedEncrypted);
+    RUN_TEST(test_sendPositionToPublicServerIsImpreciseThenOriginal);
+    RUN_TEST(test_sendCoarserPositionToPublicServerPreservesPrecision);
+    RUN_TEST(test_sendPositionWithoutCoordinatesDoesNotCreateImpreciseCopy);
+    RUN_TEST(test_sendJsonPositionToPublicServerIsImpreciseThenOriginal);
+    RUN_TEST(test_sendQueuedJsonPositionToPublicServerKeepsOriginalOutOfJson);
+    RUN_TEST(test_sendQueuedEncryptedJsonPositionUsesImprecisePublicPacket);
+    RUN_TEST(test_sendQueuedOverflowClearsStaleJsonPayload);
+    RUN_TEST(test_sendEncryptedPositionToPublicServerStaysEncrypted);
+    RUN_TEST(test_sendEncryptedJsonPositionUsesImprecisePublicPacket);
     RUN_TEST(test_proxyToMeshServiceDecoded);
     RUN_TEST(test_proxyToMeshServiceEncrypted);
     RUN_TEST(test_dontMqttMeOnPublicServer);
@@ -899,6 +1296,7 @@ void setup()
     RUN_TEST(test_noRangeTestAppOnDefaultServer);
     RUN_TEST(test_noDetectionSensorAppOnDefaultServer);
     RUN_TEST(test_sendQueued);
+    RUN_TEST(test_sendQueuedPublicPositionKeepsImpreciseWhenQueueAlmostFull);
     RUN_TEST(test_reconnectProxyDoesNotReconnectMqtt);
     RUN_TEST(test_receiveEmptyMeshPacket);
     RUN_TEST(test_receiveDecodedProto);
