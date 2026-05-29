@@ -1,16 +1,15 @@
 #pragma once
-#if RADIOLIB_EXCLUDE_SX126X != 1
-
+#if RADIOLIB_EXCLUDE_LR2021 != 1
 #include "RadioLibInterface.h"
 
 /**
- * \brief Adapter for SX126x radio family. Implements common logic for child classes.
- * \tparam T RadioLib module type for SX126x: SX1262, SX1268.
+ * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
+ * \tparam T RadioLib module type for LR20x0, e.g. LR2021.
  */
-template <class T> class SX126xInterface : public RadioLibInterface
+template <class T> class LR20x0Interface : public RadioLibInterface
 {
   public:
-    SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+    LR20x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                     RADIOLIB_PIN_TYPE busy);
 
     /// Initialise the Driver transport hardware and software.
@@ -28,14 +27,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+#ifdef LR20X0_AGC_RESET
     void resetAGC() override;
-
-    void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
+#endif
 
   protected:
-    float currentLimit = 140; // Higher OCP limit for SX126x PA
-    float tcxoVoltage = 0.0;
-
     /**
      * Specific module instance
      */
@@ -51,7 +47,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*callback)()) { lora.setDio1Action(callback); }
+    virtual void enableInterrupt(void (*callback)()) { lora.setIrqAction(callback); }
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
@@ -77,9 +73,5 @@ template <class T> class SX126xInterface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
-
-  private:
-    /** Some boards require GPIO control of tx vs rx paths */
-    void setTransmitEnable(bool txon);
 };
 #endif
