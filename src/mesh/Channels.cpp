@@ -71,6 +71,14 @@ meshtastic_Channel &Channels::fixupChannel(ChannelIndex chIndex)
         // Convert the old string "Default" to our new short representation
         if (strcmp(meshtastic_channelSettings.name, "Default") == 0)
             *meshtastic_channelSettings.name = '\0';
+
+        // Ensure has_module_settings flag is set when any module_settings field is populated
+        if (!meshtastic_channelSettings.has_module_settings) {
+            if (meshtastic_channelSettings.module_settings.position_precision != 0 ||
+                meshtastic_channelSettings.module_settings.is_muted) {
+                meshtastic_channelSettings.has_module_settings = true;
+            }
+        }
     }
 
     hashes[chIndex] = generateHash(chIndex);
@@ -353,7 +361,21 @@ void Channels::setChannel(const meshtastic_Channel &c)
             if (channelFile.channels[i].role == meshtastic_Channel_Role_PRIMARY)
                 channelFile.channels[i].role = meshtastic_Channel_Role_SECONDARY;
 
-    old = c; // slam in the new settings/role
+    meshtastic_Channel newc = c;
+
+    if (newc.has_settings) {
+        meshtastic_ChannelSettings &meshtastic_channelSettings = newc.settings;
+
+        // Ensure has_module_settings flag is set when any module_settings field is populated
+        if (!meshtastic_channelSettings.has_module_settings) {
+            if (meshtastic_channelSettings.module_settings.position_precision != 0 ||
+                meshtastic_channelSettings.module_settings.is_muted) {
+                meshtastic_channelSettings.has_module_settings = true;
+            }
+        }
+    }
+
+    old = newc; // slam in the new settings/role
 }
 
 bool Channels::anyMqttEnabled()
