@@ -332,8 +332,6 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
         takPacket.geo_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
         takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
     }
-    takPacket.which_payload_variant = meshtastic_TAKPacketV2_pli_tag;
-    takPacket.payload_variant.pli = true;
 
     // Callsign - stored as plain string (no compression, apps handle that)
     strncpy(takPacket.callsign, owner.long_name, sizeof(takPacket.callsign) - 1);
