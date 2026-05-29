@@ -6,6 +6,8 @@
 #include "mesh/NodeDB.h"
 #ifdef LR11X0_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
+#define lr11x0_rfswitch_dio_pins rfswitch_dio_pins
+#define lr11x0_rfswitch_table rfswitch_table
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #define lr11x0_rfswitch_dio_pins portduino_config.rfswitch_dio_pins

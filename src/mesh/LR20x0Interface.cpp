@@ -12,6 +12,10 @@
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
+#ifndef LR20X0_RFSWITCH_NATIVE
+#define lr20x0_rfswitch_dio_pins rfswitch_dio_pins
+#define lr20x0_rfswitch_table rfswitch_table
+#endif
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #define lr20x0_rfswitch_dio_pins portduino_config.rfswitch_dio_pins
