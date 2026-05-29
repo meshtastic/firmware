@@ -35,6 +35,8 @@ template <class T> class SX128xInterface : public RadioLibInterface
      */
     T lora;
 
+    int16_t getCurrentRSSI() override;
+
     /**
      * Glue functions called from ISR land
      */
