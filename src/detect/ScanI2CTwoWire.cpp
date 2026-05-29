@@ -359,9 +359,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);
 #endif
-#ifdef HAS_LP5562
-                SCAN_SIMPLE_CASE(LP5562_ADDR, LP5562, "LP5562", (uint8_t)addr.address);
-#endif
             case XPOWERS_AXP192_AXP2101_ADDRESS:
                 // Do we have the axp2101/192 or the TCA8418
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x90), 1);
@@ -581,6 +578,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #else
                 SCAN_SIMPLE_CASE(PMSA003I_ADDR, PMSA003I, "PMSA003I", (uint8_t)addr.address)
 #endif
+            case MMC5983MA_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x2F), 1);
+                if (registerValue == 0x30) {
+                    type = MMC5983MA;
+                    logFoundDevice("MMC5983MA", (uint8_t)addr.address);
+#ifdef HAS_LP5562
+                } else {
+                    type = LP5562;
+                    logFoundDevice("LP5562", (uint8_t)addr.address);
+#endif
+                }
+                break;
             case BMA423_ADDR: // this can also be LIS3DH_ADDR_ALT
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 2);
                 if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
@@ -735,8 +744,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-            case ICM20948_ADDR:     // same as BMX160_ADDR, BMI270_ADDR_ALT, and SEN5X_ADDR
-            case ICM20948_ADDR_ALT: // same as MPU6050_ADDR, BMI270_ADDR
+            case ICM20948_ADDR:     // same as BMX160_ADDR, BMI270_ADDR_ALT, ICM42607P_ADDR_ALT, and SEN5X_ADDR
+            case ICM20948_ADDR_ALT: // same as MPU6050_ADDR, BMI270_ADDR, and ICM42607P_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
 #ifdef HAS_ICM20948
                 type = ICM20948;
@@ -756,6 +765,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("BMX160", (uint8_t)addr.address);
                     break;
                 } else {
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x75), 1); // WHO_AM_I
+                    if (registerValue == 0x60) {
+                        type = ICM42607P;
+                        logFoundDevice("ICM-42607-P", (uint8_t)addr.address);
+                        break;
+                    }
                     String prod = "";
                     prod = readSEN5xProductName(i2cBus, addr.address);
                     if (prod.startsWith("SEN55")) {
