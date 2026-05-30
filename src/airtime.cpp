@@ -12,6 +12,8 @@ uint32_t air_period_rx[PERIODS_TO_LOG];
 
 void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
+    // A packet may be logged immediately after waking from light sleep. Sync first so
+    // the packet is counted in the current wall-time bucket, not a stale awake-time bucket.
     syncNow();
 
     if (reportType == TX_LOG) {
@@ -50,11 +52,14 @@ uint8_t AirTime::getPeriodUtilHour()
 
 void AirTime::airtimeRotatePeriod()
 {
+    // Preserve the public helper while keeping all rotation logic in one monotonic-time path.
     syncNow();
 }
 
 void AirTime::syncNow()
 {
+    // Use monotonic uptime rather than RTC/network time; user, GPS, or NTP clock changes
+    // must not move airtime accounting backward or forward.
     uint32_t nowMsec = millis();
 
     if (firstTime) {
@@ -67,6 +72,7 @@ void AirTime::syncNow()
         memset(air_period_rx, 0, sizeof(air_period_rx));
 
         this->secSinceBoot = nowMsec / 1000;
+        // Keep the checkpoint on a whole-second boundary so elapsedSecs advances predictably.
         this->lastSyncMsec = nowMsec - (nowMsec % 1000);
         this->lastUtilPeriod = this->getPeriodUtilMinute();
         this->lastUtilPeriodTX = this->getPeriodUtilHour();
@@ -85,6 +91,8 @@ void AirTime::syncNow()
     this->secSinceBoot += elapsedSecs;
     this->lastSyncMsec += elapsedSecs * 1000;
 
+    // Historical airtime reports use 1-hour buckets. If multiple hours elapsed while
+    // asleep, rotate each crossed bucket or clear the whole report window.
     uint32_t elapsedAirtimePeriods = (this->secSinceBoot / SECONDS_PER_PERIOD) - (oldSecSinceBoot / SECONDS_PER_PERIOD);
     if (elapsedAirtimePeriods >= PERIODS_TO_LOG) {
         memset(this->airtimes.periodTX, 0, sizeof(this->airtimes.periodTX));
@@ -112,6 +120,8 @@ void AirTime::syncNow()
     }
     this->airtimes.lastPeriodIndex = this->currentPeriodIndex();
 
+    // Channel utilization is a rolling 60-second view split into six 10-second buckets.
+    // Clear every bucket crossed while asleep so old airtime decays by real elapsed time.
     uint32_t elapsedUtilPeriods = (this->secSinceBoot / 10) - (oldSecSinceBoot / 10);
     if (elapsedUtilPeriods >= CHANNEL_UTILIZATION_PERIODS) {
         memset(this->channelUtilization, 0, sizeof(this->channelUtilization));
@@ -122,6 +132,7 @@ void AirTime::syncNow()
     }
     this->lastUtilPeriod = this->getPeriodUtilMinute();
 
+    // TX utilization is a rolling 60-minute view used by duty-cycle checks.
     uint32_t elapsedUtilTXPeriods = (this->secSinceBoot / 60) - (oldSecSinceBoot / 60);
     if (elapsedUtilTXPeriods >= MINUTES_IN_HOUR) {
         memset(this->utilizationTX, 0, sizeof(this->utilizationTX));
@@ -135,6 +146,7 @@ void AirTime::syncNow()
 
 uint32_t *AirTime::airtimeReport(reportTypes reportType)
 {
+    // Reports may be requested before runOnce() executes after wake.
     syncNow();
 
     if (reportType == TX_LOG) {
@@ -159,12 +171,14 @@ uint32_t AirTime::getSecondsPerPeriod()
 
 uint32_t AirTime::getSecondsSinceBoot()
 {
+    // Keep HTTP/debug reporting aligned with the same monotonic clock used by the buckets.
     syncNow();
     return this->secSinceBoot;
 }
 
 float AirTime::channelUtilizationPercent()
 {
+    // Gate decisions should see buckets that have decayed across light-sleep time.
     syncNow();
 
     uint32_t sum = 0;
@@ -177,6 +191,7 @@ float AirTime::channelUtilizationPercent()
 
 float AirTime::utilizationTXPercent()
 {
+    // Duty-cycle checks use this value, so keep it current even outside the periodic thread.
     syncNow();
 
     uint32_t sum = 0;
