@@ -52,8 +52,8 @@ template <typename T> bool SX126xInterface<T>::init()
 
 #ifdef SX126X_POWER_EN // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
                        // used and not part of the 'default' set of pin definitions.
-    digitalWrite(SX126X_POWER_EN, HIGH);
     pinMode(SX126X_POWER_EN, OUTPUT);
+    digitalWrite(SX126X_POWER_EN, HIGH);
 #endif
 
 #if HAS_LORA_FEM
@@ -65,8 +65,8 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #ifdef RF95_FAN_EN
-    digitalWrite(RF95_FAN_EN, HIGH);
     pinMode(RF95_FAN_EN, OUTPUT);
+    digitalWrite(RF95_FAN_EN, HIGH);
 #endif
 
 #if ARCH_PORTDUINO
@@ -263,6 +263,12 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     startReceive(); // restart receiving
 
     return true;
+}
+
+template <typename T> int16_t SX126xInterface<T>::getCurrentRSSI()
+{
+    float rssi = lora.getRSSI(false);
+    return (int16_t)round(rssi);
 }
 
 template <typename T> void SX126xInterface<T>::disableInterrupt()
