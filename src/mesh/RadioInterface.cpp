@@ -231,20 +231,30 @@ const RegionInfo regions[] = {
         ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 2m allocation: 144.000 - 146.000 MHz.
         Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
         via its own PA curve; the field here is just the legal upper bound.
+
+        Default slot: 9 (144.531 MHz)
+        https://www.iaru-r1.org/wp-content/uploads/2020/12/VHF-Bandplan.pdf
     */
-    RDEF(ITU1_2M, 144.0f, 146.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST), 0),
+    RDEF(ITU1_2M, 144.0f, 146.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST), 9),
 
     /*
         ITU Region 2 (Americas) amateur 2m allocation: 144.000 - 148.000 MHz.
         Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
+
+        Default slot: 17 (145.031 MHz)
+        https://www.arrl.org/band-plan
     */
     RDEF(ITU2_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST), 17),
 
     /*
         ITU Region 3 (Asia/Pacific) amateur 2m allocation: 144.000 - 148.000 MHz.
         Typical admin rules allow well above 30 dBm for licensed operators.
+
+        Default slot: 11 (144.656 MHz)
+        https://www.iaru.org/wp-content/uploads/2020/01/R3-004-IARU-Region-3-Bandplan-rev.2.pdf
+        https://www.wia.org.au/members/bandplans/data/documents/WIA%20Australian%20Band%20Plan%202026.pdf
     */
-    RDEF(ITU3_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST), 0),
+    RDEF(ITU3_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM, PRESET(NARROW_FAST), 11),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
