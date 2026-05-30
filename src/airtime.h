@@ -66,6 +66,7 @@ class AirTime : private concurrency::OSThread
     bool firstTime = true;
     uint8_t lastUtilPeriod = 0;
     uint8_t lastUtilPeriodTX = 0;
+    // Monotonic uptime checkpoint used to rotate airtime windows even if the scheduler was paused by light sleep.
     uint32_t lastSyncMsec = 0;
     uint32_t secSinceBoot = 0;
     uint8_t max_channel_util_percent = 40;
@@ -82,6 +83,7 @@ class AirTime : private concurrency::OSThread
     uint8_t getPeriodUtilMinute();
     uint8_t getPeriodUtilHour();
     uint8_t currentPeriodIndex();
+    // Advance rolling airtime windows from millis(), not from runOnce() calls.
     void syncNow();
 
   protected:
