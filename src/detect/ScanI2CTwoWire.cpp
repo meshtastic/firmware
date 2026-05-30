@@ -179,8 +179,28 @@ String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+static uint8_t sensirionCrc8(const uint8_t *data, size_t length)
+{
+    uint8_t crc = 0x00;
+
+    for (size_t i = 0; i < length; ++i) {
+        crc ^= data[i];
+        for (uint8_t bit = 0; bit < 8; ++bit) {
+            if (crc & 0x80) {
+                crc = (uint8_t)((crc << 1) ^ 0x31);
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+
+    return crc;
+}
+
 bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
 {
+    uint8_t otpData[8] = {0};
+    uint8_t metalRomData[6] = {0};
 
     i2cBus->beginTransmission(address);
     i2cBus->write(0xFA);
@@ -192,9 +212,17 @@ bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
     if (i2cBus->requestFrom(address, (uint8_t)8) != 8)
         return false;
 
-    // Just flush the data
-    while (i2cBus->available() < 8) {
-        i2cBus->read();
+    for (size_t i = 0; i < sizeof(otpData); ++i) {
+        if (!i2cBus->available()) {
+            return false;
+        }
+        otpData[i] = i2cBus->read();
+    }
+
+    for (size_t i = 0; i < 4; ++i) {
+        if (otpData[i * 2 + 1] != sensirionCrc8(&otpData[i * 2], 1)) {
+            return false;
+        }
     }
 
     i2cBus->beginTransmission(address);
@@ -207,12 +235,20 @@ bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
     if (i2cBus->requestFrom(address, (uint8_t)6) != 6)
         return false;
 
-    // Just flush the data
-    while (i2cBus->available() < 6) {
-        i2cBus->read();
+    for (size_t i = 0; i < sizeof(metalRomData); ++i) {
+        if (!i2cBus->available()) {
+            return false;
+        }
+        metalRomData[i] = i2cBus->read();
     }
 
-    // Assume we detect the SHT21 if something came back from the request
+    for (size_t i = 0; i < 2; ++i) {
+        if (metalRomData[i * 3 + 2] != sensirionCrc8(&metalRomData[i * 3], 2)) {
+            return false;
+        }
+    }
+
+    // Assume we detect the SHT21 only if both serial-number reads validate.
     return true;
 }
 #endif
@@ -442,13 +478,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = INA260;
                     }
                 }
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
                 if (type == NONE && detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
                     logFoundDevice("SHTXX (SHT2X)", (uint8_t)addr.address);
                     type = SHTXX;
                 }
-#endif
-                else { // Assume INA219 if none of the above ones are found
+                if (type == NONE) { // Assume INA219 if none of the above ones are found
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
                 }
