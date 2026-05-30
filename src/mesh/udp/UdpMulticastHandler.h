@@ -12,9 +12,8 @@
 
 #include <AsyncUDP.h>
 
-#if HAS_ETHERNET && defined(USE_WS5500)
-#include <ETHClass2.h>
-#define ETH ETH2
+#if HAS_ETHERNET && defined(ARCH_ESP32)
+#include <ETH.h>
 #endif // HAS_ETHERNET
 
 #define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
@@ -69,14 +68,16 @@ class UdpMulticastHandler final
         // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
         LOG_DEBUG("UDP broadcast from: %s, len=%u", packet.remoteIP().toString().c_str(), packetLength);
 #endif
-        meshtastic_MeshPacket mp;
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
         LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
         bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router && mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+            // Drop packets with spoofed local origin — no legitimate LAN node should send from=0 or our own nodeNum
+            if (isFromUs(&mp)) {
+                LOG_WARN("UDP packet with spoofed local from=0x%x, dropping", mp.from);
+                return;
+            }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
-            mp.pki_encrypted = false;
-            mp.public_key.size = 0;
-            memset(mp.public_key.bytes, 0, sizeof(mp.public_key.bytes));
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             // Unset received SNR/RSSI
             p->rx_snr = 0;

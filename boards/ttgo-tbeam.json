@@ -1,0 +1,29 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "esp32_out.ld"
+    },
+    "core": "esp32",
+    "extra_flags": "-DARDUINO_T_Beam",
+    "f_cpu": "240000000L",
+    "f_flash": "40000000L",
+    "flash_mode": "dio",
+    "mcu": "esp32",
+    "variant": "tbeam"
+  },
+  "connectivity": ["wifi", "bluetooth", "can", "ethernet"],
+  "debug": {
+    "openocd_board": "esp-wroom-32.cfg"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "name": "TTGO T-Beam (PSRAM Disabled)",
+  "upload": {
+    "flash_size": "4MB",
+    "maximum_ram_size": 1310720,
+    "maximum_size": 4194304,
+    "require_upload_port": true,
+    "speed": 460800
+  },
+  "url": "https://github.com/LilyGO/TTGO-T-Beam",
+  "vendor": "TTGO"
+}
