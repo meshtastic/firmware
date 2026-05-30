@@ -885,7 +885,7 @@ void Router::publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState d
                 return;
             }
         }
-        mqtt->onSend(*pEncrypted, *decodedPacket, p->channel);
+        mqtt->onSend(*pEncrypted, *decodedPacket, decodedPacket->channel);
     }
 
     packetPool.release(decodedCopy);
@@ -893,7 +893,7 @@ void Router::publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState d
 #else
     (void)p;
     (void)decodedState;
-    (void)pEncrypted;
+    packetPool.release(pEncrypted);
 #endif
 }
 
