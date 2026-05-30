@@ -805,15 +805,20 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     // If this could be a spoofed packet, don't let the modules see it.
     if (!skipHandle) {
         MeshModule::callModules(*p, src);
+#if !MESHTASTIC_EXCLUDE_MQTT
         publishReceivedToMqtt(p, decodedState, p_encrypted);
+#else
+        packetPool.release(p_encrypted);
+#endif
     } else {
         packetPool.release(p_encrypted);
     }
 }
 
+#if !MESHTASTIC_EXCLUDE_MQTT
 void Router::publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState decodedState, meshtastic_MeshPacket *pEncrypted)
 {
-#if !MESHTASTIC_EXCLUDE_MQTT
+    bool callerProvided = (pEncrypted != nullptr);
     if (!moduleConfig.mqtt.enabled || !mqtt || isFromUs(p)) {
         packetPool.release(pEncrypted);
         return;
@@ -832,7 +837,8 @@ void Router::publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState d
 
     const meshtastic_MeshPacket *decodedPacket = p;
     meshtastic_MeshPacket *decodedCopy = nullptr;
-    if (decodedState == DecodeState::DECODE_FAILURE && p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+    if (decodedState == DecodeState::DECODE_FAILURE && !callerProvided &&
+        p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         decodedCopy = packetPool.allocCopy(*p);
         if (decodedCopy == nullptr) {
             LOG_WARN("Failed to allocate packet copy for MQTT decode");
@@ -890,12 +896,8 @@ void Router::publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState d
 
     packetPool.release(decodedCopy);
     packetPool.release(pEncrypted);
-#else
-    (void)p;
-    (void)decodedState;
-    packetPool.release(pEncrypted);
-#endif
 }
+#endif
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {

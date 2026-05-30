@@ -33,7 +33,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
     // Handle hop_limit upgrade scenario for rebroadcasters
     if (wasUpgraded && perhapsHandleUpgradedPacket(p)) {
-#if USERPREFS_MQTT_UPLINK_ALL_SEEN
+#if USERPREFS_MQTT_UPLINK_ALL_SEEN && !MESHTASTIC_EXCLUDE_MQTT
         publishReceivedToMqtt(p, DecodeState::DECODE_FAILURE);
 #endif
         return true; // we handled it, so stop processing
@@ -61,7 +61,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             perhapsCancelDupe(p);
         }
 
-#if USERPREFS_MQTT_UPLINK_ALL_SEEN
+#if USERPREFS_MQTT_UPLINK_ALL_SEEN && !MESHTASTIC_EXCLUDE_MQTT
         publishReceivedToMqtt(p, DecodeState::DECODE_FAILURE);
 #endif
         return true;
