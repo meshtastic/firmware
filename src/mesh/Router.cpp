@@ -811,7 +811,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 }
 
-void Router::publishReceivedToMqtt(meshtastic_MeshPacket *p, DecodeState decodedState, meshtastic_MeshPacket *pEncrypted)
+void Router::publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState decodedState, meshtastic_MeshPacket *pEncrypted)
 {
 #if !MESHTASTIC_EXCLUDE_MQTT
     if (!moduleConfig.mqtt.enabled || !mqtt || isFromUs(p)) {
@@ -830,13 +830,24 @@ void Router::publishReceivedToMqtt(meshtastic_MeshPacket *p, DecodeState decoded
         }
     }
 
+    const meshtastic_MeshPacket *decodedPacket = p;
+    meshtastic_MeshPacket *decodedCopy = nullptr;
     if (decodedState == DecodeState::DECODE_FAILURE && p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
-        decodedState = perhapsDecode(p);
+        decodedCopy = packetPool.allocCopy(*p);
+        if (decodedCopy == nullptr) {
+            LOG_WARN("Failed to allocate packet copy for MQTT decode");
+            packetPool.release(pEncrypted);
+            return;
+        }
+        decodedState = perhapsDecode(decodedCopy);
+        if (decodedState == DecodeState::DECODE_SUCCESS)
+            decodedPacket = decodedCopy;
     } else if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         decodedState = DecodeState::DECODE_SUCCESS;
     }
 
     if (decodedState == DecodeState::DECODE_FATAL) {
+        packetPool.release(decodedCopy);
         packetPool.release(pEncrypted);
         return;
     }
@@ -851,26 +862,33 @@ void Router::publishReceivedToMqtt(meshtastic_MeshPacket *p, DecodeState decoded
     // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet.
     if (decodedState == DecodeState::DECODE_SUCCESS || pEncrypted->pki_encrypted) {
         if (decodedState == DecodeState::DECODE_SUCCESS && moduleConfig.mqtt.encryption_enabled &&
-            (p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP ||
+            (decodedPacket->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP ||
              pEncrypted->which_payload_variant != meshtastic_MeshPacket_encrypted_tag)) {
             // For traceroute or when we don't have an encrypted copy, encrypt a fresh copy from the current packet state.
-            auto *pEncryptedNew = packetPool.allocCopy(*p);
+            auto *pEncryptedNew = packetPool.allocCopy(*decodedPacket);
             if (pEncryptedNew) {
                 auto encodeResult = perhapsEncode(pEncryptedNew);
                 if (encodeResult != meshtastic_Routing_Error_NONE) {
-                    LOG_WARN("Encryption of received packet failed, sending original packet to MQTT");
+                    LOG_WARN("Encryption of received packet failed, skipping MQTT publish");
                     packetPool.release(pEncryptedNew);
+                    packetPool.release(decodedCopy);
+                    packetPool.release(pEncrypted);
+                    return;
                 } else {
                     packetPool.release(pEncrypted);
                     pEncrypted = pEncryptedNew;
                 }
             } else {
                 LOG_WARN("Failed to allocate new encrypted packet for MQTT publish");
+                packetPool.release(decodedCopy);
+                packetPool.release(pEncrypted);
+                return;
             }
         }
-        mqtt->onSend(*pEncrypted, *p, p->channel);
+        mqtt->onSend(*pEncrypted, *decodedPacket, p->channel);
     }
 
+    packetPool.release(decodedCopy);
     packetPool.release(pEncrypted);
 #else
     (void)p;

@@ -131,8 +131,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
                     bool ackWantsAck = false);
 
-    /** Publish a received packet to MQTT using the same receive-side publish rules as handleReceived(). */
-    void publishReceivedToMqtt(meshtastic_MeshPacket *p, DecodeState decodedState, meshtastic_MeshPacket *pEncrypted = nullptr);
+    /**
+     * Publish a received packet to MQTT using the same receive-side publish rules as handleReceived().
+     * Takes ownership of pEncrypted when provided (and always releases it before returning).
+     */
+    void publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState decodedState,
+                               meshtastic_MeshPacket *pEncrypted = nullptr);
 
   private:
     /**
