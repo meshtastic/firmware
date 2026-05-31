@@ -73,7 +73,8 @@ int32_t MMC5983MASensor::runOnce()
     if (doCalibration) {
         beginCalibrationDisplay(showingScreen);
         updateCalibrationExtrema(magX, magY, magZ, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
-        finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+        finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ,
+                                   lowestZ);
     }
 #endif
 
@@ -108,10 +109,13 @@ int32_t MMC5983MASensor::runOnce()
         heading = atan2f(magY, magX) * RAD_TO_DEG + MMC5983MA_HEADING_OFFSET_DEG;
     }
 
-    if (heading >= 360.0f) heading -= 360.0f;
-    else if (heading < 0.0f) heading += 360.0f;
+    if (heading >= 360.0f)
+        heading -= 360.0f;
+    else if (heading < 0.0f)
+        heading += 360.0f;
     heading = 360.0f - heading;
-    if (heading >= 360.0f) heading -= 360.0f;
+    if (heading >= 360.0f)
+        heading -= 360.0f;
 
     heading = applyCompassOrientation(heading);
     if (screen)

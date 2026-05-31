@@ -82,7 +82,7 @@ extern "C" {
 #define PIN_WIRE_SDA (32 + 3)
 #define PIN_WIRE_SCL (0 + 10)
 
-#define PIN_SENSOR_EN (32 + 6)   // Active LOW — controls IMU and compass VDD
+#define PIN_SENSOR_EN (32 + 6) // Active LOW — controls IMU and compass VDD
 #define PIN_SENSOR_EN_ACTIVE LOW
 
 // ICM42607P interrupt pins — populated on PCB, not yet used in firmware
