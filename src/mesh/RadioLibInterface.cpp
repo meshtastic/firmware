@@ -1,4 +1,5 @@
 #include "RadioLibInterface.h"
+#include "MeshLED.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
@@ -425,6 +426,7 @@ void RadioLibInterface::completeSending()
     auto p = sendingPacket;
     sendingPacket = NULL;
 
+    meshLED->off();
     if (p) {
         // Packet has been sent, count it toward our TX airtime utilization.
         uint32_t xmitMsec = getPacketTime(p);
@@ -596,6 +598,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {
+            meshLED->on();
             // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
             // bits
             enableInterrupt(isrTxLevel0);
