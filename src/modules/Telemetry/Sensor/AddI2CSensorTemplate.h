@@ -11,6 +11,15 @@ static std::forward_list<TelemetrySensor *> sensors;
 template <typename T> void addSensor(const ScanI2C *i2cScanner, ScanI2C::DeviceType type)
 {
     ScanI2C::FoundDevice dev = i2cScanner->find(type);
+    // Avoid adding the same device twice
+    if (dev.type != ScanI2C::DeviceType::NONE) {
+        for (TelemetrySensor *_sensor : sensors) {
+            if ((_sensor->_address == dev.address.address) && (_sensor->_port == dev.address.port)) {
+                return;
+            }
+        }
+    }
+
     if (dev.type != ScanI2C::DeviceType::NONE || type == ScanI2C::DeviceType::NONE) {
         TelemetrySensor *sensor = new T();
 #if WIRE_INTERFACES_COUNT > 1
