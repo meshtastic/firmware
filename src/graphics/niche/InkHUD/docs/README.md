@@ -471,6 +471,13 @@ We keep this separate latest-message cache for this purpose, because:
 - we want to expose both the most recent broadcast and most recent DM independently
 - applets like `DMApplet` and `NotificationApplet` need quick access without scanning the full message history
 
+#### How messages reach the store
+
+Broadcasts and DMs take different paths into `messageStore`:
+
+- **Broadcasts** — `ThreadedMessageApplet::handleReceived()` calls `messageStore.addFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
+- **DMs** — `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.addFromPacket()` directly and stores the result in `latestMessage.dm`.
+
 #### Saving / Loading
 
 The `LatestMessage` cache is not persisted to its own file. On boot, `InkHUD::begin()` calls `messageStore.loadFromFlash()` first, then `Persistence::loadLatestMessage()` rebuilds the cache by scanning the loaded messages for the most recent broadcast and DM.
@@ -579,6 +586,10 @@ If debt is particularly high, and no updates are taking place organically, `Disp
 Handles events which impact the InkHUD system generally (e.g. shutdown, button press).
 
 Applets themselves do also listen separately for various events, but for the purpose of gathering information which they would like to display.
+
+#### Text Messages
+
+`Events::onReceiveTextMessage()` is the central handler for all incoming text messages. It updates the `LatestMessage` cache and, for DMs, also adds the message to `messageStore` (since `ThreadedMessageApplet` only handles broadcasts). See `Persistence::LatestMessage` for details on how the two message types are stored.
 
 #### Buttons
 

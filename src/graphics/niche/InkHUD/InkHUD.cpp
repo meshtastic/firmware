@@ -2,10 +2,6 @@
 
 #include "./InkHUD.h"
 
-#include "FSCommon.h"
-#include "MessageStore.h"
-#include "SPILock.h"
-#include "concurrency/LockGuard.h"
 #include "./Applet.h"
 #include "./Events.h"
 #include "./Persistence.h"
@@ -13,6 +9,10 @@
 #include "./SystemApplet.h"
 #include "./Tile.h"
 #include "./WindowManager.h"
+#include "FSCommon.h"
+#include "MessageStore.h"
+#include "SPILock.h"
+#include "concurrency/LockGuard.h"
 
 using namespace NicheGraphics;
 
