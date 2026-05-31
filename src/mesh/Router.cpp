@@ -819,7 +819,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 void Router::publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState decodedState, meshtastic_MeshPacket *pEncrypted)
 {
     bool callerProvided = (pEncrypted != nullptr);
-    if (!moduleConfig.mqtt.enabled || !mqtt || isFromUs(p)) {
+    if (!moduleConfig.mqtt.enabled || !mqtt || (isFromUs(p) && callerProvided)) {
         packetPool.release(pEncrypted);
         return;
     }
