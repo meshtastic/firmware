@@ -332,8 +332,6 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
         takPacket.geo_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
         takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
     }
-    // TAKPacketV2 dropped the `payload_variant` oneof (former `bool pli` arm,
-    // tag 30) — PLI is now the implicit payload, so no variant selector is set.
 
     // Callsign - stored as plain string (no compression, apps handle that)
     strncpy(takPacket.callsign, owner.long_name, sizeof(takPacket.callsign) - 1);

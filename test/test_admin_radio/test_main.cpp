@@ -138,7 +138,6 @@ static const RegionProfile TEST_PROFILE_SPACED = {
     /* textThrottle */ 0,
     /* positionThrottle */ 0,
     /* telemetryThrottle */ 0,
-    /* overrideSlot */ 0,
 };
 
 // A licensed-only profile for testing access control
@@ -151,7 +150,6 @@ static const RegionProfile TEST_PROFILE_LICENSED = {
     /* textThrottle */ 5,
     /* positionThrottle */ 10,
     /* telemetryThrottle */ 10,
-    /* overrideSlot */ 3,
 };
 
 // Turbo-only profile
@@ -164,7 +162,6 @@ static const RegionProfile TEST_PROFILE_TURBO = {
     /* textThrottle */ 0,
     /* positionThrottle */ 0,
     /* telemetryThrottle */ 0,
-    /* overrideSlot */ 0,
 };
 
 // A preset list for the preset-hash override slot test (LONG_FAST + MEDIUM_FAST)
@@ -185,7 +182,6 @@ static const RegionProfile TEST_PROFILE_PRESET_HASH = {
     /* textThrottle */ 0,
     /* positionThrottle */ 0,
     /* telemetryThrottle */ 0,
-    /* overrideSlot */ OVERRIDE_SLOT_PRESET_HASH,
 };
 
 // Standalone test region using US frequencies (26 MHz span → 104 slots at 250 kHz BW)
@@ -200,25 +196,26 @@ static const RegionInfo TEST_REGION_PRESET_HASH = {
     false,
     &TEST_PROFILE_PRESET_HASH,
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+    OVERRIDE_SLOT_PRESET_HASH,
     "TEST_PRESET_HASH",
 };
 
 static const RegionInfo testRegions[] = {
     // A wide US-like region with spacing + padding
     {meshtastic_Config_LoRaConfig_RegionCode_US, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
-     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, "TEST_US_SPACED"},
+     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_US_SPACED"},
 
     // A narrow band simulating tight EU regulation
     {meshtastic_Config_LoRaConfig_RegionCode_EU_868, 869.4f, 869.65f, 10, 14, false, false, &TEST_PROFILE_LICENSED,
-     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, "TEST_EU_LICENSED"},
+     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 3, "TEST_EU_LICENSED"},
 
     // A wide-LoRa region with turbo-only presets
     {meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, &TEST_PROFILE_TURBO,
-     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, "TEST_LORA24_TURBO"},
+     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, 0, "TEST_LORA24_TURBO"},
 
     // Sentinel — must be last
     {meshtastic_Config_LoRaConfig_RegionCode_UNSET, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
-     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, "TEST_UNSET"},
+     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_UNSET"},
 };
 
 static const RegionInfo *getTestRegion(meshtastic_Config_LoRaConfig_RegionCode code)
@@ -256,7 +253,7 @@ static void test_shadowTable_licensedProfileFlagsCorrect()
     const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
     TEST_ASSERT_TRUE(r->profile->licensedOnly);
     TEST_ASSERT_FALSE(r->profile->audioPermitted);
-    TEST_ASSERT_EQUAL(3, r->profile->overrideSlot);
+    TEST_ASSERT_EQUAL(3, r->overrideSlot);
 }
 
 static void test_shadowTable_presetCountMatchesExpected()
@@ -319,8 +316,8 @@ static void test_shadowTable_unknownCodeFallsToSentinel()
 
 static void test_shadowTable_presetHashProfileHasCorrectOverrideSlot()
 {
-    TEST_ASSERT_EQUAL(OVERRIDE_SLOT_PRESET_HASH, TEST_PROFILE_PRESET_HASH.overrideSlot);
-    TEST_ASSERT_EQUAL(-1, TEST_PROFILE_PRESET_HASH.overrideSlot);
+    TEST_ASSERT_EQUAL(OVERRIDE_SLOT_PRESET_HASH, TEST_REGION_PRESET_HASH.overrideSlot);
+    TEST_ASSERT_EQUAL(-1, TEST_REGION_PRESET_HASH.overrideSlot);
     TEST_ASSERT_EQUAL(2, TEST_REGION_PRESET_HASH.getNumPresets());
 }
 
