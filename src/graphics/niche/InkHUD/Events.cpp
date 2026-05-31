@@ -2,6 +2,7 @@
 
 #include "./Events.h"
 
+#include "MessageStore.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "buzz.h"
@@ -514,6 +515,7 @@ int InkHUD::Events::beforeReboot(void *unused)
         inkhud->persistence->saveLatestMessage();
     } else {
         NicheGraphics::clearFlashData();
+        messageStore.clearAllMessages(); // also wipe the shared message store
     }
 
     // Note: no forceUpdate call here
@@ -538,9 +540,8 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
     inkhud->persistence->latestMessage.wasBroadcast = isBroadcast(packet->to);
 
     // Pick the appropriate variable to store the message in
-    MessageStore::Message *storedMessage = inkhud->persistence->latestMessage.wasBroadcast
-                                               ? &inkhud->persistence->latestMessage.broadcast
-                                               : &inkhud->persistence->latestMessage.dm;
+    StoredMessage *storedMessage = inkhud->persistence->latestMessage.wasBroadcast ? &inkhud->persistence->latestMessage.broadcast
+                                                                                   : &inkhud->persistence->latestMessage.dm;
 
     // Store nodenum of the sender
     // Applets can use this to fetch user data from nodedb, if they want
@@ -554,10 +555,11 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
     // - (potentially) used to determine which applet to focus
     storedMessage->channelIndex = packet->channel;
 
-    // Store the text
-    // Need to specify manually how many bytes, because source not null-terminated
-    storedMessage->text =
-        std::string(&packet->decoded.payload.bytes[0], &packet->decoded.payload.bytes[packet->decoded.payload.size]);
+    // Store the text via the shared pool so getText() works on this StoredMessage
+    const char *payload = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
+    uint16_t payloadLen = packet->decoded.payload.size;
+    storedMessage->textOffset = MessageStore::storeText(payload, payloadLen);
+    storedMessage->textLength = payloadLen;
 
     return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)
 }
