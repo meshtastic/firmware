@@ -61,10 +61,7 @@ struct _SEN5XMeasurements {
 class SEN5XSensor : public TelemetrySensor
 {
   private:
-    TwoWire *_bus{};
-    uint8_t _address{};
 #ifdef SEN5X_I2C_CLOCK_SPEED
-    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
     ReClockI2C reClockI2C;
 #endif
 
