@@ -2,10 +2,19 @@
 #include "TCA9555.h"
 #include "AudioBoard.h"
 #include "DebugConfiguration.h"
+#include "mesh/MeshLED.h"
 
 TCA9535 ioExpander(0x21);
 DriverPins PinsAudioBoardES8311;
 AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
+
+class WioTrackerMeshLED : public MeshLED
+{
+  public:
+    void init() override { ioExpander.write1(10, LOW); } // ensure LED starts off
+    void on() override { ioExpander.write1(10, HIGH); }
+    void off() override { ioExpander.write1(10, LOW); }
+};
 
 static bool initOK = false;
 
@@ -68,6 +77,9 @@ void initVariant()
         ioExpander.write1(8, HIGH); // TP RST high
         delay(60);
         initOK = true;
+
+        meshLED = std::make_shared<WioTrackerMeshLED>();
+        meshLED->init();
     }
 }
 
