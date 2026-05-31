@@ -151,9 +151,7 @@ extern "C" {
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (4.916F)
 
-// BATTERY_LPCOMP_INPUT omitted — enabling it causes 2.9 mA deep-sleep leakage (issue #8801)
-// AIN3 = VBAT * (100/490); threshold 2/8 VDD ≈ 0.25 * 3.3 V → wake at VBAT ≈ 4.04 V
-#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_2_8
+// #define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_3 // UNSAFE: causes 2.9 mA deep-sleep leakage (issue #8801)
 
 // Power / USB
 
