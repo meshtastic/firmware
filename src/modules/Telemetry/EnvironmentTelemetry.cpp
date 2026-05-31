@@ -22,6 +22,10 @@
 #include "target_specific.h"
 #include <OLEDDisplay.h>
 
+#if MESHTASTIC_ENABLE_ONCHIP_TEMPERATURE_SENSOR
+#include "Sensor/OnChipTemperatureSensor.h"
+#endif
+
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 
 // Sensors
@@ -157,6 +161,11 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // moduleConfig.telemetry.environment_update_interval = 15;
 
     // order by priority of metrics/values (low top, high bottom)
+
+#if MESHTASTIC_ENABLE_ONCHIP_TEMPERATURE_SENSOR
+    // Detected sensors push_front later, so the fallback remains last and only fills missing temperature.
+    sensors.push_front(new OnChipTemperatureSensor());
+#endif
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #ifdef T1000X_SENSOR_EN
