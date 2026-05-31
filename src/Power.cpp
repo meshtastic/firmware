@@ -31,6 +31,10 @@
 #include "input/LinuxInputImpl.h"
 #endif
 
+#ifdef HAS_ADS1115
+#include <Adafruit_ADS1X15.h>
+#endif
+
 // Working USB detection for powered/charging states on the RAK platform
 #ifdef NRF_APM
 #include "nrfx_power.h"
@@ -616,6 +620,164 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 static AnalogBatteryLevel analogLevel;
 
+#ifdef HAS_ADS1115
+#include "SPILock.h"
+// AW35615 USB-C CC controller register constants (Arduino Wire, no ESP-IDF dependency)
+static constexpr uint8_t AW35615_ADDR       = 0x22;
+static constexpr uint8_t AW35615_REG_DEVID  = 0x01; // Device ID (probe)
+static constexpr uint8_t AW35615_REG_ST1A   = 0x3D; // STATUS1A: TOGSS[5:3]
+static constexpr uint8_t AW35615_REG_ST0    = 0x40; // STATUS0:  VBUSOK[7]
+static constexpr uint8_t AW35615_VBUSOK     = (1 << 7);
+static constexpr uint8_t AW35615_TOGSS_MASK = 0x38;
+static constexpr uint8_t AW35615_TOGSS_SHIFT = 3;
+static constexpr uint8_t AW35615_TOGSS_SNK_CC1 = 5; // device is sink on CC1
+static constexpr uint8_t AW35615_TOGSS_SNK_CC2 = 6; // device is sink on CC2
+
+/**
+ * Battery level sensor using an ADS1115 16-bit ADC on I2C (address 0x48).
+ * Channel 0 is battery voltage through a ×2 resistive divider, so the
+ * measured voltage is multiplied by 2.0 to recover the true cell voltage.
+ * USB/charging state is read from the AW35615 USB-C CC controller (0x22)
+ * when present; falls back to a voltage threshold when not.
+ */
+class ADS1115BatteryLevel : public AnalogBatteryLevel
+{
+  public:
+    bool init()
+    {
+        concurrency::LockGuard guard(spiLock);
+        // Wire is already configured (SDA=47, SCL=48) and the ADC-enable
+        // expander pin (pin 15) is already HIGH from initVariant().
+        if (!_ads.begin(ADS1115_ADDR, &Wire)) {
+            LOG_WARN("ADS1115 not found on I2C bus — battery sensor unavailable");
+            return false;
+        }
+        _ads.setGain(GAIN_TWO); // ±2.048 V FSR matches the voltage-divider ratio
+        initialized = true;
+        LOG_INFO("[ADS1115] battery sensor initialized");
+
+        // Probe and configure AW35615 USB-C CC controller for VBUS / charging detection
+        uint8_t devId = 0;
+        if (aw35615Read(AW35615_REG_DEVID, devId)) {
+            aw35615_initialized = true;
+            LOG_INFO("[AW35615] found at 0x22, DEVICE_ID=0x%02x", devId);
+            // Enable all internal power blocks
+            aw35615Write(0x0B, 0x0F); // POWER = 0x0F
+            // Put Rd (pull-down) resistors on both CC pins → device acts as USB-C sink
+            aw35615Write(0x02, 0x03); // SWITCHES0: PDWN1|PDWN2
+            // Enable sink toggle so the chip detects CC attachment and sets VBUSOK
+            aw35615Write(0x08, 0x05); // CONTROL2: MODE=SINK (2<<1) | TOGGLE=1
+        } else {
+            LOG_WARN("[AW35615] not found at 0x22, falling back to voltage threshold for USB detection");
+        }
+        return true;
+    }
+
+    virtual uint16_t getBattVoltage() override
+    {
+        if (!initialized) {
+            return 0;
+        }
+
+        concurrency::LockGuard guard(spiLock);
+        static constexpr uint32_t MIN_READ_INTERVAL_MS = 30000;
+        if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_ms, MIN_READ_INTERVAL_MS)) {
+            last_read_ms = millis();
+            float sum = 0;
+            for (int i = 0; i < SAMPLE_COUNT; i++) {
+                int16_t raw = _ads.readADC_SingleEnded(0);
+                float v = _ads.computeVolts(raw);
+                sum += v;
+            }
+            // Channel 0 sees battery/2 (resistive divider); multiply back, convert to mV
+            float v = (sum / SAMPLE_COUNT) * 2.0f * 1000.0f;
+            if (!initial_read_done) {
+                cached_mv = (uint16_t)v;
+                initial_read_done = true;
+            } else {
+                cached_mv = (uint16_t)(cached_mv + (v - cached_mv) * 0.5f);
+            }
+        }
+        return cached_mv;
+    }
+
+    virtual bool isVbusIn() override
+    {
+        concurrency::LockGuard guard(spiLock);
+        if (aw35615_initialized) {
+            uint8_t st0 = 0;
+            if (aw35615Read(AW35615_REG_ST0, st0)) {
+                bool vbus = (st0 & AW35615_VBUSOK) != 0;
+                //LOG_DEBUG("[AW35615] STATUS0=0x%02x  VBUSOK=%d", st0, (int)vbus);
+                return vbus;
+            }
+        }
+        // Fallback: CV-phase voltage threshold
+        static constexpr uint16_t CHARGING_THRESH_MV = (4190 + 10) * NUM_CELLS;
+        return getBattVoltage() > CHARGING_THRESH_MV;
+    }
+
+    virtual bool isCharging() override
+    {
+        if (!isBatteryConnect())
+            return false;
+        if (aw35615_initialized) {
+            concurrency::LockGuard guard(spiLock);
+            uint8_t st1a = 0;
+            if (aw35615Read(AW35615_REG_ST1A, st1a)) {
+                uint8_t togss = (st1a & AW35615_TOGSS_MASK) >> AW35615_TOGSS_SHIFT;
+                bool charging = (togss == AW35615_TOGSS_SNK_CC1 || togss == AW35615_TOGSS_SNK_CC2);
+                //LOG_DEBUG("[AW35615] STATUS1A=0x%02x  TOGSS=%d  charging=%d", st1a, (int)togss, (int)charging);
+                return charging;
+            }
+        }
+        return isVbusIn();
+    }
+
+  private:
+    // arduino Wire helpers for AW35615 register access
+    bool aw35615Read(uint8_t reg, uint8_t &val)
+    {
+        Wire.beginTransmission(AW35615_ADDR);
+        Wire.write(reg);
+        if (Wire.endTransmission(false) != 0)
+            return false;
+        if (Wire.requestFrom(AW35615_ADDR, (uint8_t)1) != 1)
+            return false;
+        val = Wire.read();
+        return true;
+    }
+
+    bool aw35615Write(uint8_t reg, uint8_t val)
+    {
+        Wire.beginTransmission(AW35615_ADDR);
+        Wire.write(reg);
+        Wire.write(val);
+        return Wire.endTransmission() == 0;
+    }
+
+    static constexpr uint8_t SAMPLE_COUNT = 3;
+    Adafruit_ADS1115 _ads;
+    bool initialized = false;
+    bool aw35615_initialized = false;
+    bool initial_read_done = false;
+    uint16_t cached_mv = 0;
+    uint32_t last_read_ms = 0;
+};
+
+static ADS1115BatteryLevel ads1115BattLevel;
+
+bool Power::ads1115Init()
+{
+    if (ads1115BattLevel.init()) {
+        batteryLevel = &ads1115BattLevel;
+        return true;
+    }
+    else
+        return false;
+}
+#endif // HAS_ADS1115
+
 Power::Power() : OSThread("Power")
 {
     statusHandler = {};
@@ -725,6 +887,10 @@ bool Power::setup()
         found = true;
     } else if (meshSolarInit()) {
         found = true;
+#ifdef HAS_ADS1115
+    } else if (ads1115Init()) {
+        found = true;
+#endif
     } else if (analogInit()) {
         found = true;
     } else {
