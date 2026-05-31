@@ -30,6 +30,12 @@ bool isRangeValid(float highest, float lowest)
     // NaN/Inf guard without pulling in extra math helpers.
     return (highest == highest) && (lowest == lowest) && (highest > lowest);
 }
+
+volatile float latestCompassAccelX = 0.0f;
+volatile float latestCompassAccelY = 0.0f;
+volatile float latestCompassAccelZ = 0.0f;
+volatile uint32_t latestCompassAccelAtMs = 0;
+volatile uint32_t latestCompassAccelSeq = 0;
 } // namespace
 
 // screen is defined in main.cpp
@@ -202,6 +208,47 @@ float MotionSensor::applyCompassOrientation(float heading)
     default:
         return heading;
     }
+}
+
+void MotionSensor::publishCompassAccelSample(float x, float y, float z)
+{
+    latestCompassAccelSeq++;
+    latestCompassAccelX = x;
+    latestCompassAccelY = y;
+    latestCompassAccelZ = z;
+    latestCompassAccelAtMs = millis();
+    latestCompassAccelSeq++;
+}
+
+bool MotionSensor::getLatestCompassAccelSample(FusionVector &accel, uint32_t &ageMs)
+{
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    uint32_t sampledAtMs = 0;
+    uint32_t seqStart = 0;
+    uint32_t seqEnd = 0;
+
+    do {
+        seqStart = latestCompassAccelSeq;
+        if (seqStart & 1U) {
+            continue;
+        }
+
+        x = latestCompassAccelX;
+        y = latestCompassAccelY;
+        z = latestCompassAccelZ;
+        sampledAtMs = latestCompassAccelAtMs;
+        seqEnd = latestCompassAccelSeq;
+    } while ((seqStart != seqEnd) || (seqEnd & 1U));
+
+    if (sampledAtMs == 0) {
+        return false;
+    }
+
+    accel.axis.x = x;
+    accel.axis.y = y;
+    accel.axis.z = z;
+    ageMs = millis() - sampledAtMs;
+    return true;
 }
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
