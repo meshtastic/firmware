@@ -830,7 +830,7 @@ void Router::publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState d
         pEncrypted = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("Router::publishReceivedToMqtt", pEncrypted);
         if (pEncrypted == nullptr) {
-            LOG_WARN("p_encrypted is null, skipping MQTT publish");
+            LOG_WARN("pEncrypted is null, skipping MQTT publish");
             return;
         }
     }
@@ -865,7 +865,9 @@ void Router::publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState d
         pEncrypted->pki_encrypted = true;
     }
 
-    // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet.
+    // After potentially altering it, publish received message to MQTT.
+    // Note: packets originating from us are only suppressed when callerProvided=true (the handleReceived path);
+    // on the dupe-filter path (callerProvided=false) we intentionally uplink relayed copies of our own packets.
     if (decodedState == DecodeState::DECODE_SUCCESS || pEncrypted->pki_encrypted) {
         if (decodedState == DecodeState::DECODE_SUCCESS && moduleConfig.mqtt.encryption_enabled &&
             (decodedPacket->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP ||
