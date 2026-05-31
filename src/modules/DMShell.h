@@ -25,9 +25,11 @@ struct DMShellSession {
     uint32_t highestSeenRxSeq = 0;
     uint32_t lastActivityMs = 0;
     // --- Half-duplex turn-taking ("talking stick") state ---
-    bool turnManaged = false; // becomes true once the peer uses turn-taking flags; enables gating
-    bool hasToken = false;    // do we currently hold the right to transmit?
-    uint32_t lastRtsMs = 0;   // last time we asked the client for a turn (rate-limit)
+    bool turnManaged = false;    // becomes true once the peer uses turn-taking flags; enables gating
+    bool hasToken = false;       // do we currently hold the right to transmit?
+    uint32_t lastRtsMs = 0;      // last time we asked the client for a turn (rate-limit)
+    uint32_t turnDeadlineMs = 0; // while holding the turn, keep it until this time (extended on output)
+    uint32_t turnFramesSent = 0; // output frames sent in the current held turn (vs TURN_BUDGET_FRAMES)
     struct SentFrame {
         bool valid = false;
         meshtastic_RemoteShell_OpCode op = meshtastic_RemoteShell_OpCode_ERROR;

@@ -24,7 +24,12 @@ START1 = 0x94
 START2 = 0xC3
 HEADER_LEN = 4
 DEFAULT_API_PORT = 4403
-DEFAULT_HOP_LIMIT = 0
+# Must be > 0: the firmware sets hop_start = hop_limit when it originates the packet, and the
+# receiver's pre-hop drop policy (classifyHopStart, which runs *before* decryption so it can't see
+# the bitfield) discards packets that arrive with hop_start == 0. hop_limit=0 therefore gets us
+# silently dropped at the far end. On a direct 2-node link any non-zero value works; the
+# destination receives it directly and does not rebroadcast a DM addressed to itself.
+DEFAULT_HOP_LIMIT = 3
 LOCAL_ESCAPE_BYTE = b"\x1d"  # Ctrl+]
 MISSING_SEQ_RETRY_INTERVAL_SEC = 1.0
 INPUT_BATCH_WINDOW_SEC = .5
@@ -41,7 +46,7 @@ HEARTBEAT_POLL_INTERVAL_SEC = 0.25
 FLAG_GRANT = 0x01  # I am handing you the turn; you may transmit now
 FLAG_MORE = 0x02   # I yielded under a budget but still have data queued (grant back promptly)
 FLAG_RTS = 0x04    # (server->client) I have output but no turn; please grant me one
-CLIENT_TURN_BUDGET = 4   # max frames the client sends per turn before yielding
+CLIENT_TURN_BUDGET = 8   # max frames the client sends per turn before yielding
 TURN_RECLAIM_SEC = 8.0   # reclaim the token if a grant goes unanswered this long (anti-deadlock)
 
 
@@ -67,6 +72,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--baud", type=int, default=115200, help="serial baud rate when using --serial")
     parser.add_argument("--to", required=True, help="destination node number, e.g. !170896f7 or 0x170896f7")
     parser.add_argument("--channel", type=int, default=0, help="channel index to use")
+    parser.add_argument(
+        "--hop-limit",
+        type=int,
+        default=DEFAULT_HOP_LIMIT,
+        help="hop limit (must be > 0 or the far end drops our packets via the pre-hop policy)",
+    )
     parser.add_argument("--cols", type=int, default=None, help="initial terminal columns (default: detect local terminal)")
     parser.add_argument("--rows", type=int, default=None, help="initial terminal rows (default: detect local terminal)")
     parser.add_argument("--command", action="append", default=[], help="send a command line after opening")
@@ -329,6 +340,7 @@ class SessionState:
     target: int
     channel: int
     verbose: bool
+    hop_limit: int = DEFAULT_HOP_LIMIT
     session_id: int = field(default_factory=lambda: random.randint(1, 0x7FFFFFFF))
     next_seq: int = 1
     last_rx_seq: int = 0
@@ -375,6 +387,12 @@ class SessionState:
         with self.turn_cv:
             self.last_inbound_time = time.monotonic()
             if flags & FLAG_GRANT:
+                self.has_token = True
+            if flags & FLAG_RTS:
+                # The server only sends RTS when it has output and does NOT hold the token, so the
+                # token is (or should be) ours. Take it so we can grant. This also self-heals the
+                # case where our previous grant or the server's yield-grant was lost, which would
+                # otherwise leave neither side holding the token and the server flooding RTS forever.
                 self.has_token = True
             if flags & (FLAG_MORE | FLAG_RTS):
                 self.grant_requested = True
@@ -555,13 +573,19 @@ def make_toradio_packet(pb2, state: SessionState, shell_msg) -> object:
     # The 'from' field is a reserved keyword in Python, so use setattr
     setattr(packet, "from", 0)
     packet.channel = state.channel
-    packet.hop_limit = DEFAULT_HOP_LIMIT
+    packet.hop_limit = state.hop_limit
     packet.want_ack = False
     packet.decoded.portnum = pb2.portnums.REMOTE_SHELL_APP
     packet.decoded.payload = shell_msg.SerializeToString()
     packet.decoded.want_response = False
     packet.decoded.dest = state.target
     packet.decoded.source = 0
+    # Mark has_bitfield (proto3 optional → assigning even 0 sets presence) and leave OK_TO_MQTT clear,
+    # which is right for a private shell. Note: this is NOT what prevents the far-end pre-hop drop —
+    # that check runs before decryption and can't read the (encrypted) bitfield; a non-zero hop_limit
+    # is what keeps us alive there. The firmware also sets this for locally-originated packets, so this
+    # is mostly belt-and-suspenders for the post-decryption consumers (e.g. getHopsAway).
+    packet.decoded.bitfield = 0
 
     toradio = pb2.mesh.ToRadio()
     toradio.packet.CopyFrom(packet)
@@ -1092,6 +1116,7 @@ def main() -> int:
         target=parse_node_num(args.to),
         channel=args.channel,
         verbose=args.verbose,
+        hop_limit=args.hop_limit,
         turn_taking=args.turn_taking,
         turn_budget=args.turn_budget,
         turn_reclaim_sec=args.turn_reclaim,
