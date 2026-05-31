@@ -13,6 +13,7 @@
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "UnitConversions.h"
+#include "detect/ScanI2CTwoWire.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
@@ -41,18 +42,65 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     if (!moduleConfig.telemetry.air_quality_enabled && !AIR_QUALITY_TELEMETRY_MODULE_ENABLE) {
         return;
     }
+
     LOG_INFO("Air Quality Telemetry adding I2C devices...");
 
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
-        Note: this was previously on runOnce, which didnt take effect
+        Note: this was previously on runOnce, which didn't take effect
         as other modules already had already been initialized (screen)
     */
 
     // moduleConfig.telemetry.air_quality_enabled = 1;
     // moduleConfig.telemetry.air_quality_screen_enabled = 1;
     // moduleConfig.telemetry.air_quality_interval = 15;
+
+    // Add here supported sensors in the Air Quality module
+    // These sensors will be scanned twice, once in the first scan,
+    // and secondly in the first run of the module
+    if (!supportedSensors.count(PMSA003I_ADDR))
+        supportedSensors[PMSA003I_ADDR] = ScanI2C::DeviceType::PMSA003I;
+    if (!supportedSensors.count(SEN5X_ADDR))
+        supportedSensors[SEN5X_ADDR] = ScanI2C::DeviceType::SEN5X;
+#if __has_include(<SensirionI2cScd4x.h>)
+    if (!supportedSensors.count(SCD4X_ADDR))
+        supportedSensors[SCD4X_ADDR] = ScanI2C::DeviceType::SCD4X;
+#endif
+#if __has_include(<SensirionI2cSfa3x.h>)
+    if (!supportedSensors.count(SFA30_ADDR))
+        supportedSensors[SFA30_ADDR] = ScanI2C::DeviceType::SFA30;
+#endif
+#if __has_include(<SensirionI2cScd30.h>)
+    if (!supportedSensors.count(SCD30_ADDR))
+        supportedSensors[SCD30_ADDR] = ScanI2C::DeviceType::SCD30;
+#endif
+
+    if (!firstTime) {
+        // Re-scan for late comming sensors
+        LOG_INFO("Re-scanning supported sensors...");
+
+        for (const auto &[address, type] : supportedSensors) {
+
+            if (!i2cScanner->exists(type)) {
+                LOG_INFO("Re-scanning on address 0x%x", address);
+                uint8_t array_address[1] = {address};
+#if defined(I2C_SDA1) || (defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2))
+                i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1, array_address, sizeof(array_address));
+#endif
+
+#if defined(I2C_SDA)
+                i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, array_address, sizeof(array_address));
+#elif defined(ARCH_PORTDUINO)
+                if (portduino_config.i2cdev != "") {
+                    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, array_address, sizeof(array_address));
+                }
+#elif HAS_WIRE
+                i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, array_address, sizeof(array_address));
+#endif
+            }
+        }
+    }
 
     // order by priority of metrics/values (low top, high bottom)
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
@@ -93,6 +141,10 @@ int32_t AirQualityTelemetryModule::runOnce()
 
         if (moduleConfig.telemetry.air_quality_enabled) {
             LOG_INFO("Air quality Telemetry: init");
+
+            // Re-scan I2C bus
+            auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
+            i2cScanFinished(i2cScanner.get());
 
             // check if we have at least one sensor
             if (!sensors.empty()) {
