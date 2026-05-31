@@ -38,8 +38,14 @@ constexpr size_t MAX_MESSAGE_SIZE = 200;
 constexpr uint32_t TURN_FLAG_GRANT = 0x01; // I am handing you the turn; you may transmit now
 constexpr uint32_t TURN_FLAG_MORE = 0x02;  // I yielded under a budget but still have data queued
 constexpr uint32_t TURN_FLAG_RTS = 0x04;   // I have output but no turn; please grant me one
-constexpr size_t TURN_BUDGET_FRAMES = 4;   // max output frames per granted turn before yielding
-constexpr uint32_t RTS_RETRY_MS = 1000;    // min interval between request-to-send frames
+constexpr size_t TURN_BUDGET_FRAMES = 8;   // max output frames per granted turn before yielding (bounds interrupt latency)
+constexpr uint32_t RTS_RETRY_MS = 250;     // min interval between request-to-send frames
+// After being granted the turn we keep it for a short "linger" window, continuing to drain shell
+// output as it appears, instead of yielding the instant the PTY drains. This lets a command's
+// output (and the next prompt) ride the same turn as the keystroke that triggered it, avoiding a
+// full RTS->grant round-trip per command. The turn still ends promptly once the PTY is idle this
+// long, or once TURN_BUDGET_FRAMES is hit (so the client can interject, e.g. Ctrl-C).
+constexpr uint32_t TURN_LINGER_MS = 120;
 } // namespace
 
 DMShellModule::DMShellModule()
@@ -63,6 +69,7 @@ ProcessMessage DMShellModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     if (frame.op == meshtastic_RemoteShell_OpCode_ACK) {
         if (session.active && frame.session_id == session.sessionId && getFrom(&mp) == session.peer) {
+            LOG_WARN("DMShell: Received ack from 0x%x 0x%x", getFrom(&mp), session.peer);
             applyTurnFlags(frame);
             if (frame.last_rx_seq > 0) {
                 resendFramesFrom(frame.last_rx_seq + 1);
@@ -363,7 +370,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     session.nextExpectedRxSeq = frame.seq + 1;
     session.highestSeenRxSeq = frame.seq;
     session.lastActivityMs = millis();
-    session.turnManaged = false;
+    session.turnManaged = true;
     session.hasToken = false;
     session.lastRtsMs = 0;
 
@@ -637,6 +644,11 @@ void DMShellModule::applyTurnFlags(const meshtastic_RemoteShell &frame)
         session.turnManaged = true; // peer speaks turn-taking; enable gating for this session
     }
     if (frame.flags & TURN_FLAG_GRANT) {
+        if (!session.hasToken) {
+            // Fresh turn: start the linger window and reset the per-turn budget.
+            session.turnDeadlineMs = millis() + TURN_LINGER_MS;
+            session.turnFramesSent = 0;
+        }
         session.hasToken = true;
     }
 }
@@ -701,26 +713,29 @@ void DMShellModule::sendRts()
     sendFrameToPeer(session.peer, frame, false);
 }
 
-// Called when we hold the turn: send up to TURN_BUDGET_FRAMES chunks of shell output, then hand
-// the turn back to the client. The grant is piggybacked on the last output frame (or sent as a
-// standalone ACK if there was nothing to send), so the token always settles back at the client.
+// Called (every tick) while we hold the turn. Drains available shell output and sends it
+// immediately, then decides whether to keep the turn (linger, to catch output that is about to
+// appear) or hand it back. The turn is yielded once the per-turn budget is hit (so the client can
+// interject, e.g. Ctrl-C) or once the PTY has been idle past the linger window. Output frames go
+// out as soon as they are read (no extra delay); the grant is a trailing ACK.
 void DMShellModule::serviceTurn()
 {
     if (!session.active || !session.turnManaged || !session.hasToken) {
         return;
     }
 
-    uint8_t chunks[TURN_BUDGET_FRAMES][MAX_MESSAGE_SIZE];
-    size_t chunkLen[TURN_BUDGET_FRAMES] = {0};
-    size_t nChunks = 0;
+    uint8_t buf[MAX_MESSAGE_SIZE];
     bool eof = false;
     bool readError = false;
 
-    while (nChunks < TURN_BUDGET_FRAMES && session.masterFd >= 0) {
-        const ssize_t n = read(session.masterFd, chunks[nChunks], MAX_MESSAGE_SIZE);
+    // Drain whatever is available right now, up to the remaining per-turn budget.
+    while (session.turnFramesSent < TURN_BUDGET_FRAMES && session.masterFd >= 0) {
+        const ssize_t n = read(session.masterFd, buf, sizeof(buf));
         if (n > 0) {
-            chunkLen[nChunks] = (size_t)n;
-            nChunks++;
+            sendOutputFrame(buf, (size_t)n, 0u);
+            session.turnFramesSent++;
+            session.lastActivityMs = millis();
+            session.turnDeadlineMs = millis() + TURN_LINGER_MS; // extend the linger while output flows
         } else if (n == 0) {
             eof = true;
             break;
@@ -732,27 +747,36 @@ void DMShellModule::serviceTurn()
         }
     }
 
-    // If we filled the budget, there may still be more output waiting; ask for a prompt re-grant.
-    const bool more = (nChunks == TURN_BUDGET_FRAMES) && ptyHasOutput();
-
-    session.hasToken = false; // we are handing the turn back below
-    if (nChunks > 0) {
-        session.lastActivityMs = millis();
-        for (size_t i = 0; i < nChunks; i++) {
-            const uint32_t flags = (i + 1 == nChunks) ? (TURN_FLAG_GRANT | (more ? TURN_FLAG_MORE : 0u)) : 0u;
-            sendOutputFrame(chunks[i], chunkLen[i], flags);
-        }
-    } else {
-        // Nothing to send: hand the turn straight back so the link goes quiet at the client.
+    if (eof || readError) {
+        session.hasToken = false;
         sendTurnGrant(false);
+        if (eof) {
+            closeSession("pty_eof", true);
+        } else {
+            LOG_WARN("DMShell: PTY read error errno=%d", errno);
+            closeSession("pty_read_error", true);
+        }
+        return;
     }
 
-    if (eof) {
-        closeSession("pty_eof", true);
-    } else if (readError) {
-        LOG_WARN("DMShell: PTY read error errno=%d", errno);
-        closeSession("pty_read_error", true);
+    const bool morePending = ptyHasOutput();
+
+    if (session.turnFramesSent >= TURN_BUDGET_FRAMES) {
+        // Hit the per-turn budget: yield so the client gets a chance to interject (e.g. Ctrl-C).
+        session.hasToken = false;
+        sendTurnGrant(morePending);
+        return;
     }
+
+    if (!morePending && (int32_t)(millis() - session.turnDeadlineMs) >= 0) {
+        // PTY has been idle past the linger window: hand the turn back.
+        session.hasToken = false;
+        sendTurnGrant(false);
+        return;
+    }
+
+    // Otherwise keep holding the turn: there is more to drain next pass, or we are lingering for
+    // output that may be about to appear. runOnce re-enters serviceTurn on the next tick.
 }
 
 void DMShellModule::sendError(const char *message, NodeNum peer)
