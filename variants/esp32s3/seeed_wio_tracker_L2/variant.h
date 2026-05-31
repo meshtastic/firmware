@@ -8,14 +8,23 @@
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
 
+#define HAS_ADS1115
+#define ADS1115_ADDR 0x48
+
+// LED controller
+#define HAS_LP5814
+
 // ES8311 DAC / AMP
 #define HAS_I2S
+
+#define HAS_ES8311
 #define DAC_I2S_BCK 11 // SCLK
 #define DAC_I2S_WS 12  // LRLK
 #define DAC_I2S_DOUT 16
 #define DAC_I2S_DIN -1
 #define DAC_I2S_MCLK 10
 
+#define HAS_ES7243E
 #define ADC_I2S_BCK 11
 #define ADC_I2S_WS 12
 #define ADC_I2S_DOUT -1
