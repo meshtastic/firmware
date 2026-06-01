@@ -48,6 +48,8 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     // Convert Compressed_msg to normal msg and receive it
     void unpackAndReceive(meshtastic_MeshPacket &p);
 
+    int16_t getCurrentRSSI() override;
+
     /**
      * Debugging counts
      */
