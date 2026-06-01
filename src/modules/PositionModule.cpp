@@ -339,6 +339,9 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
     strncpy(takPacket.device_callsign, owner.long_name, sizeof(takPacket.device_callsign) - 1);
     takPacket.device_callsign[sizeof(takPacket.device_callsign) - 1] = '\0';
 
+    // CoT uid — ATAK drops PLI entities with empty uid; derive stable "!<nodenum>" id.
+    snprintf(takPacket.uid, sizeof(takPacket.uid), "!%08x", nodeDB->getNodeNum());
+
     // Encode TAKPacketV2 protobuf, leaving room for flags byte prefix
     uint8_t protobuf_bytes[sizeof(mp->decoded.payload.bytes) - 1];
     size_t proto_size = pb_encode_to_bytes(protobuf_bytes, sizeof(protobuf_bytes), &meshtastic_TAKPacketV2_msg, &takPacket);
