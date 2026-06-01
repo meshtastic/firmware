@@ -22,21 +22,18 @@ void InkHUD::Persistence::loadSettings()
 // are immediately available to applets (DMApplet, AllMessageApplet, NotificationApplet).
 void InkHUD::Persistence::loadLatestMessage()
 {
+    int lastBroadcastPos = -1, lastDMPos = -1, pos = 0;
     for (const StoredMessage &m : messageStore.getLiveMessages()) {
         if (m.type == MessageType::BROADCAST) {
-            if (m.timestamp >= latestMessage.broadcast.timestamp) {
-                latestMessage.broadcast = m;
-                if (m.timestamp >= latestMessage.dm.timestamp)
-                    latestMessage.wasBroadcast = true;
-            }
+            latestMessage.broadcast = m;
+            lastBroadcastPos = pos;
         } else if (m.type == MessageType::DM_TO_US) {
-            if (m.timestamp >= latestMessage.dm.timestamp) {
-                latestMessage.dm = m;
-                if (m.timestamp >= latestMessage.broadcast.timestamp)
-                    latestMessage.wasBroadcast = false;
-            }
+            latestMessage.dm = m;
+            lastDMPos = pos;
         }
+        pos++;
     }
+    latestMessage.wasBroadcast = (lastBroadcastPos > lastDMPos);
 }
 
 // Save the InkHUD settings to flash

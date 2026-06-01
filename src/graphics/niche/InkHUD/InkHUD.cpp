@@ -99,6 +99,7 @@ static void migrateOldInkHUDMessages()
         uint8_t count = 0;
         f.readBytes(reinterpret_cast<char *>(&count), 1);
 
+        std::vector<StoredMessage> channelMsgs;
         for (uint8_t i = 0; i < count; i++) {
             StoredMessage sm;
             f.readBytes(reinterpret_cast<char *>(&sm.timestamp), sizeof(sm.timestamp));
@@ -120,12 +121,18 @@ static void migrateOldInkHUDMessages()
             sm.type = MessageType::BROADCAST;
             sm.isBootRelative = false;
             sm.ackStatus = AckStatus::ACKED;
-            sm.textOffset = MessageStore::storeText(textBuf, textLen);
-            sm.textLength = static_cast<uint16_t>(textLen);
+            size_t storedLen = (textLen >= MAX_MESSAGE_SIZE) ? MAX_MESSAGE_SIZE - 1 : textLen;
+            sm.textOffset = MessageStore::storeText(textBuf, storedLen);
+            sm.textLength = static_cast<uint16_t>(storedLen);
 
-            messageStore.addLiveMessage(sm);
-            migrated = true;
+            channelMsgs.push_back(sm);
         }
+
+        // Old format stored newest-first (push_front); insert oldest-first for correct chronological order
+        for (int i = static_cast<int>(channelMsgs.size()) - 1; i >= 0; i--)
+            messageStore.addLiveMessage(channelMsgs[i]);
+        if (!channelMsgs.empty())
+            migrated = true;
 
         f.close();
         FSCom.remove(path.c_str());

@@ -549,9 +549,11 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
         sm.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true);
         sm.channelIndex = packet->channel;
         const char *payload = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
-        uint16_t payloadLen = packet->decoded.payload.size;
-        sm.textOffset = MessageStore::storeText(payload, payloadLen);
-        sm.textLength = payloadLen;
+        size_t storedLen = packet->decoded.payload.size;
+        if (storedLen >= MAX_MESSAGE_SIZE)
+            storedLen = MAX_MESSAGE_SIZE - 1;
+        sm.textOffset = MessageStore::storeText(payload, storedLen);
+        sm.textLength = static_cast<uint16_t>(storedLen);
     }
 
     return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)

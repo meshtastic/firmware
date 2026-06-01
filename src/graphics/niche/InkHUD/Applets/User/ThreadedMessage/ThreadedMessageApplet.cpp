@@ -234,9 +234,7 @@ void InkHUD::ThreadedMessageApplet::loadMessagesFromFlash()
 // This is in addition to any onDeactivate() code, which will also run
 void InkHUD::ThreadedMessageApplet::onShutdown()
 {
-    // Save our current set of messages to flash, provided the applet isn't disabled
-    if (isActive())
-        saveMessagesToFlash();
+    // messageStore.saveToFlash() is called centrally by Events::beforeDeepSleep / beforeReboot
 }
 
 #endif
