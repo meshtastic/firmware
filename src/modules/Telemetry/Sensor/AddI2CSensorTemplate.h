@@ -13,7 +13,7 @@ template <typename T> void addSensor(const ScanI2C *i2cScanner, ScanI2C::DeviceT
     ScanI2C::FoundDevice dev = i2cScanner->find(type);
     // Avoid adding the same device twice
     if (dev.type != ScanI2C::DeviceType::NONE) {
-        for (TelemetrySensor *_sensor : sensors) {
+        for (const TelemetrySensor *_sensor : sensors) {
             if ((_sensor->_address == dev.address.address) && (_sensor->_port == dev.address.port)) {
                 return;
             }
