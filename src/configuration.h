@@ -31,6 +31,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #if __has_include("SensorRtcHelper.hpp")
 #include "SensorRtcHelper.hpp"
+// SensorLib defines isBitSet as a macro; undefine it here to avoid conflicts
+// with the SparkFun MMC5983MA library, which has a class method of the same name.
+#ifdef isBitSet
+#undef isBitSet
+#endif
 #endif
 
 /* Offer chance for variant-specific defines */
