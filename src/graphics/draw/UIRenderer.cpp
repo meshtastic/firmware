@@ -2,6 +2,7 @@
 #if HAS_SCREEN
 #include "CompassRenderer.h"
 #include "GPSStatus.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
@@ -25,7 +26,7 @@
 
 // External variables
 extern graphics::Screen *screen;
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
 static uint32_t lastSwitchTime = 0;
 #endif
 namespace graphics
@@ -753,7 +754,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (!node || node->num == nodeDB->getNodeNum() || !nodeInfoLiteIsFavorite(node))
         return;
     display->clear();
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     uint32_t now = millis();
     if (now - lastSwitchTime >= 10000) // 10000 ms = 10 秒
     {
@@ -816,16 +817,16 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     // Helper to get SNR limit based on modem preset
     auto getSnrLimit = [](meshtastic_Config_LoRaConfig_ModemPreset preset) -> float {
         switch (preset) {
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+        case PRESET(LONG_SLOW):
+        case PRESET(LONG_MODERATE):
+        case PRESET(LONG_FAST):
             return -6.0f;
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+        case PRESET(MEDIUM_SLOW):
+        case PRESET(MEDIUM_FAST):
             return -5.5f;
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+        case PRESET(SHORT_SLOW):
+        case PRESET(SHORT_FAST):
+        case PRESET(SHORT_TURBO):
             return -4.5f;
         default:
             return -6.0f;
@@ -959,7 +960,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (seenStr[0]) {
         display->drawString(x, getTextPositions(display)[line++], seenStr);
     }
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
     // === 4. Uptime (only show if metric is present) ===
     char uptimeStr[32] = "";
     meshtastic_DeviceMetrics nodeMetrics;
@@ -1172,7 +1173,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 #endif
 
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     line += 1;
 
     // === Node Identity ===
@@ -1456,7 +1457,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     // needs to be drawn relative to x and y
 
     // draw centered icon left to right and centered above the one line of app text
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     display->drawXbm(x + (SCREEN_WIDTH - 50) / 2, y + (SCREEN_HEIGHT - 28) / 2, icon_width, icon_height, icon_bits);
     if (gBootSplashBoldPass) {
         display->drawXbm(x + (SCREEN_WIDTH - 50) / 2 + 1, y + (SCREEN_HEIGHT - 28) / 2, icon_width, icon_height, icon_bits);
@@ -1667,7 +1668,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         }
         display->drawString(x, textPos[line++], altitudeLine);
     }
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
     // === Draw Compass ===
     if (validHeading || statusLine1) {
         // --- Compass Rendering: landscape (wide) screens use original side-aligned logic ---
