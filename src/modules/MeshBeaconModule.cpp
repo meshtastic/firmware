@@ -97,7 +97,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         config.lora.channel_num = targetSlot;
         memset(c->name, 0, sizeof(c->name));
 
-        const auto &bcfg = moduleConfig.payload_variant.mesh_beacon;
+        const auto &bcfg = moduleConfig.mesh_beacon;
         if (bcfg.has_broadcast_on_channel && strlen(bcfg.broadcast_on_channel.name) > 0) {
             strncpy(c->name, bcfg.broadcast_on_channel.name, sizeof(c->name));
         } else {
@@ -165,7 +165,7 @@ MeshBeaconBroadcastModule::MeshBeaconBroadcastModule() : MeshBeaconModule(), con
 
 void MeshBeaconBroadcastModule::sendBeacon()
 {
-    const auto &bcfg = moduleConfig.payload_variant.mesh_beacon;
+    const auto &bcfg = moduleConfig.mesh_beacon;
 
     meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
     strncpy(beacon.message, bcfg.broadcast_message, sizeof(beacon.message) - 1);
@@ -191,7 +191,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
     p->want_ack = false;
     p->rx_time = getValidTime(RTCQualityFromNet);
 
-    if (bcfg.has_broadcast_on_preset &&
+    if (bcfg.broadcast_on_preset != _meshtastic_Config_LoRaConfig_ModemPreset_MIN &&
         (bcfg.broadcast_on_preset != config.lora.modem_preset ||
          (bcfg.has_broadcast_on_channel && bcfg.broadcast_on_channel.channel_num != config.lora.channel_num))) {
         uint16_t targetSlot = bcfg.has_broadcast_on_channel ? bcfg.broadcast_on_channel.channel_num : config.lora.channel_num;
@@ -204,7 +204,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
 
 int32_t MeshBeaconBroadcastModule::runOnce()
 {
-    const auto &bcfg = moduleConfig.payload_variant.mesh_beacon;
+    const auto &bcfg = moduleConfig.mesh_beacon;
     if (bcfg.broadcast_enabled && airTime->isTxAllowedAirUtil() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         sendBeacon();
@@ -233,8 +233,8 @@ MeshBeaconListenerModule::MeshBeaconListenerModule()
 
 bool MeshBeaconListenerModule::wantPacket(const meshtastic_MeshPacket *p)
 {
-    return moduleConfig.which_payload_variant == meshtastic_ModuleConfig_mesh_beacon_tag &&
-           moduleConfig.payload_variant.mesh_beacon.listen_enabled && p->decoded.portnum == meshtastic_PortNum_MESH_BEACON_APP;
+    return moduleConfig.has_mesh_beacon && moduleConfig.mesh_beacon.listen_enabled &&
+           p->decoded.portnum == meshtastic_PortNum_MESH_BEACON_APP;
 }
 
 bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_MeshBeacon *b)
