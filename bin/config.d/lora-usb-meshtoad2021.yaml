@@ -17,6 +17,7 @@ Lora:
   # Optional: Set the serial number for multi-radio support
   # USB_Serialnum: 13374201
 
+# NiceRF LoRa2021F33 module
 rfswitch_table:
   pins: [DIO5, DIO6, DIO8]
   MODE_STBY: [LOW, LOW, LOW]

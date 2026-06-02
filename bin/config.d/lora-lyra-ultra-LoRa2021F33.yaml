@@ -8,7 +8,7 @@
 # Enable overlay 'luckfox-lyra-ultra-w-spi0-cs0-spidev' with armbian-config
 
 Meta:
-  name: Luackfox Ultra NiceRF LoRa2021F33
+  name: Luckfox Ultra NiceRF LoRa2021F33
   support: community
   compatible:
     - luckfox-pico-ultra # Armbian
@@ -29,6 +29,7 @@ Lora:
   spidev: spidev0.0 #pins are (CS=10, CLK=8, MOSI=6, MISO=7)
   spiSpeed: 2000000
 
+# NiceRF LoRa2021F33 module
 rfswitch_table:
   pins: [DIO5, DIO6, DIO8]
   MODE_STBY: [LOW, LOW, LOW]
