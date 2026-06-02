@@ -127,11 +127,33 @@ static void drawMarker(OLEDDisplay *display, int px, int py, uint8_t sym)
         display->drawLine(px + 2, py + 2, px - 2, py + 2);
         display->drawLine(px - 2, py + 2, px - 2, py - 2);
         break;
-    default: // ◆
+    case 4: // ◆ diamond
         display->drawLine(px, py - 2, px + 2, py);
         display->drawLine(px + 2, py, px, py + 2);
         display->drawLine(px, py + 2, px - 2, py);
         display->drawLine(px - 2, py, px, py - 2);
+        break;
+    case 5: // △ triangle up
+        display->drawLine(px, py - 2, px + 2, py + 2);
+        display->drawLine(px, py - 2, px - 2, py + 2);
+        display->drawLine(px - 2, py + 2, px + 2, py + 2);
+        break;
+    case 6: // ▽ triangle down
+        display->drawLine(px, py + 2, px + 2, py - 2);
+        display->drawLine(px, py + 2, px - 2, py - 2);
+        display->drawLine(px - 2, py - 2, px + 2, py - 2);
+        break;
+    case 7: // — horizontal bar
+        display->drawLine(px - 2, py, px + 2, py);
+        break;
+    case 8: // ○ hollow circle
+        display->drawCircle(px, py, 2);
+        break;
+    default: // * asterisk (+ and × combined)
+        display->drawLine(px - 2, py, px + 2, py);
+        display->drawLine(px, py - 2, px, py + 2);
+        display->drawLine(px - 2, py - 2, px + 2, py + 2);
+        display->drawLine(px + 2, py - 2, px - 2, py + 2);
         break;
     }
 }
@@ -220,7 +242,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 
     const int contentH = sh - headerH;               // full-height area for the radar
     const int listContentH = contentH - listFooterH; // shorter area for list rows
-    const int pad = 2;                               // px padding around the radar circle
+    const int pad = 4;                               // px padding around the radar circle
 
     // -----------------------------------------------------------------------
     // Radar circle — right side, 2 px padding on all sides.
@@ -305,7 +327,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // Auto-scale from only the nodes we will actually plot, so a single
     // far-away node can't push the scale into a high bucket and squash all
     // the close nodes into an invisible cluster at the centre.
-    constexpr int kMaxPlotted = 5;
+    constexpr int kMaxPlotted = 10;
     float maxDistM = 1.0f;
     const int plottedCount = std::min((int)entries.size(), kMaxPlotted);
     for (int i = 0; i < plottedCount; i++) {
@@ -335,6 +357,38 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->drawCircle(radarCX, radarCY, (radarRadius * ring) / 3);
 
     // -----------------------------------------------------------------------
+    // Distance labels on inner two rings (outer ring range is in the header).
+    // Fixed in screen space at the SE quadrant — no conflict with N label.
+    // -----------------------------------------------------------------------
+    {
+        display->setFont(FONT_SMALL);
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        for (int ring = 1; ring <= 2; ring++) {
+            const int ringR = (radarRadius * ring) / 3;
+            char ringLabel[12];
+            formatDistM(ringLabel, sizeof(ringLabel), scale * ring / 3.0f);
+            const int lx = radarCX + (int)(ringR * 0.707f) + 1;
+            const int ly = radarCY + (int)(ringR * 0.707f) - FONT_HEIGHT_SMALL;
+            display->drawString(lx, ly, ringLabel);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 8 tick marks at 45° intervals on the outer ring, rotating with heading.
+    // -----------------------------------------------------------------------
+    {
+        constexpr int kTickLen = 4;
+        for (int t = 0; t < 8; t++) {
+            const float tickAngle = (t * static_cast<float>(M_PI) * 0.25f) - headingRad;
+            const float sA = sinf(tickAngle);
+            const float cA = cosf(tickAngle);
+            display->drawLine(radarCX + (int)(radarRadius * sA), radarCY - (int)(radarRadius * cA),
+                              radarCX + (int)((radarRadius - kTickLen) * sA),
+                              radarCY - (int)((radarRadius - kTickLen) * cA));
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // North indicator — rotates in heading-up mode.
     // -----------------------------------------------------------------------
     {
@@ -353,9 +407,9 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     // Plot remote nodes — cap at kMaxPlotted to match the list panel.
     //
-    // Marker symbol is the sort-position index (0..4) so every plotted node
+    // Marker symbol is the sort-position index (0..9) so every plotted node
     // gets a unique shape and matches its row in the list panel.  Using the
-    // node number modulo 5 caused symbol collisions when several plotted
+    // node number modulo N caused symbol collisions when several plotted
     // nodes shared a residue.
     // -----------------------------------------------------------------------
     for (int i = 0; i < plottedCount; i++) {
@@ -364,7 +418,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     }
 
     // -----------------------------------------------------------------------
-    // Node list (left panel) — up to 5 closest nodes.
+    // Node list (left panel) — up to 10 closest nodes.
     //
     // Each row: marker symbol (matches the radar dot) | short name | distance.
     // -----------------------------------------------------------------------
@@ -380,7 +434,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     for (int i = 0; i < plottedCount; i++) {
         const Entry &e = entries[i];
         const int rowY = y + headerH + rowPitch * i;
-        const int symCX = x + 3;
+        const int symCX = x + 6;  // 4 px left margin + 2 px to marker centre
         const int symCY = rowY + symOffsetY;
 
         drawMarker(display, symCX, symCY, (uint8_t)i);
@@ -395,7 +449,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         formatDistM(dist, sizeof(dist), e.distM);
 
         display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->drawString(x + 7, rowY, name);
+        display->drawString(x + 11, rowY, name);  // 3 px gap after marker right edge
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
         display->drawString(x + listRight, rowY, dist);
         display->setTextAlignment(TEXT_ALIGN_LEFT);
