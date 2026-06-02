@@ -1,4 +1,5 @@
 #pragma once
+#include "MeshRadio.h"
 #include "Observer.h"
 #include "ProtobufModule.h"
 #include "RadioInterface.h"
@@ -58,17 +59,29 @@ class MeshBeaconModule
 /**
  * Broadcaster: periodically sends MeshBeacon packets on the configured preset/channel.
  * Active only when moduleConfig.mesh_beacon.broadcast_enabled is true.
+ * Inherits ProtobufModule to access allocDataProtobuf + setStartDelay.
  */
-class MeshBeaconBroadcastModule : private MeshBeaconModule, private concurrency::OSThread
+class MeshBeaconBroadcastModule : private MeshBeaconModule,
+                                  public ProtobufModule<meshtastic_MeshBeacon>,
+                                  private concurrency::OSThread
 {
   public:
     MeshBeaconBroadcastModule();
 
+    // Mark the cached payload dirty (call after config change).
+    void invalidateCache() { payloadCacheDirty = true; }
+
   protected:
+    virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &, meshtastic_MeshBeacon *) override { return false; }
     virtual int32_t runOnce() override;
 
   private:
     void sendBeacon();
+    void rebuildCache();
+
+    bool payloadCacheDirty = true;
+    uint8_t payloadCache[meshtastic_MeshBeacon_size];
+    pb_size_t payloadCacheSize = 0;
 };
 extern MeshBeaconBroadcastModule *meshBeaconBroadcastModule;
 
