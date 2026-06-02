@@ -381,30 +381,31 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 
     // -----------------------------------------------------------------------
     // Ring distance labels — high-res only; numbers only, no unit suffix,
-    // right-aligned to the SE point of each ring so they sit on the arc.
+    // smallest available font, right-aligned flush inside the SE arc point.
+    // All 3 rings labelled; the outer ring number echoes the header scale.
     // -----------------------------------------------------------------------
     if (currentResolution == ScreenResolution::High) {
-        display->setFont(FONT_SMALL);
+        display->setFont(FONT_SMALL_LOCAL);
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        for (int ring = 1; ring <= 2; ring++) {
+        constexpr int kRingFontH = _fontHeight(FONT_SMALL_LOCAL);
+        for (int ring = 1; ring <= 3; ring++) {
             const int ringR = (radarRadius * ring) / 3;
             char ringLabel[12];
             formatDistNum(ringLabel, sizeof(ringLabel), scale * ring / 3.0f);
-            // Right edge of text at the SE arc point; bottom edge at the arc line.
+            // Right edge at SE x; bottom edge at SE y — text sits just inside the arc.
             const int lx = radarCX + (int)(ringR * 0.707f);
-            const int ly = radarCY + (int)(ringR * 0.707f) - FONT_HEIGHT_SMALL;
+            const int ly = radarCY + (int)(ringR * 0.707f) - kRingFontH;
             display->drawString(lx, ly, ringLabel);
         }
     }
 
     // -----------------------------------------------------------------------
     // North indicator — rotates in heading-up mode.
-    // Positioned at 5/6 of outer radius: sits between ring 2 (2R/3) and
-    // ring 3 (R), closer to ring 3.
+    // Top edge of the N glyph just touches ring 3 from inside.
     // -----------------------------------------------------------------------
     {
         const float northBrg = -headingRad;
-        const int nRadius = radarRadius * 5 / 6;
+        const int nRadius = radarRadius - FONT_HEIGHT_SMALL / 2;
         const int nx = radarCX + (int)(nRadius * sinf(northBrg));
         const int ny = radarCY - (int)(nRadius * cosf(northBrg));
         display->setFont(FONT_SMALL);
@@ -435,7 +436,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
 
-    constexpr int kListTopPad = 2;
+    constexpr int kListTopPad = 5;
     const int rowPitch = (listContentH - kListTopPad) / kMaxPlotted;
 
     // Marker centred to the visible text height (rowY is the top of the
