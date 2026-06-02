@@ -323,7 +323,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             if (b.broadcast_send_as_node != 0 && b.broadcast_send_as_node != mp.from) {
                 LOG_WARN("Beacon: rejecting broadcast_send_as_node %#08lx from node %#08lx (must match sender)",
                          b.broadcast_send_as_node, mp.from);
-                b.broadcast_send_as_node = moduleConfig.payload_variant.mesh_beacon.broadcast_send_as_node;
+                b.broadcast_send_as_node = moduleConfig.mesh_beacon.broadcast_send_as_node;
             }
         }
 #endif
@@ -1187,8 +1187,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
             b.broadcast_interval_secs = 3600;
         if (b.broadcast_interval_secs > 259200)
             b.broadcast_interval_secs = 259200;
-        moduleConfig.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
-        moduleConfig.payload_variant.mesh_beacon = b;
+        moduleConfig.has_mesh_beacon = true;
+        moduleConfig.mesh_beacon = b;
         shouldReboot = false;
         break;
     }
