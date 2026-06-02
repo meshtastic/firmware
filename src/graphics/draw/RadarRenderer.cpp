@@ -92,6 +92,28 @@ static void formatDistM(char *buf, size_t len, float metres)
     }
 }
 
+/** Format metres as a number only (no unit suffix) — used for radar ring labels. */
+static void formatDistNum(char *buf, size_t len, float metres)
+{
+    const bool imperial = (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL);
+    if (imperial) {
+        const float miles = metres / 1609.34f;
+        if (miles < 0.1f)
+            snprintf(buf, len, "%d", (int)(metres * 3.28084f));
+        else if (miles < 10.0f)
+            snprintf(buf, len, "%.1f", miles);
+        else
+            snprintf(buf, len, "%d", (int)(miles + 0.5f));
+    } else {
+        if (metres < 1000.0f)
+            snprintf(buf, len, "%d", (int)metres);
+        else if (metres < 10000.0f)
+            snprintf(buf, len, "%.1f", metres / 1000.0f);
+        else
+            snprintf(buf, len, "%d", (int)(metres / 1000.0f + 0.5f));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Node marker shapes
 // ---------------------------------------------------------------------------
@@ -242,7 +264,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 
     const int contentH = sh - headerH;               // full-height area for the radar
     const int listContentH = contentH - listFooterH; // shorter area for list rows
-    const int pad = 4;                               // px padding around the radar circle
+    const int pad = (currentResolution == ScreenResolution::High) ? 9 : 4;
 
     // -----------------------------------------------------------------------
     // Radar circle — right side, 2 px padding on all sides.
@@ -358,43 +380,33 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->drawCircle(radarCX, radarCY, (radarRadius * ring) / 3);
 
     // -----------------------------------------------------------------------
-    // Ring labels and tick marks — only on high-res screens where there is
-    // enough pixel real estate to render them legibly.
+    // Ring distance labels — high-res only; numbers only, no unit suffix,
+    // right-aligned to the SE point of each ring so they sit on the arc.
     // -----------------------------------------------------------------------
     if (currentResolution == ScreenResolution::High) {
-        // Distance labels on inner two rings (outer ring range is in header).
-        // Fixed in screen space at the SE quadrant — no conflict with N label.
         display->setFont(FONT_SMALL);
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->setTextAlignment(TEXT_ALIGN_RIGHT);
         for (int ring = 1; ring <= 2; ring++) {
             const int ringR = (radarRadius * ring) / 3;
             char ringLabel[12];
-            formatDistM(ringLabel, sizeof(ringLabel), scale * ring / 3.0f);
-            const int lx = radarCX + (int)(ringR * 0.707f) + 1;
+            formatDistNum(ringLabel, sizeof(ringLabel), scale * ring / 3.0f);
+            // Right edge of text at the SE arc point; bottom edge at the arc line.
+            const int lx = radarCX + (int)(ringR * 0.707f);
             const int ly = radarCY + (int)(ringR * 0.707f) - FONT_HEIGHT_SMALL;
             display->drawString(lx, ly, ringLabel);
-        }
-
-        // 8 tick marks at 45° intervals on the outer ring, rotating with heading.
-        constexpr int kTickLen = 4;
-        for (int t = 0; t < 8; t++) {
-            const float tickAngle = (t * static_cast<float>(M_PI) * 0.25f) - headingRad;
-            const float sA = sinf(tickAngle);
-            const float cA = cosf(tickAngle);
-            display->drawLine(radarCX + (int)(radarRadius * sA), radarCY - (int)(radarRadius * cA),
-                              radarCX + (int)((radarRadius - kTickLen) * sA),
-                              radarCY - (int)((radarRadius - kTickLen) * cA));
         }
     }
 
     // -----------------------------------------------------------------------
     // North indicator — rotates in heading-up mode.
+    // Positioned at 5/6 of outer radius: sits between ring 2 (2R/3) and
+    // ring 3 (R), closer to ring 3.
     // -----------------------------------------------------------------------
     {
-        const int inset = FONT_HEIGHT_SMALL / 2 + 1;
         const float northBrg = -headingRad;
-        const int nx = radarCX + (int)((radarRadius - inset) * sinf(northBrg));
-        const int ny = radarCY - (int)((radarRadius - inset) * cosf(northBrg));
+        const int nRadius = radarRadius * 5 / 6;
+        const int nx = radarCX + (int)(nRadius * sinf(northBrg));
+        const int ny = radarCY - (int)(nRadius * cosf(northBrg));
         display->setFont(FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->drawString(nx, ny - FONT_HEIGHT_SMALL / 2, "N");
@@ -423,7 +435,8 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     display->setFont(FONT_SMALL);
 
-    const int rowPitch = listContentH / kMaxPlotted;
+    constexpr int kListTopPad = 2;
+    const int rowPitch = (listContentH - kListTopPad) / kMaxPlotted;
 
     // Marker centred to the visible text height (rowY is the top of the
     // glyph bbox; centring on rowPitch/2 read as "top-aligned" because the
@@ -432,7 +445,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 
     for (int i = 0; i < plottedCount; i++) {
         const Entry &e = entries[i];
-        const int rowY = y + headerH + rowPitch * i;
+        const int rowY = y + headerH + kListTopPad + rowPitch * i;
         const int symCX = x + 6;  // 4 px left margin + 2 px to marker centre
         const int symCY = rowY + symOffsetY;
 
