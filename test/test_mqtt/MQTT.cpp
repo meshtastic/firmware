@@ -840,8 +840,7 @@ void test_reinitTopicsUpdatesOnRegionChange(void)
 
     // Verify that subscriptions are refreshed with the new region prefix.
     TEST_ASSERT_TRUE(loopUntil([] {
-        return pubsub->subscriptions_.count("msh/EU_868/2/e/test/+") &&
-               pubsub->subscriptions_.count("msh/EU_868/2/e/PKI/+");
+        return pubsub->subscriptions_.count("msh/EU_868/2/e/test/+") && pubsub->subscriptions_.count("msh/EU_868/2/e/PKI/+");
     }));
 
     // Verify that publish also uses the new topic prefix.
