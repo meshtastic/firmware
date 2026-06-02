@@ -32,6 +32,93 @@
 #include "STM32WLE5JCInterface.h"
 #endif
 
+#ifdef USE_BB_HAL
+#include "esp_task_wdt.h"
+// Bit-bang HAL to bypass hardware SPI on ESP32-C6
+class BBTxRXHal : public LockingArduinoHal {
+  uint8_t _sck, _miso, _mosi, _nss, _busy;
+  uint8_t _lastOpcode = 0;
+public:
+  BBTxRXHal(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t nss, uint8_t busy)
+    : LockingArduinoHal(SPI, SPISettings(1000000, MSBFIRST, SPI_MODE0)),
+      _sck(sck), _miso(miso), _mosi(mosi), _nss(nss), _busy(busy) {
+    gpio_reset_pin((gpio_num_t)_nss);  ::pinMode(_nss, OUTPUT);  ::digitalWrite(_nss, HIGH);
+    gpio_reset_pin((gpio_num_t)_sck);  ::pinMode(_sck, OUTPUT);  ::digitalWrite(_sck, LOW);
+    gpio_reset_pin((gpio_num_t)_mosi); ::pinMode(_mosi, OUTPUT); ::digitalWrite(_mosi, LOW);
+    gpio_reset_pin((gpio_num_t)_miso); ::pinMode(_miso, INPUT);
+    if (_busy != 255) { gpio_reset_pin((gpio_num_t)_busy); ::pinMode(_busy, INPUT); }
+  }
+  void init() override {}
+  void term() override {}
+  void spiBegin() override {}
+  void spiBeginTransaction() override {
+    // Wait for BUSY to go low before any SPI transaction
+    // SX1262 ignores all commands when BUSY is high
+    if (_busy != 255) {
+      unsigned long start = millis();
+      while (::digitalRead(_busy) == HIGH) {
+        if (millis() - start > 500) {
+          printf("BB BUSY timeout!\n");
+          break;
+        }
+        delayMicroseconds(10);
+      }
+    }
+  }
+  void spiTransfer(uint8_t* out, size_t len, uint8_t* in) override {
+    uint8_t firstTx = (out && len > 0) ? out[0] : 0x00;
+    _lastOpcode = firstTx;
+    Serial.printf("BB cmd=0x%02X len=%d\n", firstTx, len); Serial.flush();
+    uint8_t rxBuf[8] = {0};
+
+    for (size_t i = 0; i < len; i++) {
+      uint8_t tx = out ? out[i] : 0x00, rx = 0;
+      for (int b = 7; b >= 0; b--) {
+        ::digitalWrite(_mosi, (tx >> b) & 1);
+        ::digitalWrite(_sck, HIGH);
+        if (::digitalRead(_miso)) rx |= (1 << b);
+        ::digitalWrite(_sck, LOW);
+      }
+      if (i < 8) rxBuf[i] = rx;
+      if (in) in[i] = rx;
+      // Feed WDT every 8 bytes to prevent timeout during long transfers
+      if ((i & 0x07) == 0x07) esp_task_wdt_reset();
+    }
+
+    // Decode status byte (rxBuf[1] = status for current command per SX1262 stream protocol)
+    uint8_t st = (len > 1) ? rxBuf[1] : rxBuf[0];
+    const char* stStr = "OK";
+    uint8_t cs = st & 0x0E;
+    if (cs == 0x08) stStr = "INVALID";
+    else if (cs == 0x06) stStr = "TIMEOUT";
+    else if (cs == 0x0A) stStr = "FAILED";
+    if (cs != 0x00) {
+      Serial.printf("BB op=0x%02X rx1=0x%02X rx2=0x%02X st=%s\n",
+             firstTx, rxBuf[1], rxBuf[2], stStr); Serial.flush();
+    }
+    Serial.printf("BB done cmd=0x%02X\n", firstTx); Serial.flush();
+  }
+  void spiEndTransaction() override {
+    // RadioLib calls this AFTER NSS goes HIGH.
+    // SX1262 asserts BUSY while processing the command we just sent.
+    // If we don't wait, the next command will find BUSY high and be ignored!
+    Serial.printf("BB endTxn start cmd=0x%02X busy=%d\n", _lastOpcode, _busy != 255 ? ::digitalRead(_busy) : -1); Serial.flush();
+    if (_busy != 255) {
+      unsigned long start = millis();
+      while (::digitalRead(_busy) == HIGH) {
+        if (millis() - start > 500) {
+          Serial.printf("BB BUSY timeout after cmd 0x%02X!\n", _lastOpcode); Serial.flush();
+          break;
+        }
+        delayMicroseconds(10);
+      }
+    }
+    Serial.printf("BB endTxn done cmd=0x%02X\n", _lastOpcode); Serial.flush();
+  }
+  void spiEnd() override {}
+};
+#endif
+
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
     {                                                                                                                            \
         meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, \
@@ -235,6 +322,9 @@ std::unique_ptr<RadioInterface> initLoRa()
 
 #if ARCH_PORTDUINO
     SPISettings loraSpiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+    // ESP32-C6 con GPIO matrix: 4MHz è instabile, 500kHz è sicuro
+    SPISettings loraSpiSettings(500000, MSBFIRST, SPI_MODE0);
 #else
     SPISettings loraSpiSettings(4000000, MSBFIRST, SPI_MODE0);
 #endif
@@ -295,7 +385,12 @@ std::unique_ptr<RadioInterface> initLoRa()
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI1, loraSpiSettings);
     RadioLibHAL = loraHal;
 #else // HW_SPI1_DEVICE
-    LockingArduinoHal *loraHal = new LockingArduinoHal(SPI, loraSpiSettings);
+    #ifdef USE_BB_HAL
+      static BBTxRXHal bbHal(19, 20, 18, 23, 21);
+      LockingArduinoHal *loraHal = &bbHal;
+    #else
+      LockingArduinoHal *loraHal = new LockingArduinoHal(SPI, loraSpiSettings);
+    #endif
     RadioLibHAL = loraHal;
 #endif
 

@@ -120,20 +120,7 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_DEBUG("Current limit set to %f", currentLimit);
     LOG_DEBUG("Current limit set result %d", res);
 
-    if (res == RADIOLIB_ERR_NONE) {
-#ifdef SX126X_DIO2_AS_RF_SWITCH
-        bool dio2AsRfSwitch = true;
-#elif defined(ARCH_PORTDUINO)
-        bool dio2AsRfSwitch = false;
-        if (portduino_config.dio2_as_rf_switch) {
-            dio2AsRfSwitch = true;
-        }
-#else
-        bool dio2AsRfSwitch = false;
-#endif
-        res = lora.setDio2AsRfSwitch(dio2AsRfSwitch);
-        LOG_DEBUG("Set DIO2 as %sRF switch, result: %d", dio2AsRfSwitch ? "" : "not ", res);
-    }
+    // REMOVED: setDio2AsRfSwitch - causes SPI_CMD_INVALID on Wio SX1262
 
 // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
 // no effect
@@ -337,6 +324,8 @@ template <typename T> void SX126xInterface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
+    // CAD DISABLED: Wio SX1262 non supporta SetCad (0xC5/0x88)
+    return false;
     // check if we can detect a LoRa preamble on the current channel
     ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
                                        .detPeak = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
@@ -436,25 +425,21 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     lora.calibrateImage(getFreq());
 
     // Re-apply settings that calibration may have reset
-
-    // DIO2 as RF switch
-#ifdef SX126X_DIO2_AS_RF_SWITCH
-    lora.setDio2AsRfSwitch(true);
-#elif defined(ARCH_PORTDUINO)
-    if (portduino_config.dio2_as_rf_switch)
-        lora.setDio2AsRfSwitch(true);
-#endif
+    // REMOVED: setDio2AsRfSwitch - causes SPI_CMD_INVALID on Wio SX1262
 
     // RX boosted gain mode
     lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
 
     // Re-apply the undocumented 0x8B5 RX sensitivity patch that was set in init().
-    // The CALIBRATE_ALL (0x7F) command above clears bit 0 of register 0x8B5, which
-    // silently removes the RX sensitivity improvement introduced in #9571 / #9777.
-    // Without this re-apply, every SX1262 node loses its RX boost ~60s after boot
-    // and never recovers until reboot. See empirical evidence in the PR description.
-    if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) != RADIOLIB_ERR_NONE) {
-        LOG_WARN("SX126x resetAGC: failed to re-apply 0x8B5 RX sensitivity patch");
+    // The CALIBRATE_ALL (0x7F) command above clears bit 0 of register 0x8B5.
+    // Some SX1262 variants (e.g. Wio SX1262 shield) don't expose this register.
+    // Log only once if the register is unsupported, then skip silently.
+    static bool reg0x8B5Failed = false;
+    if (!reg0x8B5Failed) {
+        if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) != RADIOLIB_ERR_NONE) {
+            LOG_WARN("SX126x: register 0x8B5 not supported (RX sensitivity patch skipped)");
+            reg0x8B5Failed = true;
+        }
     }
 
     // 6. Resume receiving
