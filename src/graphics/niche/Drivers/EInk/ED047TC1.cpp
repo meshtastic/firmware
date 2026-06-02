@@ -6,14 +6,11 @@
     FastEPD buffer format: 1bpp, horizontal bytes, MSB = leftmost pixel, 1 = white
 
     Both formats share the same pixel layout and polarity (1 = white, 0 = black).
-    The InkHUD safe-area buffer (944×523) is copied into the centre of the physical
+    The InkHUD safe-area buffer (928×508) is copied into the centre of the physical
     960×540 FastEPD buffer so content clears the panel's inactive edge border.
     See ED047TC1.h for the H_OFFSET_BYTES / V_OFFSET_TOP / V_OFFSET_BOTTOM constants.
 
 */
-
-// Ruler diagnostic — uncomment to draw calibration lines at each physical edge.
-// #define EINK_EDGE_LINES
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 #ifdef T5_S3_EPAPER_PRO
@@ -211,35 +208,6 @@ void ED047TC1::update(uint8_t *imageData, UpdateTypes type)
         uint8_t *dstRow = cur + (row + V_OFFSET_TOP) * dstRowBytes + H_OFFSET_BYTES;
         memcpy(dstRow, srcRow, srcRowBytes);
     }
-
-#ifdef EINK_EDGE_LINES
-    // Draw a 1px black box at the exact boundary of the safe area within the
-    // physical buffer. If the margins are correct, all 4 lines should be
-    // fully visible and right at the edge of the usable display area.
-
-    auto setPixelBlack = [&](uint32_t col, uint32_t row) { cur[row * dstRowBytes + col / 8] &= ~(0x80 >> (col % 8)); };
-
-    const uint32_t safeX = H_OFFSET_BYTES * 8;
-    const uint32_t safeY = V_OFFSET_TOP;
-    const uint32_t safeW = DISPLAY_WIDTH;
-    const uint32_t safeH = DISPLAY_HEIGHT;
-
-    // Top edge: horizontal line at safeY
-    for (uint32_t col = safeX; col < safeX + safeW; col++)
-        setPixelBlack(col, safeY);
-
-    // Bottom edge: horizontal line at safeY + safeH - 1
-    for (uint32_t col = safeX; col < safeX + safeW; col++)
-        setPixelBlack(col, safeY + safeH - 1);
-
-    // Left edge: vertical line at safeX
-    for (uint32_t row = safeY; row < safeY + safeH; row++)
-        setPixelBlack(safeX, row);
-
-    // Right edge: vertical line at safeX + safeW - 1
-    for (uint32_t row = safeY; row < safeY + safeH; row++)
-        setPixelBlack(safeX + safeW - 1, row);
-#endif
 
     if (type == FULL) {
         epaper->fullUpdate(CLEAR_SLOW, false);

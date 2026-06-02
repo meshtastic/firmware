@@ -123,8 +123,18 @@ static inline float clampBandwidthKHz(float bwKHz)
 
 static inline float bwCodeToKHz(uint16_t bwCode)
 {
+    if (bwCode == 8)
+        return 7.8f;
+    if (bwCode == 10)
+        return 10.4f;
+    if (bwCode == 16)
+        return 15.6f;
+    if (bwCode == 21)
+        return 20.8f;
     if (bwCode == 31)
         return 31.25f;
+    if (bwCode == 42)
+        return 41.7f;
     if (bwCode == 62)
         return 62.5f;
     if (bwCode == 200)
@@ -140,8 +150,18 @@ static inline float bwCodeToKHz(uint16_t bwCode)
 
 static inline uint16_t bwKHzToCode(float bwKHz)
 {
+    if (bwKHz > 7.7f && bwKHz < 7.9f)
+        return 8;
+    if (bwKHz > 10.3f && bwKHz < 10.5f)
+        return 10;
+    if (bwKHz > 15.5f && bwKHz < 15.7f)
+        return 16;
+    if (bwKHz > 20.7f && bwKHz < 20.9f)
+        return 21;
     if (bwKHz > 31.24f && bwKHz < 31.26f)
         return 31;
+    if (bwKHz > 41.6f && bwKHz < 41.8f)
+        return 42;
     if (bwKHz > 62.49f && bwKHz < 62.51f)
         return 62;
     if (bwKHz > 203.12f && bwKHz < 203.13f)
