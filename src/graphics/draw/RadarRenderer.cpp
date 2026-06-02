@@ -327,7 +327,8 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // Auto-scale from only the nodes we will actually plot, so a single
     // far-away node can't push the scale into a high bucket and squash all
     // the close nodes into an invisible cluster at the centre.
-    constexpr int kMaxPlotted = 10;
+    const int minDim = std::min(sw, sh);
+    const int kMaxPlotted = (minDim >= 230) ? 10 : (minDim > 128) ? 8 : 5;
     float maxDistM = 1.0f;
     const int plottedCount = std::min((int)entries.size(), kMaxPlotted);
     for (int i = 0; i < plottedCount; i++) {
@@ -357,10 +358,12 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->drawCircle(radarCX, radarCY, (radarRadius * ring) / 3);
 
     // -----------------------------------------------------------------------
-    // Distance labels on inner two rings (outer ring range is in the header).
-    // Fixed in screen space at the SE quadrant — no conflict with N label.
+    // Ring labels and tick marks — only on high-res screens where there is
+    // enough pixel real estate to render them legibly.
     // -----------------------------------------------------------------------
-    {
+    if (currentResolution == ScreenResolution::High) {
+        // Distance labels on inner two rings (outer ring range is in header).
+        // Fixed in screen space at the SE quadrant — no conflict with N label.
         display->setFont(FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         for (int ring = 1; ring <= 2; ring++) {
@@ -371,12 +374,8 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
             const int ly = radarCY + (int)(ringR * 0.707f) - FONT_HEIGHT_SMALL;
             display->drawString(lx, ly, ringLabel);
         }
-    }
 
-    // -----------------------------------------------------------------------
-    // 8 tick marks at 45° intervals on the outer ring, rotating with heading.
-    // -----------------------------------------------------------------------
-    {
+        // 8 tick marks at 45° intervals on the outer ring, rotating with heading.
         constexpr int kTickLen = 4;
         for (int t = 0; t < 8; t++) {
             const float tickAngle = (t * static_cast<float>(M_PI) * 0.25f) - headingRad;
