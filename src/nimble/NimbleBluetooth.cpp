@@ -862,7 +862,7 @@ void NimbleBluetooth::setupService()
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    if ((config.bluetooth.enabled == true) && nimbleBluetooth->isConnected()) {
+    if ((config.bluetooth.enabled == true) && nimbleBluetooth && nimbleBluetooth->isConnected()) {
         BatteryCharacteristic->setValue(&level, 1);
         BatteryCharacteristic->notify();
     }
