@@ -63,7 +63,7 @@ void HopScalingModule::clear()
     filteringDenomHoldRollsRemaining = 0;
     lastPerHopCounts = {};
     lastSuggestedHop = MAX_HOP;
-    lastPoliteness = POLITENESS_DEFAULT;
+    lastPoliteNumer = POLITENESS_DEFAULT;
     lastTrendStats = {};
     memset(denominatorHistory, DENOM_MIN, sizeof(denominatorHistory));
 #ifndef UNIT_TEST
@@ -249,16 +249,17 @@ void HopScalingModule::rollHour()
     {
         const uint32_t recent = static_cast<uint32_t>(hourlyRaw[0]) + hourlyRaw[1];
         const uint32_t older = static_cast<uint32_t>(hourlyRaw[1]) + hourlyRaw[2];
-        float activityWeight = 1.0f;
         if (older > 1 && recent > 1) {
-            activityWeight = static_cast<float>(recent) / static_cast<float>(older);
-        }
-        if (activityWeight < ACTIVITY_WEIGHT_GENEROUS_MAX) {
-            lastPoliteness = POLITENESS_GENEROUS;
-        } else if (activityWeight > ACTIVITY_WEIGHT_STRICT_MIN) {
-            lastPoliteness = POLITENESS_STRICT;
+            const uint32_t r = static_cast<uint32_t>(recent) * ACTIVITY_WEIGHT_SCALE;
+            const uint32_t o = static_cast<uint32_t>(older);
+            if (r < o * ACTIVITY_WEIGHT_GENEROUS_MAX_NUMER)
+                lastPoliteNumer = POLITENESS_GENEROUS;
+            else if (r > o * ACTIVITY_WEIGHT_STRICT_MIN_NUMER)
+                lastPoliteNumer = POLITENESS_STRICT;
+            else
+                lastPoliteNumer = POLITENESS_DEFAULT;
         } else {
-            lastPoliteness = POLITENESS_DEFAULT;
+            lastPoliteNumer = POLITENESS_DEFAULT;
         }
     }
 
@@ -281,20 +282,27 @@ void HopScalingModule::rollHour()
     }
 
     // 2. Walk scaled hop buckets to produce a hop-limit recommendation.
+    //     effectiveMin: walk threshold — first hop whose cumulative count reaches this.
+    //     effectiveMax: ceiling on the one-hop extension check with GENEROUS politeness.
+    const uint16_t effectiveMin = TARGET_AFFECTED_NODES;
+    const uint16_t effectiveMax = MAX_TARGET_NODES;
     uint8_t suggested = MAX_HOP;
     if (counts.total > 0) {
         uint32_t cumulative = 0;
         for (uint8_t hop = 0; hop <= MAX_HOP; hop++) {
             cumulative += static_cast<uint32_t>(counts.perHop[hop]) * filteringDenominator;
-            if (cumulative >= TARGET_AFFECTED_NODES) {
+            if (cumulative >= effectiveMin) {
                 suggested = hop;
                 break;
             }
         }
         if (suggested < MAX_HOP) {
             const uint32_t atNext = static_cast<uint32_t>(counts.perHop[suggested + 1]) * filteringDenominator;
-            const float politeLimit = static_cast<float>(TARGET_AFFECTED_NODES) * lastPoliteness;
-            if (static_cast<float>(cumulative + atNext) <= politeLimit) {
+            // politeLimit = effectiveMin + gap * politeNumer / POLITENESS_DENOM
+            // Multiply both sides by POLITENESS_DENOM to stay in integers.
+            const uint32_t gap = static_cast<uint32_t>(effectiveMax) - static_cast<uint32_t>(effectiveMin);
+            if ((cumulative + atNext) * POLITENESS_DENOM <=
+                static_cast<uint32_t>(effectiveMin) * POLITENESS_DENOM + gap * lastPoliteNumer) {
                 suggested++;
             }
         }
@@ -310,9 +318,9 @@ void HopScalingModule::rollHour()
         }
         const uint32_t scaledTotal = static_cast<uint32_t>(counts.total) * filteringDenominator;
         memcpy(lastScaledPerHop, scaled, sizeof(lastScaledPerHop));
-        LOG_INFO("[HOPSCALE] rollHour: entries=%u/128 samp=1/%u filt=1/%u counted=%u est=%u suggestedHop=%u polite=%.2f", count,
+        LOG_INFO("[HOPSCALE] rollHour: entries=%u/128 samp=1/%u filt=1/%u counted=%u est=%u suggestedHop=%u polite=%u/4", count,
                  samplingDenominator, filteringDenominator, counts.total, static_cast<unsigned>(scaledTotal), suggested,
-                 static_cast<double>(lastPoliteness));
+                 lastPoliteNumer);
 
         const auto &ts = lastTrendStats;
         LOG_INFO("[HOPSCALE] scaledSeenPerHour (h0=now): [%u %u %u %u %u %u %u %u %u %u %u %u %u]", ts.scaledPerHour[0],
@@ -423,10 +431,10 @@ void HopScalingModule::logStatusReport(bool didHourlyUpdate) const
     const uint8_t runsRemaining = didHourlyUpdate ? RUNS_PER_HOUR : (RUNS_PER_HOUR - runsSinceLastHourlyUpdate);
     const uint8_t minsUntilRollover = runsRemaining * (RUN_INTERVAL_MS / (60 * 1000UL));
 
-    LOG_INFO("[HOPSCALE] hop=%u histActive=%u fill=%u%% samp=1/%u filt=1/%u entries=%u lastCounted=%u polite=%.2f "
+    LOG_INFO("[HOPSCALE] hop=%u histActive=%u fill=%u%% samp=1/%u filt=1/%u entries=%u lastCounted=%u polite=%u/4 "
              "nextRoll=%umin",
              lastRequiredHop, histActive ? 1u : 0u, getFillPercentage(), samplingDenominator, filteringDenominator, count,
-             histCounts.total, static_cast<double>(lastPoliteness), minsUntilRollover);
+             histCounts.total, lastPoliteNumer, minsUntilRollover);
 
     LOG_INFO("[HOPSCALE] nodes perHop: [%u %u %u %u %u %u %u %u]", histCounts.perHop[0], histCounts.perHop[1],
              histCounts.perHop[2], histCounts.perHop[3], histCounts.perHop[4], histCounts.perHop[5], histCounts.perHop[6],

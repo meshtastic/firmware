@@ -3,6 +3,7 @@
 #include "MeshTypes.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "mesh/Default.h"
 #include "mesh/mesh-pb-constants.h"
 #include <algorithm>
 #include <cstdint>
@@ -88,16 +89,28 @@ class HopScalingModule : private concurrency::OSThread
     static constexpr uint8_t FILTER_DENOM_HOLD_ROLLS = 13u;
 
     // Hop-walk: target cumulative affected-node count when choosing a hop limit
-    static constexpr uint16_t TARGET_AFFECTED_NODES = 40;
+    static constexpr uint16_t TARGET_AFFECTED_NODES = default_hop_scaling_min_target_nodes;
 
-    // Politeness factors for the one-hop extension check in the hop walk
-    static constexpr float POLITENESS_GENEROUS = 2.0f; // Quiet mesh: allow doubling
-    static constexpr float POLITENESS_DEFAULT = 1.5f;  // Stable mesh: allow 50% growth
-    static constexpr float POLITENESS_STRICT = 1.25f;  // Busy mesh: allow 25% growth
+    // Clamp bounds enforced on min_target_nodes / max_target_nodes
+    static constexpr uint16_t MIN_TARGET_NODES_FLOOR = default_hop_scaling_min_target_nodes_floor;
+    static constexpr uint16_t MAX_TARGET_NODES_CEILING = default_hop_scaling_max_target_nodes_ceiling;
+    static constexpr uint16_t MAX_TARGET_NODES = default_hop_scaling_max_target_nodes;
 
-    // Activity weight thresholds (ratio of 0-2 h window vs 1-3 h window)
-    static constexpr float ACTIVITY_WEIGHT_GENEROUS_MAX = 0.9f; // Below this: GENEROUS
-    static constexpr float ACTIVITY_WEIGHT_STRICT_MIN = 1.2f;   // Above this: STRICT
+    // Politeness factors for the one-hop extension check in the hop walk.
+    // Stored as integer numerators over POLITENESS_DENOM (4):
+    //   politeLimit = min + gap * politeNumer / POLITENESS_DENOM
+    // STRICT  → min + 25% of gap;  DEFAULT → midpoint;  GENEROUS → max
+    static constexpr uint8_t POLITENESS_DENOM = 4u;
+    static constexpr uint8_t POLITENESS_GENEROUS = 4u; // 4/4 = 1.00
+    static constexpr uint8_t POLITENESS_DEFAULT = 2u;  // 2/4 = 0.50
+    static constexpr uint8_t POLITENESS_STRICT = 1u;   // 1/4 = 0.25
+
+    // Activity weight thresholds (ratio of 0-2 h window vs 1-3 h window).
+    // Cross-multiply form: recent * ACTIVITY_WEIGHT_SCALE vs older * threshold_numer.
+    // GENEROUS if recent*10 < older*9 (ratio < 0.9); STRICT if recent*10 > older*12 (ratio > 1.2)
+    static constexpr uint8_t ACTIVITY_WEIGHT_SCALE = 10u;
+    static constexpr uint8_t ACTIVITY_WEIGHT_GENEROUS_MAX_NUMER = 9u;
+    static constexpr uint8_t ACTIVITY_WEIGHT_STRICT_MIN_NUMER = 12u;
 
     // Scheduling: number of 5-minute runOnce() ticks that make up one hourly rollover
     static constexpr uint8_t RUNS_PER_HOUR = 12;
@@ -162,7 +175,7 @@ class HopScalingModule : private concurrency::OSThread
     uint8_t getFillPercentage() const { return static_cast<uint8_t>((static_cast<uint16_t>(count) * 100u) / CAPACITY); }
     uint8_t getSamplingDenominator() const { return samplingDenominator; }
     uint8_t getFilteringDenominator() const { return filteringDenominator; }
-    float getPoliteness() const { return lastPoliteness; }
+    float getPoliteness() const { return lastPoliteNumer / static_cast<float>(POLITENESS_DENOM); }
     const PerHopCounts &getLastPerHopCounts() const { return lastPerHopCounts; }
     uint8_t getLastSuggestedHop() const { return lastSuggestedHop; }
     const MeshTrendStats &getLastTrendStats() const { return lastTrendStats; }
@@ -287,7 +300,7 @@ class HopScalingModule : private concurrency::OSThread
     PerHopCounts lastPerHopCounts = {};
     uint16_t lastScaledPerHop[MAX_HOP + 1] = {};
     uint8_t lastSuggestedHop = MAX_HOP;
-    float lastPoliteness = POLITENESS_DEFAULT;
+    uint8_t lastPoliteNumer = POLITENESS_DEFAULT;
     MeshTrendStats lastTrendStats = {};
 
     // -----------------------------------------------------------------------
