@@ -386,15 +386,16 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     if (currentResolution == ScreenResolution::High) {
         display->setFont(FONT_SMALL_LOCAL);
-        display->setTextAlignment(TEXT_ALIGN_RIGHT);
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
         const int kRingFontH = _fontHeight(FONT_SMALL_LOCAL);
+        const float oppNBrg = -headingRad + static_cast<float>(M_PI); // 180° from N
         for (int ring = 1; ring <= 3; ring++) {
             const int ringR = (radarRadius * ring) / 3;
             char ringLabel[12];
             formatDistNum(ringLabel, sizeof(ringLabel), scale * ring / 3.0f);
-            // Right edge at SE x; bottom edge at SE y — text sits just inside the arc.
-            const int lx = radarCX + (int)(ringR * 0.707f);
-            const int ly = radarCY + (int)(ringR * 0.707f) - kRingFontH;
+            // Centred on the ring arc, opposite N — just inside the line.
+            const int lx = radarCX + (int)(ringR * sinf(oppNBrg));
+            const int ly = radarCY - (int)(ringR * cosf(oppNBrg)) - kRingFontH;
             display->drawString(lx, ly, ringLabel);
         }
     }
