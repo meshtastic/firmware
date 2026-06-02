@@ -158,34 +158,46 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
 
 MeshBeaconBroadcastModule *meshBeaconBroadcastModule;
 
-MeshBeaconBroadcastModule::MeshBeaconBroadcastModule() : MeshBeaconModule(), concurrency::OSThread("MeshBeaconBroadcast")
+MeshBeaconBroadcastModule::MeshBeaconBroadcastModule()
+    : MeshBeaconModule(), ProtobufModule("beacon_tx", meshtastic_PortNum_MESH_BEACON_APP, &meshtastic_MeshBeacon_msg),
+      concurrency::OSThread("MeshBeaconBroadcast")
 {
     setIntervalFromNow(setStartDelay());
 }
 
-void MeshBeaconBroadcastModule::sendBeacon()
+void MeshBeaconBroadcastModule::rebuildCache()
 {
     const auto &bcfg = moduleConfig.mesh_beacon;
-
     meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
     strncpy(beacon.message, bcfg.broadcast_message, sizeof(beacon.message) - 1);
-
     if (bcfg.has_broadcast_offer_channel) {
         beacon.has_offer_channel = true;
         beacon.offer_channel = bcfg.broadcast_offer_channel;
     }
     beacon.offer_preset = bcfg.broadcast_offer_preset;
     beacon.offer_region = bcfg.broadcast_offer_region;
+    payloadCacheSize = (pb_size_t)pb_encode_to_bytes(payloadCache, sizeof(payloadCache), &meshtastic_MeshBeacon_msg, &beacon);
+    payloadCacheDirty = false;
+    LOG_DEBUG("Beacon: payload cache rebuilt (%u bytes)", payloadCacheSize);
+}
 
-    meshtastic_MeshPacket *p = allocDataProtobuf(beacon);
+void MeshBeaconBroadcastModule::sendBeacon()
+{
+    const auto &bcfg = moduleConfig.mesh_beacon;
+
+    if (payloadCacheDirty)
+        rebuildCache();
+
+    meshtastic_MeshPacket *p = allocDataPacket();
     if (!p) {
         LOG_WARN("Beacon: failed to allocate packet");
         return;
     }
-
+    memcpy(p->decoded.payload.bytes, payloadCache, payloadCacheSize);
+    p->decoded.payload.size = payloadCacheSize;
+    p->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
     p->to = NODENUM_BROADCAST;
     p->from = (bcfg.broadcast_send_as_node != 0) ? bcfg.broadcast_send_as_node : nodeDB->getNodeNum();
-    p->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
     p->hop_limit = 3;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     p->want_ack = false;
@@ -198,7 +210,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         setTargetRadioSettings(p, bcfg.broadcast_on_preset, targetSlot);
     }
 
-    LOG_INFO("Beacon: broadcast from=%#08lx msg='%.40s'", p->from, beacon.message);
+    LOG_INFO("Beacon: broadcast from=%#08lx msg='%.40s'", p->from, bcfg.broadcast_message);
     service->sendToMesh(p, RX_SRC_LOCAL, false);
 }
 
