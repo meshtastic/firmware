@@ -387,7 +387,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     if (currentResolution == ScreenResolution::High) {
         display->setFont(FONT_SMALL_LOCAL);
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        constexpr int kRingFontH = _fontHeight(FONT_SMALL_LOCAL);
+        const int kRingFontH = _fontHeight(FONT_SMALL_LOCAL);
         for (int ring = 1; ring <= 3; ring++) {
             const int ringR = (radarRadius * ring) / 3;
             char ringLabel[12];
