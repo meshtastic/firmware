@@ -31,6 +31,9 @@
 #if !MESHTASTIC_EXCLUDE_TIPS
 #include "modules/MeshTipsModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
 #endif
@@ -150,6 +153,10 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_TIPS
     meshTipsNodeInfoModule = new MeshTipsNodeInfoModule();
     meshTipsMessageModule = new MeshTipsMessageModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+    meshBeaconNodeInfoModule = new MeshBeaconNodeInfoModule();
+    meshBeaconMessageModule = new MeshBeaconMessageModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS
     positionModule = new PositionModule();

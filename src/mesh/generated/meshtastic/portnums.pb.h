@@ -98,6 +98,11 @@ typedef enum _meshtastic_PortNum {
  This module allows setting an extra string of status for a node.
  Broadcasts on change and on a timer, possibly once a day. */
     meshtastic_PortNum_NODE_STATUS_APP = 36,
+    /* Beacon module broadcast packets.
+ ENCODING: protobuf (MeshBeacon)
+ Periodically broadcast by nodes in beacon mode; received by nodes with listen_enabled.
+ Carries a text message plus optional channel/preset offers for client apps. */
+    meshtastic_PortNum_MESH_BEACON_APP = 37,
     /* Provides a hardware serial interface to send and receive from the Meshtastic network.
  Connect to the RX/TX pins of a device with 38400 8N1. Packets received from the Meshtastic
  network is forwarded to the RX pin while sending a packet to TX will go out to the Mesh network.
