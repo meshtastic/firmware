@@ -11,6 +11,9 @@
 #if !MESHTASTIC_EXCLUDE_TIPS
 #include "modules/MeshTipsModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -372,6 +375,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
 #if !MESHTASTIC_EXCLUDE_TIPS
         MeshTipsModule::configureRadioForPacket(this, txQueue.getFront());
 #endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::reconfigureForBeaconTX(this, txQueue.getFront());
+#endif
         startReceive();
         setTransmitDelay();
         break;
@@ -399,10 +405,16 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // We just switched radio config, so wait to ensure the new channel is available
                     setTransmitDelay();
 #endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+                } else if (MeshBeaconModule::reconfigureForBeaconTX(this, txp)) {
+                    setTransmitDelay();
+#endif
                 } else {
                     if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
 #if !MESHTASTIC_EXCLUDE_TIPS
                         if (!MeshTipsModule::hasTargetRadioSettings(txp))
+#elif !MESHTASTIC_EXCLUDE_BEACON
+                        if (!MeshBeaconModule::hasTargetRadioSettings(txp))
 #endif
                         {
                             startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
@@ -540,6 +552,10 @@ void RadioLibInterface::completeSending()
         printPacket("Completed sending", p);
 #if !MESHTASTIC_EXCLUDE_TIPS
         MeshTipsModule::clearTargetRadioSettings(p);
+#endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(p);
+        MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
 #endif
 
         // We are done sending that packet, release it

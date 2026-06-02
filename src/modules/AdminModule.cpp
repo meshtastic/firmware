@@ -35,6 +35,9 @@
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
 #include "security/EncryptedStorage.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -313,6 +316,17 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     case meshtastic_AdminMessage_set_module_config_tag:
         LOG_DEBUG("Client set module config");
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // broadcast_send_as_node: remote admins may only set this to their own node ID.
+        if (mp.from != 0 && r->set_module_config.which_payload_variant == meshtastic_ModuleConfig_mesh_beacon_tag) {
+            auto &b = const_cast<meshtastic_ModuleConfig_MeshBeaconConfig &>(r->set_module_config.payload_variant.mesh_beacon);
+            if (b.broadcast_send_as_node != 0 && b.broadcast_send_as_node != mp.from) {
+                LOG_WARN("Beacon: rejecting broadcast_send_as_node %#08lx from node %#08lx (must match sender)",
+                         b.broadcast_send_as_node, mp.from);
+                b.broadcast_send_as_node = moduleConfig.payload_variant.mesh_beacon.broadcast_send_as_node;
+            }
+        }
+#endif
         if (!handleSetModuleConfig(r->set_module_config)) {
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         }
@@ -1161,6 +1175,24 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_traffic_management = true;
         moduleConfig.traffic_management = c.payload_variant.traffic_management;
         break;
+#if !MESHTASTIC_EXCLUDE_BEACON
+    case meshtastic_ModuleConfig_mesh_beacon_tag: {
+        LOG_INFO("Set module config: MeshBeacon");
+        auto &b = const_cast<meshtastic_ModuleConfig_MeshBeaconConfig &>(c.payload_variant.mesh_beacon);
+        // Enforce message length limit.
+        if (strnlen(b.broadcast_message, sizeof(b.broadcast_message)) >= 100)
+            b.broadcast_message[99] = '\0';
+        // Enforce interval bounds (0 means unset/use default).
+        if (b.broadcast_interval_secs != 0 && b.broadcast_interval_secs < 3600)
+            b.broadcast_interval_secs = 3600;
+        if (b.broadcast_interval_secs > 259200)
+            b.broadcast_interval_secs = 259200;
+        moduleConfig.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+        moduleConfig.payload_variant.mesh_beacon = b;
+        shouldReboot = false;
+        break;
+    }
+#endif
     }
     saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
     return true;
