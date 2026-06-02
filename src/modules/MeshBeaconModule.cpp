@@ -1,85 +1,80 @@
 #include "MeshBeaconModule.h"
 #include "Default.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "RTC.h"
 #include "RadioInterface.h"
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
-#include <stdlib.h>
+#include <string.h>
 
-// TODO(beacon): Remove virtual nodenum. Beacon packets will originate from the real local node.
-#define NODENUM_BEACON 0x00000005
-
-static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;                   // original modem preset
-static uint16_t originalLoraChannel;                                                   // original frequency slot
-char originalBeaconChannelName[sizeof(((meshtastic_ChannelSettings *)nullptr)->name)]; // original channel name
-
-typedef struct {
-    bool inUse;
-    PacketId id;
-    MeshBeaconModule_TXSettings settings;
-} MeshBeaconModule_TargetRadioSettings;
+// Static members
+meshtastic_Config_LoRaConfig_ModemPreset MeshBeaconModule::originalModemPreset;
+uint16_t MeshBeaconModule::originalLoraChannel;
+char MeshBeaconModule::originalChannelName[12];
 
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
 
-// Internal: look up sidecar entry by packet ID.
-static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, MeshBeaconModule_TXSettings *settings)
+static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset *preset,
+                                   uint16_t *slot)
 {
     if (!p)
         return false;
-
     for (auto &entry : targetRadioSettings) {
         if (entry.inUse && entry.id == p->id) {
-            if (settings)
-                *settings = entry.settings;
+            if (preset)
+                *preset = entry.preset;
+            if (slot)
+                *slot = entry.slot;
             return true;
         }
     }
     return false;
 }
 
+// ---------------------------------------------------------------------------
+// MeshBeaconModule base
+// ---------------------------------------------------------------------------
+
 MeshBeaconModule::MeshBeaconModule()
 {
     originalModemPreset = config.lora.modem_preset;
     originalLoraChannel = config.lora.channel_num;
-    strncpy(originalBeaconChannelName, channels.getPrimary().name, sizeof(originalBeaconChannelName));
+    strncpy(originalChannelName, channels.getPrimary().name, sizeof(originalChannelName));
 }
 
-void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, MeshBeaconModule_TXSettings settings)
+void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset,
+                                              uint16_t slot)
 {
     if (!p)
         return;
-
-    MeshBeaconModule_TargetRadioSettings *slot = nullptr;
+    MeshBeaconModule_TargetRadioSettings *target = nullptr;
     for (auto &entry : targetRadioSettings) {
         if (entry.inUse && entry.id == p->id) {
-            slot = &entry;
+            target = &entry;
             break;
         }
-        if (!slot && !entry.inUse)
-            slot = &entry;
+        if (!target && !entry.inUse)
+            target = &entry;
     }
-
-    // All 8 slots full: evict slot 0 (silent overwrite)
-    if (!slot)
-        slot = &targetRadioSettings[0];
-
-    slot->inUse = true;
-    slot->id = p->id;
-    slot->settings = settings;
+    if (!target)
+        target = &targetRadioSettings[0];
+    target->inUse = true;
+    target->id = p->id;
+    target->preset = preset;
+    target->slot = slot;
 }
 
 bool MeshBeaconModule::hasTargetRadioSettings(const meshtastic_MeshPacket *p)
 {
-    return getTargetRadioSettings(p, nullptr);
+    return getTargetRadioSettings(p, nullptr, nullptr);
 }
 
 void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
 {
     if (!p)
         return;
-
     for (auto &entry : targetRadioSettings) {
         if (entry.inUse && entry.id == p->id) {
             entry.inUse = false;
@@ -88,48 +83,52 @@ void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
     }
 }
 
-bool MeshBeaconModule::configureRadioForPacket(RadioInterface *iface, meshtastic_MeshPacket *p)
+bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p)
 {
-    // TODO(beacon): Drive from broadcast_on_preset / broadcast_on_channel in MeshBeaconConfig
-    //   rather than the per-packet sidecar table.
     meshtastic_ChannelSettings *c = (meshtastic_ChannelSettings *)&channels.getPrimary();
-    MeshBeaconModule_TXSettings target;
-    if (p && p->from == NODENUM_BEACON && getTargetRadioSettings(p, &target) &&
-        (target.preset != config.lora.modem_preset || target.slot != config.lora.channel_num)) {
-        LOG_INFO("Beacon: reconfiguring radio for TX of packet %#08lx (from=%#08lx size=%lu)", p->id, p->from,
-                 p->decoded.payload.size);
+    meshtastic_Config_LoRaConfig_ModemPreset targetPreset;
+    uint16_t targetSlot;
 
-        config.lora.modem_preset = target.preset;
-        config.lora.channel_num = target.slot;
+    if (p && getTargetRadioSettings(p, &targetPreset, &targetSlot) &&
+        (targetPreset != config.lora.modem_preset || targetSlot != config.lora.channel_num)) {
+
+        LOG_INFO("Beacon: switch radio for packet %#08lx to preset=%d slot=%u", p->id, targetPreset, targetSlot);
+        config.lora.modem_preset = targetPreset;
+        config.lora.channel_num = targetSlot;
         memset(c->name, 0, sizeof(c->name));
 
-        switch (target.preset) {
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
-            strncpy(c->name, "ShortTurbo", sizeof(c->name));
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-            strncpy(c->name, "ShortFast", sizeof(c->name));
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-            strncpy(c->name, "ShortSlow", sizeof(c->name));
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-            strncpy(c->name, "MediumFast", sizeof(c->name));
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-            strncpy(c->name, "MediumSlow", sizeof(c->name));
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
-            strncpy(c->name, "LongFast", sizeof(c->name));
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-            strncpy(c->name, "LongMod", sizeof(c->name));
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-            strncpy(c->name, "LongSlow", sizeof(c->name));
-            break;
-        default:
-            break;
+        const auto &bcfg = moduleConfig.payload_variant.mesh_beacon;
+        if (bcfg.has_broadcast_on_channel && strlen(bcfg.broadcast_on_channel.name) > 0) {
+            strncpy(c->name, bcfg.broadcast_on_channel.name, sizeof(c->name));
+        } else {
+            switch (targetPreset) {
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+                strncpy(c->name, "ShortTurbo", sizeof(c->name));
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+                strncpy(c->name, "ShortFast", sizeof(c->name));
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+                strncpy(c->name, "ShortSlow", sizeof(c->name));
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+                strncpy(c->name, "MediumFast", sizeof(c->name));
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+                strncpy(c->name, "MediumSlow", sizeof(c->name));
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+                strncpy(c->name, "LongFast", sizeof(c->name));
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+                strncpy(c->name, "LongMod", sizeof(c->name));
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+                strncpy(c->name, "LongSlow", sizeof(c->name));
+                break;
+            default:
+                break;
+            }
         }
 
         channels.fixupChannel(channels.getPrimaryIndex());
@@ -137,18 +136,14 @@ bool MeshBeaconModule::configureRadioForPacket(RadioInterface *iface, meshtastic
         iface->reconfigure();
         return true;
 
-    } else if ((!p || !getTargetRadioSettings(p, nullptr)) &&
+    } else if ((!p || !getTargetRadioSettings(p, nullptr, nullptr)) &&
                (config.lora.modem_preset != originalModemPreset || config.lora.channel_num != originalLoraChannel)) {
-        if (p)
-            LOG_INFO("Beacon: reconfiguring radio for TX of packet %#08lx (from=%#08lx size=%lu)", p->id, p->from,
-                     p->decoded.payload.size);
-        else
-            LOG_INFO("Beacon: restoring radio config after beacon TX");
 
+        LOG_INFO("Beacon: restoring radio config after beacon TX");
         config.lora.modem_preset = originalModemPreset;
         config.lora.channel_num = originalLoraChannel;
         memset(c->name, 0, sizeof(c->name));
-        strncpy(c->name, originalBeaconChannelName, sizeof(c->name));
+        strncpy(c->name, originalChannelName, sizeof(c->name));
 
         channels.fixupChannel(channels.getPrimaryIndex());
         iface->reconfigure();
@@ -157,184 +152,122 @@ bool MeshBeaconModule::configureRadioForPacket(RadioInterface *iface, meshtastic
     return false;
 }
 
-MeshBeaconModule_TXSettings MeshBeaconModule::stripTargetRadioSettings(meshtastic_MeshPacket *p)
-{
-    // TODO(beacon): Remove entirely. Beacon payloads are structured MeshBeacon protobufs,
-    //   not freeform text with embedded #PPNN routing directives.
-    MeshBeaconModule_TXSettings s = {
-        .preset = originalModemPreset,
-        .slot = originalLoraChannel,
-    };
-
-    if (!p || p->decoded.payload.size < 4 || p->decoded.payload.bytes[0] != '#')
-        return s;
-
-    if (p->decoded.payload.size < sizeof(p->decoded.payload.bytes))
-        p->decoded.payload.bytes[p->decoded.payload.size] = 0;
-    else
-        p->decoded.payload.bytes[sizeof(p->decoded.payload.bytes) - 1] = 0;
-
-    char *msg = strchr((char *)p->decoded.payload.bytes, ' ');
-    if (!msg || !*msg)
-        return s;
-    *msg++ = 0;
-
-    const char presetString[3] = {p->decoded.payload.bytes[1], p->decoded.payload.bytes[2], 0};
-    char *slotString = (char *)&p->decoded.payload.bytes[3];
-    if (!*slotString)
-        return s;
-
-    for (char *c = slotString; *c; c++) {
-        if (!strchr("1234567890", *c))
-            return s;
-    }
-
-    if (!strncmp(presetString, "ST", 2))
-        s.preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
-    else if (!strncmp(presetString, "SF", 2))
-        s.preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
-    else if (!strncmp(presetString, "SS", 2))
-        s.preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW;
-    else if (!strncmp(presetString, "MF", 2))
-        s.preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-    else if (!strncmp(presetString, "MS", 2))
-        s.preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
-    else if (!strncmp(presetString, "LF", 2))
-        s.preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-    else if (!strncmp(presetString, "LM", 2))
-        s.preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
-    else if (!strncmp(presetString, "LS", 2))
-        s.preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
-    else
-        return s;
-
-    s.slot = strtoul(slotString, nullptr, 10);
-
-    p->decoded.payload.size = 1;
-    for (char *a = msg, *b = (char *)p->decoded.payload.bytes; (*b++ = *a++);)
-        p->decoded.payload.size++;
-
-    return s;
-}
-
 // ---------------------------------------------------------------------------
-// MeshBeaconNodeInfoModule
-// TODO(beacon): Remove this class. Replaced by real-node broadcasts.
+// MeshBeaconBroadcastModule
 // ---------------------------------------------------------------------------
 
-MeshBeaconNodeInfoModule *meshBeaconNodeInfoModule;
+MeshBeaconBroadcastModule *meshBeaconBroadcastModule;
 
-bool MeshBeaconNodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
+MeshBeaconBroadcastModule::MeshBeaconBroadcastModule() : MeshBeaconModule(), concurrency::OSThread("MeshBeaconBroadcast")
 {
-    return true;
-}
-
-void MeshBeaconNodeInfoModule::sendBeaconNodeInfo()
-{
-    // TODO(beacon): Remove - replaced by MeshBeaconBroadcastModule sending structured MeshBeacon packets.
-    LOG_INFO("Beacon: send NodeInfo for mesh beacon");
-    static meshtastic_User u = {
-        .hw_model = meshtastic_HardwareModel_PRIVATE_HW,
-        .is_licensed = false,
-        .role = meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE,
-        .public_key =
-            {
-                .size = 32,
-                .bytes = {0x39, 0x37, 0x58, 0xe4, 0x05, 0x34, 0x7d, 0xe0, 0x49, 0x73, 0xec, 0xaf, 0xbc, 0x8e, 0x07, 0xe8,
-                          0x66, 0x57, 0xe4, 0xa1, 0x2d, 0x53, 0x0e, 0x26, 0x51, 0x1f, 0x1a, 0x6c, 0xbf, 0xe8, 0x5e, 0x04},
-            },
-        .has_is_unmessagable = true,
-        .is_unmessagable = true,
-    };
-    // TODO(beacon): long_name, short_name, id should come from config (broadcast_node_id / device name)
-    strncpy(u.id, "!mesh_bcn", sizeof(u.id));
-    strncpy(u.long_name, "Mesh Beacon Node", sizeof(u.long_name));
-    strncpy(u.short_name, "BCN", sizeof(u.short_name));
-    meshtastic_MeshPacket *p = allocDataProtobuf(u);
-    p->to = NODENUM_BROADCAST;
-    p->from = NODENUM_BEACON;
-    p->hop_limit = 0;
-    p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-
-    // TODO(beacon): The second copy on a different preset comes from broadcast_on_preset config.
-    meshtastic_MeshPacket *p_LF20 = packetPool.allocCopy(*p);
-    service->sendToMesh(p, RX_SRC_LOCAL, false);
-
-    setTargetRadioSettings(p_LF20, {
-                                       .preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
-                                       .slot = 20,
-                                   });
-    service->sendToMesh(p_LF20, RX_SRC_LOCAL, false);
-}
-
-MeshBeaconNodeInfoModule::MeshBeaconNodeInfoModule()
-    : ProtobufModule("nodeinfo_beacon", meshtastic_PortNum_NODEINFO_APP, &meshtastic_User_msg),
-      concurrency::OSThread("MeshBeaconNodeInfo")
-{
-    MeshBeaconModule();
     setIntervalFromNow(setStartDelay());
 }
 
-int32_t MeshBeaconNodeInfoModule::runOnce()
+void MeshBeaconBroadcastModule::sendBeacon()
 {
-    if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
-        sendBeaconNodeInfo();
+    const auto &bcfg = moduleConfig.payload_variant.mesh_beacon;
+
+    meshtastic_MeshBeacon beacon = meshtastic_MeshBeacon_init_zero;
+    strncpy(beacon.message, bcfg.broadcast_message, sizeof(beacon.message) - 1);
+
+    if (bcfg.has_broadcast_offer_channel) {
+        beacon.has_offer_channel = true;
+        beacon.offer_channel = bcfg.broadcast_offer_channel;
     }
-    // TODO(beacon): Use broadcast_interval_secs from MeshBeaconConfig (min 3600 s, max 259200 s).
-    return Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
+    beacon.offer_preset = bcfg.broadcast_offer_preset;
+    beacon.offer_region = bcfg.broadcast_offer_region;
+
+    meshtastic_MeshPacket *p = allocDataProtobuf(beacon);
+    if (!p) {
+        LOG_WARN("Beacon: failed to allocate packet");
+        return;
+    }
+
+    p->to = NODENUM_BROADCAST;
+    p->from = (bcfg.broadcast_send_as_node != 0) ? bcfg.broadcast_send_as_node : nodeDB->getNodeNum();
+    p->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
+    p->hop_limit = 3;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    p->want_ack = false;
+    p->rx_time = getValidTime(RTCQualityFromNet);
+
+    if (bcfg.has_broadcast_on_preset &&
+        (bcfg.broadcast_on_preset != config.lora.modem_preset ||
+         (bcfg.has_broadcast_on_channel && bcfg.broadcast_on_channel.channel_num != config.lora.channel_num))) {
+        uint16_t targetSlot = bcfg.has_broadcast_on_channel ? bcfg.broadcast_on_channel.channel_num : config.lora.channel_num;
+        setTargetRadioSettings(p, bcfg.broadcast_on_preset, targetSlot);
+    }
+
+    LOG_INFO("Beacon: broadcast from=%#08lx msg='%.40s'", p->from, beacon.message);
+    service->sendToMesh(p, RX_SRC_LOCAL, false);
+}
+
+int32_t MeshBeaconBroadcastModule::runOnce()
+{
+    const auto &bcfg = moduleConfig.payload_variant.mesh_beacon;
+    if (bcfg.broadcast_enabled && airTime->isTxAllowedAirUtil() &&
+        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        sendBeacon();
+    }
+
+    uint32_t interval = bcfg.broadcast_interval_secs;
+    if (interval < 3600)
+        interval = 3600;
+    if (interval > 259200)
+        interval = 259200;
+    return interval * 1000;
 }
 
 // ---------------------------------------------------------------------------
-// MeshBeaconMessageModule
-// TODO(beacon): Split into MeshBeaconBroadcastModule + MeshBeaconListenerModule (see header).
+// MeshBeaconListenerModule
 // ---------------------------------------------------------------------------
 
-MeshBeaconMessageModule *meshBeaconMessageModule;
+MeshBeaconListenerModule *meshBeaconListenerModule;
+MeshBeaconListenerModule::BeaconOffer MeshBeaconListenerModule::lastReceivedOffer;
 
-ProcessMessage MeshBeaconMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
+MeshBeaconListenerModule::MeshBeaconListenerModule()
+    : ProtobufModule("beacon_listen", meshtastic_PortNum_MESH_BEACON_APP, &meshtastic_MeshBeacon_msg)
 {
-    // TODO(beacon): On the broadcaster side: read broadcast_message / broadcast_offer_channel /
-    //   broadcast_offer_preset from config, build a MeshBeacon protobuf, and send it periodically
-    //   via the OSThread. This relay-incoming-message logic is replaced entirely.
-    //
-    // TODO(beacon): On the listener side: decode MeshBeacon protobuf, deliver text portion as a
-    //   TEXT_MESSAGE_APP packet to the inbox, store offered channel / preset in a local cache for
-    //   client app retrieval. Do NOT apply offered settings automatically.
-#ifdef DEBUG_PORT
-    auto &d = mp.decoded;
-#endif
-    meshtastic_MeshPacket *p = packetPool.allocCopy(mp);
-    MeshBeaconModule_TXSettings s = stripTargetRadioSettings(p);
-    if (!p->decoded.payload.size || p->decoded.payload.bytes[0] == '#')
-        return ProcessMessage::STOP;
-    p->to = NODENUM_BROADCAST;
-    p->decoded.source = p->from;
-    p->from = NODENUM_BEACON;
-    p->channel = channels.getPrimaryIndex();
-    p->hop_limit = 0;
-    p->hop_start = 0;
-    p->rx_rssi = 0;
-    p->rx_snr = 0;
-    p->priority = meshtastic_MeshPacket_Priority_HIGH;
-    p->want_ack = false;
-    if (s.preset != originalModemPreset || s.slot != originalLoraChannel) {
-        setTargetRadioSettings(p, s);
+    lastReceivedOffer = {};
+}
+
+bool MeshBeaconListenerModule::wantPacket(const meshtastic_MeshPacket *p)
+{
+    return moduleConfig.which_payload_variant == meshtastic_ModuleConfig_mesh_beacon_tag &&
+           moduleConfig.payload_variant.mesh_beacon.listen_enabled && p->decoded.portnum == meshtastic_PortNum_MESH_BEACON_APP;
+}
+
+bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_MeshBeacon *b)
+{
+    if (!b || strlen(b->message) == 0)
+        return false;
+
+    LOG_INFO("Beacon: received from %#08lx: '%.40s'", mp.from, b->message);
+
+    // Deliver text to the local inbox as a TEXT_MESSAGE_APP packet.
+    meshtastic_MeshPacket *txt = packetPool.allocCopy(mp);
+    txt->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    txt->to = nodeDB->getNodeNum();
+    memset(txt->decoded.payload.bytes, 0, sizeof(txt->decoded.payload.bytes));
+    txt->decoded.payload.size = (pb_size_t)strnlen(b->message, sizeof(b->message) - 1);
+    memcpy(txt->decoded.payload.bytes, b->message, txt->decoded.payload.size);
+    service->handleToRadio(*txt);
+    packetPool.release(txt);
+
+    // Cache any offer for the client app — never auto-applied.
+    if (b->has_offer_channel || b->offer_preset != 0) {
+        lastReceivedOffer.valid = true;
+        lastReceivedOffer.sender = mp.from;
+        lastReceivedOffer.has_channel = b->has_offer_channel;
+        if (b->has_offer_channel)
+            lastReceivedOffer.channel = b->offer_channel;
+        lastReceivedOffer.region = b->offer_region;
+        lastReceivedOffer.preset = b->offer_preset;
+        lastReceivedOffer.received_at = getValidTime(RTCQualityFromNet);
+        LOG_INFO("Beacon: stored offer from %#08lx (preset=%d)", mp.from, b->offer_preset);
     }
-    p->rx_time = getValidTime(RTCQualityFromNet);
-    service->sendToMesh(p, RX_SRC_LOCAL, false);
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
     notifyObservers(&mp);
-
-    return ProcessMessage::CONTINUE;
-}
-
-bool MeshBeaconMessageModule::wantPacket(const meshtastic_MeshPacket *p)
-{
-    // TODO(beacon): Replace with: p->decoded.portnum == meshtastic_PortNum_MESH_BEACON_APP
-    //   No special named channel needed — any node with beacons_listen=true receives beacon packets.
-    meshtastic_Channel *c = &channels.getByIndex(p->channel);
-    return c->role == meshtastic_Channel_Role_SECONDARY && strlen(c->settings.name) == strlen("Beacon") &&
-           !strcmp(c->settings.name, "Beacon") && p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP;
+    return false;
 }
