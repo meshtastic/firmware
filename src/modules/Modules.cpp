@@ -154,8 +154,8 @@ void setupModules()
     meshTipsMessageModule = new MeshTipsMessageModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_BEACON
-    meshBeaconNodeInfoModule = new MeshBeaconNodeInfoModule();
-    meshBeaconMessageModule = new MeshBeaconMessageModule();
+    meshBeaconBroadcastModule = new MeshBeaconBroadcastModule();
+    meshBeaconListenerModule = new MeshBeaconListenerModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS
     positionModule = new PositionModule();
