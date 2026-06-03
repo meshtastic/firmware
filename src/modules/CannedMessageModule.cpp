@@ -6,6 +6,7 @@
 #include "CannedMessageModule.h"
 #include "Channels.h"
 #include "FSCommon.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
@@ -141,7 +142,7 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
 static bool returnToCannedList = false;
 bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
 {
-    return node && node->has_user && node->user.public_key.size > 0;
+    return nodeInfoLiteHasUser(node) && node->public_key.size > 0;
 }
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
@@ -262,10 +263,10 @@ void CannedMessageModule::updateDestinationSelectionList()
 
     for (size_t i = 0; i < numMeshNodes; ++i) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node || node->num == myNodeNum || !node->has_user || node->user.public_key.size != 32)
+        if (!node || node->num == myNodeNum || !nodeInfoLiteHasUser(node) || node->public_key.size != 32)
             continue;
 
-        const String &nodeName = node->user.long_name;
+        const String &nodeName = node->long_name;
 
         if (searchQuery.length() == 0) {
             this->filteredNodes.push_back({node, sinceLastSeen(node)});
@@ -1054,7 +1055,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     }
 
     NodeNum myNodeNum = nodeDB->getNodeNum();
-    if (node && node->num != myNodeNum && node->has_user && node->user.public_key.size == 32) {
+    if (node && node->num != myNodeNum && nodeInfoLiteHasUser(node) && node->public_key.size == 32) {
         p->pki_encrypted = true;
         p->channel = 0; // force PKI
     }
@@ -1415,8 +1416,8 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
         return "Broadcast";
 
     meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
-    if (info && info->has_user && strlen(info->user.long_name) > 0) {
-        return info->user.long_name;
+    if (nodeInfoLiteHasUser(info) && strlen(info->long_name) > 0) {
+        return info->long_name;
     }
 
     static char fallback[12];
@@ -1723,17 +1724,17 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                 meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
                 if (node) {
                     if (display->getWidth() <= 64) {
-                        entryText = node->user.short_name;
-                    } else if (node->user.long_name[0]) {
-                        entryText = node->user.long_name;
+                        entryText = node->short_name;
+                    } else if (node->long_name[0]) {
+                        entryText = node->long_name;
                     } else {
-                        entryText = node->user.short_name;
+                        entryText = node->short_name;
                     }
                 }
 
                 int availWidth = display->getWidth() -
                                  ((graphics::currentResolution == graphics::ScreenResolution::High) ? 40 : 20) -
-                                 ((node && node->is_favorite) ? 10 : 0);
+                                 ((nodeInfoLiteIsFavorite(node)) ? 10 : 0);
                 if (availWidth < 0)
                     availWidth = 0;
                 char truncatedEntry[96];
@@ -1742,7 +1743,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                 entryText = truncatedEntry;
 
                 // Prepend "* " if this is a favorite
-                if (node && node->is_favorite) {
+                if (nodeInfoLiteIsFavorite(node)) {
                     entryText = "* " + entryText;
                 }
                 graphics::UIRenderer::truncateStringWithEmotes(display, entryText.c_str(), truncatedEntry, sizeof(truncatedEntry),
@@ -2102,16 +2103,16 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 static float getSnrLimit(meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
     switch (preset) {
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+    case PRESET(LONG_SLOW):
+    case PRESET(LONG_MODERATE):
+    case PRESET(LONG_FAST):
         return -6.0f;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+    case PRESET(MEDIUM_SLOW):
+    case PRESET(MEDIUM_FAST):
         return -5.5f;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+    case PRESET(SHORT_SLOW):
+    case PRESET(SHORT_FAST):
+    case PRESET(SHORT_TURBO):
         return -4.5f;
     default:
         return -6.0f;

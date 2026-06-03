@@ -13,6 +13,7 @@ Meshtastic is an open-source LoRa mesh networking project for long-range, low-po
 - **RP2040/RP2350** - Raspberry Pi Pico variants
 - **STM32WL** - STM32 with integrated LoRa
 - **Linux/Portduino** - Native Linux builds (Raspberry Pi, etc.)
+- **macOS native** - Headless `meshtasticd` on Apple Silicon / x86_64; see `variants/native/portduino/platformio.ini` for Homebrew prereqs + CH341 LoRa setup
 
 ### Supported Radio Chips
 
@@ -70,6 +71,163 @@ PKI (Public Key Infrastructure) messages have special handling:
 - Accepted on a special "PKI" channel
 - Allow encrypted DMs between nodes that discovered each other on downlink-enabled channels
 
+## Encryption & Key Management
+
+Meshtastic packets on the air are typically encrypted one of two ways: the **per-channel symmetric** layer (AES-CTR with a shared PSK) for broadcasts and channel traffic, and the **per-peer PKI** layer (X25519 ECDH → AES-256-CCM) for direct messages and remote admin. A channel with a 0-byte PSK (or Ham mode, which wipes PSKs) transmits cleartext — see the size table below. Both are implemented in `src/mesh/CryptoEngine.cpp`; the send/receive dispatch lives in `src/mesh/Router.cpp`; admin authorization lives in `src/modules/AdminModule.cpp`.
+
+### High-level model
+
+- **Channels** are symmetric rooms: anyone with the PSK can read any message on the channel. Channel 0 is the "primary" channel and ships with the short-form default PSK on factory devices, forming the public mesh most users join. (The LoRa modem preset `LONG_FAST` lives on `config.lora.modem_preset` and is an independent field — don't conflate "channel 0 default PSK" with the modem preset name.)
+- **DMs** addressed to a single node require PKI so that other holders of the channel PSK can't read them. Outside Ham mode, Meshtastic does not fall back to channel-symmetric encryption when the destination public key is unknown.
+- **Remote admin** is a DM carrying an `AdminMessage`. The receiver only acts on it if the sender's public key is on its allowlist (`config.security.admin_key[0..2]`).
+- **Ham mode** (`owner.is_licensed=true`, where `owner` is the local `meshtastic_User` record) disables PKI entirely and sends cleartext — FCC Part 97 prohibits encryption on amateur bands.
+- **No ratchet, no session.** Every packet is encrypted from scratch — a stateless design that matches the high-loss, store-and-forward nature of LoRa.
+
+### Symmetric channel encryption (AES-CTR)
+
+`CryptoEngine::encryptPacket` / `decrypt` / `encryptAESCtr` in `src/mesh/CryptoEngine.cpp`.
+
+- **Cipher**: AES-CTR, AES-128 or AES-256 depending on key length. Same routine in both directions (CTR is a stream cipher, so encrypt == decrypt).
+- **Key**: `ChannelSettings.psk` bytes. Size semantics:
+  - **0 bytes** → no encryption, cleartext on the air
+  - **1 byte** → short-form index into the well-known `defaultpsk[]` in `src/mesh/Channels.h`. Index 0 = cleartext; 1 = defaultpsk unchanged; 2..255 = defaultpsk with its last byte incremented by (index − 1). This is what the CLI's `--ch-set psk default` produces.
+  - **16 bytes** → raw AES-128 key
+  - **32 bytes** → raw AES-256 key
+  - **2..15 bytes** → zero-padded to 16 and used as AES-128 (with a warn log); **17..31 bytes** → zero-padded to 32 and used as AES-256 (with a warn log). Defensive fallback for malformed PSK input, not something to rely on.
+- **Nonce (128 bit)**: `packet_id` (u64 LE) ‖ `from_node` (u32 LE) ‖ `block_counter` (u32, starts at 0). Built in `CryptoEngine::initNonce`.
+- **No AEAD**: channel packets carry no MAC, so the channel-hash byte is not an integrity or authenticity check. `Channels::getHash` is a 1-byte XOR-derived hint over the channel name bytes and PSK bytes that helps receivers pick a candidate channel/PSK for decryption. Because it is only a small hint and collisions are easy to find, it should be described purely as a PSK-selection aid, not as a security filter an attacker cannot bypass.
+- **Channel 0 is special in one way only**: it's the channel the Router attempts PKI decryption on before falling through to AES-CTR. Non-zero channels always go straight to AES-CTR.
+
+### PKI encryption for DMs (X25519 ECDH + AES-256-CCM)
+
+`CryptoEngine::encryptCurve25519` / `decryptCurve25519` in `src/mesh/CryptoEngine.cpp`.
+
+- **Keypair**: Curve25519 (aka X25519), 32-byte public + 32-byte private. Stored in `config.security.public_key` / `private_key`; the public half is mirrored into `owner.public_key` so it rides along in NodeInfo broadcasts and propagates through the mesh like any other identity field.
+- **Key generation** (`generateKeyPair`): stirs `HardwareRNG::fill()` (64 B from platform TRNG when available), the 16-byte `myNodeInfo.device_id`, and a call to `random()` into the rweather/Crypto library's software RNG, then `Curve25519::dh1`. `regeneratePublicKey` recomputes the public half from a known private (used when restoring from backup).
+- **Keygen entry points**: at boot, `NodeDB` calls `generateKeyPair` (or `regeneratePublicKey` when a stored private key is present and passes a low-entropy check) **directly** when `!owner.is_licensed` and `config.lora.region != UNSET`. `ensurePkiKeys` wraps the same logic for runtime/admin flows — it's the path `AdminModule::handleSetConfig` runs when first assigning a valid region or when security config is written; **do not assume it's the universal boot-time gate**, because the NodeDB path bypasses it.
+- **Handshake**: `Curve25519::dh2(local_private, remote_public) → 32-byte shared secret → SHA-256 → 32-byte AES-256 key`. Recomputed per packet. The SHA-256 step is effectively a KDF over the raw ECDH output.
+- **Cipher**: AES-256-CCM via `aes_ccm_ae` / `aes_ccm_ad` (`src/mesh/aes-ccm.cpp`). MAC length (the `M` parameter) is **8 bytes**. No AAD — the MAC covers ciphertext only.
+- **Nonce (13 bytes / 104 bit)**: `aes_ccm_ae`/`aes_ccm_ad` use a 13-byte CCM nonce (`L = 2` is hardcoded in `src/mesh/aes-ccm.cpp`), not a 16-byte nonce. For PKI packets, `CryptoEngine::initNonce(fromNode, packetNum, extraNonce)` starts from the usual packet-derived nonce material, then overwrites nonce bytes `4..7` with a fresh 32-bit `extraNonce = random()`. The effective nonce bytes are therefore: bytes `0..3` = `packet_id`, bytes `4..7` = transmitted `extraNonce`, bytes `8..11` = `from_node`, byte `12` = `0x00`. The receiver reconstructs the same 13-byte nonce from the packet metadata plus the appended `extraNonce`.
+- **Wire overhead**: 12 bytes appended to the ciphertext = 8-byte MAC ‖ 4-byte extraNonce. Defined as `MESHTASTIC_PKC_OVERHEAD = 12` in `src/mesh/RadioInterface.h`. Only the 4-byte `extraNonce` is sent; the rest of the 13-byte CCM nonce is reconstructed from packet fields as described above. The Router's send path checks this overhead against `MAX_LORA_PAYLOAD_LEN` before committing to PKI.
+- **Send selection** (`Router::send`): the sender enters the PKI path when **all** hold — we're the originator AND not Ham mode AND not Portduino simradio AND not on the `serial`/`gpio` channels (unless the packet is already marked `pki_encrypted`) AND `config.security.private_key.size == 32` AND destination is a single node (not broadcast) AND the portnum isn't infrastructure. `TRACEROUTE_APP`, `NODEINFO_APP`, `ROUTING_APP`, and `POSITION_APP` are routed through channel encryption even when DMed (these need to be readable by relaying peers). Once on the PKI path, if the destination's public key isn't in our NodeDB the send **fails** with `PKI_SEND_FAIL_PUBLIC_KEY` — it does not silently fall back to channel encryption. If the client explicitly set `pki_encrypted=true` and any condition blocks PKI, the send fails with `PKI_FAILED`.
+- **Receive selection** (`Router::perhapsDecode`): try PKI decrypt first when `channel == 0` AND `isToUs(p)` AND not broadcast AND both peers have public keys in NodeDB AND `rawSize > MESHTASTIC_PKC_OVERHEAD`. On success the packet gets `pki_encrypted=true` stamped and the sender's public key copied into `p->public_key` for downstream authorization.
+
+### Remote admin authorization
+
+Implemented in `src/modules/AdminModule.cpp` → `handleReceivedProtobuf`. The authorization check runs in this order:
+
+1. **Response messages** — if `messageIsResponse(r)` is true (the payload is a response to one of our earlier admin requests), it's accepted without any further check. The in-file comment flags this as a known-untightened gap: a stricter implementation would remember which `public_key` we last queried and reject responses that don't match.
+2. **Local admin** — `mp.from == 0` (phone app over BLE, serial CLI, internal module); never travels over the air. **Rejected** if `config.security.is_managed` is true, because managed devices expect admin to arrive over the air through an authorized remote path.
+3. **Legacy admin channel (deprecated)** — the packet arrived on a channel named literally `"admin"`. Gated by `config.security.admin_channel_enabled`; returns `NOT_AUTHORIZED` if the flag is false. Kept for backward compatibility; new deployments should use PKI admin.
+4. **PKI admin (preferred for remote)** — `mp.pki_encrypted == true` AND `mp.public_key` matches one of `config.security.admin_key[0..2]` (up to three authorized 32-byte Curve25519 public keys, typically copied from the admin node's own `user.public_key`).
+5. **Fallthrough** → `NOT_AUTHORIZED`.
+
+On top of authorization, any remote admin message that **mutates** state (not a request, not a response) also has to pass a session-key check (`checkPassKey`): the client must first pull a fresh 8-byte `session_passkey` via `get_admin_session_key_request`, then echo that passkey back in the mutating message. The device rotates the passkey after 150 s and rejects values older than 300 s — a narrow anti-replay window on top of the PKI layer.
+
+`config.security.is_managed = true` disables **local** admin writes (`mp.from == 0` is rejected). It does not by itself force every admin action through PKI — the legacy `"admin"` channel still authorizes remote admin when `config.security.admin_channel_enabled == true`. The AdminModule refuses to persist `is_managed=true` unless at least one `admin_key` is populated — a deliberate guard against operators locking themselves out.
+
+### Key-rotation hazards (actions that invalidate peers)
+
+- **`factory_reset_device`** (the "full" variant, calls `NodeDB::factoryReset(eraseBleBonds=true)`) → **wipes** the X25519 private key; a fresh keypair is generated on the next region-set. Every existing peer holds the old public key, so DMs to this node silently fail PKI decrypt until every peer re-exchanges NodeInfo.
+- **`factory_reset_config`** (the "partial" variant, calls `NodeDB::factoryReset()` with `eraseBleBonds=false`) → **preserves** the X25519 private key in `installDefaultConfig(preserveKey=true)`; the public key is zeroed and gets rebuilt from the preserved private key on the next boot via the NodeDB path's `regeneratePublicKey` call. Identity is preserved and the mesh does not need to re-exchange keys.
+- **`region=UNSET → valid region`** → `ensurePkiKeys` runs inside the same `handleSetConfig` path; missing keys get generated at that moment.
+- **Ham mode transitions** — entering Ham mode (`user.is_licensed=true`) runs `Channels::ensureLicensedOperation`, which **wipes every channel PSK** (all traffic becomes cleartext) and disables the legacy admin channel. The X25519 private key is preserved on the device but not used because `Router::send` skips PKI when `owner.is_licensed` is true. Leaving Ham mode re-enables PKI with the preserved keypair but does not restore the wiped channel PSKs — the operator has to re-set them.
+- **Channel 0 PSK change** → every peer must re-learn the channel hash; cached NodeInfo becomes temporarily unreachable until the next broadcast.
+- **`security.private_key` blanked via admin** → regenerates both halves (unless in Ham mode) and propagates the new public key via NodeInfo.
+
+## NodeDB Layout (v25)
+
+`DEVICESTATE_CUR_VER = 25`, `DEVICESTATE_MIN_VER = 24`. The on-device NodeDB was split in v25 into a slim header table plus four optional satellite stores. Older v24 saves auto-migrate at boot. Old training-data instincts (`node->user.long_name`, `node->position.latitude_i`, `node->is_favorite`, `node->device_metrics.battery_level`) are wrong now — the fields aren't there. Read this section before touching anything that walks `nodeDB->meshNodes`.
+
+### Slim `NodeInfoLite`
+
+`UserLite` is flattened onto `NodeInfoLite` (no nested sub-message); `position` and `device_metrics` are removed entirely (tags reserved). MAC address is dropped. Long names are capped at 25 chars (`max_size:25` in `deviceonly.options`); `hw_model` and `role` are `int_size:8`. Encoded size dropped from ~166 B → ~105 B per node.
+
+Booleans are bit-packed into `NodeInfoLite.bitfield`. **Do not read or write the bits directly** — use the inline helpers in `src/mesh/NodeDB.h`:
+
+```cpp
+nodeInfoLiteHasUser(n)                  // bit 5 — user fields populated
+nodeInfoLiteIsFavorite(n)               // bit 3
+nodeInfoLiteIsIgnored(n)                // bit 4
+nodeInfoLiteIsMuted(n)                  // bit 1
+nodeInfoLiteIsLicensed(n)               // bit 6 — Ham mode peer
+nodeInfoLiteIsKeyManuallyVerified(n)    // bit 0
+nodeInfoLiteHasIsUnmessagable(n)        // bit 8 — "is_unmessagable was sent"
+nodeInfoLiteIsUnmessagable(n)           // bit 7
+// via_mqtt is bit 2 (mask exposed; predicate uses the mask directly)
+
+nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);  // setter
+```
+
+### Satellite stores
+
+Four `std::unordered_map<NodeNum, …>` members on `NodeDB`, each gated by its own build flag:
+
+| Map               | Value type                      | Build flag                         |
+| ----------------- | ------------------------------- | ---------------------------------- |
+| `nodePositions`   | `meshtastic_PositionLite`       | `MESHTASTIC_EXCLUDE_POSITIONDB`    |
+| `nodeTelemetry`   | `meshtastic_DeviceMetrics`      | `MESHTASTIC_EXCLUDE_TELEMETRYDB`   |
+| `nodeEnvironment` | `meshtastic_EnvironmentMetrics` | `MESHTASTIC_EXCLUDE_ENVIRONMENTDB` |
+| `nodeStatus`      | `meshtastic_StatusMessage`      | `MESHTASTIC_EXCLUDE_STATUSDB`      |
+
+Defaults are ON (i.e., maps **excluded**) for STM32WL only — see `src/mesh/mesh-pb-constants.h`. On every other arch all four maps are present. When excluded, the map member is absent and the corresponding accessors return `false`.
+
+All four maps are guarded by **`mutable concurrency::Lock satelliteMutex`** — concurrent access from receive threads, the phone API state machine, and the renderer is the rule, not the exception.
+
+### Accessor convention
+
+**Never hand out pointers into the maps.** Use the copy-out accessors on `NodeDB`:
+
+```cpp
+bool copyNodePosition(NodeNum, meshtastic_PositionLite &out)       const;
+bool copyNodeTelemetry(NodeNum, meshtastic_DeviceMetrics &out)     const;
+bool copyNodeEnvironment(NodeNum, meshtastic_EnvironmentMetrics &out) const;
+bool copyNodeStatus(NodeNum, meshtastic_StatusMessage &out)        const;
+```
+
+Each takes the lock, copies the value if present, returns `false` if the entry is absent or the DB is excluded. Pass-by-out-param is deliberate — pointer-style accessors would invite UAF and lock-leak bugs across the renderer. The "has any X" convenience predicates (`hasValidPosition` etc.) are implemented in terms of these.
+
+Writers go through `setNodeStatus`, `updatePosition`, `updateTelemetry` (which dispatches on `which_variant` for device vs environment metrics) — these own the lock and the eviction hooks.
+
+### Eviction
+
+Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly.
+
+### Sync flow: thin NodeInfo + post-COMPLETE_ID replay (no opt-in)
+
+There is no capability flag and no special "gradient" nonce. The **default** sync flow is:
+
+1. Config / module-config / channel / metadata segments (same as before).
+2. `STATE_SEND_OWN_NODEINFO` — **our own** NodeInfo, still bundled with our position and device_metrics (because the replay snapshot excludes our own NodeNum). Emitted via `ConvertToNodeInfo(lite)`.
+3. `STATE_SEND_OTHER_NODEINFOS` — every other peer's NodeInfo, **always thin** (no `position`, no `device_metrics`). Emitted via `ConvertToNodeInfoThin(lite)`.
+4. `STATE_SEND_FILEMANIFEST` → `STATE_SEND_COMPLETE_ID` — the phone sees `config_complete_id` and treats sync as done.
+5. `STATE_SEND_PACKETS` — live mesh packets, with a trailing replay drain interleaved. The replay drain walks four cached satellite stores in order (positions → telemetry → environment → status) and emits each cached entry as an ordinary `MeshPacket` on the matching portnum (`POSITION_APP`, `TELEMETRY_APP` device + environment variants, `NODE_STATUS_APP`). These are indistinguishable on the wire from live mesh traffic, so clients need no special handling — any code that already updates UI on `POSITION_APP` etc. works.
+
+`PhoneAPI::sendConfigComplete()` arms `replayPhase = REPLAY_PHASE_POSITIONS` for default/full sync and `SPECIAL_NONCE_ONLY_NODES`, while `SPECIAL_NONCE_ONLY_CONFIG` skips replay. The drain runs inside `STATE_SEND_PACKETS` via `popReplayPacket()`, lower priority than live traffic. When all four phases drain, `replayPhase` flips back to `REPLAY_PHASE_IDLE` and the snapshot vectors get `shrink_to_fit`ed.
+
+STM32WL and any other build with all four `MESHTASTIC_EXCLUDE_*DB` flags set produces zero replay packets — `popReplayPacket` advances through each phase in microseconds without emitting anything.
+
+Special nonces that still mean something:
+
+- `SPECIAL_NONCE_ONLY_CONFIG` (69420) — skip node sync entirely, just config.
+- `SPECIAL_NONCE_ONLY_NODES` (69421) — skip config segments, jump straight to `STATE_SEND_OWN_NODEINFO`. Still gets the post-COMPLETE_ID replay drain.
+
+There are no other reserved nonces; everything else is a fresh random `want_config_id` from the client.
+
+### v24 → v25 migration
+
+The legacy migration code lives in **`src/mesh/NodeDBLegacyMigration.cpp`**, not in `NodeDB.cpp`. It owns the `meshtastic_NodeDatabase_Legacy` callback and `NodeDB::migrateLegacyNodeDatabase()`. The legacy proto descriptor is `protobufs/meshtastic/deviceonly_legacy.proto` (only included by the migration TU). The boot path peeks the file's leading version tag, runs the migration if `version < 25`, then re-saves in v25 layout. The legacy descriptor is scheduled for removal once `DEVICESTATE_MIN_VER` is bumped.
+
+### Read-site rules of thumb
+
+- Never `node->position.X` / `node->device_metrics.X` — those fields no longer exist. Pull from the satellite map via `copyNodePosition` / `copyNodeTelemetry`.
+- Never `node->user.long_name` — `long_name`, `short_name`, `public_key`, `hw_model`, `role`, `macaddr` (gone), `is_licensed`, `is_unmessagable` are flat on `NodeInfoLite`.
+- Never `node->is_favorite` / `node->is_ignored` / `node->via_mqtt` / `node->is_key_manually_verified` — use the bitfield helpers.
+- Never assume `nodeDB->getMeshNode(num)->position.time` — call `copyNodePosition` and check the return.
+- Don't lock `satelliteMutex` yourself in renderer code; the copy-out accessors already do.
+
+Unit tests for the conversion layer live in `test/test_type_conversions/test_main.cpp` (Unity) — bitfield round-trips, `long_name` truncation, thin-vs-full conversions. Add cases there when extending the schema.
+
 ## Project Structure
 
 ```
@@ -80,7 +238,7 @@ firmware/
 │   │   ├── NodeDB.*       # Node database management
 │   │   ├── Router.*       # Packet routing
 │   │   ├── Channels.*     # Channel management
-│   │   ├── CryptoEngine.* # AES-CCM encryption
+│   │   ├── CryptoEngine.* # AES-CTR (channels) + X25519 ECDH→AES-256-CCM (PKI for DMs/admin)
 │   │   ├── *Interface.*   # Radio interface implementations
 │   │   ├── api/           # WiFi/Ethernet server APIs (ServerAPI, PacketAPI)
 │   │   ├── http/          # HTTP server (WebServer, ContentHandler)
@@ -131,6 +289,8 @@ firmware/
 - Prefer `LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR` for logging
 - Use `assert()` for invariants that should never fail
 - C++17 features are available (`std::optional`, structured bindings, `if constexpr`, etc.)
+- **Keep code comments minimal — one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
+- **Use `Throttle` for time-based rate limiting, not raw `millis()` math.** `src/mesh/Throttle.h` provides `Throttle::isWithinTimespanMs(lastMs, intervalMs)` (returns true while inside the cooldown) and `Throttle::execute(&lastMs, intervalMs, func)` (function-pointer form that updates the timestamp on fire). Use these for any "did N ms pass since X" check — raw `millis() > lastMs + N` is rollover-unsafe (breaks after ~49.7 days) and inconsistent with the rest of the codebase. The helpers compute `now - lastMs` with unsigned subtraction, which wraps correctly.
 
 ### Naming Conventions
 
@@ -296,6 +456,23 @@ Key defines in variant.h:
 
 ## Build System
 
+## Agent Tooling Baseline
+
+Mirror counterpart: `AGENTS.md` under **Agent Tooling Baseline**.
+
+To reduce avoidable agent mistakes, assume these tools are available (or install them before significant repo work):
+
+- **Required CLI basics**: `bash`, `git`, `find`, `grep`, `sed`, `awk`, `xargs`
+- **Strongly recommended**: `rg` (ripgrep) for fast file/text search, `jq` for JSON processing
+- **Build/test tools**: `python3`, `pip`, virtualenv (`python3 -m venv`), `platformio` (`pio`)
+- **Containerized native testing**: `docker` (fallback for non-Linux hosts; macOS can also build natively via `pio run -e native-macos`)
+
+Fallback expectations for agents:
+
+- If `rg` is unavailable, use `find` + `grep` instead of failing.
+- For native tests on hosts without Linux deps, prefer `./bin/test-native-docker.sh`.
+- The simulator helper script is `./bin/test-simulator.sh`.
+
 Uses **PlatformIO** with custom scripts:
 
 - `bin/platformio-pre.py` - Pre-build script
@@ -307,6 +484,7 @@ Build commands:
 pio run -e tbeam              # Build specific target
 pio run -e tbeam -t upload    # Build and upload
 pio run -e native             # Build native/Linux version
+pio run -e native-macos       # Build headless macOS meshtasticd (Homebrew prereqs in variants/native/portduino/platformio.ini)
 ```
 
 ### Build Manifest
@@ -431,22 +609,39 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory with 12 test suites:
+Unit tests in `test/` directory with 17 test suites:
 
-- `test_crypto/` - Cryptography
-- `test_mqtt/` - MQTT integration
-- `test_radio/` - Radio interface
-- `test_mesh_module/` - Module framework
-- `test_meshpacket_serializer/` - Packet serialization
-- `test_transmit_history/` - Retransmission tracking
+- `test_admin_radio/` - LoRa region/config validation and AdminModule dispatch
 - `test_atak/` - ATAK integration
+- `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
 - `test_http_content_handler/` - HTTP handling
+- `test_mac_from_string/` - MAC address parsing
+- `test_mesh_module/` - Module framework
+- `test_meshpacket_serializer/` - Packet serialization
+- `test_mqtt/` - MQTT integration
+- `test_packet_history/` - Packet history tracking
+- `test_position_precision/` - Position precision helpers
+- `test_radio/` - Radio interface
 - `test_serial/` - Serial communication
+- `test_traffic_management/` - Traffic management
+- `test_transmit_history/` - Retransmission tracking
+- `test_type_conversions/` - NodeDB v25 type conversion (bitfield round-trips, NodeInfoLite)
+- `test_utf8/` - UTF-8 utilities
 
-Run with: `pio test -e native`
+Run command (preferred — avoids pipe-buffering and the Ubuntu externally-managed-environment error):
+
+```bash
+~/.platformio/penv/bin/python -m platformio test -e native -f test_your_suite > /tmp/test_out.txt 2>&1
+grep -E 'error:|PASS|FAIL|succeeded|failed' /tmp/test_out.txt
+tail -15 /tmp/test_out.txt
+```
+
+Do **not** use `pio test … | tail -N` — it discards build errors and shows stale cached results. Do **not** use `pio test … | grep` — line-buffering makes the terminal appear hung until the process exits. Redirect to a file first, then grep.
 
 Simulation testing: `bin/test-simulator.sh`
+
+Quick entry point for new test modules: `test/README.md` (native unit-test authoring guide, skeleton, pitfalls, and setup checklist).
 
 ### Hardware-in-the-loop tests (`mcp-server/tests/`)
 
@@ -474,7 +669,7 @@ The repo registers the server via `.mcp.json` at the repo root — Claude Code p
 
 **One MCP call per port at a time.** `SerialInterface` holds an exclusive OS-level lock on the serial port for its lifetime. If a `serial_*` session is open on `/dev/cu.usbmodem101`, calling `device_info` on the same port will fail fast pointing at the active session. Sequence calls: open → read/mutate → close, then next device. Never parallelize tool calls on the same port.
 
-### MCP tool surface (~32 tools)
+### MCP tool surface (43 tools)
 
 Grouped by purpose. Full argument shapes in `mcp-server/README.md`; a few high-value signatures are called out here.
 
@@ -482,11 +677,15 @@ Grouped by purpose. Full argument shapes in `mcp-server/README.md`; a few high-v
 - **Build & flash**: `build`, `clean`, `pio_flash`, `erase_and_flash` (ESP32 only), `update_flash` (ESP32 OTA), `touch_1200bps`
 - **Serial sessions** (long-running, 10k-line ring buffer): `serial_open`, `serial_read`, `serial_list`, `serial_close`
 - **Device reads**: `device_info`, `list_nodes`
-- **Device writes** (all require `confirm=True`): `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `reboot`, `shutdown`, `factory_reset`, `set_debug_log_api`
+- **Device writes**: `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `send_input_event` (inject a button/key press via the firmware's InputBroker), `set_debug_log_api`; destructive/power-state writes require `confirm=True`: `reboot`, `shutdown`, `factory_reset`
 - **userPrefs admin** (build-time constants, not runtime config): `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
 - **Vendor escape hatches**: `esptool_chip_info`, `esptool_erase_flash`, `esptool_raw`, `nrfutil_dfu`, `nrfutil_raw`, `picotool_info`, `picotool_load`, `picotool_raw`
+- **USB power control** (via `uhubctl`, per-port PPPS toggle): `uhubctl_list` (read-only), `uhubctl_power(action='on'|'off', confirm=True)`, `uhubctl_cycle(delay_s, confirm=True)`. Target by raw `(location, port)` or by `role` (`"nrf52"`, `"esp32s3"`); role lookup checks `MESHTASTIC_UHUBCTL_LOCATION_<ROLE>` + `_PORT_<ROLE>` env vars first, falls back to VID auto-detection.
+- **Observability** (UI tier + operator ad-hoc): `capture_screen(role, ocr=True)` — grabs a USB-webcam frame of the device OLED and optionally OCRs it. Requires `mcp-server[ui]` extras (`opencv-python-headless`, `easyocr`) and `MESHTASTIC_UI_CAMERA_DEVICE_<ROLE>` env var; falls through to a 1×1 black PNG `NullBackend` when unconfigured.
 
-`confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve — it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `factory_reset` and `erase_and_flash`.
+`confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve — it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `factory_reset`, `erase_and_flash`, `uhubctl_power(action='off')`, and `uhubctl_cycle`.
+
+**TCP / native-host nodes.** Setting `MESHTASTIC_MCP_TCP_HOST=<host[:port]>` makes `list_devices` surface a `meshtasticd` daemon (e.g. the `native-macos` build) as a synthetic `tcp://host:port` entry, and `connect()` routes through `meshtastic.tcp_interface.TCPInterface` instead of `SerialInterface`. Every read/write/admin tool that flows through `connect()` works against the daemon transparently. USB-only tools (`pio_flash`, `erase_and_flash`, `update_flash`, `touch_1200bps`, `serial_open`, `esptool_*`, `nrfutil_*`, `picotool_*`) raise a clear `ConnectionError` when handed a `tcp://` port; `pio_flash` against a `native*` env raises a `FlashError` (no upload step — use `build` and run the binary directly). The pytest harness still assumes USB-attached devices per role; TCP-aware fixtures are deferred. See `mcp-server/README.md` § "TCP / native-host nodes".
 
 ### Hardware test suite (`mcp-server/run-tests.sh`)
 
@@ -494,14 +693,16 @@ The wrapper auto-detects connected devices (VID → role map: `0x239A` → `nrf5
 
 Suite tiers (collected + run in this order via `pytest_collection_modifyitems`):
 
-1. `tests/unit/` — pure Python (boards parse, pio wrapper, userPrefs parse, testing profile). No hardware.
+1. `tests/unit/` — pure Python (boards parse, pio wrapper, userPrefs parse, testing profile, uhubctl parser). No hardware.
 2. `tests/test_00_bake.py` — flashes each detected device with current `userPrefs.jsonc` merged with the session's test profile. Has its own skip-if-already-baked check comparing region + primary channel to the session profile; skips cheaply on warm devices.
-3. `tests/mesh/` — multi-device mesh: bidirectional send, broadcast delivery, direct-with-ACK, mesh formation within 60s. Parametrized `[nrf52->esp32s3]` and `[esp32s3->nrf52]`.
+3. `tests/mesh/` — multi-device mesh: bidirectional send, broadcast delivery, direct-with-ACK, mesh formation within 60s. Parametrized `[nrf52->esp32s3]` and `[esp32s3->nrf52]`. Includes `test_peer_offline_recovery` which uses uhubctl to physically power off one peer mid-conversation (requires uhubctl; skips without).
 4. `tests/telemetry/` — `DEVICE_METRICS_APP` broadcast timing.
 5. `tests/monitor/` — boot-log panic check.
-6. `tests/fleet/` — PSK seed session isolation.
-7. `tests/admin/` — channel URL roundtrip, owner persistence across reboot.
-8. `tests/provisioning/` — region + modem + slot bake, admin key presence, `UNSET` region blocks TX, userPrefs survive factory reset.
+6. `tests/recovery/` — `uhubctl` power-cycle round-trip + NVS persistence across hard reset. Requires `uhubctl` installed and a PPPS-capable hub; entire tier auto-skips otherwise.
+7. `tests/ui/` — input-broker-driven screen navigation with camera + OCR evidence.
+8. `tests/fleet/` — PSK seed session isolation.
+9. `tests/admin/` — channel URL roundtrip, owner persistence across reboot.
+10. `tests/provisioning/` — region + modem + slot bake, admin key presence, `UNSET` region blocks TX, userPrefs survive factory reset.
 
 Invocation patterns:
 
@@ -586,15 +787,19 @@ If you're modifying `StreamAPI`, `PhoneAPI`, `NodeInfoModule`, or `userPrefs` fl
 
 ### Recovery playbooks
 
-| Symptom                                                    | First check                                                   | Fix                                                                                                                                                                        |
-| ---------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `userPrefs.jsonc` dirty after test run                     | `git status --porcelain userPrefs.jsonc`                      | If non-empty, re-run `./mcp-server/run-tests.sh` once — the pre-flight self-heal restores from sidecar. If still dirty, `git checkout userPrefs.jsonc`.                    |
-| Port busy / wedged CP2102 on macOS                         | `lsof /dev/cu.usbserial-0001`                                 | Kill the holder. USB replug if the kernel still reports busy. Often a stale `pio device monitor` or zombie `meshtastic_mcp` process.                                       |
-| nRF52 appears unresponsive                                 | `list_devices` shows VID `0x239A` but `device_info` times out | `touch_1200bps(port=...)` drops it into the DFU bootloader → `pio_flash` re-installs.                                                                                      |
-| Multiple MCP server processes                              | `ps aux \| grep meshtastic_mcp` shows >1                      | Kill all but the one your MCP host spawned. Zombies hold ports and break tests.                                                                                            |
-| Mesh formation fails, one side sees peer but other doesn't | `/diagnose` (or `list_nodes` on both sides)                   | Asymmetric NodeInfo. `test_direct_with_ack` has a heal path; `/repro` it a few times. If persistent, both devices' clocks may be out of sync with their NodeInfo cooldown. |
-| "role not present on hub" in skip reasons                  | `list_devices`                                                | Expected if a device is unplugged. Reconnect before re-running the tier.                                                                                                   |
-| Tests fail only on first attempt then pass on rerun        | —                                                             | State leak from a prior session. Run with `--force-bake` to reset to a known state.                                                                                        |
+| Symptom                                                                           | First check                                                   | Fix                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `userPrefs.jsonc` dirty after test run                                            | `git status --porcelain userPrefs.jsonc`                      | If non-empty, re-run `./mcp-server/run-tests.sh` once — the pre-flight self-heal restores from sidecar. If still dirty, `git checkout userPrefs.jsonc`.                                                                          |
+| Port busy / wedged CP2102 on macOS                                                | `lsof /dev/cu.usbserial-0001`                                 | Kill the holder. USB replug if the kernel still reports busy. Often a stale `pio device monitor` or zombie `meshtastic_mcp` process.                                                                                             |
+| nRF52 appears unresponsive                                                        | `list_devices` shows VID `0x239A` but `device_info` times out | `touch_1200bps(port=...)` drops it into the DFU bootloader → `pio_flash` re-installs.                                                                                                                                            |
+| Device fully wedged (Guru Meditation, frozen CDC, no DFU)                         | `list_devices` shows the VID but every admin call times out   | `uhubctl_cycle(role="nrf52", confirm=True)` hard-power-cycles the port via USB hub PPPS. `baked_single`'s auto-recovery hook does this once automatically if uhubctl is installed. Falls back to physical replug if no PPPS hub. |
+| Multiple MCP server processes                                                     | `ps aux \| grep meshtastic_mcp` shows >1                      | Kill all but the one your MCP host spawned. Zombies hold ports and break tests.                                                                                                                                                  |
+| Mesh formation fails, one side sees peer but other doesn't                        | `/diagnose` (or `list_nodes` on both sides)                   | Asymmetric NodeInfo. `test_direct_with_ack` has a heal path; `/repro` it a few times. If persistent, both devices' clocks may be out of sync with their NodeInfo cooldown.                                                       |
+| "role not present on hub" in skip reasons                                         | `list_devices`                                                | Expected if a device is unplugged. Reconnect before re-running the tier.                                                                                                                                                         |
+| Entire `tests/recovery/` tier skipped                                             | `command -v uhubctl`                                          | Expected if `uhubctl` isn't on PATH. Install via `brew install uhubctl` (macOS) or `apt install uhubctl` (Debian/Ubuntu). Also skips if no hub advertises PPPS.                                                                  |
+| Entire `tests/ui/` tier skipped ("firmware not baked with USERPREFS_UI_TEST_LOG") | reportlog.jsonl for the skip reason                           | Re-run with `--force-bake` so the UI-log macro gets compiled into the fresh firmware. First run after the Round-3 landing always re-bakes.                                                                                       |
+| `tests/ui/` runs but captures are all 1×1 black PNGs                              | `MESHTASTIC_UI_CAMERA_DEVICE_ESP32S3`                         | Env var not set → `NullBackend`. Point a USB webcam at the heltec-v3 OLED and set the device index; `.venv/bin/python -c "import cv2; [print(i, cv2.VideoCapture(i).read()[0]) for i in range(5)]"` discovers it.                |
+| Tests fail only on first attempt then pass on rerun                               | —                                                             | State leak from a prior session. Run with `--force-bake` to reset to a known state.                                                                                                                                              |
 
 ### Never do these without asking
 

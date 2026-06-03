@@ -252,7 +252,7 @@ bool RF95Interface::reconfigure()
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
 /**
@@ -340,5 +340,11 @@ bool RF95Interface::sleep()
 #endif
 
     return true;
+}
+
+int16_t RF95Interface::getCurrentRSSI()
+{
+    float rssi = lora->getRSSI(false);
+    return (int16_t)round(rssi);
 }
 #endif

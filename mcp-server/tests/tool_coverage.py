@@ -73,6 +73,13 @@ _TOOL_MAP: dict[str, tuple[str, str]] = {
     "reboot": ("meshtastic_mcp.admin", "reboot"),
     "shutdown": ("meshtastic_mcp.admin", "shutdown"),
     "factory_reset": ("meshtastic_mcp.admin", "factory_reset"),
+    "send_input_event": ("meshtastic_mcp.admin", "send_input_event"),
+    # `capture_screen` in server.py calls camera.get_camera — instrument that.
+    "capture_screen": ("meshtastic_mcp.camera", "get_camera"),
+    # USB power control via uhubctl.
+    "uhubctl_list": ("meshtastic_mcp.uhubctl", "list_hubs"),
+    "uhubctl_power": ("meshtastic_mcp.uhubctl", "power_on"),
+    "uhubctl_cycle": ("meshtastic_mcp.uhubctl", "cycle"),
     # USERPREFS
     "userprefs_manifest": ("meshtastic_mcp.userprefs", "build_manifest"),
     "userprefs_get": ("meshtastic_mcp.userprefs", "read_state"),

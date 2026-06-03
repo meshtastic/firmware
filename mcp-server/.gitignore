@@ -7,6 +7,12 @@ __pycache__/
 dist/
 build/
 
+# Persistent device-log capture (recorder + Datadog cursor).
+# Cross-session JSONL streams written by the autouse Recorder singleton
+# (see src/meshtastic_mcp/recorder/). Lives outside tests/ so the pytest
+# fixture truncate doesn't touch it.
+.mtlog/
+
 # Test harness artifacts
 tests/report.html
 tests/junit.xml
@@ -24,3 +30,6 @@ tests/.tui-runs
 tests/.history/
 # Reproducer bundles (TUI `x` export on failed tests).
 tests/reproducers/
+# UI-tier camera captures + per-test transcripts. Regenerated every run;
+# left on disk for human review between runs.
+tests/ui_captures/

@@ -3,6 +3,8 @@ description: Re-run a specific test N times in isolation to triage flakes, diff 
 argument-hint: <test-node-id> [count=5]
 ---
 
+<!-- markdownlint-disable MD029 -->
+
 # `/repro` — flakiness triage for one test
 
 Re-run a single pytest node ID N times in isolation, track pass rate, and surface what's _different_ in the firmware logs between the passing attempts and the failing ones. Turns "it's flaky, I guess" into "it fails when X, passes when Y."
@@ -40,11 +42,14 @@ Re-run a single pytest node ID N times in isolation, track pass rate, and surfac
 
    Surface the top 3 differences as a "passes when / fails when" table. Don't dump full logs — pull specific lines with uptime timestamps.
 
+5a. **Archive recorder slices per attempt** (no extra device interaction; the recorder runs autouse). Right after each attempt finishes, capture its `(start_ts, end_ts)` and call `mcp__meshtastic__recorder_export(start=<start>, end=<end>, dest_dir="mcp-server/tests/repro_artifacts/<safe-test-id>/attempt_<n>/")`. This drops a `logs.jsonl`, `telemetry.jsonl`, `packets.jsonl`, and `events.jsonl` snapshot scoped to the attempt window. Use these for cross-attempt diffs in step 5: `jq '.line' logs.jsonl` is faster than re-running the test, and the telemetry slice lets you compare heap behavior across attempts.
+
 6. **Classify the flake** into one of:
    - **LoRa airtime collision** → pass rate improves with fewer concurrent transmitters; propose a `time.sleep` gap or retry bump in the test body.
    - **PKI key staleness** → fails on first attempt, passes after self-heal; existing retry loop in `test_direct_with_ack.py` handles this.
    - **NodeInfo cooldown** → `Skip send NodeInfo since we sent it <600s ago` in fail-only logs; needs `broadcast_nodeinfo_ping()` warmup.
-   - **Hardware-specific** (one direction fails, other passes; one device's firmware is older; driver wedged) → specific recovery pointer.
+   - **Hardware-specific** (one direction fails, other passes; one device's firmware is older; driver wedged) → specific recovery pointer. For a device that's wedged past `touch_1200bps`, the next escalation is `uhubctl_cycle(role=..., confirm=True)` to hard-power-cycle its hub port (requires `uhubctl` installed).
+   - **Device went dark mid-run** → fails from some attempt onward, never recovers, firmware log stops arriving. Almost always hardware: a Guru crash + frozen CDC. Hard-power-cycle via `uhubctl_cycle(role=..., confirm=True)` before the next iteration; if that also fails, escalate to replug.
    - **Genuinely unknown** → say so; don't invent a root cause.
 
 7. **Report back** with:

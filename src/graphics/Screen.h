@@ -608,7 +608,6 @@ class Screen : public concurrency::OSThread
 
     // Handle observer events
     int handleStatusUpdate(const meshtastic::Status *arg);
-    int handleTextMessage(const meshtastic_MeshPacket *packet);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
     int handleAdminMessage(AdminModule_ObserverData *arg);
@@ -667,6 +666,16 @@ class Screen : public concurrency::OSThread
     void handleSetOn(bool on, FrameCallback einkScreensaver = NULL);
     void handleOnPress();
     void handleStartFirmwareUpdateScreen();
+
+#ifdef USERPREFS_UI_TEST_LOG
+    // Test-only: emits one LOG_INFO line on every frame transition so the
+    // pytest harness can assert which frame is shown. Gated behind a macro
+    // so the chatty log doesn't ship in release builds. Enabled via
+    // build_testing_profile(enable_ui_log=True) in mcp-server/userprefs.py.
+    // Member function (not free) because FramesetInfo is a private nested
+    // type — only methods of Screen can reach it.
+    void logFrameChange(const char *reason, uint8_t targetIdx);
+#endif
 
     // Info collected by setFrames method.
     // Index location of specific frames.

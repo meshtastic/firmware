@@ -26,7 +26,12 @@ This prompt assumes the meshtastic MCP server is registered with your VS Code Co
    - `get_config(section="lora", port=<p>)` → region, preset, channel_num, tx_power, hop_limit
    - If anything looks off (can't connect, `num_nodes` wrong, missing `firmware_version`), open a short firmware-log window: `serial_open(port=<p>, env=<inferred>)`, wait 3 seconds, `serial_read(session_id, max_lines=100)`, `serial_close(session_id)`. Infer env from VID (0x239a → `rak4631`, 0x303a/0x10c4 → `heltec-v3`) unless an `MESHTASTIC_MCP_ENV_<ROLE>` env var overrides it.
 
-4. **Render per-device report** as a compact block:
+4. **Hub health** (call once, not per-device): `uhubctl_list()` — enumerates every USB hub the host sees. Cross-reference each Meshtastic device's VID to find which hub + port it's on. Flag in the report if:
+   - No hub advertises `ppps=true` → `tests/recovery/` can't run; hard-recovery via `uhubctl_cycle` isn't available.
+   - A Meshtastic device is on a non-PPPS hub → note it; moving to a PPPS hub unlocks auto-recovery.
+   - `uhubctl_list` raises `ConfigError: uhubctl not found` → report as "uhubctl not installed"; don't treat as a device fault.
+
+5. **Render per-device report** as a compact block:
 
    ```text
    [nrf52 @ /dev/cu.usbmodem1101]      fw=2.7.23.bce2825, hw=RAK4631
@@ -35,20 +40,22 @@ This prompt assumes the meshtastic MCP server is registered with your VS Code Co
      tx_power    : 30 dBm, hop_limit=3
      peers       : 1 (esp32s3 0x433c2428, pubkey ✓, SNR 6.0 / RSSI -24 dBm)
      primary ch  : McpTest
+     hub         : 1-1.3 port 2 (PPPS, uhubctl-controllable)
      firmware    : no panics in last 3s
    ```
 
-   Flag abnormalities inline with `⚠︎ <short reason>` — missing pubkey on a known peer, region UNSET, mismatched channel name, etc.
+   Flag abnormalities inline with `⚠︎ <short reason>` — missing pubkey on a known peer, region UNSET, mismatched channel name, device on non-PPPS hub, etc.
 
-5. **Cross-device correlation** (when >1 device selected):
+6. **Cross-device correlation** (when >1 device selected):
    - Do both see each other in `nodesByNum`?
    - Do `region`, `channel_num`, `modem_preset` match across devices?
    - Do the primary channel names match? (Different name → different PSK → no decode.)
 
-6. **Suggest next steps only for recognizable failure modes**, never speculatively:
+7. **Suggest next steps only for recognizable failure modes**, never speculatively:
    - Stale PKI one-way → "`/mcp-test tests/mesh/test_direct_with_ack.py` — the test's retry+nodeinfo-ping heals this."
    - Region mismatch → "re-bake one side via `./mcp-server/run-tests.sh --force-bake`."
-   - Device unreachable → refer operator to the touch_1200bps + CP2102-wedged-driver notes in `run-tests.sh`.
+   - Device unreachable, DFU reachable → `touch_1200bps(port=...)` + `pio_flash`. If not even DFU responds and the device is on a PPPS hub, escalate to `uhubctl_cycle(role=..., confirm=True)`.
+   - CP2102-wedged-driver on macOS → see `run-tests.sh` notes.
 
 ## Hard constraints
 

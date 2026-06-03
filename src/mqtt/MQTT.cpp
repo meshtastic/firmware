@@ -19,9 +19,8 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
-#if HAS_ETHERNET && defined(USE_WS5500)
-#include <ETHClass2.h>
-#define ETH ETH2
+#if HAS_ETHERNET && defined(ARCH_ESP32)
+#include <ETH.h>
 #endif // HAS_ETHERNET
 #include "Default.h"
 #if !defined(ARCH_NRF52) || NRF52_USE_JSON
@@ -32,7 +31,7 @@
 #include <assert.h>
 #include <utility>
 
-#include <IPAddress.h>
+#include "IPAddress.h"
 #if defined(ARCH_PORTDUINO)
 #include <netinet/in.h>
 #elif !defined(ntohl)
@@ -141,7 +140,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         const meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
         // Only accept PKI messages to us, or if we have both the sender and receiver in our nodeDB, as then it's
         // likely they discovered each other via a channel we have downlink enabled for
-        if (isToUs(p.get()) || (tx && tx->has_user && rx && rx->has_user))
+        if (isToUs(p.get()) || (nodeInfoLiteHasUser(tx) && nodeInfoLiteHasUser(rx)))
             router->enqueueReceivedMessage(p.release());
     } else if (router &&
                perhapsDecode(p.get()) == DecodeState::DECODE_SUCCESS) // ignore messages if we don't have the channel key
@@ -344,12 +343,17 @@ inline bool isConnectedToNetwork()
 #ifdef USE_WS5500
     if (ETH.connected())
         return true;
+#elif defined(USE_CH390D)
+    if (ETH.isConnected())
+        return true;
 #endif
 
 #if HAS_WIFI
     return WiFi.isConnected();
 #elif HAS_ETHERNET
     return Ethernet.linkStatus() == LinkON;
+#elif defined(ARCH_PORTDUINO)
+    return true;
 #else
     return false;
 #endif
@@ -407,6 +411,9 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
 
 void mqttInit()
 {
+    if (!moduleConfig.mqtt.enabled)
+        return;
+
     new MQTT();
 }
 
@@ -459,7 +466,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
             publishNodeInfo();
 #endif
         }
@@ -667,7 +674,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
                 const char *warning = "Could not reach the MQTT server. Settings will be saved, but please verify the server "
                                       "address and credentials.";
                 LOG_WARN(warning);
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 if (cn) {
                     cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -683,7 +690,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
 #else
         const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
         LOG_ERROR(warning);
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);
@@ -699,7 +706,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
     if (defaultServer && !IS_ONE_OF(parsed.serverPort, PubSubConfig::defaultPort, PubSubConfig::defaultPortTls)) {
         const char *warning = "Invalid MQTT config: default server address must not have a port specified";
         LOG_ERROR(warning);
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);

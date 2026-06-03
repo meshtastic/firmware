@@ -39,9 +39,10 @@
 #define DAC_I2S_BCK 48
 #define DAC_I2S_WS 15
 #define DAC_I2S_DOUT 46
-#define DAC_I2S_MCLK 0
+#define DAC_I2S_MCLK -1
 
 #define HAS_AXP2101
+#define PMU_POWER_BUTTON_IS_CANCEL // maps a short click of the power button to a cancel action (turning off the screen)
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
@@ -59,6 +60,8 @@
 #define GPS_TX_PIN 42
 
 #define BUTTON_PIN 0 // only for Plus version
+
+#define PMU_IRQ 21 // Interrupt pin for the PMU
 
 #define USE_SX1262
 #define USE_SX1268
