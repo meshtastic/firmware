@@ -29,6 +29,18 @@
 #include <pb_decode.h>
 #include <vector>
 
+// ---------------------------------------------------------------------------
+// Test output helper — Unity swallows printf; TEST_MESSAGE is the only output
+// that appears in results.  Use TEST_MSG_FMT for formatted diagnostic lines.
+// ---------------------------------------------------------------------------
+#define MSG_BUF_LEN 256
+#define TEST_MSG_FMT(fmt, ...)                                                                                                   \
+    do {                                                                                                                         \
+        char _buf[MSG_BUF_LEN];                                                                                                  \
+        snprintf(_buf, sizeof(_buf), fmt, ##__VA_ARGS__);                                                                        \
+        TEST_MESSAGE(_buf);                                                                                                      \
+    } while (0)
+
 namespace
 {
 
@@ -64,6 +76,10 @@ class MockRouter : public Router
         packetPool.release(p);
         return ERRNO_OK;
     }
+
+    // Locally-addressed packets land here instead of send().  Release immediately
+    // rather than queuing into fromRadioQueue (which is never drained in tests).
+    void enqueueReceivedMessage(meshtastic_MeshPacket *p) override { packetPool.release(p); }
 
     std::vector<meshtastic_MeshPacket> sentPackets;
 };
@@ -146,7 +162,11 @@ static void resetConfig()
 // Group 1: AdminModule config validation — bad inputs must be sanitised
 // ===========================================================================
 
-// broadcast_on_preset=SHORT_TURBO is not in EU_868's preset list → zeroed out.
+/**
+ * Verify SHORT_TURBO is rejected when the region is EU_868 (turbo presets are not in that
+ * region's allowed preset set). Important to catch regressions where admin stores unlawful
+ * radio settings that would violate regional radio regulations.
+ */
 static void test_adminValidation_turboPresetOnEU868_isCleared(void)
 {
     resetConfig();
@@ -162,7 +182,10 @@ static void test_adminValidation_turboPresetOnEU868_isCleared(void)
     TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_on_preset, "SHORT_TURBO must be cleared for EU_868");
 }
 
-// Same check for LONG_TURBO.
+/**
+ * Verify LONG_TURBO is also cleared for EU_868, not just SHORT_TURBO.
+ * Important to confirm rejection covers the entire turbo preset family rather than one variant.
+ */
 static void test_adminValidation_longTurboPresetOnEU868_isCleared(void)
 {
     resetConfig();
@@ -176,7 +199,10 @@ static void test_adminValidation_longTurboPresetOnEU868_isCleared(void)
     TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
 }
 
-// A turbo preset is valid on US (which uses PROFILE_STD) → must be kept.
+/**
+ * Verify a turbo preset passes validation for US (PROFILE_STD allows all presets).
+ * Important because the same preset that is illegal in EU_868 must be preserved in permissive regions.
+ */
 static void test_adminValidation_turboPresetOnUS_isAccepted(void)
 {
     resetConfig();
@@ -193,7 +219,11 @@ static void test_adminValidation_turboPresetOnUS_isAccepted(void)
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, moduleConfig.mesh_beacon.broadcast_on_preset);
 }
 
-// broadcast_offer_region with an unknown code (255) → cleared to UNSET.
+/**
+ * Verify an out-of-range region code (255) is sanitised to UNSET rather than stored verbatim.
+ * Important to prevent invalid proto enum values from reaching the broadcaster and being broadcast
+ * over the air.
+ */
 static void test_adminValidation_unknownOfferRegion_isCleared(void)
 {
     resetConfig();
@@ -206,7 +236,10 @@ static void test_adminValidation_unknownOfferRegion_isCleared(void)
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, moduleConfig.mesh_beacon.broadcast_offer_region);
 }
 
-// A valid broadcast_offer_region (US) → preserved as-is.
+/**
+ * Verify a known-good offer region (US) is written through unchanged after admin validation.
+ * Important as a positive-path control alongside the rejection tests.
+ */
 static void test_adminValidation_validOfferRegion_isPreserved(void)
 {
     resetConfig();
@@ -219,7 +252,10 @@ static void test_adminValidation_validOfferRegion_isPreserved(void)
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, moduleConfig.mesh_beacon.broadcast_offer_region);
 }
 
-// broadcast_message is hard-capped at 100 chars.
+/**
+ * Verify broadcast_message is hard-capped at 100 characters (NUL forced at index 100).
+ * Important to prevent oversized beacon payloads from abusing airtime across the mesh.
+ */
 static void test_adminValidation_messageTooLong_isTruncatedAt100(void)
 {
     resetConfig();
@@ -237,7 +273,10 @@ static void test_adminValidation_messageTooLong_isTruncatedAt100(void)
     TEST_ASSERT_EQUAL('A', moduleConfig.mesh_beacon.broadcast_message[0]);
 }
 
-// broadcast_interval_secs below minimum → clamped up to 3600.
+/**
+ * Verify any non-zero interval below 3600 s is clamped up to the 1-hour minimum.
+ * Important to prevent high-rate beacon floods from a misconfigured or malicious client.
+ */
 static void test_adminValidation_intervalTooLow_isClamped(void)
 {
     resetConfig();
@@ -250,7 +289,10 @@ static void test_adminValidation_intervalTooLow_isClamped(void)
     TEST_ASSERT_EQUAL_UINT32(3600, moduleConfig.mesh_beacon.broadcast_interval_secs);
 }
 
-// broadcast_interval_secs above the recommended range is preserved as-is.
+/**
+ * Verify an interval above the minimum is stored as-is without modification.
+ * Important to confirm the clamp is one-sided (lower bound only, no upper bound enforced).
+ */
 static void test_adminValidation_intervalTooHigh_isPreserved(void)
 {
     resetConfig();
@@ -263,7 +305,10 @@ static void test_adminValidation_intervalTooHigh_isPreserved(void)
     TEST_ASSERT_EQUAL_UINT32(999999, moduleConfig.mesh_beacon.broadcast_interval_secs);
 }
 
-// LONG_FAST is a valid preset and must be preserved when explicitly configured.
+/**
+ * Verify LONG_FAST (enum value 0) survives admin validation without being treated as 'absent'.
+ * Important to guard the has_broadcast_offer_preset presence-flag fix against zero-value erasure.
+ */
 static void test_adminValidation_longFastOfferPreset_isPreserved(void)
 {
     resetConfig();
@@ -278,7 +323,11 @@ static void test_adminValidation_longFastOfferPreset_isPreserved(void)
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, moduleConfig.mesh_beacon.broadcast_offer_preset);
 }
 
-// Zero interval (unset) is special-cased and must not be clamped.
+/**
+ * Verify that interval 0 (the documented 'use default' sentinel) is not raised to 3600 by the clamp.
+ * Important because 0 and 3600 have different runtime semantics in runOnce via
+ * Default::getConfiguredOrDefault.
+ */
 static void test_adminValidation_intervalZero_isNotClamped(void)
 {
     resetConfig();
@@ -291,7 +340,10 @@ static void test_adminValidation_intervalZero_isNotClamped(void)
     TEST_ASSERT_EQUAL_UINT32(0, moduleConfig.mesh_beacon.broadcast_interval_secs);
 }
 
-// After a successful save the broadcaster's cache must be invalidated.
+/**
+ * Verify that saving a new beacon config marks the broadcaster's payload cache dirty.
+ * Important so the next TX re-encodes from the latest config rather than a pre-save stale snapshot.
+ */
 static void test_adminValidation_validSave_invalidatesCache(void)
 {
     resetConfig();
@@ -316,7 +368,10 @@ static void test_adminValidation_validSave_invalidatesCache(void)
 // Group 2: Broadcaster payload cache
 // ===========================================================================
 
-// rebuildCache encodes a non-empty payload when message is set.
+/**
+ * Verify rebuildCache produces at least one encoded byte when broadcast_message is set.
+ * Important as the most basic liveness check for the protobuf encoding path.
+ */
 static void test_broadcaster_rebuildCache_producesNonEmptyPayload(void)
 {
     resetConfig();
@@ -332,7 +387,10 @@ static void test_broadcaster_rebuildCache_producesNonEmptyPayload(void)
     TEST_ASSERT_GREATER_THAN_MESSAGE(0, (int)bcast.payloadCacheSize, "rebuildCache must produce a non-empty payload");
 }
 
-// The encoded bytes decode back to the same message field.
+/**
+ * Verify the cached bytes round-trip through pb_decode back to the original message string.
+ * Important to catch any protobuf field-tag or wire-type regression in the encoding path.
+ */
 static void test_broadcaster_rebuildCache_payloadDecodesCorrectly(void)
 {
     resetConfig();
@@ -352,7 +410,10 @@ static void test_broadcaster_rebuildCache_payloadDecodesCorrectly(void)
     TEST_ASSERT_EQUAL_STRING(msg, decoded.message);
 }
 
-// Offer fields round-trip through the cache.
+/**
+ * Verify offer_region and offer_preset are present in the encoded cache payload.
+ * Important to confirm the offer-carrying path correctly uses the has_broadcast_offer_preset flag.
+ */
 static void test_broadcaster_rebuildCache_offerFieldsEncoded(void)
 {
     resetConfig();
@@ -373,7 +434,10 @@ static void test_broadcaster_rebuildCache_offerFieldsEncoded(void)
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, decoded.offer_preset);
 }
 
-// invalidateCache sets payloadCacheDirty.
+/**
+ * Verify invalidateCache flips payloadCacheDirty back to true after a successful rebuild.
+ * Important to confirm the cache-invalidation contract relied on by admin saves and config observers.
+ */
 static void test_broadcaster_invalidateCache_setsDirtyFlag(void)
 {
     resetConfig();
@@ -387,7 +451,10 @@ static void test_broadcaster_invalidateCache_setsDirtyFlag(void)
     TEST_ASSERT_TRUE(bcast.payloadCacheDirty);
 }
 
-// Calling rebuildCache twice without invalidation must leave dirty=false.
+/**
+ * Verify calling rebuildCache a second time without an intervening invalidation is a no-op.
+ * Important to prevent spurious re-encodes when config-observer callbacks fire multiple times.
+ */
 static void test_broadcaster_rebuildCache_idempotent(void)
 {
     resetConfig();
@@ -408,7 +475,10 @@ static void test_broadcaster_rebuildCache_idempotent(void)
 // Group 3: Broadcaster sendBeacon — packet structure
 // ===========================================================================
 
-// sendBeacon with broadcast_send_as_node=0 uses the local node number.
+/**
+ * Verify the 'from' field defaults to the local node number when broadcast_send_as_node is 0.
+ * Important for correct source attribution in peer node tables that receive the beacon.
+ */
 static void test_broadcaster_sendBeacon_fromIsLocalNodeWhenUnset(void)
 {
     resetConfig();
@@ -424,7 +494,10 @@ static void test_broadcaster_sendBeacon_fromIsLocalNodeWhenUnset(void)
     TEST_ASSERT_EQUAL_UINT32(kLocalNode, mockRouter->sentPackets[0].from);
 }
 
-// sendBeacon respects a custom broadcast_send_as_node.
+/**
+ * Verify broadcast_send_as_node overrides the 'from' field in the emitted packet.
+ * Important for the admin use-case of broadcasting a beacon on behalf of another node.
+ */
 static void test_broadcaster_sendBeacon_fromIsCustomNodeWhenSet(void)
 {
     resetConfig();
@@ -440,7 +513,10 @@ static void test_broadcaster_sendBeacon_fromIsCustomNodeWhenSet(void)
     TEST_ASSERT_EQUAL_UINT32(kRemoteNode, mockRouter->sentPackets[0].from);
 }
 
-// sendBeacon must address the packet to NODENUM_BROADCAST.
+/**
+ * Verify the 'to' field is always NODENUM_BROADCAST regardless of other settings.
+ * Important because beacons are mesh-wide announcements and must never be addressed to a single peer.
+ */
 static void test_broadcaster_sendBeacon_addressedToBroadcast(void)
 {
     resetConfig();
@@ -454,7 +530,10 @@ static void test_broadcaster_sendBeacon_addressedToBroadcast(void)
     TEST_ASSERT_EQUAL_UINT32(NODENUM_BROADCAST, mockRouter->sentPackets[0].to);
 }
 
-// sendBeacon uses MESH_BEACON_APP portnum when a modem preset is offered.
+/**
+ * Verify MESH_BEACON_APP portnum is used when the packet carries a radio offer payload.
+ * Important so receivers use the structured protobuf decoder rather than treating it as raw text.
+ */
 static void test_broadcaster_sendBeacon_usesBeaconPortnum(void)
 {
     resetConfig();
@@ -470,8 +549,11 @@ static void test_broadcaster_sendBeacon_usesBeaconPortnum(void)
     TEST_ASSERT_EQUAL(meshtastic_PortNum_MESH_BEACON_APP, mockRouter->sentPackets[0].decoded.portnum);
 }
 
-// sendBeacon falls back to TEXT_MESSAGE_APP when no radio settings are offered,
-// even when broadcast_on_preset is configured (that controls TX radio, not portnum).
+/**
+ * Verify TEXT_MESSAGE_APP portnum is used when no offer content is present, even if
+ * broadcast_on_preset is set (that field governs which radio config to use for TX, not portnum).
+ * Important so standard clients display plain-text beacons without needing a MESH_BEACON_APP decoder.
+ */
 static void test_broadcaster_sendBeacon_fallsBackToTextMessagePortnum(void)
 {
     resetConfig();
@@ -492,7 +574,10 @@ static void test_broadcaster_sendBeacon_fallsBackToTextMessagePortnum(void)
     TEST_ASSERT_EQUAL_STRING_LEN(msg, (const char *)p.decoded.payload.bytes, p.decoded.payload.size);
 }
 
-// sendBeacon payload decodes back to the correct message string (MESH_BEACON_APP path).
+/**
+ * Verify the MESH_BEACON_APP payload decodes back to the original message string.
+ * Important to catch encode/decode regressions in the full sendBeacon → wire → pb_decode round-trip.
+ */
 static void test_broadcaster_sendBeacon_payloadDecodesCorrectly(void)
 {
     resetConfig();
@@ -515,7 +600,11 @@ static void test_broadcaster_sendBeacon_payloadDecodesCorrectly(void)
     TEST_ASSERT_EQUAL_STRING(msg, decoded.message);
 }
 
-// Offer-only beacons must still be emitted on MESH_BEACON_APP.
+/**
+ * Verify a beacon with offer fields but no message text is still emitted on MESH_BEACON_APP.
+ * Important because offer-only beacons are a valid use case that the early-return guard must not
+ * suppress.
+ */
 static void test_broadcaster_sendBeacon_offerOnly_isSent(void)
 {
     resetConfig();
@@ -530,7 +619,10 @@ static void test_broadcaster_sendBeacon_offerOnly_isSent(void)
     TEST_ASSERT_EQUAL(meshtastic_PortNum_MESH_BEACON_APP, mockRouter->sentPackets[0].decoded.portnum);
 }
 
-// runOnce with broadcast_enabled=true must send exactly one packet.
+/**
+ * Verify runOnce sends exactly one packet when broadcast_enabled is true.
+ * Important to confirm the OSThread timer callback drives the full send path end-to-end.
+ */
 static void test_broadcaster_runOnce_sendsWhenEnabled(void)
 {
     resetConfig();
@@ -546,7 +638,10 @@ static void test_broadcaster_runOnce_sendsWhenEnabled(void)
     TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
 }
 
-// runOnce with broadcast_enabled=false must not send anything.
+/**
+ * Verify runOnce transmits nothing when broadcast_enabled is false.
+ * Important to confirm the feature can be cleanly disabled via remote admin without rebooting.
+ */
 static void test_broadcaster_runOnce_silentWhenDisabled(void)
 {
     resetConfig();
@@ -579,7 +674,10 @@ static meshtastic_MeshPacket makeBeaconPacket(const meshtastic_MeshBeacon &b, No
     return p;
 }
 
-// Receiving a beacon with an offer stores it in lastReceivedOffer.
+/**
+ * Verify a beacon carrying preset and region offer fields is stored in lastReceivedOffer.
+ * Important to confirm the client app's offer cache is populated correctly for join-offer UI flows.
+ */
 static void test_listener_receiveWithOffer_cachesOffer(void)
 {
     resetConfig();
@@ -604,7 +702,10 @@ static void test_listener_receiveWithOffer_cachesOffer(void)
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, MeshBeaconListenerModule::lastReceivedOffer.region);
 }
 
-// Receiving a beacon with a channel offer stores the has_channel flag.
+/**
+ * Verify a beacon with a full ChannelSettings offer sets has_channel and copies the channel struct.
+ * Important because the client app checks has_channel before rendering a channel join offer.
+ */
 static void test_listener_receiveWithChannelOffer_setsHasChannel(void)
 {
     resetConfig();
@@ -629,7 +730,10 @@ static void test_listener_receiveWithChannelOffer_setsHasChannel(void)
     TEST_ASSERT_EQUAL_UINT32(5, MeshBeaconListenerModule::lastReceivedOffer.channel.channel_num);
 }
 
-// An empty message with no offer content must be silently dropped.
+/**
+ * Verify a beacon with neither message text nor offer fields is silently discarded.
+ * Important to avoid spurious cache updates and wasted inbox copies from empty-payload packets.
+ */
 static void test_listener_emptyMessageWithoutOffer_isDropped(void)
 {
     resetConfig();
@@ -648,7 +752,10 @@ static void test_listener_emptyMessageWithoutOffer_isDropped(void)
     TEST_ASSERT_FALSE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.valid, "Empty message must not update offer cache");
 }
 
-// Offer-only beacons must still update the cached offer.
+/**
+ * Verify a LONG_FAST offer (preset enum value 0) with no message still populates the offer cache.
+ * Important to guard the has_offer_preset fix — LONG_FAST must not be treated as 'no offer present'.
+ */
 static void test_listener_offerOnly_isCached(void)
 {
     resetConfig();
@@ -669,7 +776,10 @@ static void test_listener_offerOnly_isCached(void)
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, MeshBeaconListenerModule::lastReceivedOffer.preset);
 }
 
-// A null MeshBeacon pointer must be handled gracefully.
+/**
+ * Verify a null MeshBeacon pointer is handled gracefully and returns false without a crash.
+ * Important to guard against the ProtobufModule base class passing nullptr on a decode failure.
+ */
 static void test_listener_nullBeacon_isDropped(void)
 {
     resetConfig();
@@ -686,7 +796,10 @@ static void test_listener_nullBeacon_isDropped(void)
     TEST_ASSERT_FALSE(MeshBeaconListenerModule::lastReceivedOffer.valid);
 }
 
-// Receiving a beacon with no offer fields must not mark the cache valid.
+/**
+ * Verify a text-only beacon (no offer fields set) does not mark the offer cache valid.
+ * Important to prevent the client from showing a join dialog in response to plain-text beacons.
+ */
 static void test_listener_receiveWithNoOffer_cacheStaysInvalid(void)
 {
     resetConfig();
@@ -706,7 +819,10 @@ static void test_listener_receiveWithNoOffer_cacheStaysInvalid(void)
     TEST_ASSERT_FALSE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.valid, "No offer fields → cache must stay invalid");
 }
 
-// wantPacket returns false when listen_enabled is false.
+/**
+ * Verify wantPacket returns false for MESH_BEACON_APP when listen_enabled is false.
+ * Important to confirm the module opts out of processing when its config flag is cleared.
+ */
 static void test_listener_wantPacket_falseWhenDisabled(void)
 {
     resetConfig();
@@ -721,7 +837,10 @@ static void test_listener_wantPacket_falseWhenDisabled(void)
     TEST_ASSERT_FALSE(listener.wantPacket(&mp));
 }
 
-// wantPacket returns true when listen_enabled is true and portnum matches.
+/**
+ * Verify wantPacket returns true for MESH_BEACON_APP packets when listen_enabled is true.
+ * Important as a basic routing sanity check confirming the module is registered for its portnum.
+ */
 static void test_listener_wantPacket_trueWhenEnabled(void)
 {
     resetConfig();
@@ -782,7 +901,7 @@ BEACON_TEST_ENTRY void setup()
     initializeTestEnvironment();
     UNITY_BEGIN();
 
-    // Admin validation
+    TEST_MESSAGE("=== AdminModule config validation ===");
     RUN_TEST(test_adminValidation_turboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_longTurboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_turboPresetOnUS_isAccepted);
@@ -795,14 +914,14 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_longFastOfferPreset_isPreserved);
     RUN_TEST(test_adminValidation_validSave_invalidatesCache);
 
-    // Broadcaster cache
+    TEST_MESSAGE("=== Broadcaster payload cache ===");
     RUN_TEST(test_broadcaster_rebuildCache_producesNonEmptyPayload);
     RUN_TEST(test_broadcaster_rebuildCache_payloadDecodesCorrectly);
     RUN_TEST(test_broadcaster_rebuildCache_offerFieldsEncoded);
     RUN_TEST(test_broadcaster_invalidateCache_setsDirtyFlag);
     RUN_TEST(test_broadcaster_rebuildCache_idempotent);
 
-    // Broadcaster send
+    TEST_MESSAGE("=== Broadcaster sendBeacon ===");
     RUN_TEST(test_broadcaster_sendBeacon_fromIsLocalNodeWhenUnset);
     RUN_TEST(test_broadcaster_sendBeacon_fromIsCustomNodeWhenSet);
     RUN_TEST(test_broadcaster_sendBeacon_addressedToBroadcast);
@@ -813,7 +932,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_runOnce_sendsWhenEnabled);
     RUN_TEST(test_broadcaster_runOnce_silentWhenDisabled);
 
-    // Listener
+    TEST_MESSAGE("=== Listener offer caching ===");
     RUN_TEST(test_listener_receiveWithOffer_cachesOffer);
     RUN_TEST(test_listener_receiveWithChannelOffer_setsHasChannel);
     RUN_TEST(test_listener_emptyMessageWithoutOffer_isDropped);
