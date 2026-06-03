@@ -70,6 +70,7 @@
   // "USERPREFS_MESH_BEACON_ON_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_868",          // Region to use when transmitting beacons
   // "USERPREFS_MESH_BEACON_ON_CHANNEL_NAME": "'LongFast'",      // Channel name to use on the TX radio config - uses default if unset.
   // "USERPREFS_MESH_BEACON_ON_CHANNEL_PSK": "{ 0x01 }",         // PSK for the TX channel (0x01 = Meshtastic default PSK)
+  // "USERPREFS_MESH_BEACON_LEGACY_SPLIT": "true",               // When both text and offer are present, split into a separate MESH_BEACON_APP (offer) and TEXT_MESSAGE_APP (text) for legacy client compatibility
   // "USERPREFS_RINGTONE_NAG_SECS": "60",
   // "USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS": "43200",
   // "USERPREFS_UI_TEST_LOG": "true", // Test-only: emits `Screen: frame N/M name=... reason=...` log per UI transition (for the mcp-server ui test tier); off in release builds.

@@ -1312,6 +1312,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_mesh_beacon = true;
     moduleConfig.mesh_beacon.listen_enabled = true;
     moduleConfig.mesh_beacon.broadcast_enabled = false;
+    moduleConfig.mesh_beacon.broadcast_legacy_split = true;
 #ifdef USERPREFS_MESH_BEACON_LISTEN_ENABLED
     moduleConfig.mesh_beacon.listen_enabled = USERPREFS_MESH_BEACON_LISTEN_ENABLED;
 #endif
@@ -1364,6 +1365,9 @@ void NodeDB::installDefaultModuleConfig()
     static const uint8_t beaconOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
     memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconOnPsk, sizeof(beaconOnPsk));
     moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
+#endif
+#ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
+    moduleConfig.mesh_beacon.broadcast_legacy_split = USERPREFS_MESH_BEACON_LEGACY_SPLIT;
 #endif
 #endif // !MESHTASTIC_EXCLUDE_BEACON
 
