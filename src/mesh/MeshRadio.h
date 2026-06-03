@@ -44,7 +44,6 @@ extern const RegionProfile PROFILE_EU868;
 extern const RegionProfile PROFILE_UNDEF;
 extern const RegionProfile PROFILE_LITE;
 extern const RegionProfile PROFILE_NARROW;
-extern const RegionProfile PROFILE_HAM;
 extern const RegionProfile PROFILE_HAM_20KHZ;
 
 // Map from old region names to new region enums
