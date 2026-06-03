@@ -485,8 +485,11 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
  If different from current config, the radio is temporarily switched for TX. */
     bool has_broadcast_on_preset;
     meshtastic_Config_LoRaConfig_ModemPreset broadcast_on_preset;
-    /* How often to broadcast, in seconds. Min 3600 (1 h), max 259200 (72 h). Default 3600. */
+    /* How often to broadcast, in seconds. Min 3600 (1 h), Default 3600. */
     uint32_t broadcast_interval_secs;
+    /* When true, offer and text are split into two separate packets so legacy nodes
+ receive TEXT_MESSAGE_APP text without needing a MESH_BEACON_APP decoder. */
+    bool broadcast_legacy_split;
 } meshtastic_ModuleConfig_MeshBeaconConfig;
 
 /* TAK team/role configuration */
@@ -644,7 +647,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_default {""}
-#define meshtastic_ModuleConfig_MeshBeaconConfig_init_default {0, 0, 0, "", false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
+#define meshtastic_ModuleConfig_MeshBeaconConfig_init_default {0, 0, 0, "", false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0}
 #define meshtastic_ModuleConfig_TAKConfig_init_default {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
@@ -664,7 +667,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_zero {""}
-#define meshtastic_ModuleConfig_MeshBeaconConfig_init_zero {0, 0, 0, "", false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
+#define meshtastic_ModuleConfig_MeshBeaconConfig_init_zero {0, 0, 0, "", false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0}
 #define meshtastic_ModuleConfig_TAKConfig_init_zero {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
 #define meshtastic_RemoteHardwarePin_init_zero   {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 
@@ -795,6 +798,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_on_region_tag 9
 #define meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_on_preset_tag 10
 #define meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_interval_secs_tag 11
+#define meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_legacy_split_tag 12
 #define meshtastic_ModuleConfig_TAKConfig_team_tag 1
 #define meshtastic_ModuleConfig_TAKConfig_role_tag 2
 #define meshtastic_RemoteHardwarePin_gpio_pin_tag 1
@@ -1055,7 +1059,8 @@ X(a, STATIC,   OPTIONAL, UENUM,    broadcast_offer_preset,   7) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  broadcast_on_channel,   8) \
 X(a, STATIC,   SINGULAR, UENUM,    broadcast_on_region,   9) \
 X(a, STATIC,   OPTIONAL, UENUM,    broadcast_on_preset,  10) \
-X(a, STATIC,   SINGULAR, UINT32,   broadcast_interval_secs,  11)
+X(a, STATIC,   SINGULAR, UINT32,   broadcast_interval_secs,  11) \
+X(a, STATIC,   SINGULAR, BOOL,     broadcast_legacy_split,  12)
 #define meshtastic_ModuleConfig_MeshBeaconConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_MeshBeaconConfig_DEFAULT NULL
 #define meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_offer_channel_MSGTYPE meshtastic_ChannelSettings

@@ -61,6 +61,12 @@ class MeshBeaconModule
  * Broadcaster: periodically sends MeshBeacon packets on the configured preset/channel.
  * Active only when moduleConfig.mesh_beacon.broadcast_enabled is true.
  * Inherits ProtobufModule to access allocDataProtobuf + setStartDelay.
+ *
+ * Packet flow:
+ *  Normal (combined):  one MESH_BEACON_APP carrying offer + message on the beacon radio config.
+ *  Legacy split:       two packets when both text and offer are present and broadcast_legacy_split=true:
+ *                        A) MESH_BEACON_APP with offer only (no text) on the beacon radio config.
+ *                        B) TEXT_MESSAGE_APP with the text on the normal radio config.
  */
 class MeshBeaconBroadcastModule : private MeshBeaconModule,
                                   public ProtobufModule<meshtastic_MeshBeacon>,

@@ -856,6 +856,99 @@ static void test_listener_wantPacket_trueWhenEnabled(void)
     TEST_ASSERT_TRUE(listener.wantPacket(&mp));
 }
 
+// ===========================================================================
+// Group 6: Legacy split messages
+// ===========================================================================
+
+/**
+ * Verify broadcast_legacy_split causes sendBeacon to emit exactly two packets when both
+ * text and offer content are present.
+ * Important to confirm the split path is wired end-to-end rather than short-circuiting.
+ */
+static void test_broadcaster_legacySplit_sendsTwoPackets(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.broadcast_legacy_split = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "split-text", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, mockRouter->sentPackets.size(), "Legacy split must emit exactly 2 packets");
+}
+
+/**
+ * Verify the first packet in a legacy-split send is MESH_BEACON_APP (the offer packet).
+ * Important so receivers without a MESH_BEACON_APP decoder still get the text from packet B.
+ */
+static void test_broadcaster_legacySplit_firstPacketIsBeaconApp(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.broadcast_legacy_split = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "split-offer-only",
+            sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32(2, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_MESH_BEACON_APP, mockRouter->sentPackets[0].decoded.portnum);
+}
+
+/**
+ * Verify the MESH_BEACON_APP packet in a legacy-split send carries no message text.
+ * Important so peers' MESH_BEACON_APP handlers do not duplicate the text already in packet B.
+ */
+static void test_broadcaster_legacySplit_firstPacketHasNoMessageText(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.broadcast_legacy_split = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "hidden-in-split",
+            sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32(2, mockRouter->sentPackets.size());
+    const meshtastic_MeshPacket &pA = mockRouter->sentPackets[0];
+    meshtastic_MeshBeacon decodedA = meshtastic_MeshBeacon_init_zero;
+    pb_istream_t stream = pb_istream_from_buffer(pA.decoded.payload.bytes, pA.decoded.payload.size);
+    pb_decode(&stream, &meshtastic_MeshBeacon_msg, &decodedA);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("", decodedA.message, "Offer-only MESH_BEACON_APP must have empty message");
+}
+
+/**
+ * Verify the second packet in a legacy-split send is TEXT_MESSAGE_APP containing the message text.
+ * Important so legacy clients that only handle TEXT_MESSAGE_APP receive the human-readable text.
+ */
+static void test_broadcaster_legacySplit_secondPacketIsTextMessage(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.broadcast_legacy_split = true;
+    const char *msg = "split-B-text";
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, msg, sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32(2, mockRouter->sentPackets.size());
+    const meshtastic_MeshPacket &pB = mockRouter->sentPackets[1];
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_TEXT_MESSAGE_APP, pB.decoded.portnum);
+    TEST_ASSERT_EQUAL_STRING_LEN(msg, (const char *)pB.decoded.payload.bytes, pB.decoded.payload.size);
+}
+
 } // namespace
 
 // ===========================================================================
@@ -946,6 +1039,14 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_listener_receiveWithNoOffer_cacheStaysInvalid);
     RUN_TEST(test_listener_wantPacket_falseWhenDisabled);
     RUN_TEST(test_listener_wantPacket_trueWhenEnabled);
+
+    printf("\n=== Legacy split messages ===\n");
+
+    RUN_TEST(test_adminValidation_statusMessageTooLong_isTruncatedAt100);
+    RUN_TEST(test_broadcaster_legacySplit_sendsTwoPackets);
+    RUN_TEST(test_broadcaster_legacySplit_firstPacketIsBeaconApp);
+    RUN_TEST(test_broadcaster_legacySplit_firstPacketHasNoMessageText);
+    RUN_TEST(test_broadcaster_legacySplit_secondPacketIsTextMessage);
 
     exit(UNITY_END());
 }
