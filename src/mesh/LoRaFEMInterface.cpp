@@ -14,7 +14,7 @@ static void enableFEMPower()
     bool wasOff = digitalRead(LORA_PA_POWER) != HIGH;
     digitalWrite(LORA_PA_POWER, HIGH);
     if (wasOff) {
-        delay(1);
+        delay(5);
     }
 }
 
