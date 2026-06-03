@@ -36,7 +36,6 @@ static MockMeshService *mockMeshService;
 // -----------------------------------------------------------------------
 // getRegion() tests
 // -----------------------------------------------------------------------
-extern const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code);
 
 static void test_getRegion_returnsCorrectRegion_US()
 {
@@ -102,6 +101,29 @@ static void test_validateConfigRegion_unsetRegionReturnsTrue()
 
     // UNSET region has licensedOnly=false, so should pass
     TEST_ASSERT_TRUE(RadioInterface::validateConfigRegion(cfg));
+}
+
+static void test_validateConfigRegion_unknownCodeReturnsFalse()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = (meshtastic_Config_LoRaConfig_RegionCode)255;
+
+    devicestate.owner.is_licensed = false;
+
+    // Unknown code is not in the regions table; getRegion() returns the UNSET sentinel,
+    // whose .code != 255, so validateConfigRegion should reject it.
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigRegion(cfg));
+}
+
+static void test_validateConfigRegion_anotherUnknownCodeReturnsFalse()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = (meshtastic_Config_LoRaConfig_RegionCode)99;
+
+    devicestate.owner.is_licensed = true;
+
+    // Unknown code should be rejected even when owner is licensed.
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigRegion(cfg));
 }
 
 // -----------------------------------------------------------------------
@@ -937,6 +959,8 @@ void setup()
     // validateConfigRegion()
     RUN_TEST(test_validateConfigRegion_validRegionReturnsTrue);
     RUN_TEST(test_validateConfigRegion_unsetRegionReturnsTrue);
+    RUN_TEST(test_validateConfigRegion_unknownCodeReturnsFalse);
+    RUN_TEST(test_validateConfigRegion_anotherUnknownCodeReturnsFalse);
 
     // Shadow table tests
     RUN_TEST(test_shadowTable_spacedProfileHasNonZeroSpacing);
