@@ -834,6 +834,16 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
 {
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
+    // Reject unrecognized region codes (getRegion returns UNSET sentinel for unknown codes)
+    if (newRegion->code != loraConfig.region) {
+        char err_string[160];
+        snprintf(err_string, sizeof(err_string), "Region code %d is not recognized", loraConfig.region);
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        sendErrorNotification(err_string);
+        return false;
+    }
+
     // If you are not licensed, you can't use ham regions.
     if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {
         char err_string[160];
