@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "RadioInterface.h"
+#include "Router.h"
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
@@ -211,7 +212,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
     }
 
     LOG_INFO("Beacon: broadcast from=%#08lx msg='%.40s'", p->from, bcfg.broadcast_message);
-    service->sendToMesh(p, RX_SRC_LOCAL, false);
+    router->send(p);
 }
 
 int32_t MeshBeaconBroadcastModule::runOnce()
