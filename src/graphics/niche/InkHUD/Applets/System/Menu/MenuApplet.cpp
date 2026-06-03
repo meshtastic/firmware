@@ -846,6 +846,22 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyLoRaPreset(PRESET(SHORT_TURBO));
         break;
 
+    case SET_PRESET_NARROW_SLOW:
+        applyLoRaPreset(PRESET(NARROW_SLOW));
+        break;
+
+    case SET_PRESET_NARROW_FAST:
+        applyLoRaPreset(PRESET(NARROW_FAST));
+        break;
+
+    case SET_PRESET_TINY_SLOW:
+        applyLoRaPreset(PRESET(TINY_SLOW));
+        break;
+
+    case SET_PRESET_TINY_FAST:
+        applyLoRaPreset(PRESET(TINY_FAST));
+        break;
+
     case SET_PRESET_FROM_REGION: {
         // cursor - 1 because index 0 is "Back"
         const uint8_t index = cursor - 1;

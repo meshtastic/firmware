@@ -87,6 +87,8 @@ enum MenuAction {
     SET_PRESET_LITE_FAST,
     SET_PRESET_NARROW_SLOW,
     SET_PRESET_NARROW_FAST,
+    SET_PRESET_TINY_SLOW,
+    SET_PRESET_TINY_FAST,
     SET_PRESET_FROM_REGION, // Dynamic: preset chosen from region-available list
     // Timezones
     SET_TZ_US_HAWAII,

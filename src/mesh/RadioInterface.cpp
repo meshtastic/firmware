@@ -49,6 +49,8 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {PRESET(L
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {PRESET(NARROW_FAST), PRESET(NARROW_SLOW),
                                                                           MODEM_PRESET_END};
 
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_TINY[] = {PRESET(TINY_FAST), PRESET(TINY_SLOW), MODEM_PRESET_END};
+
 // Region profiles: bundle preset list + regulatory parameters shared across regions
 // presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle
 const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 1, 1};
@@ -57,6 +59,8 @@ const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1};
 const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0, 10, 10};
 const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1};
 const RegionProfile PROFILE_HAM = {PRESETS_NARROW, 0, 0, false, true, 0, 1, 1};
+// Ham '20kHz' profile. 15.625kHz bandwidth coerced to 20kHz via padding.
+const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0021875f, false, true, 0, 2, 2};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
@@ -885,6 +889,16 @@ static void sendErrorNotification(const char *msg)
 bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig)
 {
     const RegionInfo *newRegion = getRegion(loraConfig.region);
+
+    // Reject unrecognized region codes (getRegion returns UNSET sentinel for unknown codes)
+    if (newRegion->code != loraConfig.region) {
+        char err_string[160];
+        snprintf(err_string, sizeof(err_string), "Region code %d is not recognized", loraConfig.region);
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        sendErrorNotification(err_string);
+        return false;
+    }
 
     // If you are not licensed, you can't use ham regions.
     // Exception: on hardware that can *only* operate on a ham band (e.g. T-Beam BPF), the user has
