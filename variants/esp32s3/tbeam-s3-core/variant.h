@@ -17,6 +17,7 @@
 #define USE_SX1262
 #define USE_SX1268
 #define USE_LR1121
+#define USE_RF95
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
 #define LORA_RESET 5
