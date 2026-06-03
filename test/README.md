@@ -15,6 +15,38 @@ pio test -e native -f test_your_module
 pio test -e native -f test_your_module -vvv
 ```
 
+**Never pipe through `| tail -N` to shorten output.** PlatformIO prints build errors at the top of output and test results at the bottom; `tail` will show stale cached results from a prior successful build while hiding the compile error that caused the current run to fail.
+
+**Preferred pattern — redirect to file, then grep:**
+
+```bash
+# Redirect all output to a file; grep for errors and results after it exits
+pio test -e native -f test_your_module > /tmp/test_out.txt 2>&1
+echo "exit: $?"
+grep -E 'error:|PASS|FAIL|succeeded|failed' /tmp/test_out.txt
+tail -15 /tmp/test_out.txt
+```
+
+Why: piping through `| grep` line-buffers the output and suppresses all progress until the process exits, making it look hung. The redirect approach lets the build stream normally while still giving you filtered results afterwards.
+
+**Viewing verbose test output without truncation (e.g. `TEST_MESSAGE` group headers):**
+
+```bash
+/tmp/meshtastic-pio-venv/bin/python -m platformio test -e coverage --filter test_mesh_beacon -vv 2>&1 | grep -v "[[:space:]]SKIPPED$"
+```
+
+The `-vv` flag makes Unity emit `INFO:` lines from `TEST_MESSAGE` calls; piping through `grep -v SKIPPED` removes the noise from platform feature gates while keeping all PASS/FAIL/INFO lines visible.
+
+**`externally-managed-environment` error on Ubuntu/Debian:**
+
+If `pio test` fails immediately with `error: externally-managed-environment`, the system `pio` binary is using the OS Python which newer distros lock down. Use PlatformIO's own venv instead:
+
+```bash
+~/.platformio/penv/bin/python -m platformio test -e native -f test_your_module > /tmp/test_out.txt 2>&1
+grep -E 'error:|PASS|FAIL|succeeded|failed' /tmp/test_out.txt
+tail -15 /tmp/test_out.txt
+```
+
 ### Helper Scripts (Useful Shortcuts)
 
 These wrappers are handy when local host dependencies are missing or when you want repeatable commands.
@@ -82,12 +114,15 @@ One file per suite. No per-test `platformio.ini` is needed — tests build under
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 #include "modules/YourModule.h"
-#include <cstdio>
+#include <cstdio>    // required for printf() — used for blank-line group separators
 #include <cstring>
 #include <memory>
 
 // --- Test output helpers ---
-// Unity swallows printf/stdout. Only TEST_MESSAGE() output appears in results.
+// printf() writes directly to stdout and appears in -vv output as a plain line (no prefix).
+// Use it for blank-line group separators: printf("\n");
+// TEST_MESSAGE() emits a "file:line:INFO: <text>" line — visible at -vv and above.
+// Use TEST_MSG_FMT for formatted diagnostic lines inside tests.
 #define MSG_BUF_LEN 200
 #define TEST_MSG_FMT(fmt, ...) do { \
     char _buf[MSG_BUF_LEN]; \
@@ -112,6 +147,9 @@ void setup()
 {
     initializeTestEnvironment();   // MUST call — sets up RTC, OSThread, console
     UNITY_BEGIN();
+
+    printf("\n=== Example group ===\n");           // header line to help find tests
+
     RUN_TEST(test_example);
     exit(UNITY_END());             // exit() required — Unity runner expects it
 }
@@ -185,20 +223,34 @@ Subclass the module under test to make protected methods callable and private me
 class YourModuleTestShim : public YourModule
 {
   public:
-    // Expose protected methods
+    // Pull protected methods into public scope via using.
+    // IMPORTANT: using requires the method to be protected (or public) in the base —
+    // friend alone does NOT satisfy this. See pitfall #6.
     using YourModule::runOnce;
     using YourModule::someProtectedMethod;
 
-    // Access private members via friend (see below)
+    // Wrap private members with setter methods (friend grants direct access here).
     void setPrivateField(int x) { privateField = x; }
 };
 ```
 
-In the module header, grant friend access under the `UNIT_TEST` define (set automatically by PlatformIO's test framework):
+For methods you want to expose via `using`, use the conditional access-specifier pattern in the header — **not** plain `friend`:
 
 ```cpp
 // In YourModule.h, inside the class body:
-#ifdef UNIT_TEST
+#ifdef PIO_UNIT_TESTING
+  protected:
+#else
+  private:
+#endif
+    bool someMethod();
+```
+
+For private _member variables_ that a shim setter needs to touch directly, `friend` is sufficient (no `using` involved):
+
+```cpp
+// In YourModule.h, inside the class body:
+#ifdef PIO_UNIT_TESTING
     friend class YourModuleTestShim;
 #endif
 ```
@@ -283,6 +335,21 @@ shim.setWindowStartMs(millis() - 3600000UL);  // pretend 1 hour elapsed
 Fixed-size data structures (hash sets, ring buffers) overflow when tests inject more data than fits. This triggers early flushes with near-zero time fractions, compounding the time-dependent-zeros problem.
 
 **Fix:** Simulate multiple realistic time windows rather than one massive burst. Let adaptive mechanisms (if any) self-tune over several rolls.
+
+### 6. Granting test access to private/protected members
+
+PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several production headers (`TransmitHistory.h`, `CryptoEngine.h`, `MQTT.h`, `RTC.h`) use this to gate test-only visibility changes. PlatformIO also defines `UNIT_TEST` in the same builds for backward compatibility, but that spelling is deprecated — always use `PIO_UNIT_TESTING` in new code. The established pattern for exposing a private method to a test shim **without widening production visibility**:
+
+```cpp
+#ifdef PIO_UNIT_TESTING
+  protected:
+#else
+  private:
+#endif
+    bool myMethod();
+```
+
+**Critical C++ rule:** a `using` declaration in a derived class (e.g. `using Base::myMethod`) requires `myMethod` to be `protected` or `public` in the base — `friend` alone does **not** satisfy this. Adding `friend class TestShim` while leaving the method `private` will still fail to compile. Use the conditional access-specifier pattern above, not `friend`.
 
 ## setUp/tearDown Checklist
 

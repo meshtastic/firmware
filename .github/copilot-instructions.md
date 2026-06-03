@@ -609,20 +609,35 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory with 12 test suites:
+Unit tests in `test/` directory with 17 test suites:
 
-- `test_crypto/` - Cryptography
-- `test_mqtt/` - MQTT integration
-- `test_radio/` - Radio interface
-- `test_mesh_module/` - Module framework
-- `test_meshpacket_serializer/` - Packet serialization
-- `test_transmit_history/` - Retransmission tracking
+- `test_admin_radio/` - LoRa region/config validation and AdminModule dispatch
 - `test_atak/` - ATAK integration
+- `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
 - `test_http_content_handler/` - HTTP handling
+- `test_mac_from_string/` - MAC address parsing
+- `test_mesh_module/` - Module framework
+- `test_meshpacket_serializer/` - Packet serialization
+- `test_mqtt/` - MQTT integration
+- `test_packet_history/` - Packet history tracking
+- `test_position_precision/` - Position precision helpers
+- `test_radio/` - Radio interface
 - `test_serial/` - Serial communication
+- `test_traffic_management/` - Traffic management
+- `test_transmit_history/` - Retransmission tracking
+- `test_type_conversions/` - NodeDB v25 type conversion (bitfield round-trips, NodeInfoLite)
+- `test_utf8/` - UTF-8 utilities
 
-Run with: `pio test -e native`
+Run command (preferred — avoids pipe-buffering and the Ubuntu externally-managed-environment error):
+
+```bash
+~/.platformio/penv/bin/python -m platformio test -e native -f test_your_suite > /tmp/test_out.txt 2>&1
+grep -E 'error:|PASS|FAIL|succeeded|failed' /tmp/test_out.txt
+tail -15 /tmp/test_out.txt
+```
+
+Do **not** use `pio test … | tail -N` — it discards build errors and shows stale cached results. Do **not** use `pio test … | grep` — line-buffering makes the terminal appear hung until the process exits. Redirect to a file first, then grep.
 
 Simulation testing: `bin/test-simulator.sh`
 

@@ -31,7 +31,7 @@ cmake --install "$WORK/ulfius/$SANITIZER" --prefix /usr
 cd "$SRC/firmware"
 
 PLATFORMIO_EXTRA_SCRIPTS=$(echo -e "pre:.clusterfuzzlite/platformio-clusterfuzzlite-pre.py\npost:.clusterfuzzlite/platformio-clusterfuzzlite-post.py")
-STATIC_LIBS=$(pkg-config --libs --static libulfius openssl libgpiod yaml-cpp bluez --silence-errors)
+STATIC_LIBS=$(pkg-config --libs --static libulfius openssl libgpiod yaml-cpp jsoncpp bluez --silence-errors)
 export PLATFORMIO_EXTRA_SCRIPTS
 export STATIC_LIBS
 export PLATFORMIO_WORKSPACE_DIR="$WORK/pio/$SANITIZER"

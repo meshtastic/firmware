@@ -51,7 +51,7 @@ size_t RedirectablePrint::write(uint8_t c)
 size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
 {
     va_list copy;
-#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+#if ARCH_PORTDUINO
     static char printBuf[512];
 #else
     static char printBuf[160];
