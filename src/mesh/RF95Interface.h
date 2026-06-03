@@ -37,6 +37,8 @@ class RF95Interface : public RadioLibInterface
      */
     virtual void disableInterrupt() override;
 
+    int16_t getCurrentRSSI() override;
+
     /**
      * Enable a particular ISR callback glue function
      */
@@ -64,6 +66,8 @@ class RF95Interface : public RadioLibInterface
      *  We override to turn on transmitter power as needed.
      */
     virtual void configHardwareForSend() override;
+
+    uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(*lora, pl, received); }
 
   private:
     /** Some boards require GPIO control of tx vs rx paths */

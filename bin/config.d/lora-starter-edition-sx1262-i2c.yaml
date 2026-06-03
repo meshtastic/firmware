@@ -1,5 +1,11 @@
 # https://www.waveshare.com/core1262-868m.htm
 # https://github.com/markbirss/lora-starter-edition-sx1262-i2c
+Meta:
+  name: lora-starter-edition-sx1262-i2c
+  support: community
+  compatible:
+    - raspberry-pi
+
 Lora:
   Module: sx1262  # Starter Edition SX1262 I2C Raspberry Pi HAT
   DIO2_AS_RF_SWITCH: true

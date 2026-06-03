@@ -3,18 +3,20 @@
 # trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
-FROM python:3.13-bookworm AS builder
+FROM debian:trixie AS builder
 ARG PIO_ENV=native
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
 # Install Dependencies
 ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN apt-get update && apt-get install --no-install-recommends -y \
         curl wget g++ zip git ca-certificates pkg-config \
+        python3-pip python3-grpc-tools \
         libgpiod-dev libyaml-cpp-dev libbluetooth-dev libi2c-dev libuv1-dev \
         libusb-1.0-0-dev libulfius-dev liborcania-dev libssl-dev \
-        libx11-dev libinput-dev libxkbcommon-x11-dev \
+        libx11-dev libinput-dev libxkbcommon-x11-dev libsqlite3-dev libsdl2-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -U platformio \
     && mkdir /tmp/firmware
@@ -36,7 +38,7 @@ RUN curl -L "https://github.com/meshtastic/web/releases/download/v$(cat /tmp/fir
 
 ##### PRODUCTION BUILD #############
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 LABEL org.opencontainers.image.title="Meshtastic" \
       org.opencontainers.image.description="Debian Meshtastic daemon and web interface" \
       org.opencontainers.image.url="https://meshtastic.org" \
@@ -51,9 +53,9 @@ ENV TZ=Etc/UTC
 USER root
 
 RUN apt-get update && apt-get --no-install-recommends -y install \
-        libc-bin libc6 libgpiod2 libyaml-cpp0.7 libi2c0 libuv1 libusb-1.0-0-dev \
-        liborcania2.3 libulfius2.7 libssl3 \
-        libx11-6 libinput10 libxkbcommon-x11-0 \
+        libc-bin libc6 libgpiod3 libyaml-cpp0.8 libi2c0 libuv1t64 libusb-1.0-0-dev \
+        liborcania2.3 libulfius2.7t64 libssl3t64 \
+        libx11-6 libinput10 libxkbcommon-x11-0 libsdl2-2.0-0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \
@@ -61,7 +63,7 @@ RUN apt-get update && apt-get --no-install-recommends -y install \
 
 # Fetch compiled binary from the builder
 COPY --from=builder /tmp/firmware/release/meshtasticd /usr/bin/
-COPY --from=builder /tmp/web /usr/share/meshtasticd/
+COPY --from=builder /tmp/web /usr/share/meshtasticd/web/
 # Copy config templates
 COPY ./bin/config.d /etc/meshtasticd/available.d
 

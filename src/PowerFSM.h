@@ -2,6 +2,12 @@
 
 #include "configuration.h"
 
+#ifdef PowerFSMDebug
+#define LOG_POWERFSM(...) LOG_DEBUG(__VA_ARGS__)
+#else
+#define LOG_POWERFSM(...)
+#endif
+
 // See sw-design.md for documentation
 
 #define EVENT_PRESS 1

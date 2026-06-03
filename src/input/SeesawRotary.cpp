@@ -49,7 +49,7 @@ bool SeesawRotary::init()
 
 int32_t SeesawRotary::runOnce()
 {
-    InputEvent e;
+    InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
     bool currentlyPressed = !ss.digitalRead(SS_SWITCH);
 
@@ -59,7 +59,7 @@ int32_t SeesawRotary::runOnce()
     wasPressed = currentlyPressed;
 
     int32_t new_position = ss.getEncoderPosition();
-    // did we move arounde?
+    // did we move around?
     if (encoder_position != new_position) {
         if (encoder_position == 0 && new_position != 1) {
             e.inputEvent = INPUT_BROKER_ALT_PRESS;

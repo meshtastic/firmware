@@ -16,7 +16,7 @@
 #define VERBOSE_PACKET_HISTORY 0     // Set to 1 for verbose logging, 2 for heavy debugging
 #define PACKET_HISTORY_TRACE_AGING 1 // Set to 1 to enable logging of the age of re/used history slots
 
-PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPackets(NULL) // Initialize members
+PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0) // Initialize members
 {
     if (size < 4 || size > PACKETHISTORY_MAX) { // Copilot suggested - makes sense
         LOG_WARN("Packet History - Invalid size %d, using default %d", size, PACKETHISTORY_MAX);
@@ -25,7 +25,7 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPa
 
     // Allocate memory for the recent packets array
     recentPacketsCapacity = size;
-    recentPackets = new PacketRecord[recentPacketsCapacity];
+    recentPackets.reset(new PacketRecord[recentPacketsCapacity]);
     if (!recentPackets) { // No logging here, console/log probably uninitialized yet.
         LOG_ERROR("Packet History - Memory allocation failed for size=%d entries / %d Bytes", size,
                   sizeof(PacketRecord) * recentPacketsCapacity);
@@ -34,18 +34,12 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPa
     }
 
     // Initialize the recent packets array to zero
-    memset(recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
-}
-
-PacketHistory::~PacketHistory()
-{
-    recentPacketsCapacity = 0;
-    delete[] recentPackets;
-    recentPackets = NULL;
+    memset(recentPackets.get(), 0, sizeof(PacketRecord) * recentPacketsCapacity);
 }
 
 /** Update recentPackets and return true if we have already seen this packet */
-bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate, bool *wasFallback, bool *weWereNextHop)
+bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate, bool *wasFallback, bool *weWereNextHop,
+                                    bool *wasUpgraded)
 {
     if (!initOk()) {
         LOG_ERROR("Packet History - Was Seen Recently: NOT INITIALIZED!");
@@ -66,7 +60,14 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     r.id = p->id;
     r.sender = getFrom(p); // If 0 then use our ID
     r.next_hop = p->next_hop;
-    r.relayed_by[0] = p->relay_node;
+    setHighestHopLimit(r, p->hop_limit);
+    bool weWillRelay = false;
+    uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum());
+    if (p->relay_node == ourRelayID) { // If the relay_node is us, store it
+        weWillRelay = true;
+        setOurTxHopLimit(r, p->hop_limit);
+        r.relayed_by[0] = p->relay_node;
+    }
 
     r.rxTimeMsec = millis(); //
     if (r.rxTimeMsec == 0)   // =0 every 49.7 days? 0 is special
@@ -81,9 +82,16 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     PacketRecord *found = find(r.sender, r.id); // Find the packet record in the recentPackets array
     bool seenRecently = (found != NULL);        // If found -> the packet was seen recently
 
-    if (seenRecently) {
-        uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()); // Get our relay ID from our node number
+    // Check for hop_limit upgrade scenario
+    if (seenRecently && wasUpgraded && getHighestHopLimit(*found) < p->hop_limit) {
+        LOG_DEBUG("Packet History - Hop limit upgrade: packet 0x%08x from hop_limit=%d to hop_limit=%d", p->id,
+                  getHighestHopLimit(*found), p->hop_limit);
+        *wasUpgraded = true;
+    } else if (wasUpgraded) {
+        *wasUpgraded = false; // Initialize to false if not an upgrade
+    }
 
+    if (seenRecently) {
         if (wasFallback) {
             // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, and the relayer relayed already
             // before, it's a fallback to flooding. If we didn't already relay and the next-hop neither, we might need to handle
@@ -125,11 +133,40 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                       found->sender, found->id, found->next_hop, found->relayed_by[0], found->relayed_by[1], found->relayed_by[2],
                       millis() - found->rxTimeMsec);
 #endif
+            // Only update the relayer if it heard us directly (meaning hopLimit is decreased by 1)
+            uint8_t startIdx = weWillRelay ? 1 : 0;
+            if (!weWillRelay) {
+                bool weWereRelayer = wasRelayer(ourRelayID, *found);
+                // We were a relayer and the packet came in with a hop limit that is one less than when we sent it out
+                if (weWereRelayer && (p->hop_limit == getOurTxHopLimit(*found) || p->hop_limit == getOurTxHopLimit(*found) - 1)) {
+                    r.relayed_by[0] = p->relay_node;
+                    startIdx = 1; // Start copying existing relayers from index 1
+                }
+                // keep the original ourTxHopLimit
+                setOurTxHopLimit(r, getOurTxHopLimit(*found));
+            }
 
-            // Add the existing relayed_by to the new record
-            for (uint8_t i = 0; i < (NUM_RELAYERS - 1); i++) {
-                if (found->relayed_by[i] != 0)
-                    r.relayed_by[i + 1] = found->relayed_by[i];
+            // Preserve the highest hop_limit we've ever seen for this packet so upgrades aren't lost when a later copy has
+            // fewer hops remaining.
+            if (getHighestHopLimit(*found) > getHighestHopLimit(r))
+                setHighestHopLimit(r, getHighestHopLimit(*found));
+
+            // Add the existing relayed_by to the new record, avoiding duplicates
+            for (uint8_t i = 0; i < (NUM_RELAYERS - startIdx); i++) {
+                if (found->relayed_by[i] == 0)
+                    continue;
+
+                bool exists = false;
+                for (uint8_t j = 0; j < NUM_RELAYERS; j++) {
+                    if (r.relayed_by[j] == found->relayed_by[i]) {
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (!exists) {
+                    r.relayed_by[i + startIdx] = found->relayed_by[i];
+                }
             }
             r.next_hop = found->next_hop; // keep the original next_hop (such that we check whether we were originally asked)
 #if VERBOSE_PACKET_HISTORY
@@ -161,13 +198,14 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
         return NULL;
     }
 
+    PacketRecord *base = recentPackets.get();
     PacketRecord *it = NULL;
-    for (it = recentPackets; it < (recentPackets + recentPacketsCapacity); ++it) {
+    for (it = base; it < (base + recentPacketsCapacity); ++it) {
         if (it->id == id && it->sender == sender) {
 #if VERBOSE_PACKET_HISTORY
             LOG_DEBUG("Packet History - find: s=%08x id=%08x FOUND nh=%02x rby=%02x %02x %02x age=%d slot=%d/%d", it->sender,
                       it->id, it->next_hop, it->relayed_by[0], it->relayed_by[1], it->relayed_by[2], millis() - (it->rxTimeMsec),
-                      it - recentPackets, recentPacketsCapacity);
+                      it - base, recentPacketsCapacity);
 #endif
             // only the first match is returned, so be careful not to create duplicate entries
             return it; // Return pointer to the found record
@@ -181,43 +219,42 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
 }
 
 /** Insert/Replace oldest PacketRecord in recentPackets. */
-void PacketHistory::insert(PacketRecord &r)
+void PacketHistory::insert(const PacketRecord &r)
 {
     uint32_t now_millis = millis(); // Should not jump with time changes
     uint32_t OldtrxTimeMsec = 0;
+    PacketRecord *base = recentPackets.get();
     PacketRecord *tu = NULL; // Will insert here.
     PacketRecord *it = NULL;
 
     // Find a free, matching or oldest used slot in the recentPackets array
-    for (it = recentPackets; it < (recentPackets + recentPacketsCapacity); ++it) {
+    for (it = base; it < (base + recentPacketsCapacity); ++it) {
         if (it->id == 0 && it->sender == 0 /*&& rxTimeMsec == 0*/) { // Record is empty
             tu = it;                                                 // Remember the free slot
 #if VERBOSE_PACKET_HISTORY >= 2
-            LOG_DEBUG("Packet History - insert: Free slot@ %d/%d", tu - recentPackets, recentPacketsCapacity);
+            LOG_DEBUG("Packet History - insert: Free slot@ %d/%d", tu - base, recentPacketsCapacity);
 #endif
             // We have that, Exit the loop
-            it = (recentPackets + recentPacketsCapacity);
+            it = (base + recentPacketsCapacity);
         } else if (it->id == r.id && it->sender == r.sender) { // Record matches the packet we want to insert
             tu = it;                                           // Remember the matching slot
             OldtrxTimeMsec = now_millis - it->rxTimeMsec;      // ..and save current entry's age
 #if VERBOSE_PACKET_HISTORY >= 2
-            LOG_DEBUG("Packet History - insert: Matched slot@ %d/%d age=%d", tu - recentPackets, recentPacketsCapacity,
-                      OldtrxTimeMsec);
+            LOG_DEBUG("Packet History - insert: Matched slot@ %d/%d age=%d", tu - base, recentPacketsCapacity, OldtrxTimeMsec);
 #endif
             // We have that, Exit the loop
-            it = (recentPackets + recentPacketsCapacity);
+            it = (base + recentPacketsCapacity);
         } else {
             if (it->rxTimeMsec == 0) {
                 LOG_WARN(
                     "Packet History - insert: Found packet s=%08x id=%08x with rxTimeMsec = 0, slot %d/%d. Should never happen!",
-                    it->sender, it->id, it - recentPackets, recentPacketsCapacity);
+                    it->sender, it->id, it - base, recentPacketsCapacity);
             }
             if ((now_millis - it->rxTimeMsec) > OldtrxTimeMsec) { // 49.7 days rollover friendly
                 OldtrxTimeMsec = now_millis - it->rxTimeMsec;
                 tu = it; // remember the oldest packet
 #if VERBOSE_PACKET_HISTORY >= 2
-                LOG_DEBUG("Packet History - insert: Older slot@ %d/%d age=%d", tu - recentPackets, recentPacketsCapacity,
-                          OldtrxTimeMsec);
+                LOG_DEBUG("Packet History - insert: Older slot@ %d/%d age=%d", tu - base, recentPacketsCapacity, OldtrxTimeMsec);
 #endif
             }
             // keep looking for oldest till entire array is checked
@@ -232,13 +269,11 @@ void PacketHistory::insert(PacketRecord &r)
 
 #if VERBOSE_PACKET_HISTORY
     if (tu->id == 0 && tu->sender == 0) {
-        LOG_DEBUG("Packet History - insert: slot@ %d/%d is NEW", tu - recentPackets, recentPacketsCapacity);
+        LOG_DEBUG("Packet History - insert: slot@ %d/%d is NEW", tu - base, recentPacketsCapacity);
     } else if (tu->id == r.id && tu->sender == r.sender) {
-        LOG_DEBUG("Packet History - insert: slot@ %d/%d MATCHED, age=%d", tu - recentPackets, recentPacketsCapacity,
-                  OldtrxTimeMsec);
+        LOG_DEBUG("Packet History - insert: slot@ %d/%d MATCHED, age=%d", tu - base, recentPacketsCapacity, OldtrxTimeMsec);
     } else {
-        LOG_DEBUG("Packet History - insert: slot@ %d/%d REUSE OLDEST, age=%d", tu - recentPackets, recentPacketsCapacity,
-                  OldtrxTimeMsec);
+        LOG_DEBUG("Packet History - insert: slot@ %d/%d REUSE OLDEST, age=%d", tu - base, recentPacketsCapacity, OldtrxTimeMsec);
     }
 #endif
 
@@ -271,9 +306,9 @@ void PacketHistory::insert(PacketRecord &r)
 #endif
 
 #if VERBOSE_PACKET_HISTORY
-    LOG_DEBUG("Packet History - insert: Store slot@ %d/%d s=%08x id=%08x nh=%02x rby=%02x %02x %02x rxT=%d BEFORE",
-              tu - recentPackets, recentPacketsCapacity, tu->sender, tu->id, tu->next_hop, tu->relayed_by[0], tu->relayed_by[1],
-              tu->relayed_by[2], tu->rxTimeMsec);
+    LOG_DEBUG("Packet History - insert: Store slot@ %d/%d s=%08x id=%08x nh=%02x rby=%02x %02x %02x rxT=%d BEFORE", tu - base,
+              recentPacketsCapacity, tu->sender, tu->id, tu->next_hop, tu->relayed_by[0], tu->relayed_by[1], tu->relayed_by[2],
+              tu->rxTimeMsec);
 #endif
 
     if (r.rxTimeMsec == 0) {
@@ -286,15 +321,15 @@ void PacketHistory::insert(PacketRecord &r)
     *tu = r; // store the packet
 
 #if VERBOSE_PACKET_HISTORY
-    LOG_DEBUG("Packet History - insert: Store slot@ %d/%d s=%08x id=%08x nh=%02x rby=%02x %02x %02x rxT=%d AFTER",
-              tu - recentPackets, recentPacketsCapacity, tu->sender, tu->id, tu->next_hop, tu->relayed_by[0], tu->relayed_by[1],
-              tu->relayed_by[2], tu->rxTimeMsec);
+    LOG_DEBUG("Packet History - insert: Store slot@ %d/%d s=%08x id=%08x nh=%02x rby=%02x %02x %02x rxT=%d AFTER", tu - base,
+              recentPacketsCapacity, tu->sender, tu->id, tu->next_hop, tu->relayed_by[0], tu->relayed_by[1], tu->relayed_by[2],
+              tu->rxTimeMsec);
 #endif
 }
 
 /* Check if a certain node was a relayer of a packet in the history given an ID and sender
  * @return true if node was indeed a relayer, false if not */
-bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
+bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender, bool *wasSole)
 {
     if (!initOk()) {
         LOG_ERROR("PacketHistory - wasRelayer: NOT INITIALIZED!");
@@ -308,7 +343,7 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
         return false;
     }
 
-    PacketRecord *found = find(sender, id);
+    const PacketRecord *found = find(sender, id);
 
     if (found == NULL) {
 #if VERBOSE_PACKET_HISTORY
@@ -322,27 +357,34 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
               found->sender, found->id, found->next_hop, millis() - found->rxTimeMsec, found->relayed_by[0], found->relayed_by[1],
               found->relayed_by[2], relayer);
 #endif
-    return wasRelayer(relayer, *found);
+    return wasRelayer(relayer, *found, wasSole);
 }
 
 /* Check if a certain node was a relayer of a packet in the history given iterator
  * @return true if node was indeed a relayer, false if not */
-bool PacketHistory::wasRelayer(const uint8_t relayer, PacketRecord &r)
+bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r, bool *wasSole)
 {
-    for (uint8_t i = 0; i < NUM_RELAYERS; i++) {
+    bool found = false;
+    bool other_present = false;
+
+    for (uint8_t i = 0; i < NUM_RELAYERS; ++i) {
         if (r.relayed_by[i] == relayer) {
-#if VERBOSE_PACKET_HISTORY
-            LOG_DEBUG("Packet History - was rel.PR.: s=%08x id=%08x rls=%02x %02x %02x / rl=%02x? YES", r.sender, r.id,
-                      r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], relayer);
-#endif
-            return true;
+            found = true;
+        } else if (r.relayed_by[i] != 0) {
+            other_present = true;
         }
     }
+
+    if (wasSole) {
+        *wasSole = (found && !other_present);
+    }
+
 #if VERBOSE_PACKET_HISTORY
     LOG_DEBUG("Packet History - was rel.PR.: s=%08x id=%08x rls=%02x %02x %02x / rl=%02x? NO", r.sender, r.id, r.relayed_by[0],
               r.relayed_by[1], r.relayed_by[2], relayer);
 #endif
-    return false;
+
+    return found;
 }
 
 // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
@@ -385,4 +427,25 @@ void PacketHistory::removeRelayer(const uint8_t relayer, const uint32_t id, cons
     LOG_DEBUG("Packet History - remove Relayer s=%08x id=%08x rby=%02x %02x %02x  rl:%02x AFTER - removed?%d", found->sender,
               found->id, found->relayed_by[0], found->relayed_by[1], found->relayed_by[2], relayer, i != j);
 #endif
+}
+
+// Getters and setters for hop limit fields packed in hop_limit
+inline uint8_t PacketHistory::getHighestHopLimit(const PacketRecord &r)
+{
+    return r.hop_limit & HOP_LIMIT_HIGHEST_MASK;
+}
+
+inline void PacketHistory::setHighestHopLimit(PacketRecord &r, uint8_t hopLimit)
+{
+    r.hop_limit = (r.hop_limit & ~HOP_LIMIT_HIGHEST_MASK) | (hopLimit & HOP_LIMIT_HIGHEST_MASK);
+}
+
+inline uint8_t PacketHistory::getOurTxHopLimit(const PacketRecord &r)
+{
+    return (r.hop_limit & HOP_LIMIT_OUR_TX_MASK) >> HOP_LIMIT_OUR_TX_SHIFT;
+}
+
+inline void PacketHistory::setOurTxHopLimit(PacketRecord &r, uint8_t hopLimit)
+{
+    r.hop_limit = (r.hop_limit & ~HOP_LIMIT_OUR_TX_MASK) | ((hopLimit << HOP_LIMIT_OUR_TX_SHIFT) & HOP_LIMIT_OUR_TX_MASK);
 }

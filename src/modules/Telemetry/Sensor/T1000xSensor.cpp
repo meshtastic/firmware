@@ -38,18 +38,10 @@ int8_t ntc_temp2[136] = {
 
 T1000xSensor::T1000xSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SENSOR_UNSET, "T1000x") {}
 
-int32_t T1000xSensor::runOnce()
+bool T1000xSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
-    return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-}
-
-void T1000xSensor::setup()
-{
-    // Set up oversampling and filter initialization
+    return true;
 }
 
 float T1000xSensor::getLux()
@@ -81,11 +73,15 @@ float T1000xSensor::getTemp()
     float Vout = 0, Rt = 0, temp = 0;
     float Temp = 0;
 
+    // P0.4 is a sensor power enable GPIO, not a VCC ADC pin.
+    // Read BATTERY_PIN (with voltage divider) and cap at NTC_REF_VCC to estimate the sensor rail voltage.
     for (uint32_t i = 0; i < T1000X_SENSE_SAMPLES; i++) {
-        vcc_vot += analogRead(T1000X_VCC_PIN);
+        vcc_vot += analogRead(BATTERY_PIN);
     }
     vcc_vot = vcc_vot / T1000X_SENSE_SAMPLES;
-    vcc_vot = 2 * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * vcc_vot;
+    vcc_vot = ADC_MULTIPLIER * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * vcc_vot;
+    if (vcc_vot > NTC_REF_VCC)
+        vcc_vot = NTC_REF_VCC;
 
     for (uint32_t i = 0; i < T1000X_SENSE_SAMPLES; i++) {
         ntc_vot += analogRead(T1000X_NTC_PIN);

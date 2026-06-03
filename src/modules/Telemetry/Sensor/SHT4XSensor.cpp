@@ -9,16 +9,16 @@
 
 SHT4XSensor::SHT4XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SHT4X, "SHT4X") {}
 
-int32_t SHT4XSensor::runOnce()
+bool SHT4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
 
     uint32_t serialNumber = 0;
 
-    sht4x.begin(nodeTelemetrySensorsMap[sensorType].second);
+    status = sht4x.begin(bus);
+    if (!status) {
+        return status;
+    }
 
     serialNumber = sht4x.readSerial();
     if (serialNumber != 0) {
@@ -29,12 +29,8 @@ int32_t SHT4XSensor::runOnce()
         status = 0;
     }
 
-    return initI2CSensor();
-}
-
-void SHT4XSensor::setup()
-{
-    // Set up oversampling and filter initialization
+    initI2CSensor();
+    return status;
 }
 
 bool SHT4XSensor::getMetrics(meshtastic_Telemetry *measurement)

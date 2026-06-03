@@ -7,7 +7,7 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
-#if defined(RAK_4631) && !defined(RAK2560) && __has_include(<Rak_BMX160.h>)
+#if !defined(RAK2560) && __has_include(<Rak_BMX160.h>)
 
 #include "Fusion/Fusion.h"
 #include <Rak_BMX160.h>
@@ -17,6 +17,7 @@ class BMX160Sensor : public MotionSensor
   private:
     RAK_BMX160 sensor;
     bool showingScreen = false;
+    static constexpr const char *compassCalibrationFileName = "/prefs/compass_bmx160.dat";
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
   public:

@@ -33,9 +33,9 @@ int32_t LinuxInput::runOnce()
 {
 
     if (firstTime) {
-        if (settingsStrings[keyboardDevice] == "")
+        if (portduino_config.keyboardDevice == "")
             return disable();
-        fd = open(settingsStrings[keyboardDevice].c_str(), O_RDWR);
+        fd = open(portduino_config.keyboardDevice.c_str(), O_RDWR);
         if (fd < 0)
             return disable();
         ret = ioctl(fd, EVIOCGRAB, (void *)1);
@@ -73,7 +73,7 @@ int32_t LinuxInput::runOnce()
         int rd = read(events[i].data.fd, ev, sizeof(ev));
         assert(rd > ((signed int)sizeof(struct input_event)));
         for (int j = 0; j < rd / ((signed int)sizeof(struct input_event)); j++) {
-            InputEvent e;
+            InputEvent e = {};
             e.inputEvent = INPUT_BROKER_NONE;
             e.source = this->_originName;
             e.kbchar = 0;

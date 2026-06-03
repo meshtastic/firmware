@@ -13,18 +13,21 @@ struct ButtonConfig {
     bool activePullup = true;
     uint32_t pullupSense = 0;
     voidFuncPtr intRoutine = nullptr;
+    voidFuncPtr onPress = nullptr;   // Optional edge callbacks
+    voidFuncPtr onRelease = nullptr; // Optional edge callbacks
+    bool suppressLeadUpSound = false;
     input_broker_event singlePress = INPUT_BROKER_NONE;
     input_broker_event longPress = INPUT_BROKER_NONE;
     uint16_t longPressTime = 500;
     input_broker_event doublePress = INPUT_BROKER_NONE;
     input_broker_event longLongPress = INPUT_BROKER_NONE;
-    uint16_t longLongPressTime = 5000;
+    uint16_t longLongPressTime = 3900;
     input_broker_event triplePress = INPUT_BROKER_NONE;
     input_broker_event shortLong = INPUT_BROKER_NONE;
     bool touchQuirk = false;
 
     // Constructor to set required parameter
-    ButtonConfig(uint8_t pin = 0) : pinNumber(pin) {}
+    explicit ButtonConfig(uint8_t pin = 0) : pinNumber(pin) {}
 };
 
 #ifndef BUTTON_CLICK_MS
@@ -62,7 +65,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
         BUTTON_EVENT_COMBO_SHORT_LONG,
     };
 
-    ButtonThread(const char *name);
+    explicit ButtonThread(const char *name);
     int32_t runOnce() override;
     OneButton userButton;
     void attachButtonInterrupts();
@@ -75,6 +78,9 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
         else
             return digitalRead(buttonPin); // Most buttons are active low by default
     }
+
+    // Returns true while this thread's button is physically held down
+    bool isHeld() { return isButtonPressed(_pinNum); }
 
     // Disconnect and reconnect interrupts for light sleep
 #ifdef ARCH_ESP32
@@ -91,8 +97,11 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     input_broker_event _shortLong = INPUT_BROKER_NONE;
 
     voidFuncPtr _intRoutine = nullptr;
+    voidFuncPtr _pressHandler = nullptr;
+    voidFuncPtr _releaseHandler = nullptr;
+    bool _suppressLeadUp = false;
     uint16_t _longPressTime = 500;
-    uint16_t _longLongPressTime = 5000;
+    uint16_t _longLongPressTime = 3900;
     int _pinNum = 0;
     bool _activeLow = true;
     bool _touchQuirk = false;
