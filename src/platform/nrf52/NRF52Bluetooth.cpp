@@ -355,7 +355,8 @@ void NRF52Bluetooth::resumeAdvertising()
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    blebas.write(level);
+    if (nrf52Bluetooth) // skip until the Battery Service has been begun in setup()
+        blebas.write(level);
 }
 void NRF52Bluetooth::clearBonds()
 {
