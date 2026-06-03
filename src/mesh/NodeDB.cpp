@@ -1323,7 +1323,11 @@ void NodeDB::installDefaultModuleConfig()
             sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
 #endif
 #ifdef USERPREFS_MESH_BEACON_INTERVAL_SECS
-    moduleConfig.mesh_beacon.broadcast_interval_secs = USERPREFS_MESH_BEACON_INTERVAL_SECS;
+    moduleConfig.mesh_beacon.broadcast_interval_secs =
+        (USERPREFS_MESH_BEACON_INTERVAL_SECS != 0 &&
+         USERPREFS_MESH_BEACON_INTERVAL_SECS < default_mesh_beacon_min_broadcast_interval_secs)
+            ? default_mesh_beacon_min_broadcast_interval_secs
+            : USERPREFS_MESH_BEACON_INTERVAL_SECS;
 #endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_PRESET
     moduleConfig.mesh_beacon.broadcast_offer_preset = USERPREFS_MESH_BEACON_OFFER_PRESET;

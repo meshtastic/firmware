@@ -1179,9 +1179,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     case meshtastic_ModuleConfig_mesh_beacon_tag: {
         LOG_INFO("Set module config: MeshBeacon");
         auto &b = const_cast<meshtastic_ModuleConfig_MeshBeaconConfig &>(c.payload_variant.mesh_beacon);
-        // Enforce message length limit.
-        if (strnlen(b.broadcast_message, sizeof(b.broadcast_message)) >= 100)
-            b.broadcast_message[99] = '\0';
+        // Hard cap at 100 chars.
+        b.broadcast_message[100] = '\0';
         // Enforce interval minimum (0 means unset/use default).
         if (b.broadcast_interval_secs != 0 && b.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
             b.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
