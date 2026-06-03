@@ -27,6 +27,7 @@ typedef struct _meshtastic_MeshBeacon {
     meshtastic_Config_LoRaConfig_RegionCode offer_region;
     /* Optional modem preset being advertised.
  Combined with offer_region, tells a client "there is a mesh on this preset/region". */
+    bool has_offer_preset;
     meshtastic_Config_LoRaConfig_ModemPreset offer_preset;
 } meshtastic_MeshBeacon;
 
@@ -36,8 +37,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_MeshBeacon_init_default       {"", false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}
-#define meshtastic_MeshBeacon_init_zero          {"", false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}
+#define meshtastic_MeshBeacon_init_default       {"", false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}
+#define meshtastic_MeshBeacon_init_zero          {"", false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_MeshBeacon_message_tag        1
@@ -50,7 +51,7 @@ extern "C" {
 X(a, STATIC,   SINGULAR, STRING,   message,           1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  offer_channel,     2) \
 X(a, STATIC,   SINGULAR, UENUM,    offer_region,      3) \
-X(a, STATIC,   SINGULAR, UENUM,    offer_preset,      4)
+X(a, STATIC,   OPTIONAL, UENUM,    offer_preset,      4)
 #define meshtastic_MeshBeacon_CALLBACK NULL
 #define meshtastic_MeshBeacon_DEFAULT NULL
 #define meshtastic_MeshBeacon_offer_channel_MSGTYPE meshtastic_ChannelSettings

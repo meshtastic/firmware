@@ -153,13 +153,13 @@ static void test_adminValidation_turboPresetOnEU868_isCleared(void)
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
     bcfg.broadcast_enabled = true;
+    bcfg.has_broadcast_on_preset = true;
     bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     TEST_ASSERT_TRUE(moduleConfig.has_mesh_beacon);
-    TEST_ASSERT_EQUAL_MESSAGE(_meshtastic_Config_LoRaConfig_ModemPreset_MIN, moduleConfig.mesh_beacon.broadcast_on_preset,
-                              "SHORT_TURBO must be cleared for EU_868");
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_on_preset, "SHORT_TURBO must be cleared for EU_868");
 }
 
 // Same check for LONG_TURBO.
@@ -168,11 +168,12 @@ static void test_adminValidation_longTurboPresetOnEU868_isCleared(void)
     resetConfig();
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_on_preset = true;
     bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO;
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    TEST_ASSERT_EQUAL(_meshtastic_Config_LoRaConfig_ModemPreset_MIN, moduleConfig.mesh_beacon.broadcast_on_preset);
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
 }
 
 // A turbo preset is valid on US (which uses PROFILE_STD) → must be kept.
@@ -183,10 +184,12 @@ static void test_adminValidation_turboPresetOnUS_isAccepted(void)
     initRegion();
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_on_preset = true;
     bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, moduleConfig.mesh_beacon.broadcast_on_preset);
 }
 
@@ -216,21 +219,20 @@ static void test_adminValidation_validOfferRegion_isPreserved(void)
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, moduleConfig.mesh_beacon.broadcast_offer_region);
 }
 
-// broadcast_message exactly 100 chars (i.e. length 100 including terminator
-// means the last byte is at index 99) → last char must be NUL after truncation.
-static void test_adminValidation_messageTooLong_isTruncatedAt99(void)
+// broadcast_message is hard-capped at 100 chars.
+static void test_adminValidation_messageTooLong_isTruncatedAt100(void)
 {
     resetConfig();
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    // Fill with 'A' up to the full array size; admin must enforce ≤99 chars.
+    // Fill with 'A' up to the full array size; admin must enforce ≤100 chars.
     memset(bcfg.broadcast_message, 'A', sizeof(bcfg.broadcast_message));
     bcfg.broadcast_message[sizeof(bcfg.broadcast_message) - 1] = '\0'; // pb_decode guarantee
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    // Byte at index 99 must be NUL (length capped at 99).
-    TEST_ASSERT_EQUAL('\0', moduleConfig.mesh_beacon.broadcast_message[99]);
+    // Byte at index 100 must be NUL (length capped at 100).
+    TEST_ASSERT_EQUAL('\0', moduleConfig.mesh_beacon.broadcast_message[100]);
     // Bytes before it should still be 'A'.
     TEST_ASSERT_EQUAL('A', moduleConfig.mesh_beacon.broadcast_message[0]);
 }
@@ -248,8 +250,8 @@ static void test_adminValidation_intervalTooLow_isClamped(void)
     TEST_ASSERT_EQUAL_UINT32(3600, moduleConfig.mesh_beacon.broadcast_interval_secs);
 }
 
-// broadcast_interval_secs above maximum → clamped down to 259200.
-static void test_adminValidation_intervalTooHigh_isClamped(void)
+// broadcast_interval_secs above the recommended range is preserved as-is.
+static void test_adminValidation_intervalTooHigh_isPreserved(void)
 {
     resetConfig();
 
@@ -258,7 +260,22 @@ static void test_adminValidation_intervalTooHigh_isClamped(void)
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    TEST_ASSERT_EQUAL_UINT32(259200, moduleConfig.mesh_beacon.broadcast_interval_secs);
+    TEST_ASSERT_EQUAL_UINT32(999999, moduleConfig.mesh_beacon.broadcast_interval_secs);
+}
+
+// LONG_FAST is a valid preset and must be preserved when explicitly configured.
+static void test_adminValidation_longFastOfferPreset_isPreserved(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_preset = true;
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_offer_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, moduleConfig.mesh_beacon.broadcast_offer_preset);
 }
 
 // Zero interval (unset) is special-cased and must not be clamped.
@@ -341,6 +358,7 @@ static void test_broadcaster_rebuildCache_offerFieldsEncoded(void)
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
     moduleConfig.mesh_beacon.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "offer-test", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
 
@@ -442,6 +460,7 @@ static void test_broadcaster_sendBeacon_usesBeaconPortnum(void)
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "portnum-check", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
 
     MeshBeaconBroadcastModuleTestShim bcast;
@@ -460,6 +479,7 @@ static void test_broadcaster_sendBeacon_fallsBackToTextMessagePortnum(void)
     const char *msg = "plain-text-beacon";
     strncpy(moduleConfig.mesh_beacon.broadcast_message, msg, sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
     // broadcast_on_preset set, but no offer — should still be TEXT_MESSAGE_APP
+    moduleConfig.mesh_beacon.has_broadcast_on_preset = true;
     moduleConfig.mesh_beacon.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
 
     MeshBeaconBroadcastModuleTestShim bcast;
@@ -479,6 +499,7 @@ static void test_broadcaster_sendBeacon_payloadDecodesCorrectly(void)
     moduleConfig.has_mesh_beacon = true;
     const char *msg = "Greetings from the beacon";
     strncpy(moduleConfig.mesh_beacon.broadcast_message, msg, sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
 
     MeshBeaconBroadcastModuleTestShim bcast;
@@ -492,6 +513,21 @@ static void test_broadcaster_sendBeacon_payloadDecodesCorrectly(void)
 
     TEST_ASSERT_TRUE_MESSAGE(ok, "Sent payload must decode without error");
     TEST_ASSERT_EQUAL_STRING(msg, decoded.message);
+}
+
+// Offer-only beacons must still be emitted on MESH_BEACON_APP.
+static void test_broadcaster_sendBeacon_offerOnly_isSent(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_MESH_BEACON_APP, mockRouter->sentPackets[0].decoded.portnum);
 }
 
 // runOnce with broadcast_enabled=true must send exactly one packet.
@@ -555,6 +591,7 @@ static void test_listener_receiveWithOffer_cachesOffer(void)
 
     meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
     strncpy(b.message, "Join us on US/MEDIUM_FAST", sizeof(b.message) - 1);
+    b.has_offer_preset = true;
     b.offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
     b.offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
 
@@ -592,8 +629,8 @@ static void test_listener_receiveWithChannelOffer_setsHasChannel(void)
     TEST_ASSERT_EQUAL_UINT32(5, MeshBeaconListenerModule::lastReceivedOffer.channel.channel_num);
 }
 
-// An empty message must be silently dropped; cache must stay invalid.
-static void test_listener_emptyMessage_isDropped(void)
+// An empty message with no offer content must be silently dropped.
+static void test_listener_emptyMessageWithoutOffer_isDropped(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
@@ -603,13 +640,33 @@ static void test_listener_emptyMessage_isDropped(void)
     MeshBeaconListenerModule::lastReceivedOffer = {};
 
     meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
-    b.offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     // message field intentionally left blank
 
     meshtastic_MeshPacket mp = makeBeaconPacket(b);
     listener.handleReceivedProtobuf(mp, &b);
 
     TEST_ASSERT_FALSE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.valid, "Empty message must not update offer cache");
+}
+
+// Offer-only beacons must still update the cached offer.
+static void test_listener_offerOnly_isCached(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.listen_enabled = true;
+
+    MeshBeaconListenerModuleTestShim listener;
+    MeshBeaconListenerModule::lastReceivedOffer = {};
+
+    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
+    b.has_offer_preset = true;
+    b.offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    meshtastic_MeshPacket mp = makeBeaconPacket(b);
+    listener.handleReceivedProtobuf(mp, &b);
+
+    TEST_ASSERT_TRUE(MeshBeaconListenerModule::lastReceivedOffer.valid);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, MeshBeaconListenerModule::lastReceivedOffer.preset);
 }
 
 // A null MeshBeacon pointer must be handled gracefully.
@@ -641,7 +698,7 @@ static void test_listener_receiveWithNoOffer_cacheStaysInvalid(void)
 
     meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
     strncpy(b.message, "No offer here", sizeof(b.message) - 1);
-    // offer_preset == 0, has_offer_channel == false
+    // has_offer_preset == false, has_offer_channel == false
 
     meshtastic_MeshPacket mp = makeBeaconPacket(b);
     listener.handleReceivedProtobuf(mp, &b);
@@ -731,10 +788,11 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_turboPresetOnUS_isAccepted);
     RUN_TEST(test_adminValidation_unknownOfferRegion_isCleared);
     RUN_TEST(test_adminValidation_validOfferRegion_isPreserved);
-    RUN_TEST(test_adminValidation_messageTooLong_isTruncatedAt99);
+    RUN_TEST(test_adminValidation_messageTooLong_isTruncatedAt100);
     RUN_TEST(test_adminValidation_intervalTooLow_isClamped);
-    RUN_TEST(test_adminValidation_intervalTooHigh_isClamped);
+    RUN_TEST(test_adminValidation_intervalTooHigh_isPreserved);
     RUN_TEST(test_adminValidation_intervalZero_isNotClamped);
+    RUN_TEST(test_adminValidation_longFastOfferPreset_isPreserved);
     RUN_TEST(test_adminValidation_validSave_invalidatesCache);
 
     // Broadcaster cache
@@ -751,13 +809,15 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_sendBeacon_usesBeaconPortnum);
     RUN_TEST(test_broadcaster_sendBeacon_fallsBackToTextMessagePortnum);
     RUN_TEST(test_broadcaster_sendBeacon_payloadDecodesCorrectly);
+    RUN_TEST(test_broadcaster_sendBeacon_offerOnly_isSent);
     RUN_TEST(test_broadcaster_runOnce_sendsWhenEnabled);
     RUN_TEST(test_broadcaster_runOnce_silentWhenDisabled);
 
     // Listener
     RUN_TEST(test_listener_receiveWithOffer_cachesOffer);
     RUN_TEST(test_listener_receiveWithChannelOffer_setsHasChannel);
-    RUN_TEST(test_listener_emptyMessage_isDropped);
+    RUN_TEST(test_listener_emptyMessageWithoutOffer_isDropped);
+    RUN_TEST(test_listener_offerOnly_isCached);
     RUN_TEST(test_listener_nullBeacon_isDropped);
     RUN_TEST(test_listener_receiveWithNoOffer_cacheStaysInvalid);
     RUN_TEST(test_listener_wantPacket_falseWhenDisabled);

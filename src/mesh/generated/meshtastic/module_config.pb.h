@@ -473,6 +473,7 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
     /* Optional region to advertise in the MeshBeacon offer_region field. */
     meshtastic_Config_LoRaConfig_RegionCode broadcast_offer_region;
     /* Optional modem preset to advertise in the MeshBeacon offer_preset field. */
+    bool has_broadcast_offer_preset;
     meshtastic_Config_LoRaConfig_ModemPreset broadcast_offer_preset;
     /* Channel settings (name + PSK) to use when sending beacons.
  If unset, beacons go out on the primary channel. */
@@ -482,6 +483,7 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
     meshtastic_Config_LoRaConfig_RegionCode broadcast_on_region;
     /* Modem preset to use when sending beacons.
  If different from current config, the radio is temporarily switched for TX. */
+    bool has_broadcast_on_preset;
     meshtastic_Config_LoRaConfig_ModemPreset broadcast_on_preset;
     /* How often to broadcast, in seconds. Min 3600 (1 h), max 259200 (72 h). Default 3600. */
     uint32_t broadcast_interval_secs;
@@ -642,7 +644,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_default {""}
-#define meshtastic_ModuleConfig_MeshBeaconConfig_init_default {0, 0, 0, "", false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
+#define meshtastic_ModuleConfig_MeshBeaconConfig_init_default {0, 0, 0, "", false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, meshtastic_ChannelSettings_init_default, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_ModuleConfig_TAKConfig_init_default {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
@@ -662,7 +664,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_zero {""}
-#define meshtastic_ModuleConfig_MeshBeaconConfig_init_zero {0, 0, 0, "", false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
+#define meshtastic_ModuleConfig_MeshBeaconConfig_init_zero {0, 0, 0, "", false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, false, meshtastic_ChannelSettings_init_zero, _meshtastic_Config_LoRaConfig_RegionCode_MIN, false, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_ModuleConfig_TAKConfig_init_zero {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
 #define meshtastic_RemoteHardwarePin_init_zero   {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 
@@ -1049,10 +1051,10 @@ X(a, STATIC,   SINGULAR, UINT32,   broadcast_send_as_node,   3) \
 X(a, STATIC,   SINGULAR, STRING,   broadcast_message,   4) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  broadcast_offer_channel,   5) \
 X(a, STATIC,   SINGULAR, UENUM,    broadcast_offer_region,   6) \
-X(a, STATIC,   SINGULAR, UENUM,    broadcast_offer_preset,   7) \
+X(a, STATIC,   OPTIONAL, UENUM,    broadcast_offer_preset,   7) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  broadcast_on_channel,   8) \
 X(a, STATIC,   SINGULAR, UENUM,    broadcast_on_region,   9) \
-X(a, STATIC,   SINGULAR, UENUM,    broadcast_on_preset,  10) \
+X(a, STATIC,   OPTIONAL, UENUM,    broadcast_on_preset,  10) \
 X(a, STATIC,   SINGULAR, UINT32,   broadcast_interval_secs,  11)
 #define meshtastic_ModuleConfig_MeshBeaconConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_MeshBeaconConfig_DEFAULT NULL
