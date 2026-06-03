@@ -28,12 +28,12 @@
 #define LR1121_SPI_MOSI_PIN LORA_MOSI
 #define LR1121_SPI_MISO_PIN LORA_MISO
 
-// this is correct and sets the cap for the Sub-GHz part
+// Caps for the LR1121 *chip* output. The external analog PA (driven via the APC2
+// DAC pin, see RADIO_PA_APC2_PIN below) provides the rest of the gain, so the chip
+// itself is driven low. See src/platform/extra_variants/radiomaster_nomad_gemini.
 #define LR1110_MAX_POWER 5
 // 2.4G Part
 #define LR1120_MAX_POWER 5
-
-#define POWER_SHIFT -20
 
 // not yet implemented
 #define JANUS_RADIO
@@ -52,9 +52,17 @@
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // Type of neopixels in use
 #define ENABLE_AMBIENTLIGHTING               // Turn on Ambient Lighting
 
-#define BUTTON_PIN 34
+// Primary button is GPIO14 (ELRS "button"); GPIO12 is the second button ("button2").
+// NOTE: GPIO34 is the second radio's DIO1 (LR1121_IRQ2_PIN) and is input-only with no
+// internal pull resistor, so it must NOT be reused as a button.
+#define BUTTON_PIN 14
 #define BUTTON_NEED_PULLUP
 
 #undef EXT_NOTIFY_OUT
 
 #define RADIO_FAN_EN 2
+
+// Analog PA bias control (ELRS APC2). GPIO26 = ESP32 DAC channel 2, driven with
+// dacWrite() (0-255 -> 0-3.3V). Defining this enables the external-PA driver in
+// src/platform/extra_variants/radiomaster_nomad_gemini/variant.cpp.
+#define RADIO_PA_APC2_PIN 26

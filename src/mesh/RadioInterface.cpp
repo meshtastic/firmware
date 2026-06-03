@@ -1,5 +1,6 @@
 #include "RadioInterface.h"
 #include "Channels.h"
+#include "RadioExternalPa.h"
 #include "DisplayFormatters.h"
 #include "LLCC68Interface.h"
 #include "LR1110Interface.h"
@@ -917,10 +918,20 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
         power = maxPower;
     }
 
+    // Boards with an external PA controlled outside the transceiver (e.g. an analog PA
+    // biased through a DAC pin) map the desired total output to a possibly-negative chip
+    // output power here. This is applied even for licensed operators, because it reflects
+    // a hardware gain stage, not a regulatory limit (the regulatory clamp above already
+    // honors the license). Pass-through by default; see RadioExternalPa.h.
+    int8_t externalPaChip = radioExternalPaMapPower(power, getFreq());
+    if (externalPaChip != RADIO_EXTERNAL_PA_NO_MAP) {
+        LOG_INFO("External PA: %d dBm total -> chip %d dBm", power, externalPaChip);
+        power = externalPaChip;
+    } else {
 #if HAS_LORA_FEM
-    if (!devicestate.owner.is_licensed) {
-        power = loraFEMInterface.powerConversion(power);
-    }
+        if (!devicestate.owner.is_licensed) {
+            power = loraFEMInterface.powerConversion(power);
+        }
 #else
 // todo:All entries containing "lora fem" are grouped together above.
 #ifdef ARCH_PORTDUINO
@@ -949,6 +960,8 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
         }
     }
 #endif
+    }
+
     if (power > loraMaxPower) // Clamp power to maximum defined level
         power = loraMaxPower;
 
