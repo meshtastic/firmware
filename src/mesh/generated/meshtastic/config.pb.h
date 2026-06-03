@@ -356,7 +356,21 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Narrow Slow
  Moderate range preset optimized for EU 868MHz band with 62.5kHz bandwidth.
  Comparable link budget and data rate to LONG_FAST. */
-    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW = 13
+    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW = 13,
+    /* Tiny Fast
+ Preset optimized for compliance with Amateur Radio restrictions with 20kHz bandwidth.
+ Many regions limit data transmission bandwidth in lower amateur bands (2 Meter).
+ Note: TCXO with tight tolerances (±5 ppm or better) is *absolutely required* at these narrow bandwidths.
+ Only compatible with SX127x and SX126x chipsets.
+ Comparable link budget and data rate to LONG_FAST. */
+    meshtastic_Config_LoRaConfig_ModemPreset_TINY_FAST = 14,
+    /* Tiny Slow
+ Preset optimized for compliance with Amateur Radio restrictions with 20kHz bandwidth.
+ Many regions limit data transmission bandwidth in lower amateur bands (2 Meter).
+ Note: TCXO with tight tolerances (±5 ppm or better) is *absolutely required* at these narrow bandwidths.
+ Only compatible with SX127x and SX126x chipsets.
+ Comparable link budget and data rate to LONG_MODERATE. */
+    meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW = 15
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_LoRaConfig_FEM_LNA_Mode {
@@ -749,8 +763,8 @@ extern "C" {
 #define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_ITU3_70CM+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW
-#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW+1))
+#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW
+#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW+1))
 
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MAX meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT
