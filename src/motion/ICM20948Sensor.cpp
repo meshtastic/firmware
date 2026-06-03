@@ -26,7 +26,11 @@ bool ICM20948Sensor::init()
         return false;
 
     // Enable simple Wake on Motion
-    return sensor->setWakeOnMotion();
+    bool wakeOnMotionOk = sensor->setWakeOnMotion();
+    if (wakeOnMotionOk) {
+        loadMagnetometerCalibration(compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+    }
+    return wakeOnMotionOk;
 }
 
 #ifdef ICM_20948_INT_PIN
@@ -47,7 +51,8 @@ int32_t ICM20948Sensor::runOnce()
 int32_t ICM20948Sensor::runOnce()
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
-    if (screen && !screen->isScreenOn() && !config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
+    if (screen && !doCalibration && !screen->isScreenOn() && !config.display.wake_on_tap_or_motion &&
+        !config.device.double_tap_as_button_press) {
         if (!isAsleep) {
             LOG_DEBUG("sleeping IMU");
             sensor->sleep(true);
@@ -69,38 +74,10 @@ int32_t ICM20948Sensor::runOnce()
     }
 
     if (doCalibration) {
-
-        if (!showingScreen) {
-            powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
-            showingScreen = true;
-            if (screen)
-                screen->startAlert((FrameCallback)drawFrameCalibration);
-        }
-
-        if (magX > highestX)
-            highestX = magX;
-        if (magX < lowestX)
-            lowestX = magX;
-        if (magY > highestY)
-            highestY = magY;
-        if (magY < lowestY)
-            lowestY = magY;
-        if (magZ > highestZ)
-            highestZ = magZ;
-        if (magZ < lowestZ)
-            lowestZ = magZ;
-
-        uint32_t now = millis();
-        if (now > endCalibrationAt) {
-            doCalibration = false;
-            endCalibrationAt = 0;
-            showingScreen = false;
-            if (screen)
-                screen->endAlert();
-        }
-
-        // LOG_DEBUG("ICM20948 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
-        //           lowestY, highestY, lowestZ, highestZ);
+        beginCalibrationDisplay(showingScreen);
+        updateCalibrationExtrema(magX, magY, magZ, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+        finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ,
+                                   lowestZ);
     }
 
     magX -= (highestX + lowestX) / 2;
@@ -122,23 +99,7 @@ int32_t ICM20948Sensor::runOnce()
 
     float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
 
-    switch (config.display.compass_orientation) {
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0_INVERTED:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0:
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90_INVERTED:
-        heading += 90;
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180_INVERTED:
-        heading += 180;
-        break;
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270:
-    case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED:
-        heading += 270;
-        break;
-    }
+    heading = applyCompassOrientation(heading);
     if (screen)
         screen->setHeading(heading);
 #endif
@@ -169,26 +130,16 @@ int32_t ICM20948Sensor::runOnce()
 void ICM20948Sensor::calibrate(uint16_t forSeconds)
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
-    LOG_DEBUG("Old calibration data: highestX = %f, lowestX = %f, highestY = %f, lowestY = %f, highestZ = %f, lowestZ = %f",
-              highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
-    LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
+    LOG_DEBUG("ICM20948 cal start %is", forSeconds);
     if (sensor->dataReady()) {
         sensor->getAGMT();
-        highestX = sensor->agmt.mag.axes.x;
-        lowestX = sensor->agmt.mag.axes.x;
-        highestY = sensor->agmt.mag.axes.y;
-        lowestY = sensor->agmt.mag.axes.y;
-        highestZ = sensor->agmt.mag.axes.z;
-        lowestZ = sensor->agmt.mag.axes.z;
+        seedCalibrationExtrema(sensor->agmt.mag.axes.x, sensor->agmt.mag.axes.y, sensor->agmt.mag.axes.z, highestX, lowestX,
+                               highestY, lowestY, highestZ, lowestZ);
     } else {
-        highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+        seedCalibrationExtrema(0.0f, 0.0f, 0.0f, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
     }
 
-    doCalibration = true;
-    uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
-    endCalibrationAt = millis() + calibrateFor;
-    if (screen)
-        screen->setEndCalibration(endCalibrationAt);
+    startCalibrationWindow(forSeconds);
 #endif
 }
 // ----------------------------------------------------------------------
@@ -314,11 +265,6 @@ bool ICM20948Singleton::setWakeOnMotion()
     status = intEnableWOM(true);
     LOG_DEBUG("ICM20948 init set intEnableWOM - %s", statusString());
     return status == ICM_20948_Stat_Ok;
-
-    // Clear any current interrupts
-    ICM20948_IRQ = false;
-    clearInterrupts();
-    return true;
 }
 
 #endif

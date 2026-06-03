@@ -303,6 +303,10 @@ void setup()
 {
     initializeTestEnvironment();
 
+    // Wait for portduino's millis() clock to start ticking before tests run
+    testDelay(10);
+    testDelay(2000);
+
     UNITY_BEGIN();
 
     RUN_TEST(test_setLastSentToMesh_stores_millis);

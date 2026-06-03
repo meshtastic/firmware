@@ -80,9 +80,9 @@ void StoreForwardModule::populatePSRAM()
         (this->records ? this->records : (((memGet.getFreePsram() / 4) * 3) / sizeof(PacketHistoryStruct)));
     this->records = numberOfPackets;
 #if defined(ARCH_ESP32)
-    this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
+    this->packetHistory.reset(static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct))));
 #elif defined(ARCH_PORTDUINO)
-    this->packetHistory = static_cast<PacketHistoryStruct *>(calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
+    this->packetHistory.reset(static_cast<PacketHistoryStruct *>(calloc(numberOfPackets, sizeof(PacketHistoryStruct))));
 
 #endif
 
@@ -206,7 +206,7 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     this->packetHistory[this->packetHistoryTotalCount].hop_limit = mp.hop_limit;
     this->packetHistory[this->packetHistoryTotalCount].via_mqtt = mp.via_mqtt;
     this->packetHistory[this->packetHistoryTotalCount].transport_mechanism = mp.transport_mechanism;
-    memcpy(this->packetHistory[this->packetHistoryTotalCount].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+    memcpy(this->packetHistory[this->packetHistoryTotalCount].payload, p.payload.bytes, p.payload.size);
 
     this->packetHistoryTotalCount++;
 }
