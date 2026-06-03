@@ -485,10 +485,13 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
  If different from current config, the radio is temporarily switched for TX. */
     bool has_broadcast_on_preset;
     meshtastic_Config_LoRaConfig_ModemPreset broadcast_on_preset;
-    /* How often to broadcast, in seconds. Min 3600 (1 h), Default 3600. */
+    /* How often to broadcast, in seconds. Min 3600 (1 h), default 3600. */
     uint32_t broadcast_interval_secs;
-    /* When true, offer and text are split into two separate packets so legacy nodes
- receive TEXT_MESSAGE_APP text without needing a MESH_BEACON_APP decoder. */
+    /* When true and both broadcast_message and offer content (preset/channel/region) are present,
+ the broadcaster splits them into two separate packets instead of one combined MESH_BEACON_APP:
+   - Packet A: MESH_BEACON_APP carrying only the offer fields (no text) on the beacon radio config.
+   - Packet B: TEXT_MESSAGE_APP carrying only the broadcast_message on the normal radio config.
+ This ensures nodes that only decode TEXT_MESSAGE_APP can still receive the human-readable text. */
     bool broadcast_legacy_split;
 } meshtastic_ModuleConfig_MeshBeaconConfig;
 
@@ -1131,7 +1134,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 42
 #define meshtastic_ModuleConfig_MQTTConfig_size  224
 #define meshtastic_ModuleConfig_MapReportSettings_size 14
-#define meshtastic_ModuleConfig_MeshBeaconConfig_size 274
+#define meshtastic_ModuleConfig_MeshBeaconConfig_size 276
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
 #define meshtastic_ModuleConfig_PaxcounterConfig_size 30
 #define meshtastic_ModuleConfig_RangeTestConfig_size 12
@@ -1142,7 +1145,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_TAKConfig_size   4
 #define meshtastic_ModuleConfig_TelemetryConfig_size 50
 #define meshtastic_ModuleConfig_TrafficManagementConfig_size 52
-#define meshtastic_ModuleConfig_size             278
+#define meshtastic_ModuleConfig_size             280
 #define meshtastic_RemoteHardwarePin_size        21
 
 #ifdef __cplusplus
