@@ -1,6 +1,5 @@
 #include "RadioInterface.h"
 #include "Channels.h"
-#include "RadioExternalPa.h"
 #include "DisplayFormatters.h"
 #include "LLCC68Interface.h"
 #include "LR1110Interface.h"
@@ -10,6 +9,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RF95Interface.h"
+#include "RadioExternalPa.h"
 #include "Router.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
@@ -935,30 +935,30 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
 #else
 // todo:All entries containing "lora fem" are grouped together above.
 #ifdef ARCH_PORTDUINO
-    size_t num_pa_points = portduino_config.num_pa_points;
-    const uint16_t *tx_gain = portduino_config.tx_gain_lora;
+        size_t num_pa_points = portduino_config.num_pa_points;
+        const uint16_t *tx_gain = portduino_config.tx_gain_lora;
 #else
-    size_t num_pa_points = NUM_PA_POINTS;
-    const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
+        size_t num_pa_points = NUM_PA_POINTS;
+        const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
 #endif
 
-    if (num_pa_points == 1) {
-        if (tx_gain[0] > 0 && !devicestate.owner.is_licensed) {
-            LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[0]);
-            power -= tx_gain[0];
-        }
-    } else if (!devicestate.owner.is_licensed) {
-        // we have an array of PA gain values.  Find the highest power setting that works.
-        for (int radio_dbm = 0; radio_dbm < (int)num_pa_points; radio_dbm++) {
-            if (((radio_dbm + tx_gain[radio_dbm]) > power) ||
-                ((radio_dbm == (int)(num_pa_points - 1)) && ((radio_dbm + tx_gain[radio_dbm]) <= power))) {
-                // we've exceeded the power limit, or hit the max we can do
-                LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[radio_dbm]);
-                power -= tx_gain[radio_dbm];
-                break;
+        if (num_pa_points == 1) {
+            if (tx_gain[0] > 0 && !devicestate.owner.is_licensed) {
+                LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[0]);
+                power -= tx_gain[0];
+            }
+        } else if (!devicestate.owner.is_licensed) {
+            // we have an array of PA gain values.  Find the highest power setting that works.
+            for (int radio_dbm = 0; radio_dbm < (int)num_pa_points; radio_dbm++) {
+                if (((radio_dbm + tx_gain[radio_dbm]) > power) ||
+                    ((radio_dbm == (int)(num_pa_points - 1)) && ((radio_dbm + tx_gain[radio_dbm]) <= power))) {
+                    // we've exceeded the power limit, or hit the max we can do
+                    LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[radio_dbm]);
+                    power -= tx_gain[radio_dbm];
+                    break;
+                }
             }
         }
-    }
 #endif
     }
 
