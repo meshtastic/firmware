@@ -25,6 +25,12 @@
 #define LORA_DIO2 4 // SX1262 BUSY
 #define LORA_DIO3   // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
+#ifdef USE_RF95
+#define RF95_IRQ 2
+#define RF95_RESET LORA_RESET
+#define RF95_DIO1 LORA_DIO1
+#endif
+
 #ifdef USE_SX1262
 #define SX126X_CS 10 // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 LORA_DIO1
