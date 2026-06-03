@@ -57,6 +57,18 @@
   // "USERPREFS_MQTT_ENCRYPTION_ENABLED": "true",
   // "USERPREFS_MQTT_TLS_ENABLED": "false",
   // "USERPREFS_MQTT_ROOT_TOPIC": "event/REPLACEME",
+  // "USERPREFS_MESH_BEACON_LISTEN_ENABLED": "true",              // Accept incoming beacons and deliver their text to the local inbox
+  // "USERPREFS_MESH_BEACON_BROADCAST_ENABLED": "true",           // Periodically broadcast beacons from this node
+  // "USERPREFS_MESH_BEACON_MESSAGE": "Join us on NarrowSlow!!!", // Text payload included in every beacon broadcast
+  // "USERPREFS_MESH_BEACON_INTERVAL_SECS": "3600",               // Broadcast interval in seconds (min 3600 = 1 hour)
+  // "USERPREFS_MESH_BEACON_OFFER_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW", // Modem preset advertised in the beacon payload (listeners can adopt this)
+  // "USERPREFS_MESH_BEACON_OFFER_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_N_868",     // Region advertised in the beacon payload
+  // "USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME": "'MyChannel'",   // Channel name advertised in the beacon payload
+  // "USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK": "{ 0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36, 0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55, 0xbf, 0x74, 0x22, 0x7e, 0x9d, 0x6a, 0xfb, 0x48, 0xd6, 0x4c, 0xb1, 0xa1 }", // PSK for the offered channel (32-byte AES-256)
+  // "USERPREFS_MESH_BEACON_ON_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST",      // Modem preset to use when transmitting beacons (radio temporarily switched for TX)
+  // "USERPREFS_MESH_BEACON_ON_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_868",          // Region to use when transmitting beacons
+  // "USERPREFS_MESH_BEACON_ON_CHANNEL_NAME": "'LongFast'",      // Channel name to use on the TX radio config - uses default if unset.
+  // "USERPREFS_MESH_BEACON_ON_CHANNEL_PSK": "{ 0x01 }",         // PSK for the TX channel (0x01 = Meshtastic default PSK)
   // "USERPREFS_RINGTONE_NAG_SECS": "60",
   // "USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS": "43200",
   // "USERPREFS_UI_TEST_LOG": "true", // Test-only: emits `Screen: frame N/M name=... reason=...` log per UI transition (for the mcp-server ui test tier); off in release builds.

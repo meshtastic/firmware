@@ -147,10 +147,6 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_NODEINFO
     nodeInfoModule = new NodeInfoModule();
 #endif
-#if !MESHTASTIC_EXCLUDE_TIPS
-    meshTipsNodeInfoModule = new MeshTipsNodeInfoModule();
-    meshTipsMessageModule = new MeshTipsMessageModule();
-#endif
 #if !MESHTASTIC_EXCLUDE_BEACON
     meshBeaconBroadcastModule = new MeshBeaconBroadcastModule();
     meshBeaconListenerModule = new MeshBeaconListenerModule();
