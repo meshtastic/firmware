@@ -24,6 +24,7 @@
 #include "airtime.h"
 #include "modules/AdminModule.h"
 #include "modules/MeshBeaconModule.h"
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <pb_decode.h>
@@ -37,7 +38,7 @@
 #define TEST_MSG_FMT(fmt, ...)                                                                                                   \
     do {                                                                                                                         \
         char _buf[MSG_BUF_LEN];                                                                                                  \
-        snprintf(_buf, sizeof(_buf), fmt, ##__VA_ARGS__);                                                                        \
+        println(_buf, sizeof(_buf), "/n", ##__VA_ARGS__);                                                                        \
         TEST_MESSAGE(_buf);                                                                                                      \
     } while (0)
 
@@ -901,8 +902,7 @@ BEACON_TEST_ENTRY void setup()
     initializeTestEnvironment();
     UNITY_BEGIN();
 
-    TEST_MESSAGE("");
-    TEST_MESSAGE("=== AdminModule config validation ===");
+    printf("\n=== AdminModule config validation ===\n");
 
     RUN_TEST(test_adminValidation_turboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_longTurboPresetOnEU868_isCleared);
@@ -916,8 +916,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_longFastOfferPreset_isPreserved);
     RUN_TEST(test_adminValidation_validSave_invalidatesCache);
 
-    TEST_MESSAGE("");
-    TEST_MESSAGE("=== Broadcaster payload cache ===");
+    printf("\n=== Broadcaster payload cache ===\n");
 
     RUN_TEST(test_broadcaster_rebuildCache_producesNonEmptyPayload);
     RUN_TEST(test_broadcaster_rebuildCache_payloadDecodesCorrectly);
@@ -925,8 +924,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_invalidateCache_setsDirtyFlag);
     RUN_TEST(test_broadcaster_rebuildCache_idempotent);
 
-    TEST_MESSAGE("");
-    TEST_MESSAGE("=== Broadcaster sendBeacon ===");
+    printf("\n=== Broadcaster sendBeacon ===\n");
 
     RUN_TEST(test_broadcaster_sendBeacon_fromIsLocalNodeWhenUnset);
     RUN_TEST(test_broadcaster_sendBeacon_fromIsCustomNodeWhenSet);
@@ -938,8 +936,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_runOnce_sendsWhenEnabled);
     RUN_TEST(test_broadcaster_runOnce_silentWhenDisabled);
 
-    TEST_MESSAGE("");
-    TEST_MESSAGE("=== Listener offer caching ===");
+    printf("\n=== Listener offer caching === \n");
 
     RUN_TEST(test_listener_receiveWithOffer_cachesOffer);
     RUN_TEST(test_listener_receiveWithChannelOffer_setsHasChannel);
