@@ -15,6 +15,7 @@
 #endif
 #include "BMM150Sensor.h"
 #include "BMX160Sensor.h"
+#include "ICM42607PSensor.h"
 #include "ICM20948Sensor.h"
 #include "LIS3DHSensor.h"
 #include "LSM6DS3Sensor.h"
@@ -114,6 +115,9 @@ class AccelerometerThread : public concurrency::OSThread
             break;
         case ScanI2C::DeviceType::MPU9250:
             sensor = new MPU9250Sensor(device);
+            break;
+        case ScanI2C::DeviceType::ICM42607P:
+            sensor = new ICM42607PSensor(device);
             break;
         case ScanI2C::DeviceType::BMM150:
             sensor = new BMM150Sensor(device);
