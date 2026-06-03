@@ -34,6 +34,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     libxcb-xkb-dev \
     libxkbcommon-dev \
     libinput-dev \
+    libnotify-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN pipx install platformio

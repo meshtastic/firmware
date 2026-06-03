@@ -18,7 +18,7 @@ RUN apk --no-cache add \
         py3-pip py3-grpcio-tools \
         libgpiod-dev yaml-cpp-dev bluez-dev \
         libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \
-        libx11-dev libinput-dev libxkbcommon-dev sqlite-dev sdl2-dev \
+        libx11-dev libinput-dev libxkbcommon-dev sqlite-dev sdl2-dev libnotify-dev \
     && rm -rf /var/cache/apk/* \
     && pip install --no-cache-dir -U platformio \
     && mkdir /tmp/firmware
@@ -49,7 +49,7 @@ USER root
 
 RUN apk --no-cache add \
         shadow libstdc++ libbsd libgpiod yaml-cpp libusb \
-        i2c-tools libuv libx11 libinput libxkbcommon sdl2 \
+        i2c-tools libuv libx11 libinput libxkbcommon sdl2 libnotify \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \
