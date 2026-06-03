@@ -3,6 +3,7 @@
 #include "DisplayFormatters.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #include "RTC.h"
 #include "RadioInterface.h"
 #include "Router.h"
@@ -15,7 +16,7 @@
 meshtastic_Config_LoRaConfig_ModemPreset MeshBeaconModule::originalModemPreset;
 uint16_t MeshBeaconModule::originalLoraChannel;
 meshtastic_Config_LoRaConfig_RegionCode MeshBeaconModule::originalRegion;
-char MeshBeaconModule::originalChannelName[12];
+meshtastic_ChannelSettings MeshBeaconModule::originalPrimaryChannel;
 
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
 
@@ -24,7 +25,7 @@ static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Co
 {
     if (!p)
         return false;
-    for (auto &entry : targetRadioSettings) {
+    for (const auto &entry : targetRadioSettings) {
         if (entry.inUse && entry.id == p->id) {
             if (preset)
                 *preset = entry.preset;
@@ -45,7 +46,7 @@ MeshBeaconModule::MeshBeaconModule()
     originalModemPreset = config.lora.modem_preset;
     originalLoraChannel = config.lora.channel_num;
     originalRegion = config.lora.region;
-    strncpy(originalChannelName, channels.getPrimary().name, sizeof(originalChannelName));
+    originalPrimaryChannel = channels.getPrimary();
 }
 
 void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset,
@@ -93,8 +94,12 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
     meshtastic_Config_LoRaConfig_ModemPreset targetPreset;
     uint16_t targetSlot;
 
-    if (p && getTargetRadioSettings(p, &targetPreset, &targetSlot) &&
-        (targetPreset != config.lora.modem_preset || targetSlot != config.lora.channel_num)) {
+    const auto channelDiffers = [&](const meshtastic_ChannelSettings &target) {
+        return strncmp(c->name, target.name, sizeof(c->name)) != 0 || c->psk.size != target.psk.size ||
+               memcmp(c->psk.bytes, target.psk.bytes, c->psk.size) != 0 || c->channel_num != target.channel_num;
+    };
+
+    if (p && getTargetRadioSettings(p, &targetPreset, &targetSlot) && true) {
 
         const auto &bcfg = moduleConfig.mesh_beacon;
         meshtastic_Config_LoRaConfig_RegionCode targetRegion;
@@ -102,6 +107,23 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
             targetRegion = bcfg.broadcast_on_region;
         else
             targetRegion = config.lora.region;
+
+        meshtastic_ChannelSettings targetChannel = *c;
+        if (bcfg.has_broadcast_on_channel) {
+            targetChannel.channel_num = bcfg.broadcast_on_channel.channel_num;
+            if (bcfg.broadcast_on_channel.name[0] != '\0')
+                strncpy(targetChannel.name, bcfg.broadcast_on_channel.name, sizeof(targetChannel.name) - 1);
+            if (bcfg.broadcast_on_channel.psk.size > 0)
+                targetChannel.psk = bcfg.broadcast_on_channel.psk;
+        } else if (targetChannel.name[0] == '\0') {
+            strncpy(targetChannel.name, DisplayFormatters::getModemPresetDisplayName(targetPreset, false, true),
+                    sizeof(targetChannel.name) - 1);
+        }
+        targetChannel.name[sizeof(targetChannel.name) - 1] = '\0';
+
+        if (targetPreset == config.lora.modem_preset && targetSlot == config.lora.channel_num &&
+            targetRegion == config.lora.region && !channelDiffers(targetChannel))
+            return false;
 
         // Guard: skip TX if preset is invalid for the target region.
         meshtastic_Config_LoRaConfig broadcastOnSetting = config.lora;
@@ -117,8 +139,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         originalModemPreset = config.lora.modem_preset;
         originalLoraChannel = config.lora.channel_num;
         originalRegion = config.lora.region;
-        strncpy(originalChannelName, c->name, sizeof(originalChannelName) - 1);
-        originalChannelName[sizeof(originalChannelName) - 1] = '\0';
+        originalPrimaryChannel = *c;
 
         LOG_INFO("Beacon: switch radio for packet %#08lx to preset=%d slot=%u region=%d", p->id, targetPreset, targetSlot,
                  targetRegion);
@@ -126,16 +147,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         config.lora.channel_num = targetSlot;
         if (targetRegion != config.lora.region)
             config.lora.region = targetRegion;
-        memset(c->name, 0, sizeof(c->name));
-
-        if (bcfg.has_broadcast_on_channel && strlen(bcfg.broadcast_on_channel.name) > 0) {
-            strncpy(c->name, bcfg.broadcast_on_channel.name, sizeof(c->name) - 1);
-        } else if (originalChannelName[0] != '\0') {
-            strncpy(c->name, originalChannelName, sizeof(c->name) - 1);
-        } else {
-            strncpy(c->name, DisplayFormatters::getModemPresetDisplayName(targetPreset, false, true), sizeof(c->name) - 1);
-        }
-        c->name[sizeof(c->name) - 1] = '\0';
+        *c = targetChannel;
 
         channels.fixupChannel(channels.getPrimaryIndex());
         p->channel = channels.getHash(channels.getPrimaryIndex());
@@ -150,8 +162,8 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         config.lora.modem_preset = originalModemPreset;
         config.lora.channel_num = originalLoraChannel;
         config.lora.region = originalRegion;
-        memset(c->name, 0, sizeof(c->name));
-        strncpy(c->name, originalChannelName, sizeof(c->name));
+        *c = originalPrimaryChannel;
+        c->name[sizeof(c->name) - 1] = '\0';
 
         channels.fixupChannel(channels.getPrimaryIndex());
         iface->reconfigure();
@@ -186,6 +198,7 @@ void MeshBeaconBroadcastModule::rebuildCache()
         // not a security boundary.  Operators who want a private channel must
         // distribute the PSK out-of-band and leave offer_channel unset.
     }
+    beacon.has_offer_preset = bcfg.has_broadcast_offer_preset;
     beacon.offer_preset = bcfg.broadcast_offer_preset;
     beacon.offer_region = bcfg.broadcast_offer_region;
     payloadCacheSize = (pb_size_t)pb_encode_to_bytes(payloadCache, sizeof(payloadCache), &meshtastic_MeshBeacon_msg, &beacon);
@@ -197,8 +210,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
 {
     const auto &bcfg = moduleConfig.mesh_beacon;
 
-    bool hasRadioContent = (bcfg.broadcast_offer_preset != _meshtastic_Config_LoRaConfig_ModemPreset_MIN) ||
-                           bcfg.has_broadcast_offer_channel ||
+    bool hasRadioContent = bcfg.has_broadcast_offer_preset || bcfg.has_broadcast_offer_channel ||
                            (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     if (bcfg.broadcast_message[0] == '\0' && !hasRadioContent) {
         LOG_DEBUG("Beacon: nothing to send (empty message, no offer), skipping");
@@ -234,11 +246,17 @@ void MeshBeaconBroadcastModule::sendBeacon()
     p->want_ack = false;
     p->rx_time = getValidTime(RTCQualityFromNet);
 
-    if (bcfg.broadcast_on_preset != _meshtastic_Config_LoRaConfig_ModemPreset_MIN &&
-        (bcfg.broadcast_on_preset != config.lora.modem_preset ||
-         (bcfg.has_broadcast_on_channel && bcfg.broadcast_on_channel.channel_num != config.lora.channel_num))) {
-        uint16_t targetSlot = bcfg.has_broadcast_on_channel ? bcfg.broadcast_on_channel.channel_num : config.lora.channel_num;
-        setTargetRadioSettings(p, bcfg.broadcast_on_preset, targetSlot);
+    const meshtastic_Config_LoRaConfig_ModemPreset targetPreset =
+        bcfg.has_broadcast_on_preset ? bcfg.broadcast_on_preset : config.lora.modem_preset;
+    const uint16_t targetSlot = bcfg.has_broadcast_on_channel ? bcfg.broadcast_on_channel.channel_num : config.lora.channel_num;
+    const bool channelOverrideConfigured =
+        bcfg.has_broadcast_on_channel && (bcfg.broadcast_on_channel.name[0] != '\0' || bcfg.broadcast_on_channel.psk.size > 0 ||
+                                          bcfg.broadcast_on_channel.channel_num != config.lora.channel_num);
+    if ((bcfg.has_broadcast_on_preset && targetPreset != config.lora.modem_preset) ||
+        (bcfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+         bcfg.broadcast_on_region != config.lora.region) ||
+        channelOverrideConfigured) {
+        setTargetRadioSettings(p, targetPreset, targetSlot);
     }
 
     LOG_INFO("Beacon: broadcast from=%#08lx msg='%.40s'", p->from, bcfg.broadcast_message);
@@ -281,28 +299,32 @@ bool MeshBeaconListenerModule::wantPacket(const meshtastic_MeshPacket *p)
 
 bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_MeshBeacon *b)
 {
-    if (!b || strlen(b->message) == 0)
+    const bool hasOfferContent =
+        b && (b->has_offer_channel || b->offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET || b->has_offer_preset);
+    if (!b || (strlen(b->message) == 0 && !hasOfferContent))
         return false;
 
-    LOG_INFO("Beacon: received from %#08lx: '%.40s'", mp.from, b->message);
+    if (strlen(b->message) > 0)
+        LOG_INFO("Beacon: received from %#08lx: '%.40s'", mp.from, b->message);
 
-    // Deliver text to the local inbox as a TEXT_MESSAGE_APP packet.
-    meshtastic_MeshPacket *txt = packetPool.allocCopy(mp);
-    if (!txt) {
-        LOG_WARN("Beacon: failed to alloc inbox copy");
-        return false;
+    if (strlen(b->message) > 0) {
+        // Deliver text to the local inbox as a TEXT_MESSAGE_APP packet.
+        meshtastic_MeshPacket *txt = packetPool.allocCopy(mp);
+        if (!txt) {
+            LOG_WARN("Beacon: failed to alloc inbox copy");
+            return false;
+        }
+        txt->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        txt->to = nodeDB->getNodeNum();
+        memset(txt->decoded.payload.bytes, 0, sizeof(txt->decoded.payload.bytes));
+        txt->decoded.payload.size = (pb_size_t)strnlen(b->message, sizeof(b->message) - 1);
+        memcpy(txt->decoded.payload.bytes, b->message, txt->decoded.payload.size);
+        service->handleToRadio(*txt);
+        packetPool.release(txt);
     }
-    txt->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-    txt->to = nodeDB->getNodeNum();
-    memset(txt->decoded.payload.bytes, 0, sizeof(txt->decoded.payload.bytes));
-    txt->decoded.payload.size = (pb_size_t)strnlen(b->message, sizeof(b->message) - 1);
-    memcpy(txt->decoded.payload.bytes, b->message, txt->decoded.payload.size);
-    service->handleToRadio(*txt);
-    packetPool.release(txt);
 
     // Cache any offer for the client app — never auto-applied.
-    if (b->has_offer_channel || b->offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET ||
-        b->offer_preset != _meshtastic_Config_LoRaConfig_ModemPreset_MIN) {
+    if (hasOfferContent) {
         lastReceivedOffer.valid = true;
         lastReceivedOffer.sender = mp.from;
         lastReceivedOffer.has_channel = b->has_offer_channel;
@@ -314,7 +336,8 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
         LOG_INFO("Beacon: stored offer from %#08lx (preset=%d)", mp.from, b->offer_preset);
     }
 
-    powerFSM.trigger(EVENT_RECEIVED_MSG);
+    if (strlen(b->message) > 0)
+        powerFSM.trigger(EVENT_RECEIVED_MSG);
     notifyObservers(&mp);
     return false;
 }

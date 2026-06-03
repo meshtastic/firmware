@@ -1330,6 +1330,7 @@ void NodeDB::installDefaultModuleConfig()
             : USERPREFS_MESH_BEACON_INTERVAL_SECS;
 #endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_PRESET
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = USERPREFS_MESH_BEACON_OFFER_PRESET;
 #endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_REGION
@@ -1347,6 +1348,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
 #endif
 #ifdef USERPREFS_MESH_BEACON_ON_PRESET
+    moduleConfig.mesh_beacon.has_broadcast_on_preset = true;
     moduleConfig.mesh_beacon.broadcast_on_preset = USERPREFS_MESH_BEACON_ON_PRESET;
 #endif
 #ifdef USERPREFS_MESH_BEACON_ON_REGION

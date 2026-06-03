@@ -54,7 +54,7 @@ class MeshBeaconModule
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
     static uint16_t originalLoraChannel;
     static meshtastic_Config_LoRaConfig_RegionCode originalRegion;
-    static char originalChannelName[12]; // matches ChannelSettings.name max_size
+    static meshtastic_ChannelSettings originalPrimaryChannel;
 };
 
 /**
@@ -81,7 +81,7 @@ class MeshBeaconBroadcastModule : private MeshBeaconModule,
     void rebuildCache();
 
     bool payloadCacheDirty = true;
-    uint8_t payloadCache[meshtastic_MeshBeacon_size];
+    uint8_t payloadCache[meshtastic_MeshBeacon_size] = {};
     pb_size_t payloadCacheSize = 0;
 };
 extern MeshBeaconBroadcastModule *meshBeaconBroadcastModule;
