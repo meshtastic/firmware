@@ -1,5 +1,6 @@
 #include "MeshBeaconModule.h"
 #include "Default.h"
+#include "DisplayFormatters.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -102,34 +103,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         if (bcfg.has_broadcast_on_channel && strlen(bcfg.broadcast_on_channel.name) > 0) {
             strncpy(c->name, bcfg.broadcast_on_channel.name, sizeof(c->name));
         } else {
-            switch (targetPreset) {
-            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
-                strncpy(c->name, "ShortTurbo", sizeof(c->name));
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-                strncpy(c->name, "ShortFast", sizeof(c->name));
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-                strncpy(c->name, "ShortSlow", sizeof(c->name));
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-                strncpy(c->name, "MediumFast", sizeof(c->name));
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-                strncpy(c->name, "MediumSlow", sizeof(c->name));
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
-                strncpy(c->name, "LongFast", sizeof(c->name));
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-                strncpy(c->name, "LongMod", sizeof(c->name));
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-                strncpy(c->name, "LongSlow", sizeof(c->name));
-                break;
-            default:
-                break;
-            }
+            strncpy(c->name, DisplayFormatters::getModemPresetDisplayName(targetPreset, false, true), sizeof(c->name) - 1);
         }
 
         channels.fixupChannel(channels.getPrimaryIndex());
@@ -186,17 +160,31 @@ void MeshBeaconBroadcastModule::sendBeacon()
 {
     const auto &bcfg = moduleConfig.mesh_beacon;
 
-    if (payloadCacheDirty)
-        rebuildCache();
-
     meshtastic_MeshPacket *p = allocDataPacket();
     if (!p) {
         LOG_WARN("Beacon: failed to allocate packet");
         return;
     }
-    memcpy(p->decoded.payload.bytes, payloadCache, payloadCacheSize);
-    p->decoded.payload.size = payloadCacheSize;
-    p->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
+
+    // Use MESH_BEACON_APP only when radio settings are being offered to listeners;
+    // otherwise fall back to TEXT_MESSAGE_APP so standard clients receive the text
+    // without needing a MESH_BEACON_APP decoder.  broadcast_on_* controls which
+    // radio config to use for TX and has no bearing on the portnum.
+    bool hasRadioContent = (bcfg.broadcast_offer_preset != _meshtastic_Config_LoRaConfig_ModemPreset_MIN) ||
+                           bcfg.has_broadcast_offer_channel ||
+                           (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    if (hasRadioContent) {
+        if (payloadCacheDirty)
+            rebuildCache();
+        memcpy(p->decoded.payload.bytes, payloadCache, payloadCacheSize);
+        p->decoded.payload.size = payloadCacheSize;
+        p->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
+    } else {
+        pb_size_t msgLen = (pb_size_t)strnlen(bcfg.broadcast_message, sizeof(bcfg.broadcast_message) - 1);
+        memcpy(p->decoded.payload.bytes, bcfg.broadcast_message, msgLen);
+        p->decoded.payload.size = msgLen;
+        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    }
     p->to = NODENUM_BROADCAST;
     p->from = (bcfg.broadcast_send_as_node != 0) ? bcfg.broadcast_send_as_node : nodeDB->getNodeNum();
     p->hop_limit = 3;
@@ -223,12 +211,8 @@ int32_t MeshBeaconBroadcastModule::runOnce()
         sendBeacon();
     }
 
-    uint32_t interval = bcfg.broadcast_interval_secs;
-    if (interval < 3600)
-        interval = 3600;
-    if (interval > 259200)
-        interval = 259200;
-    return interval * 1000;
+    return Default::getConfiguredOrMinimumValue(bcfg.broadcast_interval_secs, default_mesh_beacon_min_broadcast_interval_secs) *
+           1000;
 }
 
 // ---------------------------------------------------------------------------

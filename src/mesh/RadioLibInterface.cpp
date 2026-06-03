@@ -8,9 +8,6 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#if !MESHTASTIC_EXCLUDE_TIPS
-#include "modules/MeshTipsModule.h"
-#endif
 #if !MESHTASTIC_EXCLUDE_BEACON
 #include "modules/MeshBeaconModule.h"
 #endif
@@ -372,9 +369,6 @@ void RadioLibInterface::onNotify(uint32_t notification)
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt();
-#if !MESHTASTIC_EXCLUDE_TIPS
-        MeshTipsModule::configureRadioForPacket(this, txQueue.getFront());
-#endif
 #if !MESHTASTIC_EXCLUDE_BEACON
         MeshBeaconModule::reconfigureForBeaconTX(this, txQueue.getFront());
 #endif
@@ -400,20 +394,13 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 if (delay_remaining > 0) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, false);
-#if !MESHTASTIC_EXCLUDE_TIPS
-                } else if (MeshTipsModule::configureRadioForPacket(this, txp)) {
-                    // We just switched radio config, so wait to ensure the new channel is available
-                    setTransmitDelay();
-#endif
 #if !MESHTASTIC_EXCLUDE_BEACON
                 } else if (MeshBeaconModule::reconfigureForBeaconTX(this, txp)) {
                     setTransmitDelay();
 #endif
                 } else {
                     if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-#if !MESHTASTIC_EXCLUDE_TIPS
-                        if (!MeshTipsModule::hasTargetRadioSettings(txp))
-#elif !MESHTASTIC_EXCLUDE_BEACON
+#if !MESHTASTIC_EXCLUDE_BEACON
                         if (!MeshBeaconModule::hasTargetRadioSettings(txp))
 #endif
                         {
@@ -550,9 +537,6 @@ void RadioLibInterface::completeSending()
         if (!isFromUs(p))
             txRelay++;
         printPacket("Completed sending", p);
-#if !MESHTASTIC_EXCLUDE_TIPS
-        MeshTipsModule::clearTargetRadioSettings(p);
-#endif
 #if !MESHTASTIC_EXCLUDE_BEACON
         MeshBeaconModule::clearTargetRadioSettings(p);
         MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
