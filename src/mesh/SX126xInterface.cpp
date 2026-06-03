@@ -64,11 +64,6 @@ template <typename T> bool SX126xInterface<T>::init()
     }
 #endif
 
-#ifdef RF95_FAN_EN
-    pinMode(RF95_FAN_EN, OUTPUT);
-    digitalWrite(RF95_FAN_EN, HIGH);
-#endif
-
     enableFan();
 
 #if ARCH_PORTDUINO
