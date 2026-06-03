@@ -1,0 +1,205 @@
+name: FlashMesh — Client Firmware Build (per-node PSK)
+
+# Triggered by the client-area worker (workflow_dispatch) when a client asks to
+# generate a firmware image that bakes THEIR OTA PSK for THEIR node's board.
+# The PSK is NOT passed as an input (dispatch inputs are visible in the Actions
+# UI); the build pulls it from the client area via a one-time, secret-gated
+# callback and masks it. The artifact is uploaded to a PRIVATE FlashMesh
+# namespace (client/<build_token>/) that is never listed in the public catalog.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pio_env:
+        description: 'PlatformIO env to build'
+        required: true
+        type: string
+      build_token:
+        description: 'One-time build token (also the private artifact path)'
+        required: true
+        type: string
+      version_prefix:
+        description: 'Version prefix (final = <prefix>.<sha7>)'
+        required: false
+        default: '2.8.0'
+        type: string
+      callback_base:
+        description: 'Client-area base URL for PSK + done callbacks'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    env:
+      FLASHMESH_ENDPOINT: https://flasher.cvaldess.com
+    steps:
+      - name: Mask secrets in logs
+        run: |
+          echo "::add-mask::${{ secrets.FLASHMESH_ADMIN_TOKEN }}"
+          echo "::add-mask::${{ secrets.BUILD_CALLBACK_SECRET }}"
+
+      - name: Validate pio_env (allowlist)
+        env:
+          PIO_ENV: ${{ inputs.pio_env }}
+        run: |
+          case "$PIO_ENV" in
+            wiznet_5500_evb_pico2_e22p|pico2_w5500_e22) : ;;
+            *) echo "::error::unsupported pio_env '$PIO_ENV'"; exit 1 ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Compute SHA7 + version
+        id: meta
+        run: |
+          SHA7=$(git rev-parse --short=7 HEAD)
+          VERSION="${{ inputs.version_prefix }}.$SHA7"
+          echo "sha7=$SHA7" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "::notice::pio_env=${{ inputs.pio_env }}  version=$VERSION"
+
+      - name: Fetch + inject client PSK (callback)
+        env:
+          CALLBACK_BASE: ${{ inputs.callback_base }}
+          BUILD_TOKEN: ${{ inputs.build_token }}
+          CALLBACK_SECRET: ${{ secrets.BUILD_CALLBACK_SECRET }}
+        run: |
+          if [ -z "$CALLBACK_SECRET" ]; then
+            echo "::error::BUILD_CALLBACK_SECRET secret not set"; exit 1
+          fi
+          RESP=$(curl -fsS -H "X-Build-Secret: $CALLBACK_SECRET" \
+            "$CALLBACK_BASE/api/internal/build/$BUILD_TOKEN/psk") \
+            || { echo "::error::PSK callback failed"; exit 1; }
+          PSK_HEX=$(echo "$RESP" | jq -r '.psk_hex // empty')
+          echo "::add-mask::$PSK_HEX"
+          if [ ${#PSK_HEX} -ne 64 ] || ! [[ "$PSK_HEX" =~ ^[0-9a-fA-F]+$ ]]; then
+            echo "::error::psk_hex must be 64 hex chars (32 bytes)"; exit 1
+          fi
+          PSK_C=$(python3 -c "import sys;h=sys.argv[1];print('{'+','.join(f'0x{h[i:i+2]}' for i in range(0,len(h),2))+'}')" "$PSK_HEX")
+          echo "::add-mask::$PSK_C"
+          echo "PLATFORMIO_BUILD_FLAGS=-D USERPREFS_OTA_PSK=$PSK_C" >> "$GITHUB_ENV"
+          echo "::notice::client PSK injected (32 bytes)"
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/packages
+            ~/.platformio/platforms
+            ~/.platformio/cache
+          key: pio-${{ runner.os }}-${{ inputs.pio_env }}-${{ hashFiles('platformio.ini', format('variants/**/{0}/platformio.ini', inputs.pio_env)) }}
+          restore-keys: |
+            pio-${{ runner.os }}-${{ inputs.pio_env }}-
+            pio-${{ runner.os }}-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
+
+      - name: Build firmware
+        run: pio run -e ${{ inputs.pio_env }}
+
+      - name: Locate build artifacts
+        id: artifacts
+        run: |
+          BUILD_DIR=.pio/build/${{ inputs.pio_env }}
+          ELF=$(ls "$BUILD_DIR"/firmware-*.elf 2>/dev/null | head -1)
+          BIN=$(ls "$BUILD_DIR"/firmware-*.bin 2>/dev/null | head -1)
+          if [ -z "$ELF" ] || [ -z "$BIN" ]; then
+            echo "::error::artifacts missing in $BUILD_DIR (elf=$ELF bin=$BIN)"
+            ls -la "$BUILD_DIR" || true
+            exit 1
+          fi
+          echo "elf=$ELF" >> "$GITHUB_OUTPUT"
+          echo "bin=$BIN" >> "$GITHUB_OUTPUT"
+
+      - name: Sanity check — OTA symbols present
+        env:
+          ELF: ${{ steps.artifacts.outputs.elf }}
+        run: |
+          NM_BIN=$(find ~/.platformio/packages -name 'arm-none-eabi-nm' 2>/dev/null | head -1)
+          if [ -z "$NM_BIN" ]; then
+            echo "::warning::arm-none-eabi-nm not found — skipping symbol check"; exit 0
+          fi
+          if ! "$NM_BIN" -C "$ELF" | grep -qE 'initEthOTA|initEthHttpOTA|OTAShared::'; then
+            echo "::error::HAS_ETHERNET_OTA symbols missing"; exit 1
+          fi
+
+      - name: Gzip firmware
+        env:
+          BIN: ${{ steps.artifacts.outputs.bin }}
+        run: gzip -9 -k -f "$BIN"
+
+      - name: Compute local CRC32
+        id: crc
+        env:
+          BIN: ${{ steps.artifacts.outputs.bin }}
+        run: |
+          LOCAL_CRC=$(python3 -c "import sys,zlib;print(format(zlib.crc32(open(sys.argv[1],'rb').read()) & 0xffffffff, '08x'))" "$BIN.gz")
+          echo "local_crc=$LOCAL_CRC" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to FlashMesh (private client namespace)
+        id: upload
+        env:
+          TOKEN: ${{ secrets.FLASHMESH_ADMIN_TOKEN }}
+          BIN: ${{ steps.artifacts.outputs.bin }}
+          BUILD_TOKEN: ${{ inputs.build_token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          LOCAL_CRC: ${{ steps.crc.outputs.local_crc }}
+        run: |
+          if [ -z "$TOKEN" ]; then echo "::error::FLASHMESH_ADMIN_TOKEN not set"; exit 1; fi
+          RESP=$(mktemp)
+          HTTP=$(curl -sS -o "$RESP" -w '%{http_code}' \
+            -X POST "$FLASHMESH_ENDPOINT/api/admin/client-upload" \
+            -H "Authorization: Bearer $TOKEN" \
+            -F "build_token=$BUILD_TOKEN" \
+            -F "version=$VERSION" \
+            -F "firmware=@$BIN.gz;type=application/gzip")
+          cat "$RESP"; echo
+          if [ "$HTTP" -ne 200 ]; then echo "::error::upload failed HTTP $HTTP"; exit 1; fi
+          KEY=$(jq -r '.key' < "$RESP")
+          SERVER_CRC=$(jq -r '.crc32_hex' < "$RESP")
+          if [ "$SERVER_CRC" != "$LOCAL_CRC" ]; then
+            echo "::error::server CRC $SERVER_CRC != local $LOCAL_CRC"; exit 1
+          fi
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Notify client area (ready)
+        env:
+          CALLBACK_BASE: ${{ inputs.callback_base }}
+          BUILD_TOKEN: ${{ inputs.build_token }}
+          CALLBACK_SECRET: ${{ secrets.BUILD_CALLBACK_SECRET }}
+          KEY: ${{ steps.upload.outputs.key }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          LOCAL_CRC: ${{ steps.crc.outputs.local_crc }}
+        run: |
+          curl -fsS -X POST "$CALLBACK_BASE/api/internal/build/$BUILD_TOKEN/done" \
+            -H "X-Build-Secret: $CALLBACK_SECRET" \
+            -H "Content-Type: application/json" \
+            -d "{\"status\":\"ready\",\"key\":\"$KEY\",\"crc32_hex\":\"$LOCAL_CRC\",\"version\":\"$VERSION\"}"
+
+      - name: Notify client area (error)
+        if: failure()
+        env:
+          CALLBACK_BASE: ${{ inputs.callback_base }}
+          BUILD_TOKEN: ${{ inputs.build_token }}
+          CALLBACK_SECRET: ${{ secrets.BUILD_CALLBACK_SECRET }}
+        run: |
+          curl -fsS -X POST "$CALLBACK_BASE/api/internal/build/$BUILD_TOKEN/done" \
+            -H "X-Build-Secret: $CALLBACK_SECRET" \
+            -H "Content-Type: application/json" \
+            -d "{\"status\":\"error\",\"error\":\"build failed (run ${{ github.run_id }})\"}" || true
