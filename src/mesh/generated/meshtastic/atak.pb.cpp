@@ -30,7 +30,7 @@ PB_BIND(meshtastic_AircraftTrack, meshtastic_AircraftTrack, AUTO)
 PB_BIND(meshtastic_CotGeoPoint, meshtastic_CotGeoPoint, AUTO)
 
 
-PB_BIND(meshtastic_DrawnShape, meshtastic_DrawnShape, 2)
+PB_BIND(meshtastic_DrawnShape, meshtastic_DrawnShape, AUTO)
 
 
 PB_BIND(meshtastic_Marker, meshtastic_Marker, AUTO)
@@ -61,6 +61,15 @@ PB_BIND(meshtastic_TAKEnvironment, meshtastic_TAKEnvironment, AUTO)
 
 
 PB_BIND(meshtastic_SensorFov, meshtastic_SensorFov, AUTO)
+
+
+PB_BIND(meshtastic_TakTalkMessage, meshtastic_TakTalkMessage, AUTO)
+
+
+PB_BIND(meshtastic_TakTalkRoomData, meshtastic_TakTalkRoomData, AUTO)
+
+
+PB_BIND(meshtastic_Marti, meshtastic_Marti, AUTO)
 
 
 PB_BIND(meshtastic_TAKPacketV2, meshtastic_TAKPacketV2, 2)
