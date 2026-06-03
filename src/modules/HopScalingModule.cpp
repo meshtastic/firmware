@@ -66,7 +66,7 @@ void HopScalingModule::clear()
     lastPoliteNumer = POLITENESS_DEFAULT;
     lastTrendStats = {};
     memset(denominatorHistory, DENOM_MIN, sizeof(denominatorHistory));
-#ifndef UNIT_TEST
+#ifndef PIO_UNIT_TESTING
     hashSeed = static_cast<uint16_t>(random());
 #else
     hashSeed = 0; // deterministic in unit tests

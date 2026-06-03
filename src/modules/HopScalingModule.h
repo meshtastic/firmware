@@ -196,8 +196,8 @@ class HopScalingModule : private concurrency::OSThread
         filteringDenomHoldRollsRemaining = 0;
     }
 
-#ifdef UNIT_TEST
-    // Writable from tests as HopScalingModule::s_testNowMs; drives nowMs() in UNIT_TEST builds.
+#ifdef PIO_UNIT_TESTING
+    // Writable from tests as HopScalingModule::s_testNowMs; drives nowMs() in PIO_UNIT_TESTING builds.
     inline static uint32_t s_testNowMs = 0;
     /// Override the per-session hash seed. Use in tests that need a specific sampling distribution.
     void setHashSeed(uint16_t seed) { hashSeed = seed; }
@@ -210,7 +210,7 @@ class HopScalingModule : private concurrency::OSThread
     int32_t runOnce() override;
 
   private:
-#ifdef UNIT_TEST
+#ifdef PIO_UNIT_TESTING
     friend class HopScalingTestShim;
 #endif
 
@@ -330,7 +330,7 @@ class HopScalingModule : private concurrency::OSThread
     /// XOR-fold + golden-ratio hash of a 32-bit node ID to 16 bits, mixed with the session seed.
     /// Multiplying by floor(2^32 / φ) gives uniform avalanche; XORing the seed ensures different
     /// devices (or the same device after a clear()) sample a different subset of node IDs.
-    /// For seed=0 the function is deterministic, which is used in UNIT_TEST builds.
+    /// For seed=0 the function is deterministic, which is used in PIO_UNIT_TESTING builds.
     uint16_t hashNodeId(uint32_t nodeId) const { return static_cast<uint16_t>((nodeId * 2654435761u) >> 16) ^ hashSeed; }
     static bool seenInLast13h(const Record &r) { return r.seenHoursAgo != 0u; }
     static void markCurrentHour(Record &r) { r.seenHoursAgo |= 1u; }
@@ -339,7 +339,7 @@ class HopScalingModule : private concurrency::OSThread
 
   public:
     // Clock — public so tests can share the same timebase via HopScalingModule::s_testNowMs
-#ifdef UNIT_TEST
+#ifdef PIO_UNIT_TESTING
     static uint32_t nowMs() { return s_testNowMs; }
 #else
     static uint32_t nowMs() { return millis(); }
