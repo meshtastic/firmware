@@ -1200,9 +1200,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         }
         // Validate broadcast_offer_region is a known region code.
         if (b.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            meshtastic_Config_LoRaConfig probe = config.lora;
-            probe.region = b.broadcast_offer_region;
-            if (!RadioInterface::validateConfigRegion(probe)) {
+            const RegionInfo *r = getRegion(b.broadcast_offer_region);
+            if (r->code != b.broadcast_offer_region) {
                 LOG_WARN("Beacon: broadcast_offer_region %d invalid, clearing", b.broadcast_offer_region);
                 b.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
             }

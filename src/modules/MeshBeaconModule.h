@@ -75,7 +75,7 @@ class MeshBeaconBroadcastModule : private MeshBeaconModule,
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &, meshtastic_MeshBeacon *) override { return false; }
     virtual int32_t runOnce() override;
 
-  private:
+  protected:
     void sendBeacon();
     void rebuildCache();
 
