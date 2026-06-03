@@ -436,12 +436,13 @@ static void test_broadcaster_sendBeacon_addressedToBroadcast(void)
     TEST_ASSERT_EQUAL_UINT32(NODENUM_BROADCAST, mockRouter->sentPackets[0].to);
 }
 
-// sendBeacon uses MESH_BEACON_APP portnum.
+// sendBeacon uses MESH_BEACON_APP portnum when a modem preset is offered.
 static void test_broadcaster_sendBeacon_usesBeaconPortnum(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "portnum-check", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
 
     MeshBeaconBroadcastModuleTestShim bcast;
     bcast.sendBeacon();
@@ -450,13 +451,35 @@ static void test_broadcaster_sendBeacon_usesBeaconPortnum(void)
     TEST_ASSERT_EQUAL(meshtastic_PortNum_MESH_BEACON_APP, mockRouter->sentPackets[0].decoded.portnum);
 }
 
-// sendBeacon payload decodes back to the correct message string.
+// sendBeacon falls back to TEXT_MESSAGE_APP when no radio settings are offered,
+// even when broadcast_on_preset is configured (that controls TX radio, not portnum).
+static void test_broadcaster_sendBeacon_fallsBackToTextMessagePortnum(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    const char *msg = "plain-text-beacon";
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, msg, sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    // broadcast_on_preset set, but no offer — should still be TEXT_MESSAGE_APP
+    moduleConfig.mesh_beacon.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    const meshtastic_MeshPacket &p = mockRouter->sentPackets[0];
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_TEXT_MESSAGE_APP, p.decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(strlen(msg), p.decoded.payload.size);
+    TEST_ASSERT_EQUAL_STRING_LEN(msg, (const char *)p.decoded.payload.bytes, p.decoded.payload.size);
+}
+
+// sendBeacon payload decodes back to the correct message string (MESH_BEACON_APP path).
 static void test_broadcaster_sendBeacon_payloadDecodesCorrectly(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
     const char *msg = "Greetings from the beacon";
     strncpy(moduleConfig.mesh_beacon.broadcast_message, msg, sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
 
     MeshBeaconBroadcastModuleTestShim bcast;
     bcast.sendBeacon();
@@ -726,6 +749,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_sendBeacon_fromIsCustomNodeWhenSet);
     RUN_TEST(test_broadcaster_sendBeacon_addressedToBroadcast);
     RUN_TEST(test_broadcaster_sendBeacon_usesBeaconPortnum);
+    RUN_TEST(test_broadcaster_sendBeacon_fallsBackToTextMessagePortnum);
     RUN_TEST(test_broadcaster_sendBeacon_payloadDecodesCorrectly);
     RUN_TEST(test_broadcaster_runOnce_sendsWhenEnabled);
     RUN_TEST(test_broadcaster_runOnce_silentWhenDisabled);

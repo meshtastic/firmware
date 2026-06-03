@@ -28,9 +28,6 @@
 #if !MESHTASTIC_EXCLUDE_NODEINFO
 #include "modules/NodeInfoModule.h"
 #endif
-#if !MESHTASTIC_EXCLUDE_TIPS
-#include "modules/MeshTipsModule.h"
-#endif
 #if !MESHTASTIC_EXCLUDE_BEACON
 #include "modules/MeshBeaconModule.h"
 #endif
