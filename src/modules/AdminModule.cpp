@@ -1182,20 +1182,32 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         // Enforce message length limit.
         if (strnlen(b.broadcast_message, sizeof(b.broadcast_message)) >= 100)
             b.broadcast_message[99] = '\0';
-        // Enforce interval bounds (0 means unset/use default).
-        if (b.broadcast_interval_secs != 0 && b.broadcast_interval_secs < 3600)
-            b.broadcast_interval_secs = 3600;
-        if (b.broadcast_interval_secs > 259200)
-            b.broadcast_interval_secs = 259200;
-        // Validate broadcast_on_preset against the device's current region.
+        // Enforce interval minimum (0 means unset/use default).
+        if (b.broadcast_interval_secs != 0 && b.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
+            b.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
+        // Validate broadcast_on_preset against broadcast_on_region (or current region if unset).
         if (b.broadcast_on_preset != _meshtastic_Config_LoRaConfig_ModemPreset_MIN) {
             meshtastic_Config_LoRaConfig probe = config.lora;
             probe.use_preset = true;
             probe.modem_preset = b.broadcast_on_preset;
+            if (b.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                probe.region = b.broadcast_on_region;
             if (!RadioInterface::validateConfigLora(probe)) {
                 LOG_WARN("Beacon: broadcast_on_preset %d invalid for region, clearing", b.broadcast_on_preset);
                 b.broadcast_on_preset = _meshtastic_Config_LoRaConfig_ModemPreset_MIN;
                 b.has_broadcast_on_channel = false;
+            }
+        }
+        // Validate broadcast_offer_preset against broadcast_offer_region (or current region if unset).
+        if (b.broadcast_offer_preset != _meshtastic_Config_LoRaConfig_ModemPreset_MIN) {
+            meshtastic_Config_LoRaConfig probe = config.lora;
+            probe.use_preset = true;
+            probe.modem_preset = b.broadcast_offer_preset;
+            if (b.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                probe.region = b.broadcast_offer_region;
+            if (!RadioInterface::validateConfigLora(probe)) {
+                LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clearing", b.broadcast_offer_preset);
+                b.broadcast_offer_preset = _meshtastic_Config_LoRaConfig_ModemPreset_MIN;
             }
         }
         // Validate broadcast_offer_region is a known region code.

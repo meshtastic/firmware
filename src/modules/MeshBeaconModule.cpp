@@ -14,6 +14,7 @@
 // Static members
 meshtastic_Config_LoRaConfig_ModemPreset MeshBeaconModule::originalModemPreset;
 uint16_t MeshBeaconModule::originalLoraChannel;
+meshtastic_Config_LoRaConfig_RegionCode MeshBeaconModule::originalRegion;
 char MeshBeaconModule::originalChannelName[12];
 
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
@@ -43,6 +44,7 @@ MeshBeaconModule::MeshBeaconModule()
 {
     originalModemPreset = config.lora.modem_preset;
     originalLoraChannel = config.lora.channel_num;
+    originalRegion = config.lora.region;
     strncpy(originalChannelName, channels.getPrimary().name, sizeof(originalChannelName));
 }
 
@@ -94,12 +96,31 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
     if (p && getTargetRadioSettings(p, &targetPreset, &targetSlot) &&
         (targetPreset != config.lora.modem_preset || targetSlot != config.lora.channel_num)) {
 
-        LOG_INFO("Beacon: switch radio for packet %#08lx to preset=%d slot=%u", p->id, targetPreset, targetSlot);
+        const auto &bcfg = moduleConfig.mesh_beacon;
+        meshtastic_Config_LoRaConfig_RegionCode targetRegion;
+        if (bcfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            targetRegion = bcfg.broadcast_on_region;
+        else
+            targetRegion = config.lora.region;
+
+        // Guard: skip TX if preset is invalid for the target region.
+        meshtastic_Config_LoRaConfig broadcastOnSetting = config.lora;
+        broadcastOnSetting.use_preset = true;
+        broadcastOnSetting.modem_preset = targetPreset;
+        broadcastOnSetting.region = targetRegion;
+        if (!RadioInterface::validateConfigLora(broadcastOnSetting)) {
+            LOG_WARN("Beacon: preset %d invalid for region %d, skipping radio switch", targetPreset, targetRegion);
+            return false;
+        }
+
+        LOG_INFO("Beacon: switch radio for packet %#08lx to preset=%d slot=%u region=%d", p->id, targetPreset, targetSlot,
+                 targetRegion);
         config.lora.modem_preset = targetPreset;
         config.lora.channel_num = targetSlot;
+        if (targetRegion != config.lora.region)
+            config.lora.region = targetRegion;
         memset(c->name, 0, sizeof(c->name));
 
-        const auto &bcfg = moduleConfig.mesh_beacon;
         if (bcfg.has_broadcast_on_channel && strlen(bcfg.broadcast_on_channel.name) > 0) {
             strncpy(c->name, bcfg.broadcast_on_channel.name, sizeof(c->name));
         } else {
@@ -112,11 +133,13 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         return true;
 
     } else if ((!p || !getTargetRadioSettings(p, nullptr, nullptr)) &&
-               (config.lora.modem_preset != originalModemPreset || config.lora.channel_num != originalLoraChannel)) {
+               (config.lora.modem_preset != originalModemPreset || config.lora.channel_num != originalLoraChannel ||
+                config.lora.region != originalRegion)) {
 
         LOG_INFO("Beacon: restoring radio config after beacon TX");
         config.lora.modem_preset = originalModemPreset;
         config.lora.channel_num = originalLoraChannel;
+        config.lora.region = originalRegion;
         memset(c->name, 0, sizeof(c->name));
         strncpy(c->name, originalChannelName, sizeof(c->name));
 

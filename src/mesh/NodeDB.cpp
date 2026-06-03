@@ -1308,6 +1308,59 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
     moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.listen_enabled = true;
+    moduleConfig.mesh_beacon.broadcast_enabled = false;
+#ifdef USERPREFS_MESH_BEACON_LISTEN_ENABLED
+    moduleConfig.mesh_beacon.listen_enabled = USERPREFS_MESH_BEACON_LISTEN_ENABLED;
+#endif
+#ifdef USERPREFS_MESH_BEACON_BROADCAST_ENABLED
+    moduleConfig.mesh_beacon.broadcast_enabled = USERPREFS_MESH_BEACON_BROADCAST_ENABLED;
+#endif
+#ifdef USERPREFS_MESH_BEACON_MESSAGE
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, USERPREFS_MESH_BEACON_MESSAGE,
+            sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+#endif
+#ifdef USERPREFS_MESH_BEACON_INTERVAL_SECS
+    moduleConfig.mesh_beacon.broadcast_interval_secs = USERPREFS_MESH_BEACON_INTERVAL_SECS;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_PRESET
+    moduleConfig.mesh_beacon.broadcast_offer_preset = USERPREFS_MESH_BEACON_OFFER_PRESET;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_REGION
+    moduleConfig.mesh_beacon.broadcast_offer_region = USERPREFS_MESH_BEACON_OFFER_REGION;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
+            sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1);
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
+    static const uint8_t beaconOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
+    memcpy(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, beaconOfferPsk, sizeof(beaconOfferPsk));
+    moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_PRESET
+    moduleConfig.mesh_beacon.broadcast_on_preset = USERPREFS_MESH_BEACON_ON_PRESET;
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_REGION
+    moduleConfig.mesh_beacon.broadcast_on_region = USERPREFS_MESH_BEACON_ON_REGION;
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_on_channel.name, USERPREFS_MESH_BEACON_ON_CHANNEL_NAME,
+            sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1);
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_PSK
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    static const uint8_t beaconOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
+    memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconOnPsk, sizeof(beaconOnPsk));
+    moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
+#endif
+#endif // !MESHTASTIC_EXCLUDE_BEACON
+
     initModuleConfigIntervals();
 }
 
@@ -2758,6 +2811,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
         moduleConfig.has_statusmessage = true;
+        moduleConfig.has_mesh_beacon = true;
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);

@@ -53,6 +53,7 @@ class MeshBeaconModule
   protected:
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
     static uint16_t originalLoraChannel;
+    static meshtastic_Config_LoRaConfig_RegionCode originalRegion;
     static char originalChannelName[12]; // matches ChannelSettings.name max_size
 };
 
