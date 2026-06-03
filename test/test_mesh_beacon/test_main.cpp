@@ -901,7 +901,9 @@ BEACON_TEST_ENTRY void setup()
     initializeTestEnvironment();
     UNITY_BEGIN();
 
+    TEST_MESSAGE("");
     TEST_MESSAGE("=== AdminModule config validation ===");
+
     RUN_TEST(test_adminValidation_turboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_longTurboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_turboPresetOnUS_isAccepted);
@@ -914,14 +916,18 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_longFastOfferPreset_isPreserved);
     RUN_TEST(test_adminValidation_validSave_invalidatesCache);
 
+    TEST_MESSAGE("");
     TEST_MESSAGE("=== Broadcaster payload cache ===");
+
     RUN_TEST(test_broadcaster_rebuildCache_producesNonEmptyPayload);
     RUN_TEST(test_broadcaster_rebuildCache_payloadDecodesCorrectly);
     RUN_TEST(test_broadcaster_rebuildCache_offerFieldsEncoded);
     RUN_TEST(test_broadcaster_invalidateCache_setsDirtyFlag);
     RUN_TEST(test_broadcaster_rebuildCache_idempotent);
 
+    TEST_MESSAGE("");
     TEST_MESSAGE("=== Broadcaster sendBeacon ===");
+
     RUN_TEST(test_broadcaster_sendBeacon_fromIsLocalNodeWhenUnset);
     RUN_TEST(test_broadcaster_sendBeacon_fromIsCustomNodeWhenSet);
     RUN_TEST(test_broadcaster_sendBeacon_addressedToBroadcast);
@@ -932,7 +938,9 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_runOnce_sendsWhenEnabled);
     RUN_TEST(test_broadcaster_runOnce_silentWhenDisabled);
 
+    TEST_MESSAGE("");
     TEST_MESSAGE("=== Listener offer caching ===");
+
     RUN_TEST(test_listener_receiveWithOffer_cachesOffer);
     RUN_TEST(test_listener_receiveWithChannelOffer_setsHasChannel);
     RUN_TEST(test_listener_emptyMessageWithoutOffer_isDropped);
