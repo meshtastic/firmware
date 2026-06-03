@@ -466,7 +466,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
             publishNodeInfo();
 #endif
         }
@@ -674,7 +674,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
                 const char *warning = "Could not reach the MQTT server. Settings will be saved, but please verify the server "
                                       "address and credentials.";
                 LOG_WARN(warning);
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 if (cn) {
                     cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -690,7 +690,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
 #else
         const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
         LOG_ERROR(warning);
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);
@@ -706,7 +706,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
     if (defaultServer && !IS_ONE_OF(parsed.serverPort, PubSubConfig::defaultPort, PubSubConfig::defaultPortTls)) {
         const char *warning = "Invalid MQTT config: default server address must not have a port specified";
         LOG_ERROR(warning);
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);
