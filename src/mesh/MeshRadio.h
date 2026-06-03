@@ -77,6 +77,7 @@ extern const RegionInfo regions[];
 extern const RegionInfo *myRegion;
 
 extern void initRegion();
+extern const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code);
 
 // Valid LoRa spread factor range and defaults
 constexpr uint8_t LORA_SF_MIN = 5;
