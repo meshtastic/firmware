@@ -6,6 +6,8 @@
  * Released under GPL v3 (see LICENSE file for details)
  */
 
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_ZPS
+
 #include "ZPSModule.h"
 #include "Default.h"
 #include "MeshService.h"
@@ -18,7 +20,13 @@
 
 #if !defined(MESHTASTIC_EXCLUDE_BLUETOOTH)
 
-#include "NimBLEDevice.h"
+// Use the bundled NimBLE host stack directly (matching src/nimble/NimbleBluetooth.cpp).
+// The external h2zero NimBLE-Arduino library (NimBLEDevice.h) is in lib_ignore since the
+// pioarduino / arduino-esp32 3.x migration, so we talk to the raw host APIs instead.
+#include "host/ble_gap.h"
+#include "host/ble_hs.h"
+#include "host/ble_hs_adv.h"
+#include "host/ble_hs_id.h"
 
 #define BLE_MAX_REC 15
 #define BLE_NO_RESULTS -1 // Indicates a BLE scan is in progress
@@ -256,7 +264,7 @@ int32_t ZPSModule::runOnce()
     return 5000;
 }
 
-uint64_t encodeBSS(uint8_t *bssid, uint8_t chan, uint8_t absRSSI)
+uint64_t encodeBSS(const uint8_t *bssid, uint8_t chan, uint8_t absRSSI)
 {
     uint64_t netBytes = absRSSI & 0xff;
     netBytes <<= 8;
@@ -270,7 +278,7 @@ uint64_t encodeBSS(uint8_t *bssid, uint8_t chan, uint8_t absRSSI)
     return netBytes;
 }
 
-uint64_t encodeBLE(uint8_t *addr, uint8_t absRSSI)
+uint64_t encodeBLE(const uint8_t *addr, uint8_t absRSSI)
 {
     uint64_t netBytes = absRSSI & 0xff;
     netBytes <<= 8;
@@ -417,3 +425,5 @@ static int ble_scan(uint32_t duration, bool passive, bool dedup)
 }
 
 #endif // MESHTASTIC_EXCLUDE_BLUETOOTH
+
+#endif // ARCH_ESP32 && !MESHTASTIC_EXCLUDE_ZPS

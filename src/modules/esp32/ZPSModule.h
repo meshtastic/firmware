@@ -20,8 +20,8 @@ enum SCANSTATE { SCAN_NONE, SCAN_BSS_RUN, SCAN_BSS_DONE, SCAN_BLE_RUN, SCAN_BLE_
  * Ingest a WiFi BSSID, channel and RSSI (or BLE address and RSSI)
  *   and encode them into a packed uint64
  */
-uint64_t encodeBSS(uint8_t *bssid, uint8_t chan, uint8_t absRSSI);
-uint64_t encodeBLE(uint8_t *addr, uint8_t absRSSI);
+uint64_t encodeBSS(const uint8_t *bssid, uint8_t chan, uint8_t absRSSI);
+uint64_t encodeBLE(const uint8_t *addr, uint8_t absRSSI);
 
 class ZPSModule : public SinglePortModule, private concurrency::OSThread
 {
