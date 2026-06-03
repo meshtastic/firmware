@@ -216,9 +216,8 @@ void LoRaFEMInterface::setRxModeEnableWhenMCUSleep(void)
 #endif
 
 #ifdef HELTEC_V4
-    // Keep GC1109 FEM powered during deep sleep so LNA remains active for RX wake.
-    // Set PA_POWER and PA_EN HIGH (overrides SX126xInterface::sleep() shutdown),
-    // then latch with RTC hold so the state survives deep sleep.
+    // Keep FEM rail powered during deep sleep so LoRa RX wake can work (GC1109 keeps LNA active; KCT8103L uses RX bypass).
+    // Set PA_POWER HIGH (overrides SX126xInterface::sleep() shutdown), then latch with RTC hold so the state survives deep sleep.
     enableFEMPower();
     rtc_gpio_hold_en((gpio_num_t)LORA_PA_POWER);
     if (fem_type == GC1109_PA) {
