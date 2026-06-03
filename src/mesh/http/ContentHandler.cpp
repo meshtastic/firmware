@@ -804,23 +804,24 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     uint32_t readIndex = 0;
     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
     while (tempNodeInfo != NULL) {
-        if (tempNodeInfo->has_user) {
+        if (nodeInfoLiteHasUser(tempNodeInfo)) {
             char id[16];
             snprintf(id, sizeof(id), "!%08x", tempNodeInfo->num);
-            char macStr[18];
-            snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", tempNodeInfo->user.macaddr[0],
-                     tempNodeInfo->user.macaddr[1], tempNodeInfo->user.macaddr[2], tempNodeInfo->user.macaddr[3],
-                     tempNodeInfo->user.macaddr[4], tempNodeInfo->user.macaddr[5]);
 
             std::string position;
             if (nodeDB->hasValidPosition(tempNodeInfo)) {
-                position = "{\"altitude\":";
-                position += jsonNum((int)tempNodeInfo->position.altitude);
-                position += ",\"latitude\":";
-                position += jsonNum((float)tempNodeInfo->position.latitude_i * 1e-7);
-                position += ",\"longitude\":";
-                position += jsonNum((float)tempNodeInfo->position.longitude_i * 1e-7);
-                position += "}";
+                meshtastic_PositionLite posLite;
+                if (nodeDB->copyNodePosition(tempNodeInfo->num, posLite)) {
+                    position = "{\"altitude\":";
+                    position += jsonNum((int)posLite.altitude);
+                    position += ",\"latitude\":";
+                    position += jsonNum((float)posLite.latitude_i * 1e-7);
+                    position += ",\"longitude\":";
+                    position += jsonNum((float)posLite.longitude_i * 1e-7);
+                    position += "}";
+                } else {
+                    position = "null";
+                }
             } else {
                 position = "null";
             }
@@ -831,23 +832,23 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
 
             // Alphabetical key order matches previous std::map-based output.
             out += "{\"hw_model\":";
-            out += jsonNum(tempNodeInfo->user.hw_model);
+            out += jsonNum(tempNodeInfo->hw_model);
             out += ",\"id\":";
             out += jsonEscape(id);
             out += ",\"last_heard\":";
             out += jsonNum((int)tempNodeInfo->last_heard);
             out += ",\"long_name\":";
-            out += jsonEscape(tempNodeInfo->user.long_name);
+            out += jsonEscape(tempNodeInfo->long_name);
             out += ",\"mac_address\":";
-            out += jsonEscape(macStr);
+            out += jsonEscape("00:00:00:00:00:00");
             out += ",\"position\":";
             out += position;
             out += ",\"short_name\":";
-            out += jsonEscape(tempNodeInfo->user.short_name);
+            out += jsonEscape(tempNodeInfo->short_name);
             out += ",\"snr\":";
             out += jsonNum(tempNodeInfo->snr);
             out += ",\"via_mqtt\":";
-            out += jsonEscape(BoolToString(tempNodeInfo->via_mqtt));
+            out += jsonEscape(BoolToString(nodeInfoLiteViaMqtt(tempNodeInfo)));
             out += "}";
         }
         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);

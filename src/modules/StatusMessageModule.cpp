@@ -2,6 +2,7 @@
 
 #include "StatusMessageModule.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "ProtobufModule.h"
 
 StatusMessageModule *statusMessageModule;
@@ -36,16 +37,8 @@ ProcessMessage StatusMessageModule::handleReceived(const meshtastic_MeshPacket &
 
             LOG_INFO("Received a NodeStatus message %s", incomingMessage.status);
 
-            RecentStatus entry;
-            entry.fromNodeId = mp.from;
-            entry.statusText = incomingMessage.status;
-
-            recentReceived.push_back(std::move(entry));
-
-            // Keep only last MAX_RECENT_STATUSMESSAGES
-            if (recentReceived.size() > MAX_RECENT_STATUSMESSAGES) {
-                recentReceived.erase(recentReceived.begin()); // drop oldest
-            }
+            if (nodeDB)
+                nodeDB->setNodeStatus(mp.from, incomingMessage);
         }
     }
     return ProcessMessage::CONTINUE;
