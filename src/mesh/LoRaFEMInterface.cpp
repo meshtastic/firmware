@@ -14,7 +14,7 @@ static void enableFEMPower()
     bool wasOff = digitalRead(LORA_PA_POWER) != HIGH;
     digitalWrite(LORA_PA_POWER, HIGH);
     if (wasOff) {
-        delay(5);
+        delay(5); // This is an arbitrary 5ms for FEM rail power-up.
     }
 }
 
