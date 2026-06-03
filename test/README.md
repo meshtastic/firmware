@@ -29,6 +29,14 @@ tail -15 /tmp/test_out.txt
 
 Why: piping through `| grep` line-buffers the output and suppresses all progress until the process exits, making it look hung. The redirect approach lets the build stream normally while still giving you filtered results afterwards.
 
+**Viewing verbose test output without truncation (e.g. `TEST_MESSAGE` group headers):**
+
+```bash
+/tmp/meshtastic-pio-venv/bin/python -m platformio test -e coverage --filter test_mesh_beacon -vv 2>&1 | grep -v "[[:space:]]SKIPPED$"
+```
+
+The `-vv` flag makes Unity emit `INFO:` lines from `TEST_MESSAGE` calls; piping through `grep -v SKIPPED` removes the noise from platform feature gates while keeping all PASS/FAIL/INFO lines visible.
+
 **`externally-managed-environment` error on Ubuntu/Debian:**
 
 If `pio test` fails immediately with `error: externally-managed-environment`, the system `pio` binary is using the OS Python which newer distros lock down. Use PlatformIO's own venv instead:
@@ -106,12 +114,15 @@ One file per suite. No per-test `platformio.ini` is needed — tests build under
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 #include "modules/YourModule.h"
-#include <cstdio>
+#include <cstdio>    // required for printf() — used for blank-line group separators
 #include <cstring>
 #include <memory>
 
 // --- Test output helpers ---
-// Unity swallows printf/stdout. Only TEST_MESSAGE() output appears in results.
+// printf() writes directly to stdout and appears in -vv output as a plain line (no prefix).
+// Use it for blank-line group separators: printf("\n");
+// TEST_MESSAGE() emits a "file:line:INFO: <text>" line — visible at -vv and above.
+// Use TEST_MSG_FMT for formatted diagnostic lines inside tests.
 #define MSG_BUF_LEN 200
 #define TEST_MSG_FMT(fmt, ...) do { \
     char _buf[MSG_BUF_LEN]; \
@@ -136,6 +147,9 @@ void setup()
 {
     initializeTestEnvironment();   // MUST call — sets up RTC, OSThread, console
     UNITY_BEGIN();
+
+    printf("\n=== Example group ===\n");           // header line to help find tests
+
     RUN_TEST(test_example);
     exit(UNITY_END());             // exit() required — Unity runner expects it
 }
