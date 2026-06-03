@@ -691,22 +691,31 @@ void setup()
     nodeDB = mockNodeDB;
 
     UNITY_BEGIN();
+
+    printf("\n=== Topology-driven hop reduction ===\n");
     RUN_TEST(test_dense_local_telemetry);
     RUN_TEST(test_spread_sparse_position);
     RUN_TEST(test_deep_chain_position);
     RUN_TEST(test_router_cluster_telemetry);
     RUN_TEST(test_megamesh_eviction_scaling);
     RUN_TEST(test_sparse_to_dense_transition);
+
+    printf("\n=== Lifecycle ===\n");
     RUN_TEST(test_state_persistence);
     RUN_TEST(test_hourly_roll);
     RUN_TEST(test_intermediate_status);
     RUN_TEST(test_startup_blank_state);
-    RUN_TEST(test_scenario_summary_output);
-    RUN_TEST(test_memory_layout);
+
+    printf("\n=== Denominator state machine ===\n");
     RUN_TEST(test_denominator_rises_on_overflow);
     RUN_TEST(test_filtering_denom_hold_counts_down);
     RUN_TEST(test_filtering_denom_steps_down_gradually);
     RUN_TEST(test_full_at_denom_max_drops_entry);
+
+    printf("\n=== Summary ===\n");
+    RUN_TEST(test_memory_layout);
+    RUN_TEST(test_scenario_summary_output);
+
     exit(UNITY_END());
 }
 
