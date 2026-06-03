@@ -33,7 +33,12 @@ class TestableRadioInterface : public RadioInterface
 
 static void test_bwCodeToKHz_specialMappings()
 {
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 7.8f, bwCodeToKHz(8));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 10.4f, bwCodeToKHz(10));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 15.6f, bwCodeToKHz(16));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 20.8f, bwCodeToKHz(21));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 31.25f, bwCodeToKHz(31));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 41.7f, bwCodeToKHz(42));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 62.5f, bwCodeToKHz(62));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 203.125f, bwCodeToKHz(200));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 406.25f, bwCodeToKHz(400));
@@ -45,6 +50,18 @@ static void test_bwCodeToKHz_passthrough()
 {
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 125.0f, bwCodeToKHz(125));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 250.0f, bwCodeToKHz(250));
+}
+
+static void test_bwCodeToKHz_roundTrip()
+{
+    // Round-trip: bwKHzToCode(bwCodeToKHz(code)) should return the original code
+    uint16_t codes[] = {8, 10, 16, 21, 31, 42, 62, 200, 400, 800, 1600};
+    for (size_t i = 0; i < sizeof(codes) / sizeof(codes[0]); i++) {
+        uint16_t code = codes[i];
+        float khz = bwCodeToKHz(code);
+        uint16_t result = bwKHzToCode(khz);
+        TEST_ASSERT_EQUAL_UINT16(code, result);
+    }
 }
 
 static void test_validateConfigLora_noopWhenUsePresetFalse()
@@ -213,6 +230,7 @@ void setup()
     UNITY_BEGIN();
     RUN_TEST(test_bwCodeToKHz_specialMappings);
     RUN_TEST(test_bwCodeToKHz_passthrough);
+    RUN_TEST(test_bwCodeToKHz_roundTrip);
     RUN_TEST(test_validateConfigLora_noopWhenUsePresetFalse);
     RUN_TEST(test_validateConfigLora_validPreset_nonWideRegion);
     RUN_TEST(test_validateConfigLora_validPreset_wideRegion);
