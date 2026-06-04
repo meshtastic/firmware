@@ -1,10 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
-#include <optional>
 #include "mesh/ProtobufModule.h"
+#include "mesh/generated/meshtastic/protobufs/meshtastic/control_point.pb.h"
 
 struct ControlPointPeerMetric {
     NodeNum node_id = 0;
@@ -24,7 +25,7 @@ static constexpr uint32_t CONTROL_POINT_MAX_ROUTE_COST = 1000000;
 static constexpr uint32_t CONTROL_POINT_MAX_LOAD = 100;
 static constexpr uint32_t CONTROL_POINT_MIN_PRIORITY = 1;
 
-class ControlPointModule : public ProtobufModule
+class ControlPointModule : public ProtobufModule<meshtastic_ControlPointMessage>
 {
 public:
     ControlPointModule();
@@ -35,8 +36,8 @@ public:
     std::optional<uint8_t> choosePreferredRelay(NodeNum to) const;
     
 protected:
-    ProcessMessage handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
-                                          meshtastic_ControlPointMessage *msg) override;
+    bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
+                            meshtastic_ControlPointMessage *msg) override;
 
     bool wantPacket(const meshtastic_MeshPacket *p) override;
     int32_t runOnce() override;

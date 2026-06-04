@@ -5,7 +5,9 @@
 ControlPointModule *controlPointModule = nullptr;
 
 ControlPointModule::ControlPointModule()
-    : ProtobufModule("control_point", meshtastic_PortNum_PRIVATE_APP, &meshtastic_ControlPointMessage_msg)
+    : ProtobufModule<meshtastic_ControlPointMessage>("control_point",
+                                                     meshtastic_PortNum_PRIVATE_APP,
+                                                     &meshtastic_ControlPointMessage_msg)
 {
 }
 
@@ -87,15 +89,17 @@ bool ControlPointModule::isPreferredRelay(uint8_t relay_id) const
     return metric != nullptr && isMetricUsable(*metric);
 }
 
-ProcessMessage ControlPointModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
-                                                          meshtastic_ControlPointMessage *msg)
+bool ControlPointModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
+                                                meshtastic_ControlPointMessage *msg)
 {
     if (!msg) {
-        return ProcessMessage::CONTINUE;
+        return false;
     }
 
     upsertMetric(*msg, mp.from);
-    return ProcessMessage::CONTINUE;
+
+    // false = не останавливаем дальнейшую обработку пакета другими модулями
+    return false;
 }
 
 bool ControlPointModule::wantPacket(const meshtastic_MeshPacket *p)
