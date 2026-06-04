@@ -60,7 +60,27 @@ The protobuf definition `meshtastic_ModuleConfig_WireGuardConfig` (generated in 
 
 ## Device configuration
 
-Use `bin/wireguard-config.py` with a meshtastic-python build that includes this branch's protobufs:
+Use `bin/wireguard-config.py` with a meshtastic-python build that includes this branch's protobufs. The preferred path is to import a standard single-peer WireGuard config file:
+
+```ini
+[Interface]
+Address = 10.0.0.2/32
+PrivateKey = CLIENT_PRIVATE_KEY
+
+[Peer]
+PublicKey = SERVER_PUBLIC_KEY
+PresharedKey = OPTIONAL_PRESHARED_KEY
+Endpoint = wg.example.net:51820
+AllowedIPs = 0.0.0.0/0
+```
+
+```bash
+python bin/wireguard-config.py --port COM7 set --config wg0.conf --enable
+```
+
+The importer maps `Interface.Address`, `Interface.PrivateKey`, `Peer.PublicKey`, `Peer.PresharedKey`, and `Peer.Endpoint`. It strips the subnet mask from `Address`, splits `Endpoint` into server host and port, rejects multi-peer configs, and ignores unsupported options such as `AllowedIPs`, `DNS`, and `PersistentKeepalive`.
+
+You can also set fields directly:
 
 ```bash
 python bin/wireguard-config.py --port COM7 set \

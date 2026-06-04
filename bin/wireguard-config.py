@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import configparser
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 SECRET = "sekrit"
@@ -73,7 +75,93 @@ def _set_if_present(config: Any, field: str, value: Any) -> None:
         setattr(config, field, value)
 
 
+def _strip_cidr(address: str) -> str:
+    first_address = address.split(",", 1)[0].strip()
+    if "/" in first_address:
+        first_address = first_address.split("/", 1)[0].strip()
+    if not first_address:
+        raise SystemExit("WireGuard config Interface.Address is empty.")
+    if ":" in first_address:
+        raise SystemExit("This firmware currently supports IPv4 WireGuard client addresses only.")
+    return first_address
+
+
+def _parse_endpoint(endpoint: str) -> tuple[str, int]:
+    endpoint = endpoint.strip()
+    if not endpoint:
+        raise SystemExit("WireGuard config Peer.Endpoint is empty.")
+
+    if endpoint.startswith("["):
+        end = endpoint.find("]")
+        if end == -1 or len(endpoint) <= end + 2 or endpoint[end + 1] != ":":
+            raise SystemExit("IPv6 endpoints must use [host]:port syntax.")
+        host = endpoint[1:end]
+        port_text = endpoint[end + 2 :]
+    else:
+        if endpoint.count(":") != 1:
+            raise SystemExit("Endpoint must be host:port. Use [IPv6-address]:port for IPv6 endpoints.")
+        host, port_text = endpoint.rsplit(":", 1)
+
+    host = host.strip()
+    if not host:
+        raise SystemExit("WireGuard config Peer.Endpoint host is empty.")
+    try:
+        port = int(port_text)
+    except ValueError as exc:
+        raise SystemExit(f"WireGuard config Peer.Endpoint port is not an integer: {port_text!r}") from exc
+    if port <= 0 or port > 65535:
+        raise SystemExit(f"WireGuard config Peer.Endpoint port is out of range: {port}")
+    return host, port
+
+
+def _read_wireguard_config(path: str) -> dict[str, Any]:
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str.lower
+    try:
+        with Path(path).open("r", encoding="utf-8") as config_file:
+            parser.read_file(config_file)
+    except configparser.DuplicateSectionError as exc:
+        raise SystemExit("WireGuard configs with multiple [Peer] sections are not supported.") from exc
+    except configparser.Error as exc:
+        raise SystemExit(f"Unable to parse WireGuard config: {exc}") from exc
+    except OSError as exc:
+        raise SystemExit(f"Unable to read WireGuard config {path!r}: {exc}") from exc
+
+    if "Interface" not in parser:
+        raise SystemExit("WireGuard config is missing an [Interface] section.")
+    if "Peer" not in parser:
+        raise SystemExit("WireGuard config is missing a [Peer] section.")
+
+    interface = parser["Interface"]
+    peer = parser["Peer"]
+    values: dict[str, Any] = {}
+
+    if interface.get("address"):
+        values["address"] = _strip_cidr(interface["address"])
+    if interface.get("privatekey"):
+        values["private_key"] = interface["privatekey"].strip()
+    if peer.get("publickey"):
+        values["public_key"] = peer["publickey"].strip()
+    if peer.get("presharedkey"):
+        values["preshared_key"] = peer["presharedkey"].strip()
+    if peer.get("endpoint"):
+        values["server_addr"], values["server_port"] = _parse_endpoint(peer["endpoint"])
+
+    return values
+
+
+def _apply_config_file_defaults(args: argparse.Namespace) -> None:
+    if not getattr(args, "config", None):
+        return
+
+    for field, value in _read_wireguard_config(args.config).items():
+        if getattr(args, field) is None:
+            setattr(args, field, value)
+
+
 def _write_config(node: Any, config: Any, args: argparse.Namespace) -> None:
+    _apply_config_file_defaults(args)
+
     if args.enable:
         config.enabled = True
     if args.disable:
@@ -137,6 +225,7 @@ def build_parser() -> argparse.ArgumentParser:
     enabled = set_parser.add_mutually_exclusive_group()
     enabled.add_argument("--enable", action="store_true", help="Enable automatic tunnel startup.")
     enabled.add_argument("--disable", action="store_true", help="Disable automatic tunnel startup.")
+    set_parser.add_argument("--config", help="Read settings from a standard WireGuard .conf file.")
     set_parser.add_argument("--address", help="Client tunnel IPv4 address, without subnet mask.")
     set_parser.add_argument("--server-addr", help="WireGuard server hostname or IP address.")
     set_parser.add_argument("--server-port", type=int, help="WireGuard server UDP port.")
