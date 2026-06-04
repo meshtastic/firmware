@@ -14,7 +14,7 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN apt-get update && apt-get install --no-install-recommends -y \
         curl wget g++ zip git ca-certificates pkg-config \
         python3-pip python3-grpc-tools \
-        libgpiod-dev libyaml-cpp-dev libbluetooth-dev libi2c-dev libuv1-dev \
+        libgpiod-dev libyaml-cpp-dev libjsoncpp-dev libbluetooth-dev libi2c-dev libuv1-dev \
         libusb-1.0-0-dev libulfius-dev liborcania-dev libssl-dev \
         libx11-dev libinput-dev libxkbcommon-x11-dev libsqlite3-dev libsdl2-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
@@ -53,7 +53,7 @@ ENV TZ=Etc/UTC
 USER root
 
 RUN apt-get update && apt-get --no-install-recommends -y install \
-        libc-bin libc6 libgpiod3 libyaml-cpp0.8 libi2c0 libuv1t64 libusb-1.0-0-dev \
+        libc-bin libc6 libgpiod3 libyaml-cpp0.8 libjsoncpp26 libi2c0 libuv1t64 libusb-1.0-0-dev \
         liborcania2.3 libulfius2.7t64 libssl3t64 \
         libx11-6 libinput10 libxkbcommon-x11-0 libsdl2-2.0-0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \

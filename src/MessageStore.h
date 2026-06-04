@@ -1,6 +1,6 @@
 #pragma once
 
-#if HAS_SCREEN
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
 
 // Disable debug logging entirely on release builds of HELTEC_MESH_SOLAR for space constraints
 #if defined(HELTEC_MESH_SOLAR)
