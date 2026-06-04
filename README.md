@@ -46,12 +46,12 @@ The firmware now includes an experimental WireGuard VPN client.
 - Edit your `platformio.ini` variant configuration to add: `-DHAS_WIREGUARD_VPN=1`
 
 **Configuration:**
-- Update server details and keys in: `src/mesh/wireguard/WireGuardConfig.h` (use plain IP addresses without subnet masks)
+- Configure server details and keys on the device with `bin/wireguard-config.py` or another client that supports `ModuleConfig.wireguard`. Production firmware should leave WireGuard defaults blank and disabled.
 
 **How it works:**
 - Uses the [`wireguard-esp32`](https://github.com/juvinski/wireguard-esp32) library.
-- The VPN tunnel starts automatically when WiFi connects, and stops when WiFi disconnects.
+- When enabled and fully configured, the VPN tunnel starts automatically when WiFi or Ethernet is available and NTP time is synced. It stops when the network disconnects.
 
-- See [`src\mesh\wireguard\WireGuard_ReadMe.md`] for developer documentation.
+- See [`src/mesh/wireguard/WireGuard_ReadMe.md`] for developer documentation.
 
 > **Note:** This feature is experimental and full tunnel functionality may not be stable yet.
