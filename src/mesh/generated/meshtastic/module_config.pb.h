@@ -473,8 +473,6 @@ typedef struct _meshtastic_ModuleConfig_TAKConfig {
 
 /* Configuration for the experimental WireGuard VPN client */
 typedef struct _meshtastic_ModuleConfig_WireGuardConfig {
-    /* Whether the WireGuard tunnel should be started when networking and NTP are ready. */
-    bool enabled;
     /* Client address. Must not include subnet mask. */
     char address[32];
     /* WireGuard server host */
@@ -487,6 +485,8 @@ typedef struct _meshtastic_ModuleConfig_WireGuardConfig {
     char public_key[64];
     /* Optional preshared key */
     char preshared_key[64];
+    /* Whether the WireGuard tunnel should be started when networking and NTP are ready. */
+    bool enabled;
     /* Current runtime status for the tunnel. */
     meshtastic_ModuleConfig_WireGuardConfig_Status status;
     /* Short human-readable reason for the current status, if any. */
@@ -638,7 +638,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_default {""}
 #define meshtastic_ModuleConfig_TAKConfig_init_default {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
-#define meshtastic_ModuleConfig_WireGuardConfig_init_default {0, "", "", 0, "", "", "", _meshtastic_ModuleConfig_WireGuardConfig_Status_MIN, ""}
+#define meshtastic_ModuleConfig_WireGuardConfig_init_default {"", "", 0, "", "", "", 0, _meshtastic_ModuleConfig_WireGuardConfig_Status_MIN, ""}
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
 #define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, "", 0, 0, false, meshtastic_ModuleConfig_MapReportSettings_init_zero}
@@ -658,7 +658,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_zero {""}
 #define meshtastic_ModuleConfig_TAKConfig_init_zero {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
-#define meshtastic_ModuleConfig_WireGuardConfig_init_zero {0, "", "", 0, "", "", "", _meshtastic_ModuleConfig_WireGuardConfig_Status_MIN, ""}
+#define meshtastic_ModuleConfig_WireGuardConfig_init_zero {"", "", 0, "", "", "", 0, _meshtastic_ModuleConfig_WireGuardConfig_Status_MIN, ""}
 #define meshtastic_RemoteHardwarePin_init_zero   {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -1042,13 +1042,13 @@ X(a, STATIC,   SINGULAR, UENUM,    role,              2)
 #define meshtastic_ModuleConfig_TAKConfig_DEFAULT NULL
 
 #define meshtastic_ModuleConfig_WireGuardConfig_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, BOOL,     enabled,           7) \
 X(a, STATIC,   SINGULAR, STRING,   address,           1) \
 X(a, STATIC,   SINGULAR, STRING,   server_addr,       2) \
 X(a, STATIC,   SINGULAR, UINT32,   server_port,       3) \
 X(a, STATIC,   SINGULAR, STRING,   private_key,       4) \
 X(a, STATIC,   SINGULAR, STRING,   public_key,        5) \
 X(a, STATIC,   SINGULAR, STRING,   preshared_key,     6) \
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           7) \
 X(a, STATIC,   SINGULAR, UENUM,    status,            8) \
 X(a, STATIC,   SINGULAR, STRING,   last_error,        9)
 #define meshtastic_ModuleConfig_WireGuardConfig_CALLBACK NULL

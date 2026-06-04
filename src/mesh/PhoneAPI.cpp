@@ -18,6 +18,9 @@
 #include "concurrency/LockGuard.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
+#if HAS_WIREGUARD_VPN
+#include "mesh/wireguard/WireGuardVPN.h"
+#endif
 #include "xmodem.h"
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -464,6 +467,29 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Send module config: paxcounter");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             fromRadioScratch.moduleConfig.payload_variant.paxcounter = moduleConfig.paxcounter;
+            break;
+        case meshtastic_ModuleConfig_statusmessage_tag:
+            LOG_DEBUG("Send module config: statusmessage");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_statusmessage_tag;
+            fromRadioScratch.moduleConfig.payload_variant.statusmessage = moduleConfig.statusmessage;
+            break;
+        case meshtastic_ModuleConfig_traffic_management_tag:
+            LOG_DEBUG("Send module config: traffic management");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
+            fromRadioScratch.moduleConfig.payload_variant.traffic_management = moduleConfig.traffic_management;
+            break;
+        case meshtastic_ModuleConfig_tak_tag:
+            LOG_DEBUG("Send module config: tak");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_tak_tag;
+            fromRadioScratch.moduleConfig.payload_variant.tak = moduleConfig.tak;
+            break;
+        case meshtastic_ModuleConfig_wireguard_tag:
+            LOG_DEBUG("Send module config: wireguard");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_wireguard_tag;
+            fromRadioScratch.moduleConfig.payload_variant.wireguard = moduleConfig.wireguard;
+#if HAS_WIREGUARD_VPN
+            populateWireGuardStatus(fromRadioScratch.moduleConfig.payload_variant.wireguard);
+#endif
             break;
         default:
             LOG_ERROR("Unknown module config type %d", config_state);

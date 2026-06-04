@@ -7,7 +7,9 @@ import argparse
 import configparser
 import json
 import sys
+import time
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 SECRET = "sekrit"
@@ -15,19 +17,67 @@ SECRET = "sekrit"
 
 def _import_meshtastic():
     try:
+        from meshtastic.mesh_interface import MeshInterface
+        from meshtastic.protobuf import admin_pb2, mesh_pb2, module_config_pb2
         from meshtastic.serial_interface import SerialInterface
     except ModuleNotFoundError as exc:
         raise SystemExit(
             "meshtastic-python is required. Install it in your active Python environment first."
         ) from exc
-    return SerialInterface
+    _patch_wireguard_module_config_copy(MeshInterface, mesh_pb2)
+    return SerialInterface, admin_pb2, module_config_pb2
+
+
+def _patch_wireguard_module_config_copy(mesh_interface: Any, mesh_pb2: Any) -> None:
+    if getattr(mesh_interface, "_wireguard_patch_applied", False):
+        return
+
+    original = mesh_interface._handleFromRadio
+
+    def patched(self: Any, from_radio_bytes: Any) -> None:
+        original(self, from_radio_bytes)
+        fromRadio = mesh_pb2.FromRadio()
+        fromRadio.ParseFromString(from_radio_bytes)
+        if not fromRadio.HasField("moduleConfig") or not fromRadio.moduleConfig.HasField("wireguard"):
+            return
+        self.localNode.moduleConfig.wireguard.CopyFrom(fromRadio.moduleConfig.wireguard)
+
+    mesh_interface._handleFromRadio = patched
+    mesh_interface._wireguard_patch_applied = True
 
 
 def _open_interface(port: str | None):
-    serial_interface = _import_meshtastic()
+    serial_interface, _, _ = _import_meshtastic()
     if port:
         return serial_interface(devPath=port)
     return serial_interface()
+
+
+def _admin_message():
+    _, admin_pb2, _ = _import_meshtastic()
+    return admin_pb2.AdminMessage()
+
+
+def _new_wireguard_config():
+    _, _, module_config_pb2 = _import_meshtastic()
+    return module_config_pb2.ModuleConfig.WireGuardConfig()
+
+
+def _refresh_wireguard_config(node: Any, delay: float = 5.0) -> None:
+    config = _wireguard_config(node)
+    admin = _admin_message()
+    admin.get_module_config_request = admin.ModuleConfigType.Value("WIREGUARD_CONFIG")
+    received = Event()
+
+    def on_response(packet: dict[str, Any]) -> None:
+        try:
+            raw_admin = packet["decoded"]["admin"]["raw"]
+            config.CopyFrom(raw_admin.get_module_config_response.wireguard)
+        finally:
+            received.set()
+
+    node._sendAdmin(admin, wantResponse=True, onResponse=on_response)
+    received.wait(delay)
 
 
 def _wireguard_config(node: Any):
@@ -159,27 +209,38 @@ def _apply_config_file_defaults(args: argparse.Namespace) -> None:
             setattr(args, field, value)
 
 
-def _write_config(node: Any, config: Any, args: argparse.Namespace) -> None:
+def _write_config(node: Any, config: Any, args: argparse.Namespace) -> Any:
     _apply_config_file_defaults(args)
 
+    outgoing = _new_wireguard_config()
+    outgoing.CopyFrom(config)
+
     if args.enable:
-        config.enabled = True
+        outgoing.enabled = True
     if args.disable:
-        config.enabled = False
+        outgoing.enabled = False
 
-    _set_if_present(config, "address", args.address)
-    _set_if_present(config, "server_addr", args.server_addr)
-    _set_if_present(config, "server_port", args.server_port)
-    _set_if_present(config, "private_key", args.private_key)
-    _set_if_present(config, "public_key", args.public_key)
-    _set_if_present(config, "preshared_key", args.preshared_key)
+    _set_if_present(outgoing, "address", args.address)
+    _set_if_present(outgoing, "server_addr", args.server_addr)
+    _set_if_present(outgoing, "server_port", args.server_port)
+    _set_if_present(outgoing, "private_key", args.private_key)
+    _set_if_present(outgoing, "public_key", args.public_key)
+    _set_if_present(outgoing, "preshared_key", args.preshared_key)
+    outgoing.status = 0
+    outgoing.last_error = ""
 
-    node.writeConfig("wireguard")
+    admin = _admin_message()
+    admin.set_module_config.wireguard.CopyFrom(outgoing)
+    on_response = None if node == node.iface.localNode else node.onAckNak
+    node._sendAdmin(admin, onResponse=on_response)
+    time.sleep(2.0)
+    return outgoing
 
 
 def do_get(args: argparse.Namespace) -> int:
     iface = _open_interface(args.port)
     try:
+        _refresh_wireguard_config(iface.localNode)
         config = _wireguard_config(iface.localNode)
         print(json.dumps(_to_dict(config, args.show_secrets), indent=2))
     finally:
@@ -192,8 +253,8 @@ def do_set(args: argparse.Namespace) -> int:
     try:
         node = iface.localNode
         config = _wireguard_config(node)
-        _write_config(node, config, args)
-        print(json.dumps(_to_dict(config, args.show_secrets), indent=2))
+        written = _write_config(node, config, args)
+        print(json.dumps(_to_dict(written, args.show_secrets), indent=2))
     finally:
         iface.close()
     return 0
