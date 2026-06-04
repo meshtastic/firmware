@@ -5,6 +5,7 @@
 #if HAS_WIREGUARD_VPN
 
 #include <Arduino.h>
+#include "meshtastic/module_config.pb.h"
 
 /**
  * Configuration values for the experimental WireGuard VPN client.
@@ -12,12 +13,12 @@
  */
 
 typedef struct WireGuardConfig {
-    const char *address;       ///< Client IPv4 address (e.g. 10.0.0.2)
-    const char *serverAddr;    ///< WireGuard server host
-    uint16_t serverPort;       ///< WireGuard server port
-    const char *privateKey;    ///< Client private key
-    const char *publicKey;     ///< Server public key
-    const char *presharedKey;  ///< Optional preshared key, not available in Wireguard-ESP32 as of now
+    char address[32];       ///< Client IPv4 address (e.g. 10.0.0.2)
+    char serverAddr[64];    ///< WireGuard server host
+    uint16_t serverPort;    ///< WireGuard server port
+    char privateKey[64];    ///< Client private key
+    char publicKey[64];     ///< Server public key
+    char presharedKey[64];  ///< Optional preshared key, not available in Wireguard-ESP32 as of now
 } WireGuardConfig;
 
 #ifndef WIREGUARD_DEFAULT_ADDRESS
@@ -50,5 +51,7 @@ typedef struct WireGuardConfig {
 
 /// Global WireGuard configuration in RAM.
 extern WireGuardConfig wireGuardConfig;
+
+void applyWireGuardModuleConfig(const meshtastic_ModuleConfig_WireGuardConfig &config);
 
 #endif // HAS_WIREGUARD_VPN

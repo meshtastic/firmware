@@ -12,9 +12,6 @@ void GDEY0213B74::configScanning()
     sendData(0xF9);
     sendData(0x00);
     sendData(0x00);
-
-    // To-do: delete this method?
-    // Values set here might be redundant: F9, 00, 00 seems to be default
 }
 
 // Specify which information is used to control the sequence of voltages applied to move the pixels

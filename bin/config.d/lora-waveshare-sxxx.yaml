@@ -1,3 +1,9 @@
+Meta:
+  name: Waveshare SX1262
+  support: deprecated
+  compatible:
+    - raspberry-pi
+
 Lora:
   Module: sx1262  # Waveshare SX126X XXXM
   DIO2_AS_RF_SWITCH: true

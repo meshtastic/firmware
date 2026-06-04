@@ -13,13 +13,10 @@ class LTR390UVSensor : public TelemetrySensor
     float lastLuxReading = 0;
     float lastUVReading = 0;
 
-  protected:
-    virtual void setup() override;
-
   public:
     LTR390UVSensor();
-    virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
 };
 
 #endif

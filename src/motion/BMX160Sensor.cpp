@@ -37,7 +37,8 @@ int32_t BMX160Sensor::runOnce()
         if (!showingScreen) {
             powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
             showingScreen = true;
-            screen->startAlert((FrameCallback)drawFrameCalibration);
+            if (screen)
+                screen->startAlert((FrameCallback)drawFrameCalibration);
         }
 
         if (magAccel.x > highestX)
@@ -58,7 +59,8 @@ int32_t BMX160Sensor::runOnce()
             doCalibration = false;
             endCalibrationAt = 0;
             showingScreen = false;
-            screen->endAlert();
+            if (screen)
+                screen->endAlert();
         }
 
         // LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
@@ -103,8 +105,8 @@ int32_t BMX160Sensor::runOnce()
         heading += 270;
         break;
     }
-
-    screen->setHeading(heading);
+    if (screen)
+        screen->setHeading(heading);
 #endif
 
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
@@ -113,12 +115,19 @@ int32_t BMX160Sensor::runOnce()
 void BMX160Sensor::calibrate(uint16_t forSeconds)
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
+    sBmx160SensorData_t magAccel;
+    sBmx160SensorData_t gAccel;
     LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
+    sensor.getAllData(&magAccel, NULL, &gAccel);
+    highestX = magAccel.x, lowestX = magAccel.x;
+    highestY = magAccel.y, lowestY = magAccel.y;
+    highestZ = magAccel.z, lowestZ = magAccel.z;
 
     doCalibration = true;
     uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
     endCalibrationAt = millis() + calibrateFor;
-    screen->setEndCalibration(endCalibrationAt);
+    if (screen)
+        screen->setEndCalibration(endCalibrationAt);
 #endif
 }
 

@@ -1,5 +1,9 @@
 #pragma once
-#ifdef PORTDUINO_LINUX_HARDWARE
+// Portduino webserver is built whenever the ulfius headers are reachable,
+// not only on Linux. macOS users can `brew install ulfius` to enable it;
+// without ulfius the entire body is skipped and main.cpp's matching
+// __has_include guard avoids referencing the type.
+#ifdef ARCH_PORTDUINO
 #if __has_include(<ulfius.h>)
 #include "PhoneAPI.h"
 #include "ulfius-cfg.h"
@@ -27,14 +31,15 @@ class HttpAPI : public PhoneAPI
 {
 
   public:
-    // Nothing here yet
+    HttpAPI() { api_type = TYPE_HTTP; }
+
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
 
   private:
     // Nothing here yet
 
   protected:
-    /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
 };
 
 class PiWebServerThread

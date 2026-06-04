@@ -15,6 +15,9 @@ class INA226Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
     TwoWire *_wire = &Wire;
     INA226 ina226 = INA226(_addr, _wire);
 
+    bool getEnvironmentMetrics(meshtastic_Telemetry *measurement);
+    bool getPowerMetrics(meshtastic_Telemetry *measurement);
+
   protected:
     virtual void setup() override;
     void begin(TwoWire *wire = &Wire, uint8_t addr = INA_ADDR);

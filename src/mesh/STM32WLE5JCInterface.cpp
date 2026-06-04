@@ -1,12 +1,12 @@
-#include "STM32WLE5JCInterface.h"
 #include "configuration.h"
+
+#ifdef ARCH_STM32WL
+#include "STM32WLE5JCInterface.h"
 #include "error.h"
 
 #ifndef STM32WLx_MAX_POWER
 #define STM32WLx_MAX_POWER 22
 #endif
-
-#ifdef ARCH_STM32WL
 
 STM32WLE5JCInterface::STM32WLE5JCInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq,
                                            RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy)
@@ -25,10 +25,7 @@ bool STM32WLE5JCInterface::init()
 
     lora.setRfSwitchTable(rfswitch_pins, rfswitch_table);
 
-    limitPower();
-
-    if (power > STM32WLx_MAX_POWER) // This chip has lower power limits than some
-        power = STM32WLx_MAX_POWER;
+    limitPower(STM32WLx_MAX_POWER);
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
 

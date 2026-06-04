@@ -8,7 +8,7 @@ WireGuard functionality is optional and controlled by the `HAS_WIREGUARD_VPN` co
 
 To build a variant with VPN support you must:
 
-1. Include the `Wireguard-ESP32` library in your `platformio.ini` variant.
+1. Include the `ciniml/WireGuard-ESP32` library in your `platformio.ini` variant.
 2. Add `-DHAS_WIREGUARD_VPN=1` to the variant's `build_flags`.
 
 See the below `seeed_xiao_s3` variant for an example configuration
@@ -24,16 +24,16 @@ See the below `seeed_xiao_s3` variant for an example configuration
     upload_port = COM18
     lib_deps =
         ${esp32s3_base.lib_deps}
-        Wireguard-ESP32
+        ciniml/WireGuard-ESP32@^0.1.5
     build_unflags =
         ${esp32s3_base.build_unflags}
         -DARDUINO_USB_MODE=1
     build_flags = 
-        ${esp32s3_base.build_flags} -DSEEED_XIAO_S3 -I variants/seeed_xiao_s3
+        ${esp32s3_base.build_flags}
+        -D SEEED_XIAO_S3
+        -I variants/esp32s3/seeed_xiao_s3
         -DBOARD_HAS_PSRAM 
-
         -DHAS_WIREGUARD_VPN=1
-
         -DARDUINO_USB_MODE=0
 ```
 
@@ -44,16 +44,16 @@ The runtime configuration is defined in `src/mesh/wireguard/WireGuardConfig.h`:
 
 ```cpp
 typedef struct WireGuardConfig {
-    const char *address;       ///< Client IPv4 address (e.g. 10.0.0.2)
-    const char *serverAddr;    ///< WireGuard server host
+    char address[32];       ///< Client IPv4 address (e.g. 10.0.0.2)
+    char serverAddr[64];    ///< WireGuard server host
     uint16_t serverPort;       ///< WireGuard server port
-    const char *privateKey;    ///< Client private key
-    const char *publicKey;     ///< Server public key
-    const char *presharedKey;  ///< Optional preshared key
+    char privateKey[64];    ///< Client private key
+    char publicKey[64];     ///< Server public key
+    char presharedKey[64];  ///< Optional preshared key
 } WireGuardConfig;
 ```
 
-Default values for these fields can be set at compile time using the `WIREGUARD_DEFAULT_*` macros in the same header. A global instance `wireGuardConfig` is allocated in `WireGuardConfig.cpp` and can be modified at runtime.
+Default values for these fields can be set at compile time using the `WIREGUARD_DEFAULT_*` macros in the same header. A global instance `wireGuardConfig` is allocated in `WireGuardConfig.cpp` and is synchronized from `moduleConfig.wireguard` after loading, restoring, or receiving admin updates.
 
 The protobuf definition `meshtastic_ModuleConfig_WireGuardConfig` (generated in `module_config.pb.h`) mirrors this structure so that the values can be updated over the admin API.
 

@@ -1,0 +1,37 @@
+Meta:
+  name: RAK6421 + RAK13302 Slot 2
+  support: community # Promote when tested
+  compatible:
+    - ebyte-ecb41-pge # Armbian
+
+Lora:
+  Module: sx1262
+  IRQ: # GPIO0_B4 (IO6, physical 12)
+    pin: 12
+    gpiochip: 0
+    line: 12
+  Reset: # GPIO1_C3 (IO4, physical 18)
+    pin: 51
+    gpiochip: 1
+    line: 19
+  Busy: # GPIO0_B3 (IO5, physical 35)
+    pin: 11
+    gpiochip: 0
+    line: 11
+  # Ant_sw: # GPIO1_C2 (IO3, physical 16)
+  #   pin: 50
+  #   gpiochip: 1
+  #   line: 18
+  Enable_Pins:
+    - pin: 2 # GPIO0_A2 (physical 37)
+      gpiochip: 0
+      line: 2
+    - pin: 50 # GPIO1_C2 (physical 16)
+      gpiochip: 1
+      line: 18
+  spidev: spidev0.1
+  # CS: # GPIO0_A7 (SPI1_CSN1, physical 26)
+  #   pin: 7
+  #   gpiochip: 0
+  #   line: 7
+  TX_GAIN_LORA: [9, 9, 10, 11, 9, 8, 9, 10, 10, 10, 11, 12, 12, 12, 12, 12, 12, 12, 12, 10, 9, 8]

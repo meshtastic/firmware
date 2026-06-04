@@ -23,6 +23,7 @@ class TipsApplet : public SystemApplet
     enum class Tip {
         WELCOME,
         FINISH_SETUP,
+        PICK_REGION,
         SAFE_SHUTDOWN,
         CUSTOMIZATION,
         BUTTONS,
@@ -32,10 +33,11 @@ class TipsApplet : public SystemApplet
   public:
     TipsApplet();
 
-    void onRender() override;
+    void onRender(bool full) override;
     void onForeground() override;
     void onBackground() override;
     void onButtonShortPress() override;
+    void onExitShort() override;
 
   protected:
     void renderWelcome(); // Very first screen of tutorial

@@ -39,6 +39,7 @@ BuildRequires: pkgconfig(bluez)
 BuildRequires: pkgconfig(libusb-1.0)
 BuildRequires: libi2c-devel
 BuildRequires: pkgconfig(libuv)
+BuildRequires: pkgconfig(sqlite3)
 # Web components:
 BuildRequires: pkgconfig(openssl)
 BuildRequires: pkgconfig(liborcania)
@@ -48,11 +49,25 @@ BuildRequires: pkgconfig(libulfius)
 BuildRequires: pkgconfig(x11)
 BuildRequires: pkgconfig(libinput)
 BuildRequires: pkgconfig(xkbcommon-x11)
+BuildRequires: pkgconfig(sdl2)
+
+# libbsd is needed on older Fedora/RHEL to provide 'strlcpy'
+%if 0%{?fedora} >= 39 || 0%{?rhel} >= 10
+BuildRequires: glibc-devel >= 2.38
+%else
+BuildRequires: pkgconfig(libbsd-overlay)
+%endif
 
 Requires:      systemd-udev
 
+# Declare that this package provides the user/group it creates in %pre
+# Required for Fedora 43+ which tracks users/groups as RPM dependencies
+Provides:      user(%{meshtasticd_user})
+Provides:      group(%{meshtasticd_user})
+Provides:      group(spi)
+
 %description
-Meshtastic daemon for controlling Meshtastic devices. Meshtastic is an off-grid
+Meshtastic daemon. Meshtastic is an off-grid
 text communication platform that uses inexpensive LoRa radios.
 
 %prep
@@ -69,7 +84,7 @@ platformio run -e native-tft
 %install
 # Install meshtasticd binary
 mkdir -p %{buildroot}%{_bindir}
-install -m 0755 .pio/build/native-tft/program %{buildroot}%{_bindir}/meshtasticd
+install -m 0755 .pio/build/native-tft/meshtasticd %{buildroot}%{_bindir}/meshtasticd
 
 # Install portduino VFS dir
 install -p -d -m 0770 %{buildroot}%{_localstatedir}/lib/meshtasticd
@@ -87,6 +102,9 @@ cp -r bin/config.d/* %{buildroot}%{_sysconfdir}/meshtasticd/available.d
 
 # Install systemd service
 install -D -m 0644 bin/meshtasticd.service %{buildroot}%{_unitdir}/meshtasticd.service
+
+# Install meshtasticd start wrapper
+install -D -m 0755 bin/meshtasticd-start.sh %{buildroot}%{_bindir}/meshtasticd-start.sh
 
 # Install the web files under /usr/share/meshtasticd/web
 mkdir -p %{buildroot}%{_datadir}/meshtasticd/web
@@ -140,6 +158,7 @@ fi
 %license LICENSE
 %doc README.md
 %{_bindir}/meshtasticd
+%{_bindir}/meshtasticd-start.sh
 %dir %{_localstatedir}/lib/meshtasticd
 %{_udevrulesdir}/99-meshtasticd-udev.rules
 %dir %{_sysconfdir}/meshtasticd

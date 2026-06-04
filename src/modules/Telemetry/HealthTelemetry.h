@@ -4,12 +4,15 @@
 
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "BaseTelemetryModule.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-class HealthTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
+class HealthTelemetryModule : private concurrency::OSThread,
+                              public BaseTelemetryModule,
+                              public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<HealthTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
         CallbackObserver<HealthTelemetryModule, const meshtastic::Status *>(this, &HealthTelemetryModule::handleStatusUpdate);
@@ -52,7 +55,6 @@ class HealthTelemetryModule : private concurrency::OSThread, public ProtobufModu
     bool firstTime = 1;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
-    uint32_t lastSentToMesh = 0;
     uint32_t lastSentToPhone = 0;
     uint32_t sensor_read_error_count = 0;
 };

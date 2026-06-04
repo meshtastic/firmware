@@ -39,11 +39,11 @@ InkHUD::AppletFont::AppletFont(const GFXfont &adafruitGFXFont, Encoding encoding
         // Caution: signed and unsigned types
         int8_t glyphAscender = 0 - gfxFont->glyph[i].yOffset;
         if (glyphAscender > 0)
-            this->ascenderHeight = max(this->ascenderHeight, (uint8_t)glyphAscender);
+            this->ascenderHeight = max(this->ascenderHeight, static_cast<uint8_t>(glyphAscender));
 
         int8_t glyphDescender = gfxFont->glyph[i].height + gfxFont->glyph[i].yOffset;
         if (glyphDescender > 0)
-            this->descenderHeight = max(this->descenderHeight, (uint8_t)glyphDescender);
+            this->descenderHeight = max(this->descenderHeight, static_cast<uint8_t>(glyphDescender));
     }
 
     // Apply any manual padding to grow or shrink the line size
@@ -52,7 +52,7 @@ InkHUD::AppletFont::AppletFont(const GFXfont &adafruitGFXFont, Encoding encoding
     descenderHeight += paddingBottom;
 
     // Find how far the cursor advances when we "print" a space character
-    spaceCharWidth = gfxFont->glyph[(uint8_t)' ' - gfxFont->first].xAdvance;
+    spaceCharWidth = gfxFont->glyph[static_cast<uint8_t>(' ') - gfxFont->first].xAdvance;
 }
 
 /*
@@ -98,7 +98,7 @@ uint8_t InkHUD::AppletFont::widthBetweenWords()
 
 // Convert a unicode char from set of UTF-8 bytes to UTF-32
 // Used by AppletFont::applyEncoding, which remaps unicode chars for extended ASCII fonts, based on their UTF-32 value
-uint32_t InkHUD::AppletFont::toUtf32(std::string utf8)
+uint32_t InkHUD::AppletFont::toUtf32(const std::string &utf8)
 {
     uint32_t utf32 = 0;
 
@@ -124,7 +124,7 @@ uint32_t InkHUD::AppletFont::toUtf32(std::string utf8)
         utf32 |= (utf8.at(3) & 0b00111111);
         break;
     default:
-        assert(false);
+        return 0;
     }
 
     return utf32;
@@ -132,7 +132,7 @@ uint32_t InkHUD::AppletFont::toUtf32(std::string utf8)
 
 // Process a string, collating UTF-8 bytes, and sending them off for re-encoding to extended ASCII
 // Not all InkHUD text is passed through here, only text which could potentially contain non-ASCII chars
-std::string InkHUD::AppletFont::decodeUTF8(std::string encoded)
+std::string InkHUD::AppletFont::decodeUTF8(const std::string &encoded)
 {
     // Final processed output
     std::string decoded;
@@ -141,7 +141,7 @@ std::string InkHUD::AppletFont::decodeUTF8(std::string encoded)
     std::string utf8Char;
     uint8_t utf8CharSize = 0;
 
-    for (char &c : encoded) {
+    for (const char &c : encoded) {
 
         // If first byte
         if (utf8Char.empty()) {
@@ -178,7 +178,7 @@ std::string InkHUD::AppletFont::decodeUTF8(std::string encoded)
 
 // Re-encode a single UTF-8 character to extended ASCII
 // Target encoding depends on the font
-char InkHUD::AppletFont::applyEncoding(std::string utf8)
+char InkHUD::AppletFont::applyEncoding(const std::string &utf8)
 {
     // ##################################################### Syntactic Sugar #####################################################
 #define REMAP(in, out)                                                                                                           \
@@ -616,9 +616,211 @@ char InkHUD::AppletFont::applyEncoding(std::string utf8)
         }
     }
 
-    // If not handled, return DEL
-    // Todo: swap this to SUB, and modify the fonts
-    return '\x7F';
+    else if (encoding == WINDOWS_1253) {
+        // Greek
+        // 1-Byte chars: no remapping
+        if (utf8.length() == 1)
+            return utf8.at(0);
+
+        // Multi-byte chars:
+        switch (toUtf32(utf8)) {
+            // Windows-1253 special characters (0x80-0xBF range)
+            REMAP(0x20AC, 0x80) // EURO SIGN
+            REMAP(0x2018, 0x91) // LEFT SINGLE QUOTATION MARK
+            REMAP(0x2019, 0x92) // RIGHT SINGLE QUOTATION MARK
+            REMAP(0x201C, 0x93) // LEFT DOUBLE QUOTATION MARK
+            REMAP(0x201D, 0x94) // RIGHT DOUBLE QUOTATION MARK
+            REMAP(0x2022, 0x95) // BULLET
+            REMAP(0x2013, 0x96) // EN DASH
+            REMAP(0x2014, 0x97) // EM DASH
+
+            // Greek accented capitals
+            REMAP(0x0386, 0xA2) // GREEK CAPITAL LETTER ALPHA WITH TONOS
+            REMAP(0x0388, 0xB8) // GREEK CAPITAL LETTER EPSILON WITH TONOS
+            REMAP(0x0389, 0xB9) // GREEK CAPITAL LETTER ETA WITH TONOS
+            REMAP(0x038A, 0xBA) // GREEK CAPITAL LETTER IOTA WITH TONOS
+            REMAP(0x038C, 0xBC) // GREEK CAPITAL LETTER OMICRON WITH TONOS
+            REMAP(0x038E, 0xBE) // GREEK CAPITAL LETTER UPSILON WITH TONOS
+            REMAP(0x038F, 0xBF) // GREEK CAPITAL LETTER OMEGA WITH TONOS
+
+            // Greek capital letters (U+0391-U+03A9 -> 0xC1-0xD1, with gaps)
+            REMAP(0x0391, 0xC1) // GREEK CAPITAL LETTER ALPHA
+            REMAP(0x0392, 0xC2) // GREEK CAPITAL LETTER BETA
+            REMAP(0x0393, 0xC3) // GREEK CAPITAL LETTER GAMMA
+            REMAP(0x0394, 0xC4) // GREEK CAPITAL LETTER DELTA
+            REMAP(0x0395, 0xC5) // GREEK CAPITAL LETTER EPSILON
+            REMAP(0x0396, 0xC6) // GREEK CAPITAL LETTER ZETA
+            REMAP(0x0397, 0xC7) // GREEK CAPITAL LETTER ETA
+            REMAP(0x0398, 0xC8) // GREEK CAPITAL LETTER THETA
+            REMAP(0x0399, 0xC9) // GREEK CAPITAL LETTER IOTA
+            REMAP(0x039A, 0xCA) // GREEK CAPITAL LETTER KAPPA
+            REMAP(0x039B, 0xCB) // GREEK CAPITAL LETTER LAMDA
+            REMAP(0x039C, 0xCC) // GREEK CAPITAL LETTER MU
+            REMAP(0x039D, 0xCD) // GREEK CAPITAL LETTER NU
+            REMAP(0x039E, 0xCE) // GREEK CAPITAL LETTER XI
+            REMAP(0x039F, 0xCF) // GREEK CAPITAL LETTER OMICRON
+            REMAP(0x03A0, 0xD0) // GREEK CAPITAL LETTER PI
+            REMAP(0x03A1, 0xD1) // GREEK CAPITAL LETTER RHO
+            REMAP(0x03A3, 0xD3) // GREEK CAPITAL LETTER SIGMA
+            REMAP(0x03A4, 0xD4) // GREEK CAPITAL LETTER TAU
+            REMAP(0x03A5, 0xD5) // GREEK CAPITAL LETTER UPSILON
+            REMAP(0x03A6, 0xD6) // GREEK CAPITAL LETTER PHI
+            REMAP(0x03A7, 0xD7) // GREEK CAPITAL LETTER CHI
+            REMAP(0x03A8, 0xD8) // GREEK CAPITAL LETTER PSI
+            REMAP(0x03A9, 0xD9) // GREEK CAPITAL LETTER OMEGA
+
+            // Greek small letters with tonos (accented)
+            REMAP(0x03AC, 0xDC) // GREEK SMALL LETTER ALPHA WITH TONOS
+            REMAP(0x03AD, 0xDD) // GREEK SMALL LETTER EPSILON WITH TONOS
+            REMAP(0x03AE, 0xDE) // GREEK SMALL LETTER ETA WITH TONOS
+            REMAP(0x03AF, 0xDF) // GREEK SMALL LETTER IOTA WITH TONOS
+
+            // Greek small letters (U+03B1-U+03C9 -> 0xE1-0xF9)
+            REMAP(0x03B1, 0xE1) // GREEK SMALL LETTER ALPHA
+            REMAP(0x03B2, 0xE2) // GREEK SMALL LETTER BETA
+            REMAP(0x03B3, 0xE3) // GREEK SMALL LETTER GAMMA
+            REMAP(0x03B4, 0xE4) // GREEK SMALL LETTER DELTA
+            REMAP(0x03B5, 0xE5) // GREEK SMALL LETTER EPSILON
+            REMAP(0x03B6, 0xE6) // GREEK SMALL LETTER ZETA
+            REMAP(0x03B7, 0xE7) // GREEK SMALL LETTER ETA
+            REMAP(0x03B8, 0xE8) // GREEK SMALL LETTER THETA
+            REMAP(0x03B9, 0xE9) // GREEK SMALL LETTER IOTA
+            REMAP(0x03BA, 0xEA) // GREEK SMALL LETTER KAPPA
+            REMAP(0x03BB, 0xEB) // GREEK SMALL LETTER LAMDA
+            REMAP(0x03BC, 0xEC) // GREEK SMALL LETTER MU
+            REMAP(0x03BD, 0xED) // GREEK SMALL LETTER NU
+            REMAP(0x03BE, 0xEE) // GREEK SMALL LETTER XI
+            REMAP(0x03BF, 0xEF) // GREEK SMALL LETTER OMICRON
+            REMAP(0x03C0, 0xF0) // GREEK SMALL LETTER PI
+            REMAP(0x03C1, 0xF1) // GREEK SMALL LETTER RHO
+            REMAP(0x03C2, 0xF2) // GREEK SMALL LETTER FINAL SIGMA
+            REMAP(0x03C3, 0xF3) // GREEK SMALL LETTER SIGMA
+            REMAP(0x03C4, 0xF4) // GREEK SMALL LETTER TAU
+            REMAP(0x03C5, 0xF5) // GREEK SMALL LETTER UPSILON
+            REMAP(0x03C6, 0xF6) // GREEK SMALL LETTER PHI
+            REMAP(0x03C7, 0xF7) // GREEK SMALL LETTER CHI
+            REMAP(0x03C8, 0xF8) // GREEK SMALL LETTER PSI
+            REMAP(0x03C9, 0xF9) // GREEK SMALL LETTER OMEGA
+
+            // More accented small letters
+            REMAP(0x03CA, 0xFA) // GREEK SMALL LETTER IOTA WITH DIALYTIKA
+            REMAP(0x03CB, 0xFB) // GREEK SMALL LETTER UPSILON WITH DIALYTIKA
+            REMAP(0x03CC, 0xFC) // GREEK SMALL LETTER OMICRON WITH TONOS
+            REMAP(0x03CD, 0xFD) // GREEK SMALL LETTER UPSILON WITH TONOS
+            REMAP(0x03CE, 0xFE) // GREEK SMALL LETTER OMEGA WITH TONOS
+        }
+    }
+
+    else /*ASCII or Unhandled*/ {
+        if (utf8.length() == 1)
+            return utf8.at(0);
+    }
+
+    // All single-byte (ASCII) characters should have been handled by now
+    // Only unhandled multi-byte UTF8 characters should remain
+    assert(utf8.length() > 1);
+
+    // Parse emoji
+    // Strip emoji modifiers
+    switch (toUtf32(utf8)) {
+        REMAP(0x1F44D, 0x01) // 👍 Thumbs Up
+        REMAP(0x1F44E, 0x02) // 👎 Thumbs Down
+
+        REMAP(0x1F60A, 0x03) // 😊 Smiling Face with Smiling Eyes
+        REMAP(0x1F642, 0x03) // 🙂 Slightly Smiling Face
+        REMAP(0x1F601, 0x03) // 😁 Grinning Face with Smiling Eye
+
+        REMAP(0x1F602, 0x04) // 😂 Face with Tears of Joy
+        REMAP(0x1F923, 0x04) // 🤣 Rolling on the Floor Laughing
+        REMAP(0x1F606, 0x04) // 😆 Smiling with Open Mouth and Closed Eyes
+
+        REMAP(0x1F44B, 0x05) // 👋 Waving Hand
+
+        REMAP(0x02600, 0x06) // ☀ Sun
+        REMAP(0x1F31E, 0x06) // 🌞 Sun with Face
+
+        // 0x07 - Bell character (unused)
+        REMAP(0x1F327, 0x08) // 🌧️ Cloud with Rain
+
+        REMAP(0x02601, 0x09) // ☁️ Cloud
+        REMAP(0x1F32B, 0x09) // Fog
+
+        REMAP(0x1F9E1, 0x0B) // 🧡 Orange Heart
+        REMAP(0x02763, 0x0B) // ❣ Heart Exclamation
+        REMAP(0x02764, 0x0B) // ❤ Heart
+        REMAP(0x1F495, 0x0B) // 💕 Two Hearts
+        REMAP(0x1F496, 0x0B) // 💖 Sparkling Heart
+        REMAP(0x1F497, 0x0B) // 💗 Growing Heart
+        REMAP(0x1F498, 0x0B) // 💘 Heart with Arrow
+
+        REMAP(0x1F4A9, 0x0C) // 💩 Pile of Poo
+        // 0x0D - Carriage return (unused)
+        REMAP(0x1F514, 0x0E) // 🔔 Bell
+
+        REMAP(0x1F62D, 0x0F) // 😭 Loudly Crying Face
+        REMAP(0x1F622, 0x0F) // 😢 Crying Face
+
+        REMAP(0x1F64F, 0x10) // 🙏 Person with Folded Hands
+        REMAP(0x1F618, 0x11) // 😘 Face Throwing a Kiss
+        REMAP(0x1F389, 0x12) // 🎉 Party Popper
+
+        REMAP(0x1F600, 0x13) // 😀 Grinning Face
+        REMAP(0x1F603, 0x13) // 😃 Smiling Face with Open Mouth
+        REMAP(0x1F604, 0x13) // 😄 Smiling Face with Open Mouth and Smiling Eyes
+
+        REMAP(0x1F97A, 0x14) // 🥺 Face with Pleading Eyes
+        REMAP(0x1F605, 0x15) // 😅 Smiling with Sweat
+        REMAP(0x1F525, 0x16) // 🔥 Fire
+        REMAP(0x1F926, 0x17) // 🤦 Face Palm
+        REMAP(0x1F937, 0x18) // 🤷 Shrug
+        REMAP(0x1F644, 0x19) // 🙄 Face with Rolling Eyes
+        // 0x1A Substitution (unused)
+        REMAP(0x1F917, 0x1B) // 🤗 Hugging Face
+
+        REMAP(0x1F609, 0x1C) // 😉 Winking Face
+        REMAP(0x1F61C, 0x1C) // 😜 Face with Stuck-Out Tongue and Winking Eye
+        REMAP(0x1F60F, 0x1C) // 😏 Smirking Face
+
+        REMAP(0x1F914, 0x1D) // 🤔 Thinking Face
+        REMAP(0x1FAE1, 0x1E) // 🫡 Saluting Face
+        REMAP(0x1F44C, 0x1F) // 👌 OK Hand Sign
+
+        REMAP(0x02755, '!') // ❕
+        REMAP(0x02757, '!') // ❗
+        REMAP(0x0203C, '!') // ‼
+        REMAP(0x02753, '?') // ❓
+        REMAP(0x02754, '?') // ❔
+        REMAP(0x02049, '?') // ⁉
+
+        // Modifiers (deleted)
+        REMAP(0x02640, 0x7F) // Gender
+        REMAP(0x02642, 0x7F)
+        REMAP(0x1F3FB, 0x7F) // Skin Tones
+        REMAP(0x1F3FC, 0x7F)
+        REMAP(0x1F3FD, 0x7F)
+        REMAP(0x1F3FE, 0x7F)
+        REMAP(0x1F3FF, 0x7F)
+        REMAP(0x0FE00, 0x7F) // Variation Selectors
+        REMAP(0x0FE01, 0x7F)
+        REMAP(0x0FE02, 0x7F)
+        REMAP(0x0FE03, 0x7F)
+        REMAP(0x0FE04, 0x7F)
+        REMAP(0x0FE05, 0x7F)
+        REMAP(0x0FE06, 0x7F)
+        REMAP(0x0FE07, 0x7F)
+        REMAP(0x0FE08, 0x7F)
+        REMAP(0x0FE09, 0x7F)
+        REMAP(0x0FE0A, 0x7F)
+        REMAP(0x0FE0B, 0x7F)
+        REMAP(0x0FE0C, 0x7F)
+        REMAP(0x0FE0D, 0x7F)
+        REMAP(0x0FE0E, 0x7F)
+        REMAP(0x0FE0F, 0x7F)
+        REMAP(0x0200D, 0x7F) // Zero Width Joiner
+    }
+
+    // If not handled, return SUB
+    return '\x1A';
 
 // Sweep up the syntactic sugar
 // Don't want ants in the house

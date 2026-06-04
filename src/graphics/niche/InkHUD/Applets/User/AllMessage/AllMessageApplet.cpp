@@ -34,7 +34,7 @@ int InkHUD::AllMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *
     return 0;
 }
 
-void InkHUD::AllMessageApplet::onRender()
+void InkHUD::AllMessageApplet::onRender(bool full)
 {
     // Find newest message, regardless of whether DM or broadcast
     MessageStore::Message *message;
@@ -101,15 +101,25 @@ void InkHUD::AllMessageApplet::onRender()
     // Extra gap below the header
     int16_t textTop = headerDivY + padDivH;
 
-    // Determine size if printed large
+    // Attempt to print with fontLarge
+    uint32_t textHeight;
     setFont(fontLarge);
-    uint32_t textHeight = getWrappedTextHeight(0, width(), text);
+    textHeight = getWrappedTextHeight(0, width(), text);
+    if (textHeight <= (uint32_t)height()) {
+        printWrapped(0, textTop, width(), text);
+        return;
+    }
 
-    // If too large, swap to small font
-    if (textHeight + textTop > (uint32_t)height()) // (compare signed and unsigned)
-        setFont(fontSmall);
+    // Fallback (too large): attempt to print with fontMedium
+    setFont(fontMedium);
+    textHeight = getWrappedTextHeight(0, width(), text);
+    if (textHeight <= (uint32_t)height()) {
+        printWrapped(0, textTop, width(), text);
+        return;
+    }
 
-    // Print text
+    // Fallback (too large): print with fontSmall
+    setFont(fontSmall);
     printWrapped(0, textTop, width(), text);
 }
 

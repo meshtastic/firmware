@@ -23,11 +23,11 @@ class ScanI2CTwoWire : public ScanI2C
 
     ScanI2C::FoundDevice find(ScanI2C::DeviceType) const override;
 
-    TwoWire *fetchI2CBus(ScanI2C::DeviceAddress) const;
-
     bool exists(ScanI2C::DeviceType) const override;
 
     size_t countDevices() const override;
+
+    static TwoWire *fetchI2CBus(ScanI2C::DeviceAddress);
 
   protected:
     FoundDevice firstOfOrNONE(size_t, DeviceType[]) const override;
@@ -54,6 +54,8 @@ class ScanI2CTwoWire : public ScanI2C
     concurrency::Lock lock;
 
     uint16_t getRegisterValue(const RegisterLocation &, ResponseWidth, bool) const;
+
+    bool i2cCommandResponseLength(DeviceAddress addr, uint16_t command, uint8_t expectedLength) const;
 
     DeviceType probeOLED(ScanI2C::DeviceAddress) const;
 

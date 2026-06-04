@@ -89,14 +89,14 @@ class BluetoothStatus : public Status
             case ConnectionState::CONNECTED:
                 LOG_DEBUG("BluetoothStatus CONNECTED");
 #ifdef BLE_LED
-                digitalWrite(BLE_LED, HIGH);
+                digitalWrite(BLE_LED, LED_STATE_ON);
 #endif
                 break;
 
             case ConnectionState::DISCONNECTED:
                 LOG_DEBUG("BluetoothStatus DISCONNECTED");
 #ifdef BLE_LED
-                digitalWrite(BLE_LED, LOW);
+                digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
                 break;
             }

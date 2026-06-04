@@ -9,6 +9,7 @@
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
+#include <Throttle.h>
 #include <WebServer.h>
 #include <WiFi.h>
 
@@ -49,6 +50,18 @@ Preferences prefs;
 using namespace httpsserver;
 #include "mesh/http/ContentHandler.h"
 
+static const uint32_t ACTIVE_THRESHOLD_MS = 5000;
+static const uint32_t MEDIUM_THRESHOLD_MS = 30000;
+static const int32_t ACTIVE_INTERVAL_MS = 50;
+static const int32_t MEDIUM_INTERVAL_MS = 200;
+static const int32_t IDLE_INTERVAL_MS = 1000;
+
+// Maximum concurrent HTTPS connections (reduced from default 4 to save memory)
+static const uint8_t MAX_HTTPS_CONNECTIONS = 2;
+
+// Minimum free heap required for SSL handshake (~40KB for mbedTLS contexts)
+static const uint32_t MIN_HEAP_FOR_SSL = 40000;
+
 static SSLCert *cert;
 static HTTPSServer *secureServer;
 static HTTPServer *insecureServer;
@@ -61,8 +74,20 @@ static void handleWebResponse()
     if (isWifiAvailable()) {
 
         if (isWebServerReady) {
-            if (secureServer)
-                secureServer->loop();
+            // Check heap before HTTPS processing - SSL requires significant memory
+            if (secureServer) {
+                uint32_t freeHeap = ESP.getFreeHeap();
+                if (freeHeap >= MIN_HEAP_FOR_SSL) {
+                    secureServer->loop();
+                } else {
+                    // Skip HTTPS when memory is low to prevent SSL setup failures
+                    static uint32_t lastHeapWarning = 0;
+                    if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
+                        LOG_WARN("Low heap (%u bytes), skipping HTTPS processing", freeHeap);
+                        lastHeapWarning = millis();
+                    }
+                }
+            }
             insecureServer->loop();
         }
     }
@@ -154,7 +179,8 @@ void createSSLCert()
                     esp_task_wdt_reset();
 #if HAS_SCREEN
                     if (millis() / 1000 >= 3) {
-                        screen->setSSLFrames();
+                        if (screen)
+                            screen->setSSLFrames();
                     }
 #endif
                 }
@@ -174,6 +200,32 @@ WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
     if (!config.network.wifi_enabled && !config.network.eth_enabled) {
         disable();
     }
+    lastActivityTime = millis();
+}
+
+void WebServerThread::markActivity()
+{
+    lastActivityTime = millis();
+}
+
+int32_t WebServerThread::getAdaptiveInterval()
+{
+    uint32_t currentTime = millis();
+    uint32_t timeSinceActivity;
+
+    if (currentTime >= lastActivityTime) {
+        timeSinceActivity = currentTime - lastActivityTime;
+    } else {
+        timeSinceActivity = (UINT32_MAX - lastActivityTime) + currentTime + 1;
+    }
+
+    if (timeSinceActivity < ACTIVE_THRESHOLD_MS) {
+        return ACTIVE_INTERVAL_MS;
+    } else if (timeSinceActivity < MEDIUM_THRESHOLD_MS) {
+        return MEDIUM_INTERVAL_MS;
+    } else {
+        return IDLE_INTERVAL_MS;
+    }
 }
 
 int32_t WebServerThread::runOnce()
@@ -188,8 +240,7 @@ int32_t WebServerThread::runOnce()
         ESP.restart();
     }
 
-    // Loop every 5ms.
-    return (5);
+    return getAdaptiveInterval();
 }
 
 void initWebServer()
@@ -197,7 +248,7 @@ void initWebServer()
     LOG_DEBUG("Init Web Server");
 
     // We can now use the new certificate to setup our server as usual.
-    secureServer = new HTTPSServer(cert);
+    secureServer = new HTTPSServer(cert, 443, MAX_HTTPS_CONNECTIONS);
     insecureServer = new HTTPServer();
 
     registerHandlers(insecureServer, secureServer);

@@ -10,6 +10,8 @@
 #include "PowerTelemetry.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
+#include "graphics/SharedUIDisplay.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
@@ -20,6 +22,14 @@
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
+
+static constexpr uint16_t TX_HISTORY_KEY_POWER_TELEMETRY = 0x8005;
+
+namespace graphics
+{
+extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert,
+                             bool show_date);
+}
 
 int32_t PowerTelemetryModule::runOnce()
 {
@@ -81,10 +91,12 @@ int32_t PowerTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.power_measurement_enabled)
             return disable();
 
-        if (((lastSentToMesh == 0) || !Throttle::isWithinTimespanMs(lastSentToMesh, sendToMeshIntervalMs)) &&
+        uint32_t lastTelemetry = transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_POWER_TELEMETRY) : 0;
+        if (((lastTelemetry == 0) || !Throttle::isWithinTimespanMs(lastTelemetry, sendToMeshIntervalMs)) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = millis();
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_POWER_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
@@ -101,15 +113,23 @@ bool PowerTelemetryModule::wantUIFrame()
     return moduleConfig.telemetry.power_screen_enabled;
 }
 
+#if HAS_SCREEN
 void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
+    int line = 1;
+
+    // === Set Title
+    const char *titleStr = (graphics::currentResolution == graphics::ScreenResolution::High) ? "Power Telem." : "Power";
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
 
     if (lastMeasurementPacket == nullptr) {
-        // In case of  no valid packet, display "Power Telemetry", "No measurement"
-        display->drawString(x, y, "Power Telemetry");
-        display->drawString(x, y += _fontHeight(FONT_SMALL), "No measurement");
+        // In case of no valid packet, display "Power Telemetry", "No measurement"
+        display->drawString(x, graphics::getTextPositions(display)[line++], "No measurement");
         return;
     }
 
@@ -120,36 +140,44 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
-        display->drawString(x, y, "Measurement Error");
+        display->drawString(x, graphics::getTextPositions(display)[line++], "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
         return;
     }
 
     // Display "Pow. From: ..."
-    display->drawString(x, y, "Pow. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
+    char fromStr[64];
+    snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%us)", lastSender, agoSecs);
+    display->drawString(x, graphics::getTextPositions(display)[line++], fromStr);
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
-    if (lastMeasurement.variant.power_metrics.has_ch1_voltage || lastMeasurement.variant.power_metrics.has_ch1_current) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch1: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) + "V " +
-                                String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
+    const auto &m = lastMeasurement.variant.power_metrics;
+    int lineY = textSecondLine;
+
+    auto drawLine = [&](const char *label, float voltage, float current) {
+        char lineStr[64];
+        snprintf(lineStr, sizeof(lineStr), "%s: %.2fV %.0fmA", label, voltage, current);
+        display->drawString(x, lineY, lineStr);
+        lineY += _fontHeight(FONT_SMALL);
+    };
+
+    if (m.has_ch1_voltage || m.has_ch1_current) {
+        drawLine("Ch1", m.ch1_voltage, m.ch1_current);
     }
-    if (lastMeasurement.variant.power_metrics.has_ch2_voltage || lastMeasurement.variant.power_metrics.has_ch2_current) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch2: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 2) + "V " +
-                                String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
+    if (m.has_ch2_voltage || m.has_ch2_current) {
+        drawLine("Ch2", m.ch2_voltage, m.ch2_current);
     }
-    if (lastMeasurement.variant.power_metrics.has_ch3_voltage || lastMeasurement.variant.power_metrics.has_ch3_current) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch3: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 2) + "V " +
-                                String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
+    if (m.has_ch3_voltage || m.has_ch3_current) {
+        drawLine("Ch3", m.ch3_voltage, m.ch3_current);
     }
+    graphics::drawCommonFooter(display, x, y);
 }
+#endif
 
 bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
     if (t->which_variant == meshtastic_Telemetry_power_metrics_tag) {
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): ch1_voltage=%.1f, ch1_current=%.1f, ch2_voltage=%.1f, ch2_current=%.1f, "
@@ -194,6 +222,10 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
 meshtastic_MeshPacket *PowerTelemetryModule::allocReply()
 {
     if (currentRequest) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
         auto req = *currentRequest;
         const auto &p = req.decoded;
         meshtastic_Telemetry scratch;

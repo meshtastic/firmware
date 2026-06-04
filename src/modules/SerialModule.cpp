@@ -45,9 +45,12 @@
 
 
 */
+#ifdef HELTEC_MESH_SOLAR
+#include "meshSolarApp.h"
+#endif
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
+    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 
 #define RX_BUFFER 256
 #define TIMEOUT 250
@@ -60,19 +63,49 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1)
-SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
-static Print *serialPrint = &Serial;
-#elif defined(CONFIG_IDF_TARGET_ESP32C6)
-SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial") {}
-static Print *serialPrint = &Serial1;
-#else
-SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Serial") {}
-static Print *serialPrint = &Serial2;
+#ifndef SERIAL_PRINT_PORT
+#define SERIAL_PRINT_PORT 2
 #endif
+
+#if SERIAL_PRINT_PORT == 0
+#define SERIAL_PRINT_OBJECT Serial
+#elif SERIAL_PRINT_PORT == 1
+#define SERIAL_PRINT_OBJECT Serial1
+#elif SERIAL_PRINT_PORT == 2
+#define SERIAL_PRINT_OBJECT Serial2
+#else
+#error "Unsupported SERIAL_PRINT_PORT value. Allowed values are 0, 1, or 2."
+#endif
+
+SerialModule::SerialModule() : StreamAPI(&SERIAL_PRINT_OBJECT), concurrency::OSThread("Serial")
+{
+    api_type = TYPE_SERIAL;
+}
+static Print *serialPrint = &SERIAL_PRINT_OBJECT;
 
 char serialBytes[512];
 size_t serialPayloadSize;
+
+bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &config)
+{
+    if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
+        const char *warning =
+            "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
+        LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->time = getValidTime(RTCQualityFromNet);
+        snprintf(cn->message, sizeof(cn->message), "%s", warning);
+        service->sendClientNotification(cn);
+#endif
+        return false;
+    }
+
+    return true;
+}
 
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
@@ -148,7 +181,18 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-
+#elif defined(ARCH_STM32WL)
+#ifndef RAK3172
+            HardwareSerial *serialInstance = &Serial2;
+#else
+            HardwareSerial *serialInstance = &Serial1;
+#endif
+            if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+                serialInstance->setTx(moduleConfig.serial.txd);
+                serialInstance->setRx(moduleConfig.serial.rxd);
+            }
+            serialInstance->begin(baud);
+            serialInstance->setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
 #elif defined(ARCH_ESP32)
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
@@ -158,7 +202,8 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1)
+#elif SERIAL_PRINT_PORT != 0
+
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
                 Serial2.setFIFOSize(RX_BUFFER);
@@ -214,17 +259,32 @@ int32_t SerialModule::runOnce()
                 }
             }
 
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1)
+#if SERIAL_PRINT_PORT != 0
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
-            } else {
+            }
+#if defined(HELTEC_MESH_SOLAR)
+            else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
+                serialPayloadSize = Serial.readBytes(serialBytes, sizeof(serialBytes) - 1);
+                // If the parsing fails, the following parsing will be performed.
+                if ((serialPayloadSize > 0) && (meshSolarCmdHandle(serialBytes) != 0)) {
+                    return runOncePart(serialBytes, serialPayloadSize);
+                }
+            }
+#endif
+            else {
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
                 while (Serial1.available()) {
                     serialPayloadSize = Serial1.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 #else
-                while (Serial2.available()) {
-                    serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+#ifndef RAK3172
+                HardwareSerial *serialInstance = &Serial2;
+#else
+                HardwareSerial *serialInstance = &Serial1;
+#endif
+                while (serialInstance->available()) {
+                    serialPayloadSize = serialInstance->readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 #endif
                     serialModuleRadio->sendPayload();
                 }
@@ -341,7 +401,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 serialPrint->write(p.payload.bytes, p.payload.size);
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-                String sender = (node && node->has_user) ? node->user.short_name : "???";
+                const char *sender = (node && node->has_user) ? node->user.short_name : "???";
                 serialPrint->println();
                 serialPrint->printf("%s: %s", sender, p.payload.bytes);
                 serialPrint->println();
@@ -410,8 +470,8 @@ uint32_t SerialModule::getBaudRate()
 
 // Add this structure to help with parsing WindGust =       24.4 serial lines.
 struct ParsedLine {
-    String name;
-    String value;
+    char name[64];
+    char value[128];
 };
 
 /**
@@ -438,16 +498,30 @@ ParsedLine parseLine(const char *line)
     strncpy(nameBuf, line, nameLen);
     nameBuf[nameLen] = '\0';
 
-    // Create trimmed name string
-    String name = String(nameBuf);
-    name.trim();
+    // Trim whitespace from name
+    char *nameStart = nameBuf;
+    while (*nameStart && isspace(*nameStart))
+        nameStart++;
+    char *nameEnd = nameStart + strlen(nameStart) - 1;
+    while (nameEnd > nameStart && isspace(*nameEnd))
+        *nameEnd-- = '\0';
 
-    // Extract value after equals sign
-    String value = String(equals + 1);
-    value.trim();
+    // Copy trimmed name
+    strncpy(result.name, nameStart, sizeof(result.name) - 1);
+    result.name[sizeof(result.name) - 1] = '\0';
 
-    result.name = name;
-    result.value = value;
+    // Extract value part (after equals)
+    const char *valueStart = equals + 1;
+    while (*valueStart && isspace(*valueStart))
+        valueStart++;
+    strncpy(result.value, valueStart, sizeof(result.value) - 1);
+    result.value[sizeof(result.value) - 1] = '\0';
+
+    // Trim trailing whitespace from value
+    char *valueEnd = result.value + strlen(result.value) - 1;
+    while (valueEnd > result.value && isspace(*valueEnd))
+        *valueEnd-- = '\0';
+
     return result;
 }
 
@@ -459,8 +533,8 @@ ParsedLine parseLine(const char *line)
  */
 void SerialModule::processWXSerial()
 {
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(MESHLINK) &&                 \
-    !defined(ELECROW_ThinkNode_M1)
+#if SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
@@ -517,16 +591,16 @@ void SerialModule::processWXSerial()
                         memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
 
                         ParsedLine parsed = parseLine(line);
-                        if (parsed.name.length() > 0) {
-                            if (parsed.name == "WindDir") {
-                                strlcpy(windDir, parsed.value.c_str(), sizeof(windDir));
+                        if (strlen(parsed.name) > 0) {
+                            if (strcmp(parsed.name, "WindDir") == 0) {
+                                strlcpy(windDir, parsed.value, sizeof(windDir));
                                 double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
                                 dir_sum_sin += sin(radians);
                                 dir_sum_cos += cos(radians);
                                 dirCount++;
                                 gotwind = true;
-                            } else if (parsed.name == "WindSpeed") {
-                                strlcpy(windVel, parsed.value.c_str(), sizeof(windVel));
+                            } else if (strcmp(parsed.name, "WindSpeed") == 0) {
+                                strlcpy(windVel, parsed.value, sizeof(windVel));
                                 float newv = strtof(windVel, nullptr);
                                 velSum += newv;
                                 velCount++;
@@ -534,28 +608,28 @@ void SerialModule::processWXSerial()
                                     lull = newv;
                                 }
                                 gotwind = true;
-                            } else if (parsed.name == "WindGust") {
-                                strlcpy(windGust, parsed.value.c_str(), sizeof(windGust));
+                            } else if (strcmp(parsed.name, "WindGust") == 0) {
+                                strlcpy(windGust, parsed.value, sizeof(windGust));
                                 float newg = strtof(windGust, nullptr);
                                 if (newg > gust) {
                                     gust = newg;
                                 }
                                 gotwind = true;
-                            } else if (parsed.name == "BatVoltage") {
-                                strlcpy(batVoltage, parsed.value.c_str(), sizeof(batVoltage));
+                            } else if (strcmp(parsed.name, "BatVoltage") == 0) {
+                                strlcpy(batVoltage, parsed.value, sizeof(batVoltage));
                                 batVoltageF = strtof(batVoltage, nullptr);
                                 break; // last possible data we want so break
-                            } else if (parsed.name == "CapVoltage") {
-                                strlcpy(capVoltage, parsed.value.c_str(), sizeof(capVoltage));
+                            } else if (strcmp(parsed.name, "CapVoltage") == 0) {
+                                strlcpy(capVoltage, parsed.value, sizeof(capVoltage));
                                 capVoltageF = strtof(capVoltage, nullptr);
-                            } else if (parsed.name == "GXTS04Temp" || parsed.name == "Temperature") {
-                                strlcpy(temperature, parsed.value.c_str(), sizeof(temperature));
+                            } else if (strcmp(parsed.name, "GXTS04Temp") == 0 || strcmp(parsed.name, "Temperature") == 0) {
+                                strlcpy(temperature, parsed.value, sizeof(temperature));
                                 temperatureF = strtof(temperature, nullptr);
-                            } else if (parsed.name == "RainIntSum") {
-                                strlcpy(rainStr, parsed.value.c_str(), sizeof(rainStr));
+                            } else if (strcmp(parsed.name, "RainIntSum") == 0) {
+                                strlcpy(rainStr, parsed.value, sizeof(rainStr));
                                 rainSum = int(strtof(rainStr, nullptr));
-                            } else if (parsed.name == "Rain") {
-                                strlcpy(rainStr, parsed.value.c_str(), sizeof(rainStr));
+                            } else if (strcmp(parsed.name, "Rain") == 0) {
+                                strlcpy(rainStr, parsed.value, sizeof(rainStr));
                                 rain = strtof(rainStr, nullptr);
                             }
                         }

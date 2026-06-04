@@ -4,12 +4,18 @@
 #include "configuration.h"
 #include "main.h"
 #include "sleep.h"
+#include <memory>
 
 #ifdef HAS_I2S
 #include <AudioFileSourcePROGMEM.h>
 #include <AudioGeneratorRTTTL.h>
 #include <AudioOutputI2S.h>
 #include <ESP8266SAM.h>
+
+#ifdef USE_XL9555
+#include "ExtensionIOXL9555.hpp"
+extern ExtensionIOXL9555 io;
+#endif
 
 #define AUDIO_THREAD_INTERVAL_MS 100
 
@@ -20,12 +26,16 @@ class AudioThread : public concurrency::OSThread
 
     void beginRttl(const void *data, uint32_t len)
     {
+#ifdef T_LORA_PAGER
+        io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+#endif
         setCPUFast(true);
-        rtttlFile = new AudioFileSourcePROGMEM(data, len);
-        i2sRtttl = new AudioGeneratorRTTTL();
-        i2sRtttl->begin(rtttlFile, audioOut);
+        rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
+        i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
+        i2sRtttl->begin(rtttlFile.get(), audioOut.get());
     }
 
+    // Also handles actually playing the RTTTL, needs to be called in loop
     bool isPlaying()
     {
         if (i2sRtttl != nullptr) {
@@ -38,13 +48,33 @@ class AudioThread : public concurrency::OSThread
     {
         if (i2sRtttl != nullptr) {
             i2sRtttl->stop();
-            delete i2sRtttl;
             i2sRtttl = nullptr;
         }
-        delete rtttlFile;
+
         rtttlFile = nullptr;
 
         setCPUFast(false);
+#ifdef T_LORA_PAGER
+        io.digitalWrite(EXPANDS_AMP_EN, LOW);
+#endif
+    }
+
+    void readAloud(const char *text)
+    {
+        if (i2sRtttl != nullptr) {
+            i2sRtttl->stop();
+            i2sRtttl = nullptr;
+        }
+
+#ifdef T_LORA_PAGER
+        io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+#endif
+        auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
+        sam->Say(audioOut.get(), text);
+        setCPUFast(false);
+#ifdef T_LORA_PAGER
+        io.digitalWrite(EXPANDS_AMP_EN, LOW);
+#endif
     }
 
   protected:
@@ -61,15 +91,15 @@ class AudioThread : public concurrency::OSThread
   private:
     void initOutput()
     {
-        audioOut = new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S);
+        audioOut = std::unique_ptr<AudioOutputI2S>(new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S));
         audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT, DAC_I2S_MCLK);
         audioOut->SetGain(0.2);
     };
 
-    AudioGeneratorRTTTL *i2sRtttl = nullptr;
-    AudioOutputI2S *audioOut;
+    std::unique_ptr<AudioGeneratorRTTTL> i2sRtttl = nullptr;
+    std::unique_ptr<AudioOutputI2S> audioOut = nullptr;
 
-    AudioFileSourcePROGMEM *rtttlFile;
+    std::unique_ptr<AudioFileSourcePROGMEM> rtttlFile = nullptr;
 };
 
 #endif

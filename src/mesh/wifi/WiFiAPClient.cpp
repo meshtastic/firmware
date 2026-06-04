@@ -4,16 +4,24 @@
 #include "RTC.h"
 #include "concurrency/Periodic.h"
 #include "mesh/wifi/WiFiAPClient.h"
-#include "mesh/wireguard/WireGuardVPN.h" // <--- Added
 
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
 #include "target_specific.h"
+#if HAS_WIREGUARD_VPN
+#include "mesh/wireguard/WireGuardVPN.h"
+#endif
 #include <WiFi.h>
 
 #if HAS_ETHERNET && defined(USE_WS5500)
 #include <ETHClass2.h>
 #define ETH ETH2
+#endif // HAS_ETHERNET
+
+#if HAS_ETHERNET && defined(USE_CH390D)
+#include "ESP32_CH390.h"
+#include "hal/spi_types.h"
+#define ETH CH390
 #endif // HAS_ETHERNET
 
 #include <WiFiUdp.h>
@@ -47,17 +55,52 @@ uint8_t wifiDisconnectReason = 0;
 // Stores our hostname
 char ourHost[16];
 
+// To replace blocking wifi connect delay with a non-blocking sleep
+static unsigned long wifiReconnectStartMillis = 0;
+static bool wifiReconnectPending = false;
+
 bool APStartupComplete = 0;
 
 unsigned long lastrun_ntp = 0;
 
 bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
 bool isReconnecting = false; // If we are currently reconnecting
+#if defined(USE_WS5500) || defined(USE_CH390D)
+static volatile bool ethNetworkConnectedPending = false;
+#endif
 
 WiFiUDP syslogClient;
-Syslog syslog(syslogClient);
+meshtastic::Syslog syslog(syslogClient);
 
 Periodic *wifiReconnect;
+
+#if defined(USE_WS5500) || defined(USE_CH390D)
+static void onNetworkConnected();
+static uint32_t lastEthIP = 0;
+static int32_t ethNetworkConnectedPoll()
+{
+    if (ethNetworkConnectedPending) {
+        ethNetworkConnectedPending = false;
+        uint32_t ip = (uint32_t)ETH.localIP();
+        bool ipChanged = APStartupComplete && ip != 0 && ip != lastEthIP;
+        onNetworkConnected();
+        if (ipChanged) {
+            LOG_INFO("Ethernet IP changed (%u.%u.%u.%u), restarting mDNS", ip & 0xff, (ip >> 8) & 0xff, (ip >> 16) & 0xff,
+                     (ip >> 24) & 0xff);
+            MDNS.end();
+            if (MDNS.begin("Meshtastic")) {
+                MDNS.addService("meshtastic", "tcp", SERVER_API_DEFAULT_PORT);
+                MDNS.addServiceTxt("meshtastic", "tcp", "shortname", String(owner.short_name));
+                MDNS.addServiceTxt("meshtastic", "tcp", "id", String(nodeDB->getNodeId().c_str()));
+                MDNS.addServiceTxt("meshtastic", "tcp", "pio_env", optstr(APP_ENV));
+            }
+        }
+        if (ip != 0)
+            lastEthIP = ip;
+    }
+    return 500;
+}
+#endif
 
 #ifdef USE_WS5500
 // Startup Ethernet
@@ -69,6 +112,38 @@ bool initEthernet()
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
 #endif
+        new concurrency::Periodic("EthConnect", ethNetworkConnectedPoll);
+        return true;
+    }
+
+    return false;
+}
+#endif
+
+#ifdef USE_CH390D
+// Startup Ethernet
+bool initEthernet()
+{
+    // Configure CH390
+    ch390_config_t ch390_conf = CH390_DEFAULT_CONFIG();
+    ch390_conf.spi_host = SPI3_HOST;
+    ch390_conf.spi_cs_gpio = ETH_CS_PIN;
+    ch390_conf.spi_sck_gpio = ETH_SCLK_PIN;
+    ch390_conf.spi_mosi_gpio = ETH_MOSI_PIN;
+    ch390_conf.spi_miso_gpio = ETH_MISO_PIN;
+    ch390_conf.int_gpio = ETH_INT_PIN;
+#ifdef ETH_RST_PIN
+    ch390_conf.reset_gpio = ETH_RST_PIN;
+#else
+    ch390_conf.reset_gpio = -1;
+#endif
+    ch390_conf.spi_clock_mhz = 20;
+    if ((config.network.eth_enabled) && (ETH.begin(ch390_conf))) {
+        WiFi.onEvent(WiFiEvent);
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+        createSSLCert(); // For WebServer
+#endif
+        new concurrency::Periodic("EthConnect", ethNetworkConnectedPoll);
         return true;
     }
 
@@ -84,16 +159,20 @@ static void onNetworkConnected()
 
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
-            LOG_ERROR("Error setting up MDNS responder!");
+            LOG_ERROR("Error setting up mDNS responder!");
         } else {
             LOG_INFO("mDNS Host: Meshtastic.local");
             MDNS.addService("meshtastic", "tcp", SERVER_API_DEFAULT_PORT);
+// ESPmDNS (ESP32) and SimpleMDNS (RP2040) have slightly different APIs for adding TXT records
 #ifdef ARCH_ESP32
-            MDNS.addService("http", "tcp", 80);
-            MDNS.addService("https", "tcp", 443);
+            MDNS.addServiceTxt("meshtastic", "tcp", "shortname", String(owner.short_name));
+            MDNS.addServiceTxt("meshtastic", "tcp", "id", String(nodeDB->getNodeId().c_str()));
+            MDNS.addServiceTxt("meshtastic", "tcp", "pio_env", optstr(APP_ENV));
             // ESP32 prints obtained IP address in WiFiEvent
 #elif defined(ARCH_RP2040)
-            // ARCH_RP2040 does not support HTTPS
+            MDNS.addServiceTxt("meshtastic", "shortname", owner.short_name);
+            MDNS.addServiceTxt("meshtastic", "id", nodeDB->getNodeId().c_str());
+            MDNS.addServiceTxt("meshtastic", "pio_env", optstr(APP_ENV));
             LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
 #endif
         }
@@ -125,16 +204,17 @@ static void onNetworkConnected()
         }
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
-        initWebServer();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            initWebServer();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
-        initApiServer();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            initApiServer();
+        }
 #endif
 #if HAS_WIREGUARD_VPN
-        // Start the VPN once we have a valid NTP derived time
-        if (WiFi.isConnected() && getRTCQuality() >= RTCQualityNTP && !isWireGuardRunning()) {
-            startWireGuard();
-        }
+        startWireGuard();
 #endif
         APStartupComplete = true;
     }
@@ -167,17 +247,30 @@ static int32_t reconnectWiFi()
 #endif
         LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
 
-        delay(5000);
+        // Start the non-blocking wait for 5 seconds
+        wifiReconnectStartMillis = millis();
+        wifiReconnectPending = true;
+        // Do not attempt to connect yet, wait for the next invocation
+        return 5000; // Schedule next check soon
+    }
 
-        if (!WiFi.isConnected()) {
+    // Check if we are ready to proceed with the WiFi connection after the 5s wait
+    if (wifiReconnectPending) {
+        if (millis() - wifiReconnectStartMillis >= 5000) {
+            if (!WiFi.isConnected()) {
 #ifdef CONFIG_IDF_TARGET_ESP32C3
-            WiFi.mode(WIFI_MODE_NULL);
-            WiFi.useStaticBuffers(true);
-            WiFi.mode(WIFI_STA);
+                WiFi.mode(WIFI_MODE_NULL);
+                WiFi.useStaticBuffers(true);
+                WiFi.mode(WIFI_STA);
 #endif
-            WiFi.begin(wifiName, wifiPsw);
+                WiFi.begin(wifiName, wifiPsw);
+            }
+            isReconnecting = false;
+            wifiReconnectPending = false;
+        } else {
+            // Still waiting for 5s to elapse
+            return 100; // Check again soon
         }
-        isReconnecting = false;
     }
 
 #ifndef DISABLE_NTP
@@ -190,8 +283,6 @@ static int32_t reconnectWiFi()
             tv.tv_sec = timeClient.getEpochTime();
             tv.tv_usec = 0;
 
-            // Record that the internal RTC has a valid NTP time.
-            // This works even on boards without a hardware RTC.
             perhapsSetRTC(RTCQualityNTP, &tv);
 #if HAS_WIREGUARD_VPN
             startWireGuard();
@@ -205,16 +296,12 @@ static int32_t reconnectWiFi()
 
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
 #ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
-        /* If APStartupComplete, but we're not connected, try again.
-           Shouldn't try again before APStartupComplete. */
         needReconnect = APStartupComplete;
 #endif
         return 1000; // check once per second
     } else {
-#ifdef ARCH_RP2040
-        onNetworkConnected(); // will only do anything once
-#endif
-        return 300000; // every 5 minutes
+        onNetworkConnected(); // will only do anything once (guarded by APStartupComplete)
+        return 300000;        // every 5 minutes
     }
 }
 
@@ -223,8 +310,13 @@ bool isWifiAvailable()
 
     if (config.network.wifi_enabled && (config.network.wifi_ssid[0])) {
         return true;
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_CH390D)
     } else if (config.network.eth_enabled) {
+        return true;
+#endif
+#ifndef ARCH_PORTDUINO
+    } else if (WiFi.status() == WL_CONNECTED) {
+        // it's likely we have wifi now, but user intends to turn it off in config!
         return true;
 #endif
     } else {
@@ -247,9 +339,6 @@ void deinitWifi()
         LOG_INFO("WiFi Turned Off");
         // WiFi.printDiag(Serial);
     }
-#if HAS_WIREGUARD_VPN
-    stopWireGuard(); // <--- Added
-#endif
 }
 
 // Startup WiFi
@@ -261,9 +350,6 @@ bool initWifi()
         const char *wifiPsw = config.network.wifi_psk;
 
 #ifndef ARCH_RP2040
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
-        createSSLCert(); // For WebServer
-#endif
         WiFi.persistent(false); // Disable flash storage for WiFi credentials
 #endif
         if (!*wifiPsw) // Treat empty password as no password
@@ -288,6 +374,9 @@ bool initWifi()
 #endif
             }
 #ifdef ARCH_ESP32
+            // Register WiFi event handler BEFORE createSSLCert() to prevent race condition:
+            // Without this, WiFi can auto-reconnect during cert generation and fire GOT_IP
+            // before the handler is registered, causing onNetworkConnected() to never run.
             WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(true);
             WiFi.setSleep(false);
@@ -310,6 +399,12 @@ bool initWifi()
                 },
                 WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 #endif
+
+#ifndef ARCH_RP2040
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+            createSSLCert(); // For WebServer - called after WiFi.onEvent() to avoid race condition
+#endif
+#endif
             LOG_DEBUG("JOINING WIFI soon: ssid=%s", wifiName);
             wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
         }
@@ -321,6 +416,23 @@ bool initWifi()
 }
 
 #ifdef ARCH_ESP32
+#if ESP_ARDUINO_VERSION <= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+// Most of the next 12 lines of code are adapted from espressif/arduino-esp32
+// Licensed under the GNU Lesser General Public License v2.1
+// https://github.com/espressif/arduino-esp32/blob/1f038677eb2eaf5e9ca6b6074486803c15468bed/libraries/WiFi/src/WiFiSTA.cpp#L755
+esp_netif_t *get_esp_interface_netif(esp_interface_t interface);
+IPv6Address GlobalIPv6()
+{
+    esp_ip6_addr_t addr;
+    if (WiFiGenericClass::getMode() == WIFI_MODE_NULL) {
+        return IPv6Address();
+    }
+    if (esp_netif_get_ip6_global(get_esp_interface_netif(ESP_IF_WIFI_STA), &addr)) {
+        return IPv6Address();
+    }
+    return IPv6Address(addr.addr);
+}
+#endif
 // Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)
 {
@@ -342,24 +454,40 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
         LOG_INFO("Connected to access point");
+        if (config.network.ipv6_enabled) {
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+            if (!WiFi.enableIPv6()) {
+                LOG_WARN("Failed to enable IPv6");
+            }
+#else
+            if (!WiFi.enableIpV6()) {
+                LOG_WARN("Failed to enable IPv6");
+            }
+#endif
+        }
 #ifdef WIFI_LED
-        digitalWrite(WIFI_LED, HIGH);
+        digitalWrite(WIFI_LED, LOW ^ WIFI_STATE_ON);
 #endif
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         LOG_INFO("Disconnected from WiFi access point");
 #ifdef WIFI_LED
-        digitalWrite(WIFI_LED, LOW);
+        digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
+#endif
+#if HAS_UDP_MULTICAST
+        if (udpHandler) {
+            udpHandler->stop();
+        }
 #endif
         if (!isReconnecting) {
+#if HAS_WIREGUARD_VPN
+            stopWireGuard();
+#endif
             WiFi.disconnect(false, true);
             syslog.disable();
             needReconnect = true;
             wifiReconnect->setIntervalFromNow(1000);
         }
-#if HAS_WIREGUARD_VPN
-        stopWireGuard();
-#endif
         break;
     case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
         LOG_INFO("Authentication mode of access point has changed");
@@ -367,32 +495,32 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
         LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
         onNetworkConnected();
-#if HAS_WIREGUARD_VPN
-        startWireGuard();
-#endif
         break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP6:
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
         LOG_INFO("Obtained Local IP6 address: %s", WiFi.linkLocalIPv6().toString().c_str());
         LOG_INFO("Obtained GlobalIP6 address: %s", WiFi.globalIPv6().toString().c_str());
 #else
-        LOG_INFO("Obtained IP6 address: %s", WiFi.localIPv6().toString().c_str());
-#endif
-#if HAS_WIREGUARD_VPN
-        startWireGuard();
+        LOG_INFO("Obtained Local IP6 address: %s", WiFi.localIPv6().toString().c_str());
+        LOG_INFO("Obtained GlobalIP6 address: %s", GlobalIPv6().toString().c_str());
 #endif
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         LOG_INFO("Lost IP address and IP address is reset to 0");
+#if HAS_WIREGUARD_VPN
+        stopWireGuard();
+#endif
+#if HAS_UDP_MULTICAST
+        if (udpHandler) {
+            udpHandler->stop();
+        }
+#endif
         if (!isReconnecting) {
             WiFi.disconnect(false, true);
             syslog.disable();
             needReconnect = true;
             wifiReconnect->setIntervalFromNow(1000);
         }
-#if HAS_WIREGUARD_VPN
-        stopWireGuard();
-#endif
         break;
     case ARDUINO_EVENT_WPS_ER_SUCCESS:
         LOG_INFO("WiFi Protected Setup (WPS): succeeded in enrollee mode");
@@ -412,13 +540,13 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_AP_START:
         LOG_INFO("WiFi access point started");
 #ifdef WIFI_LED
-        digitalWrite(WIFI_LED, HIGH);
+        digitalWrite(WIFI_LED, LOW ^ WIFI_STATE_ON);
 #endif
         break;
     case ARDUINO_EVENT_WIFI_AP_STOP:
         LOG_INFO("WiFi access point stopped");
 #ifdef WIFI_LED
-        digitalWrite(WIFI_LED, LOW);
+        digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
         break;
     case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
@@ -445,9 +573,6 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_ETH_STOP:
         syslog.disable();
         LOG_INFO("Ethernet stopped");
-#if HAS_WIREGUARD_VPN
-        stopWireGuard();
-#endif
         break;
     case ARDUINO_EVENT_ETH_CONNECTED:
         LOG_INFO("Ethernet connected");
@@ -460,25 +585,22 @@ static void WiFiEvent(WiFiEvent_t event)
 #endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_CH390D)
         LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
                  ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
-        onNetworkConnected();
+        ethNetworkConnectedPending = true;
 #if HAS_WIREGUARD_VPN
         startWireGuard();
 #endif
 #endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_CH390D)
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
         LOG_INFO("Obtained Local IP6 address: %s", ETH.linkLocalIPv6().toString().c_str());
         LOG_INFO("Obtained GlobalIP6 address: %s", ETH.globalIPv6().toString().c_str());
-#else
+#elif defined(USE_WS5500)
         LOG_INFO("Obtained IP6 address: %s", ETH.localIPv6().toString().c_str());
-#endif
-#if HAS_WIREGUARD_VPN
-        startWireGuard();
 #endif
 #endif
         break;
@@ -525,4 +647,4 @@ uint8_t getWifiDisconnectReason()
 {
     return wifiDisconnectReason;
 }
-#endif
+#endif // HAS_WIFI

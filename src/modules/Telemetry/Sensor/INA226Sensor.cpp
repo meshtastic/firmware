@@ -32,16 +32,42 @@ void INA226Sensor::begin(TwoWire *wire, uint8_t addr)
     _addr = addr;
     ina226 = INA226(_addr, _wire);
     _wire->begin();
+    ina226.setMaxCurrentShunt(0.8, 0.100);
 }
 
 bool INA226Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    switch (measurement->which_variant) {
+    case meshtastic_Telemetry_environment_metrics_tag:
+        return getEnvironmentMetrics(measurement);
+
+    case meshtastic_Telemetry_power_metrics_tag:
+        return getPowerMetrics(measurement);
+    }
+
+    // unsupported metric
+    return false;
+}
+
+bool INA226Sensor::getEnvironmentMetrics(meshtastic_Telemetry *measurement)
+{
     measurement->variant.environment_metrics.has_voltage = true;
     measurement->variant.environment_metrics.has_current = true;
 
-    // mV conversion to V
     measurement->variant.environment_metrics.voltage = ina226.getBusVoltage();
     measurement->variant.environment_metrics.current = ina226.getCurrent_mA();
+
+    return true;
+}
+
+bool INA226Sensor::getPowerMetrics(meshtastic_Telemetry *measurement)
+{
+    measurement->variant.power_metrics.has_ch1_voltage = true;
+    measurement->variant.power_metrics.has_ch1_current = true;
+
+    measurement->variant.power_metrics.ch1_voltage = ina226.getBusVoltage();
+    measurement->variant.power_metrics.ch1_current = ina226.getCurrent_mA();
+
     return true;
 }
 

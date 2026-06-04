@@ -37,7 +37,7 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
     return 0;
 }
 
-void InkHUD::DMApplet::onRender()
+void InkHUD::DMApplet::onRender(bool full)
 {
     // Abort if no text message
     if (!latestMessage->dm.sender) {
@@ -97,15 +97,25 @@ void InkHUD::DMApplet::onRender()
     // Extra gap below the header
     int16_t textTop = headerDivY + padDivH;
 
-    // Determine size if printed large
+    // Attempt to print with fontLarge
+    uint32_t textHeight;
     setFont(fontLarge);
-    uint32_t textHeight = getWrappedTextHeight(0, width(), text);
+    textHeight = getWrappedTextHeight(0, width(), text);
+    if (textHeight <= (uint32_t)height()) {
+        printWrapped(0, textTop, width(), text);
+        return;
+    }
 
-    // If too large, swap to small font
-    if (textHeight + textTop > (uint32_t)height()) // (compare signed and unsigned)
-        setFont(fontSmall);
+    // Fallback (too large): attempt to print with fontMedium
+    setFont(fontMedium);
+    textHeight = getWrappedTextHeight(0, width(), text);
+    if (textHeight <= (uint32_t)height()) {
+        printWrapped(0, textTop, width(), text);
+        return;
+    }
 
-    // Print text
+    // Fallback (too large): print with fontSmall
+    setFont(fontSmall);
     printWrapped(0, textTop, width(), text);
 }
 
