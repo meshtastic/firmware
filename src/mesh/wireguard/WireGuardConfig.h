@@ -46,7 +46,7 @@ typedef struct WireGuardConfig {
 #define WIREGUARD_DEFAULT_PUBLIC_KEY ""
 #endif
 
-#ifndef WIREGUARD_DEFAULT_PRESHARED_KEY  
+#ifndef WIREGUARD_DEFAULT_PRESHARED_KEY
 // WireGuard-ESP32 does not currently make use of preshared keys but the
 // structure contains a field for future compatibility. Define a default
 // empty value so that the configuration compiles when the feature is

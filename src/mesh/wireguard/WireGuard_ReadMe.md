@@ -34,11 +34,11 @@ Example `seeed_xiao_s3` configuration:
     build_unflags =
         ${esp32s3_base.build_unflags}
         -DARDUINO_USB_MODE=1
-    build_flags = 
+    build_flags =
         ${esp32s3_base.build_flags}
         -D SEEED_XIAO_S3
         -I variants/esp32s3/seeed_xiao_s3
-        -DBOARD_HAS_PSRAM 
+        -DBOARD_HAS_PSRAM
         -DHAS_WIREGUARD_VPN=1
         -DARDUINO_USB_MODE=0
 ```

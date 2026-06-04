@@ -16,7 +16,7 @@ WireGuardConfig wireGuardConfig = {
     WIREGUARD_DEFAULT_PRIVATE_KEY,
     WIREGUARD_DEFAULT_PUBLIC_KEY,
     WIREGUARD_DEFAULT_PRESHARED_KEY
-}; 
+};
 
 template <size_t N>
 static void copyWireGuardString(char (&dest)[N], const char *src)
