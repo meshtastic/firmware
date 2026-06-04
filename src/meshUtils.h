@@ -66,4 +66,10 @@ inline uint32_t pow_of_2(uint32_t n)
     return 1 << n;
 }
 
+/// Returns true if n is a power of two (n >= 1).
+template <typename T> constexpr bool is_pow_of_2(T n)
+{
+    return n >= T(1) && (n & (n - T(1))) == T(0);
+}
+
 #define IS_ONE_OF(item, ...) isOneOf(item, sizeof((int[]){__VA_ARGS__}) / sizeof(int), __VA_ARGS__)

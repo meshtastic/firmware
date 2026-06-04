@@ -200,7 +200,7 @@ class MockNodeDB : public NodeDB
         node.num = num;
         node.has_hops_away = hasHops;
         node.hops_away = hopsAway;
-        node.via_mqtt = viaMqtt;
+        nodeInfoLiteSetBit(&node, NODEINFO_BITFIELD_VIA_MQTT_MASK, viaMqtt);
         node.last_heard = getTime() - ageSecs;
         testNodes.push_back(node);
         meshNodes = &testNodes;
@@ -358,6 +358,7 @@ PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several producti
 - [ ] Set `nodeDB = mockNodeDB`
 - [ ] Delete persisted state files (`FSCom.remove(...)`)
 - [ ] Reset file-scope mutable globals
+- [ ] Reset mock clock to a safe base value (e.g. `mockTime = ONE_HOUR_MS`) — prevents unsigned subtraction underflow in time-dependent logic
 - [ ] Disable randomness/jitter flags
 - [ ] In `tearDown`: null the global singleton pointer, restore flags
 
@@ -375,15 +376,21 @@ A well-structured test suite follows this pattern:
 
 | Suite                        | Module Under Test             |
 | ---------------------------- | ----------------------------- |
+| `test_admin_radio`           | Admin + LoRa region config    |
+| `test_atak`                  | ATAK integration              |
 | `test_crypto`                | CryptoEngine                  |
-| `test_mqtt`                  | MQTT integration              |
-| `test_radio`                 | Radio interface               |
+| `test_default`               | Default configuration helpers |
+| `test_hop_scaling`           | Hop scaling algorithm         |
+| `test_http_content_handler`  | HTTP handling                 |
+| `test_mac_from_string`       | MAC address parsing           |
 | `test_mesh_module`           | Module framework              |
 | `test_meshpacket_serializer` | Packet serialization          |
-| `test_transmit_history`      | Retransmission tracking       |
-| `test_atak`                  | ATAK integration              |
-| `test_default`               | Default configuration helpers |
-| `test_http_content_handler`  | HTTP handling                 |
+| `test_mqtt`                  | MQTT integration              |
+| `test_packet_history`        | Packet history tracking       |
+| `test_position_precision`    | Position precision helpers    |
+| `test_radio`                 | Radio interface               |
 | `test_serial`                | Serial communication          |
-| `test_hop_scaling`           | Hop scaling algorithm         |
 | `test_traffic_management`    | Traffic management            |
+| `test_transmit_history`      | Retransmission tracking       |
+| `test_type_conversions`      | NodeDB v25 type conversions   |
+| `test_utf8`                  | UTF-8 utilities               |
