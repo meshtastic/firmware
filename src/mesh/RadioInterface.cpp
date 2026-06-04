@@ -49,6 +49,8 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {PRESET(L
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {PRESET(NARROW_FAST), PRESET(NARROW_SLOW),
                                                                           MODEM_PRESET_END};
 
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_TINY[] = {PRESET(TINY_FAST), PRESET(TINY_SLOW), MODEM_PRESET_END};
+
 // Region profiles: bundle preset list + regulatory parameters shared across regions
 // presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle
 const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 1, 1};
@@ -56,6 +58,8 @@ const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 1, 1
 const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1};
 const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0, 10, 10};
 const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1};
+// Ham '20kHz' profile. 15.6kHz bandwidth coerced to 20kHz via padding.
+const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, false, true, 0, 2, 2};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
@@ -225,6 +229,35 @@ const RegionInfo regions[] = {
         https://github.com/meshtastic/firmware/issues/3741
     */
     RDEF(BR_902, 902.0f, 907.5f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+
+    /*
+        ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 2m allocation: 144.000 - 146.000 MHz.
+        Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
+        via its own PA curve; the field here is just the legal upper bound.
+
+        Default slot: 26 (144.510 MHz)
+        https://www.iaru-r1.org/wp-content/uploads/2020/12/VHF-Bandplan.pdf
+    */
+    RDEF(ITU1_2M, 144.0f, 146.0f, 100, 30, false, false, PROFILE_HAM_20KHZ, PRESET(TINY_FAST), 26),
+
+    /*
+        ITU Region 2 (Americas) amateur 2m allocation: 144.000 - 148.000 MHz.
+        Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
+
+        Default slot: 51 (145.010 MHz)
+        https://www.arrl.org/band-plan
+    */
+    RDEF(ITU2_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM_20KHZ, PRESET(TINY_FAST), 51),
+
+    /*
+        ITU Region 3 (Asia/Pacific) amateur 2m allocation: 144.000 - 148.000 MHz.
+        Typical admin rules allow well above 30 dBm for licensed operators.
+
+        Default slot: 33 (144.650 MHz)
+        https://www.iaru.org/wp-content/uploads/2020/01/R3-004-IARU-Region-3-Bandplan-rev.2.pdf
+        https://www.wia.org.au/members/bandplans/data/documents/WIA%20Australian%20Band%20Plan%202026.pdf
+    */
+    RDEF(ITU3_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM_20KHZ, PRESET(TINY_FAST), 33),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
@@ -833,6 +866,16 @@ static void sendErrorNotification(const char *msg)
 bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig)
 {
     const RegionInfo *newRegion = getRegion(loraConfig.region);
+
+    // Reject unrecognized region codes (getRegion returns UNSET sentinel for unknown codes)
+    if (newRegion->code != loraConfig.region) {
+        char err_string[160];
+        snprintf(err_string, sizeof(err_string), "Region code %d is not recognized", loraConfig.region);
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        sendErrorNotification(err_string);
+        return false;
+    }
 
     // If you are not licensed, you can't use ham regions.
     if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {

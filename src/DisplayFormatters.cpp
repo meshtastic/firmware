@@ -51,6 +51,12 @@ const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaC
     case PRESET(NARROW_SLOW):
         return useShortName ? "NarS" : "NarrowSlow";
         break;
+    case PRESET(TINY_FAST):
+        return useShortName ? "TinyF" : "TinyFast";
+        break;
+    case PRESET(TINY_SLOW):
+        return useShortName ? "TinyS" : "TinySlow";
+        break;
     default:
         return useShortName ? "Custom" : "Invalid";
         break;
