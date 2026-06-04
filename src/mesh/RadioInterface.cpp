@@ -272,6 +272,33 @@ const RegionInfo regions[] = {
     RDEF(ITU2_125CM, 220.0f, 225.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 37),
 
     /*
+        ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 70cm allocation: 430.000 - 440.000 MHz.
+        Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
+        via its own PA curve; the field here is just the legal upper bound.
+
+        Default slot: 91 (439.050 MHz)
+    */
+    RDEF(ITU1_70CM, 430.0f, 440.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 91),
+
+    /*
+        ITU Region 2 (Americas) amateur 70cm allocation: 420.000 - 450.000 MHz.
+        Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
+        Note: Some countries do not allocate 420-430 MHz or 440-450 MHz. Check local law!
+
+        Default slot: 191 (439.050 MHz)
+    */
+    RDEF(ITU2_70CM, 420.0f, 450.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 191),
+
+    /*
+        ITU Region 3 (Asia/Pacific) amateur 70cm allocation: 430.000 - 450.000 MHz.
+        Typical admin rules allow well above 30 dBm for licensed operators.
+        Note: Some countries do not allocate 440-450 MHz. Check local law!
+
+        Default slot: 91 (439.050 MHz)
+    */
+    RDEF(ITU3_70CM, 430.0f, 450.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 91),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_STD, PRESET(LONG_FAST), 0),
