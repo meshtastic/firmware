@@ -62,6 +62,8 @@ The protobuf definition `meshtastic_ModuleConfig_WireGuardConfig` (generated in 
 
 Configure the device through a client that supports `ModuleConfig.wireguard` and the admin message type `AdminMessage_ModuleConfigType_WIREGUARD_CONFIG`. A standard single-peer WireGuard config contains the fields needed by the firmware:
 
+See https://github.com/TheWISPRer/Meshtastic-Wireguard-Configurator for basic configurator and monitor
+
 ```ini
 [Interface]
 Address = 10.0.0.2/32
