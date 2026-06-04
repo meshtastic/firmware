@@ -15,6 +15,24 @@ from typing import Any
 SECRET = "sekrit"
 
 
+def list_serial_ports() -> list[dict[str, str]]:
+    try:
+        from serial.tools import list_ports
+    except ModuleNotFoundError as exc:
+        raise SystemExit(
+            "pyserial is required to list serial ports. Install meshtastic-python in your active Python environment first."
+        ) from exc
+
+    return [
+        {
+            "device": port.device,
+            "description": port.description,
+            "hwid": port.hwid,
+        }
+        for port in list_ports.comports()
+    ]
+
+
 def _import_meshtastic():
     try:
         from meshtastic.mesh_interface import MeshInterface
@@ -237,26 +255,75 @@ def _write_config(node: Any, config: Any, args: argparse.Namespace) -> Any:
     return outgoing
 
 
-def do_get(args: argparse.Namespace) -> int:
-    iface = _open_interface(args.port)
+def read_wireguard_config(port: str | None, show_secrets: bool = False) -> dict[str, Any]:
+    iface = _open_interface(port)
     try:
         _refresh_wireguard_config(iface.localNode)
-        config = _wireguard_config(iface.localNode)
-        print(json.dumps(_to_dict(config, args.show_secrets), indent=2))
+        return _to_dict(_wireguard_config(iface.localNode), show_secrets)
     finally:
         iface.close()
+
+
+def set_wireguard_config(
+    port: str | None,
+    config_path: str | None = None,
+    *,
+    enable: bool = False,
+    disable: bool = False,
+    show_secrets: bool = False,
+    address: str | None = None,
+    server_addr: str | None = None,
+    server_port: int | None = None,
+    private_key: str | None = None,
+    public_key: str | None = None,
+    preshared_key: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    args = argparse.Namespace(
+        config=config_path,
+        enable=enable,
+        disable=disable,
+        show_secrets=show_secrets,
+        address=address,
+        server_addr=server_addr,
+        server_port=server_port,
+        private_key=private_key,
+        public_key=public_key,
+        preshared_key=preshared_key,
+    )
+
+    iface = _open_interface(port)
+    try:
+        node = iface.localNode
+        written = _write_config(node, _wireguard_config(node), args)
+    finally:
+        iface.close()
+
+    return {
+        "written": _to_dict(written, show_secrets),
+        "confirmed": read_wireguard_config(port, show_secrets),
+    }
+
+
+def do_get(args: argparse.Namespace) -> int:
+    print(json.dumps(read_wireguard_config(args.port, args.show_secrets), indent=2))
     return 0
 
 
 def do_set(args: argparse.Namespace) -> int:
-    iface = _open_interface(args.port)
-    try:
-        node = iface.localNode
-        config = _wireguard_config(node)
-        written = _write_config(node, config, args)
-        print(json.dumps(_to_dict(written, args.show_secrets), indent=2))
-    finally:
-        iface.close()
+    result = set_wireguard_config(
+        args.port,
+        args.config,
+        enable=args.enable,
+        disable=args.disable,
+        show_secrets=args.show_secrets,
+        address=args.address,
+        server_addr=args.server_addr,
+        server_port=args.server_port,
+        private_key=args.private_key,
+        public_key=args.public_key,
+        preshared_key=args.preshared_key,
+    )
+    print(json.dumps(result["written"], indent=2))
     return 0
 
 

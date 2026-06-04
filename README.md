@@ -54,6 +54,14 @@ Import a standard single-peer WireGuard config file:
 python bin/wireguard-config.py --port COM7 set --config wg0.conf --enable
 ```
 
+Or use the simple desktop GUI:
+
+```bash
+python bin/wireguard-gui.py
+```
+
+The GUI lets you select a serial port, browse for a WireGuard `.conf`, push it to the device, confirm the readback, and poll basic tunnel health.
+
 Or set fields directly:
 
 ```bash
