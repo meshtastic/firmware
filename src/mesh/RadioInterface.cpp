@@ -877,6 +877,7 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
         return false;
     }
 
+    // If you are not licensed, you can't use ham regions.
     if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {
         char err_string[160];
         snprintf(err_string, sizeof(err_string), "Region %s requires licensed mode", newRegion->name);
