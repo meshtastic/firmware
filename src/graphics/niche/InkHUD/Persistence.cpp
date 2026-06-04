@@ -17,23 +17,23 @@ void InkHUD::Persistence::loadSettings()
         LOG_WARN("Settings version changed. Using defaults");
 }
 
-// Load settings and latestMessage data
+// Rebuild the latestMessage cache from the global messageStore.
+// Called after messageStore.loadFromFlash() so that the most recent broadcast and DM
+// are immediately available to applets (DMApplet, AllMessageApplet, NotificationApplet).
 void InkHUD::Persistence::loadLatestMessage()
 {
-    // Load previous "latestMessages" data from flash
-    MessageStore store("latest");
-    store.loadFromFlash();
-
-    // Place into latestMessage struct, for convenient access
-    // Number of strings loaded determines whether last message was broadcast or dm
-    if (store.messages.size() == 1) {
-        latestMessage.dm = store.messages.at(0);
-        latestMessage.wasBroadcast = false;
-    } else if (store.messages.size() == 2) {
-        latestMessage.dm = store.messages.at(0);
-        latestMessage.broadcast = store.messages.at(1);
-        latestMessage.wasBroadcast = true;
+    int lastBroadcastPos = -1, lastDMPos = -1, pos = 0;
+    for (const StoredMessage &m : messageStore.getLiveMessages()) {
+        if (m.type == MessageType::BROADCAST) {
+            latestMessage.broadcast = m;
+            lastBroadcastPos = pos;
+        } else if (m.type == MessageType::DM_TO_US) {
+            latestMessage.dm = m;
+            lastDMPos = pos;
+        }
+        pos++;
     }
+    latestMessage.wasBroadcast = (lastBroadcastPos > lastDMPos);
 }
 
 // Save the InkHUD settings to flash
@@ -42,15 +42,10 @@ void InkHUD::Persistence::saveSettings()
     FlashData<Settings>::save(&settings, "settings");
 }
 
-// Save latestMessage data to flash
+// Persist all messages via the global messageStore.
 void InkHUD::Persistence::saveLatestMessage()
 {
-    // Number of strings saved determines whether last message was broadcast or dm
-    MessageStore store("latest");
-    store.messages.push_back(latestMessage.dm);
-    if (latestMessage.wasBroadcast)
-        store.messages.push_back(latestMessage.broadcast);
-    store.saveToFlash();
+    messageStore.saveToFlash();
 }
 
 /*

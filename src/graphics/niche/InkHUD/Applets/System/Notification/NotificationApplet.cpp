@@ -3,6 +3,7 @@
 #include "./NotificationApplet.h"
 
 #include "./Notification.h"
+#include "MessageStore.h"
 #include "graphics/niche/InkHUD/Persistence.h"
 
 #include "meshUtils.h"
@@ -231,7 +232,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
         bool msgIsBroadcast = currentNotification.type == Notification::Type::NOTIFICATION_MESSAGE_BROADCAST;
 
         // Pick source of message
-        const MessageStore::Message *message =
+        const StoredMessage *message =
             msgIsBroadcast ? &inkhud->persistence->latestMessage.broadcast : &inkhud->persistence->latestMessage.dm;
 
         // Find info about the sender
@@ -261,7 +262,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
                 text += hexifyNodeNum(message->sender);
 
             text += ": ";
-            text += message->text;
+            text += MessageStore::getText(*message);
         }
     }
 
