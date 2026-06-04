@@ -60,11 +60,10 @@ PB_BIND(meshtastic_ModuleConfig_StatusMessageConfig, meshtastic_ModuleConfig_Sta
 PB_BIND(meshtastic_ModuleConfig_TAKConfig, meshtastic_ModuleConfig_TAKConfig, AUTO)
 
 
-PB_BIND(meshtastic_ModuleConfig_WireGuardConfig, meshtastic_ModuleConfig_WireGuardConfig, AUTO)
+PB_BIND(meshtastic_ModuleConfig_WireGuardConfig, meshtastic_ModuleConfig_WireGuardConfig, 2)
 
 
 PB_BIND(meshtastic_RemoteHardwarePin, meshtastic_RemoteHardwarePin, AUTO)
-
 
 
 
