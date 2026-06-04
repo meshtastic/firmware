@@ -1,6 +1,7 @@
 #include "ControlPointModule.h"
 
 #include <algorithm>
+#include "MeshService.h"
 
 ControlPointModule *controlPointModule = nullptr;
 

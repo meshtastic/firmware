@@ -8,6 +8,7 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 #include "NodeDB.h"
+#include "modules/ControlPointModule.h"
 
 NextHopRouter::NextHopRouter() {}
 

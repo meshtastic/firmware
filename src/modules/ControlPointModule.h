@@ -40,7 +40,7 @@ protected:
                             meshtastic_ControlPointMessage *msg) override;
 
     bool wantPacket(const meshtastic_MeshPacket *p) override;
-    int32_t runOnce() override;
+    int32_t runOnce();
 
 private:
     std::vector<ControlPointPeerMetric> peerMetrics;
