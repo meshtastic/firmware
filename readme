@@ -1,0 +1,71 @@
+# Meshtastic firmware with ControlPointModule (experimental)
+
+This release contains a custom Meshtastic firmware build that adds an
+experimental routing extension based on **control points**.
+
+The implementation is built on top of the official `meshtastic/firmware`
+repository and keeps the default routing behavior (next-hop routing and
+managed flooding) as a fallback.
+
+## What is included
+
+- `firmware-heltec-v3-<VERSION>.bin`  
+  Custom firmware for **Heltec WiFi LoRa 32 V3 (ESP32-S3)** with
+  `ControlPointModule` integrated into the routing pipeline.
+
+- Standard Meshtastic helper scripts from the official release:
+  - `device-install.sh` / `device-install.bat`
+  - `device-update.sh` / `device-update.bat`
+  - any other files required by the official Meshtastic installer
+
+The structure of this ZIP matches the official Meshtastic ESP32 release,
+so it can be used both with:
+- the Meshtastic **Web Flasher** (`flasher.meshtastic.org`);
+- the official CLI install scripts.
+
+## How to flash using the Web Flasher
+
+1. Download this **ZIP** file to your computer.  
+2. Open Chrome or Edge and visit: `https://flasher.meshtastic.org`.  
+3. Connect your Heltec WiFi LoRa 32 V3 via USB and put it into bootloader
+   mode (press and hold BOOT, tap RESET, then release BOOT).  
+4. In the Web Flasher:
+   - Select your device type (Heltec WiFi LoRa 32 V3 or equivalent).
+   - Instead of choosing a firmware version from the list, click the
+     **folder** icon and select this ZIP file from disk.
+5. Choose **Erase & Install** (recommended for switching between firmware
+   variants) or **Install** if you want to keep existing settings.
+6. Wait until the flashing process completes and the device reboots.
+
+After flashing, connect with the Meshtastic app as usual and verify that
+the node boots and joins the mesh.
+
+## How this build differs from official Meshtastic
+
+- Adds a new protobuf payload `ControlPointMessage` on the
+  `PRIVATE_APP` port.
+- Implements `ControlPointModule`:
+  - broadcasts control-point metrics periodically;
+  - stores peer metrics with TTL and basic validation;
+  - provides `choosePreferredRelay()` to suggest a better next hop based
+    on route cost, load, and priority.
+- Integrates `ControlPointModule` into `NextHopRouter`:
+  - if a valid preferred relay is available, it is used as `next_hop`;
+  - otherwise, the standard Meshtastic routing (`getNextHop()` and
+    managed flooding) is used as a fallback.
+
+All low-level packet handling, ACK logic and flooding behavior remain
+unchanged, so this build should stay compatible with standard Meshtastic
+nodes at the packet level.
+
+## Status and caveats
+
+- **Experimental:** This firmware is part of an academic project exploring
+  control-point-based routing heuristics. Use it on test nodes first.
+- No stability guarantees. Routing decisions may differ from the stock
+  firmware in non-obvious ways.
+- Always keep at least one device with official Meshtastic firmware as a
+  reference node in your test mesh.
+
+If you encounter issues, please capture serial logs from the node and
+include the exact commit hash / branch name used to build this release.
