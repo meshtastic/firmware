@@ -49,18 +49,23 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {PRESET(L
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {PRESET(NARROW_FAST), PRESET(NARROW_SLOW),
                                                                           MODEM_PRESET_END};
 
-// Region profiles: bundle preset list + regulatory parameters shared across regions
-// presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle, override slot
-const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 1, 1, 0};
-const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 1, 1, 0};
-const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1, 0};
-const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0, 10, 10, 0};
-const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1, 1};
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_TINY[] = {PRESET(TINY_FAST), PRESET(TINY_SLOW), MODEM_PRESET_END};
 
-#define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset)   \
+// Region profiles: bundle preset list + regulatory parameters shared across regions
+// presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle
+const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 1, 1};
+const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 1, 1};
+const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1};
+const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0, 10, 10};
+const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1};
+// Ham '20kHz' profile. 15.6kHz bandwidth coerced to 20kHz via padding.
+const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, false, true, 0, 2, 2};
+
+#define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
+             override_slot)                                                                                                      \
     {                                                                                                                            \
         meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching,      \
-            wide_lora, &profile_ptr, default_preset, #name                                                                       \
+            wide_lora, &profile_ptr, default_preset, override_slot, #name                                                        \
     }
 
 const RegionInfo regions[] = {
@@ -68,7 +73,7 @@ const RegionInfo regions[] = {
         https://link.springer.com/content/pdf/bbm%3A978-1-4842-4357-2%2F1.pdf
         https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
     */
-    RDEF(US, 902.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(US, 902.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         EN300220 ETSI V3.2.1 [Table B.1, Item H, p. 21]
@@ -76,7 +81,7 @@ const RegionInfo regions[] = {
         https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.02.01_60/en_30022002v030201p.pdf
         FIXME: https://github.com/meshtastic/firmware/issues/3371
      */
-    RDEF(EU_433, 433.0f, 434.0f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(EU_433, 433.0f, 434.0f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
     /*
        https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
        https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
@@ -91,33 +96,33 @@ const RegionInfo regions[] = {
        AFA) to avoid a duty cycle. (Please refer to line P page 22 of this document.)
        https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.01.01_60/en_30022002v030101p.pdf
      */
-    RDEF(EU_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_EU868, PRESET(LONG_FAST)),
+    RDEF(EU_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_EU868, PRESET(LONG_FAST), 0),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(CN, 470.0f, 510.0f, 100, 19, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(CN, 470.0f, 510.0f, 100, 19, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
         https://www.arib.or.jp/english/html/overview/doc/5-STD-T108v1_5-E1.pdf
         https://qiita.com/ammo0613/items/d952154f1195b64dc29f
      */
-    RDEF(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
         https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
         Also used in Brazil.
      */
-    RDEF(ANZ, 915.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(ANZ, 915.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         433.05 - 434.79 MHz, 25mW EIRP max, No duty cycle restrictions
         AU Low Interference Potential https://www.acma.gov.au/licences/low-interference-potential-devices-lipd-class-licence
         NZ General User Radio Licence for Short Range Devices https://gazette.govt.nz/notice/id/2022-go3100
      */
-    RDEF(ANZ_433, 433.05f, 434.79f, 100, 14, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(ANZ_433, 433.05f, 434.79f, 100, 14, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
@@ -125,13 +130,13 @@ const RegionInfo regions[] = {
         Note:
             - We do LBT, so 100% is allowed.
      */
-    RDEF(RU, 868.7f, 869.2f, 100, 20, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(RU, 868.7f, 869.2f, 100, 20, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulId=53943&efYd=0
         https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
      */
-    RDEF(KR, 920.0f, 923.0f, 100, 23, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(KR, 920.0f, 923.0f, 100, 23, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Taiwan, 920-925Mhz, limited to 0.5W indoor or coastal, 1.0W outdoor.
@@ -139,40 +144,40 @@ const RegionInfo regions[] = {
         https://www.ncc.gov.tw/english/files/23070/102_5190_230703_1_doc_C.PDF
         https://gazette.nat.gov.tw/egFront/e_detail.do?metaid=147283
      */
-    RDEF(TW, 920.0f, 925.0f, 100, 27, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(TW, 920.0f, 925.0f, 100, 27, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(IN, 865.0f, 867.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(IN, 865.0f, 867.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
          https://rrf.rsm.govt.nz/smart-web/smart/page/-smart/domain/licence/LicenceSummary.wdk?id=219752
          https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
       */
-    RDEF(NZ_865, 864.0f, 868.0f, 100, 36, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(NZ_865, 864.0f, 868.0f, 100, 36, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
        https://standard.nbtc.go.th/getattachment/Standards/%E0%B8%A1%E0%B8%B2%E0%B8%95%E0%B8%A3%E0%B8%90%E0%B8%B2%E0%B8%99%E0%B8%97%E0%B8%B2%E0%B8%87%E0%B9%80%E0%B8%97%E0%B8%84%E0%B8%99%E0%B8%B4%E0%B8%84%E0%B8%82%E0%B8%AD%E0%B8%87%E0%B9%80%E0%B8%84%E0%B8%A3%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B9%82%E0%B8%97%E0%B8%A3%E0%B8%84%E0%B8%A1%E0%B8%99%E0%B8%B2%E0%B8%84%E0%B8%A1/1033-2565.pdf.aspx?lang=th-TH
        Thailand 920–925 MHz set max TX power to 27 dBm and enforce 10% duty cycle, aligned with NBTC regulations.
     */
-    RDEF(TH, 920.0f, 925.0f, 10, 27, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(TH, 920.0f, 925.0f, 10, 27, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         433,05-434,7 Mhz 10 mW
         868,0-868,6 Mhz 25 mW
         https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
     */
-    RDEF(UA_433, 433.0f, 434.7f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST)),
-    RDEF(UA_868, 868.0f, 868.6f, 1, 14, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(UA_433, 433.0f, 434.7f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(UA_868, 868.0f, 868.6f, 1, 14, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Malaysia
         433 - 435 MHz at 100mW, no restrictions.
         https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
     */
-    RDEF(MY_433, 433.0f, 435.0f, 100, 20, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(MY_433, 433.0f, 435.0f, 100, 20, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Malaysia
@@ -181,14 +186,14 @@ const RegionInfo regions[] = {
         Frequency hopping is used for 919 - 923 MHz.
         https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
     */
-    RDEF(MY_919, 919.0f, 924.0f, 100, 27, true, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(MY_919, 919.0f, 924.0f, 100, 27, true, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Singapore
         SG_923 Band 30d: 917 - 925 MHz at 100mW, no restrictions.
         https://www.imda.gov.sg/-/media/imda/files/regulation-licensing-and-consultations/ict-standards/telecommunication-standards/radio-comms/imdatssrd.pdf
     */
-    RDEF(SG_923, 917.0f, 925.0f, 100, 20, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(SG_923, 917.0f, 925.0f, 100, 20, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Philippines
@@ -198,9 +203,9 @@ const RegionInfo regions[] = {
                 https://github.com/meshtastic/firmware/issues/4948#issuecomment-2394926135
     */
 
-    RDEF(PH_433, 433.0f, 434.7f, 100, 10, false, false, PROFILE_STD, PRESET(LONG_FAST)),
-    RDEF(PH_868, 868.0f, 869.4f, 100, 14, false, false, PROFILE_STD, PRESET(LONG_FAST)),
-    RDEF(PH_915, 915.0f, 918.0f, 100, 24, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(PH_433, 433.0f, 434.7f, 100, 10, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(PH_868, 868.0f, 869.4f, 100, 14, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(PH_915, 915.0f, 918.0f, 100, 24, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Kazakhstan
@@ -208,46 +213,75 @@ const RegionInfo regions[] = {
                 863 - 868 MHz <25 mW EIRP, 500kHz channels allowed, must not be used at airfields
                                 https://github.com/meshtastic/firmware/issues/7204
     */
-    RDEF(KZ_433, 433.075f, 434.775f, 100, 10, false, false, PROFILE_STD, PRESET(LONG_FAST)),
-    RDEF(KZ_863, 863.0f, 868.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(KZ_433, 433.075f, 434.775f, 100, 10, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(KZ_863, 863.0f, 868.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Nepal
         865 MHz to 868 MHz frequency band for IoT (Internet of Things), M2M (Machine-to-Machine), and smart metering use,
        specifically in non-cellular mode. https://www.nta.gov.np/uploads/contents/Radio-Frequency-Policy-2080-English.pdf
     */
-    RDEF(NP_865, 865.0f, 868.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(NP_865, 865.0f, 868.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Brazil
         902 - 907.5 MHz , 1W power limit, no duty cycle restrictions
         https://github.com/meshtastic/firmware/issues/3741
     */
-    RDEF(BR_902, 902.0f, 907.5f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(BR_902, 902.0f, 907.5f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+
+    /*
+        ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 2m allocation: 144.000 - 146.000 MHz.
+        Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
+        via its own PA curve; the field here is just the legal upper bound.
+
+        Default slot: 26 (144.510 MHz)
+        https://www.iaru-r1.org/wp-content/uploads/2020/12/VHF-Bandplan.pdf
+    */
+    RDEF(ITU1_2M, 144.0f, 146.0f, 100, 30, false, false, PROFILE_HAM_20KHZ, PRESET(TINY_FAST), 26),
+
+    /*
+        ITU Region 2 (Americas) amateur 2m allocation: 144.000 - 148.000 MHz.
+        Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
+
+        Default slot: 51 (145.010 MHz)
+        https://www.arrl.org/band-plan
+    */
+    RDEF(ITU2_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM_20KHZ, PRESET(TINY_FAST), 51),
+
+    /*
+        ITU Region 3 (Asia/Pacific) amateur 2m allocation: 144.000 - 148.000 MHz.
+        Typical admin rules allow well above 30 dBm for licensed operators.
+
+        Default slot: 33 (144.650 MHz)
+        https://www.iaru.org/wp-content/uploads/2020/01/R3-004-IARU-Region-3-Bandplan-rev.2.pdf
+        https://www.wia.org.au/members/bandplans/data/documents/WIA%20Australian%20Band%20Plan%202026.pdf
+    */
+    RDEF(ITU3_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM_20KHZ, PRESET(TINY_FAST), 33),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
-    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_STD, PRESET(LONG_FAST)),
+    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         EU 866MHz band (Band no. 46b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD)
         Gives 4 channels at 865.7/866.3/866.9/867.5 MHz, 400 kHz gap plus 37.5 kHz padding between channels, 27 dBm,
         duty cycle 2.5% (mobile) or 10% (fixed) https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006D0771(01)-20250123
     */
-    RDEF(EU_866, 865.6f, 867.6f, 2.5, 27, false, false, PROFILE_LITE, PRESET(LITE_FAST)),
+    RDEF(EU_866, 865.6f, 867.6f, 2.5, 27, false, false, PROFILE_LITE, PRESET(LITE_FAST), 0),
 
     /*
         EU 868MHz band: 3 channels at 869.410/869.4625/869.577 MHz
         Channel centres at 869.442/869.525/869.608 MHz,
         10.4 kHz padding on channels, 27 dBm, duty cycle 10%
     */
-    RDEF(EU_N_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_NARROW, PRESET(NARROW_SLOW)),
+    RDEF(EU_N_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_NARROW, PRESET(NARROW_SLOW), 1),
 
     /*
         This needs to be last. Same as US.
     */
-    RDEF(UNSET, 902.0f, 928.0f, 100, 30, false, false, PROFILE_UNDEF, PRESET(LONG_FAST)),
+    RDEF(UNSET, 902.0f, 928.0f, 100, 30, false, false, PROFILE_UNDEF, PRESET(LONG_FAST), 0),
 
 };
 
@@ -833,6 +867,16 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
 {
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
+    // Reject unrecognized region codes (getRegion returns UNSET sentinel for unknown codes)
+    if (newRegion->code != loraConfig.region) {
+        char err_string[160];
+        snprintf(err_string, sizeof(err_string), "Region code %d is not recognized", loraConfig.region);
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        sendErrorNotification(err_string);
+        return false;
+    }
+
     // If you are not licensed, you can't use ham regions.
     if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {
         char err_string[160];
@@ -932,11 +976,11 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         // overrideSlot: 0 = channel hash, -1 = preset hash, >0 = explicit slot
         uses_default_frequency_slot =
             (loraConfig.channel_num == 0) || // user choice unset, no frequency override, so use default
-            (newRegion->profile->overrideSlot > 0 &&
-             loraConfig.channel_num == newRegion->profile->overrideSlot) || // user setting matches explicit override slot
-            ((newRegion->profile->overrideSlot == OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH) &&
+            (newRegion->overrideSlot > 0 &&
+             loraConfig.channel_num == newRegion->overrideSlot) || // user setting matches explicit override slot
+            ((newRegion->overrideSlot == OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH) &&
              ((uint32_t)(loraConfig.channel_num - 1) == channelNameHashSlot)) || // user setting matches channel name hash
-            ((newRegion->profile->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) &&
+            ((newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) &&
              ((uint32_t)(loraConfig.channel_num - 1) == presetNameHashSlot)); // user setting matches preset name hash
 
         // check if user setting different to preset name
@@ -952,12 +996,11 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             if (clamp) {
                 if (uses_custom_channel_name) { // clamp to channel name hash
                     loraConfig.channel_num =
-                        channelNameHashSlot + 1;                   // channel_num is 1-based, but hash slot is 0-based, so add 1
-                } else if (newRegion->profile->overrideSlot > 0) { // clamp to explicit override slot
-                    loraConfig.channel_num =
-                        newRegion->profile->overrideSlot; // use the explicit override slot specified by the region profile
+                        channelNameHashSlot + 1;          // channel_num is 1-based, but hash slot is 0-based, so add 1
+                } else if (newRegion->overrideSlot > 0) { // clamp to explicit override slot
+                    loraConfig.channel_num = newRegion->overrideSlot; // use the explicit override slot defined for this region
                     uses_default_frequency_slot = true;
-                } else if (newRegion->profile->overrideSlot == OVERRIDE_SLOT_PRESET_HASH && loraConfig.use_preset) {
+                } else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH && loraConfig.use_preset) {
                     // clamp to preset name hash
                     loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
                     uses_default_frequency_slot = true;
@@ -1076,9 +1119,9 @@ void RadioInterface::applyModemConfig()
         // NB: channel_num is also know as frequency slot but it's too late to fix now.
         if (uses_default_frequency_slot) {
             // Handle three override slot cases: explicit slot (>0), preset hash (-1), or channel hash (0)
-            if (newRegion->profile->overrideSlot > 0) {
-                channel_num = newRegion->profile->overrideSlot - 1; // explicit override slot (1-based to 0-based)
-            } else if (newRegion->profile->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) {
+            if (newRegion->overrideSlot > 0) {
+                channel_num = newRegion->overrideSlot - 1; // explicit override slot (1-based to 0-based)
+            } else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) {
                 channel_num = presetNameHashSlot; // use preset name hash
             } else {
                 channel_num = channelNameHashSlot; // use channel name hash (default case)
@@ -1111,9 +1154,9 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("newRegion->freqStart -> newRegion->freqEnd: %f -> %f (%f MHz)", newRegion->freqStart, newRegion->freqEnd,
              newRegion->freqEnd - newRegion->freqStart);
     LOG_INFO("numFreqSlots: %u x %.3fkHz", numFreqSlots, bw);
-    if (newRegion->profile->overrideSlot > 0) {
-        LOG_INFO("Using region explicit override slot: %d", newRegion->profile->overrideSlot);
-    } else if (newRegion->profile->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) {
+    if (newRegion->overrideSlot > 0) {
+        LOG_INFO("Using region explicit override slot: %d", newRegion->overrideSlot);
+    } else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) {
         LOG_INFO("Using region preset name hash for slot selection");
     }
     LOG_INFO("channel_num: %d", channel_num + 1);
