@@ -58,8 +58,8 @@ const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 1, 1
 const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1};
 const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0, 10, 10};
 const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1};
-// Ham '20kHz' profile. 15.625kHz bandwidth coerced to 20kHz via padding.
-const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0021875f, false, true, 0, 2, 2};
+// Ham '20kHz' profile. 15.6kHz bandwidth coerced to 20kHz via padding.
+const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, false, true, 0, 2, 2};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
@@ -229,6 +229,35 @@ const RegionInfo regions[] = {
         https://github.com/meshtastic/firmware/issues/3741
     */
     RDEF(BR_902, 902.0f, 907.5f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+
+    /*
+        ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 2m allocation: 144.000 - 146.000 MHz.
+        Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
+        via its own PA curve; the field here is just the legal upper bound.
+
+        Default slot: 26 (144.510 MHz)
+        https://www.iaru-r1.org/wp-content/uploads/2020/12/VHF-Bandplan.pdf
+    */
+    RDEF(ITU1_2M, 144.0f, 146.0f, 100, 30, false, false, PROFILE_HAM_20KHZ, PRESET(TINY_FAST), 26),
+
+    /*
+        ITU Region 2 (Americas) amateur 2m allocation: 144.000 - 148.000 MHz.
+        Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
+
+        Default slot: 51 (145.010 MHz)
+        https://www.arrl.org/band-plan
+    */
+    RDEF(ITU2_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM_20KHZ, PRESET(TINY_FAST), 51),
+
+    /*
+        ITU Region 3 (Asia/Pacific) amateur 2m allocation: 144.000 - 148.000 MHz.
+        Typical admin rules allow well above 30 dBm for licensed operators.
+
+        Default slot: 33 (144.650 MHz)
+        https://www.iaru.org/wp-content/uploads/2020/01/R3-004-IARU-Region-3-Bandplan-rev.2.pdf
+        https://www.wia.org.au/members/bandplans/data/documents/WIA%20Australian%20Band%20Plan%202026.pdf
+    */
+    RDEF(ITU3_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM_20KHZ, PRESET(TINY_FAST), 33),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
