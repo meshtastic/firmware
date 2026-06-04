@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import queue
+import sys
 import threading
 import time
 import tkinter as tk
@@ -15,7 +16,8 @@ from typing import Any, Callable
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-CONFIG_SCRIPT = SCRIPT_DIR / "wireguard-config.py"
+BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", SCRIPT_DIR))
+CONFIG_SCRIPT = BUNDLE_DIR / "wireguard-config.py"
 
 
 def _load_config_api():

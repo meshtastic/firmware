@@ -62,6 +62,28 @@ python bin/wireguard-gui.py
 
 The GUI lets you select a serial port, browse for a WireGuard `.conf`, push it to the device, confirm the readback, and poll basic tunnel health.
 
+On Windows, the easiest path is to create the local GUI Python environment once:
+
+```powershell
+bin\setup-wireguard-gui.cmd
+```
+
+Then launch it with:
+
+```powershell
+bin\wireguard-gui.cmd
+```
+
+The setup script installs `meshtastic-python`, generates Python protobufs from this firmware branch, and overlays them into the local GUI environment so `ModuleConfig.wireguard` is available.
+
+To package a single-file Windows executable for simple users:
+
+```powershell
+bin\build-wireguard-gui-exe.cmd
+```
+
+The packaged app is written to `dist\MeshtasticWireGuardConfigurator.exe`. It bundles the GUI, `meshtastic-python`, and this branch's generated protobufs. Do not commit generated `dist`, `build`, or `.spec` files.
+
 Or set fields directly:
 
 ```bash
