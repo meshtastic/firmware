@@ -5,10 +5,6 @@ pio
 pio.tar
 web
 web.tar
-build/
-dist/
-*.spec
-
 # ignore vscode IDE settings files
 .vscode/*
 !.vscode/settings.json
@@ -20,8 +16,6 @@ dist/
 .platformio
 .local
 .cache
-.wireguard-gui-venv
-
 .DS_Store
 Thumbs.db
 .autotools

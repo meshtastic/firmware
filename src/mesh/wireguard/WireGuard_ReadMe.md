@@ -60,7 +60,7 @@ The protobuf definition `meshtastic_ModuleConfig_WireGuardConfig` (generated in 
 
 ## Device configuration
 
-Use `bin/wireguard-config.py` with a meshtastic-python build that includes this branch's protobufs. The preferred path is to import a standard single-peer WireGuard config file:
+Configure the device through a client that supports `ModuleConfig.wireguard` and the admin message type `AdminMessage_ModuleConfigType_WIREGUARD_CONFIG`. A standard single-peer WireGuard config contains the fields needed by the firmware:
 
 ```ini
 [Interface]
@@ -74,37 +74,9 @@ Endpoint = wg.example.net:51820
 AllowedIPs = 0.0.0.0/0
 ```
 
-```bash
-python bin/wireguard-config.py --port COM7 set --config wg0.conf --enable
-```
+Client-side importers should map `Interface.Address`, `Interface.PrivateKey`, `Peer.PublicKey`, `Peer.PresharedKey`, and `Peer.Endpoint`. They should strip the subnet mask from `Address`, split `Endpoint` into server host and port, reject multi-peer configs, and ignore unsupported options such as `AllowedIPs`, `DNS`, and `PersistentKeepalive`.
 
-The importer maps `Interface.Address`, `Interface.PrivateKey`, `Peer.PublicKey`, `Peer.PresharedKey`, and `Peer.Endpoint`. It strips the subnet mask from `Address`, splits `Endpoint` into server host and port, rejects multi-peer configs, and ignores unsupported options such as `AllowedIPs`, `DNS`, and `PersistentKeepalive`.
-
-You can also set fields directly:
-
-```bash
-python bin/wireguard-config.py --port COM7 set \
-  --enable \
-  --address 10.0.0.2 \
-  --server-addr wg.example.net \
-  --server-port 51820 \
-  --private-key CLIENT_PRIVATE_KEY \
-  --public-key SERVER_PUBLIC_KEY
-```
-
-Read config and runtime status:
-
-```bash
-python bin/wireguard-config.py --port COM7 get
-```
-
-Disable startup without erasing keys:
-
-```bash
-python bin/wireguard-config.py --port COM7 disable
-```
-
-Private and preshared keys are redacted from script output unless `--show-secrets` is passed. When updating other fields, pass `sekrit` as the private or preshared key to preserve the existing value through the firmware admin handler.
+The private and preshared key sentinel value `sekrit` preserves an existing saved key when updating other WireGuard fields through the admin handler.
 
 ## WireGuard API
 
