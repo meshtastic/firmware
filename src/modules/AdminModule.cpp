@@ -28,6 +28,7 @@
 
 #if HAS_WIREGUARD_VPN
 #include "mesh/wireguard/WireGuardConfig.h"
+#include "mesh/wireguard/WireGuardVPN.h"
 #endif
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -1021,9 +1022,20 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     case meshtastic_ModuleConfig_wireguard_tag:
         LOG_INFO("Set module config: WireGuard");
         moduleConfig.has_wireguard = true;
-        moduleConfig.wireguard = c.payload_variant.wireguard;
+        {
+            auto wireguard = c.payload_variant.wireguard;
+            writeSecret(wireguard.private_key, sizeof(wireguard.private_key), moduleConfig.wireguard.private_key);
+            writeSecret(wireguard.preshared_key, sizeof(wireguard.preshared_key), moduleConfig.wireguard.preshared_key);
+            wireguard.status = meshtastic_ModuleConfig_WireGuardConfig_Status_STATUS_UNSPECIFIED;
+            wireguard.last_error[0] = '\0';
+            moduleConfig.wireguard = wireguard;
+        }
 #if HAS_WIREGUARD_VPN
         applyWireGuardModuleConfig(moduleConfig.wireguard);
+        stopWireGuard();
+        if (moduleConfig.wireguard.enabled) {
+            startWireGuard();
+        }
 #endif
         shouldReboot = false;
         break;
@@ -1216,6 +1228,9 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             LOG_INFO("Get module config: WireGuard");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_wireguard_tag;
             res.get_module_config_response.payload_variant.wireguard = moduleConfig.wireguard;
+#if HAS_WIREGUARD_VPN
+            populateWireGuardStatus(res.get_module_config_response.payload_variant.wireguard);
+#endif
             break;
         }
 

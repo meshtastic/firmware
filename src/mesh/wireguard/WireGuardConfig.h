@@ -13,6 +13,7 @@
  */
 
 typedef struct WireGuardConfig {
+    bool enabled;           ///< Whether the tunnel should start when networking and NTP are ready
     char address[32];       ///< Client IPv4 address (e.g. 10.0.0.2)
     char serverAddr[64];    ///< WireGuard server host
     uint16_t serverPort;    ///< WireGuard server port
@@ -20,6 +21,10 @@ typedef struct WireGuardConfig {
     char publicKey[64];     ///< Server public key
     char presharedKey[64];  ///< Optional preshared key, not available in Wireguard-ESP32 as of now
 } WireGuardConfig;
+
+#ifndef WIREGUARD_DEFAULT_ENABLED
+#define WIREGUARD_DEFAULT_ENABLED false
+#endif
 
 #ifndef WIREGUARD_DEFAULT_ADDRESS
 #define WIREGUARD_DEFAULT_ADDRESS "" // Client address in Wireguard configuration. Must not include subnet mask.
@@ -53,5 +58,9 @@ typedef struct WireGuardConfig {
 extern WireGuardConfig wireGuardConfig;
 
 void applyWireGuardModuleConfig(const meshtastic_ModuleConfig_WireGuardConfig &config);
+bool isWireGuardConfigComplete(const char **reason = nullptr);
+meshtastic_ModuleConfig_WireGuardConfig_Status getWireGuardStatus();
+const char *getWireGuardLastError();
+void setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status status, const char *lastError = "");
 
 #endif // HAS_WIREGUARD_VPN

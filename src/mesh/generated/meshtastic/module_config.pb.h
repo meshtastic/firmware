@@ -50,6 +50,18 @@ typedef enum _meshtastic_ModuleConfig_AudioConfig_Audio_Baud {
     meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B = 8
 } meshtastic_ModuleConfig_AudioConfig_Audio_Baud;
 
+/* Runtime tunnel status. This is reported by firmware and is not intended to be saved by clients. */
+typedef enum _meshtastic_ModuleConfig_WireGuardConfig_Status {
+    meshtastic_ModuleConfig_WireGuardConfig_Status_STATUS_UNSPECIFIED = 0,
+    meshtastic_ModuleConfig_WireGuardConfig_Status_DISABLED = 1,
+    meshtastic_ModuleConfig_WireGuardConfig_Status_NOT_CONFIGURED = 2,
+    meshtastic_ModuleConfig_WireGuardConfig_Status_WAITING_FOR_NETWORK = 3,
+    meshtastic_ModuleConfig_WireGuardConfig_Status_WAITING_FOR_NTP = 4,
+    meshtastic_ModuleConfig_WireGuardConfig_Status_RESOLVING_SERVER = 5,
+    meshtastic_ModuleConfig_WireGuardConfig_Status_RUNNING = 6,
+    meshtastic_ModuleConfig_WireGuardConfig_Status_FAILED = 7
+} meshtastic_ModuleConfig_WireGuardConfig_Status;
+
 /* TODO: REPLACE */
 typedef enum _meshtastic_ModuleConfig_SerialConfig_Serial_Baud {
     meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT = 0,
@@ -461,6 +473,8 @@ typedef struct _meshtastic_ModuleConfig_TAKConfig {
 
 /* Configuration for the experimental WireGuard VPN client */
 typedef struct _meshtastic_ModuleConfig_WireGuardConfig {
+    /* Whether the WireGuard tunnel should be started when networking and NTP are ready. */
+    bool enabled;
     /* Client address. Must not include subnet mask. */
     char address[32];
     /* WireGuard server host */
@@ -473,6 +487,10 @@ typedef struct _meshtastic_ModuleConfig_WireGuardConfig {
     char public_key[64];
     /* Optional preshared key */
     char preshared_key[64];
+    /* Current runtime status for the tunnel. */
+    meshtastic_ModuleConfig_WireGuardConfig_Status status;
+    /* Short human-readable reason for the current status, if any. */
+    char last_error[96];
 } meshtastic_ModuleConfig_WireGuardConfig;
 
 /* A GPIO pin definition for remote hardware module */
@@ -555,6 +573,10 @@ extern "C" {
 #define _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MAX meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B
 #define _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_ARRAYSIZE ((meshtastic_ModuleConfig_AudioConfig_Audio_Baud)(meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B+1))
 
+#define _meshtastic_ModuleConfig_WireGuardConfig_Status_MIN meshtastic_ModuleConfig_WireGuardConfig_Status_STATUS_UNSPECIFIED
+#define _meshtastic_ModuleConfig_WireGuardConfig_Status_MAX meshtastic_ModuleConfig_WireGuardConfig_Status_FAILED
+#define _meshtastic_ModuleConfig_WireGuardConfig_Status_ARRAYSIZE ((meshtastic_ModuleConfig_WireGuardConfig_Status)(meshtastic_ModuleConfig_WireGuardConfig_Status_FAILED+1))
+
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MAX meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Baud)(meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600+1))
@@ -616,7 +638,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_default {""}
 #define meshtastic_ModuleConfig_TAKConfig_init_default {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
-#define meshtastic_ModuleConfig_WireGuardConfig_init_default {"", "", 0, "", "", ""}
+#define meshtastic_ModuleConfig_WireGuardConfig_init_default {0, "", "", 0, "", "", "", _meshtastic_ModuleConfig_WireGuardConfig_Status_MIN, ""}
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
 #define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, "", 0, 0, false, meshtastic_ModuleConfig_MapReportSettings_init_zero}
@@ -636,7 +658,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_zero {""}
 #define meshtastic_ModuleConfig_TAKConfig_init_zero {_meshtastic_Team_MIN, _meshtastic_MemberRole_MIN}
-#define meshtastic_ModuleConfig_WireGuardConfig_init_zero {"", "", 0, "", "", ""}
+#define meshtastic_ModuleConfig_WireGuardConfig_init_zero {0, "", "", 0, "", "", "", _meshtastic_ModuleConfig_WireGuardConfig_Status_MIN, ""}
 #define meshtastic_RemoteHardwarePin_init_zero   {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -763,6 +785,9 @@ extern "C" {
 #define meshtastic_ModuleConfig_WireGuardConfig_private_key_tag 4
 #define meshtastic_ModuleConfig_WireGuardConfig_public_key_tag 5
 #define meshtastic_ModuleConfig_WireGuardConfig_preshared_key_tag 6
+#define meshtastic_ModuleConfig_WireGuardConfig_enabled_tag 7
+#define meshtastic_ModuleConfig_WireGuardConfig_status_tag 8
+#define meshtastic_ModuleConfig_WireGuardConfig_last_error_tag 9
 #define meshtastic_RemoteHardwarePin_gpio_pin_tag 1
 #define meshtastic_RemoteHardwarePin_name_tag    2
 #define meshtastic_RemoteHardwarePin_type_tag    3
@@ -1017,14 +1042,18 @@ X(a, STATIC,   SINGULAR, UENUM,    role,              2)
 #define meshtastic_ModuleConfig_TAKConfig_DEFAULT NULL
 
 #define meshtastic_ModuleConfig_WireGuardConfig_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           7) \
 X(a, STATIC,   SINGULAR, STRING,   address,           1) \
 X(a, STATIC,   SINGULAR, STRING,   server_addr,       2) \
 X(a, STATIC,   SINGULAR, UINT32,   server_port,       3) \
 X(a, STATIC,   SINGULAR, STRING,   private_key,       4) \
 X(a, STATIC,   SINGULAR, STRING,   public_key,        5) \
-X(a, STATIC,   SINGULAR, STRING,   preshared_key,     6)
+X(a, STATIC,   SINGULAR, STRING,   preshared_key,     6) \
+X(a, STATIC,   SINGULAR, UENUM,    status,            8) \
+X(a, STATIC,   SINGULAR, STRING,   last_error,        9)
 #define meshtastic_ModuleConfig_WireGuardConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_WireGuardConfig_DEFAULT NULL
+#define meshtastic_ModuleConfig_WireGuardConfig_status_ENUMTYPE meshtastic_ModuleConfig_WireGuardConfig_Status
 
 #define meshtastic_RemoteHardwarePin_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   gpio_pin,          1) \
@@ -1095,8 +1124,8 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_TAKConfig_size   4
 #define meshtastic_ModuleConfig_TelemetryConfig_size 50
 #define meshtastic_ModuleConfig_TrafficManagementConfig_size 52
-#define meshtastic_ModuleConfig_WireGuardConfig_size 399
-#define meshtastic_ModuleConfig_size             403
+#define meshtastic_ModuleConfig_WireGuardConfig_size 512
+#define meshtastic_ModuleConfig_size             516
 #define meshtastic_RemoteHardwarePin_size        21
 
 #ifdef __cplusplus

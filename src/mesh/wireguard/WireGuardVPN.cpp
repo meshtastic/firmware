@@ -4,6 +4,7 @@
 #include "mesh/wireguard/WireGuardConfig.h"
 #include "mesh/NodeDB.h"
 #include "gps/RTC.h"
+#include <cstring>
 #include <WiFi.h>
 #include <WireGuard-ESP32.h>
 #if HAS_WIFI
@@ -22,8 +23,21 @@ bool startWireGuard()
         return true;
     }
 
+    const char *configError = nullptr;
+    if (!wireGuardConfig.enabled) {
+        setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_DISABLED);
+        return false;
+    }
+
+    if (!isWireGuardConfigComplete(&configError)) {
+        LOG_WARN("WireGuard not configured: %s", configError);
+        setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_NOT_CONFIGURED, configError);
+        return false;
+    }
+
     if (getRTCQuality() < RTCQualityNTP) {
         LOG_INFO("WireGuard waiting for NTP");
+        setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_WAITING_FOR_NTP);
         return false;
     }
 
@@ -40,11 +54,13 @@ bool startWireGuard()
 #endif
     if (!haveNetwork) {
         LOG_WARN("WireGuard requires an active network");
+        setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_WAITING_FOR_NETWORK);
         return false;
     }
 
     IPAddress serverIp;
     bool resolved = false;
+    setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_RESOLVING_SERVER);
 #if HAS_ETHERNET
     if (isEthernetAvailable()) {
         resolved = Ethernet.hostByName(wireGuardConfig.serverAddr, serverIp);
@@ -57,12 +73,14 @@ bool startWireGuard()
 #endif
     if (!resolved) {
         LOG_ERROR("WireGuard server %s unreachable", wireGuardConfig.serverAddr);
+        setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_FAILED, "server unreachable");
         return false;
     }
 
     IPAddress localIp;
     if (!localIp.fromString(wireGuardConfig.address)) {
         LOG_ERROR("Invalid WireGuard client IP %s", wireGuardConfig.address);
+        setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_FAILED, "invalid client address");
         return false;
     }
 
@@ -73,6 +91,7 @@ bool startWireGuard()
                    wireGuardConfig.publicKey,     // server public key
                    wireGuardConfig.serverPort)) {
         LOG_ERROR("Unable to start WireGuard tunnel");
+        setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_FAILED, "tunnel start failed");
         return false;
     }
 
@@ -82,6 +101,7 @@ bool startWireGuard()
              wireGuardConfig.serverPort);
 
     running = true;
+    setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_RUNNING);
     return running;
 }
 
@@ -93,11 +113,23 @@ void stopWireGuard()
     vpn.end();
     LOG_INFO("WireGuard VPN stopped");
     running = false;
+    if (wireGuardConfig.enabled) {
+        setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_WAITING_FOR_NETWORK);
+    } else {
+        setWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig_Status_DISABLED);
+    }
 }
 
 bool isWireGuardRunning()
 {
     return running;
+}
+
+void populateWireGuardStatus(meshtastic_ModuleConfig_WireGuardConfig &config)
+{
+    config.status = getWireGuardStatus();
+    strncpy(config.last_error, getWireGuardLastError(), sizeof(config.last_error));
+    config.last_error[sizeof(config.last_error) - 1] = '\0';
 }
 
 #endif // HAS_WIREGUARD_VPN

@@ -44,6 +44,7 @@ The runtime configuration is defined in `src/mesh/wireguard/WireGuardConfig.h`:
 
 ```cpp
 typedef struct WireGuardConfig {
+    bool enabled;           ///< Whether the tunnel should start when networking and NTP are ready
     char address[32];       ///< Client IPv4 address (e.g. 10.0.0.2)
     char serverAddr[64];    ///< WireGuard server host
     uint16_t serverPort;       ///< WireGuard server port
@@ -53,9 +54,37 @@ typedef struct WireGuardConfig {
 } WireGuardConfig;
 ```
 
-Default values for these fields can be set at compile time using the `WIREGUARD_DEFAULT_*` macros in the same header. A global instance `wireGuardConfig` is allocated in `WireGuardConfig.cpp` and is synchronized from `moduleConfig.wireguard` after loading, restoring, or receiving admin updates.
+Default values for these fields can be set at compile time using the `WIREGUARD_DEFAULT_*` macros in the same header, but production firmware should leave them blank and disabled. A global instance `wireGuardConfig` is allocated in `WireGuardConfig.cpp` and is synchronized from `moduleConfig.wireguard` after loading, restoring, or receiving admin updates.
 
-The protobuf definition `meshtastic_ModuleConfig_WireGuardConfig` (generated in `module_config.pb.h`) mirrors this structure so that the values can be updated over the admin API.
+The protobuf definition `meshtastic_ModuleConfig_WireGuardConfig` (generated in `module_config.pb.h`) mirrors this structure so that the values can be updated over the admin API. It also reports transient runtime `status` and `last_error` fields in get responses.
+
+## Device configuration
+
+Use `bin/wireguard-config.py` with a meshtastic-python build that includes this branch's protobufs:
+
+```bash
+python bin/wireguard-config.py --port COM7 set \
+  --enable \
+  --address 10.0.0.2 \
+  --server-addr wg.example.net \
+  --server-port 51820 \
+  --private-key CLIENT_PRIVATE_KEY \
+  --public-key SERVER_PUBLIC_KEY
+```
+
+Read config and runtime status:
+
+```bash
+python bin/wireguard-config.py --port COM7 get
+```
+
+Disable startup without erasing keys:
+
+```bash
+python bin/wireguard-config.py --port COM7 disable
+```
+
+Private and preshared keys are redacted from script output unless `--show-secrets` is passed. When updating other fields, pass `sekrit` as the private or preshared key to preserve the existing value through the firmware admin handler.
 
 ## WireGuard API
 
@@ -67,7 +96,7 @@ void stopWireGuard();     // Stop the VPN service
 bool isWireGuardRunning();
 ```
 
-`startWireGuard()` attempts to create a tunnel using the values in `wireGuardConfig`. It first checks that the device has valid NTP time and an active network (Wi‑Fi or Ethernet). On success the global VPN instance becomes active and `isWireGuardRunning()` returns `true`.
+`startWireGuard()` attempts to create a tunnel only when WireGuard is enabled and all required fields are configured. It first checks that the device has valid NTP time and an active network (Wi‑Fi or Ethernet). On success the global VPN instance becomes active and `isWireGuardRunning()` returns `true`.
 
 `stopWireGuard()` tears down the tunnel if it is running.
 
