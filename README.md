@@ -48,6 +48,38 @@ The firmware now includes an experimental WireGuard VPN client.
 **Configuration:**
 - Configure server details and keys on the device with `bin/wireguard-config.py` or another client that supports `ModuleConfig.wireguard`. Production firmware should leave WireGuard defaults blank and disabled.
 
+Import a standard single-peer WireGuard config file:
+
+```bash
+python bin/wireguard-config.py --port COM7 set --config wg0.conf --enable
+```
+
+Or set fields directly:
+
+```bash
+python bin/wireguard-config.py --port COM7 set \
+  --enable \
+  --address 10.0.0.2 \
+  --server-addr wg.example.net \
+  --server-port 51820 \
+  --private-key CLIENT_PRIVATE_KEY \
+  --public-key SERVER_PUBLIC_KEY
+```
+
+Read runtime status:
+
+```bash
+python bin/wireguard-config.py --port COM7 get
+```
+
+Disable automatic startup without erasing saved keys:
+
+```bash
+python bin/wireguard-config.py --port COM7 disable
+```
+
+The config importer uses `Interface.Address`, `Interface.PrivateKey`, `Peer.PublicKey`, `Peer.PresharedKey`, and `Peer.Endpoint`. CLI flags override imported values. Private and preshared keys are redacted from output unless `--show-secrets` is passed.
+
 **How it works:**
 - Uses the [`wireguard-esp32`](https://github.com/juvinski/wireguard-esp32) library.
 - When enabled and fully configured, the VPN tunnel starts automatically when WiFi or Ethernet is available and NTP time is synced. It stops when the network disconnects.
