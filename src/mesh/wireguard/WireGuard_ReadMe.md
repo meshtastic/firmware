@@ -2,18 +2,24 @@
 
 This document explains how the experimental WireGuard VPN support in the Meshtastic firmware is implemented and how developers can interact with it.
 
+## Overview
+
+The WireGuard feature is implemented as an optional firmware module for devices with IP networking. It keeps production defaults blank, stores user-provided tunnel settings in `ModuleConfig.wireguard`, and starts the VPN only after networking and NTP time are available.
+
+Until official Meshtastic clients expose `ModuleConfig.wireguard`, a standalone GUI/CLI configurator is available at https://github.com/TheWISPRer/Meshtastic-Wireguard-Configurator.
+
 ## Enabling the Feature
 
 WireGuard functionality is optional and controlled by the `HAS_WIREGUARD_VPN` compile-time flag. By default this flag is disabled in `src/configuration.h`.
 
-To build a variant with VPN support you must:
+To build a variant with VPN support:
 
 1. Include the `ciniml/WireGuard-ESP32` library in your `platformio.ini` variant.
 2. Add `-DHAS_WIREGUARD_VPN=1` to the variant's `build_flags`.
 
-See the below `seeed_xiao_s3` variant for an example configuration
+Example `seeed_xiao_s3` configuration:
 
-```cpp
+```ini
     [env:seeed-xiao-s3]
     extends = esp32s3_base
     board = seeed-xiao-s3
@@ -37,7 +43,6 @@ See the below `seeed_xiao_s3` variant for an example configuration
         -DARDUINO_USB_MODE=0
 ```
 
-
 ## Configuration Structure
 
 The runtime configuration is defined in `src/mesh/wireguard/WireGuardConfig.h`:
@@ -47,7 +52,7 @@ typedef struct WireGuardConfig {
     bool enabled;           ///< Whether the tunnel should start when networking and NTP are ready
     char address[32];       ///< Client IPv4 address (e.g. 10.0.0.2)
     char serverAddr[64];    ///< WireGuard server host
-    uint16_t serverPort;       ///< WireGuard server port
+    uint16_t serverPort;    ///< WireGuard server port
     char privateKey[64];    ///< Client private key
     char publicKey[64];     ///< Server public key
     char presharedKey[64];  ///< Optional preshared key
@@ -58,11 +63,9 @@ Default values for these fields can be set at compile time using the `WIREGUARD_
 
 The protobuf definition `meshtastic_ModuleConfig_WireGuardConfig` (generated in `module_config.pb.h`) mirrors this structure so that the values can be updated over the admin API. It also reports transient runtime `status` and `last_error` fields in get responses.
 
-## Device configuration
+## Device Configuration
 
 Configure the device through a client that supports `ModuleConfig.wireguard` and the admin message type `AdminMessage_ModuleConfigType_WIREGUARD_CONFIG`. A standard single-peer WireGuard config contains the fields needed by the firmware:
-
-See https://github.com/TheWISPRer/Meshtastic-Wireguard-Configurator for basic configurator and monitor
 
 ```ini
 [Interface]
@@ -76,9 +79,19 @@ Endpoint = wg.example.net:51820
 AllowedIPs = 0.0.0.0/0
 ```
 
-Client-side importers should map `Interface.Address`, `Interface.PrivateKey`, `Peer.PublicKey`, `Peer.PresharedKey`, and `Peer.Endpoint`. They should strip the subnet mask from `Address`, split `Endpoint` into server host and port, reject multi-peer configs, and ignore unsupported options such as `AllowedIPs`, `DNS`, and `PersistentKeepalive`.
+Client-side importers should map:
 
-The private and preshared key sentinel value `sekrit` preserves an existing saved key when updating other WireGuard fields through the admin handler.
+- `Interface.Address` -> `address`
+- `Interface.PrivateKey` -> `private_key`
+- `Peer.PublicKey` -> `public_key`
+- `Peer.PresharedKey` -> `preshared_key`
+- `Peer.Endpoint` -> `server_addr` and `server_port`
+
+Importers should strip the subnet mask from `Address`, split `Endpoint` into server host and port, reject multi-peer configs, and ignore unsupported options such as `AllowedIPs`, `DNS`, and `PersistentKeepalive`.
+
+The private and preshared key sentinel value `sekrit` preserves an existing saved key when updating other WireGuard fields through the admin handler. Clients should redact private and preshared keys from normal readback displays.
+
+For users who need a temporary desktop client before native Meshtastic clients expose these fields, use the standalone configurator: https://github.com/TheWISPRer/Meshtastic-Wireguard-Configurator.
 
 ## WireGuard API
 
@@ -96,7 +109,7 @@ bool isWireGuardRunning();
 
 ## Automatic Control
 
-The Wi‑Fi and Ethernet client code automatically manages the VPN. When a network connection is established and the real‑time clock is synced, `startWireGuard()` is called. When the connection drops, `stopWireGuard()` is invoked. This logic can be seen in `WiFiAPClient.cpp` and `ethClient.cpp`.
+The WiFi and Ethernet client code automatically manages the VPN. When a network connection is established and the real-time clock is synced, `startWireGuard()` is called. When the connection drops, `stopWireGuard()` is invoked. This logic can be seen in `WiFiAPClient.cpp` and `ethClient.cpp`.
 
 ## Interacting from Other Modules
 

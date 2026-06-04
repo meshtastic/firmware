@@ -40,18 +40,23 @@ Join our community and help improve Meshtastic! 🚀
 
 ## WireGuard VPN (Experimental)
 
-The firmware now includes an experimental WireGuard VPN client.
+This branch includes an experimental WireGuard VPN client for network-capable Meshtastic devices.
 
-**How to enable:**
-- Edit your `platformio.ini` variant configuration to add: `-DHAS_WIREGUARD_VPN=1`
+**What changed:**
+- Adds a firmware-side WireGuard client powered by [`wireguard-esp32`](https://github.com/juvinski/wireguard-esp32).
+- Adds `ModuleConfig.wireguard` so clients can configure the tunnel at runtime instead of hardcoding keys and endpoint details into firmware.
+- Persists WireGuard settings in the normal module config flow and exposes transient tunnel status fields for client readback.
+- Starts the tunnel automatically when WireGuard is enabled, all required fields are configured, a WiFi or Ethernet connection is active, and NTP time is synced. The tunnel stops when the network disconnects.
+
+**How to enable in firmware:**
+- Add `-DHAS_WIREGUARD_VPN=1` to the target variant's `build_flags`.
+- Include `ciniml/WireGuard-ESP32` in the target variant's `lib_deps`.
 
 **Configuration:**
-- Configure server details and keys through a client that supports `ModuleConfig.wireguard`. Production firmware should leave WireGuard defaults blank and disabled.
+- Production firmware should leave WireGuard defaults blank and disabled.
+- Configure server details and keys through a client that supports `ModuleConfig.wireguard`.
+- Until official Meshtastic clients support these fields, use the standalone configurator: [TheWISPRer/Meshtastic-Wireguard-Configurator](https://github.com/TheWISPRer/Meshtastic-Wireguard-Configurator).
 
-**How it works:**
-- Uses the [`wireguard-esp32`](https://github.com/juvinski/wireguard-esp32) library.
-- When enabled and fully configured, the VPN tunnel starts automatically when WiFi or Ethernet is available and NTP time is synced. It stops when the network disconnects.
+See [src/mesh/wireguard/WireGuard_ReadMe.md](src/mesh/wireguard/WireGuard_ReadMe.md) for implementation notes, config field mapping, and client integration guidance.
 
-- See [`src/mesh/wireguard/WireGuard_ReadMe.md`] for developer documentation.
-
-> **Note:** This feature is experimental and full tunnel functionality may not be stable yet.
+> **Note:** This feature is experimental and full tunnel functionality may not be stable on all devices yet.
