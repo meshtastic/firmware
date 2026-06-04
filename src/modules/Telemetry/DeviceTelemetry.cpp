@@ -20,6 +20,7 @@ static constexpr uint16_t TX_HISTORY_KEY_DEVICE_TELEMETRY = 0x8001;
 
 int32_t DeviceTelemetryModule::runOnce()
 {
+
     refreshUptime();
     uint32_t lastTelemetry = transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_DEVICE_TELEMETRY) : 0;
     bool isImpoliteRole = isSensorOrRouterRole();
@@ -125,6 +126,8 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     telemetry.variant.local_stats.num_online_nodes = numOnlineNodes;
     telemetry.variant.local_stats.num_total_nodes = nodeDB->getNumMeshNodes();
     if (RadioLibInterface::instance) {
+        RadioLibInterface::instance->updateNoiseFloor();
+        telemetry.variant.local_stats.noise_floor = RadioLibInterface::instance->getAverageNoiseFloor();
         telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instance->txGood;
         telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
@@ -133,6 +136,8 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     }
 #ifdef ARCH_PORTDUINO
     if (SimRadio::instance) {
+        if (!RadioLibInterface::instance)
+            telemetry.variant.local_stats.noise_floor = SimRadio::instance->getCurrentRSSI();
         telemetry.variant.local_stats.num_packets_tx = SimRadio::instance->txGood;
         telemetry.variant.local_stats.num_packets_rx = SimRadio::instance->rxGood + SimRadio::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = SimRadio::instance->rxBad;
@@ -148,10 +153,11 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_tx_relay_canceled = router->txRelayCanceled;
     }
 
-    LOG_INFO("Sending local stats: uptime=%i, channel_utilization=%f, air_util_tx=%f, num_online_nodes=%i, num_total_nodes=%i",
+    LOG_INFO("Sending local stats: uptime=%i, channel_utilization=%f, air_util_tx=%f, num_online_nodes=%i, num_total_nodes=%i, "
+             "noise_floor=%d",
              telemetry.variant.local_stats.uptime_seconds, telemetry.variant.local_stats.channel_utilization,
              telemetry.variant.local_stats.air_util_tx, telemetry.variant.local_stats.num_online_nodes,
-             telemetry.variant.local_stats.num_total_nodes);
+             telemetry.variant.local_stats.num_total_nodes, telemetry.variant.local_stats.noise_floor);
 
     LOG_INFO("num_packets_tx=%i, num_packets_rx=%i, num_packets_rx_bad=%i", telemetry.variant.local_stats.num_packets_tx,
              telemetry.variant.local_stats.num_packets_rx, telemetry.variant.local_stats.num_packets_rx_bad);

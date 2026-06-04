@@ -19,6 +19,6 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Trunk Check
-        uses: trunk-io/trunk-action@v1
+        uses: trunk-io/trunk-action@v1.3.1
         with:
           save-annotations: true

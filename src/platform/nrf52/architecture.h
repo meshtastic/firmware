@@ -89,6 +89,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO_CARD
 #elif defined(TTGO_T_ECHO_PLUS)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO_PLUS
+#elif defined(T_IMPULSE_PLUS)
+#define HW_VENDOR meshtastic_HardwareModel_T_IMPULSE_PLUS
 #elif defined(ELECROW_ThinkNode_M1)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M1
 #elif defined(ELECROW_ThinkNode_M3)
@@ -119,6 +121,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(HELTEC_T114)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
+#elif defined(HELTEC_MESH_NODE_T1)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T1
 #elif defined(MESHLINK)
 #define HW_VENDOR meshtastic_HardwareModel_MESHLINK
 #elif defined(SEEED_XIAO_NRF52840_KIT)
