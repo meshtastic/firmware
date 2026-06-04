@@ -25,6 +25,9 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#if HAS_VARIABLE_HOPS
+#include "modules/HopScalingModule.h"
+#endif
 #include "xmodem.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
@@ -2544,6 +2547,14 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT
+
+#if HAS_VARIABLE_HOPS
+        // Only sample packets that arrived over LoRa.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && hopScalingModule) {
+            uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
+            hopScalingModule->samplePacketForHistogram(mp.from, hopCount);
+        }
+#endif
 
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
         const int8_t hopsAway = getHopsAway(mp);
