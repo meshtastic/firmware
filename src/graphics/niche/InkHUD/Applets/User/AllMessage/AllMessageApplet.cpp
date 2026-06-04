@@ -2,6 +2,8 @@
 
 #include "./AllMessageApplet.h"
 
+#include "MessageStore.h"
+
 using namespace NicheGraphics;
 
 void InkHUD::AllMessageApplet::onActivate()
@@ -37,7 +39,7 @@ int InkHUD::AllMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *
 void InkHUD::AllMessageApplet::onRender(bool full)
 {
     // Find newest message, regardless of whether DM or broadcast
-    MessageStore::Message *message;
+    StoredMessage *message;
     if (latestMessage->wasBroadcast)
         message = &latestMessage->broadcast;
     else
@@ -96,7 +98,7 @@ void InkHUD::AllMessageApplet::onRender(bool full)
     // ===================
 
     // Parse any non-ascii chars in the message
-    std::string text = parse(message->text);
+    std::string text = parse(std::string(MessageStore::getText(*message)));
 
     // Extra gap below the header
     int16_t textTop = headerDivY + padDivH;
