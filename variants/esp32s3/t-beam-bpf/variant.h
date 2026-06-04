@@ -1,9 +1,6 @@
 // LilyGo T-Beam-BPF variant.h
 // Configuration based on LilyGO utilities.h and RF documentation
 
-// Hardware has 2M support
-#define HAS_HAM_2M 1
-
 // Hardware is restricted to the amateur 2m band (144-148 MHz).
 #define HAS_HAM_2M_ONLY 1
 
