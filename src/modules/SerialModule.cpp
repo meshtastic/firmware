@@ -94,7 +94,7 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
         const char *warning =
             "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
         LOG_ERROR(warning);
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);
