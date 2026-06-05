@@ -44,8 +44,6 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
         p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE);
         LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
     }
-    p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE); // set the next hop
-    LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
