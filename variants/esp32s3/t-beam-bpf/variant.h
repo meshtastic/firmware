@@ -47,13 +47,15 @@
 // GPIO 16 powers the SX1278 via LDO
 #define RF95_POWER_EN 16
 
-// "+27dBm"? PA! Investigate further (poorly documented)
+// +27dBm PA
 // LilyGo Docs specify SX1278 power must be capped at 10
 #define RF95_MAX_POWER 10
-// TODO
-// PA curve mapping (TX values 0-10)
-// #define NUM_PA_POINTS 11
-// #define TX_GAIN_LORA 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+// PA curve mapping (TX values 1-10)
+// Measurements taken with 5V USB power (max 37 dBm on battery power)
+// Input values:  1, 2,  3,  4,  5,  6,  7,  8,  9,  10
+// Output values: 0, 34, 35, 36, 36, 37, 37, 38, 38, 38
+#define NUM_PA_POINTS 10
+#define TX_GAIN_LORA 0, 32, 32, 32, 31, 31, 30, 30, 29, 28
 
 // Display - SH1106 OLED (128x64)
 #define USE_SH1106
