@@ -24,12 +24,23 @@ const ControlPointPeerMetric *ControlPointModule::findMetric(NodeNum node_id) co
 
 const ControlPointPeerMetric *ControlPointModule::findMetricByRelayId(uint8_t relay_id) const
 {
+    if (relay_id == 0) {
+        return nullptr;
+    }
+
+    const ControlPointPeerMetric *best = nullptr;
+
     for (const auto &metric : peerMetrics) {
-        if (metric.valid && metric.relay_id == relay_id) {
-            return &metric;
+        if (!metric.valid || metric.relay_id != relay_id) {
+            continue;
+        }
+
+        if (!best || metric.last_update_ms > best->last_update_ms) {
+            best = &metric;
         }
     }
-    return nullptr;
+
+    return best;
 }
 
 std::optional<uint8_t> ControlPointModule::choosePreferredRelay(NodeNum to) const
@@ -52,26 +63,36 @@ std::optional<uint8_t> ControlPointModule::choosePreferredRelay(NodeNum to) cons
             continue;
         }
 
-        if (metric.route_cost < best->route_cost) {
+        if (metric.priority > best->priority) {
             best = &metric;
             continue;
         }
 
-        if (metric.route_cost == best->route_cost && metric.load < best->load) {
+        if (metric.priority == best->priority &&
+            metric.route_cost < best->route_cost) {
             best = &metric;
             continue;
         }
 
-        if (metric.route_cost == best->route_cost &&
+        if (metric.priority == best->priority &&
+            metric.route_cost == best->route_cost &&
+            metric.load < best->load) {
+            best = &metric;
+            continue;
+        }
+
+        if (metric.priority == best->priority &&
+            metric.route_cost == best->route_cost &&
             metric.load == best->load &&
-            metric.priority > best->priority) {
+            metric.last_update_ms > best->last_update_ms) {
             best = &metric;
             continue;
         }
 
-        if (metric.route_cost == best->route_cost &&
+        if (metric.priority == best->priority &&
+            metric.route_cost == best->route_cost &&
             metric.load == best->load &&
-            metric.priority == best->priority &&
+            metric.last_update_ms == best->last_update_ms &&
             metric.relay_id < best->relay_id) {
             best = &metric;
             continue;
@@ -79,11 +100,14 @@ std::optional<uint8_t> ControlPointModule::choosePreferredRelay(NodeNum to) cons
     }
 
     if (best) {
+        LOG_DEBUG("ControlPoint: selected relay 0x%x (node 0x%x, priority %u, cost %u, load %u)",
+                  best->relay_id, best->node_id, best->priority, best->route_cost, best->load);
         return best->relay_id;
     }
 
     return std::nullopt;
 }
+
 bool ControlPointModule::isPreferredRelay(uint8_t relay_id) const
 {
     const auto *metric = findMetricByRelayId(relay_id);
@@ -94,6 +118,21 @@ bool ControlPointModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
                                                 meshtastic_ControlPointMessage *msg)
 {
     if (!msg) {
+        return false;
+    }
+
+    if (mp.from == 0) {
+        LOG_DEBUG("ControlPoint: ignored message with empty from_node");
+        return false;
+    }
+
+    if (msg->schema_version != 1) {
+        LOG_DEBUG("ControlPoint: ignored message with unsupported schema_version %u", msg->schema_version);
+        return false;
+    }
+
+    if (!msg->is_control_point) {
+        LOG_DEBUG("ControlPoint: ignored non-control-point message from 0x%x", mp.from);
         return false;
     }
 
@@ -183,8 +222,11 @@ void ControlPointModule::sendControlPointBroadcast()
         return;
     }
 
-    p->to = NODENUM_BROADCAST;
-    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+        p->to = NODENUM_BROADCAST;
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
-    service->sendToMesh(p);
+            LOG_DEBUG("ControlPoint: broadcasting announcement priority=%u cost=%u load=%u",
+            msg.node_priority, msg.route_cost, msg.current_load);
+
+service->sendToMesh(p);
 }
