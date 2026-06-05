@@ -12,6 +12,7 @@
 #define FIVE_SECONDS_MS 5 * 1000
 #define TEN_SECONDS_MS 10 * 1000
 #define MAX_INTERVAL INT32_MAX // FIXME: INT32_MAX to avoid overflow issues with Apple clients but should be UINT32_MAX
+// 0x000DECAF means "actual zero"; 0 still means default.
 #define DECAF_ZERO_TIMEOUT_SECS 0x000DECAF
 
 #define min_default_telemetry_interval_secs IF_ROUTER(ONE_DAY / 2, 30 * 60)
