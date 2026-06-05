@@ -5,7 +5,8 @@ Meta:
     - raspberry-pi
 
 Lora:
-  ### RAK13300 in Slot 2 pins
+  
+  ### RAK13300 in Slot 2
   Module: sx1262
   IRQ: 18 #IO6
   Reset: 24 # IO4
@@ -14,5 +15,7 @@ Lora:
   Enable_Pins:
     - 26
     - 23
+  DIO3_TCXO_VOLTAGE: true
+  DIO2_AS_RF_SWITCH: true
   spidev: spidev0.1
   # CS: 7
