@@ -50,8 +50,10 @@
 // "+27dBm"? PA! Investigate further (poorly documented)
 // LilyGo Docs specify SX1278 power must be capped at 10
 #define RF95_MAX_POWER 10
-// TODO map PA output curve
-// #define TX_GAIN_LORA 17
+// TODO
+// PA curve mapping (TX values 0-10)
+// #define NUM_PA_POINTS 11
+// #define TX_GAIN_LORA 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // Display - SH1106 OLED (128x64)
 #define USE_SH1106
