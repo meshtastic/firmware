@@ -145,11 +145,14 @@ template <typename T> bool LR20x0Interface<T>::init()
     int versionRes = lora.getVersion(&fwMajor, &fwMinor);
     if (versionRes == RADIOLIB_ERR_NONE)
         LOG_DEBUG("LR20x0 FW %d.%d", fwMajor, fwMinor);
+#endif
 
-    // Semtech DCDC sensitivity workaround for sub-GHz operations (engineering sample date code 2513).
-    // lr20xx_workarounds_dcdc_reset must follow setPacketType; lr20xx_workarounds_dcdc_configure
-    // must follow setModulationParams — both are satisfied after lora.begin() returns.
-    // Only applies to sub-GHz; 2.4 GHz (LORA_24) is excluded.
+        // Semtech DCDC sensitivity workaround for sub-GHz operations (engineering sample date code 2513).
+        // lr20xx_workarounds_dcdc_reset must follow setPacketType; lr20xx_workarounds_dcdc_configure
+        // must follow setModulationParams — both are satisfied after lora.begin() returns.
+        // Only applies to sub-GHz; 2.4 GHz (LORA_24) is excluded.
+
+#if RADIOLIB_GODMODE
     if (res == RADIOLIB_ERR_NONE && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) {
         // Helper: set DCDC LF frequency register and re-apply the current RF frequency.
         auto dcdcSetFreq = [&](uint32_t freqHz) -> int16_t {
