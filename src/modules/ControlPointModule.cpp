@@ -208,13 +208,20 @@ void ControlPointModule::pruneExpiredMetrics()
 
 void ControlPointModule::sendControlPointBroadcast()
 {
-    meshtastic_ControlPointMessage msg = {};
-    msg.schema_version = 1;
-    msg.is_control_point = true;
-    msg.node_priority = 100;
-    msg.route_cost = 1;
-    msg.current_load = 0;
-    msg.aggregation_enabled = true;
+    #ifndef CONTROL_POINT_ADVERTISEMENT_ENABLED
+    #define CONTROL_POINT_ADVERTISEMENT_ENABLED 1
+    #endif
+
+    #if !CONTROL_POINT_ADVERTISEMENT_ENABLED
+        return;
+    #endif
+        meshtastic_ControlPointMessage msg = {};
+        msg.schema_version = 1;
+        msg.is_control_point = true;
+        msg.node_priority = 100;
+        msg.route_cost = 1;
+        msg.current_load = 0;
+        msg.aggregation_enabled = true;
 
     meshtastic_MeshPacket *p = allocDataProtobuf(msg);
     if (!p) {
