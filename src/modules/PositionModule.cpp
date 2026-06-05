@@ -332,14 +332,15 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
         takPacket.geo_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
         takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
     }
-    takPacket.which_payload_variant = meshtastic_TAKPacketV2_pli_tag;
-    takPacket.payload_variant.pli = true;
 
     // Callsign - stored as plain string (no compression, apps handle that)
     strncpy(takPacket.callsign, owner.long_name, sizeof(takPacket.callsign) - 1);
     takPacket.callsign[sizeof(takPacket.callsign) - 1] = '\0';
     strncpy(takPacket.device_callsign, owner.long_name, sizeof(takPacket.device_callsign) - 1);
     takPacket.device_callsign[sizeof(takPacket.device_callsign) - 1] = '\0';
+
+    // CoT uid — ATAK drops PLI entities with empty uid; derive stable "!<nodenum>" id.
+    snprintf(takPacket.uid, sizeof(takPacket.uid), "!%08x", nodeDB->getNodeNum());
 
     // Encode TAKPacketV2 protobuf, leaving room for flags byte prefix
     uint8_t protobuf_bytes[sizeof(mp->decoded.payload.bytes) - 1];

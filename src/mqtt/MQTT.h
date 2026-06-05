@@ -6,9 +6,6 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
-#if !defined(ARCH_NRF52) || NRF52_USE_JSON
-#include "serialization/JSON.h"
-#endif
 #if HAS_WIFI
 #include <WiFiClient.h>
 #if __has_include(<WiFiClientSecure.h>)
@@ -101,9 +98,8 @@ class MQTT : private concurrency::OSThread
     explicit MQTT(std::unique_ptr<MQTTClient> mqttClient);
 #endif
 
-    std::string cryptTopic = "/2/e/";   // msh/2/e/CHANNELID/NODEID
-    std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
-    std::string mapTopic = "/2/map/";   // For protobuf-encoded MapReport messages
+    std::string cryptTopic = "/2/e/"; // msh/2/e/CHANNELID/NODEID
+    std::string mapTopic = "/2/map/"; // For protobuf-encoded MapReport messages
 
     // For map reporting (only applies when enabled)
     const uint32_t default_map_position_precision = 14; // defaults to max. offset of ~1459m

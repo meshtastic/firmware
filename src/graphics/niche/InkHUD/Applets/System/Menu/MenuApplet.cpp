@@ -784,6 +784,18 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868);
         break;
 
+    case SET_REGION_ITU1_2M:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M);
+        break;
+
+    case SET_REGION_ITU2_2M:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M);
+        break;
+
+    case SET_REGION_ITU3_2M:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M);
+        break;
+
     // Roles
     case SET_ROLE_CLIENT:
         applyDeviceRole(meshtastic_Config_DeviceConfig_Role_CLIENT);
@@ -832,6 +844,22 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SET_PRESET_SHORT_TURBO:
         applyLoRaPreset(PRESET(SHORT_TURBO));
+        break;
+
+    case SET_PRESET_NARROW_SLOW:
+        applyLoRaPreset(PRESET(NARROW_SLOW));
+        break;
+
+    case SET_PRESET_NARROW_FAST:
+        applyLoRaPreset(PRESET(NARROW_FAST));
+        break;
+
+    case SET_PRESET_TINY_SLOW:
+        applyLoRaPreset(PRESET(TINY_SLOW));
+        break;
+
+    case SET_PRESET_TINY_FAST:
+        applyLoRaPreset(PRESET(TINY_FAST));
         break;
 
     case SET_PRESET_FROM_REGION: {
@@ -1469,6 +1497,9 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("KZ 863", MenuAction::SET_REGION_KZ_863, MenuPage::EXIT));
         items.push_back(MenuItem("NP 865", MenuAction::SET_REGION_NP_865, MenuPage::EXIT));
         items.push_back(MenuItem("BR 902", MenuAction::SET_REGION_BR_902, MenuPage::EXIT));
+        items.push_back(MenuItem("ITU1_2M (144-146)", MenuAction::SET_REGION_ITU1_2M, MenuPage::EXIT));
+        items.push_back(MenuItem("ITU2_2M (144-148)", MenuAction::SET_REGION_ITU2_2M, MenuPage::EXIT));
+        items.push_back(MenuItem("ITU3_2M (144-148)", MenuAction::SET_REGION_ITU3_2M, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
