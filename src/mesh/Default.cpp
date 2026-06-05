@@ -19,14 +19,9 @@ uint32_t Default::getConfiguredOrDefaultMs(uint32_t configuredInterval)
     return secondsToMsClamped(configuredInterval > 0 ? configuredInterval : default_broadcast_interval_secs);
 }
 
-bool Default::isZeroSentinel(uint32_t configured)
+uint32_t Default::getTimeoutMs(uint32_t configuredInterval, uint32_t defaultInterval)
 {
-    return configured == UINT32_MAX || configured == static_cast<uint32_t>(MAX_INTERVAL);
-}
-
-uint32_t Default::getConfiguredOrDefaultMsWithZeroSentinel(uint32_t configuredInterval, uint32_t defaultInterval)
-{
-    return isZeroSentinel(configuredInterval) ? 0 : getConfiguredOrDefaultMs(configuredInterval, defaultInterval);
+    return configuredInterval == DECAF_ZERO_TIMEOUT_SECS ? 0 : getConfiguredOrDefaultMs(configuredInterval, defaultInterval);
 }
 
 uint32_t Default::getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue)
