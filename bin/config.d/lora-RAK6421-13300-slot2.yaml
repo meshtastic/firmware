@@ -6,6 +6,7 @@ Meta:
 
 Lora:
   ### RAK13300 in Slot 2 pins
+  Module: sx1262
   IRQ: 18 #IO6
   Reset: 24 # IO4
   Busy: 19 # IO5
