@@ -306,17 +306,14 @@ void mqttInit()
 void MQTT::reinitTopics()
 {
     cryptTopic = "/2/e/";
-    jsonTopic = "/2/json/";
     mapTopic = "/2/map/";
 
     if (*moduleConfig.mqtt.root) {
         cryptTopic = moduleConfig.mqtt.root + cryptTopic;
-        jsonTopic = moduleConfig.mqtt.root + jsonTopic;
         mapTopic = moduleConfig.mqtt.root + mapTopic;
         isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
     } else {
         cryptTopic = "msh" + cryptTopic;
-        jsonTopic = "msh" + jsonTopic;
         mapTopic = "msh" + mapTopic;
         isConfiguredForDefaultRootTopic = true;
     }
