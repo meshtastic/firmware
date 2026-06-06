@@ -60,6 +60,8 @@ const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0,
 const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1};
 // Ham '20kHz' profile. 15.6kHz bandwidth coerced to 20kHz via padding.
 const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, false, true, 0, 2, 2};
+// Ham '100kHz' profile. 62.5kHz bandwidth coerced to 100kHz via padding.
+const RegionProfile PROFILE_HAM_100KHZ = {PRESETS_NARROW, 0, 0.01875f, false, true, 0, 1, 1};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
@@ -258,6 +260,16 @@ const RegionInfo regions[] = {
         https://www.wia.org.au/members/bandplans/data/documents/WIA%20Australian%20Band%20Plan%202026.pdf
     */
     RDEF(ITU3_2M, 144.0f, 148.0f, 100, 30, false, false, PROFILE_HAM_20KHZ, PRESET(TINY_FAST), 33),
+
+    /*
+        ITU Region 2 (Americas) amateur 1.25m '125cm' allocation: 220.000 - 225.000 MHz.
+        Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
+        Note: Some countries do not allocate 220-222 MHz (e.g. USA, Canada). Check local law!
+
+        Default slot: 37 (223.650 MHz)
+        https://www.arrl.org/band-plan
+    */
+    RDEF(ITU2_125CM, 220.0f, 225.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 37),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
