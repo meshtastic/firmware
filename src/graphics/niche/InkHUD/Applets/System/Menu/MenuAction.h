@@ -69,6 +69,7 @@ enum MenuAction {
     SET_REGION_ITU1_2M,
     SET_REGION_ITU2_2M,
     SET_REGION_ITU3_2M,
+    SET_REGION_ITU2_125CM,
     // Device Roles
     SET_ROLE_CLIENT,
     SET_ROLE_CLIENT_MUTE,
