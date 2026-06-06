@@ -16,33 +16,36 @@ on:
         type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   build-debian-src:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           path: meshtasticd
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Install deps
         shell: bash
         working-directory: meshtasticd
         run: |
+          # Build-tools (notably platformio) come from the Meshtastic project
+          # on the OpenSUSE Build Service:
+          # https://build.opensuse.org/project/show/network:Meshtastic:build-tools
+          echo 'deb http://download.opensuse.org/repositories/network:/Meshtastic:/build-tools/xUbuntu_24.04/ /' \
+            | sudo tee /etc/apt/sources.list.d/network:Meshtastic:build-tools.list
+          curl -fsSL https://download.opensuse.org/repositories/network:Meshtastic:build-tools/xUbuntu_24.04/Release.key \
+            | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/network_Meshtastic_build-tools.gpg >/dev/null
           sudo apt-get update -y --fix-missing
-          sudo apt-get install -y software-properties-common build-essential devscripts equivs
-          sudo add-apt-repository ppa:meshtastic/build-tools -y
-          sudo apt-get update -y --fix-missing
+          sudo apt-get install -y build-essential devscripts equivs
           sudo mk-build-deps --install --remove --tool='apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends --yes' debian/control
 
       - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
+        if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
+        uses: crazy-max/ghaction-import-gpg@v7
         with:
           gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
         id: gpg
@@ -60,11 +63,11 @@ jobs:
         run: debian/ci_pack_sdeb.sh
         env:
           SERIES: ${{ inputs.series }}
-          GPG_KEY_ID: ${{ steps.gpg.outputs.keyid }}
+          GPG_KEY_ID: ${{ steps.gpg.outputs.keyid || '' }}
           PKG_VERSION: ${{ steps.version.outputs.deb }}
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-debian-${{ steps.version.outputs.deb }}~${{ inputs.series }}-src
           overwrite: true

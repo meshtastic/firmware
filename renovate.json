@@ -4,10 +4,13 @@
     ":dependencyDashboard",
     ":semanticCommitTypeAll(chore)",
     ":ignoreModulesAndTests",
+    ":noUnscheduledUpdates",
+    "schedule:daily",
     "group:recommended",
     "replacements:all",
     "workarounds:all"
   ],
+  "baseBranchPatterns": ["master"],
   "forkProcessing": "enabled",
   "ignoreDeps": [
     "protobufs"

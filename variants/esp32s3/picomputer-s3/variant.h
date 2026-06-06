@@ -11,7 +11,7 @@
 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 // ratio of voltage divider = 3.0 (R11=200k, R7=100k)
 #define ADC_MULTIPLIER 3.1 // 3.0 with correction of display undervoltage.
-#define ADC_CHANNEL ADC1_GPIO2_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_1
 
 #define USE_RF95 // RFM95/SX127x
 
@@ -32,6 +32,7 @@
 #define ST7789_CS 6
 #define ST7789_RS 1
 #define ST7789_BL 5
+#define USE_TFTDISPLAY 1
 
 #define ST7789_RESET -1
 #define ST7789_MISO -1
@@ -46,12 +47,9 @@
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 0
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 5
+#define SCREEN_TRANSITION_FRAMERATE 30
 
 // Picomputer gets a white on black display
-#define TFT_MESH_OVERRIDE COLOR565(255, 255, 255)
-
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 #define INPUTBROKER_MATRIX_TYPE 1
 

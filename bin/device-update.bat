@@ -30,11 +30,11 @@ ECHO     --change-mode    Attempt to place the device in correct mode. (1200bps 
 ECHO                      Some hardware requires this twice.
 ECHO.
 ECHO Example: %SCRIPT_NAME% -p COM17 --change-mode
-ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4-update.bin -p COM11
+ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4.bin -p COM11
 GOTO eof
 
 :version
-ECHO %SCRIPT_NAME% [Version 2.6.2]
+ECHO %SCRIPT_NAME% [Version 2.7.0]
 ECHO Meshtastic
 GOTO eof
 
@@ -78,12 +78,12 @@ IF NOT EXIST !FILENAME! (
     GOTO eof
 )
 
-IF "!FILENAME:update=!"=="!FILENAME!" (
-    CALL :LOG_MESSAGE DEBUG "We are NOT working with a *update* file. !FILENAME!"
+IF NOT "__!FILENAME:.factory.bin=!__"=="__!FILENAME!__" (
+    CALL :LOG_MESSAGE DEBUG "We are working with a *.factory.bin* file. !FILENAME!"
     CALL :LOG_MESSAGE INFO "Use script device-install.bat to flash !FILENAME!."
     GOTO eof
 ) ELSE (
-    CALL :LOG_MESSAGE DEBUG "We are working with a *update* file. !FILENAME!"
+    CALL :LOG_MESSAGE DEBUG "We are not working with a *.factory.bin* file. !FILENAME!"
 )
 
 :skip-filename

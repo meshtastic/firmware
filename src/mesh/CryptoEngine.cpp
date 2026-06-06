@@ -1,8 +1,10 @@
 #include "CryptoEngine.h"
 // #include "NodeDB.h"
 #include "architecture.h"
+#include <memory>
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
+#include "HardwareRNG.h"
 #include "NodeDB.h"
 #include "aes-ccm.h"
 #include "meshUtils.h"
@@ -25,6 +27,15 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
 {
     // Mix in any randomness we can, to make key generation stronger.
     CryptRNG.begin(optstr(APP_VERSION));
+
+    uint8_t hardwareEntropy[64] = {0};
+    if (HardwareRNG::fill(hardwareEntropy, sizeof(hardwareEntropy), true)) {
+        CryptRNG.stir(hardwareEntropy, sizeof(hardwareEntropy));
+    } else {
+        LOG_WARN("Hardware entropy unavailable, falling back to software RNG");
+    }
+    memset(hardwareEntropy, 0, sizeof(hardwareEntropy));
+
     if (myNodeInfo.device_id.size == 16) {
         CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
     }
@@ -60,12 +71,34 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
     }
     return true;
 }
-#endif
-void CryptoEngine::clearKeys()
+
+bool CryptoEngine::ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user)
 {
-    memset(public_key, 0, sizeof(public_key));
-    memset(private_key, 0, sizeof(private_key));
+    if (user.is_licensed) {
+        return false;
+    }
+
+    bool keygenSuccess = false;
+    if (security.private_key.size == 32) {
+        if (regeneratePublicKey(security.public_key.bytes, security.private_key.bytes)) {
+            keygenSuccess = true;
+        }
+    } else {
+        LOG_INFO("Generate new PKI keys");
+        generateKeyPair(security.public_key.bytes, security.private_key.bytes);
+        keygenSuccess = true;
+    }
+
+    if (keygenSuccess) {
+        security.public_key.size = 32;
+        security.private_key.size = 32;
+        user.public_key.size = 32;
+        memcpy(user.public_key.bytes, security.public_key.bytes, 32);
+    }
+
+    return keygenSuccess;
 }
+#endif
 
 /**
  * Encrypt a packet's payload using a key generated with Curve25519 and SHA256
@@ -79,7 +112,7 @@ void CryptoEngine::clearKeys()
  * @param bytes Buffer containing plaintext input.
  * @param bytesOut Output buffer to be populated with encrypted ciphertext.
  */
-bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
+bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic,
                                      uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
     uint8_t *auth;
@@ -92,10 +125,10 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
         LOG_DEBUG("Node %d or their public_key not found", toNode);
         return false;
     }
-    if (!crypto->setDHPublicKey(remotePublic.bytes)) {
+    if (!setDHPublicKey(remotePublic.bytes)) {
         return false;
     }
-    crypto->hash(shared_key, 32);
+    hash(shared_key, 32);
     initNonce(fromNode, packetNum, extraNonceTmp);
 
     // Calculate the shared secret with the destination node and encrypt
@@ -119,7 +152,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
  * @param bytes Buffer containing ciphertext input.
  * @param bytesOut Output buffer to be populated with decrypted plaintext.
  */
-bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
+bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic, uint64_t packetNum,
                                      size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
     const uint8_t *auth = bytes + numBytes - 12; // set to last 8 bytes of text?
@@ -134,10 +167,10 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_publ
     }
 
     // Calculate the shared secret with the sending node and decrypt
-    if (!crypto->setDHPublicKey(remotePublic.bytes)) {
+    if (!setDHPublicKey(remotePublic.bytes)) {
         return false;
     }
-    crypto->hash(shared_key, 32);
+    hash(shared_key, 32);
 
     initNonce(fromNode, packetNum, extraNonce);
     printBytes("Attempt decrypt with nonce: ", nonce, 13);
@@ -174,10 +207,9 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
-    delete aes;
     aes = nullptr;
     if (key_len != 0) {
-        aes = new AESSmall256();
+        aes = std::unique_ptr<AESSmall256>(new AESSmall256());
         aes->setKey(key_bytes, key_len);
     }
 }
@@ -236,12 +268,11 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
 // Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    delete ctr;
-    ctr = nullptr;
+    std::unique_ptr<CTRCommon> ctr;
     if (_key.length == 16)
-        ctr = new CTR<AES128>();
+        ctr = std::unique_ptr<CTRCommon>(new CTR<AES128>());
     else
-        ctr = new CTR<AES256>();
+        ctr = std::unique_ptr<CTRCommon>(new CTR<AES256>());
     ctr->setKey(_key.bytes, _key.length);
     static uint8_t scratch[MAX_BLOCKSIZE];
     memcpy(scratch, bytes, numBytes);

@@ -26,7 +26,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_INA219 = 5,
     /* High accuracy temperature and pressure */
     meshtastic_TelemetrySensorType_BMP280 = 6,
-    /* High accuracy temperature and humidity */
+    /* TODO - REMOVE High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHTC3 = 7,
     /* High accuracy pressure */
     meshtastic_TelemetrySensorType_LPS22 = 8,
@@ -36,7 +36,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_QMI8658 = 10,
     /* 3-Axis magnetic sensor */
     meshtastic_TelemetrySensorType_QMC5883L = 11,
-    /* High accuracy temperature and humidity */
+    /* TODO - REMOVE High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT31 = 12,
     /* PM2.5 air quality sensor */
     meshtastic_TelemetrySensorType_PMSA003I = 13,
@@ -46,7 +46,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_BMP085 = 15,
     /* RCWL-9620 Doppler Radar Distance Sensor, used for water level detection */
     meshtastic_TelemetrySensorType_RCWL9620 = 16,
-    /* Sensirion High accuracy temperature and humidity */
+    /* TODO - REMOVE Sensirion High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT4X = 17,
     /* VEML7700 high accuracy ambient light(Lux) digital 16-bit resolution sensor. */
     meshtastic_TelemetrySensorType_VEML7700 = 18,
@@ -101,7 +101,25 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* SEN5X PM SENSORS */
     meshtastic_TelemetrySensorType_SEN5X = 43,
     /* TSL2561 light sensor */
-    meshtastic_TelemetrySensorType_TSL2561 = 44
+    meshtastic_TelemetrySensorType_TSL2561 = 44,
+    /* BH1750 light sensor */
+    meshtastic_TelemetrySensorType_BH1750 = 45,
+    /* HDC1080 Temperature and Humidity Sensor */
+    meshtastic_TelemetrySensorType_HDC1080 = 46,
+    /* TODO - REMOVE STH21 Temperature and R. Humidity sensor */
+    meshtastic_TelemetrySensorType_SHT21 = 47,
+    /* Sensirion STC31 CO2 sensor */
+    meshtastic_TelemetrySensorType_STC31 = 48,
+    /* SCD30 CO2, humidity, temperature sensor */
+    meshtastic_TelemetrySensorType_SCD30 = 49,
+    /* SHT family of sensors for temperature and humidity */
+    meshtastic_TelemetrySensorType_SHTXX = 50,
+    /* DS248X Bridge for one-wire temperature sensors */
+    meshtastic_TelemetrySensorType_DS248X = 51,
+    /* MMC5983MA 3-Axis Digital Magnetic Sensor */
+    meshtastic_TelemetrySensorType_MMC5983MA = 52,
+    /* ICM-42607-P 6‑Axis IMU */
+    meshtastic_TelemetrySensorType_ICM42607P = 53
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -194,6 +212,9 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Soil temperature measured (*C) */
     bool has_soil_temperature;
     float soil_temperature;
+    /* One-wire temperature (*C) */
+    pb_size_t one_wire_temperature_count;
+    float one_wire_temperature[8];
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -357,7 +378,29 @@ typedef struct _meshtastic_LocalStats {
     uint32_t heap_total_bytes;
     /* Number of bytes free in the heap */
     uint32_t heap_free_bytes;
+    /* Number of packets that were dropped because the transmit queue was full. */
+    uint16_t num_tx_dropped;
+    /* Noise floor value measured in dBm */
+    int32_t noise_floor;
 } meshtastic_LocalStats;
+
+/* Traffic management statistics for mesh network optimization */
+typedef struct _meshtastic_TrafficManagementStats {
+    /* Total number of packets inspected by traffic management */
+    uint32_t packets_inspected;
+    /* Number of position packets dropped due to deduplication */
+    uint32_t position_dedup_drops;
+    /* Number of NodeInfo requests answered from cache */
+    uint32_t nodeinfo_cache_hits;
+    /* Number of packets dropped due to rate limiting */
+    uint32_t rate_limit_drops;
+    /* Number of unknown/undecryptable packets dropped */
+    uint32_t unknown_packet_drops;
+    /* Number of packets with hop_limit exhausted for local-only broadcast */
+    uint32_t hop_exhausted_packets;
+    /* Number of times router hop preservation was applied */
+    uint32_t router_hops_preserved;
+} meshtastic_TrafficManagementStats;
 
 /* Health telemetry metrics */
 typedef struct _meshtastic_HealthMetrics {
@@ -418,6 +461,8 @@ typedef struct _meshtastic_Telemetry {
         meshtastic_HealthMetrics health_metrics;
         /* Linux host metrics */
         meshtastic_HostMetrics host_metrics;
+        /* Traffic management statistics */
+        meshtastic_TrafficManagementStats traffic_management_stats;
     } variant;
 } meshtastic_Telemetry;
 
@@ -429,6 +474,25 @@ typedef struct _meshtastic_Nau7802Config {
     float calibrationFactor;
 } meshtastic_Nau7802Config;
 
+/* SEN5X State, for saving to flash */
+typedef struct _meshtastic_SEN5XState {
+    /* Last cleaning time for SEN5X */
+    uint32_t last_cleaning_time;
+    /* Last cleaning time for SEN5X - valid flag */
+    bool last_cleaning_valid;
+    /* Config flag for one-shot mode (see admin.proto) */
+    bool one_shot_mode;
+    /* Last VOC state time for SEN55 */
+    bool has_voc_state_time;
+    uint32_t voc_state_time;
+    /* Last VOC state validity flag for SEN55 */
+    bool has_voc_state_valid;
+    bool voc_state_valid;
+    /* VOC state array (8x uint8t) for SEN55 */
+    bool has_voc_state_array;
+    uint64_t voc_state_array;
+} meshtastic_SEN5XState;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -436,8 +500,10 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_TSL2561
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_TSL2561+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_ICM42607P
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_ICM42607P+1))
+
+
 
 
 
@@ -451,23 +517,27 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_TrafficManagementStats_init_default {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_default    {false, 0, false, 0, false, 0}
 #define meshtastic_HostMetrics_init_default      {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
+#define meshtastic_SEN5XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_TrafficManagementStats_init_zero {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_zero       {false, 0, false, 0, false, 0}
 #define meshtastic_HostMetrics_init_zero         {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 #define meshtastic_Nau7802Config_init_zero       {0, 0}
+#define meshtastic_SEN5XState_init_zero          {0, 0, 0, false, 0, false, 0, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_DeviceMetrics_battery_level_tag 1
@@ -497,6 +567,7 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_rainfall_24h_tag 20
 #define meshtastic_EnvironmentMetrics_soil_moisture_tag 21
 #define meshtastic_EnvironmentMetrics_soil_temperature_tag 22
+#define meshtastic_EnvironmentMetrics_one_wire_temperature_tag 23
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -551,6 +622,15 @@ extern "C" {
 #define meshtastic_LocalStats_num_tx_relay_canceled_tag 11
 #define meshtastic_LocalStats_heap_total_bytes_tag 12
 #define meshtastic_LocalStats_heap_free_bytes_tag 13
+#define meshtastic_LocalStats_num_tx_dropped_tag 14
+#define meshtastic_LocalStats_noise_floor_tag    15
+#define meshtastic_TrafficManagementStats_packets_inspected_tag 1
+#define meshtastic_TrafficManagementStats_position_dedup_drops_tag 2
+#define meshtastic_TrafficManagementStats_nodeinfo_cache_hits_tag 3
+#define meshtastic_TrafficManagementStats_rate_limit_drops_tag 4
+#define meshtastic_TrafficManagementStats_unknown_packet_drops_tag 5
+#define meshtastic_TrafficManagementStats_hop_exhausted_packets_tag 6
+#define meshtastic_TrafficManagementStats_router_hops_preserved_tag 7
 #define meshtastic_HealthMetrics_heart_bpm_tag   1
 #define meshtastic_HealthMetrics_spO2_tag        2
 #define meshtastic_HealthMetrics_temperature_tag 3
@@ -571,8 +651,15 @@ extern "C" {
 #define meshtastic_Telemetry_local_stats_tag     6
 #define meshtastic_Telemetry_health_metrics_tag  7
 #define meshtastic_Telemetry_host_metrics_tag    8
+#define meshtastic_Telemetry_traffic_management_stats_tag 9
 #define meshtastic_Nau7802Config_zeroOffset_tag  1
 #define meshtastic_Nau7802Config_calibrationFactor_tag 2
+#define meshtastic_SEN5XState_last_cleaning_time_tag 1
+#define meshtastic_SEN5XState_last_cleaning_valid_tag 2
+#define meshtastic_SEN5XState_one_shot_mode_tag  3
+#define meshtastic_SEN5XState_voc_state_time_tag 4
+#define meshtastic_SEN5XState_voc_state_valid_tag 5
+#define meshtastic_SEN5XState_voc_state_array_tag 6
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceMetrics_FIELDLIST(X, a) \
@@ -606,7 +693,8 @@ X(a, STATIC,   OPTIONAL, FLOAT,    radiation,        18) \
 X(a, STATIC,   OPTIONAL, FLOAT,    rainfall_1h,      19) \
 X(a, STATIC,   OPTIONAL, FLOAT,    rainfall_24h,     20) \
 X(a, STATIC,   OPTIONAL, UINT32,   soil_moisture,    21) \
-X(a, STATIC,   OPTIONAL, FLOAT,    soil_temperature,  22)
+X(a, STATIC,   OPTIONAL, FLOAT,    soil_temperature,  22) \
+X(a, STATIC,   REPEATED, FLOAT,    one_wire_temperature,  23)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
@@ -672,9 +760,22 @@ X(a, STATIC,   SINGULAR, UINT32,   num_rx_dupe,       9) \
 X(a, STATIC,   SINGULAR, UINT32,   num_tx_relay,     10) \
 X(a, STATIC,   SINGULAR, UINT32,   num_tx_relay_canceled,  11) \
 X(a, STATIC,   SINGULAR, UINT32,   heap_total_bytes,  12) \
-X(a, STATIC,   SINGULAR, UINT32,   heap_free_bytes,  13)
+X(a, STATIC,   SINGULAR, UINT32,   heap_free_bytes,  13) \
+X(a, STATIC,   SINGULAR, UINT32,   num_tx_dropped,   14) \
+X(a, STATIC,   SINGULAR, INT32,    noise_floor,      15)
 #define meshtastic_LocalStats_CALLBACK NULL
 #define meshtastic_LocalStats_DEFAULT NULL
+
+#define meshtastic_TrafficManagementStats_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   packets_inspected,   1) \
+X(a, STATIC,   SINGULAR, UINT32,   position_dedup_drops,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   nodeinfo_cache_hits,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   rate_limit_drops,   4) \
+X(a, STATIC,   SINGULAR, UINT32,   unknown_packet_drops,   5) \
+X(a, STATIC,   SINGULAR, UINT32,   hop_exhausted_packets,   6) \
+X(a, STATIC,   SINGULAR, UINT32,   router_hops_preserved,   7)
+#define meshtastic_TrafficManagementStats_CALLBACK NULL
+#define meshtastic_TrafficManagementStats_DEFAULT NULL
 
 #define meshtastic_HealthMetrics_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, UINT32,   heart_bpm,         1) \
@@ -704,7 +805,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,air_quality_metrics,variant.air_qual
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,power_metrics,variant.power_metrics),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,local_stats,variant.local_stats),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,health_metrics,variant.health_metrics),   7) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,host_metrics,variant.host_metrics),   8)
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,host_metrics,variant.host_metrics),   8) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,traffic_management_stats,variant.traffic_management_stats),   9)
 #define meshtastic_Telemetry_CALLBACK NULL
 #define meshtastic_Telemetry_DEFAULT NULL
 #define meshtastic_Telemetry_variant_device_metrics_MSGTYPE meshtastic_DeviceMetrics
@@ -714,6 +816,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,host_metrics,variant.host_metrics), 
 #define meshtastic_Telemetry_variant_local_stats_MSGTYPE meshtastic_LocalStats
 #define meshtastic_Telemetry_variant_health_metrics_MSGTYPE meshtastic_HealthMetrics
 #define meshtastic_Telemetry_variant_host_metrics_MSGTYPE meshtastic_HostMetrics
+#define meshtastic_Telemetry_variant_traffic_management_stats_MSGTYPE meshtastic_TrafficManagementStats
 
 #define meshtastic_Nau7802Config_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    zeroOffset,        1) \
@@ -721,15 +824,27 @@ X(a, STATIC,   SINGULAR, FLOAT,    calibrationFactor,   2)
 #define meshtastic_Nau7802Config_CALLBACK NULL
 #define meshtastic_Nau7802Config_DEFAULT NULL
 
+#define meshtastic_SEN5XState_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   last_cleaning_time,   1) \
+X(a, STATIC,   SINGULAR, BOOL,     last_cleaning_valid,   2) \
+X(a, STATIC,   SINGULAR, BOOL,     one_shot_mode,     3) \
+X(a, STATIC,   OPTIONAL, UINT32,   voc_state_time,    4) \
+X(a, STATIC,   OPTIONAL, BOOL,     voc_state_valid,   5) \
+X(a, STATIC,   OPTIONAL, FIXED64,  voc_state_array,   6)
+#define meshtastic_SEN5XState_CALLBACK NULL
+#define meshtastic_SEN5XState_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_DeviceMetrics_msg;
 extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
 extern const pb_msgdesc_t meshtastic_PowerMetrics_msg;
 extern const pb_msgdesc_t meshtastic_AirQualityMetrics_msg;
 extern const pb_msgdesc_t meshtastic_LocalStats_msg;
+extern const pb_msgdesc_t meshtastic_TrafficManagementStats_msg;
 extern const pb_msgdesc_t meshtastic_HealthMetrics_msg;
 extern const pb_msgdesc_t meshtastic_HostMetrics_msg;
 extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
+extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_DeviceMetrics_fields &meshtastic_DeviceMetrics_msg
@@ -737,22 +852,26 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 #define meshtastic_PowerMetrics_fields &meshtastic_PowerMetrics_msg
 #define meshtastic_AirQualityMetrics_fields &meshtastic_AirQualityMetrics_msg
 #define meshtastic_LocalStats_fields &meshtastic_LocalStats_msg
+#define meshtastic_TrafficManagementStats_fields &meshtastic_TrafficManagementStats_msg
 #define meshtastic_HealthMetrics_fields &meshtastic_HealthMetrics_msg
 #define meshtastic_HostMetrics_fields &meshtastic_HostMetrics_msg
 #define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
 #define meshtastic_Nau7802Config_fields &meshtastic_Nau7802Config_msg
+#define meshtastic_SEN5XState_fields &meshtastic_SEN5XState_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        150
 #define meshtastic_DeviceMetrics_size            27
-#define meshtastic_EnvironmentMetrics_size       113
+#define meshtastic_EnvironmentMetrics_size       161
 #define meshtastic_HealthMetrics_size            11
 #define meshtastic_HostMetrics_size              264
-#define meshtastic_LocalStats_size               72
+#define meshtastic_LocalStats_size               87
 #define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             81
+#define meshtastic_SEN5XState_size               27
 #define meshtastic_Telemetry_size                272
+#define meshtastic_TrafficManagementStats_size   42
 
 #ifdef __cplusplus
 } /* extern "C" */

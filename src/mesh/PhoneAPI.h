@@ -1,12 +1,18 @@
 #pragma once
 
 #include "Observer.h"
+#include "concurrency/Lock.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
+#include <cstdint>
+#include <deque>
 #include <iterator>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+// NodeNum stored as raw uint32_t below; including MeshTypes.h here breaks the
+// LOG_WARN include order via Arduino.h/MemoryPool.h.
 
 // Make sure that we never let our packets grow too large for one BLE packet
 #define MAX_TO_FROM_RADIO_SIZE 512
@@ -45,7 +51,20 @@ class PhoneAPI
         STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to to the client
         STATE_SEND_FILEMANIFEST,    // Send file manifest
         STATE_SEND_COMPLETE_ID,
-        STATE_SEND_PACKETS // send packets or debug strings
+        STATE_SEND_PACKETS // live mesh packets + any cached satellite-DB replay that trails sync completion
+    };
+
+    // Satellite-DB replay (positions / telemetry / environment / status) used to live
+    // as four top-level states between STATE_SEND_OTHER_NODEINFOS and STATE_SEND_FILEMANIFEST.
+    // It now drains *after* config_complete_id has been emitted: the phone considers the
+    // initial sync done as soon as headers + manifest are delivered, and the cached
+    // position/telemetry/etc. trickle in alongside live mesh traffic inside STATE_SEND_PACKETS.
+    enum ReplayPhase : uint8_t {
+        REPLAY_PHASE_IDLE = 0, // not replaying (legacy clients, no-op DBs, or replay finished)
+        REPLAY_PHASE_POSITIONS,
+        REPLAY_PHASE_TELEMETRY,
+        REPLAY_PHASE_ENVIRONMENT,
+        REPLAY_PHASE_STATUS,
     };
 
     State state = STATE_SEND_NOTHING;
@@ -79,6 +98,27 @@ class PhoneAPI
 
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     meshtastic_NodeInfo nodeInfoForPhone = meshtastic_NodeInfo_init_default;
+    // Prefetched node info entries ready for immediate transmission to the phone.
+    std::deque<meshtastic_NodeInfo> nodeInfoQueue;
+    // Tunable size of the node info cache so we can keep BLE reads non-blocking.
+    static constexpr size_t kNodePrefetchDepth = 4;
+    // Protect nodeInfoForPhone + nodeInfoQueue because NimBLE callbacks run in a separate FreeRTOS task.
+    concurrency::Lock nodeInfoMutex;
+
+    // Synthetic-packet replay queue (paced via prefetch).
+    std::deque<meshtastic_MeshPacket> replayQueue;
+    static constexpr size_t kReplayPrefetchDepth = 4;
+    // NodeNum snapshots taken at each replay phase start so concurrent
+    // satellite-map mutations don't invalidate iteration.
+    std::vector<uint32_t> replayPositionOrder;
+    std::vector<uint32_t> replayTelemetryOrder;
+    std::vector<uint32_t> replayEnvironmentOrder;
+    std::vector<uint32_t> replayStatusOrder;
+    size_t replayPositionIndex = 0;
+    size_t replayTelemetryIndex = 0;
+    size_t replayEnvironmentIndex = 0;
+    size_t replayStatusIndex = 0;
+    ReplayPhase replayPhase = REPLAY_PHASE_IDLE; // armed by sendConfigComplete() for full/default sync
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
@@ -128,6 +168,7 @@ class PhoneAPI
     bool available();
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
+    bool isSendingPackets() { return state == STATE_SEND_PACKETS; }
 
   protected:
     /// Our fromradio packet while it is being assembled
@@ -150,13 +191,50 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
+    /// Subclasses can use these lifecycle hooks for transport-specific behavior around config/steady-state
+    /// (i.e. BLE connection params)
+    virtual void onConfigStart() {}
+    virtual void onConfigComplete() {}
+
     /// begin a new connection
     void handleStartConfig();
+
+    enum APIType {
+        TYPE_NONE, // Initial state, don't send anything until the client starts asking for config
+        TYPE_BLE,
+        TYPE_WIFI,
+        TYPE_SERIAL,
+        TYPE_PACKET,
+        TYPE_HTTP,
+        TYPE_ETH
+    };
+
+    APIType api_type = TYPE_NONE;
 
   private:
     void releasePhonePacket();
 
     void releaseQueueStatusPhonePacket();
+
+    void prefetchNodeInfos();
+    void beginReplayPositions();
+    void prefetchReplayPositions();
+    void beginReplayTelemetry();
+    void prefetchReplayTelemetry();
+    void beginReplayEnvironment();
+    void prefetchReplayEnvironment();
+    void beginReplayStatus();
+    void prefetchReplayStatus();
+    meshtastic_MeshPacket makeReplayPositionPacket(uint32_t num, const meshtastic_PositionLite &pos);
+    meshtastic_MeshPacket makeReplayTelemetryPacket(uint32_t num, const meshtastic_DeviceMetrics &metrics);
+    meshtastic_MeshPacket makeReplayEnvironmentPacket(uint32_t num, const meshtastic_EnvironmentMetrics &env);
+    meshtastic_MeshPacket makeReplayStatusPacket(uint32_t num, const meshtastic_StatusMessage &status);
+
+    // Post-sync replay drain: pop one cached packet from the active phase, advancing
+    // through positions -> telemetry -> environment -> status until everything is drained.
+    bool popReplayPacket(meshtastic_MeshPacket &out);
+    void advanceReplayPhase();
+    bool replayPending() const { return replayPhase != REPLAY_PHASE_IDLE; }
 
     void releaseMqttClientProxyPhonePacket();
 

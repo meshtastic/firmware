@@ -48,10 +48,13 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     // Convert Compressed_msg to normal msg and receive it
     void unpackAndReceive(meshtastic_MeshPacket &p);
 
+    int16_t getCurrentRSSI() override;
+
     /**
      * Debugging counts
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
+    uint16_t txDrop = 0;
 
   protected:
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
@@ -88,6 +91,8 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     /**
      * If a send was in progress finish it and return the buffer to the pool */
     void completeSending();
+
+    virtual uint32_t getPacketTime(uint32_t pl, bool received = false) override;
 };
 
 extern SimRadio *simRadio;

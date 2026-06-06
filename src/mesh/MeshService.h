@@ -79,6 +79,18 @@ class MeshService
     uint32_t oldFromNum = 0;
 
   public:
+    enum APIState {
+        STATE_DISCONNECTED, // Initial state, no API is connected
+        STATE_BLE,
+        STATE_WIFI,
+        STATE_SERIAL,
+        STATE_PACKET,
+        STATE_HTTP,
+        STATE_ETH
+    };
+
+    APIState api_state = STATE_DISCONNECTED;
+
     static bool isTextPayload(const meshtastic_MeshPacket *p)
     {
         if (moduleConfig.range_test.enabled && p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {

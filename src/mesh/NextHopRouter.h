@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FloodingRouter.h"
+#include <optional>
 #include <unordered_map>
 
 /**
@@ -146,9 +147,9 @@ class NextHopRouter : public FloodingRouter
      * Get the next hop for a destination, given the relay node
      * @return the node number of the next hop, 0 if no preference (fallback to FloodingRouter)
      */
-    uint8_t getNextHop(NodeNum to, uint8_t relay_node);
+    std::optional<uint8_t> getNextHop(NodeNum to, uint8_t relay_node);
 
-    /** Check if we should be relaying this packet if so, do so.
-     *  @return true if we did relay */
-    bool perhapsRelay(const meshtastic_MeshPacket *p);
+    /** Check if we should be rebroadcasting this packet if so, do so.
+     *  @return true if we did rebroadcast */
+    bool perhapsRebroadcast(const meshtastic_MeshPacket *p) override;
 };

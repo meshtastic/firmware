@@ -1,6 +1,3 @@
-// Status
-#define LED_PIN 1
-
 #define PIN_BUTTON1 47 // 功能键
 #define PIN_BUTTON2 4  // 电源键
 #define ALT_BUTTON_PIN PIN_BUTTON2
@@ -43,8 +40,8 @@
 // Battery
 // #define BATTERY_PIN 2
 #define BATTERY_PIN 17
-// #define ADC_CHANNEL ADC1_GPIO2_CHANNEL
-#define ADC_CHANNEL ADC2_GPIO17_CHANNEL
+// #define ADC_CHANNEL ADC_CHANNEL_1
+#define ADC_CHANNEL ADC_CHANNEL_6
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
 #undef AREF_VOLTAGE
@@ -56,10 +53,6 @@
 #define HAS_SCREEN 1
 #define USE_SH1106 1
 
-// PCF8563 RTC Module
-// #define PCF8563_RTC 0x51
-// #define PIN_RTC_INT 48 // Interrupt from the PCF8563 RTC
-#define HAS_RTC 0
 #define HAS_GPS 0
 
 #define BUTTON_PIN PIN_BUTTON1

@@ -1,22 +1,38 @@
 #include "configuration.h"
-#if HAS_SCREEN
 
+#if HAS_SCREEN
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
 #include "NotificationRenderer.h"
+#include "UIRenderer.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/images.h"
+#include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/UpDownInterruptImpl1.h"
+#if HAS_BUTTON
+#include "input/ButtonThread.h"
+#endif
 #include "main.h"
 #include <algorithm>
 #include <string>
 #include <vector>
+#if HAS_TRACKBALL
+#include "input/TrackballInterruptImpl1.h"
+#endif
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
 #endif
 
 using namespace meshtastic;
+
+#if HAS_BUTTON
+// Global button thread pointer defined in main.cpp
+extern ::ButtonThread *UserButtonThread;
+#endif
 
 // External references to global variables from Screen.cpp
 extern std::vector<std::string> functionSymbol;
@@ -25,12 +41,12 @@ extern bool hasUnreadMessage;
 
 namespace graphics
 {
-
+int bannerSignalBars = -1;
 InputEvent NotificationRenderer::inEvent;
 int8_t NotificationRenderer::curSelected = 0;
 char NotificationRenderer::alertBannerMessage[256] = {0};
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
-uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are seelctable options
+uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are selectable options
 const char **NotificationRenderer::optionsArrayPtr = nullptr;
 const int *NotificationRenderer::optionsEnumPtr = nullptr;
 std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
@@ -38,6 +54,8 @@ bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
 uint32_t NotificationRenderer::numDigits = 0;
 uint32_t NotificationRenderer::currentNumber = 0;
+VirtualKeyboard *NotificationRenderer::virtualKeyboard = nullptr;
+std::function<void(const std::string &)> NotificationRenderer::textInputCallback = nullptr;
 
 uint32_t pow_of_10(uint32_t n)
 {
@@ -46,6 +64,110 @@ uint32_t pow_of_10(uint32_t n)
         ret *= 10;
     }
     return ret;
+}
+
+char graphics::NotificationRenderer::alertBannerLines[MAX_LINES + 1][64] = {};
+uint8_t graphics::NotificationRenderer::alertBannerLineCount = 0;
+graphics::NotificationRenderer::BannerFont graphics::NotificationRenderer::alertBannerLineFonts[MAX_LINES + 1] = {};
+
+static inline graphics::NotificationRenderer::BannerFont parseFontTagPrefix(const char *&p)
+{
+    // Tags must be at the start of the line:
+    // [S] small, [M] medium, [L] large
+    if (p && p[0] == '[' && p[2] == ']' && p[1] != '\0') {
+        char t = p[1];
+        if (t == 'S') {
+            p += 3;
+            return graphics::NotificationRenderer::BANNER_FONT_SMALL;
+        }
+        if (t == 'M') {
+            p += 3;
+            return graphics::NotificationRenderer::BANNER_FONT_MEDIUM;
+        }
+        if (t == 'L') {
+            p += 3;
+            return graphics::NotificationRenderer::BANNER_FONT_LARGE;
+        }
+    }
+    return graphics::NotificationRenderer::BANNER_FONT_DEFAULT;
+}
+
+static inline const uint8_t *fontForBannerLine(graphics::NotificationRenderer::BannerFont f)
+{
+    switch (f) {
+    case graphics::NotificationRenderer::BANNER_FONT_SMALL:
+        return FONT_SMALL;
+    case graphics::NotificationRenderer::BANNER_FONT_MEDIUM:
+        return FONT_MEDIUM;
+    case graphics::NotificationRenderer::BANNER_FONT_LARGE:
+        return FONT_LARGE;
+    case graphics::NotificationRenderer::BANNER_FONT_DEFAULT:
+    default:
+        return FONT_SMALL;
+    }
+}
+
+static inline uint8_t effectiveLineHeightForBannerLine(graphics::NotificationRenderer::BannerFont f)
+{
+    uint8_t height = FONT_HEIGHT_SMALL;
+    switch (f) {
+    case graphics::NotificationRenderer::BANNER_FONT_MEDIUM:
+        height = FONT_HEIGHT_MEDIUM;
+        break;
+    case graphics::NotificationRenderer::BANNER_FONT_LARGE:
+        height = FONT_HEIGHT_LARGE;
+        break;
+    case graphics::NotificationRenderer::BANNER_FONT_SMALL:
+    case graphics::NotificationRenderer::BANNER_FONT_DEFAULT:
+    default:
+        height = FONT_HEIGHT_SMALL;
+        break;
+    }
+    return (height > 3) ? (height - 3) : height;
+}
+
+void graphics::NotificationRenderer::parseBannerMessageWithFonts(const char *message)
+{
+    alertBannerLineCount = 0;
+    for (uint8_t i = 0; i < (MAX_LINES + 1); i++) {
+        alertBannerLines[i][0] = '\0';
+        alertBannerLineFonts[i] = BANNER_FONT_DEFAULT;
+    }
+
+    if (!message || !message[0]) {
+        return;
+    }
+
+    const char *p = message;
+
+    while (*p && alertBannerLineCount < (MAX_LINES + 1)) {
+        const char *lineStart = p;
+        while (*p && *p != '\n') {
+            p++;
+        }
+
+        char tmp[64] = {0};
+        size_t len = (size_t)(p - lineStart);
+        if (len > (sizeof(tmp) - 1)) {
+            len = sizeof(tmp) - 1;
+        }
+        memcpy(tmp, lineStart, len);
+        tmp[len] = '\0';
+
+        // Tag at start
+        const char *tp = tmp;
+        BannerFont f = parseFontTagPrefix(tp);
+        alertBannerLineFonts[alertBannerLineCount] = f;
+
+        // Store stripped text
+        strncpy(alertBannerLines[alertBannerLineCount], tp, sizeof(alertBannerLines[0]) - 1);
+        alertBannerLines[alertBannerLineCount][sizeof(alertBannerLines[0]) - 1] = '\0';
+        alertBannerLineCount++;
+
+        if (*p == '\n') {
+            p++;
+        }
+    }
 }
 
 // Used on boot when a certificate is being created
@@ -70,13 +192,17 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
 void NotificationRenderer::resetBanner()
 {
+    notificationTypeEnum previousType = current_notification_type;
+
     alertBannerMessage[0] = '\0';
     current_notification_type = notificationTypeEnum::none;
+
+    OnScreenKeyboardModule::instance().clearPopup();
 
     inEvent.inputEvent = INPUT_BROKER_NONE;
     inEvent.kbchar = 0;
     curSelected = 0;
-    alertBannerOptions = 0; // last x lines are seelctable options
+    alertBannerOptions = 0; // last x lines are selectable options
     optionsArrayPtr = nullptr;
     optionsEnumPtr = nullptr;
     alertBannerCallback = NULL;
@@ -85,17 +211,43 @@ void NotificationRenderer::resetBanner()
     currentNumber = 0;
 
     nodeDB->pause_sort(false);
+
+    // If we're exiting from text_input (virtual keyboard), stop module and trigger frame update
+    // to ensure any messages received during keyboard use are now displayed
+    if (previousType == notificationTypeEnum::text_input && screen) {
+        OnScreenKeyboardModule::instance().stop(false);
+        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+    }
 }
 
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    if (!isOverlayBannerShowing() && alertBannerMessage[0] != '\0')
-        resetBanner();
-    if (!isOverlayBannerShowing() || pauseBanner)
+    // Handle text_input notifications first - they have their own timeout/banner logic
+    if (current_notification_type == notificationTypeEnum::text_input) {
+        // Check for timeout and reset if needed for text input
+        if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+            resetBanner();
+            return;
+        }
+        drawTextInput(display, state);
         return;
+    }
+
+    if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+        resetBanner();
+    }
+
+    // Exit if no banner is showing or banner is paused
+    if (!isOverlayBannerShowing() || pauseBanner) {
+        return;
+    }
+
     switch (current_notification_type) {
     case notificationTypeEnum::none:
         // Do nothing - no notification to display
+        break;
+    case notificationTypeEnum::text_input:
+        // Already handled above with dedicated logic (early return). Keep a case here to satisfy -Wswitch.
         break;
     case notificationTypeEnum::text_banner:
     case notificationTypeEnum::selection_picker:
@@ -129,13 +281,15 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
     // modulo to extract
     uint8_t this_digit = (currentNumber % (pow_of_10(numDigits - curSelected))) / (pow_of_10(numDigits - curSelected - 1));
     // Handle input
-    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS ||
+        inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
         if (this_digit == 9) {
             currentNumber -= 9 * (pow_of_10(numDigits - curSelected - 1));
         } else {
             currentNumber += (pow_of_10(numDigits - curSelected - 1));
         }
-    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS ||
+               inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
         if (this_digit == 0) {
             currentNumber += 9 * (pow_of_10(numDigits - curSelected - 1));
         } else {
@@ -217,10 +371,10 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
 
     // Handle input
     if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
-        inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+        inEvent.inputEvent == INPUT_BROKER_ALT_PRESS || inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
         curSelected--;
     } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_RIGHT ||
-               inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+               inEvent.inputEvent == INPUT_BROKER_USER_PRESS || inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
         curSelected++;
     } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
         alertBannerCallback(selectedNodenum);
@@ -252,7 +406,7 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     for (int i = 0; i < lineCount; i++) {
         linePointers[i] = lineStarts[i];
     }
-    char scratchLineBuffer[visibleTotalLines - lineCount][40];
+    char scratchLineBuffer[visibleTotalLines - lineCount][64];
 
     uint8_t firstOptionToShow = 0;
     if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount) {
@@ -265,30 +419,47 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     }
     int scratchLineNum = 0;
     for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
-        char temp_name[16] = {0};
-        if (nodeDB->getMeshNodeByIndex(i + 1)->has_user) {
-            std::string sanitized = sanitizeString(nodeDB->getMeshNodeByIndex(i + 1)->user.long_name);
-            strncpy(temp_name, sanitized.c_str(), sizeof(temp_name) - 1);
-
+        char tempName[48] = {0};
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i + 1);
+        if (nodeInfoLiteHasUser(node)) {
+            const char *rawName = nullptr;
+            if (node->long_name[0]) {
+                rawName = node->long_name;
+            } else if (node->short_name[0]) {
+                rawName = node->short_name;
+            }
+            if (rawName) {
+                const int arrowWidth = (currentResolution == ScreenResolution::High)
+                                           ? UIRenderer::measureStringWithEmotes(display, ">  <")
+                                           : UIRenderer::measureStringWithEmotes(display, "><");
+                const int maxTextWidth = std::max(0, display->getWidth() - 28 - arrowWidth);
+                UIRenderer::truncateStringWithEmotes(display, rawName, tempName, sizeof(tempName), maxTextWidth);
+            }
         } else {
-            snprintf(temp_name, sizeof(temp_name), "(%04X)", (uint16_t)(nodeDB->getMeshNodeByIndex(i + 1)->num & 0xFFFF));
+            snprintf(tempName, sizeof(tempName), "(%04X)", (uint16_t)(node ? (node->num & 0xFFFF) : 0));
         }
-        // make temp buffer for name
-        // fi
+        if (!tempName[0]) {
+            snprintf(tempName, sizeof(tempName), "(%04X)", (uint16_t)(node ? (node->num & 0xFFFF) : 0));
+        }
         if (i == curSelected) {
-            selectedNodenum = nodeDB->getMeshNodeByIndex(i + 1)->num;
-            if (isHighResolution) {
+            selectedNodenum = node ? node->num : 0;
+            if (currentResolution == ScreenResolution::High) {
                 strncpy(scratchLineBuffer[scratchLineNum], "> ", 3);
-                strncpy(scratchLineBuffer[scratchLineNum] + 2, temp_name, 36);
-                strncpy(scratchLineBuffer[scratchLineNum] + strlen(temp_name) + 2, " <", 3);
+                strncpy(scratchLineBuffer[scratchLineNum] + 2, tempName, sizeof(scratchLineBuffer[scratchLineNum]) - 3);
+                scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
+                const size_t used = strnlen(scratchLineBuffer[scratchLineNum], sizeof(scratchLineBuffer[scratchLineNum]) - 1);
+                strncpy(scratchLineBuffer[scratchLineNum] + used, " <", sizeof(scratchLineBuffer[scratchLineNum]) - used - 1);
             } else {
                 strncpy(scratchLineBuffer[scratchLineNum], ">", 2);
-                strncpy(scratchLineBuffer[scratchLineNum] + 1, temp_name, 37);
-                strncpy(scratchLineBuffer[scratchLineNum] + strlen(temp_name) + 1, "<", 2);
+                strncpy(scratchLineBuffer[scratchLineNum] + 1, tempName, sizeof(scratchLineBuffer[scratchLineNum]) - 2);
+                scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
+                const size_t used = strnlen(scratchLineBuffer[scratchLineNum], sizeof(scratchLineBuffer[scratchLineNum]) - 1);
+                strncpy(scratchLineBuffer[scratchLineNum] + used, "<", sizeof(scratchLineBuffer[scratchLineNum]) - used - 1);
             }
-            scratchLineBuffer[scratchLineNum][39] = '\0';
+            scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
         } else {
-            strncpy(scratchLineBuffer[scratchLineNum], temp_name, 36);
+            strncpy(scratchLineBuffer[scratchLineNum], tempName, sizeof(scratchLineBuffer[scratchLineNum]) - 1);
+            scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
         }
         linePointers[linesShown] = scratchLineBuffer[scratchLineNum++];
     }
@@ -308,23 +479,37 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     const char *lineStarts[MAX_LINES + 1] = {0};
     uint16_t lineCount = 0;
     char lineBuffer[40] = {0};
+    bool useTaggedTextBanner =
+        (current_notification_type == notificationTypeEnum::text_banner && alertBannerOptions == 0 && alertBannerLineCount > 0);
 
-    // Parse lines
-    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
-    lineStarts[lineCount] = alertBannerMessage;
+    if (useTaggedTextBanner) {
+        lineCount = std::min<uint8_t>(alertBannerLineCount, MAX_LINES);
+        for (uint16_t i = 0; i < lineCount; i++) {
+            lineStarts[i] = alertBannerLines[i];
+            lineLengths[i] = strlen(lineStarts[i]);
+            display->setFont(fontForBannerLine(alertBannerLineFonts[i]));
+            lineWidths[i] = display->getStringWidth(lineStarts[i], lineLengths[i], true);
+            if (lineWidths[i] > maxWidth)
+                maxWidth = lineWidths[i];
+        }
+    } else {
+        char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
+        lineStarts[lineCount] = alertBannerMessage;
 
-    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
-        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
-        lineLengths[lineCount] = lineStarts[lineCount + 1] - lineStarts[lineCount];
-        if (lineStarts[lineCount + 1][0] == '\n')
-            lineStarts[lineCount + 1] += 1;
-        lineWidths[lineCount] = display->getStringWidth(lineStarts[lineCount], lineLengths[lineCount], true);
-        if (lineWidths[lineCount] > maxWidth)
-            maxWidth = lineWidths[lineCount];
-        lineCount++;
+        while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
+            lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
+            lineLengths[lineCount] = lineStarts[lineCount + 1] - lineStarts[lineCount];
+            if (lineStarts[lineCount + 1][0] == '\n')
+                lineStarts[lineCount + 1] += 1;
+            lineWidths[lineCount] = display->getStringWidth(lineStarts[lineCount], lineLengths[lineCount], true);
+            if (lineWidths[lineCount] > maxWidth)
+                maxWidth = lineWidths[lineCount];
+            lineCount++;
+        }
     }
 
     // Measure option widths
+    display->setFont(FONT_SMALL);
     for (int i = 0; i < alertBannerOptions; i++) {
         optionWidths[i] = display->getStringWidth(optionsArrayPtr[i], strlen(optionsArrayPtr[i]), true);
         if (optionWidths[i] > maxWidth)
@@ -336,10 +521,10 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     // Handle input
     if (alertBannerOptions > 0) {
         if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
-            inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+            inEvent.inputEvent == INPUT_BROKER_ALT_PRESS || inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
             curSelected--;
         } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_RIGHT ||
-                   inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+                   inEvent.inputEvent == INPUT_BROKER_USER_PRESS || inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
             curSelected++;
         } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
             if (optionsEnumPtr != nullptr) {
@@ -404,7 +589,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
         if (i == curSelected) {
-            if (isHighResolution) {
+            if (currentResolution == ScreenResolution::High) {
                 strncpy(lineBuffer, "> ", 3);
                 strncpy(lineBuffer + 2, optionsArrayPtr[i], 36);
                 strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 2, " <", 3);
@@ -432,12 +617,16 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
     bool is_picker = false;
     uint16_t lineCount = 0;
-    // === Layout Configuration ===
+    // Layout Configuration
     constexpr uint16_t hPadding = 5;
     constexpr uint16_t vPadding = 2;
     bool needs_bell = false;
     uint16_t lineWidths[totalLines] = {0};
     uint16_t lineLengths[totalLines] = {0};
+    BannerFont lineFonts[totalLines] = {};
+    uint8_t lineEffectiveHeights[totalLines] = {0};
+    const char *renderLines[totalLines] = {0};
+    bool useTaggedBannerFonts = (current_notification_type == notificationTypeEnum::text_banner && alertBannerOptions == 0);
 
     if (maxWidth != 0)
         is_picker = true;
@@ -446,13 +635,49 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
+    // Track widest line INCLUDING bars (but don't change per-line widths)
+    uint16_t widestLineWithBars = 0;
+
     while (lines[lineCount] != nullptr) {
-        auto newlinePointer = strchr(lines[lineCount], '\n');
+        const char *renderText = lines[lineCount];
+        BannerFont lineFont = BANNER_FONT_DEFAULT;
+        if (useTaggedBannerFonts && lineCount < alertBannerLineCount) {
+            renderText = alertBannerLines[lineCount];
+            lineFont = alertBannerLineFonts[lineCount];
+        }
+        renderLines[lineCount] = renderText;
+        lineFonts[lineCount] = lineFont;
+        lineEffectiveHeights[lineCount] = effectiveLineHeightForBannerLine(lineFont);
+        display->setFont(fontForBannerLine(lineFont));
+
+        auto newlinePointer = strchr(renderText, '\n');
         if (newlinePointer)
-            lineLengths[lineCount] = (newlinePointer - lines[lineCount]); // Check for newlines first
-        else // if the newline wasn't found, then pull string length from strlen
-            lineLengths[lineCount] = strlen(lines[lineCount]);
-        lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
+            lineLengths[lineCount] = (newlinePointer - renderText);
+        else
+            lineLengths[lineCount] = strlen(renderText);
+
+        if (current_notification_type == notificationTypeEnum::node_picker) {
+            char measureBuffer[64] = {0};
+            strncpy(measureBuffer, lines[lineCount], std::min<size_t>(lineLengths[lineCount], sizeof(measureBuffer) - 1));
+            lineWidths[lineCount] = UIRenderer::measureStringWithEmotes(display, measureBuffer);
+        } else {
+            lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
+        }
+
+        // Consider extra width for signal bars on lines that contain "Signal:"
+        uint16_t potentialWidth = lineWidths[lineCount];
+        if (graphics::bannerSignalBars >= 0 && strncmp(renderText, "Signal:", 7) == 0) {
+            const int totalBars = 5;
+            const int barWidth = 3;
+            const int barSpacing = 2;
+            const int gap = 6; // space between text and bars
+            int barsWidth = totalBars * barWidth + (totalBars - 1) * barSpacing + gap;
+            potentialWidth += barsWidth;
+        }
+
+        if (potentialWidth > widestLineWithBars)
+            widestLineWithBars = potentialWidth;
+
         if (!is_picker) {
             needs_bell |= (strstr(alertBannerMessage, "Alert Received") != nullptr);
             if (lineWidths[lineCount] > maxWidth)
@@ -462,28 +687,48 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     }
     // count lines
 
+    // Ensure box accounts for signal bars if present
+    if (widestLineWithBars > maxWidth)
+        maxWidth = widestLineWithBars;
+
     uint16_t boxWidth = hPadding * 2 + maxWidth;
-#if defined(M5STACK_UNITC6L)
+
     if (needs_bell) {
-        if (isHighResolution && boxWidth <= 150)
+        if ((currentResolution == ScreenResolution::High) && boxWidth <= 150)
             boxWidth += 26;
-        if (!isHighResolution && boxWidth <= 100)
+        if ((currentResolution == ScreenResolution::Low || currentResolution == ScreenResolution::UltraLow) && boxWidth <= 100)
             boxWidth += 20;
     }
 
     uint16_t screenHeight = display->height();
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
-    uint8_t visibleTotalLines = std::min<uint8_t>(lineCount, (screenHeight - vPadding * 2) / effectiveLineHeight);
-    uint16_t contentHeight = visibleTotalLines * effectiveLineHeight;
+    uint8_t visibleTotalLines = 0;
+    uint16_t contentHeight = 0;
+    const uint16_t availableHeight = (screenHeight > (vPadding * 2)) ? (screenHeight - vPadding * 2) : 0;
+    for (uint8_t i = 0; i < lineCount; i++) {
+        uint8_t thisLineHeight = lineEffectiveHeights[i] ? lineEffectiveHeights[i] : effectiveLineHeight;
+        if (contentHeight + thisLineHeight > availableHeight) {
+            break;
+        }
+        contentHeight += thisLineHeight;
+        visibleTotalLines++;
+    }
+    if (visibleTotalLines == 0 && lineCount > 0) {
+        visibleTotalLines = 1;
+        contentHeight = lineEffectiveHeights[0] ? lineEffectiveHeights[0] : effectiveLineHeight;
+    }
     uint16_t boxHeight = contentHeight + vPadding * 2;
-    if (visibleTotalLines == 1)
-        boxHeight += (isHighResolution ? 4 : 3);
+    if (visibleTotalLines == 1) {
+        boxHeight += (currentResolution == ScreenResolution::High) ? 4 : 3;
+    }
 
     int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
-    if (totalLines > visibleTotalLines)
-        boxWidth += (isHighResolution ? 4 : 2);
+    if (totalLines > visibleTotalLines) {
+        boxWidth += (currentResolution == ScreenResolution::High) ? 4 : 2;
+    }
     int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
-
+    boxHeight += (currentResolution == ScreenResolution::High) ? 2 : 1;
+#if defined(OLED_TINY)
     if (visibleTotalLines == 1) {
         boxTop += 25;
     }
@@ -494,127 +739,9 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
         if (boxTop < 0)
             boxTop = 0;
     }
+#endif
 
-    // === Draw Box ===
-    display->setColor(BLACK);
-    display->fillRect(boxLeft, boxTop, boxWidth, boxHeight);
-    display->setColor(WHITE);
-    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
-    display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);
-    display->fillRect(boxLeft - 2, boxTop, 1, boxHeight);
-    display->fillRect(boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
-    display->setColor(BLACK);
-    display->fillRect(boxLeft, boxTop, 1, 1);
-    display->fillRect(boxLeft + boxWidth - 1, boxTop, 1, 1);
-    display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
-    display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
-    display->setColor(WHITE);
-    int16_t lineY = boxTop + vPadding;
-    int swingRange = 8;
-    static int swingOffset = 0;
-    static bool swingRight = true;
-    static unsigned long lastSwingTime = 0;
-    unsigned long now = millis();
-    int swingSpeedMs = 10 / (swingRange * 2);
-    if (now - lastSwingTime >= (unsigned long)swingSpeedMs) {
-        lastSwingTime = now;
-        if (swingRight) {
-            swingOffset++;
-            if (swingOffset >= swingRange)
-                swingRight = false;
-        } else {
-            swingOffset--;
-            if (swingOffset <= 0)
-                swingRight = true;
-        }
-    }
-    for (int i = 0; i < lineCount; i++) {
-        bool isTitle = (i == 0);
-        int globalOptionIndex = (i - 1) + firstOptionToShow;
-        bool isSelectedOption = (!isTitle && globalOptionIndex >= 0 && globalOptionIndex == curSelected);
-
-        uint16_t visibleWidth = 64 - hPadding * 2;
-        if (totalLines > visibleTotalLines)
-            visibleWidth -= 6;
-        char lineBuffer[lineLengths[i] + 1];
-        strncpy(lineBuffer, lines[i], lineLengths[i]);
-        lineBuffer[lineLengths[i]] = '\0';
-
-        if (isTitle) {
-            if (visibleTotalLines == 1) {
-                display->setColor(BLACK);
-                display->fillRect(boxLeft, boxTop, boxWidth, effectiveLineHeight);
-                display->setColor(WHITE);
-                display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, boxTop, lineBuffer);
-            } else {
-                display->setColor(WHITE);
-                display->fillRect(boxLeft, boxTop, boxWidth, effectiveLineHeight);
-                display->setColor(BLACK);
-                display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, boxTop, lineBuffer);
-                display->setColor(WHITE);
-                if (needs_bell) {
-                    int bellY = boxTop + (FONT_HEIGHT_SMALL - 8) / 2;
-                    display->drawXbm(boxLeft + (boxWidth - lineWidths[i]) / 2 - 10, bellY, 8, 8, bell_alert);
-                    display->drawXbm(boxLeft + (boxWidth + lineWidths[i]) / 2 + 2, bellY, 8, 8, bell_alert);
-                }
-            }
-            lineY = boxTop + effectiveLineHeight + 1;
-        } else if (isSelectedOption) {
-            display->setColor(WHITE);
-            display->fillRect(boxLeft, lineY, boxWidth, effectiveLineHeight);
-            display->setColor(BLACK);
-            if (lineLengths[i] > 15 && lineWidths[i] > visibleWidth) {
-                int textX = boxLeft + hPadding + swingOffset;
-                display->drawString(textX, lineY - 1, lineBuffer);
-            } else {
-                display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, lineY - 1, lineBuffer);
-            }
-            display->setColor(WHITE);
-            lineY += effectiveLineHeight;
-        } else {
-            display->setColor(BLACK);
-            display->fillRect(boxLeft, lineY, boxWidth, effectiveLineHeight);
-            display->setColor(WHITE);
-            display->drawString(boxLeft + (boxWidth - lineWidths[i]) / 2, lineY, lineBuffer);
-            lineY += effectiveLineHeight;
-        }
-    }
-    if (totalLines > visibleTotalLines) {
-        const uint8_t scrollBarWidth = 5;
-        int16_t scrollBarX = boxLeft + boxWidth - scrollBarWidth - 2;
-        int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight;
-        uint16_t scrollBarHeight = boxHeight - vPadding * 2 - effectiveLineHeight;
-        float ratio = (float)visibleTotalLines / totalLines;
-        uint16_t indicatorHeight = std::max((int)(scrollBarHeight * ratio), 4);
-        float scrollRatio = (float)(firstOptionToShow + lineCount - visibleTotalLines) / (totalLines - visibleTotalLines);
-        uint16_t indicatorY = scrollBarY + scrollRatio * (scrollBarHeight - indicatorHeight);
-        display->drawRect(scrollBarX, scrollBarY, scrollBarWidth, scrollBarHeight);
-        display->fillRect(scrollBarX + 1, indicatorY, scrollBarWidth - 2, indicatorHeight);
-    }
-#else
-    if (needs_bell) {
-        if (isHighResolution && boxWidth <= 150)
-            boxWidth += 26;
-        if (!isHighResolution && boxWidth <= 100)
-            boxWidth += 20;
-    }
-
-    uint16_t screenHeight = display->height();
-    uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
-    uint8_t visibleTotalLines = std::min<uint8_t>(lineCount, (screenHeight - vPadding * 2) / effectiveLineHeight);
-    uint16_t contentHeight = visibleTotalLines * effectiveLineHeight;
-    uint16_t boxHeight = contentHeight + vPadding * 2;
-    if (visibleTotalLines == 1) {
-        boxHeight += (isHighResolution) ? 4 : 3;
-    }
-
-    int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
-    if (totalLines > visibleTotalLines) {
-        boxWidth += (isHighResolution) ? 4 : 2;
-    }
-    int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
-
-    // === Draw Box ===
+    // Draw Box
     display->setColor(BLACK);
     display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
     display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);
@@ -629,18 +756,24 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
     display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
     display->setColor(WHITE);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    registerTFTActionMenuRegions(boxLeft, boxTop, boxWidth, boxHeight);
+#endif
 
-    // === Draw Content ===
+    // Draw Content
     int16_t lineY = boxTop + vPadding;
-    for (int i = 0; i < lineCount; i++) {
+    for (int i = 0; i < visibleTotalLines; i++) {
+        display->setFont(fontForBannerLine(lineFonts[i]));
+        int16_t thisLineHeight = lineEffectiveHeights[i] ? lineEffectiveHeights[i] : effectiveLineHeight;
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
         if (needs_bell && i == 0) {
-            int bellY = lineY + (FONT_HEIGHT_SMALL - 8) / 2;
+            int fontHeight = thisLineHeight + 3;
+            int bellY = lineY + (fontHeight - 8) / 2;
             display->drawXbm(textX - 10, bellY, 8, 8, bell_alert);
             display->drawXbm(textX + lineWidths[i] + 2, bellY, 8, 8, bell_alert);
         }
         char lineBuffer[lineLengths[i] + 1];
-        strncpy(lineBuffer, lines[i], lineLengths[i]);
+        strncpy(lineBuffer, renderLines[i], lineLengths[i]);
         lineBuffer[lineLengths[i]] = '\0';
         // Determine if this is a pop-up or a pick list
         if (alertBannerOptions > 0 && i == 0) {
@@ -651,25 +784,96 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             if (strchr(lineBuffer, 'p') || strchr(lineBuffer, 'g') || strchr(lineBuffer, 'y') || strchr(lineBuffer, 'j')) {
                 background_yOffset = -1;
             }
-            display->fillRect(boxLeft, boxTop + 1, boxWidth, effectiveLineHeight - background_yOffset);
+            const int16_t titleBarY = boxTop + 1;
+            const int16_t titleBarHeight = effectiveLineHeight - background_yOffset;
+            display->fillRect(boxLeft, titleBarY, boxWidth, titleBarHeight);
+#if GRAPHICS_TFT_COLORING_ENABLED
+            if (alertBannerOptions > 0) {
+                const uint16_t titleTextColor =
+                    (getActiveTheme().id == ThemeID::DefaultLight) ? TFTPalette::Black : getThemeHeaderText();
+                // Keep title role away from border/corner pixels so rounded-corner masks are not remapped to the title text
+                // color.
+                if (boxWidth > 2 && titleBarHeight > 0) {
+                    setAndRegisterTFTColorRole(TFTColorRole::ActionMenuTitle, getThemeHeaderBg(), titleTextColor, boxLeft + 1,
+                                               titleBarY, boxWidth - 2, titleBarHeight);
+                }
+            }
+#endif
             display->setColor(BLACK);
             int yOffset = 3;
-            display->drawString(textX, lineY - yOffset, lineBuffer);
+            if (current_notification_type == notificationTypeEnum::node_picker) {
+                UIRenderer::drawStringWithEmotes(display, textX, lineY - yOffset, lineBuffer, FONT_HEIGHT_SMALL, 1, false);
+            } else {
+                display->drawString(textX, lineY - yOffset, lineBuffer);
+            }
             display->setColor(WHITE);
-            lineY += (effectiveLineHeight - 2 - background_yOffset);
+            lineY += (thisLineHeight - 2 - background_yOffset);
         } else {
             // Pop-up
-            display->drawString(textX, lineY, lineBuffer);
-            lineY += (effectiveLineHeight);
+            // If this is the Signal line, center text + bars as one group
+            bool isSignalLine = (graphics::bannerSignalBars >= 0 && strstr(lineBuffer, "Signal:") != nullptr);
+            if (isSignalLine) {
+                const int totalBars = 5;
+                const int barWidth = 3;
+                const int barSpacing = 2;
+                const int barHeightStep = 2;
+                const int gap = 6;
+                const int maxBarHeight = totalBars * barHeightStep;
+
+                int textWidth = display->getStringWidth(lineBuffer, strlen(lineBuffer), true);
+                int barsWidth = totalBars * barWidth + (totalBars - 1) * barSpacing + gap;
+                int totalWidth = textWidth + barsWidth;
+                int groupStartX = boxLeft + (boxWidth - totalWidth) / 2;
+
+                if (current_notification_type == notificationTypeEnum::node_picker) {
+                    UIRenderer::drawStringWithEmotes(display, groupStartX, lineY, lineBuffer, FONT_HEIGHT_SMALL, 1, false);
+                } else {
+                    display->drawString(groupStartX, lineY, lineBuffer);
+                }
+
+                int baseX = groupStartX + textWidth + gap;
+                int baseY = lineY + effectiveLineHeight - 1;
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (graphics::bannerSignalBars > 0) {
+                    uint16_t signalBarsColor = TFTPalette::Medium;
+                    if (graphics::bannerSignalBars <= 1) {
+                        signalBarsColor = TFTPalette::Bad;
+                    } else if (graphics::bannerSignalBars >= 4) {
+                        signalBarsColor = TFTPalette::Good;
+                    }
+                    const int activeBars = min(graphics::bannerSignalBars, totalBars);
+                    const int regionWidth = activeBars * barWidth + (activeBars - 1) * barSpacing;
+                    setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, baseX,
+                                               baseY - maxBarHeight, regionWidth, maxBarHeight);
+                }
+#endif
+                for (int b = 0; b < totalBars; b++) {
+                    int barHeight = (b + 1) * barHeightStep;
+                    int x = baseX + b * (barWidth + barSpacing);
+                    int y = baseY - barHeight;
+
+                    if (b < graphics::bannerSignalBars) {
+                        display->fillRect(x, y, barWidth, barHeight);
+                    } else {
+                        display->drawRect(x, y, barWidth, barHeight);
+                    }
+                }
+            } else {
+                if (current_notification_type == notificationTypeEnum::node_picker) {
+                    UIRenderer::drawStringWithEmotes(display, textX, lineY, lineBuffer, FONT_HEIGHT_SMALL, 1, false);
+                } else {
+                    display->drawString(textX, lineY, lineBuffer);
+                }
+            }
+            lineY += thisLineHeight;
         }
     }
 
-    // === Scroll Bar (Thicker, inside box, not over title) ===
+    // Scroll Bar (Thicker, inside box, not over title)
     if (totalLines > visibleTotalLines) {
         const uint8_t scrollBarWidth = 5;
-
         int16_t scrollBarX = boxLeft + boxWidth - scrollBarWidth - 2;
-        int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight; // start after title line
+        int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight;
         uint16_t scrollBarHeight = boxHeight - vPadding * 2 - effectiveLineHeight;
 
         float ratio = (float)visibleTotalLines / totalLines;
@@ -680,7 +884,6 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
         display->drawRect(scrollBarX, scrollBarY, scrollBarWidth, scrollBarHeight);
         display->fillRect(scrollBarX + 1, indicatorY, scrollBarWidth - 2, indicatorHeight);
     }
-#endif
 }
 
 /// Draw the last text message we received
@@ -709,9 +912,93 @@ void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUi
                                 "Please be patient and do not power off.");
 }
 
+void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    if (virtualKeyboard) {
+        // Check for timeout and auto-exit if needed
+        if (virtualKeyboard->isTimedOut()) {
+            LOG_INFO("Virtual keyboard timeout - auto-exiting");
+            // Cancel virtual keyboard - call callback with empty string to indicate timeout
+            auto callback = textInputCallback; // Store callback before clearing
+
+            // Clean up first to prevent re-entry
+            delete virtualKeyboard;
+            virtualKeyboard = nullptr;
+            textInputCallback = nullptr;
+            resetBanner();
+
+            // Call callback after cleanup
+            if (callback) {
+                callback("");
+            }
+
+            // Restore normal overlays
+            if (screen) {
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            }
+            return;
+        }
+
+        if (inEvent.inputEvent != INPUT_BROKER_NONE) {
+            bool handled = OnScreenKeyboardModule::processVirtualKeyboardInput(inEvent, virtualKeyboard);
+            if (!handled && inEvent.inputEvent == INPUT_BROKER_CANCEL) {
+                auto callback = textInputCallback;
+                delete virtualKeyboard;
+                virtualKeyboard = nullptr;
+                textInputCallback = nullptr;
+                resetBanner();
+                if (callback) {
+                    callback("");
+                }
+                if (screen) {
+                    screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+                }
+                return;
+            }
+
+            // Consume the event after processing for virtual keyboard
+            inEvent.inputEvent = INPUT_BROKER_NONE;
+        }
+
+        // Re-check pointer before drawing to avoid use-after-free and crashes
+        if (!virtualKeyboard) {
+            // Ensure we exit text_input state and restore frames
+            if (current_notification_type == notificationTypeEnum::text_input) {
+                resetBanner();
+            }
+            if (screen) {
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            }
+            // If screen is null, do nothing (safe fallback)
+            return;
+        }
+
+        // Clear the screen to avoid overlapping with underlying frames or overlays
+        display->setColor(BLACK);
+        display->fillRect(0, 0, display->getWidth(), display->getHeight());
+        display->setColor(WHITE);
+        // Draw the virtual keyboard
+        virtualKeyboard->draw(display, 0, 0);
+
+        // Draw transient popup overlay (if any) managed by OnScreenKeyboardModule
+        OnScreenKeyboardModule::instance().drawPopupOverlay(display);
+    } else {
+        // If virtualKeyboard is null, reset the banner to avoid getting stuck
+        LOG_INFO("Virtual keyboard is null - resetting banner");
+        resetBanner();
+    }
+}
+
 bool NotificationRenderer::isOverlayBannerShowing()
 {
     return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
+}
+
+void NotificationRenderer::showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs)
+{
+    if (!title || !content || current_notification_type != notificationTypeEnum::text_input)
+        return;
+    OnScreenKeyboardModule::instance().showPopup(title, content, durationMs);
 }
 
 } // namespace graphics

@@ -1,18 +1,10 @@
-#define LED_PIN 35
-
-#define USE_SSD1306 // Heltec_v4 has an SSD1315 display (compatible with SSD1306 driver)
-
-#define RESET_OLED 21
-#define I2C_SDA 17 // I2C pins for this board
-#define I2C_SCL 18
-
 #define VEXT_ENABLE 36 // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
 
 #define ADC_CTRL 37
 #define ADC_CTRL_ENABLED HIGH
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_0
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.045
 
@@ -37,10 +29,60 @@
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-#define LORA_PA_POWER 7 // power en
-#define LORA_PA_EN 2
-#define LORA_PA_TX_EN 46 // enable tx
+// Enable Traffic Management Module for Heltec V4
+#ifndef HAS_TRAFFIC_MANAGEMENT
+#define HAS_TRAFFIC_MANAGEMENT 1
+#endif
+#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048
+#endif
 
+// ---- GC1109 RF FRONT END CONFIGURATION ----
+// The Heltec V4.2 uses a GC1109 FEM chip with integrated PA and LNA
+// RF path: SX1262 -> Pi attenuator -> GC1109 PA -> Antenna
+// Measured net TX gain (non-linear due to PA compression):
+//   +11dB at 0-15dBm input  (e.g., 10dBm in -> 21dBm out)
+//   +10dB at 16-17dBm input
+//   +9dB  at 18-19dBm input
+//   +7dB  at 21dBm input    (e.g., 21dBm in -> 28dBm out max)
+// Control logic (from GC1109 datasheet):
+//   Shutdown:        CSD=0, CTX=X, CPS=X
+//   Receive LNA:     CSD=1, CTX=0, CPS=X  (17dB gain, 2dB NF)
+//   Transmit bypass: CSD=1, CTX=1, CPS=0  (~1dB loss, no PA)
+//   Transmit PA:     CSD=1, CTX=1, CPS=1  (full PA enabled)
+// Pin mapping:
+//   CTX (pin 6)  -> SX1262 DIO2: TX/RX path select (automatic via SX126X_DIO2_AS_RF_SWITCH)
+//   CSD (pin 4)  -> GPIO2: Chip enable (HIGH=on, LOW=shutdown)
+//   CPS (pin 5)  -> GPIO46: PA mode select (HIGH=full PA, LOW=bypass)
+//   VCC0/VCC1    -> Vfem via U3 LDO, controlled by GPIO7
+// GC1109 FEM: TX/RX path switching is handled by DIO2 -> CTX pin (via SX126X_DIO2_AS_RF_SWITCH)
+// Do NOT use SX126X_TXEN/RXEN as that would cause double-control of GPIO46
+
+#define LORA_PA_POWER 7         // VFEM_Ctrl - GC1109 and KCT8103L LDO power enable
+#define LORA_GC1109_PA_EN 2     // CSD - GC1109 chip enable (HIGH=on)
+#define LORA_GC1109_PA_TX_EN 46 // CPS - GC1109 PA mode (HIGH=full PA, LOW=bypass)
+
+// ---- KCT8103L RF FRONT END CONFIGURATION ----
+// The Heltec V4.3 uses a KCT8103L FEM chip with integrated PA and LNA
+// RF path: SX1262 -> Pi attenuator -> KCT8103L PA -> Antenna
+// Control logic (from KCT8103L datasheet):
+//   Transmit PA:     CSD=1, CTX=1, CPS=1
+//   Receive LNA:     CSD=1, CTX=0, CPS=X  (21dB gain, 1.9dB NF)
+//   Receive bypass:  CSD=1, CTX=1, CPS=0
+//   Shutdown:        CSD=0, CTX=X, CPS=X
+// Pin mapping:
+//   CPS (pin 5)  -> SX1262 DIO2: TX/RX path select (automatic via SX126X_DIO2_AS_RF_SWITCH)
+//   CSD (pin 4)  -> GPIO2: Chip enable (HIGH=on, LOW=shutdown)
+//   CTX (pin 6)  -> GPIO5: Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=RX bypass, LOW=RX LNA)
+//   VCC0/VCC1    -> Vfem via U3 LDO, controlled by GPIO7
+// KCT8103L FEM: TX/RX path switching is handled by DIO2 -> CPS pin (via SX126X_DIO2_AS_RF_SWITCH)
+
+#define LORA_KCT8103L_PA_CSD 2 // CSD - KCT8103L chip enable (HIGH=on)
+#define LORA_KCT8103L_PA_CTX 5 // CTX - Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=RX bypass, LOW=RX LNA)
+
+#if HAS_TFT
+#define USE_TFTDISPLAY 1
+#endif
 /*
  * GPS pins
  */

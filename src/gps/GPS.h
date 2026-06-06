@@ -2,6 +2,8 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 
+#include <memory>
+
 #include "GPSStatus.h"
 #include "GpioLogic.h"
 #include "Observer.h"
@@ -15,6 +17,14 @@
 #ifndef GPS_EN_ACTIVE
 #define GPS_EN_ACTIVE 1
 #endif
+
+// Allow defining the polarity of the STANDBY output.  default is LOW for standby
+#ifndef GPS_STANDBY_ACTIVE
+#define GPS_STANDBY_ACTIVE LOW
+#endif
+
+static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
+static constexpr uint32_t GPS_FIX_HOLD_MAX_MS = 20000;
 
 typedef enum {
     GNSS_MODEL_ATGM336H,
@@ -110,7 +120,7 @@ class GPS : private concurrency::OSThread
 
     // Creates an instance of the GPS class.
     // Returns the new instance or null if the GPS is not present.
-    static GPS *createGps();
+    static std::unique_ptr<GPS> createGps();
 
     // Wake the GPS hardware - ready for an update
     void up();
@@ -151,6 +161,8 @@ class GPS : private concurrency::OSThread
     TinyGPSPlus reader;
     uint8_t fixQual = 0; // fix quality from GPGGA
     uint32_t lastChecksumFailCount = 0;
+    uint8_t currentStep = 0;
+    int32_t currentDelay = 2000;
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
@@ -173,8 +185,6 @@ class GPS : private concurrency::OSThread
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
 
-    bool isInPowersave = false;
-
     bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
 
     bool hasGPS = false; // Do we have a GPS we are talking to
@@ -191,6 +201,8 @@ class GPS : private concurrency::OSThread
     /** If !NULL we will use this serial port to construct our GPS */
 #if defined(ARCH_RP2040)
     static SerialUART *_serial_gps;
+#elif defined(ARCH_NRF52)
+    static Uart *_serial_gps;
 #else
     static HardwareSerial *_serial_gps;
 #endif
@@ -246,5 +258,5 @@ class GPS : private concurrency::OSThread
     uint8_t fixeddelayCtr = 0;
 };
 
-extern GPS *gps;
+extern std::unique_ptr<GPS> gps;
 #endif // Exclude GPS

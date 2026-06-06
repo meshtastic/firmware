@@ -3,14 +3,22 @@
 # trunk-ignore-all(hadolint/DL3018): Do not pin apk package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
-FROM python:3.13-alpine3.22 AS builder
+# Ensure the Alpine version is updated in both stages of the container!
+FROM alpine:3.23 AS builder
 ARG PIO_ENV=native
-ENV PIP_ROOT_USER_ACTION=ignore
 
+# Enable Alpine community repository (for 'py3-grpcio-tools')
+RUN echo "https://dl-cdn.alpinelinux.org/alpine/v$(cut -d. -f1,2 /etc/alpine-release)/community" >> /etc/apk/repositories
+
+# Install Dependencies
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN apk --no-cache add \
-        bash g++ libstdc++-dev linux-headers zip git ca-certificates libgpiod-dev yaml-cpp-dev bluez-dev \
+        bash g++ libstdc++-dev linux-headers zip git ca-certificates libbsd-dev \
+        py3-pip py3-grpcio-tools \
+        libgpiod-dev yaml-cpp-dev jsoncpp-dev bluez-dev \
         libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \
-        libx11-dev libinput-dev libxkbcommon-dev \
+        libx11-dev libinput-dev libxkbcommon-dev sqlite-dev sdl2-dev \
     && rm -rf /var/cache/apk/* \
     && pip install --no-cache-dir -U platformio \
     && mkdir /tmp/firmware
@@ -27,7 +35,7 @@ RUN bash ./bin/build-native.sh "$PIO_ENV" && \
 
 # ##### PRODUCTION BUILD #############
 
-FROM alpine:3.22
+FROM alpine:3.23
 LABEL org.opencontainers.image.title="Meshtastic" \
       org.opencontainers.image.description="Alpine Meshtastic daemon" \
       org.opencontainers.image.url="https://meshtastic.org" \
@@ -40,8 +48,8 @@ LABEL org.opencontainers.image.title="Meshtastic" \
 USER root
 
 RUN apk --no-cache add \
-        shadow libstdc++ libgpiod yaml-cpp libusb i2c-tools libuv \
-        libx11 libinput libxkbcommon \
+        shadow libstdc++ libbsd libgpiod yaml-cpp jsoncpp libusb \
+        i2c-tools libuv libx11 libinput libxkbcommon sdl2 \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \

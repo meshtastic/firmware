@@ -90,8 +90,8 @@ int32_t PaxcounterModule::runOnce()
             configuration.blecounter = 1;
             configuration.blescantime = 0; // infinite
             configuration.wificounter = 1;
-            configuration.wifi_channel_map = WIFI_CHANNEL_ALL;
-            configuration.wifi_channel_switch_interval = 50;
+            // configuration.wifi_channel_map = WIFI_CHANNEL_ALL;
+            // configuration.wifi_channel_switch_interval = 50;
             configuration.wifi_rssi_threshold = Default::getConfiguredOrDefault(moduleConfig.paxcounter.wifi_threshold, -80);
             configuration.ble_rssi_threshold = Default::getConfiguredOrDefault(moduleConfig.paxcounter.ble_threshold, -80);
             libpax_update_config(&configuration);
@@ -141,6 +141,7 @@ void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->drawStringf(display->getWidth() / 2 + x, graphics::getTextPositions(display)[line++], buffer,
                          "WiFi: %d\nBLE: %d\nUptime: %ds", count_from_libpax.wifi_count, count_from_libpax.ble_count,
                          millis() / 1000);
+    graphics::drawCommonFooter(display, x, y);
 }
 #endif // HAS_SCREEN
 

@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
+#include <memory>
 
 extern concurrency::Lock *cryptLock;
 
@@ -35,13 +36,16 @@ class CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
     virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
+    virtual bool ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user);
 
 #endif
-    void clearKeys();
     void setDHPrivateKey(uint8_t *_private_key);
-    virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
+    // The remotePublic key parameter takes the public_key bytes container from
+    // a stored node header. NodeInfoLite is the on-device storage type since
+    // the slim refactor flattened UserLite into it.
+    virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic,
                                    uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
-    virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
+    virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic, uint64_t packetNum,
                                    size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
     virtual bool setDHPublicKey(uint8_t *publicKey);
     virtual void hash(uint8_t *bytes, size_t numBytes);
@@ -49,7 +53,7 @@ class CryptoEngine
     virtual void aesSetKey(const uint8_t *key, size_t key_len);
 
     virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-    AESSmall256 *aes = NULL;
+    std::unique_ptr<AESSmall256> aes = nullptr;
 
 #endif
 
@@ -78,7 +82,6 @@ class CryptoEngine
     /** Our per packet nonce */
     uint8_t nonce[16] = {0};
     CryptoKey key = {};
-    CTRCommon *ctr = NULL;
 #if !(MESHTASTIC_EXCLUDE_PKI)
     uint8_t shared_key[32] = {0};
     uint8_t private_key[32] = {0};

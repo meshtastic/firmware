@@ -7,6 +7,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 #include <functional>
+#include <memory>
 #include <unordered_map>
 
 struct PacketHistoryStruct {
@@ -21,15 +22,25 @@ struct PacketHistoryStruct {
     pb_size_t payload_size;
     int32_t rx_rssi;
     float rx_snr;
+    uint8_t hop_start;
+    uint8_t hop_limit;
+    bool via_mqtt;
+    uint8_t transport_mechanism;
 };
 
 class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<meshtastic_StoreAndForward>
 {
+    // packetHistory is allocated with ps_calloc / calloc, so it must be released with free(),
+    // not delete[].
+    struct CFreeDeleter {
+        void operator()(PacketHistoryStruct *p) const noexcept { free(p); }
+    };
+
     bool busy = 0;
     uint32_t busyTo = 0;
     char routerMessage[meshtastic_Constants_DATA_PAYLOAD_LEN] = {0};
 
-    PacketHistoryStruct *packetHistory = 0;
+    std::unique_ptr<PacketHistoryStruct[], CFreeDeleter> packetHistory;
     uint32_t packetHistoryTotalCount = 0;
     uint32_t last_time = 0;
     uint32_t requestCount = 0;

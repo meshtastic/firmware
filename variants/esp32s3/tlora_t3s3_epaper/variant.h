@@ -12,7 +12,7 @@
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to
 // measure battery voltage ratio of voltage divider = 2.0 (assumption)
 #define ADC_MULTIPLIER 2.11 // 2.0 + 10% for correction of display undervoltage.
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_0
 
 #define I2C_SDA SDA
 #define I2C_SCL SCL
@@ -22,7 +22,7 @@
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
 
-#define LED_PIN 37
+#define LED_POWER 37
 #define BUTTON_PIN 0
 #define BUTTON_NEED_PULLUP
 

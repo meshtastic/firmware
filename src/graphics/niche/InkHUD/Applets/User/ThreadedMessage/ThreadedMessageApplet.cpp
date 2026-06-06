@@ -7,22 +7,12 @@
 
 using namespace NicheGraphics;
 
-// Hard limits on how much message data to write to flash
-// Avoid filling the storage if something goes wrong
-// Normal usage should be well below this size
-constexpr uint8_t MAX_MESSAGES_SAVED = 10;
-constexpr uint32_t MAX_MESSAGE_SIZE = 250;
-
 InkHUD::ThreadedMessageApplet::ThreadedMessageApplet(uint8_t channelIndex)
     : SinglePortModule("ThreadedMessageApplet", meshtastic_PortNum_TEXT_MESSAGE_APP), channelIndex(channelIndex)
 {
-    // Create the message store
-    // Will shortly attempt to load messages from RAM, if applet is active
-    // Label (filename in flash) is set from channel index
-    store = new MessageStore("ch" + to_string(channelIndex));
 }
 
-void InkHUD::ThreadedMessageApplet::onRender()
+void InkHUD::ThreadedMessageApplet::onRender(bool full)
 {
     // =============
     // Draw a header
@@ -61,17 +51,24 @@ void InkHUD::ThreadedMessageApplet::onRender()
     const uint16_t msgW = (msgR - msgL) + 1;
 
     int16_t msgB = height() - 1; // Vertical cursor for drawing. Messages are bottom-aligned to this value.
-    uint8_t i = 0;               // Index of stored message
 
-    // Loop over messages
-    // - until no messages left, or
-    // - until no part of message fits on screen
-    while (msgB >= (0 - fontSmall.lineHeight()) && i < store->messages.size()) {
+    // Iterate the global store newest-first, showing only broadcast messages on our channel
+    const auto &allMessages = messageStore.getLiveMessages();
+    int msgIdx = (int)allMessages.size() - 1;
+
+    while (msgB >= (0 - fontSmall.lineHeight()) && msgIdx >= 0) {
+
+        const StoredMessage &m = allMessages.at(msgIdx);
+
+        // Skip messages that don't belong to this channel or are DMs
+        if (m.type != MessageType::BROADCAST || m.channelIndex != channelIndex) {
+            msgIdx--;
+            continue;
+        }
 
         // Grab data for message
-        MessageStore::Message &m = store->messages.at(i);
-        bool outgoing = (m.sender == 0) || (m.sender == myNodeInfo.my_node_num); // Own NodeNum if canned message
-        std::string bodyText = parse(m.text);                                    // Parse any non-ascii chars in the message
+        bool outgoing = (m.sender == myNodeInfo.my_node_num);
+        std::string bodyText = parse(std::string(MessageStore::getText(m))); // Parse any non-ascii chars
 
         // Cache bottom Y of message text
         // - Used when drawing vertical line alongside
@@ -152,18 +149,13 @@ void InkHUD::ThreadedMessageApplet::onRender()
         // Move cursor up: padding before next message
         msgB -= fontSmall.lineHeight() * 0.5;
 
-        i++;
+        msgIdx--;
     } // End of loop: drawing each message
 
     // Fade effect:
     // Area immediately below the divider. Overdraw with sparse white lines.
     // Make text appear to pass behind the header
     hatchRegion(0, dividerY + 1, width(), fontSmall.lineHeight() / 3, 2, WHITE);
-
-    // If we've run out of screen to draw messages, we can drop any leftover data from the queue
-    // Those messages have been pushed off the screen-top by newer ones
-    while (i < store->messages.size())
-        store->messages.pop_back();
 }
 
 // Code which runs when the applet begins running
@@ -198,16 +190,8 @@ ProcessMessage InkHUD::ThreadedMessageApplet::handleReceived(const meshtastic_Me
     if (mp.to != NODENUM_BROADCAST)
         return ProcessMessage::CONTINUE;
 
-    // Extract info into our slimmed-down "StoredMessage" type
-    MessageStore::Message newMessage;
-    newMessage.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
-    newMessage.sender = mp.from;
-    newMessage.channelIndex = mp.channel;
-    newMessage.text = std::string((const char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
-
-    // Store newest message at front
-    // These records are used when rendering, and also stored in flash at shutdown
-    store->messages.push_front(newMessage);
+    // Store in the global messageStore — this handles sender, timestamp, channel, text, and ack status
+    messageStore.addFromPacket(mp);
 
     // If this was an incoming message, suggest that our applet becomes foreground, if permitted
     if (getFrom(&mp) != nodeDB->getNodeNum())
@@ -232,37 +216,25 @@ bool InkHUD::ThreadedMessageApplet::approveNotification(Notification &n)
         return true;
 }
 
-// Save several recent messages to flash
-// Stores the contents of ThreadedMessageApplet::messages
-// Just enough messages to fill the display
-// Messages are packed "back-to-back", to minimize blocks of flash used
+// Save messages to flash via the global messageStore.
+// The global store holds messages for all channels; no per-channel file is needed.
 void InkHUD::ThreadedMessageApplet::saveMessagesToFlash()
 {
-    // Create a label (will become the filename in flash)
-    std::string label = "ch" + to_string(channelIndex);
-
-    store->saveToFlash();
+    messageStore.saveToFlash();
 }
 
-// Load recent messages to flash
-// Fills ThreadedMessageApplet::messages with previous messages
-// Just enough messages have been stored to cover the display
+// Messages are loaded once by InkHUD::begin() before applets start.
+// Nothing to do here at per-applet activation time.
 void InkHUD::ThreadedMessageApplet::loadMessagesFromFlash()
 {
-    // Create a label (will become the filename in flash)
-    std::string label = "ch" + to_string(channelIndex);
-
-    store->loadFromFlash();
+    // No-op: messageStore.loadFromFlash() is called in InkHUD::begin()
 }
 
 // Code to run when device is shutting down
 // This is in addition to any onDeactivate() code, which will also run
-// Todo: implement before a reboot also
 void InkHUD::ThreadedMessageApplet::onShutdown()
 {
-    // Save our current set of messages to flash, provided the applet isn't disabled
-    if (isActive())
-        saveMessagesToFlash();
+    // messageStore.saveToFlash() is called centrally by Events::beforeDeepSleep / beforeReboot
 }
 
 #endif

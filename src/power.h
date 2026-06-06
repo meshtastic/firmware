@@ -4,8 +4,10 @@
 #include "configuration.h"
 
 #ifdef ARCH_ESP32
-// "legacy adc calibration driver is deprecated, please migrate to use esp_adc/adc_cali.h and esp_adc/adc_cali_scheme.h
-#include <esp_adc_cal.h>
+// #include <driver/adc.h>
+#include <esp_adc/adc_cali.h>
+#include <esp_adc/adc_cali_scheme.h>
+#include <esp_adc/adc_oneshot.h>
 #include <soc/adc_channel.h>
 #endif
 
@@ -13,28 +15,12 @@
 #define NUM_OCV_POINTS 11
 #endif
 
+// Device specific curves go in variant.h
 #ifndef OCV_ARRAY
-#ifdef CELL_TYPE_LIFEPO4
-#define OCV_ARRAY 3400, 3350, 3320, 3290, 3270, 3260, 3250, 3230, 3200, 3120, 3000
-#elif defined(CELL_TYPE_LEADACID)
-#define OCV_ARRAY 2120, 2090, 2070, 2050, 2030, 2010, 1990, 1980, 1970, 1960, 1950
-#elif defined(CELL_TYPE_ALKALINE)
-#define OCV_ARRAY 1580, 1400, 1350, 1300, 1280, 1250, 1230, 1190, 1150, 1100, 1000
-#elif defined(CELL_TYPE_NIMH)
-#define OCV_ARRAY 1400, 1300, 1280, 1270, 1260, 1250, 1240, 1230, 1210, 1150, 1000
-#elif defined(CELL_TYPE_LTO)
-#define OCV_ARRAY 2700, 2560, 2540, 2520, 2500, 2460, 2420, 2400, 2380, 2320, 1500
-#elif defined(TRACKER_T1000_E)
-#define OCV_ARRAY 4190, 4042, 3957, 3885, 3820, 3776, 3746, 3725, 3696, 3644, 3100
-#elif defined(HELTEC_MESH_POCKET_BATTERY_5000)
-#define OCV_ARRAY 4300, 4240, 4120, 4000, 3888, 3800, 3740, 3698, 3655, 3580, 3400
-#elif defined(HELTEC_MESH_POCKET_BATTERY_10000)
-#define OCV_ARRAY 4100, 4060, 3960, 3840, 3729, 3625, 3550, 3500, 3420, 3345, 3100
-#elif defined(SEEED_WIO_TRACKER_L1)
-#define OCV_ARRAY 4200, 3876, 3826, 3763, 3713, 3660, 3573, 3485, 3422, 3359, 3300
-#elif defined(SEEED_SOLAR_NODE)
-#define OCV_ARRAY 4200, 3986, 3922, 3812, 3734, 3645, 3527, 3420, 3281, 3087, 2786
-#else // LiIon
+#if defined(ARCH_STM32WL) && BATTERY_PIN == AVBAT
+// STM32 VDD/VBAT absolute maximum is 4V so use an LFP curve
+#define OCV_ARRAY 3650, 3400, 3340, 3320, 3300, 3280, 3270, 3260, 3240, 3200, 2500
+#else
 #define OCV_ARRAY 4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 #endif
 #endif
@@ -42,11 +28,6 @@
 /*Note: 12V lead acid is 6 cells, most board accept only 1 cell LiIon/LiPo*/
 #ifndef NUM_CELLS
 #define NUM_CELLS 1
-#endif
-
-#ifdef BAT_MEASURE_ADC_UNIT
-extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
-#include "soc/sens_reg.h" // needed for adc pin reset
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
@@ -102,7 +83,7 @@ extern RAK9154Sensor rak9154Sensor;
 extern XPowersLibInterface *PMU;
 #endif
 
-class Power : private concurrency::OSThread
+class Power : public concurrency::OSThread
 {
 
   public:
@@ -116,6 +97,15 @@ class Power : private concurrency::OSThread
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
     const uint16_t OCV[11] = {OCV_ARRAY};
+    bool isLowBattery() { return low_voltage_counter >= 10; };
+
+#ifdef ARCH_ESP32
+    int beforeLightSleep(void *unused);
+    int afterLightSleep(esp_sleep_wakeup_cause_t cause);
+#endif
+
+    void attachPowerInterrupts();
+    void detachPowerInterrupts();
 
   protected:
     meshtastic::PowerStatus *statusHandler;
@@ -124,21 +114,36 @@ class Power : private concurrency::OSThread
     bool axpChipInit();
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
-    /// Setup a Lipo battery level sensor
-    bool lipoInit();
+    /// Setup cw2015 battery level sensor
+    bool cw2015Init();
+    /// Setup a 17048 battery level sensor
+    bool max17048Init();
     /// Setup a Lipo charger
     bool lipoChargerInit();
     /// Setup a meshSolar battery sensor
     bool meshSolarInit();
+    /// Setup a serial battery sensor
+    bool serialBatteryInit();
 
   private:
     void shutdown();
     void reboot();
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
+    uint32_t lastLogTime = 0;
+
+#ifdef ARCH_ESP32
+    // Get notified when lightsleep begins and ends
+    CallbackObserver<Power, void *> lsObserver = CallbackObserver<Power, void *>(this, &Power::beforeLightSleep);
+    CallbackObserver<Power, esp_sleep_wakeup_cause_t> lsEndObserver =
+        CallbackObserver<Power, esp_sleep_wakeup_cause_t>(this, &Power::afterLightSleep);
+#endif
+
 #ifdef DEBUG_HEAP
     uint32_t lastheap;
 #endif
 };
+
+void battery_adcEnable();
 
 extern Power *power;

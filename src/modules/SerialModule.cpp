@@ -63,17 +63,25 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1) ||                          \
-    defined(ELECROW_ThinkNode_M5) || defined(HELTEC_MESH_SOLAR) || defined(T_ECHO_LITE)
-SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
-static Print *serialPrint = &Serial;
-#elif defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172)
-SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial") {}
-static Print *serialPrint = &Serial1;
-#else
-SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Serial") {}
-static Print *serialPrint = &Serial2;
+#ifndef SERIAL_PRINT_PORT
+#define SERIAL_PRINT_PORT 2
 #endif
+
+#if SERIAL_PRINT_PORT == 0
+#define SERIAL_PRINT_OBJECT Serial
+#elif SERIAL_PRINT_PORT == 1
+#define SERIAL_PRINT_OBJECT Serial1
+#elif SERIAL_PRINT_PORT == 2
+#define SERIAL_PRINT_OBJECT Serial2
+#else
+#error "Unsupported SERIAL_PRINT_PORT value. Allowed values are 0, 1, or 2."
+#endif
+
+SerialModule::SerialModule() : StreamAPI(&SERIAL_PRINT_OBJECT), concurrency::OSThread("Serial")
+{
+    api_type = TYPE_SERIAL;
+}
+static Print *serialPrint = &SERIAL_PRINT_OBJECT;
 
 char serialBytes[512];
 size_t serialPayloadSize;
@@ -86,7 +94,7 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
         const char *warning =
             "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
         LOG_ERROR(warning);
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);
@@ -194,8 +202,8 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(MESHLINK) &&                             \
-    !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5)
+#elif SERIAL_PRINT_PORT != 0
+
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
                 Serial2.setFIFOSize(RX_BUFFER);
@@ -242,17 +250,19 @@ int32_t SerialModule::runOnce()
                     uint32_t readIndex = 0;
                     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     while (tempNodeInfo != NULL) {
-                        if (tempNodeInfo->has_user && nodeDB->hasValidPosition(tempNodeInfo)) {
-                            printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
-                            serialPrint->printf("%s", outbuf);
+                        if (nodeInfoLiteHasUser(tempNodeInfo) && nodeDB->hasValidPosition(tempNodeInfo)) {
+                            meshtastic_PositionLite pos;
+                            if (nodeDB->copyNodePosition(tempNodeInfo->num, pos)) {
+                                printWPL(outbuf, sizeof(outbuf), pos, tempNodeInfo->long_name, true);
+                                serialPrint->printf("%s", outbuf);
+                            }
                         }
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
             }
 
-#if !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(MESHLINK) &&                               \
-    !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5)
+#if SERIAL_PRINT_PORT != 0
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -394,7 +404,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 serialPrint->write(p.payload.bytes, p.payload.size);
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-                const char *sender = (node && node->has_user) ? node->user.short_name : "???";
+                const char *sender = nodeInfoLiteHasUser(node) ? node->short_name : "???";
                 serialPrint->println();
                 serialPrint->printf("%s: %s", sender, p.payload.bytes);
                 serialPrint->println();
@@ -410,9 +420,13 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                         decoded = &scratch;
                     }
                     // send position packet as WPL to the serial port
-                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB->getMeshNode(getFrom(&mp))->user.long_name,
-                             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
-                    serialPrint->printf("%s", outbuf);
+                    {
+                        meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(getFrom(&mp));
+                        const char *senderName = senderNode ? senderNode->long_name : "";
+                        printWPL(outbuf, sizeof(outbuf), *decoded, senderName,
+                                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
+                        serialPrint->printf("%s", outbuf);
+                    }
                 }
             }
         }
@@ -526,8 +540,8 @@ ParsedLine parseLine(const char *line)
  */
 void SerialModule::processWXSerial()
 {
-#if !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) &&              \
-    !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5) && !defined(ARCH_STM32WL)
+#if SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
@@ -644,7 +658,7 @@ void SerialModule::processWXSerial()
         LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
                  strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
     }
-    if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
+    if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis) && velCount > 0 && dirCount > 0) {
         // calculate averages and send to the mesh
         float velAvg = 1.0 * velSum / velCount;
 

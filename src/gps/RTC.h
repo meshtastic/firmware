@@ -4,6 +4,10 @@
 #include "sys/time.h"
 #include <Arduino.h>
 
+#ifdef RX8130CE_RTC
+#include <ArtronShop_RX8130CE.h>
+#endif
+
 enum RTCQuality {
 
     /// We haven't had our RTC set yet
@@ -37,7 +41,7 @@ extern uint32_t lastSetFromPhoneNtpOrGps;
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
 RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate = false);
-RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t);
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t);
 
 /// Return a string name for the quality
 const char *RtcName(RTCQuality quality);
@@ -50,7 +54,11 @@ uint32_t getValidTime(RTCQuality minQuality, bool local = false);
 
 RTCSetResult readFromRTC();
 
-time_t gm_mktime(struct tm *tm);
+#ifdef PIO_UNIT_TESTING
+void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot);
+#endif
+
+time_t gm_mktime(const struct tm *tm);
 
 #define SEC_PER_DAY 86400
 #define SEC_PER_HOUR 3600

@@ -69,6 +69,8 @@ template <typename T> bool SX128xInterface<T>::init()
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     // \todo Display actual typename of the adapter, not just `SX128x`
     LOG_INFO("SX128x init result %d", res);
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
+        return false;
 
     if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
         LOG_WARN("Radio only supports 2.4GHz LoRa. Adjusting Region and rebooting");
@@ -124,7 +126,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    err = lora.setCodingRate(cr);
+    err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
@@ -142,8 +144,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > SX128X_MAX_POWER) // This chip has lower power limits than some
-        power = SX128X_MAX_POWER;
+    limitPower(SX128X_MAX_POWER);
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE)
@@ -152,10 +153,10 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
-template <typename T> void INTERRUPT_ATTR SX128xInterface<T>::disableInterrupt()
+template <typename T> void SX128xInterface<T>::disableInterrupt()
 {
     lora.clearDio1Action();
 }
@@ -204,6 +205,7 @@ template <typename T> void SX128xInterface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
 /** We override to turn on transmitter power as needed.
@@ -268,6 +270,7 @@ template <typename T> void SX128xInterface<T>::startReceive()
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag();
 #endif
 }
 
@@ -321,5 +324,11 @@ template <typename T> bool SX128xInterface<T>::sleep()
 #endif
 
     return true;
+}
+
+template <typename T> int16_t SX128xInterface<T>::getCurrentRSSI()
+{
+    float rssi = lora.getRSSI(false);
+    return (int16_t)round(rssi);
 }
 #endif

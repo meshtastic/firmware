@@ -1,4 +1,4 @@
-#define LED_PIN 18
+#define LED_POWER 18
 
 #define _VARIANT_HELTEC_WIRELESS_TRACKER
 #define HELTEC_TRACKER_V1_X
@@ -27,6 +27,7 @@
 #define TFT_OFFSET_Y -1
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
+#define USE_TFTDISPLAY 1
 
 // pin 3 is Vext on v1.1 - HIGH enables LDO for Vext rail which goes to:
 // GPS UC6580:          GPS V_DET(8), VDD_IO(7), DCDC_IN(21), pulls up RESETN(17), D_SEL(33) and BOOT_MODE(34) through 10kR
@@ -38,7 +39,7 @@
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_0
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.045
 #define ADC_CTRL 2     // active HIGH, powers the voltage divider. Only on 1.1

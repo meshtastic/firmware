@@ -5,17 +5,15 @@ runs:
   using: composite
   steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         submodules: recursive
-        ref: ${{github.event.pull_request.head.ref}}
-        repository: ${{github.event.pull_request.head.repo.full_name}}
 
     - name: Install dependencies
       shell: bash
       run: |
         sudo apt-get -y update --fix-missing
-        sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev lsb-release
+        sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev libjsoncpp-dev lsb-release
 
     - name: Setup Python
       uses: actions/setup-python@v6

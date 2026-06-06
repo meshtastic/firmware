@@ -41,12 +41,12 @@ int32_t RangeTestModule::runOnce()
     // moduleConfig.range_test.enabled = 1;
     // moduleConfig.range_test.sender = 30;
     // moduleConfig.range_test.save = 1;
+    // moduleConfig.range_test.clear_on_reboot = 1;
 
     // Fixed position is useful when testing indoors.
     // config.position.fixed_position = 1;
 
     uint32_t senderHeartbeat = moduleConfig.range_test.sender * 1000;
-
     if (moduleConfig.range_test.enabled) {
 
         if (firstTime) {
@@ -54,6 +54,11 @@ int32_t RangeTestModule::runOnce()
 
             firstTime = 0;
 
+            if (moduleConfig.range_test.clear_on_reboot) {
+                // User wants to delete previous range test(s)
+                LOG_INFO("Range Test Module - Clearing out previous test file");
+                rangeTestModuleRadio->removeFile();
+            }
             if (moduleConfig.range_test.sender) {
                 LOG_INFO("Init Range Test Module -- Sender");
                 started = millis(); // make a note of when we started
@@ -141,7 +146,6 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
         */
 
         if (!isFromUs(&mp)) {
-
             if (moduleConfig.range_test.save) {
                 appendFile(mp);
             }
@@ -155,6 +159,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             LOG_DEBUG("---- Received Packet:");
             LOG_DEBUG("mp.from          %d", mp.from);
             LOG_DEBUG("mp.rx_snr        %f", mp.rx_snr);
+            LOG_DEBUG("mp.rx_rssi       %f", mp.rx_rssi);
             LOG_DEBUG("mp.hop_limit     %d", mp.hop_limit);
             LOG_DEBUG("---- Node Information of Received Packet (mp.from):");
             LOG_DEBUG("n->user.long_name         %s", n->user.long_name);
@@ -230,8 +235,8 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         }
 
         // Print the CSV header
-        if (fileToWrite.println(
-                "time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx snr,distance,hop limit,payload")) {
+        if (fileToWrite.println("time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx "
+                                "snr,distance,hop limit,payload,rx rssi")) {
             LOG_INFO("File was written");
         } else {
             LOG_ERROR("File write failed");
@@ -263,26 +268,36 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         fileToAppend.printf("??:??:??,"); // Time
     }
 
-    fileToAppend.printf("%d,", getFrom(&mp));                   // From
-    fileToAppend.printf("%s,", n->user.long_name);              // Long Name
-    fileToAppend.printf("%f,", n->position.latitude_i * 1e-7);  // Sender Lat
-    fileToAppend.printf("%f,", n->position.longitude_i * 1e-7); // Sender Long
+    fileToAppend.printf("%d,", getFrom(&mp));          // From
+    fileToAppend.printf("%s,", n ? n->long_name : ""); // Long Name
+    meshtastic_PositionLite senderPos;
+    const bool haveSenderPos = nodeDB->copyNodePosition(getFrom(&mp), senderPos);
+    if (haveSenderPos) {
+        fileToAppend.printf("%f,", senderPos.latitude_i * 1e-7);  // Sender Lat
+        fileToAppend.printf("%f,", senderPos.longitude_i * 1e-7); // Sender Long
+    } else {
+        fileToAppend.printf("0.0,0.0,");
+    }
     if (gpsStatus->getIsConnected() || config.position.fixed_position) {
         fileToAppend.printf("%f,", gpsStatus->getLatitude() * 1e-7);  // RX Lat
         fileToAppend.printf("%f,", gpsStatus->getLongitude() * 1e-7); // RX Long
         fileToAppend.printf("%d,", gpsStatus->getAltitude());         // RX Altitude
     } else {
         // When the phone API is in use, the node info will be updated with position
-        meshtastic_NodeInfoLite *us = nodeDB->getMeshNode(nodeDB->getNodeNum());
-        fileToAppend.printf("%f,", us->position.latitude_i * 1e-7);  // RX Lat
-        fileToAppend.printf("%f,", us->position.longitude_i * 1e-7); // RX Long
-        fileToAppend.printf("%d,", us->position.altitude);           // RX Altitude
+        meshtastic_PositionLite usPos;
+        if (nodeDB->copyNodePosition(nodeDB->getNodeNum(), usPos)) {
+            fileToAppend.printf("%f,", usPos.latitude_i * 1e-7);  // RX Lat
+            fileToAppend.printf("%f,", usPos.longitude_i * 1e-7); // RX Long
+            fileToAppend.printf("%d,", usPos.altitude);           // RX Altitude
+        } else {
+            fileToAppend.printf("0.0,0.0,0,");
+        }
     }
 
     fileToAppend.printf("%f,", mp.rx_snr); // RX SNR
 
-    if (n->position.latitude_i && n->position.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
-        float distance = GeoCoord::latLongToMeter(n->position.latitude_i * 1e-7, n->position.longitude_i * 1e-7,
+    if (haveSenderPos && senderPos.latitude_i && senderPos.longitude_i && gpsStatus->getLatitude() && gpsStatus->getLongitude()) {
+        float distance = GeoCoord::latLongToMeter(senderPos.latitude_i * 1e-7, senderPos.longitude_i * 1e-7,
                                                   gpsStatus->getLatitude() * 1e-7, gpsStatus->getLongitude() * 1e-7);
         fileToAppend.printf("%f,", distance); // Distance in meters
     } else {
@@ -293,9 +308,46 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     // TODO: If quotes are found in the payload, it has to be escaped.
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
+    fileToAppend.printf("%i,", mp.rx_rssi); // RX RSSI
+
     fileToAppend.flush();
     fileToAppend.close();
-#endif
 
     return 1;
+
+#else
+    LOG_ERROR("Failed to store range test results - feature only available for ESP32");
+
+    return 0;
+#endif
+}
+
+bool RangeTestModuleRadio::removeFile()
+{
+#ifdef ARCH_ESP32
+    if (!FSBegin()) {
+        LOG_DEBUG("An Error has occurred while mounting the filesystem");
+        return 0;
+    }
+
+    if (!FSCom.exists("/static/rangetest.csv")) {
+        LOG_DEBUG("No range tests found.");
+        return 0;
+    }
+
+    LOG_INFO("Deleting previous range test.");
+    bool result = FSCom.remove("/static/rangetest.csv");
+
+    if (!result) {
+        LOG_ERROR("Failed to delete range test.");
+        return 0;
+    }
+    LOG_INFO("Range test removed.");
+
+    return 1;
+#else
+    LOG_ERROR("Failed to remove range test results - feature only available for ESP32");
+
+    return 0;
+#endif
 }

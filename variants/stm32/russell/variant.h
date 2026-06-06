@@ -1,0 +1,56 @@
+#ifndef _VARIANT_RUSSELL_
+#define _VARIANT_RUSSELL_
+
+#define USE_STM32WLx
+
+// I/O
+#define LED_POWER PA0 // Red LED
+#define LED_STATE_ON 1
+#define BUTTON_PIN PH3 // Shared with BOOT0
+#define BUTTON_NEED_PULLUP
+// Charger IC charge/standby pins are open-drain with no hardware pull-up:
+// Internal pull-up is needed on STM32 (TODO)
+// #define EXT_CHRG_DETECT PA5
+// #define EXT_PWR_DETECT PA4
+
+#define BATTERY_PIN AVBAT
+// ADC_MULTIPLIER: 3.0 = internal 1:3 bridge divider (DS13105§3.18.3)
+// Margin: 1.10 = AVBAT divider tolerance ±10% (Table 82)
+#define ADC_MULTIPLIER (1.01f * 3)
+/*
+Sample OCV curve for Li-SOCl2 primary lithium cells (e.g. Saft cells have fresh OCV of 3.67V)
+#define NUM_OCV_POINTS 11
+#define OCV_ARRAY 3670, 3650, 3630, 3610, 3590, 3560, 3530, 3480, 3400, 3200, 2500
+*/
+
+// Bosch Sensortec BME280
+#define HAS_SENSOR 1
+
+// CDtop CD-PA1010D
+#define ENABLE_HWSERIAL1
+#define PIN_SERIAL1_RX PB7
+#define PIN_SERIAL1_TX PB6
+
+// Debug serial (USART2)
+#define ENABLE_HWSERIAL2
+#define PIN_SERIAL2_TX PA2
+#define PIN_SERIAL2_RX PA3
+#define HAS_GPS 1
+#define PIN_GPS_STANDBY PA15
+#define GPS_RX_PIN PB7
+#define GPS_TX_PIN PB6
+
+// LoRa
+/*
+ * RAK3172   (-20–85°C) -> No TCXO
+ * RAK3172-T (-40–85°C) -> 3.0V TCXO
+ * https://github.com/RAKWireless/RAK-STM32-RUI/blob/e5a28be8fab1a492bd9223dd425ca33a8a297d90/variants/WisDuo_RAK3172-T_Board/radio_conf.h#L91
+ */
+#define TCXO_OPTIONAL
+#define SX126X_DIO3_TCXO_VOLTAGE 3.0
+
+// Required to avoid Serial1 conflicts due to board definition here:
+// https://github.com/stm32duino/Arduino_Core_STM32/blob/main/variants/STM32WLxx/WL54CCU_WL55CCU_WLE4C(8-B-C)U_WLE5C(8-B-C)U/variant_RAK3172_MODULE.h
+#define RAK3172
+
+#endif
