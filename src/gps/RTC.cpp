@@ -62,10 +62,13 @@ static struct timeval mockSystemTime = {};
     if (readSystemTime(&tv)) {
         uint32_t now = millis();
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
-        LOG_DEBUG("Read RTC time as %lu", (unsigned long)printableEpoch);
         if (currentQuality == RTCQualityNone) {
+            LOG_DEBUG("Seed time from system clock: %lu", (unsigned long)printableEpoch);
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
+        } else {
+            LOG_DEBUG("Ignore system clock fallback (%lu); current RTC quality is %s", (unsigned long)printableEpoch,
+                      RtcName(currentQuality));
         }
         return RTCSetResultSuccess;
     }
