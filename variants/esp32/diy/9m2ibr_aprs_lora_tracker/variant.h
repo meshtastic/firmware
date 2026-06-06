@@ -21,8 +21,8 @@
 #define BUTTON_PIN 15 // Right side button - if not available, set device.button_gpio to 0 from Meshtastic client
 
 // LEDs
-#define LED_PIN 13 // Tx LED
-#define USER_LED 2 // Rx LED
+#define LED_POWER 13 // Tx LED
+#define USER_LED 2   // Rx LED
 
 // Buzzer
 #define PIN_BUZZER 33
@@ -30,7 +30,7 @@
 // Battery sense
 #define BATTERY_PIN 35
 #define ADC_MULTIPLIER 2.01 // 100k + 100k, and add 1% tolerance
-#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_7
 #define BATTERY_SENSE_RESOLUTION_BITS ADC_RESOLUTION
 
 // SPI

@@ -18,7 +18,7 @@
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 3
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 5
+#define SCREEN_TRANSITION_FRAMERATE 30
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
 #define USE_TFTDISPLAY 1
 #define HAS_PHYSICAL_KEYBOARD 1
@@ -40,7 +40,6 @@
 
 // PCF85063 RTC Module
 #define PCF85063_RTC 0x51
-#define HAS_RTC 1
 
 // Rotary
 #define ROTARY_A (40)
@@ -61,7 +60,6 @@
 #define I2C_NO_RESCAN
 #define KB_BL_PIN 46
 #define KB_INT 6
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 // audio codec ES8311
 #define HAS_I2S

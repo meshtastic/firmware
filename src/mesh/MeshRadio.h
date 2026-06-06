@@ -4,22 +4,265 @@
 #include "MeshTypes.h"
 #include "PointerQueue.h"
 #include "configuration.h"
+#include "detect/LoRaRadioType.h"
+
+// Sentinel marking the end of a modem preset array. Declared `const` rather
+// than `constexpr` because the cast from 0xFF to the enum is out-of-range and
+// therefore not a valid constant expression on Clang 16+ (Apple Clang on
+// macOS). The value is only ever compared at runtime, so static-init is fine.
+static const meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
+    static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(0xFF);
+
+#define PRESET(name) meshtastic_Config_LoRaConfig_ModemPreset_##name
+
+// Override slot magic numbers for RegionInfo.overrideSlot
+#define OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH 0 // Use hash of primary channel name
+#define OVERRIDE_SLOT_PRESET_HASH -1         // Use hash of preset name instead
+// Positive values (1-32767) are explicit slot numbers
+
+// Region profile: bundles the preset list with regulatory parameters shared across regions
+struct RegionProfile {
+    const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated
+    float spacing;                                           // gaps between radio channels
+    float padding;                                           // padding at each side of the "operating channel"
+    bool audioPermitted;
+    bool licensedOnly;        // a region profile for licensed operators only
+    int8_t textThrottle;      // throttle for text - future expansion
+    int8_t positionThrottle;  // throttle for location data - future expansion
+    int8_t telemetryThrottle; // throttle for telemetry - future expansion
+};
+
+/**
+ * Get the effective duty cycle for the current region based on device role.
+ * For EU_866, returns 10% for fixed devices (ROUTER, ROUTER_LATE) and 2.5% for mobile devices.
+ * For other regions, returns the standard duty cycle.
+ */
+extern float getEffectiveDutyCycle();
+
+extern const RegionProfile PROFILE_STD;
+extern const RegionProfile PROFILE_EU868;
+extern const RegionProfile PROFILE_UNDEF;
+extern const RegionProfile PROFILE_LITE;
+extern const RegionProfile PROFILE_NARROW;
+extern const RegionProfile PROFILE_HAM_20KHZ;
 
 // Map from old region names to new region enums
 struct RegionInfo {
     meshtastic_Config_LoRaConfig_RegionCode code;
     float freqStart;
     float freqEnd;
-    float dutyCycle;
-    float spacing;
+    float dutyCycle;    // modified by getEffectiveDutyCycle
     uint8_t powerLimit; // Or zero for not set
-    bool audioPermitted;
     bool freqSwitching;
     bool wideLora;
-    const char *name; // EU433 etc
+    const RegionProfile *profile;
+    meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
+    int16_t overrideSlot; // per-region override slot for frequency selection
+                          // Magic values: 0 = use channel name hash, -1 = use preset name hash, >0 = explicit slot
+    const char *name;     // EU433 etc
+
+    // Preset accessors (delegate through profile)
+    meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return defaultPreset; }
+    const meshtastic_Config_LoRaConfig_ModemPreset *getAvailablePresets() const { return profile->presets; }
+    size_t getNumPresets() const
+    {
+        size_t n = 0;
+        while (profile->presets[n] != MODEM_PRESET_END)
+            n++;
+        return n;
+    }
 };
 
 extern const RegionInfo regions[];
 extern const RegionInfo *myRegion;
 
 extern void initRegion();
+extern const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code);
+
+// Valid LoRa spread factor range and defaults
+constexpr uint8_t LORA_SF_MIN = 5;
+constexpr uint8_t LORA_SF_MAX = 12;
+constexpr uint8_t LORA_SF_DEFAULT = 11; // LONG_FAST default
+
+// Valid LoRa coding rate range and default
+constexpr uint8_t LORA_CR_MIN = 4;
+constexpr uint8_t LORA_CR_MAX = 8;
+constexpr uint8_t LORA_CR_DEFAULT = 5; // LONG_FAST default
+
+// Default bandwidth in kHz (LONG_FAST)
+constexpr float LORA_BW_DEFAULT_KHZ = 250.0f;
+
+/// Clamp spread factor to the valid LoRa range [5, 12].
+/// Out-of-range values (including 0 from unset preset mode) return LORA_SF_DEFAULT.
+static inline uint8_t clampSpreadFactor(uint8_t sf)
+{
+    // We check for RF95 radios that are incompatible with Spreading Factors 5 and 6.
+    if (radioType == RF95_RADIO && (sf == 5 || sf == 6))
+        return LORA_SF_DEFAULT;
+
+    if (sf < LORA_SF_MIN || sf > LORA_SF_MAX)
+        return LORA_SF_DEFAULT;
+    return sf;
+}
+
+/// Clamp coding rate to the valid LoRa range [4, 8].
+/// Out-of-range values return LORA_CR_DEFAULT.
+static inline uint8_t clampCodingRate(uint8_t cr)
+{
+    if (cr < LORA_CR_MIN || cr > LORA_CR_MAX)
+        return LORA_CR_DEFAULT;
+    return cr;
+}
+
+/// Ensure bandwidth is positive. Non-positive values return LORA_BW_DEFAULT_KHZ.
+static inline float clampBandwidthKHz(float bwKHz)
+{
+    if (bwKHz <= 0.0f)
+        return LORA_BW_DEFAULT_KHZ;
+    return bwKHz;
+}
+
+static inline float bwCodeToKHz(uint16_t bwCode)
+{
+    if (bwCode == 8)
+        return 7.8f;
+    if (bwCode == 10)
+        return 10.4f;
+    if (bwCode == 16)
+        return 15.6f;
+    if (bwCode == 21)
+        return 20.8f;
+    if (bwCode == 31)
+        return 31.25f;
+    if (bwCode == 42)
+        return 41.7f;
+    if (bwCode == 62)
+        return 62.5f;
+    if (bwCode == 200)
+        return 203.125f;
+    if (bwCode == 400)
+        return 406.25f;
+    if (bwCode == 800)
+        return 812.5f;
+    if (bwCode == 1600)
+        return 1625.0f;
+    return (float)bwCode;
+}
+
+static inline uint16_t bwKHzToCode(float bwKHz)
+{
+    if (bwKHz > 7.7f && bwKHz < 7.9f)
+        return 8;
+    if (bwKHz > 10.3f && bwKHz < 10.5f)
+        return 10;
+    if (bwKHz > 15.5f && bwKHz < 15.7f)
+        return 16;
+    if (bwKHz > 20.7f && bwKHz < 20.9f)
+        return 21;
+    if (bwKHz > 31.24f && bwKHz < 31.26f)
+        return 31;
+    if (bwKHz > 41.6f && bwKHz < 41.8f)
+        return 42;
+    if (bwKHz > 62.49f && bwKHz < 62.51f)
+        return 62;
+    if (bwKHz > 203.12f && bwKHz < 203.13f)
+        return 200;
+    if (bwKHz > 406.24f && bwKHz < 406.26f)
+        return 400;
+    if (bwKHz > 812.49f && bwKHz < 812.51f)
+        return 800;
+    if (bwKHz > 1624.99f && bwKHz < 1625.01f)
+        return 1600;
+    return (uint16_t)(bwKHz + 0.5f);
+}
+
+static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora, float &bwKHz, uint8_t &sf,
+                                       uint8_t &cr)
+{
+    switch (preset) {
+    case PRESET(SHORT_TURBO):
+        bwKHz = wideLora ? 1625.0f : 500.0f;
+        cr = 5;
+        sf = 7;
+        break;
+    case PRESET(SHORT_FAST):
+        bwKHz = wideLora ? 812.5f : 250.0f;
+        cr = 5;
+        sf = 7;
+        break;
+    case PRESET(SHORT_SLOW):
+        bwKHz = wideLora ? 812.5f : 250.0f;
+        cr = 5;
+        sf = 8;
+        break;
+    case PRESET(MEDIUM_FAST):
+        bwKHz = wideLora ? 812.5f : 250.0f;
+        cr = 5;
+        sf = 9;
+        break;
+    case PRESET(MEDIUM_SLOW):
+        bwKHz = wideLora ? 812.5f : 250.0f;
+        cr = 5;
+        sf = 10;
+        break;
+    case PRESET(LONG_TURBO):
+        bwKHz = wideLora ? 1625.0f : 500.0f;
+        cr = 8;
+        sf = 11;
+        break;
+    case PRESET(LONG_MODERATE):
+        bwKHz = wideLora ? 406.25f : 125.0f;
+        cr = 8;
+        sf = 11;
+        break;
+    case PRESET(LONG_SLOW):
+        bwKHz = wideLora ? 406.25f : 125.0f;
+        cr = 8;
+        sf = 12;
+        break;
+    case PRESET(LITE_FAST):
+        bwKHz = 125;
+        cr = 5;
+        sf = 9;
+        break;
+    case PRESET(LITE_SLOW):
+        bwKHz = 125;
+        cr = 5;
+        sf = 10;
+        break;
+    case PRESET(NARROW_FAST):
+        bwKHz = 62.5f;
+        cr = 6;
+        sf = 7;
+        break;
+    case PRESET(NARROW_SLOW):
+        bwKHz = 62.5f;
+        cr = 6;
+        sf = 8;
+        break;
+    case PRESET(TINY_FAST):
+        bwKHz = 15.6f;
+        cr = 5;
+        sf = 7;
+        break;
+    case PRESET(TINY_SLOW):
+        bwKHz = 15.6f;
+        cr = 6;
+        sf = 8;
+        break;
+    default: // LONG_FAST (or illegal)
+        bwKHz = wideLora ? 812.5f : 250.0f;
+        cr = 5;
+        sf = 11;
+        break;
+    }
+}
+
+static inline float modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora)
+{
+    float bwKHz = 0;
+    uint8_t sf = 0;
+    uint8_t cr = 0;
+    modemPresetToParams(preset, wideLora, bwKHz, sf, cr);
+    return bwKHz;
+}

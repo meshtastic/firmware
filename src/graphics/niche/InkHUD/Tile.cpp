@@ -18,7 +18,7 @@ static int32_t runtaskHighlight()
     LOG_DEBUG("Dismissing Highlight");
     InkHUD::Tile::highlightShown = false;
     InkHUD::Tile::highlightTarget = nullptr;
-    InkHUD::InkHUD::getInstance()->forceUpdate(Drivers::EInk::UpdateTypes::FAST); // Re-render, clearing the highlighting
+    InkHUD::InkHUD::getInstance()->forceUpdate(Drivers::EInk::UpdateTypes::FAST, true); // Re-render, clearing the highlighting
     return taskHighlight->disable();
 }
 static void inittaskHighlight()
@@ -190,6 +190,18 @@ void InkHUD::Tile::handleAppletPixel(int16_t x, int16_t y, Color c)
     }
 }
 
+// Used in Renderer for clearing the tile
+int16_t InkHUD::Tile::getLeft()
+{
+    return left;
+}
+
+// Used in Renderer for clearing the tile
+int16_t InkHUD::Tile::getTop()
+{
+    return top;
+}
+
 // Called by Applet base class, when setting applet dimensions, immediately before render
 uint16_t InkHUD::Tile::getWidth()
 {
@@ -220,7 +232,7 @@ void InkHUD::Tile::requestHighlight()
 {
     Tile::highlightTarget = this;
     Tile::highlightShown = false;
-    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FAST);
+    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FAST, true);
 }
 
 // Starts the timer which will automatically dismiss the highlighting, if the tile doesn't organically redraw first

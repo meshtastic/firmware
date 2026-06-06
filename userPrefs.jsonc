@@ -18,6 +18,7 @@
   // "USERPREFS_CHANNEL_2_UPLINK_ENABLED": "false",
   // "USERPREFS_CONFIG_GPS_MODE": "meshtastic_Config_PositionConfig_GpsMode_ENABLED",
   // "USERPREFS_CONFIG_LORA_IGNORE_MQTT": "true",
+  // "USERPREFS_LORA_TX_DISABLED": "1", // If set, forces config.lora.tx_enabled=false during lora bootstrap
   // "USERPREFS_CONFIG_LORA_REGION": "meshtastic_Config_LoRaConfig_RegionCode_US",
   // "USERPREFS_CONFIG_OWNER_LONG_NAME": "My Long Name",
   // "USERPREFS_CONFIG_OWNER_SHORT_NAME": "MLN",
@@ -33,6 +34,8 @@
   // "USERPREFS_CONFIG_GPS_UPDATE_INTERVAL": "600",
   // "USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL": "1800",
   // "USERPREFS_CONFIG_DEVICE_TELEM_UPDATE_INTERVAL": "900", // Device telemetry update interval in seconds
+  // "USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL": "900",     // Environment telemetry update interval in seconds
+  // "USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED": "1", // Force BMP280/sensor reads + LoRa broadcast on first boot
   // "USERPREFS_LORACONFIG_CHANNEL_NUM": "31",
   // "USERPREFS_LORACONFIG_MODEM_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST",
   // "USERPREFS_USE_ADMIN_KEY_0": "{ 0xcd, 0xc0, 0xb4, 0x3c, 0x53, 0x24, 0xdf, 0x13, 0xca, 0x5a, 0xa6, 0x0c, 0x0d, 0xec, 0x85, 0x5a, 0x4c, 0xf6, 0x1a, 0x96, 0x04, 0x1a, 0x3e, 0xfc, 0xbb, 0x8e, 0x33, 0x71, 0xe5, 0xfc, 0xff, 0x3c }",
@@ -56,6 +59,7 @@
   // "USERPREFS_MQTT_ROOT_TOPIC": "event/REPLACEME",
   // "USERPREFS_RINGTONE_NAG_SECS": "60",
   // "USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS": "43200",
+  // "USERPREFS_UI_TEST_LOG": "true", // Test-only: emits `Screen: frame N/M name=... reason=...` log per UI transition (for the mcp-server ui test tier); off in release builds.
   "USERPREFS_RINGTONE_RTTTL": "24:d=32,o=5,b=565:f6,p,f6,4p,p,f6,p,f6,2p,p,b6,p,b6,p,b6,p,b6,p,b,p,b,p,b,p,b,p,b,p,b,p,b,p,b,1p.,2p.,p",
   // "USERPREFS_NETWORK_IPV6_ENABLED": "1",
   "USERPREFS_TZ_STRING": "tzplaceholder                                         "

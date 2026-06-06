@@ -12,6 +12,6 @@ Ex:
 - `logo_320x480.png`
 - `logo_320x240.png`
 
-This file is copied to `data/boot/logo.png` before filesytem image compilation.
+This file is copied to `data/boot/logo.png` before filesystem image compilation.
 
 For additional examples see the [`event/defcon33` branch](https://github.com/meshtastic/firmware/tree/event/defcon33).

@@ -1,13 +1,13 @@
 // EByte EoRA-Hub
 // Uses E80 (LR1121) LoRa module
 
-#define LED_PIN 35
+#define LED_POWER 35
 
 // Button - user interface
 #define BUTTON_PIN 0 // BOOT button
 
 #define BATTERY_PIN 1
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_0
 #define ADC_MULTIPLIER 103.0 // Calibrated value
 #define ADC_ATTENUATION ADC_ATTEN_DB_0
 #define ADC_CTRL 37

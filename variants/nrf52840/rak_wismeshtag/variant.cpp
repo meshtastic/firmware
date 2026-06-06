@@ -19,7 +19,11 @@
 */
 
 #include "variant.h"
+#include "Arduino.h"
+#include "FreeRTOS.h"
 #include "nrf.h"
+#include "power/PowerHAL.h"
+#include "sleep.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
 
@@ -36,10 +40,43 @@ void initVariant()
     pinMode(PIN_LED1, OUTPUT);
     ledOff(PIN_LED1);
 
-    pinMode(PIN_LED2, OUTPUT);
-    ledOff(PIN_LED2);
-
     // 3V3 Power Rail
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
 }
+
+#ifdef LOW_VDD_SYSTEMOFF_DELAY_MS
+void variant_nrf52LoopHook(void)
+{
+    // If VDD stays unsafe for a while (brownout), force System OFF.
+    // Skip when VBUS present to allow recovery while USB-powered.
+    if (!powerHAL_isVBUSConnected()) {
+        // Rate-limit VDD safety checks: powerHAL_isPowerLevelSafe() calls getVDDVoltage() each time.
+        static constexpr uint32_t POWER_LEVEL_CHECK_INTERVAL_MS = 100;
+        static uint32_t last_vdd_check_ms = 0;
+        static bool last_power_level_safe = true;
+
+        const uint32_t now = millis();
+        if (last_vdd_check_ms == 0 || (uint32_t)(now - last_vdd_check_ms) >= POWER_LEVEL_CHECK_INTERVAL_MS) {
+            last_vdd_check_ms = now;
+            last_power_level_safe = powerHAL_isPowerLevelSafe();
+        }
+
+        // Do not use millis()==0 as a sentinel: at boot, millis() may be 0 while VDD is unsafe.
+        static bool low_vdd_timer_armed = false;
+        static uint32_t low_vdd_since_ms = 0;
+
+        if (!last_power_level_safe) {
+            if (!low_vdd_timer_armed) {
+                low_vdd_since_ms = now;
+                low_vdd_timer_armed = true;
+            }
+            if ((uint32_t)(now - low_vdd_since_ms) >= (uint32_t)LOW_VDD_SYSTEMOFF_DELAY_MS) {
+                cpuDeepSleep(portMAX_DELAY);
+            }
+        } else {
+            low_vdd_timer_armed = false;
+        }
+    }
+}
+#endif

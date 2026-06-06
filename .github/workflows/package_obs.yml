@@ -18,8 +18,7 @@ on:
         type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   build-debian-src:
@@ -58,7 +57,7 @@ jobs:
         id: version
 
       - name: Download artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: firmware-debian-${{ steps.version.outputs.deb }}~${{ inputs.series }}-src
           merge-multiple: true

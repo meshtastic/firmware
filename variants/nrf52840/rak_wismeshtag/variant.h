@@ -45,13 +45,10 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (35)
-#define PIN_LED2 (36)
-
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
+#define LED_BLUE (36)
 
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_NOTIFICATION LED_BLUE
 
 #define LED_STATE_ON 1 // State when LED is litted
 
@@ -62,8 +59,6 @@ extern "C" {
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
 #define PIN_BUTTON2 12
-#define PIN_BUTTON3 24
-#define PIN_BUTTON4 25
 
 /*
  * Analog pins
@@ -230,7 +225,41 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.73
-#define OCV_ARRAY 4240, 4112, 4029, 3970, 3906, 3846, 3824, 3802, 3776, 3650, 3072
+#define OCV_ARRAY 4160, 4020, 3940, 3870, 3810, 3760, 3740, 3720, 3680, 3620, 2990 // updated OCV array for rak_wismeshtag
+
+// Wake from System OFF when battery rises again (LPCOMP).
+// BAT_ADC divider: R22=1M (top), R24=1.5M (bottom) => V_BAT_ADC = VBAT * (1.5 / (1.0 + 1.5)) = 0.6 * VBAT
+// RAK4630 module: AIN0 = nrf52840 AIN3 = Pin 5 (A0/BATTERY_PIN)
+#define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_3
+// LPCOMP compares the selected input to a fraction of VDD (here 5/8 of VDD at the LPCOMP input).
+// With VDD ≈ 3.3 V: threshold at input ≈ (5/8) * 3.3 V ≈ 2.06 V.
+// BAT_ADC divider: V_BAT_ADC = 0.6 * VBAT → equivalent VBAT ≈ 2.06 / 0.6 ≈ 3.4 V (wake when battery recovers).
+//
+// Note: if VDD is drooping/tracking VBAT in the low-voltage region, using a fraction >= divider ratio helps ensure the
+// input is below the threshold at shutdown; the intended wake event happens when the supply recovers enough for a rising
+// crossing to occur.
+#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_5_8
+
+// Low voltage protection:
+// If VDD is below SAFE_VDD_VOLTAGE_THRESHOLD for longer than this delay (and no USB VBUS),
+// the device will enter System OFF to avoid brownout loops and flash corruption.
+#ifndef LOW_VDD_SYSTEMOFF_DELAY_MS
+#define LOW_VDD_SYSTEMOFF_DELAY_MS 5000
+#endif
+
+// Prefer integer mV so platform code avoids float→int truncation quirks (e.g. 0.1 V → 99 vs 100 mV).
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD_MV
+#define SAFE_VDD_VOLTAGE_THRESHOLD_MV 2900
+#endif
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD_HYST_MV
+#define SAFE_VDD_VOLTAGE_THRESHOLD_HYST_MV 100
+#endif
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD
+#define SAFE_VDD_VOLTAGE_THRESHOLD (SAFE_VDD_VOLTAGE_THRESHOLD_MV / 1000.0f)
+#endif
+#ifndef SAFE_VDD_VOLTAGE_THRESHOLD_HYST
+#define SAFE_VDD_VOLTAGE_THRESHOLD_HYST (SAFE_VDD_VOLTAGE_THRESHOLD_HYST_MV / 1000.0f)
+#endif
 
 #define RAK_4631 1
 

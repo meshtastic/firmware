@@ -17,12 +17,6 @@
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
     if (p->want_ack) {
-        // If someone asks for acks on broadcast, we need the hop limit to be at least one, so that first node that receives our
-        // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop
-        // counts and we want this message to get through the whole mesh, so use the default.
-        if (p->hop_limit == 0) {
-            p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-        }
         DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("ReliableRouter::send", copy);
@@ -121,7 +115,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
                 } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 &&
-                           (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->user.public_key.size == 0)) {
+                           (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->public_key.size == 0)) {
                     LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY");
                     sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
                                routingModule->getHopLimitForResponse(*p));

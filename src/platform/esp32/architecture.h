@@ -33,9 +33,6 @@
 #ifndef HAS_RADIO
 #define HAS_RADIO 1
 #endif
-#ifndef HAS_RTC
-#define HAS_RTC 1
-#endif
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 1
 #endif
@@ -149,6 +146,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M2
 #elif defined(ELECROW_ThinkNode_M5)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M5
+#elif defined(ELECROW_ThinkNode_M7)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M7
 #elif defined(ESP32_S3_PICO)
 #define HW_VENDOR meshtastic_HardwareModel_ESP32_S3_PICO
 #elif defined(SENSELORA_S3)
@@ -159,6 +158,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_CHATTER_2
 #elif defined(STATION_G2)
 #define HW_VENDOR meshtastic_HardwareModel_STATION_G2
+#elif defined(STATION_G3)
+#define HW_VENDOR meshtastic_HardwareModel_STATION_G3
 #elif defined(UNPHONE)
 #define HW_VENDOR meshtastic_HardwareModel_UNPHONE
 #elif defined(WIPHONE)
@@ -205,6 +206,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_C6L
 #elif defined(HELTEC_WIRELESS_TRACKER_V2)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
+#elif defined(M5STACK_CARDPUTER_ADV)
+#define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif

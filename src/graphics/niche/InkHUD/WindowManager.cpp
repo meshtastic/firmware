@@ -3,16 +3,27 @@
 #include "./WindowManager.h"
 
 #include "./Applets/System/AlignStick/AlignStickApplet.h"
+#include "./Applets/System/AppSwitcher/AppSwitcherApplet.h"
 #include "./Applets/System/BatteryIcon/BatteryIconApplet.h"
+#include "./Applets/System/Keyboard/KeyboardApplet.h"
 #include "./Applets/System/Logo/LogoApplet.h"
 #include "./Applets/System/Menu/MenuApplet.h"
 #include "./Applets/System/Notification/NotificationApplet.h"
+#include "./Applets/System/Notification/TouchStatusApplet.h"
 #include "./Applets/System/Pairing/PairingApplet.h"
 #include "./Applets/System/Placeholder/PlaceholderApplet.h"
 #include "./Applets/System/Tips/TipsApplet.h"
 #include "./SystemApplet.h"
 
 using namespace NicheGraphics;
+
+namespace
+{
+bool supportsOnScreenKeyboard(const InkHUD::InkHUD *inkhud, const InkHUD::Persistence::Settings *settings)
+{
+    return !inkhud->twoWayRocker && (settings->joystick.enabled || inkhud->hasTouchEnabledProvider());
+}
+} // namespace
 
 InkHUD::WindowManager::WindowManager()
 {
@@ -131,6 +142,38 @@ void InkHUD::WindowManager::prevTile()
         userTiles.at(settings->userTiles.focused)->requestHighlight();
 }
 
+// Focus the user tile containing a touch coordinate.
+// Returns true only when the focused tile changes.
+bool InkHUD::WindowManager::selectTileAt(uint16_t x, uint16_t y)
+{
+    if (userTiles.size() < 2)
+        return false;
+
+    const int32_t tx = x;
+    const int32_t ty = y;
+
+    for (uint8_t i = 0; i < userTiles.size(); i++) {
+        Tile *tile = userTiles.at(i);
+
+        const int32_t left = tile->getLeft();
+        const int32_t top = tile->getTop();
+        const int32_t right = left + tile->getWidth();
+        const int32_t bottom = top + tile->getHeight();
+
+        if (tx < left || tx >= right || ty < top || ty >= bottom)
+            continue;
+
+        if (settings->userTiles.focused == i)
+            return false;
+
+        settings->userTiles.focused = i;
+        refocusTile();
+        return true;
+    }
+
+    return false;
+}
+
 // Show the menu (on the the focused tile)
 // The applet previously displayed there will be restored once the menu closes
 void InkHUD::WindowManager::openMenu()
@@ -139,12 +182,52 @@ void InkHUD::WindowManager::openMenu()
     menu->show(userTiles.at(settings->userTiles.focused));
 }
 
+// Show touch-only app switcher on the focused tile
+void InkHUD::WindowManager::openAppSwitcher()
+{
+    if (!inkhud->hasTouchEnabledProvider())
+        return;
+
+    AppSwitcherApplet *switcher = static_cast<AppSwitcherApplet *>(inkhud->getSystemApplet("AppSwitcher"));
+    if (switcher) {
+        switcher->show(userTiles.at(settings->userTiles.focused));
+    }
+}
+
 // Bring the AlignStick applet to the foreground
 void InkHUD::WindowManager::openAlignStick()
 {
-    if (settings->joystick.enabled) {
+    if (settings->joystick.enabled && !inkhud->twoWayRocker) {
         AlignStickApplet *alignStick = (AlignStickApplet *)inkhud->getSystemApplet("AlignStick");
         alignStick->bringToForeground();
+    }
+}
+
+void InkHUD::WindowManager::openKeyboard()
+{
+    if (!supportsOnScreenKeyboard(inkhud, settings))
+        return;
+
+    KeyboardApplet *keyboard = (KeyboardApplet *)inkhud->getSystemApplet("Keyboard");
+
+    if (keyboard) {
+        keyboard->bringToForeground();
+        keyboardOpen = true;
+        changeLayout();
+    }
+}
+
+void InkHUD::WindowManager::closeKeyboard()
+{
+    if (!supportsOnScreenKeyboard(inkhud, settings))
+        return;
+
+    KeyboardApplet *keyboard = (KeyboardApplet *)inkhud->getSystemApplet("Keyboard");
+
+    if (keyboard) {
+        keyboard->sendToBackground();
+        keyboardOpen = false;
+        changeLayout();
     }
 }
 
@@ -250,6 +333,47 @@ void InkHUD::WindowManager::prevApplet()
     inkhud->forceUpdate(EInk::UpdateTypes::FAST); // bringToForeground already requested, but we're manually forcing FAST
 }
 
+// Show a specific applet on the focused tile, or focus the tile where it is already shown.
+bool InkHUD::WindowManager::showApplet(uint8_t appletIndex)
+{
+    if (appletIndex >= inkhud->userApplets.size())
+        return false;
+
+    Applet *target = inkhud->userApplets.at(appletIndex);
+    if (!target || !target->isActive())
+        return false;
+
+    // If target is already visible on another tile, just focus that tile.
+    for (uint8_t i = 0; i < userTiles.size(); i++) {
+        if (userTiles.at(i)->getAssignedApplet() == target) {
+            settings->userTiles.focused = i;
+            refocusTile();
+            if (!settings->optionalMenuItems.nextTile)
+                userTiles.at(settings->userTiles.focused)->requestHighlight();
+            inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+            return true;
+        }
+    }
+
+    // Otherwise replace the focused tile's applet.
+    Tile *focused = userTiles.at(settings->userTiles.focused);
+    Applet *current = focused->getAssignedApplet();
+    if (current && current != target)
+        current->sendToBackground();
+
+    focused->assignApplet(target);
+    target->bringToForeground();
+    settings->userTiles.displayedUserApplet[settings->userTiles.focused] = appletIndex;
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+    return true;
+}
+
+// Returns active applet
+NicheGraphics::InkHUD::Applet *InkHUD::WindowManager::getActiveApplet()
+{
+    return userTiles.at(settings->userTiles.focused)->getAssignedApplet();
+}
+
 // Rotate the display image by 90 degrees
 void InkHUD::WindowManager::rotate()
 {
@@ -272,7 +396,6 @@ void InkHUD::WindowManager::toggleBatteryIcon()
         batteryIcon->sendToBackground();
 
     // Force-render
-    // - redraw all applets
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
@@ -311,9 +434,25 @@ void InkHUD::WindowManager::changeLayout()
         menu->show(ft);
     }
 
+    // Resize for the on-screen keyboard
+    if (keyboardOpen) {
+        // Send all user applets to the background
+        // User applets currently don't handle free text input
+        for (uint8_t i = 0; i < inkhud->userApplets.size(); i++)
+            inkhud->userApplets.at(i)->sendToBackground();
+        // Find the first system applet that can handle freetext and resize it
+        for (SystemApplet *sa : inkhud->systemApplets) {
+            if (sa->handleFreeText) {
+                const uint16_t keyboardHeight = KeyboardApplet::getKeyboardHeight();
+                sa->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height() - keyboardHeight - 1);
+                break;
+            }
+        }
+    }
+
     // Force-render
     // - redraw all applets
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST, true);
 }
 
 // Perform necessary reconfiguration when user activates or deactivates applets at run-time
@@ -347,7 +486,7 @@ void InkHUD::WindowManager::changeActivatedApplets()
 
     // Force-render
     // - redraw all applets
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST, true);
 }
 
 // Some applets may be permitted to bring themselves to foreground, to show new data
@@ -358,7 +497,7 @@ void InkHUD::WindowManager::autoshow()
 {
     // Don't perform autoshow if a system applet has exclusive use of the display right now
     // Note: lockRequests prevents autoshow attempting to hide menuApplet
-    for (SystemApplet *sa : inkhud->systemApplets) {
+    for (const SystemApplet *sa : inkhud->systemApplets) {
         if (sa->lockRendering || sa->lockRequests)
             return;
     }
@@ -433,14 +572,23 @@ void InkHUD::WindowManager::createSystemApplets()
     addSystemApplet("Logo", new LogoApplet, new Tile);
     addSystemApplet("Pairing", new PairingApplet, new Tile);
     addSystemApplet("Tips", new TipsApplet, new Tile);
-    if (settings->joystick.enabled)
+    if (settings->joystick.enabled && !inkhud->twoWayRocker) {
         addSystemApplet("AlignStick", new AlignStickApplet, new Tile);
+    }
+    if (supportsOnScreenKeyboard(inkhud, settings)) {
+        addSystemApplet("Keyboard", new KeyboardApplet, new Tile);
+    }
+    if (inkhud->hasTouchEnabledProvider()) {
+        addSystemApplet("AppSwitcher", new AppSwitcherApplet, nullptr);
+    }
 
     addSystemApplet("Menu", new MenuApplet, nullptr);
 
     // Battery and notifications *behind* the menu
     addSystemApplet("Notification", new NotificationApplet, new Tile);
     addSystemApplet("BatteryIcon", new BatteryIconApplet, new Tile);
+    if (inkhud->hasTouchEnabledProvider())
+        addSystemApplet("TouchStatus", new TouchStatusApplet, new Tile);
 
     // Special handling only, via Rendering::renderPlaceholders
     addSystemApplet("Placeholder", new PlaceholderApplet, nullptr);
@@ -457,19 +605,36 @@ void InkHUD::WindowManager::placeSystemTiles()
     inkhud->getSystemApplet("Logo")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
     inkhud->getSystemApplet("Pairing")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
     inkhud->getSystemApplet("Tips")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
-    if (settings->joystick.enabled)
+    if (settings->joystick.enabled && !inkhud->twoWayRocker) {
         inkhud->getSystemApplet("AlignStick")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
-
+    }
+    if (supportsOnScreenKeyboard(inkhud, settings)) {
+        const uint16_t keyboardHeight = KeyboardApplet::getKeyboardHeight();
+        inkhud->getSystemApplet("Keyboard")
+            ->getTile()
+            ->setRegion(0, inkhud->height() - keyboardHeight, inkhud->width(), keyboardHeight);
+    }
     inkhud->getSystemApplet("Notification")->getTile()->setRegion(0, 0, inkhud->width(), 20);
 
     const uint16_t batteryIconHeight = Applet::getHeaderHeight() - 2 - 2;
     const uint16_t batteryIconWidth = batteryIconHeight * 1.8;
     inkhud->getSystemApplet("BatteryIcon")
         ->getTile()
-        ->setRegion(inkhud->width() - batteryIconWidth, // x
-                    2,                                  // y
-                    batteryIconWidth,                   // width
-                    batteryIconHeight);                 // height
+        ->setRegion(inkhud->width() - batteryIconWidth - 1, // x
+                    1,                                      // y
+                    batteryIconWidth + 1,                   // width
+                    batteryIconHeight + 2);                 // height
+
+    if (inkhud->hasTouchEnabledProvider()) {
+        const uint16_t touchStatusH = Applet::fontSmall.lineHeight() + 4;
+        inkhud->getSystemApplet("TouchStatus")
+            ->getTile()
+            ->setRegion(0, inkhud->height() - touchStatusH, inkhud->width(), touchStatusH);
+        if (inkhud->isTouchEnabled())
+            inkhud->getSystemApplet("TouchStatus")->sendToBackground();
+        else
+            inkhud->getSystemApplet("TouchStatus")->bringToForeground();
+    }
 
     // Note: the tiles of placeholder and menu applets are manipulated specially
     // - menuApplet borrows user tiles
@@ -599,7 +764,7 @@ void InkHUD::WindowManager::refocusTile()
     }
 }
 
-// Seach for any applets which believe they are foreground, but no longer have a valid tile
+// Search for any applets which believe they are foreground, but no longer have a valid tile
 // Tidies up after layout changes at runtime
 void InkHUD::WindowManager::findOrphanApplets()
 {

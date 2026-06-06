@@ -5,6 +5,25 @@
 //
 // defaults for NRF52 architecture
 //
+
+/*
+ * Internal Reference is +/-0.6V, with an adjustable gain of 1/6, 1/5, 1/4,
+ * 1/3, 1/2 or 1, meaning 3.6, 3.0, 2.4, 1.8, 1.2 or 0.6V for the ADC levels.
+ *
+ * External Reference is VDD/4, with an adjustable gain of 1, 2 or 4, meaning
+ * VDD/4, VDD/2 or VDD for the ADC levels.
+ *
+ * Default settings are internal reference with 1/6 gain (GND..3.6V ADC range)
+ * Some variants overwrite it.
+ */
+#ifndef AREF_VOLTAGE
+#define AREF_VOLTAGE 3.6
+#endif
+
+#ifndef BATTERY_SENSE_RESOLUTION_BITS
+#define BATTERY_SENSE_RESOLUTION_BITS 10
+#endif
+
 #ifndef HAS_BLUETOOTH
 #define HAS_BLUETOOTH 1
 #endif
@@ -98,6 +117,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(HELTEC_T114)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
+#elif defined(HELTEC_MESH_NODE_T1)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T1
 #elif defined(MESHLINK)
 #define HW_VENDOR meshtastic_HardwareModel_MESHLINK
 #elif defined(SEEED_XIAO_NRF52840_KIT)
@@ -138,8 +159,8 @@
 
 #endif
 
-#ifdef PIN_LED1
-#define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
+#if defined(PIN_LED1) && !defined(LED_POWER)
+#define LED_POWER PIN_LED1 // LED1 on nrf52840-DK
 #endif
 
 #ifdef PIN_BUTTON1
