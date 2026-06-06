@@ -73,8 +73,8 @@ static struct timeval mockSystemTime = {};
 }
 
 /**
- * Reads the current date and time from the RTC module and updates the system time.
- * @return True if the RTC was successfully read and the system time was updated, false otherwise.
+ * Reads date/time from the RTC module (or system-time fallback) and seeds internal timekeeping.
+ * @return RTCSetResultSuccess if a time source was read successfully (even if an existing higher-quality time is retained).
  */
 RTCSetResult readFromRTC()
 {
