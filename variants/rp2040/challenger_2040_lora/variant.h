@@ -5,8 +5,6 @@
 #define EXT_NOTIFY_OUT 0xFFFFFFFF
 #define BUTTON_PIN 0xFFFFFFFF
 
-#define LED_PIN PIN_LED
-
 #define USE_RF95 // RFM95/SX127x
 
 #undef LORA_SCK

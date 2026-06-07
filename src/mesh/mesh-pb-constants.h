@@ -37,16 +37,50 @@
 #define MAX_RX_NOTIFICATION_TOPHONE 2
 #endif
 
-/// Verify baseline assumption of node size. If it increases, we need to reevaluate
-/// the impact of its memory footprint, notably on MAX_NUM_NODES.
-static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
+/// Tighten this when the slim header shrinks; loosen only with deliberate
+/// awareness of MAX_NUM_NODES impact per platform.
+static_assert(sizeof(meshtastic_NodeInfoLite) <= 130, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
+
+// Compile satellite NodeDBs out on STM32WL (and the status DB also follows
+// MESHTASTIC_EXCLUDE_STATUS).
+#ifndef MESHTASTIC_EXCLUDE_POSITIONDB
+#if defined(ARCH_STM32WL)
+#define MESHTASTIC_EXCLUDE_POSITIONDB 1
+#else
+#define MESHTASTIC_EXCLUDE_POSITIONDB 0
+#endif
+#endif
+
+#ifndef MESHTASTIC_EXCLUDE_TELEMETRYDB
+#if defined(ARCH_STM32WL)
+#define MESHTASTIC_EXCLUDE_TELEMETRYDB 1
+#else
+#define MESHTASTIC_EXCLUDE_TELEMETRYDB 0
+#endif
+#endif
+
+#ifndef MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+#if defined(ARCH_STM32WL)
+#define MESHTASTIC_EXCLUDE_ENVIRONMENTDB 1
+#else
+#define MESHTASTIC_EXCLUDE_ENVIRONMENTDB 0
+#endif
+#endif
+
+#ifndef MESHTASTIC_EXCLUDE_STATUSDB
+#if defined(ARCH_STM32WL) || defined(MESHTASTIC_EXCLUDE_STATUS)
+#define MESHTASTIC_EXCLUDE_STATUSDB 1
+#else
+#define MESHTASTIC_EXCLUDE_STATUSDB 0
+#endif
+#endif
 
 /// max number of nodes allowed in the nodeDB
 #ifndef MAX_NUM_NODES
 #if defined(ARCH_STM32WL)
 #define MAX_NUM_NODES 10
 #elif defined(ARCH_NRF52)
-#define MAX_NUM_NODES 80
+#define MAX_NUM_NODES 150
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 #include "Esp.h"
 static inline int get_max_num_nodes()
@@ -68,6 +102,31 @@ static inline int get_max_num_nodes()
 
 /// Max number of channels allowed
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))
+
+// Traffic Management module configuration
+// Enable per-variant by defining HAS_TRAFFIC_MANAGEMENT=1 in variant.h
+#ifndef HAS_TRAFFIC_MANAGEMENT
+#define HAS_TRAFFIC_MANAGEMENT 0
+#endif
+
+// HopScalingModule - variable hop module: dynamically adjusts broadcast hop_limit based on mesh density
+// Enable per-variant by defining HAS_VARIABLE_HOPS=1 in variant.h
+#ifdef ARCH_STM32WL
+#define HAS_VARIABLE_HOPS 0
+#endif
+#ifndef HAS_VARIABLE_HOPS
+#define HAS_VARIABLE_HOPS 1
+#endif
+
+// Cache size for traffic management (number of nodes to track)
+// Can be overridden per-variant based on available memory
+#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
+#if HAS_TRAFFIC_MANAGEMENT
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000
+#else
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 0
+#endif
+#endif
 
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
 /// returns the encoded packet size

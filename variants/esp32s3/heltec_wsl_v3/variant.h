@@ -1,7 +1,7 @@
 #define I2C_SCL SCL
 #define I2C_SDA SDA
 
-#define LED_PIN LED
+#define LED_POWER LED
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define VEXT_ON_VALUE LOW
@@ -10,7 +10,7 @@
 #define ADC_CTRL 37
 #define ADC_CTRL_ENABLED LOW
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_0
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.045
 

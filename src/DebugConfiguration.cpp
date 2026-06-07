@@ -26,6 +26,8 @@ SOFTWARE.*/
 
 #include "DebugConfiguration.h"
 
+#include <memory>
+
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -41,7 +43,8 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...)
 }
 
 #if HAS_NETWORKING
-
+namespace meshtastic
+{
 Syslog::Syslog(UDP &client)
 {
     this->_client = &client;
@@ -97,7 +100,6 @@ Syslog &Syslog::logMask(uint8_t priMask)
 
 void Syslog::enable()
 {
-    this->_client->begin(this->_port);
     this->_enabled = true;
 }
 
@@ -119,27 +121,22 @@ bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
 
 bool Syslog::vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args)
 {
-    char *message;
-    size_t initialLen;
-    size_t len;
-    bool result;
+    // First measure the formatted length using a copy of args; passing args directly
+    // to vsnprintf consumes it, and reusing a consumed va_list is undefined behavior.
+    va_list args_measure;
+    va_copy(args_measure, args);
+    int needed = vsnprintf(nullptr, 0, fmt, args_measure);
+    va_end(args_measure);
 
-    initialLen = strlen(fmt);
+    if (needed < 0)
+        return false; // encoding error
 
-    message = new char[initialLen + 1];
+    auto message = std::unique_ptr<char[]>(new char[static_cast<size_t>(needed) + 1]);
+    int written = vsnprintf(message.get(), static_cast<size_t>(needed) + 1, fmt, args);
+    if (written < 0)
+        return false;
 
-    len = vsnprintf(message, initialLen + 1, fmt, args);
-    if (len > initialLen) {
-        delete[] message;
-        message = new char[len + 1];
-
-        vsnprintf(message, len + 1, fmt, args);
-    }
-
-    result = this->_sendLog(pri, appName, message);
-
-    delete[] message;
-    return result;
+    return this->_sendLog(pri, appName, message.get());
 }
 
 inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *message)
@@ -154,7 +151,7 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
     if (!this->_enabled)
         return false;
 
-    if ((this->_server == NULL && this->_ip == INADDR_NONE) || this->_port == 0)
+    if ((this->_server == NULL && this->_ip == IPAddress(0, 0, 0, 0)) || this->_port == 0)
         return false;
 
     // Check priority against priMask values.
@@ -165,14 +162,21 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
     if ((pri & LOG_FACMASK) == 0)
         pri = LOG_MAKEPRI(LOG_FAC(this->_priDefault), pri);
 
+    // W5100S: acquire UDP socket on-demand to avoid permanent socket consumption
+    if (!this->_client->begin(this->_port)) {
+        return false;
+    }
+
     if (this->_server != NULL) {
         result = this->_client->beginPacket(this->_server, this->_port);
     } else {
         result = this->_client->beginPacket(this->_ip, this->_port);
     }
 
-    if (result != 1)
+    if (result != 1) {
+        this->_client->stop();
         return false;
+    }
 
     this->_client->print('<');
     this->_client->print(pri);
@@ -192,7 +196,11 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
     this->_client->print(message);
     this->_client->endPacket();
 
+    this->_client->stop(); // W5100S: release UDP socket for other services
+
     return true;
 }
+
+}; // namespace meshtastic
 
 #endif

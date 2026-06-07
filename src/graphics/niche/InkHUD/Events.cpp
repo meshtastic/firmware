@@ -2,6 +2,8 @@
 
 #include "./Events.h"
 
+#include "MessageStore.h"
+#include "PowerFSM.h"
 #include "RTC.h"
 #include "buzz.h"
 #include "modules/ExternalNotificationModule.h"
@@ -13,6 +15,19 @@
 #include "graphics/niche/Utils/FlashData.h"
 
 using namespace NicheGraphics;
+
+namespace
+{
+// When touch long-press opens menu, some panels report a delayed release/tap
+// if the finger stays down briefly. Keep this long enough to cover that release.
+constexpr uint32_t TOUCH_MENU_OPEN_TAP_SUPPRESS_MS = 1200;
+
+inline void noteInkHUDUserInteraction()
+{
+    // Keep power state and screen-timeout behavior in sync with InkHUD input activity.
+    powerFSM.trigger(EVENT_INPUT);
+}
+} // namespace
 
 InkHUD::Events::Events()
 {
@@ -38,6 +53,248 @@ void InkHUD::Events::begin()
 
 void InkHUD::Events::onButtonShort()
 {
+    noteInkHUDUserInteraction();
+
+    // Audio feedback (via buzzer)
+    // Short tone
+    playChirp();
+    // Cancel any beeping, buzzing, blinking
+    // Some button handling suppressed if we are dismissing an external notification (see below)
+    bool dismissedExt = dismissExternalNotification();
+
+    // Check which system applet wants to handle the button press (if any)
+    SystemApplet *consumer = nullptr;
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleInput) {
+            consumer = sa;
+            break;
+        }
+    }
+
+    // If no system applet is handling input, default behavior instead is to cycle applets
+    // or open menu if joystick is enabled
+    if (consumer) {
+        consumer->onButtonShortPress();
+    } else if (!dismissedExt) { // Don't change applet if this button press silenced the external notification module
+        Applet *userConsumer = inkhud->getActiveApplet();
+
+        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::BUTTON_SHORT))
+            userConsumer->onButtonShortPress();
+        else {
+            if (!settings->joystick.enabled)
+                inkhud->nextApplet();
+            else
+                inkhud->openMenu();
+        }
+    }
+}
+
+void InkHUD::Events::onButtonLong()
+{
+    noteInkHUDUserInteraction();
+
+    // Audio feedback (via buzzer)
+    // Slightly longer than playChirp
+    playBoop();
+
+    // Check which system applet wants to handle the button press (if any)
+    SystemApplet *consumer = nullptr;
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleInput) {
+            consumer = sa;
+            break;
+        }
+    }
+
+    // If no system applet is handling input, default behavior instead is to open the menu
+    if (consumer)
+        consumer->onButtonLongPress();
+    else {
+        Applet *userConsumer = inkhud->getActiveApplet();
+
+        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::BUTTON_LONG))
+            userConsumer->onButtonLongPress();
+        else
+            inkhud->openMenu();
+    }
+}
+
+void InkHUD::Events::onExitShort()
+{
+    // Preserve legacy behavior on non-touch builds:
+    // EXIT input is only active when joystick mode is enabled.
+    // Touch-capable builds intentionally bypass this joystick gate.
+    if (!settings->joystick.enabled && !inkhud->hasTouchEnabledProvider()) {
+        return;
+    }
+
+    noteInkHUDUserInteraction();
+
+    // Audio feedback (via buzzer)
+    // Short tone
+    playChirp();
+    // Cancel any beeping, buzzing, blinking
+    // Some button handling suppressed if we are dismissing an external notification module (see below)
+    bool dismissedExt = dismissExternalNotification();
+
+    // Check which system applet wants to handle the button press (if any)
+    SystemApplet *consumer = nullptr;
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleInput) {
+            consumer = sa;
+            break;
+        }
+    }
+
+    // Always let active system applets consume EXIT/HOME input (menu close, keyboard cancel, etc),
+    // including on touch-first nodes where joystick mode is disabled.
+    if (consumer) {
+        consumer->onExitShort();
+        return;
+    }
+
+    // Touch-capable InkHUD nodes use EXIT/HOME as a quick app switcher launcher.
+    if (!dismissedExt && inkhud->hasTouchEnabledProvider()) {
+        inkhud->openAppSwitcher();
+        return;
+    }
+
+    if (!dismissedExt) {
+        Applet *userConsumer = inkhud->getActiveApplet();
+
+        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::EXIT_SHORT)) {
+            userConsumer->onExitShort();
+        } else if (settings->joystick.enabled) {
+            // Preserve existing joystick behavior when no applet handles EXIT.
+            inkhud->nextTile();
+        }
+    }
+}
+
+void InkHUD::Events::onExitLong()
+{
+    // Preserve legacy behavior on non-touch builds:
+    // EXIT input is only active when joystick mode is enabled.
+    // Touch-capable builds intentionally bypass this joystick gate.
+    if (!settings->joystick.enabled && !inkhud->hasTouchEnabledProvider()) {
+        return;
+    }
+
+    noteInkHUDUserInteraction();
+
+    // Audio feedback (via buzzer)
+    // Slightly longer than playChirp
+    playBoop();
+
+    // Check which system applet wants to handle the button press (if any)
+    SystemApplet *consumer = nullptr;
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleInput) {
+            consumer = sa;
+            break;
+        }
+    }
+
+    // Always allow system applets to consume EXIT/HOME long-press.
+    if (consumer) {
+        consumer->onExitLong();
+    } else {
+        Applet *userConsumer = inkhud->getActiveApplet();
+
+        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::EXIT_LONG))
+            userConsumer->onExitLong();
+        // Nothing uses exit long yet
+    }
+}
+
+void InkHUD::Events::onNavUp()
+{
+    if (settings->joystick.enabled)
+        onTouchNavUp();
+}
+
+void InkHUD::Events::onNavDown()
+{
+    if (settings->joystick.enabled)
+        onTouchNavDown();
+}
+
+void InkHUD::Events::onNavLeft()
+{
+    if (settings->joystick.enabled)
+        onTouchNavLeft();
+}
+
+void InkHUD::Events::onNavRight()
+{
+    if (settings->joystick.enabled)
+        onTouchNavRight();
+}
+
+void InkHUD::Events::onTouchNavUp()
+{
+    noteInkHUDUserInteraction();
+
+    // Audio feedback (via buzzer)
+    // Short tone
+    playChirp();
+    // Cancel any beeping, buzzing, blinking
+    // Some button handling suppressed if we are dismissing an external notification (see below)
+    bool dismissedExt = dismissExternalNotification();
+
+    // Check which system applet wants to handle the button press (if any)
+    SystemApplet *consumer = nullptr;
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleInput) {
+            consumer = sa;
+            break;
+        }
+    }
+
+    if (consumer)
+        consumer->onNavUp();
+    else if (!dismissedExt) {
+        Applet *userConsumer = inkhud->getActiveApplet();
+
+        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::NAV_UP))
+            userConsumer->onNavUp();
+    }
+}
+
+void InkHUD::Events::onTouchNavDown()
+{
+    noteInkHUDUserInteraction();
+
+    // Audio feedback (via buzzer)
+    // Short tone
+    playChirp();
+    // Cancel any beeping, buzzing, blinking
+    // Some button handling suppressed if we are dismissing an external notification (see below)
+    bool dismissedExt = dismissExternalNotification();
+
+    // Check which system applet wants to handle the button press (if any)
+    SystemApplet *consumer = nullptr;
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleInput) {
+            consumer = sa;
+            break;
+        }
+    }
+
+    if (consumer)
+        consumer->onNavDown();
+    else if (!dismissedExt) {
+        Applet *userConsumer = inkhud->getActiveApplet();
+
+        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::NAV_DOWN))
+            userConsumer->onNavDown();
+    }
+}
+
+void InkHUD::Events::onTouchNavLeft()
+{
+    noteInkHUDUserInteraction();
+
     // Audio feedback (via buzzer)
     // Short tone
     playChirp();
@@ -56,16 +313,27 @@ void InkHUD::Events::onButtonShort()
 
     // If no system applet is handling input, default behavior instead is to cycle applets
     if (consumer)
-        consumer->onButtonShortPress();
-    else if (!dismissedExt) // Don't change applet if this button press silenced the external notification module
-        inkhud->nextApplet();
+        consumer->onNavLeft();
+    else if (!dismissedExt) { // Don't change applet if this button press silenced the external notification module
+        Applet *userConsumer = inkhud->getActiveApplet();
+
+        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::NAV_LEFT))
+            userConsumer->onNavLeft();
+        else
+            inkhud->prevApplet();
+    }
 }
 
-void InkHUD::Events::onButtonLong()
+void InkHUD::Events::onTouchNavRight()
 {
+    noteInkHUDUserInteraction();
+
     // Audio feedback (via buzzer)
-    // Slightly longer than playChirp
-    playBoop();
+    // Short tone
+    playChirp();
+    // Cancel any beeping, buzzing, blinking
+    // Some button handling suppressed if we are dismissing an external notification (see below)
+    bool dismissedExt = dismissExternalNotification();
 
     // Check which system applet wants to handle the button press (if any)
     SystemApplet *consumer = nullptr;
@@ -76,11 +344,105 @@ void InkHUD::Events::onButtonLong()
         }
     }
 
-    // If no system applet is handling input, default behavior instead is to open the menu
+    // If no system applet is handling input, default behavior instead is to cycle applets
     if (consumer)
-        consumer->onButtonLongPress();
-    else
-        inkhud->openMenu();
+        consumer->onNavRight();
+    else if (!dismissedExt) { // Don't change applet if this button press silenced the external notification module
+        Applet *userConsumer = inkhud->getActiveApplet();
+
+        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::NAV_RIGHT))
+            userConsumer->onNavRight();
+        else
+            inkhud->nextApplet();
+    }
+}
+
+void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
+{
+    const bool touchEnabledBuild = inkhud->hasTouchEnabledProvider();
+
+    // A long-press used to open the menu can be followed by a synthetic/queued tap at release.
+    // Ignore that brief follow-up window so touch-opened menus do not auto-select an item.
+    if (touchEnabledBuild && !longPress && suppressTouchTapUntilMs != 0) {
+        if ((int32_t)(millis() - suppressTouchTapUntilMs) < 0) {
+            noteInkHUDUserInteraction();
+            return;
+        }
+        suppressTouchTapUntilMs = 0;
+    }
+
+    // Give system applets (menu, keyboard, etc) first chance to consume direct touch input.
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleInput && sa->onTouchPoint(x, y, longPress)) {
+            noteInkHUDUserInteraction();
+            return;
+        }
+    }
+
+    // In split layouts, tapping a different tile changes focus.
+    // Consume this tap so selection does not also trigger button fallback behavior.
+    if (inkhud->selectTileAt(x, y)) {
+        noteInkHUDUserInteraction();
+        return;
+    }
+
+    // Allow foreground user applet to consume direct touch input if it wants.
+    Applet *userConsumer = inkhud->getActiveApplet();
+    if (userConsumer != nullptr && userConsumer->onTouchPoint(x, y, longPress)) {
+        noteInkHUDUserInteraction();
+        return;
+    }
+
+    // Fallback to existing button semantics so non-touch-aware applets keep working unchanged.
+    if (longPress) {
+        onButtonLong();
+
+        // Only arm suppression if the long-press actually opened menu foreground.
+        SystemApplet *menu = inkhud->getSystemApplet("Menu");
+        if (touchEnabledBuild && menu && menu->isForeground()) {
+            suppressTouchTapUntilMs = millis() + TOUCH_MENU_OPEN_TAP_SUPPRESS_MS;
+        }
+    } else
+        onButtonShort();
+}
+
+void InkHUD::Events::onFreeText(char c)
+{
+    noteInkHUDUserInteraction();
+
+    // Trigger the first system applet that wants to handle the new character
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleFreeText) {
+            sa->onFreeText(c);
+            break;
+        }
+    }
+}
+
+void InkHUD::Events::onFreeTextDone()
+{
+    noteInkHUDUserInteraction();
+
+    // Trigger the first system applet that wants to handle it
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleFreeText) {
+            sa->onFreeTextDone();
+            break;
+        }
+    }
+}
+
+void InkHUD::Events::onFreeTextCancel()
+{
+    noteInkHUDUserInteraction();
+
+    // Trigger the first system applet that wants to handle it
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        if (sa->handleFreeText) {
+            sa->onFreeTextCancel();
+            break;
+        }
+    }
 }
 
 // Callback for deepSleepObserver
@@ -111,7 +473,7 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
     // then prepared a final powered-off screen for us, which shows device shortname.
     // We're updating to show that one now.
 
-    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
+    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true, false);
     delay(1000); // Cooldown, before potentially yanking display power
 
     // InkHUD shutdown complete
@@ -119,6 +481,15 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
     playShutdownMelody();
 
     return 0; // We agree: deep sleep now
+}
+
+// Display an intermediate screen while configuration changes are applied
+void InkHUD::Events::applyingChanges()
+{
+    // Bring the logo applet forward with a temporary message
+    for (SystemApplet *sa : inkhud->systemApplets) {
+        sa->onApplyingChanges();
+    }
 }
 
 // Callback for rebootObserver
@@ -144,6 +515,7 @@ int InkHUD::Events::beforeReboot(void *unused)
         inkhud->persistence->saveLatestMessage();
     } else {
         NicheGraphics::clearFlashData();
+        messageStore.clearAllMessages(); // also wipe the shared message store
     }
 
     // Note: no forceUpdate call here
@@ -155,39 +527,34 @@ int InkHUD::Events::beforeReboot(void *unused)
 // Callback when a new text message is received
 // Caches the most recently received message, for use by applets
 // Rx does not trigger a save to flash, however the data *will* be saved alongside other during shutdown, etc.
-// Note: this is different from devicestate.rx_text_message, which may contain an *outgoing* message
+// Note: this is intentionally separate from device-state message fields.
 int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
 {
     // Short circuit: don't store outgoing messages
     if (getFrom(packet) == nodeDB->getNodeNum())
         return 0;
 
-    // Determine whether the message is broadcast or a DM
-    // Store this info to prevent confusion after a reboot
-    // Avoids need to compare timestamps, because of situation where "future" messages block newly received, if time not set
-    inkhud->persistence->latestMessage.wasBroadcast = isBroadcast(packet->to);
+    bool isBroadcastMsg = isBroadcast(packet->to);
+    inkhud->persistence->latestMessage.wasBroadcast = isBroadcastMsg;
 
-    // Pick the appropriate variable to store the message in
-    MessageStore::Message *storedMessage = inkhud->persistence->latestMessage.wasBroadcast
-                                               ? &inkhud->persistence->latestMessage.broadcast
-                                               : &inkhud->persistence->latestMessage.dm;
-
-    // Store nodenum of the sender
-    // Applets can use this to fetch user data from nodedb, if they want
-    storedMessage->sender = packet->from;
-
-    // Store the time (epoch seconds) when message received
-    storedMessage->timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
-
-    // Store the channel
-    // - (potentially) used to determine whether notification shows
-    // - (potentially) used to determine which applet to focus
-    storedMessage->channelIndex = packet->channel;
-
-    // Store the text
-    // Need to specify manually how many bytes, because source not null-terminated
-    storedMessage->text =
-        std::string(&packet->decoded.payload.bytes[0], &packet->decoded.payload.bytes[packet->decoded.payload.size]);
+    if (!isBroadcastMsg) {
+        // DMs never pass through ThreadedMessageApplet, so add them to the global store here
+        // so they survive reboots. Derive the latestMessage cache entry from the stored result.
+        inkhud->persistence->latestMessage.dm = messageStore.addFromPacket(*packet);
+    } else {
+        // Broadcasts are added to the global store by ThreadedMessageApplet::handleReceived().
+        // Here we only update the latestMessage cache used by AllMessageApplet / NotificationApplet.
+        StoredMessage &sm = inkhud->persistence->latestMessage.broadcast;
+        sm.sender = packet->from;
+        sm.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true);
+        sm.channelIndex = packet->channel;
+        const char *payload = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
+        size_t storedLen = packet->decoded.payload.size;
+        if (storedLen >= MAX_MESSAGE_SIZE)
+            storedLen = MAX_MESSAGE_SIZE - 1;
+        sm.textOffset = MessageStore::storeText(payload, storedLen);
+        sm.textLength = static_cast<uint16_t>(storedLen);
+    }
 
     return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)
 }

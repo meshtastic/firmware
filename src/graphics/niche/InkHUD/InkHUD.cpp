@@ -9,6 +9,10 @@
 #include "./SystemApplet.h"
 #include "./Tile.h"
 #include "./WindowManager.h"
+#include "FSCommon.h"
+#include "MessageStore.h"
+#include "SPILock.h"
+#include "concurrency/LockGuard.h"
 
 using namespace NicheGraphics;
 
@@ -53,17 +57,133 @@ void InkHUD::InkHUD::addApplet(const char *name, Applet *a, bool defaultActive, 
     windowManager->addApplet(name, a, defaultActive, defaultAutoshow, onTile);
 }
 
+void InkHUD::InkHUD::notifyApplyingChanges()
+{
+    if (events) {
+        events->applyingChanges();
+    }
+}
+
+// One-time migration from the old per-channel InkHUD message files (/NicheGraphics/ch*.msgs)
+// to the firmware-wide MessageStore format (/Messages_default.msgs).
+// Only runs when the new store loaded empty, meaning this is the first boot after the format change.
+// Old files are deleted once migrated.
+static void migrateOldInkHUDMessages()
+{
+#ifdef FSCom
+    bool migrated = false;
+    constexpr uint8_t MAX_CHANNELS = 8;
+    constexpr uint32_t OLD_MAX_MSG_SIZE = 250;
+
+    for (uint8_t ch = 0; ch < MAX_CHANNELS; ch++) {
+        std::string path = "/NicheGraphics/ch";
+        path += std::to_string(ch);
+        path += ".msgs";
+
+        spiLock->lock();
+        bool exists = FSCom.exists(path.c_str());
+        spiLock->unlock();
+        if (!exists)
+            continue;
+
+        concurrency::LockGuard guard(spiLock);
+
+        auto f = FSCom.open(path.c_str(), FILE_O_READ);
+        if (!f || f.size() == 0) {
+            if (f)
+                f.close();
+            FSCom.remove(path.c_str());
+            continue;
+        }
+
+        uint8_t count = 0;
+        f.readBytes(reinterpret_cast<char *>(&count), 1);
+
+        std::vector<StoredMessage> channelMsgs;
+        for (uint8_t i = 0; i < count; i++) {
+            StoredMessage sm;
+            f.readBytes(reinterpret_cast<char *>(&sm.timestamp), sizeof(sm.timestamp));
+            f.readBytes(reinterpret_cast<char *>(&sm.sender), sizeof(sm.sender));
+            f.readBytes(reinterpret_cast<char *>(&sm.channelIndex), sizeof(sm.channelIndex));
+
+            char textBuf[OLD_MAX_MSG_SIZE + 1] = {};
+            uint32_t textLen = 0;
+            char c;
+            while (textLen < OLD_MAX_MSG_SIZE) {
+                if (f.readBytes(&c, 1) != 1)
+                    break;
+                if (c == '\0')
+                    break;
+                textBuf[textLen++] = c;
+            }
+
+            sm.dest = NODENUM_BROADCAST;
+            sm.type = MessageType::BROADCAST;
+            sm.isBootRelative = false;
+            sm.ackStatus = AckStatus::ACKED;
+            size_t storedLen = (textLen >= MAX_MESSAGE_SIZE) ? MAX_MESSAGE_SIZE - 1 : textLen;
+            sm.textOffset = MessageStore::storeText(textBuf, storedLen);
+            sm.textLength = static_cast<uint16_t>(storedLen);
+
+            channelMsgs.push_back(sm);
+        }
+
+        // Old format stored newest-first (push_front); insert oldest-first for correct chronological order
+        for (int i = static_cast<int>(channelMsgs.size()) - 1; i >= 0; i--)
+            messageStore.addLiveMessage(channelMsgs[i]);
+        if (!channelMsgs.empty())
+            migrated = true;
+
+        f.close();
+        FSCom.remove(path.c_str());
+        LOG_INFO("Migrated %u messages from %s", static_cast<uint32_t>(count), path.c_str());
+    }
+
+    // Delete the old latest.msgs; the latestMessage cache will be re-derived from migrated channel messages
+    spiLock->lock();
+    if (FSCom.exists("/NicheGraphics/latest.msgs"))
+        FSCom.remove("/NicheGraphics/latest.msgs");
+    spiLock->unlock();
+
+    if (migrated) {
+        LOG_INFO("InkHUD message migration complete, saving to new format");
+        messageStore.saveToFlash();
+    }
+#endif
+}
+
 // Start InkHUD!
 // Call this only after you have configured InkHUD
 void InkHUD::InkHUD::begin()
 {
     persistence->loadSettings();
+    messageStore.loadFromFlash(); // Load persisted messages before deriving latestMessage cache
+    if (messageStore.getLiveMessages().empty())
+        migrateOldInkHUDMessages(); // First boot after format change: import old per-channel files
     persistence->loadLatestMessage();
 
     windowManager->begin();
     events->begin();
     renderer->begin();
     // LogoApplet shows boot screen here
+}
+
+void InkHUD::InkHUD::setTouchEnabledProvider(TouchEnabledProvider provider)
+{
+    touchEnabledProvider = provider;
+}
+
+bool InkHUD::InkHUD::hasTouchEnabledProvider() const
+{
+    return touchEnabledProvider != nullptr;
+}
+
+bool InkHUD::InkHUD::isTouchEnabled() const
+{
+    if (!touchEnabledProvider)
+        return true;
+
+    return touchEnabledProvider();
 }
 
 // Call this when your user button gets a short press
@@ -80,12 +200,219 @@ void InkHUD::InkHUD::longpress()
     events->onButtonLong();
 }
 
+// Call this when your exit button gets a short press
+void InkHUD::InkHUD::exitShort()
+{
+    events->onExitShort();
+}
+
+// Call this when your exit button gets a long press
+void InkHUD::InkHUD::exitLong()
+{
+    events->onExitLong();
+}
+
+// Call this when your joystick gets an up input
+void InkHUD::InkHUD::navUp()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onNavLeft();
+        break;
+    case 2: // 180 deg
+        events->onNavDown();
+        break;
+    case 3: // 270 deg
+        events->onNavRight();
+        break;
+    default: // 0 deg
+        events->onNavUp();
+        break;
+    }
+}
+
+// Call this when your joystick gets a down input
+void InkHUD::InkHUD::navDown()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onNavRight();
+        break;
+    case 2: // 180 deg
+        events->onNavUp();
+        break;
+    case 3: // 270 deg
+        events->onNavLeft();
+        break;
+    default: // 0 deg
+        events->onNavDown();
+        break;
+    }
+}
+
+// Call this when your joystick gets a left input
+void InkHUD::InkHUD::navLeft()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onNavDown();
+        break;
+    case 2: // 180 deg
+        events->onNavRight();
+        break;
+    case 3: // 270 deg
+        events->onNavUp();
+        break;
+    default: // 0 deg
+        events->onNavLeft();
+        break;
+    }
+}
+
+// Call this when your joystick gets a right input
+void InkHUD::InkHUD::navRight()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onNavUp();
+        break;
+    case 2: // 180 deg
+        events->onNavLeft();
+        break;
+    case 3: // 270 deg
+        events->onNavDown();
+        break;
+    default: // 0 deg
+        events->onNavRight();
+        break;
+    }
+}
+
+// Call this when touch input needs joystick-like up navigation independent of joystick-enabled mode
+void InkHUD::InkHUD::touchNavUp()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onTouchNavLeft();
+        break;
+    case 2: // 180 deg
+        events->onTouchNavDown();
+        break;
+    case 3: // 270 deg
+        events->onTouchNavRight();
+        break;
+    default: // 0 deg
+        events->onTouchNavUp();
+        break;
+    }
+}
+
+// Call this when touch input needs joystick-like down navigation independent of joystick-enabled mode
+void InkHUD::InkHUD::touchNavDown()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onTouchNavRight();
+        break;
+    case 2: // 180 deg
+        events->onTouchNavUp();
+        break;
+    case 3: // 270 deg
+        events->onTouchNavLeft();
+        break;
+    default: // 0 deg
+        events->onTouchNavDown();
+        break;
+    }
+}
+
+// Call this when touch input needs joystick-like left navigation independent of joystick-enabled mode
+void InkHUD::InkHUD::touchNavLeft()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onTouchNavDown();
+        break;
+    case 2: // 180 deg
+        events->onTouchNavRight();
+        break;
+    case 3: // 270 deg
+        events->onTouchNavUp();
+        break;
+    default: // 0 deg
+        events->onTouchNavLeft();
+        break;
+    }
+}
+
+// Call this when touch input needs joystick-like right navigation independent of joystick-enabled mode
+void InkHUD::InkHUD::touchNavRight()
+{
+    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
+    case 1: // 90 deg
+        events->onTouchNavUp();
+        break;
+    case 2: // 180 deg
+        events->onTouchNavLeft();
+        break;
+    case 3: // 270 deg
+        events->onTouchNavDown();
+        break;
+    default: // 0 deg
+        events->onTouchNavRight();
+        break;
+    }
+}
+
+void InkHUD::InkHUD::touchTap(uint16_t x, uint16_t y)
+{
+    events->onTouchTap(x, y, false);
+}
+
+void InkHUD::InkHUD::touchLongPress(uint16_t x, uint16_t y)
+{
+    events->onTouchTap(x, y, true);
+}
+
+// Call this for keyboard input
+// The Keyboard Applet also calls this
+void InkHUD::InkHUD::freeText(char c)
+{
+    events->onFreeText(c);
+}
+
+// Call this to complete a freetext input
+void InkHUD::InkHUD::freeTextDone()
+{
+    events->onFreeTextDone();
+}
+
+// Call this to cancel a freetext input
+void InkHUD::InkHUD::freeTextCancel()
+{
+    events->onFreeTextCancel();
+}
+
 // Cycle the next user applet to the foreground
 // Only activated applets are cycled
 // If user has a multi-applet layout, the applets will cycle on the "focused tile"
 void InkHUD::InkHUD::nextApplet()
 {
     windowManager->nextApplet();
+}
+
+// Cycle the previous user applet to the foreground
+// Only activated applets are cycled
+// If user has a multi-applet layout, the applets will cycle on the "focused tile"
+void InkHUD::InkHUD::prevApplet()
+{
+    windowManager->prevApplet();
+}
+
+// Returns the currently active applet
+InkHUD::Applet *InkHUD::InkHUD::getActiveApplet()
+{
+    return windowManager->getActiveApplet();
 }
 
 // Show the menu (on the the focused tile)
@@ -95,6 +422,30 @@ void InkHUD::InkHUD::openMenu()
     windowManager->openMenu();
 }
 
+// Show touch-friendly app switcher (on the focused tile)
+void InkHUD::InkHUD::openAppSwitcher()
+{
+    windowManager->openAppSwitcher();
+}
+
+// Bring AlignStick applet to the foreground
+void InkHUD::InkHUD::openAlignStick()
+{
+    windowManager->openAlignStick();
+}
+
+// Open the on-screen keyboard
+void InkHUD::InkHUD::openKeyboard()
+{
+    windowManager->openKeyboard();
+}
+
+// Close the on-screen keyboard
+void InkHUD::InkHUD::closeKeyboard()
+{
+    windowManager->closeKeyboard();
+}
+
 // In layouts where multiple applets are shown at once, change which tile is focused
 // The focused tile in the one which cycles applets on button short press, and displays menu on long press
 void InkHUD::InkHUD::nextTile()
@@ -102,10 +453,34 @@ void InkHUD::InkHUD::nextTile()
     windowManager->nextTile();
 }
 
+// In layouts where multiple applets are shown at once, change which tile is focused
+// The focused tile in the one which cycles applets on button short press, and displays menu on long press
+void InkHUD::InkHUD::prevTile()
+{
+    windowManager->prevTile();
+}
+
+bool InkHUD::InkHUD::showApplet(uint8_t appletIndex)
+{
+    return windowManager->showApplet(appletIndex);
+}
+
+bool InkHUD::InkHUD::selectTileAt(uint16_t x, uint16_t y)
+{
+    return windowManager->selectTileAt(x, y);
+}
+
 // Rotate the display image by 90 degrees
 void InkHUD::InkHUD::rotate()
 {
     windowManager->rotate();
+}
+
+// rotate the joystick in 90 degree increments
+void InkHUD::InkHUD::rotateJoystick(uint8_t angle)
+{
+    persistence->settings.joystick.alignment += angle;
+    persistence->settings.joystick.alignment %= 4;
 }
 
 // Show / hide the battery indicator in top-right
@@ -129,10 +504,11 @@ void InkHUD::InkHUD::requestUpdate()
 // Ignores all diplomacy:
 //  - the display *will* update
 //  - the specified update type *will* be used
+// If the all parameter is true, the whole screen buffer is cleared and re-rendered
 // If the async parameter is false, code flow is blocked while the update takes place
-void InkHUD::InkHUD::forceUpdate(EInk::UpdateTypes type, bool async)
+void InkHUD::InkHUD::forceUpdate(EInk::UpdateTypes type, bool all, bool async)
 {
-    renderer->forceUpdate(type, async);
+    renderer->forceUpdate(type, all, async);
 }
 
 // Wait for any in-progress display update to complete before continuing

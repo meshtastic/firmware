@@ -7,6 +7,8 @@
 #include "TDeckProKeyboard.h"
 #elif defined(T_LORA_PAGER)
 #include "TLoraPagerKeyboard.h"
+#elif defined(M5STACK_CARDPUTER_ADV)
+#include "CardputerKeyboard.h"
 #elif defined(HACKADAY_COMMUNICATOR)
 #include "HackadayCommunicatorKeyboard.h"
 #else
@@ -22,6 +24,8 @@ KbI2cBase::KbI2cBase(const char *name)
       TCAKeyboard(*(new TDeckProKeyboard()))
 #elif defined(T_LORA_PAGER)
       TCAKeyboard(*(new TLoraPagerKeyboard()))
+#elif defined(M5STACK_CARDPUTER_ADV)
+      TCAKeyboard(*(new CardputerKeyboard()))
 #elif defined(HACKADAY_COMMUNICATOR)
       TCAKeyboard(*(new HackadayCommunicatorKeyboard()))
 #else
@@ -321,6 +325,26 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_TAB;
                 break;
+            case TCA8418KeyboardBase::FUNCTION_F1:
+                e.inputEvent = INPUT_BROKER_FN_F1;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F2:
+                e.inputEvent = INPUT_BROKER_FN_F2;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F3:
+                e.inputEvent = INPUT_BROKER_FN_F3;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F4:
+                e.inputEvent = INPUT_BROKER_FN_F4;
+                e.kbchar = 0x00;
+                break;
+            case TCA8418KeyboardBase::FUNCTION_F5:
+                e.inputEvent = INPUT_BROKER_FN_F5;
+                e.kbchar = 0x00;
+                break;
             default:
                 if (nextEvent > 127) {
                     e.inputEvent = INPUT_BROKER_NONE;
@@ -467,7 +491,7 @@ int32_t KbI2cBase::runOnce()
                 e.kbchar = 0;
                 break;
             case 0xc: // Modifier key: 0xc is alt+c (Other options could be: 0xea = shift+mic button or 0x4 shift+$(speaker))
-                // toggle moddifiers button.
+                // toggle modifiers button.
                 is_sym = !is_sym;
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that the
@@ -489,8 +513,6 @@ int32_t KbI2cBase::runOnce()
             case 0x90: // fn+r      INPUT_BROKER_MSG_REBOOT
             case 0x91: // fn+t
             case 0xac: // fn+m      INPUT_BROKER_MSG_MUTE_TOGGLE
-
-            case 0x8b: // fn+del    INPUT_BROKEN_MSG_DISMISS_FRAME
             case 0xAA: // fn+b      INPUT_BROKER_MSG_BLUETOOTH_TOGGLE
             case 0x8F: // fn+e      INPUT_BROKER_MSG_EMOTE_LIST
                 // just pass those unmodified

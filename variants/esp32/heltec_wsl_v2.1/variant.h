@@ -1,7 +1,7 @@
 #define I2C_SCL SCL
 #define I2C_SDA SDA
 
-#define LED_PIN LED
+#define LED_POWER LED
 
 // active low, powers the Battery reader, but no lora antenna boost (?)
 // #define VEXT_ENABLE Vext
@@ -12,7 +12,7 @@
 #define ADC_CTRL 21
 #define ADC_CTRL_ENABLED LOW
 #define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_CHANNEL_1
+#define ADC_CHANNEL ADC_CHANNEL_1
 // ratio of voltage divider = 3.20 (R1=100k, R2=220k)
 #define ADC_MULTIPLIER 3.2
 

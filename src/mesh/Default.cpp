@@ -2,18 +2,21 @@
 
 #include "meshUtils.h"
 
+// Convert seconds to ms, clamping at INT32_MAX (~24.86 days)
+static inline uint32_t secondsToMsClamped(uint32_t secs)
+{
+    constexpr uint32_t MAX_MS = static_cast<uint32_t>(INT32_MAX);
+    return (secs > MAX_MS / 1000U) ? MAX_MS : secs * 1000U;
+}
+
 uint32_t Default::getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval)
 {
-    if (configuredInterval > 0)
-        return configuredInterval * 1000;
-    return defaultInterval * 1000;
+    return secondsToMsClamped(configuredInterval > 0 ? configuredInterval : defaultInterval);
 }
 
 uint32_t Default::getConfiguredOrDefaultMs(uint32_t configuredInterval)
 {
-    if (configuredInterval > 0)
-        return configuredInterval * 1000;
-    return default_broadcast_interval_secs * 1000;
+    return secondsToMsClamped(configuredInterval > 0 ? configuredInterval : default_broadcast_interval_secs);
 }
 
 uint32_t Default::getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue)
@@ -38,14 +41,43 @@ uint32_t Default::getConfiguredOrDefault(uint32_t configured, uint32_t defaultVa
 uint32_t Default::getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes)
 {
     // If we are a router, we don't scale the value. It's already significantly higher.
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER)
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)
         return getConfiguredOrDefaultMs(configured, defaultValue);
 
     // Additionally if we're a tracker or sensor, we want priority to send position and telemetry
-    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_SENSOR, meshtastic_Config_DeviceConfig_Role_TRACKER))
+    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_SENSOR, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER))
         return getConfiguredOrDefaultMs(configured, defaultValue);
 
-    return getConfiguredOrDefaultMs(configured, defaultValue) * congestionScalingCoefficient(numOnlineNodes);
+    // Saturate at INT32_MAX to match secondsToMsClamped: float→uint32_t when
+    // out of range is UB, and the result is consumed as an int32_t downstream.
+    constexpr uint32_t MAX_MS = static_cast<uint32_t>(INT32_MAX);
+    uint32_t base = getConfiguredOrDefaultMs(configured, defaultValue);
+    float coef = congestionScalingCoefficient(numOnlineNodes);
+    if (static_cast<double>(base) * static_cast<double>(coef) >= static_cast<double>(MAX_MS))
+        return MAX_MS;
+    return base * coef;
+}
+
+uint32_t Default::getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes,
+                                                 TrafficType type)
+{
+    uint32_t baseMs = getConfiguredOrDefaultMsScaled(configured, defaultValue, numOnlineNodes);
+
+    if (!myRegion || !myRegion->profile)
+        return baseMs;
+
+    int8_t throttle =
+        (type == TrafficType::POSITION) ? myRegion->profile->positionThrottle : myRegion->profile->telemetryThrottle;
+
+    // throttle <= 0 means unset; 1 is the neutral multiplier — skip the multiply for performance
+    if (throttle <= 1)
+        return baseMs;
+
+    constexpr uint32_t MAX_MS = static_cast<uint32_t>(INT32_MAX);
+    uint64_t result = static_cast<uint64_t>(baseMs) * static_cast<uint64_t>(throttle);
+    return result >= static_cast<uint64_t>(MAX_MS) ? MAX_MS : static_cast<uint32_t>(result);
 }
 
 uint32_t Default::getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue)

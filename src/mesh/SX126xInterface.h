@@ -28,6 +28,8 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+    void resetAGC() override;
+
     void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
 
   protected:
@@ -38,6 +40,8 @@ template <class T> class SX126xInterface : public RadioLibInterface
      * Specific module instance
      */
     T lora;
+
+    int16_t getCurrentRSSI() override;
 
     /**
      * Glue functions called from ISR land

@@ -23,12 +23,8 @@
 #define PIN_LED1 (12) // LED        P1.15
 #define PIN_LED2 (11) //
 
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
-
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
-// #define LED_PIN PIN_LED2
 #define LED_STATE_ON 1 // State when LED is litted
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
@@ -116,13 +112,13 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define GPS_L76K
 #ifdef GPS_L76K
-#define PIN_GPS_TX D6 // 44
-#define PIN_GPS_RX D7 // 43
+#define GPS_TX_PIN D6 // 44
+#define GPS_RX_PIN D7 // 43
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
-#define PIN_SERIAL1_TX PIN_GPS_TX
-#define PIN_SERIAL1_RX PIN_GPS_RX
+#define PIN_SERIAL1_TX GPS_TX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
 #define PIN_GPS_STANDBY D0
 #define GPS_EN D18 // P1.05
 #endif

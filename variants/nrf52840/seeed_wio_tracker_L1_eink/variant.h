@@ -23,13 +23,9 @@
 #define PIN_LED1 (11) // LED        P1.15
 #define PIN_LED2 (12) //
 
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
-
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
-// #define LED_PIN PIN_LED2
-#define LED_STATE_ON 1 // State when LED is litted
+#define LED_STATE_ON 1 // State when LED is lit
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -129,16 +125,14 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define GPS_L76K
 #ifdef GPS_L76K
-#define PIN_GPS_RX D6 // P0.26
-#define PIN_GPS_TX D7
+#define GPS_TX_PIN D6 // P0.26 - This is data from the MCU
+#define GPS_RX_PIN D7 // P0.27 - This is data from the GNSS
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_RX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
 
-#define GPS_RX_PIN PIN_GPS_TX
-#define GPS_TX_PIN PIN_GPS_RX
 #define PIN_GPS_STANDBY D0
 
 // #define GPS_DEBUG
@@ -179,7 +173,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define TB_PRESS 29
 #define TB_DIRECTION FALLING
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 #define CANNED_MESSAGE_ADD_CONFIRMATION 1
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

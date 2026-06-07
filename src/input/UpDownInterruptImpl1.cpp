@@ -8,6 +8,14 @@ UpDownInterruptImpl1::UpDownInterruptImpl1() : UpDownInterruptBase("upDown1") {}
 
 bool UpDownInterruptImpl1::init()
 {
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER) && defined(INPUTDRIVER_TWO_WAY_ROCKER_LEFT) && defined(INPUTDRIVER_TWO_WAY_ROCKER_RIGHT)
+    moduleConfig.canned_message.updown1_enabled = true;
+    moduleConfig.canned_message.inputbroker_pin_a = INPUTDRIVER_TWO_WAY_ROCKER_LEFT;
+    moduleConfig.canned_message.inputbroker_pin_b = INPUTDRIVER_TWO_WAY_ROCKER_RIGHT;
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
+    moduleConfig.canned_message.inputbroker_pin_press = INPUTDRIVER_TWO_WAY_ROCKER_BTN;
+#endif
+#endif
 
     if (!moduleConfig.canned_message.updown1_enabled) {
         // Input device is disabled.
@@ -29,7 +37,9 @@ bool UpDownInterruptImpl1::init()
                               eventDownLong, UpDownInterruptImpl1::handleIntDown, UpDownInterruptImpl1::handleIntUp,
                               UpDownInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
+#ifndef HAS_PHYSICAL_KEYBOARD
     osk_found = true;
+#endif
     return true;
 }
 

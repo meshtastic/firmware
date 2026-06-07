@@ -37,8 +37,8 @@ class Renderer : protected concurrency::OSThread
 
     // Call these to make the image change
 
-    void requestUpdate(); // Update display, if a foreground applet has info it wants to show
-    void forceUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED,
+    void requestUpdate(bool all = false); // Update display, if a foreground applet has info it wants to show
+    void forceUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED, bool all = false,
                      bool async = true); // Update display, regardless of whether any applets requested this
 
     // Wait for an update to complete
@@ -53,7 +53,7 @@ class Renderer : protected concurrency::OSThread
     uint16_t height();
 
   private:
-    // Make attemps to render / update, once triggered by requestUpdate or forceUpdate
+    // Make attempts to render / update, once triggered by requestUpdate or forceUpdate
     int32_t runOnce() override;
 
     // Apply the display rotation to handled pixels
@@ -65,6 +65,7 @@ class Renderer : protected concurrency::OSThread
     // Steps of the rendering process
 
     void clearBuffer();
+    void clearTile(Tile *t);
     void checkLocks();
     bool shouldUpdate();
     Drivers::EInk::UpdateTypes decideUpdateType();
@@ -85,6 +86,7 @@ class Renderer : protected concurrency::OSThread
 
     bool requested = false;
     bool forced = false;
+    bool renderAll = false;
 
     // For convenience
     InkHUD *inkhud = nullptr;

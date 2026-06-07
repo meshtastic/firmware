@@ -174,7 +174,7 @@ class BasicExampleApplet : public Applet
     // You must have an onRender() method
     // All drawing happens here
 
-    void onRender() override;
+    void onRender(bool full) override;
 };
 ```
 
@@ -183,7 +183,7 @@ The `onRender` method is called when the display image is redrawn. This can happ
 ```cpp
 // All drawing happens here
 // Our basic example doesn't do anything useful. It just passively prints some text.
-void InkHUD::BasicExampleApplet::onRender()
+void InkHUD::BasicExampleApplet::onRender(bool full)
 {
     printAt(0, 0, "Hello, world!");
 }
@@ -273,7 +273,7 @@ _(Example shows only config required by InkHUD. This is not a complete `env` def
 extends = esp32s3_base, inkhud ; or nrf52840_base, etc
 
 build_src_filter =
-${esp32_base.build_src_filter}
+${esp32s3_base.build_src_filter}
 ${inkhud.build_src_filter}
 
 build_flags =
@@ -422,9 +422,11 @@ Stores InkHUD data in flash
 - settings
 - most recent text message received (both for broadcast and DM)
 
-In rare cases, applets may store their own specific data separately (e.g. `ThreadedMessageApplet`)
+Message history (used by `ThreadedMessageApplet`) is stored by the firmware-wide `MessageStore` (`src/MessageStore.h`), not by `Persistence` directly.
 
-Data saved only on shutdown / reboot. Not saved if power is removed unexpectedly.
+Settings are saved only on shutdown / reboot. Not saved if power is removed unexpectedly.
+
+Message history is saved periodically (every 2 hours by default), as well as on shutdown / reboot.
 
 ---
 
@@ -464,20 +466,23 @@ Most recently received text message
 
 Collected here, so various user applets don't all have to store their own copy of this info.
 
-We are unable to use `devicestate.rx_text_message` for this purpose, because:
+We keep this separate latest-message cache for this purpose, because:
 
-- it is cleared by an outgoing text message
-- we want to store both a recent broadcast and a recent DM
+- we want to expose both the most recent broadcast and most recent DM independently
+- applets like `DMApplet` and `NotificationApplet` need quick access without scanning the full message history
+
+#### How messages reach the store
+
+Broadcasts and DMs take different paths into `messageStore`:
+
+- **Broadcasts** — `ThreadedMessageApplet::handleReceived()` calls `messageStore.addFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
+- **DMs** — `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.addFromPacket()` directly and stores the result in `latestMessage.dm`.
 
 #### Saving / Loading
 
-_A bit of a hack.._
-Stored to flash using `InkHUD::MessageStore`, which is really intended for storing a thread of messages (see `ThreadedMessageApplet`). Used because it stores strings more efficiently than `FlashData.h`.
+The `LatestMessage` cache is not persisted to its own file. On boot, `InkHUD::begin()` calls `messageStore.loadFromFlash()` first, then `Persistence::loadLatestMessage()` rebuilds the cache by scanning the loaded messages for the most recent broadcast and DM.
 
-The hack is:
-
-- If most recent message was a DM, we only store the DM.
-- If most recent message was a broadcast, we store both a DM and a broadcast. The DM may be 0-length string.
+Text is stored in the firmware-wide shared text pool. Use `MessageStore::getText(msg)` to retrieve it from a `StoredMessage`.
 
 ---
 
@@ -582,13 +587,17 @@ Handles events which impact the InkHUD system generally (e.g. shutdown, button p
 
 Applets themselves do also listen separately for various events, but for the purpose of gathering information which they would like to display.
 
+#### Text Messages
+
+`Events::onReceiveTextMessage()` is the central handler for all incoming text messages. It updates the `LatestMessage` cache and, for DMs, also adds the message to `messageStore` (since `ThreadedMessageApplet` only handles broadcasts). See `Persistence::LatestMessage` for details on how the two message types are stored.
+
 #### Buttons
 
 Button input is sometimes handled by a system applet. `InkHUD::Events` determines whether the button should be handled by a specific system applet, or should instead trigger a default behavior
 
 #### Factory Reset
 
-The Events class handles the admin messages(s) which trigger factory reset. We set `Events::eraseOnReboot = true`, which causes `Events::onReboot` to erase the contents of InkHUD's data directory. We do this because some applets (e.g. ThreadedMessageApplet) save their own data to flash, so if we erased earlier, that data would get re-written during reboot.
+The Events class handles the admin message(s) which trigger factory reset. We set `Events::eraseOnReboot = true`, which causes `Events::onReboot` to erase the contents of InkHUD's data directory (`/NicheGraphics/`) and also call `messageStore.clearAllMessages()` to wipe the firmware-wide message store (`/Messages_default.msgs`). Both are cleared during reboot rather than earlier, to avoid data being re-written by applets still running before shutdown.
 
 ---
 
@@ -733,7 +742,7 @@ To add support for additional encodings, add to the `AppletFont::Encodings` enum
 
 #### Custom Line Height
 
-Some fonts may have a handful of especially tall characters, especially extended-ASCII fonts with diacritcs. Ideally, the font should be modified to help resolve this, but if the problem remains, manual offsets to the automatically determined line height can be specified in the constructor.
+Some fonts may have a handful of especially tall characters, especially extended-ASCII fonts with diacritics. Ideally, the font should be modified to help resolve this, but if the problem remains, manual offsets to the automatically determined line height can be specified in the constructor.
 
 ```cpp
 // -2 px of padding above, +1 px of padding below
@@ -756,12 +765,12 @@ This mapping of emoji to control characters is fairly arbitrary. Selection was i
 | `0x03`     | 🙂                                             |
 | `0x04`     | 😆                                             |
 | `0x05`     | 👋                                             |
-| `0x06`     | ☀                                             |
+| `0x06`     | ☀                                              |
 | ~~`0x07`~~ | (bell char, unused)                            |
 | `0x08`     | 🌧                                             |
-| `0x09`     | ☁                                             |
+| `0x09`     | ☁                                              |
 | ~~`0x0A`~~ | (line feed, unused)                            |
-| `0x0B`     | ♥                                             |
+| `0x0B`     | ♥                                              |
 | `0x0C`     | 💩                                             |
 | ~~`0x0D`~~ | (carriage return, unused)                      |
 | `0x0E`     | 🔔                                             |

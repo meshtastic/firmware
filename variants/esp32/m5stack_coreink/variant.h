@@ -11,12 +11,10 @@
 
 // Green LED
 #define LED_STATE_ON 1 // State when LED is lit
-#define LED_PIN 10
+#define LED_POWER 10
 
-#include "pcf8563.h"
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
-#define HAS_RTC 1
 
 // Wheel
 //  Down 37
@@ -94,7 +92,7 @@
 #define PIN_EINK_MOSI 23 // EPD_MOSI
 
 #define BATTERY_PIN 35
-#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_7
 // https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/docs/schematic/Core/m5paper/M5_PAPER_SCH.pdf
 // https://github.com/m5stack/M5Core-Ink/blob/master/examples/Basics/FactoryTest/FactoryTest.ino#L58
 //  VBAT

@@ -19,6 +19,10 @@ extern NimbleBluetooth *nimbleBluetooth;
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
+#ifdef ARCH_NRF54L15
+#include "NRF54L15Bluetooth.h"
+extern NRF54L15Bluetooth *nrf54l15Bluetooth;
+#endif
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
 #endif
@@ -26,8 +30,8 @@ extern NRF52Bluetooth *nrf52Bluetooth;
 #if ARCH_PORTDUINO
 extern HardwareSPI *DisplaySPI;
 extern HardwareSPI *LoraSPI;
-
 #endif
+
 extern ScanI2C::DeviceAddress screen_found;
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
@@ -35,6 +39,7 @@ extern bool kb_found;
 extern bool osk_found;
 extern ScanI2C::DeviceAddress rtc_found;
 extern ScanI2C::DeviceAddress accelerometer_found;
+extern ScanI2C::DeviceAddress magnetometer_found;
 extern ScanI2C::FoundDevice rgb_found;
 extern ScanI2C::DeviceAddress aqi_found;
 
@@ -42,19 +47,19 @@ extern bool eink_found;
 extern bool pmu_found;
 extern bool isUSBPowered;
 
-#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
+#ifdef HAS_DRV2605
 #include <Adafruit_DRV2605.h>
 extern Adafruit_DRV2605 drv;
+#endif
+
+#ifdef HAS_PCA9557
+#include <PCA9557.h>
+extern PCA9557 io;
 #endif
 
 #ifdef HAS_I2S
 #include "AudioThread.h"
 extern AudioThread *audioThread;
-#endif
-
-#ifdef ELECROW_ThinkNode_M5
-#include <PCA9557.h>
-extern PCA9557 io;
 #endif
 
 #ifdef HAS_UDP_MULTICAST
@@ -65,9 +70,13 @@ extern UdpMulticastHandler *udpHandler;
 // Global Screen singleton.
 extern graphics::Screen *screen;
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
+#endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#include "motion/MagnetometerThread.h"
+extern MagnetometerThread *magnetometerThread;
 #endif
 
 extern bool isVibrating;
@@ -81,6 +90,7 @@ extern uint32_t timeLastPowered;
 
 extern uint32_t rebootAtMsec;
 extern uint32_t shutdownAtMsec;
+extern bool suppressRebootBanner;
 
 extern uint32_t serialSinceMsec;
 
