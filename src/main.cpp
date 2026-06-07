@@ -1243,7 +1243,7 @@ void loop()
     }
 #endif
 #endif
-#if HAS_SCREEN && ENABLE_MESSAGE_PERSISTENCE
+#if (HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)) && ENABLE_MESSAGE_PERSISTENCE
     messageStoreAutosaveTick();
 #endif
     long delayMsec = mainController.runOrDelay();
