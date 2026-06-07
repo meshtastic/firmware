@@ -1990,7 +1990,7 @@ bool NodeDB::saveDeviceStateToDisk()
 bool NodeDB::saveNodeDatabaseToDisk()
 {
     // Don't persist the node DB until this device has a PKI keypair
-    // TODO: revisit when Licensed is signed
+    // TODO: revisit when https://github.com/meshtastic/firmware/pull/10478 lands
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     if (owner.public_key.size != 32 && !owner.is_licensed) {
         LOG_DEBUG("Skip NodeDB without key");
