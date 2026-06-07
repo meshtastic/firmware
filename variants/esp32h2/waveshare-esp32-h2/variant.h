@@ -1,6 +1,5 @@
 
 #define HAS_SCREEN 0
-#define HAS_WIFI 0
 
 #define SERIAL_PRINT_PORT 1
 
