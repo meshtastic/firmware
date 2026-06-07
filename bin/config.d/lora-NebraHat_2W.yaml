@@ -2,7 +2,7 @@
 # Use for 2 watt hat
 Meta:
   name: NebraHat 2W
-  support: official
+  support: community
   compatible:
     - raspberry-pi
 
