@@ -410,10 +410,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     uint64_t sleepUsec = sleepMsec * 1000LL;
 
     // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
+
 #if SOC_PM_SUPPORT_RTC_PERIPH_PD
     // We want RTC peripherals to stay on
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 #endif
+
 #if defined(BUTTON_PIN) && defined(BUTTON_NEED_PULLUP)
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #endif
