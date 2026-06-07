@@ -704,7 +704,7 @@ void RadioLibInterface::enableFan()
 #endif
 #else
     pinMode(RADIO_FAN_EN, OUTPUT);
-    digitalWrite(RADIO_FAN_EN, 1);
+    digitalWrite(RADIO_FAN_EN, config.lora.pa_fan_disabled ? 0 : 1);
 #endif
 #endif
 }

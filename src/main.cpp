@@ -1017,9 +1017,9 @@ void setup()
     analogWrite(RADIO_FAN_EN, config.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
 #endif
 #else
-    // Set up as ON/OFF switch of fan
+    // Set up as ON/OFF switch of fan; default on unless disabled by config.
     pinMode(RADIO_FAN_EN, OUTPUT);
-    digitalWrite(RADIO_FAN_EN, LOW ^ 0);
+    digitalWrite(RADIO_FAN_EN, config.lora.pa_fan_disabled ? (LOW ^ 0) : (HIGH ^ 0));
 #endif
 #endif
 
