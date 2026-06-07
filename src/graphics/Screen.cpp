@@ -50,6 +50,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "RadioLibInterface.h"
+#include "SPILock.h"
 #include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
@@ -654,6 +655,10 @@ void Screen::setup()
     } else {
         brightness = uiconfig.screen_brightness;
     }
+
+    // Restore which frames the user has hidden (persisted across reboots).
+    // Must happen before the first setFrames().
+    loadFrameVisibility();
 
     // Detect OLED subtype (if supported by board variant)
 #ifdef AutoOLEDWire_h
@@ -1416,6 +1421,9 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
     if (frameName == "chirpy") {
         hiddenFrames.chirpy = !hiddenFrames.chirpy;
     }
+
+    // Save the new visibility state so it survives a reboot.
+    saveFrameVisibility();
 }
 
 bool Screen::isFrameHidden(const std::string &frameName) const
@@ -1452,6 +1460,167 @@ bool Screen::isFrameHidden(const std::string &frameName) const
         return hiddenFrames.chirpy;
 
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// Frame visibility persistence
+//
+// The set of hideable frames varies by build (USE_EINK, HAS_GPS, ...), so we
+// serialize to a fixed bitmask where each frame name owns a permanent bit
+// position. Bits for frames that don't exist in the current build are simply
+// left untouched, which keeps the saved file portable across firmware variants.
+// ---------------------------------------------------------------------------
+namespace
+{
+static const char *frameVisibilityFileName = "/prefs/framevis";
+constexpr uint32_t FRAMEVIS_MAGIC = 0x53495646; // "FVIS" little-endian
+constexpr uint8_t FRAMEVIS_VERSION = 1;
+
+// Permanent bit assignments. Never renumber these; only append new ones.
+enum FrameVisBit : uint8_t {
+    FVBIT_TEXT_MESSAGE = 0,
+    FVBIT_WAYPOINT = 1,
+    FVBIT_WIFI = 2,
+    FVBIT_SYSTEM = 3,
+    FVBIT_HOME = 4,
+    FVBIT_CLOCK = 5,
+    FVBIT_NODELIST_NODES = 6,
+    FVBIT_NODELIST_LOCATION = 7,
+    FVBIT_NODELIST_LASTHEARD = 8,
+    FVBIT_NODELIST_HOPSIGNAL = 9,
+    FVBIT_NODELIST_DISTANCE = 10,
+    FVBIT_NODELIST_BEARINGS = 11,
+    FVBIT_GPS = 12,
+    FVBIT_LORA = 13,
+    FVBIT_SHOW_FAVORITES = 14,
+    FVBIT_CHIRPY = 15,
+};
+
+struct __attribute__((packed)) FrameVisFile {
+    uint32_t magic;
+    uint8_t version;
+    uint32_t mask;
+};
+
+inline void setBit(uint32_t &mask, uint8_t bit, bool value)
+{
+    if (value)
+        mask |= (1UL << bit);
+    else
+        mask &= ~(1UL << bit);
+}
+
+inline bool getBit(uint32_t mask, uint8_t bit)
+{
+    return (mask & (1UL << bit)) != 0;
+}
+} // namespace
+
+uint32_t Screen::packHiddenFrames() const
+{
+    uint32_t mask = 0;
+    setBit(mask, FVBIT_TEXT_MESSAGE, hiddenFrames.textMessage);
+    setBit(mask, FVBIT_WAYPOINT, hiddenFrames.waypoint);
+    setBit(mask, FVBIT_WIFI, hiddenFrames.wifi);
+    setBit(mask, FVBIT_SYSTEM, hiddenFrames.system);
+    setBit(mask, FVBIT_HOME, hiddenFrames.home);
+    setBit(mask, FVBIT_CLOCK, hiddenFrames.clock);
+#ifndef USE_EINK
+    setBit(mask, FVBIT_NODELIST_NODES, hiddenFrames.nodelist_nodes);
+    setBit(mask, FVBIT_NODELIST_LOCATION, hiddenFrames.nodelist_location);
+#endif
+#ifdef USE_EINK
+    setBit(mask, FVBIT_NODELIST_LASTHEARD, hiddenFrames.nodelist_lastheard);
+    setBit(mask, FVBIT_NODELIST_HOPSIGNAL, hiddenFrames.nodelist_hopsignal);
+    setBit(mask, FVBIT_NODELIST_DISTANCE, hiddenFrames.nodelist_distance);
+#endif
+#if HAS_GPS
+#ifdef USE_EINK
+    setBit(mask, FVBIT_NODELIST_BEARINGS, hiddenFrames.nodelist_bearings);
+#endif
+    setBit(mask, FVBIT_GPS, hiddenFrames.gps);
+#endif
+    setBit(mask, FVBIT_LORA, hiddenFrames.lora);
+    setBit(mask, FVBIT_SHOW_FAVORITES, hiddenFrames.show_favorites);
+    setBit(mask, FVBIT_CHIRPY, hiddenFrames.chirpy);
+    return mask;
+}
+
+void Screen::applyHiddenFramesMask(uint32_t mask)
+{
+    hiddenFrames.textMessage = getBit(mask, FVBIT_TEXT_MESSAGE);
+    hiddenFrames.waypoint = getBit(mask, FVBIT_WAYPOINT);
+    hiddenFrames.wifi = getBit(mask, FVBIT_WIFI);
+    hiddenFrames.system = getBit(mask, FVBIT_SYSTEM);
+    hiddenFrames.home = getBit(mask, FVBIT_HOME);
+    hiddenFrames.clock = getBit(mask, FVBIT_CLOCK);
+#ifndef USE_EINK
+    hiddenFrames.nodelist_nodes = getBit(mask, FVBIT_NODELIST_NODES);
+    hiddenFrames.nodelist_location = getBit(mask, FVBIT_NODELIST_LOCATION);
+#endif
+#ifdef USE_EINK
+    hiddenFrames.nodelist_lastheard = getBit(mask, FVBIT_NODELIST_LASTHEARD);
+    hiddenFrames.nodelist_hopsignal = getBit(mask, FVBIT_NODELIST_HOPSIGNAL);
+    hiddenFrames.nodelist_distance = getBit(mask, FVBIT_NODELIST_DISTANCE);
+#endif
+#if HAS_GPS
+#ifdef USE_EINK
+    hiddenFrames.nodelist_bearings = getBit(mask, FVBIT_NODELIST_BEARINGS);
+#endif
+    hiddenFrames.gps = getBit(mask, FVBIT_GPS);
+#endif
+    hiddenFrames.lora = getBit(mask, FVBIT_LORA);
+    hiddenFrames.show_favorites = getBit(mask, FVBIT_SHOW_FAVORITES);
+    hiddenFrames.chirpy = getBit(mask, FVBIT_CHIRPY);
+}
+
+void Screen::loadFrameVisibility()
+{
+#ifdef FSCom
+    spiLock->lock();
+    auto file = FSCom.open(frameVisibilityFileName, FILE_O_READ);
+    if (file) {
+        FrameVisFile data{};
+        bool ok = file.read((uint8_t *)&data, sizeof(data)) == sizeof(data) && data.magic == FRAMEVIS_MAGIC &&
+                  data.version == FRAMEVIS_VERSION;
+        file.close();
+        spiLock->unlock();
+        if (ok) {
+            applyHiddenFramesMask(data.mask);
+            LOG_INFO("Loaded frame visibility (mask 0x%08x)", data.mask);
+        } else {
+            LOG_WARN("Frame visibility file invalid, keeping defaults");
+        }
+        return;
+    }
+    spiLock->unlock();
+    LOG_DEBUG("No saved frame visibility, using defaults");
+#endif
+}
+
+void Screen::saveFrameVisibility()
+{
+#ifdef FSCom
+    spiLock->lock();
+    FSCom.mkdir("/prefs");
+    if (FSCom.exists(frameVisibilityFileName))
+        FSCom.remove(frameVisibilityFileName);
+
+    auto file = FSCom.open(frameVisibilityFileName, FILE_O_WRITE);
+    if (file) {
+        FrameVisFile data{};
+        data.magic = FRAMEVIS_MAGIC;
+        data.version = FRAMEVIS_VERSION;
+        data.mask = packHiddenFrames();
+        file.write((uint8_t *)&data, sizeof(data));
+        file.flush();
+        file.close();
+        LOG_INFO("Saved frame visibility (mask 0x%08x)", data.mask);
+    } else {
+        LOG_WARN("Failed to open %s for writing", frameVisibilityFileName);
+    }
+    spiLock->unlock();
+#endif
 }
 
 void Screen::handleStartFirmwareUpdateScreen()

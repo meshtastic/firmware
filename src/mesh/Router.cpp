@@ -15,6 +15,9 @@
 #if HAS_TRAFFIC_MANAGEMENT
 #include "modules/TrafficManagementModule.h"
 #endif
+#if HAS_VARIABLE_HOPS
+#include "modules/HopScalingModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -22,8 +25,6 @@
 #if ARCH_PORTDUINO
 #include "Throttle.h"
 #include "platform/portduino/PortduinoGlue.h"
-#endif
-#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
 #include "serialization/MeshPacketSerializer.h"
 #endif
 
@@ -357,6 +358,30 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     p->from = getFrom(p);
 
     p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // set the relayer to us
+
+#if HAS_VARIABLE_HOPS
+    // Apply HopScaling hop recommendation to routine outgoing broadcasts
+    if (isFromUs(p) && isBroadcast(p->to) && hopScalingModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        switch (p->decoded.portnum) {
+        case meshtastic_PortNum_POSITION_APP:
+        case meshtastic_PortNum_TELEMETRY_APP:
+        case meshtastic_PortNum_NODEINFO_APP:
+        case meshtastic_PortNum_NEIGHBORINFO_APP: {
+            uint8_t variableHopLimit = hopScalingModule->getLastRequiredHop();
+
+            // Never exceed user-configured hop_limit
+            if (variableHopLimit < p->hop_limit) {
+                LOG_DEBUG("[HOPSCALE] hop_limit %u -> %u for portnum %u", p->hop_limit, variableHopLimit, p->decoded.portnum);
+                p->hop_limit = variableHopLimit;
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
+#endif
+
     // If we are the original transmitter, set the hop limit with which we start
     if (isFromUs(p))
         p->hop_start = p->hop_limit;
@@ -585,9 +610,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         } */
 
         printPacket("decoded message", p);
-#if ENABLE_JSON_LOGGING
-        LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
-#elif ARCH_PORTDUINO
+#if ARCH_PORTDUINO
         if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
         } else if (portduino_config.JSONFilename != "") {
@@ -892,11 +915,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
-#if ENABLE_JSON_LOGGING
-    // Even ignored packets get logged in the trace
-    p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
-    LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
-#elif ARCH_PORTDUINO
+#if ARCH_PORTDUINO
     // Even ignored packets get logged in the trace
     if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
         p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
