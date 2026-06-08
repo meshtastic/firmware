@@ -103,7 +103,12 @@ class UdpUnicastConnector final
         size_t len = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
         if (len == 0)
             return;
-        if (::send(fd, buffer, len, MSG_NOSIGNAL) < 0)
+#ifdef MSG_NOSIGNAL
+        constexpr int kSendFlags = MSG_NOSIGNAL;
+#else
+        constexpr int kSendFlags = 0;
+#endif
+        if (::send(fd, buffer, len, kSendFlags) < 0)
             LOG_DEBUG("UDP unicast: send() failed for packet id=%u", mp->id);
     }
 
