@@ -325,6 +325,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_T_IMPULSE_PLUS = 135,
     /* Lilygo T-Echo Card */
     meshtastic_HardwareModel_T_ECHO_CARD = 136,
+    /* Seeed Tracker L2 */
+    meshtastic_HardwareModel_SEEED_WIO_TRACKER_L2 = 137,
+    /* Elecrow CrowPanel Advance P4 models, ESP32-P4 and TFT with SX1262 radio plugin */
+    meshtastic_HardwareModel_CROWPANEL_P4 = 138,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
