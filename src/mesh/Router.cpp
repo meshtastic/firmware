@@ -560,7 +560,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             if (channels.decryptForHash(chIndex, p->channel)) {
                 decrypted = attemptAESDecrypt(p, rawSize);
                 if (decrypted) {
-                    LOG_INFO("Packet decrypted using channel %d!", chIndex);
+                    LOG_DEBUG("Packet decrypted using channel %d", chIndex);
                     break;
                 }
 
