@@ -214,7 +214,7 @@ static PhoneAuthSlot *findOrAllocSlot_LH(PhoneAPI *p)
 
 // Drop p's slot from both the auth table and the status-queue table.
 // Lock-held variant.
-static void clearAuthSlot_LH(PhoneAPI *p)
+static void clearAuthSlot_LH(const PhoneAPI *p)
 {
     if (!p)
         return;
