@@ -107,7 +107,7 @@ static PendingStatusSlot *findOrAllocStatusSlot_LH(PhoneAPI *p)
     return nullptr;
 }
 
-static void clearStatusSlot_LH(PhoneAPI *p)
+static void clearStatusSlot_LH(const PhoneAPI *p)
 {
     if (!p)
         return;
@@ -1742,7 +1742,7 @@ bool PhoneAPI::getAdminAuthorized() const
     concurrency::LockGuard g(&g_authSlotsMutex);
     // const_cast is safe — findOrAllocSlot_LH only mutates the slot table,
     // not the PhoneAPI itself, and the table key is just the pointer.
-    auto *slot = findOrAllocSlot_LH(const_cast<PhoneAPI *>(this));
+    const auto *slot = findOrAllocSlot_LH(const_cast<PhoneAPI *>(this));
     return slot && slot->authorized && slot->epoch == g_authEpoch;
 }
 
@@ -1858,7 +1858,7 @@ void PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State state, co
 bool PhoneAPI::hasPendingLockdownStatus() const
 {
     concurrency::LockGuard guard(&g_authSlotsMutex);
-    for (auto &s : g_statusSlots) {
+    for (const auto &s : g_statusSlots) {
         if (s.who == this && s.hasPending)
             return true;
     }

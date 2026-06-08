@@ -1968,7 +1968,8 @@ void NodeDB::loadFromDisk()
     if (EncryptedStorage::isLockdownActive()) {
         const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
                                       nodeDatabaseFileName};
-        int segments[] = {SEGMENT_CONFIG, SEGMENT_MODULECONFIG, SEGMENT_CHANNELS, SEGMENT_DEVICESTATE, SEGMENT_NODEDATABASE};
+        const int segments[] = {SEGMENT_CONFIG, SEGMENT_MODULECONFIG, SEGMENT_CHANNELS, SEGMENT_DEVICESTATE,
+                                SEGMENT_NODEDATABASE};
         int toSave = 0;
         for (int i = 0; i < 5; i++) {
             if (!EncryptedStorage::isEncrypted(filesToCheck[i])) {

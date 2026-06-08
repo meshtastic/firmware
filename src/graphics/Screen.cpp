@@ -662,9 +662,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             // someone over their shoulder) can see on wake is the redacted
             // view. Gated on lockdown — non-lockdown builds keep the
             // previous frame as a UX cue that the display is just dimmed.
-            if (dispdev) {
-                drawLockdownLockScreen(dispdev);
-            }
+            // dispdev is dereferenced unguarded throughout this file (incl.
+            // displayOff() just below), so no null check here.
+            drawLockdownLockScreen(dispdev);
 #endif
 
 #ifdef PIN_EINK_EN

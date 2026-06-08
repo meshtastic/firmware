@@ -867,9 +867,9 @@ static bool readAndConsumeToken()
 
     // Parse fields from body
     size_t pos = 4; // skip magic
-    uint8_t *nonce = buf.data() + pos;
+    const uint8_t *nonce = buf.data() + pos;
     pos += NONCE_SIZE;
-    uint8_t *encDek = buf.data() + pos;
+    const uint8_t *encDek = buf.data() + pos;
     pos += AES_KEY_SIZE;
     uint8_t bootsRemaining = buf[pos++];
     uint32_t validUntilEpoch;
