@@ -580,7 +580,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                     LOG_DEBUG("Packet decrypted using channel %d with UDP bypass", chIndex);
                     break;
                 }
-                }
             }
         }
     }
