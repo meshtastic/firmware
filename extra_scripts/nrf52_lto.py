@@ -37,6 +37,9 @@ def _no_lto(node):
         path = node.get_abspath()
     except Exception:
         path = str(node)
+    path = path.replace(
+        "\\", "/"
+    )  # normalize Windows backslashes so the substring matches below work cross-platform
     if USB_ISR in path:
         return env.Object(
             node,
