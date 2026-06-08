@@ -2,19 +2,22 @@
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821)
 #
-# Whole-image LTO for nrf52840, EXCEPT the interrupt handlers.
+# Whole-image LTO for nrf52840 (~-60KB vs no-LTO; ~-23KB beyond src-only LTO),
+# EXCEPT the objects that own interrupt/exception handlers.
 #
-# Every interrupt/exception handler is referenced only from the assembly vector
-# table (gcc_startup_nrf52840.S), which LTO cannot see. So whole-program LTO judges
-# the handlers dead, removes them, and the weak `b .` Default_Handler stubs prevail
-# -> the first IRQ (FreeRTOS scheduler-start SVC, then GPIOTE/RTC/USBD/...) lands in
-# an infinite loop and the chip hangs. Compiling the handler-bearing objects WITHOUT
-# LTO lets ordinary linking keep the strong handlers (exactly like a non-LTO build):
-#   - framework core (/FrameworkArduino/, /cores/nRF5/): every nrfx ISR + the
-#     FreeRTOS SVC/PendSV port (vPortSVCHandler / xPortPendSVHandler).
-#   - TinyUSB's nrf port: USBD_IRQHandler -- without it USB enumerates but the data
-#     path hangs (the host's first transfer interrupt is never serviced).
-# Everything else (app src + RadioLib/Crypto/nanopb/sensor libs/...) stays LTO'd.
+# Every ISR is referenced only from the assembly vector table (gcc_startup_nrf52840.S),
+# which LTO cannot see -> whole-program LTO judges the handlers dead, removes them, and
+# the weak `b .` Default_Handler stubs prevail -> the first IRQ (FreeRTOS scheduler-start
+# SVC, then GPIOTE/RTC/USBD/...) lands in an infinite loop and the chip hangs. Compiling
+# the handler-bearing objects WITHOUT LTO lets ordinary linking keep the strong handlers
+# (exactly like a non-LTO build); everything else (app src + RadioLib/Crypto/nanopb/...)
+# stays LTO'd:
+#   - framework core (/FrameworkArduino/, /cores/nRF5/): every nrfx ISR + the FreeRTOS
+#     SVC/PendSV port (vPortSVCHandler / xPortPendSVHandler).
+#   - TinyUSB's nrf port (Adafruit_TinyUSB_nrf.cpp): USBD_IRQHandler -- without it USB
+#     enumerates but the data path hangs.
+#
+# HW-validated: RAK4631 (SX1262) and muzi-base (LR1121) both boot and init their radios.
 import os
 
 Import("env")
