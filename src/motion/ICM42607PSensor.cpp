@@ -71,9 +71,6 @@ int32_t ICM42607PSensor::runOnce()
     }
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 #else
-    int16_t x = 0;
-    int16_t y = 0;
-    int16_t z = 0;
     inv_imu_sensor_event_t event = {};
 
     if (sensor == nullptr || sensor->getDataFromRegisters(event) != 0) {
@@ -85,11 +82,8 @@ int32_t ICM42607PSensor::runOnce()
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
-    x = event.accel[0];
-    y = event.accel[1];
-    z = event.accel[2];
-    // LOG_DEBUG("ICM-42607-P accel read x=%.3fg y=%.3fg z=%.3fg", (float)x / ICM42607P_COUNTS_PER_G,
-    //           (float)y / ICM42607P_COUNTS_PER_G, (float)z / ICM42607P_COUNTS_PER_G);
+    // LOG_DEBUG("ICM-42607-P accel read x=%.3fg y=%.3fg z=%.3fg", (float)event.accel[0] / ICM42607P_COUNTS_PER_G,
+    //           (float)event.accel[1] / ICM42607P_COUNTS_PER_G, (float)event.accel[2] / ICM42607P_COUNTS_PER_G);
 
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 #endif
