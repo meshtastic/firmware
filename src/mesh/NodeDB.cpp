@@ -25,6 +25,9 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#if HAS_VARIABLE_HOPS
+#include "modules/HopScalingModule.h"
+#endif
 #include "xmodem.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
@@ -2213,6 +2216,14 @@ bool NodeDB::saveDeviceStateToDisk()
 
 bool NodeDB::saveNodeDatabaseToDisk()
 {
+    // Don't persist the node DB until this device has a PKI keypair
+    // TODO: revisit when https://github.com/meshtastic/firmware/pull/10478 lands
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (owner.public_key.size != 32 && !owner.is_licensed) {
+        LOG_DEBUG("Skip NodeDB without key");
+        return true;
+    }
+#endif
 
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
@@ -2780,6 +2791,14 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT
+
+#if HAS_VARIABLE_HOPS
+        // Only sample packets that arrived over LoRa.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && hopScalingModule) {
+            uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
+            hopScalingModule->samplePacketForHistogram(mp.from, hopCount);
+        }
+#endif
 
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
         const int8_t hopsAway = getHopsAway(mp);

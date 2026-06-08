@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,sys,subprocess,shutil,os; f=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); t=shutil.which('trunk') or os.path.expanduser('~/.cache/trunk/launcher/trunk'); f and os.path.exists(t) and subprocess.run([t,'fmt','--force',f],stderr=subprocess.DEVNULL)\" 2>/dev/null || true",
+            "statusMessage": "Formatting..."
+          }
+        ]
+      }
+    ]
+  }
+}

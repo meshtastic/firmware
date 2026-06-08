@@ -636,6 +636,11 @@ class Screen : public concurrency::OSThread
     void toggleFrameVisibility(const std::string &frameName);
     bool isFrameHidden(const std::string &frameName) const;
 
+    // Persist / restore which frames are hidden, across reboots.
+    // Stored as a single uint32 bitmask in /prefs (see Screen.cpp for the format).
+    void loadFrameVisibility();
+    void saveFrameVisibility();
+
 #ifdef USE_EINK
     /// Draw an image to remain on E-Ink display after screen off
     void setScreensaverFrames(FrameCallback einkScreensaver = NULL);
@@ -750,6 +755,11 @@ class Screen : public concurrency::OSThread
         bool show_favorites = false;
         bool chirpy = true;
     } hiddenFrames;
+
+    // Convert hiddenFrames to a uint32 bitmask. Bit positions are fixed per
+    // frame name (see Screen.cpp).
+    uint32_t packHiddenFrames() const;
+    void applyHiddenFramesMask(uint32_t mask);
 
     /// Try to start drawing ASAP
     void setFastFramerate();

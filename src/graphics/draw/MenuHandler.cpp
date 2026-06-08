@@ -206,6 +206,10 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"KZ_863", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_KZ_863},
         {"NP_865", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NP_865},
         {"BR_902", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_BR_902},
+        {"ITU1_2M (144-146)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M},
+        {"ITU2_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M},
+        {"ITU3_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M},
+        {"ITU2_125CM (220-225)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM},
 
     };
 
