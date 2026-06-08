@@ -66,11 +66,11 @@ uint32_t pow_of_10(uint32_t n)
     return ret;
 }
 
-uint32_t pow_of_16(uint32_t n)
+uint64_t pow_of_16(uint32_t n)
 {
-    uint32_t ret = 1;
+    uint64_t ret = 1;
     for (uint32_t i = 0; i < n; i++) {
-        ret *= 16;
+        ret *= 16ULL;
     }
     return ret;
 }
