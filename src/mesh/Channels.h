@@ -98,13 +98,13 @@ class Channels
 
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
-  private:
     /** Given a channel index, change to use the crypto key specified by that index
      *
      * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
      */
     int16_t setCrypto(ChannelIndex chIndex);
 
+  private:
     /** Return the channel index for the specified channel hash, or -1 for not found */
     int8_t getIndexByHash(ChannelHash channelHash);
 
