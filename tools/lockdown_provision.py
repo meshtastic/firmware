@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 Lockdown passphrase provisioning / unlock / lock-now over USB serial.
 
 Speaks the AdminMessage.lockdown_auth / FromRadio.lockdown_status wire format
@@ -37,7 +37,7 @@ bindings from this repo's protobufs/ submodule and either overlay them into
 your site-packages or add them to PYTHONPATH before this script's imports.
 
 ==============================================================================
-EXAMPLES
+USAGE
 ==============================================================================
 
     # Interactive provision (prompts twice for passphrase, confirms intent):
