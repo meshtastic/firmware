@@ -79,10 +79,12 @@ static inline void transformNeedlePoint(float localX, float localY, float sinHea
     outY = static_cast<int16_t>(y);
 }
 
+#if GRAPHICS_TFT_COLORING_ENABLED
 static float getCompassRingAngleOffset(float heading)
 {
     return (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) ? -heading : 0.0f;
 }
+#endif
 
 static inline StandardCompassNeedlePoints computeStandardCompassNeedlePoints(int16_t compassX, int16_t compassY,
                                                                              uint16_t compassDiam, float headingRadian,
