@@ -944,7 +944,10 @@ void setup()
     if (!portduino_config.udp_unicast_peer.empty()) {
         LOG_DEBUG("Start UDP unicast connector");
         udpUnicastConnector = new UdpUnicastConnector();
-        udpUnicastConnector->start(portduino_config.udp_unicast_peer);
+        if (!udpUnicastConnector->start(portduino_config.udp_unicast_peer)) {
+            delete udpUnicastConnector;
+            udpUnicastConnector = nullptr;
+        }
     }
 #endif
 
