@@ -12,7 +12,7 @@
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 namespace graphics
 {
-enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker, text_input };
+enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker, hex_picker, text_input };
 
 struct BannerOverlayOptions {
     const char *message;
