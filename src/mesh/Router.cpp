@@ -577,8 +577,9 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 channels.setCrypto(chIndex);
                 decrypted = attemptAESDecrypt(p, rawSize);
                 if (decrypted) {
-                    LOG_INFO("Packet decrypted using channel %d with UDP bypass!", chIndex);
+                    LOG_DEBUG("Packet decrypted using channel %d with UDP bypass", chIndex);
                     break;
+                }
                 }
             }
         }
