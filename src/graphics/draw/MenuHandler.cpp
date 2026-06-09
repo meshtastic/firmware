@@ -267,11 +267,6 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
-            bool hamMode = getRegion(selectedRegion)->profile->licensedOnly;
-            if (hamMode) {
-                LOG_INFO("User chose an amateur radio mode region");
-            }
-
             // Guard: without a reboot, reconfigure() applies the region directly.
             // Reject LORA_24 on sub-GHz-only hardware — getRadio() used to catch this post-reboot.
             // TODO: change this to either use the validateLoraConfig() logic or at least check the region for wideLora
@@ -282,7 +277,9 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
+            bool hamMode = getRegion(selectedRegion)->profile->licensedOnly;
             if (hamMode) {
+                LOG_INFO("User chose an amateur radio mode region");
                 pendingHamRegion = selectedRegion;
                 menuQueue = HamModeConfirm;
                 screen->runNow();
