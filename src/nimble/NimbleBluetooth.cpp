@@ -166,8 +166,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         // re-enter the GAP API while the host is mid-reset -- the crash that happens when a
         // phone reconnects with a stale bond to a freshly-wiped device.
         if (pendingStartAdvertising) {
-            if (isConnected()) {
-                pendingStartAdvertising = false; // a new connection beat us to it; nothing to do
+            if (checkIsConnected()) {
+                pendingStartAdvertising = false; // a new physical connection beat us to it; nothing to do
             } else if (ble_hs_synced()) {
                 pendingStartAdvertising = false;
                 if (nimbleBluetooth) {
