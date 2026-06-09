@@ -183,15 +183,11 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     if (isHam && adminModule) {
         meshtastic_HamParameters hamParams = meshtastic_HamParameters_init_zero;
         strncpy(hamParams.call_sign, "N0CALL", sizeof(hamParams.call_sign) - 1);
-        strncpy(hamParams.short_name, "N0CL", sizeof(hamParams.short_name) - 1);
+        strncpy(hamParams.short_name, "N0CL", sizeof(hamParams.short_name));
         hamParams.tx_power = config.lora.tx_power;
         hamParams.frequency = config.lora.override_frequency;
         adminModule->handleSetHamMode(hamParams);
     }
-    if (!(owner.is_licensed && strcmp(owner.long_name, "N0CALL") == 0)) {
-        config.lora.tx_enabled = true;
-    }
-
     auto changes = SEGMENT_CONFIG;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     if (crypto) {
