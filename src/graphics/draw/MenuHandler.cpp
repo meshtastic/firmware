@@ -126,7 +126,7 @@ void launchReplyForMessage(const StoredMessage &message, bool freetext)
 
 menuHandler::screenMenus menuHandler::menuQueue = MenuNone;
 uint32_t menuHandler::pickedNodeNum = 0;
-meshtastic_Config_LoRaConfig_RegionCode menuHandler::pendingHamRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+meshtastic_Config_LoRaConfig_RegionCode menuHandler::pendingRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
@@ -276,8 +276,13 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             bool hamMode = getRegion(selectedRegion)->profile->licensedOnly;
             if (hamMode) {
                 LOG_INFO("User chose an amateur radio mode region");
-                pendingHamRegion = selectedRegion;
+                pendingRegion = selectedRegion;
                 menuQueue = HamModeConfirm;
+                screen->runNow();
+            } else if (owner.is_licensed) {
+                LOG_INFO("Licensed user chose a non-ham region; prompting to revert licensed mode");
+                pendingRegion = selectedRegion;
+                menuQueue = LicensedToNormalConfirm;
                 screen->runNow();
             } else {
                 applyLoraRegion(selectedRegion, false);
@@ -307,7 +312,25 @@ void menuHandler::hamModeConfirmMenu()
     confirmBanner.optionsCount = 2;
     confirmBanner.bannerCallback = [](int selected) {
         if (selected == 1)
-            applyLoraRegion(pendingHamRegion, true);
+            applyLoraRegion(pendingRegion, true);
+    };
+    screen->showOverlayBanner(confirmBanner);
+}
+
+void menuHandler::licensedToNormalConfirmMenu()
+{
+    static const char *confirmOptions[] = {"Keep licensed", "Revert to Normal"};
+    BannerOverlayOptions confirmBanner;
+    confirmBanner.message = "Revert licensed\nmode? This will\nre-enable encryption.";
+    confirmBanner.optionsArrayPtr = confirmOptions;
+    confirmBanner.optionsCount = 2;
+    confirmBanner.bannerCallback = [](int selected) {
+        if (selected == 1) {
+            owner.is_licensed = false;
+            config.lora.override_duty_cycle = false;
+            service->reloadOwner(false);
+        }
+        applyLoraRegion(pendingRegion, false);
     };
     screen->showOverlayBanner(confirmBanner);
 }
@@ -2857,6 +2880,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case HamModeConfirm:
         hamModeConfirmMenu();
+        break;
+    case LicensedToNormalConfirm:
+        licensedToNormalConfirmMenu();
         break;
     }
     menuQueue = MenuNone;
