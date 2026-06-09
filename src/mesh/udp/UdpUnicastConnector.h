@@ -96,7 +96,7 @@ class UdpUnicastConnector final
             return;
         // Never reflect a packet that arrived over UDP straight back out over UDP. The daemon's
         // (from,id) dedup is the backstop if this ever slips through.
-        if (mp->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP)
+        if (mp->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP)
             return;
 
         uint8_t buffer[meshtastic_MeshPacket_size];
@@ -133,7 +133,7 @@ class UdpUnicastConnector final
                 LOG_WARN("UDP unicast packet with spoofed local from=0x%x, dropping", mp.from);
                 continue;
             }
-            mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
+            mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP;
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             p->rx_snr = 0;
             p->rx_rssi = 0;
