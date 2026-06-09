@@ -16,7 +16,10 @@ uint32_t getPositionPrecisionForChannel(const meshtastic_Channel &channel)
 
 uint32_t getPositionPrecisionForChannel(uint8_t channelIndex)
 {
-    uint32_t precision = getPositionPrecisionForChannel(channels.getByIndex(channelIndex));
+    const meshtastic_Channel &ch = channels.getByIndex(channelIndex);
+    if (ch.role == meshtastic_Channel_Role_DISABLED)
+        return 0;
+    uint32_t precision = getPositionPrecisionForChannel(ch);
 
     // Never send a precise position on a publicly-decryptable channel (key check is gated on > ceiling).
     if (precision > MAX_POSITION_PRECISION_PUBLIC_KEY && channels.usesPublicKey(channelIndex)) {

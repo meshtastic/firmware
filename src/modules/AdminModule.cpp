@@ -1057,15 +1057,21 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     if (channels.ensureLicensedOperation()) {
         sendWarning(licensedModeMessage);
     }
-    // Persist the public-key precision clamp and warn the client if it coarsened the requested precision.
-    meshtastic_Channel &stored = channels.getByIndex(cc.index);
-    if (stored.settings.has_module_settings) {
-        uint32_t allowed = getPositionPrecisionForChannel(cc.index);
-        if (allowed != stored.settings.module_settings.position_precision) {
-            stored.settings.module_settings.position_precision = allowed;
-            sendWarning(publicChannelPrecisionMessage);
+    // Persist the public-key precision clamp for all channels that may be affected (e.g. secondaries
+    // that inherit a now-public primary key) and warn the client once if anything was coarsened.
+    bool clamped = false;
+    for (uint8_t i = 0; i < channels.getNumChannels(); i++) {
+        meshtastic_Channel &ch = channels.getByIndex(i);
+        if (ch.role == meshtastic_Channel_Role_DISABLED || !ch.settings.has_module_settings)
+            continue;
+        uint32_t allowed = getPositionPrecisionForChannel(i);
+        if (allowed != ch.settings.module_settings.position_precision) {
+            ch.settings.module_settings.position_precision = allowed;
+            clamped = true;
         }
     }
+    if (clamped)
+        sendWarning(publicChannelPrecisionMessage);
     channels.onConfigChanged(); // tell the radios about this change
     saveChanges(SEGMENT_CHANNELS, false);
 }
