@@ -150,11 +150,19 @@ static CryptoKey makeCryptoKey(const uint8_t *bytes, int length)
 {
     CryptoKey k;
     memset(k.bytes, 0, sizeof(k.bytes));
-    if (length > 0 && bytes != nullptr) {
-        size_t copyLen = static_cast<size_t>(length) < sizeof(k.bytes) ? static_cast<size_t>(length) : sizeof(k.bytes);
-        memcpy(k.bytes, bytes, copyLen);
+
+    // CryptoKey::length is int8_t and CryptoKey::bytes is 32 bytes; keep the helper consistent and overflow-safe.
+    int cappedLen = length;
+    if (cappedLen < 0)
+        cappedLen = -1;
+    else if (cappedLen > static_cast<int>(sizeof(k.bytes)))
+        cappedLen = static_cast<int>(sizeof(k.bytes));
+
+    if (cappedLen > 0 && bytes != nullptr) {
+        memcpy(k.bytes, bytes, static_cast<size_t>(cappedLen));
     }
-    k.length = static_cast<int8_t>(length);
+
+    k.length = static_cast<int8_t>(cappedLen);
     return k;
 }
 
