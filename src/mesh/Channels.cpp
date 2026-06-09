@@ -416,7 +416,22 @@ bool cryptoKeyIsPublic(const CryptoKey &key)
 
 bool Channels::usesPublicKey(ChannelIndex chIndex)
 {
-    return cryptoKeyIsPublic(getKey(chIndex));
+    const meshtastic_Channel &ch = getByIndex(chIndex);
+    if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED)
+        return false;
+
+    const auto &psk = ch.settings.psk;
+    if (psk.size == 0) {
+        // Secondary channels inherit the primary key when unset; primary size==0 means encryption disabled.
+        return (ch.role == meshtastic_Channel_Role_SECONDARY) ? usesPublicKey(primaryIndex) : true;
+    }
+
+    if (psk.size == 1) {
+        // Short PSK aliases: 0 disables encryption; 1..255 are the public defaultpsk family.
+        return true;
+    }
+
+    return (psk.size == sizeof(defaultpsk) && memcmp(psk.bytes, defaultpsk, sizeof(defaultpsk) - 1) == 0);
 }
 
 bool Channels::hasDefaultChannel()
