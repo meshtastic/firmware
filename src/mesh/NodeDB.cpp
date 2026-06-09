@@ -1542,6 +1542,8 @@ void NodeDB::pickNewNodeNum()
 
     // Identity check via public key (or "empty slot?" when no keys yet);
     // macaddr no longer lives on the slim header.
+    // This check does not work when is_licensed=true since we don't store a public key.
+    // Revisit with XEdDSA signing.
     auto isOurOwnEntry = [&](const meshtastic_NodeInfoLite *n) -> bool {
         if (!n)
             return false;
@@ -1550,13 +1552,16 @@ void NodeDB::pickNewNodeNum()
         return !nodeInfoLiteHasUser(n);
     };
 
-    meshtastic_NodeInfoLite *found;
-    while (((found = getMeshNode(nodeNum)) && !isOurOwnEntry(found)) ||
-           (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
-        NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
-        if (found)
-            LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, picking 0x%x", nodeNum, candidate);
-        nodeNum = candidate;
+    // Short circuit the check for licensed devices since they do not have public keys to compare against the nodeDB.
+    if (!owner.is_licensed) {
+        meshtastic_NodeInfoLite *found;
+        while (((found = getMeshNode(nodeNum)) && !isOurOwnEntry(found)) ||
+               (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
+            NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
+            if (found)
+                LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, picking 0x%x", nodeNum, candidate);
+            nodeNum = candidate;
+        }
     }
     LOG_DEBUG("Use nodenum 0x%x ", nodeNum);
 
