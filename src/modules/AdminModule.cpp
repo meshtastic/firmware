@@ -1463,9 +1463,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     }
     channels.onConfigChanged();
 
-    if (strcmp(p.call_sign, "N0CALL") != 0) {
-        config.lora.tx_enabled = true;
-    } else {
+    if (strcmp(p.call_sign, "N0CALL") == 0) {
         config.lora.tx_enabled = false;
     }
 
