@@ -20,9 +20,12 @@
 #       PDM.cpp           -> PDM_IRQHandler   (PDM microphone)
 #       RotaryEncoder.cpp -> QDEC_IRQHandler  (hardware quadrature/rotary encoder)
 #
-# HW-validated: RAK4631 (SX1262) + muzi-base (LR1121). To find dropped ISRs after a deps
-# bump: nm the .elf for `_IRQHandler$` symbols marked `W` and grep the libs for who defines
-# them.
+# A post-link guard (bottom of this file) fails the build if a critical handler was dropped
+# anyway -- so a future deps bump or a new ISR-owning library becomes a red build, not a field
+# hang. To hunt a dropped ISR by hand: nm the .elf for `_IRQHandler$` symbols marked `W`, then
+# grep the libs/framework for who defines them.
+#
+# HW-validated: RAK4631 (SX1262) + muzi-base (LR1121).
 import glob
 import os
 
@@ -55,7 +58,7 @@ def _no_lto(node):
         path = str(node)
     path = path.replace(
         "\\", "/"
-    )  # normalize Windows backslashes so the matches below work cross-platform
+    )  # normalize Windows backslashes so matches work cross-platform
     if (
         USB_ISR in path
         or any(s in path for s in FRAMEWORK)
@@ -70,3 +73,66 @@ def _no_lto(node):
 
 
 env.AddBuildMiddleware(_no_lto)
+
+
+# --- post-link guard: catch a dropped ISR handler at build time (CI footgun protection) ----
+# After every link, fail the build if one of these critical vector-table handlers resolved to
+# the weak `b .` Default_Handler stub -- i.e. LTO (or a deps bump, or a new ISR-owning library
+# that nobody added to LIB_ISR) silently dropped it. A dropped handler hangs the chip the
+# instant that IRQ fires; this turns a field hang into a red build. CI builds every nrf52840
+# target, so this runs on every PR automatically. All five are used by every nrf52840
+# Meshtastic build; if a board deliberately stops using one, edit this tuple on purpose.
+_REQUIRED_STRONG = (
+    "SWI2_EGU2_IRQHandler",  # SoftDevice BLE event (SD_EVT) -- advertising & connections
+    "GPIOTE_IRQHandler",  # GPIO interrupts: radio DIO + buttons
+    "RTC1_IRQHandler",  # FreeRTOS scheduler tick
+    "USBD_IRQHandler",  # USB CDC (serial console + 1200bps DFU trigger)
+    "POWER_CLOCK_IRQHandler",  # HF/LF clock + power (HFCLK start for radio & SoftDevice)
+)
+
+_tc = env.PioPlatform().get_package_dir("toolchain-gccarmnoneeabi") or ""
+_NM = os.path.join(_tc, "bin", "arm-none-eabi-nm")
+if not os.path.isfile(_NM):
+    _NM = "arm-none-eabi-nm"  # fall back to PATH
+
+
+def _assert_isr_handlers_survived(source, target, env):
+    import subprocess
+    import sys
+
+    try:
+        # Resolve the ELF at build time; target[0] is the buildprog alias, not the file.
+        elf = env.subst("$BUILD_DIR/${PROGNAME}.elf")
+        out = subprocess.check_output([_NM, elf], universal_newlines=True)
+    except Exception as exc:  # tooling hiccup: warn loudly, don't wedge the build
+        print("nrf52_lto: WARNING - ISR-handler guard skipped (nm failed: %s)" % exc)
+        return
+    # nm line: "<addr> <type> <symbol>". type 'T'/'t' = strong (good); 'W'/'w' = weak stub.
+    kind = {}
+    for line in out.split("\n"):
+        f = line.split()
+        if len(f) >= 3 and f[-1].endswith("_IRQHandler"):
+            kind[f[-1]] = f[-2]
+    dropped = [h for h in _REQUIRED_STRONG if kind.get(h, "W").upper() != "T"]
+    if dropped:
+        sys.stderr.write(
+            "\n*** nrf52 LTO guard: interrupt handler(s) DROPPED: %s ***\n"
+            "Each resolved to the weak Default_Handler stub, so the chip hangs when that IRQ\n"
+            "fires. Compile the .cpp that defines the handler with -fno-lto by adding it to\n"
+            "LIB_ISR in extra_scripts/nrf52_lto.py. Find the owner of FOO_IRQHandler with:\n"
+            "  grep -rl FOO_IRQHandler <framework-arduinoadafruitnrf52>/{libraries,cores}\n\n"
+            % ", ".join(dropped)
+        )
+        from SCons.Script import Exit
+
+        Exit(1)  # canonical SCons build-abort -> red build
+    print(
+        "nrf52_lto: ISR-handler guard OK -- %d critical handlers strong"
+        % len(_REQUIRED_STRONG)
+    )
+
+
+# Attach to the phony "buildprog" alias, NOT the .elf file node: SCons can skip a post-action
+# on a file target during an incremental relink (observed), but the buildprog alias runs every
+# build -- so the guard fires on local incremental rebuilds and clean CI builds alike.
+env.AddPostAction("buildprog", _assert_isr_handlers_survived)
