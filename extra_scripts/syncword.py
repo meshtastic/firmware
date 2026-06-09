@@ -7,8 +7,8 @@ Usage:
     pio run -e native -t privatesync
 
 Adds -DMESHTASTIC_SYNCWORD_0x12=1 to the build so the firmware uses
-syncWord=0x12 instead of the default 0x2b. Required when pairing with 
-some devices (with FRAME_SYNCH registers are 5-bit signed; 0x2b
+syncWord=0x12 instead of the default 0x2b. Required when pairing with an
+SX1302 concentrator gateway (FRAME_SYNCH registers are 5-bit signed; 0x2b
 overflows). Nodes built with this flag cannot communicate with stock 0x2b nodes.
 """
 
