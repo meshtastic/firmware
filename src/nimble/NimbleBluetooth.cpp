@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH && !defined(CONFIG_IDF_TARGET_ESP32P4)
 #include "BluetoothCommon.h"
 #include "NimbleBluetooth.h"
 #include "PowerFSM.h"
@@ -25,6 +25,9 @@
 
 namespace
 {
+// Maintainer note: this backend intentionally diverges from HostedBluetooth in a few platform-specific areas.
+// If you change shared BLE flow here (PhoneAPI queue/sync, security/pairing, mesh GATT/advertising,
+// connect/disconnect handling), review and update HostedBluetooth.cpp as needed.
 constexpr uint16_t kPreferredBleMtu = 517;
 constexpr uint16_t kPreferredBleTxOctets = 251;
 constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
@@ -568,7 +571,7 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
                 display->setFont(FONT_MEDIUM);
                 display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-#if !defined(OLED_TINY)
+#if !defined(OLED_TINY) && !defined(M5STACK_UNITC6L)
                 display->setFont(FONT_SMALL);
                 y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
                 display->drawString(x_offset + x, y_offset + y, "Enter this code");
@@ -739,6 +742,19 @@ int NimbleBluetooth::getRssi()
         return 0; // No active BLE connection
     }
 
+    uint16_t connHandle = nimbleBluetoothConnHandle.load();
+
+    if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
+        const auto peers = bleServer->getPeerDevices(true);
+        if (!peers.empty()) {
+            connHandle = peers.begin()->first;
+            nimbleBluetoothConnHandle = connHandle;
+        }
+    }
+
+    if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
+        return 0; // Connection handle not available yet
+    }
     int8_t rssi = 0;
     const int rc = ble_gap_conn_rssi(conn_handle, &rssi);
 
@@ -862,7 +878,7 @@ void NimbleBluetooth::setupService()
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    if ((config.bluetooth.enabled == true) && nimbleBluetooth && nimbleBluetooth->isConnected()) {
+    if ((config.bluetooth.enabled == true) && BatteryCharacteristic && nimbleBluetooth && nimbleBluetooth->isConnected()) {
         BatteryCharacteristic->setValue(&level, 1);
         BatteryCharacteristic->notify();
     }
@@ -892,4 +908,13 @@ void clearNVS()
     ESP.restart();
 #endif
 }
+
+#else
+
+void updateBatteryLevel(uint8_t level)
+{
+    (void)level;
+}
+
+void clearNVS() {}
 #endif
