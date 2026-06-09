@@ -830,6 +830,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
                     //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
                     sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+#if !MESHTASTIC_EXCLUDE_MQTT
+                    if (mqtt) {
+                        mqtt->reinitTopics();
+                    }
+#endif
                 }
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             } else {

@@ -815,6 +815,35 @@ void test_customMqttRoot(void)
         [] { return pubsub->subscriptions_.count("custom/2/e/test/+") && pubsub->subscriptions_.count("custom/2/e/PKI/+"); }));
 }
 
+// After a LoRa region change, reinitTopics() updates the publish topic and forces
+// the broker to reconnect with updated subscriptions.
+void test_reinitTopicsUpdatesOnRegionChange(void)
+{
+    // Start MQTT with a US region root.
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    MQTTUnitTest::restart();
+
+    TEST_ASSERT_TRUE(loopUntil(
+        [] { return pubsub->subscriptions_.count("msh/US/2/e/test/+") && pubsub->subscriptions_.count("msh/US/2/e/PKI/+"); }));
+
+    // Simulate region change: update the root and call reinitTopics().
+    strcpy(moduleConfig.mqtt.root, "msh/EU_868");
+    pubsub->subscriptions_.clear();
+    pubsub->published_.clear();
+    mqtt->reinitTopics();
+
+    // Verify that subscriptions are refreshed with the new region prefix.
+    TEST_ASSERT_TRUE(loopUntil([] {
+        return pubsub->subscriptions_.count("msh/EU_868/2/e/test/+") && pubsub->subscriptions_.count("msh/EU_868/2/e/PKI/+");
+    }));
+
+    // Verify that publish also uses the new topic prefix.
+    mqtt->onSend(encrypted, decoded, 0);
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    const auto &[topic, payload] = pubsub->published_.front();
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868/2/e/test/!12345678", topic.c_str());
+}
+
 // Empty configuration is valid.
 void test_configEmptyIsValid(void)
 {
@@ -919,6 +948,7 @@ void setup()
     RUN_TEST(test_disabled);
     RUN_TEST(test_mqttInitSkipsAllocationWhenDisabled);
     RUN_TEST(test_customMqttRoot);
+    RUN_TEST(test_reinitTopicsUpdatesOnRegionChange);
     RUN_TEST(test_configEmptyIsValid);
     RUN_TEST(test_configEnabledEmptyIsValid);
     RUN_TEST(test_configWithDefaultServer);

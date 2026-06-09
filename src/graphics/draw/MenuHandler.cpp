@@ -23,6 +23,9 @@
 #include "mesh/RadioLibInterface.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#if !MESHTASTIC_EXCLUDE_MQTT
+#include "mqtt/MQTT.h"
+#endif
 #include "modules/ExternalNotificationModule.h"
 #include "modules/KeyVerificationModule.h"
 #include "modules/TraceRouteModule.h"
@@ -260,6 +263,11 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 //  Default broker is in use, so subscribe to the appropriate MQTT root topic for this region
                 sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
                 changes |= SEGMENT_MODULECONFIG;
+#if !MESHTASTIC_EXCLUDE_MQTT
+                if (mqtt) {
+                    mqtt->reinitTopics();
+                }
+#endif
             }
 
             service->reloadConfig(changes);
