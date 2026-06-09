@@ -423,7 +423,13 @@ bool Channels::usesPublicKey(ChannelIndex chIndex)
     const auto &psk = ch.settings.psk;
     if (psk.size == 0) {
         // Secondary channels inherit the primary key when unset; primary size==0 means encryption disabled.
-        return (ch.role == meshtastic_Channel_Role_SECONDARY) ? usesPublicKey(primaryIndex) : true;
+        if (ch.role == meshtastic_Channel_Role_SECONDARY) {
+            // Guard against malformed configs with no PRIMARY channel (primaryIndex could point back to us).
+            if (primaryIndex == chIndex)
+                return true; // fail closed: treat as public
+            return usesPublicKey(primaryIndex);
+        }
+        return true;
     }
 
     if (psk.size == 1) {
