@@ -126,6 +126,7 @@ void launchReplyForMessage(const StoredMessage &message, bool freetext)
 
 menuHandler::screenMenus menuHandler::menuQueue = MenuNone;
 uint32_t menuHandler::pickedNodeNum = 0;
+meshtastic_Config_LoRaConfig_RegionCode menuHandler::pendingHamRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
@@ -172,6 +173,40 @@ void menuHandler::OnboardMessage()
         screen->runNow();
     };
     screen->showOverlayBanner(bannerOptions);
+}
+
+static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool isHam)
+{
+    config.lora.region = region;
+    config.lora.channel_num = 0; // Reset to default channel
+
+    if (isHam && adminModule) {
+        meshtastic_HamParameters hamParams = meshtastic_HamParameters_init_zero;
+        strncpy(hamParams.call_sign, "N0CALL", sizeof(hamParams.call_sign) - 1);
+        strncpy(hamParams.short_name, "N0CL", sizeof(hamParams.short_name) - 1);
+        hamParams.tx_power = config.lora.tx_power;
+        hamParams.frequency = config.lora.override_frequency;
+        adminModule->handleSetHamMode(hamParams);
+    }
+    if (!(owner.is_licensed && strcmp(owner.long_name, "N0CALL") == 0)) {
+        config.lora.tx_enabled = true;
+    }
+
+    auto changes = SEGMENT_CONFIG;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (crypto) {
+        crypto->ensurePkiKeys(config.security, owner);
+    }
+#endif
+    initRegion();
+    if (getEffectiveDutyCycle() < 100) {
+        config.lora.ignore_mqtt = true;
+    }
+    if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+        sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+        changes |= SEGMENT_MODULECONFIG;
+    }
+    service->reloadConfig(changes);
 }
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
@@ -232,6 +267,16 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
+            bool hamMode = false;
+
+            if (selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M ||
+                selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M ||
+                selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M ||
+                selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM) {
+                LOG_INFO("User chose an amateur radio mode region");
+                hamMode = true;
+            }
+
             // Guard: without a reboot, reconfigure() applies the region directly.
             // Reject LORA_24 on sub-GHz-only hardware — getRadio() used to catch this post-reboot.
             // TODO: change this to either use the validateLoraConfig() logic or at least check the region for wideLora
@@ -242,27 +287,13 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
-            config.lora.region = selectedRegion;
-            auto changes = SEGMENT_CONFIG;
-
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-            if (crypto) {
-                crypto->ensurePkiKeys(config.security, owner);
+            if (hamMode) {
+                pendingHamRegion = selectedRegion;
+                menuQueue = HamModeConfirm;
+                screen->runNow();
+            } else {
+                applyLoraRegion(selectedRegion, false);
             }
-#endif
-            config.lora.tx_enabled = true;
-            initRegion();
-            if (getEffectiveDutyCycle() < 100) {
-                config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
-            }
-
-            if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                //  Default broker is in use, so subscribe to the appropriate MQTT root topic for this region
-                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
-                changes |= SEGMENT_MODULECONFIG;
-            }
-
-            service->reloadConfig(changes);
         });
 
     bannerOptions.durationMs = duration;
@@ -277,6 +308,20 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
     bannerOptions.InitialSelected = initialSelection;
 
     screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::hamModeConfirmMenu()
+{
+    static const char *confirmOptions[] = {"No", "Yes"};
+    BannerOverlayOptions confirmBanner;
+    confirmBanner.message = "I confirm I am a\nlicensed amateur\nradio operator";
+    confirmBanner.optionsArrayPtr = confirmOptions;
+    confirmBanner.optionsCount = 2;
+    confirmBanner.bannerCallback = [](int selected) {
+        if (selected == 1)
+            applyLoraRegion(pendingHamRegion, true);
+    };
+    screen->showOverlayBanner(confirmBanner);
 }
 
 void menuHandler::deviceRolePicker()
@@ -2821,6 +2866,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case ThemeMenu:
         themeMenu();
+        break;
+    case HamModeConfirm:
+        hamModeConfirmMenu();
         break;
     }
     menuQueue = MenuNone;
