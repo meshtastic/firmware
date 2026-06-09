@@ -267,14 +267,9 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
-            bool hamMode = false;
-
-            if (selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M ||
-                selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M ||
-                selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M ||
-                selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM) {
+            bool hamMode = getRegion(selectedRegion)->profile->licensedOnly;
+            if (hamMode) {
                 LOG_INFO("User chose an amateur radio mode region");
-                hamMode = true;
             }
 
             // Guard: without a reboot, reconfigure() applies the region directly.
