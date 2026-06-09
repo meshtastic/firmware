@@ -2,6 +2,7 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "SPILock.h"
@@ -1055,6 +1056,15 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     channels.setChannel(cc);
     if (channels.ensureLicensedOperation()) {
         sendWarning(licensedModeMessage);
+    }
+    // Persist the public-key precision clamp and warn the client if it coarsened the requested precision.
+    meshtastic_Channel &stored = channels.getByIndex(cc.index);
+    if (stored.settings.has_module_settings) {
+        uint32_t allowed = getPositionPrecisionForChannel(cc.index);
+        if (allowed != stored.settings.module_settings.position_precision) {
+            stored.settings.module_settings.position_precision = allowed;
+            sendWarning(publicChannelPrecisionMessage);
+        }
     }
     channels.onConfigChanged(); // tell the radios about this change
     saveChanges(SEGMENT_CHANNELS, false);

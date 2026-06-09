@@ -404,6 +404,21 @@ bool Channels::isDefaultChannel(ChannelIndex chIndex)
     return false;
 }
 
+bool cryptoKeyIsPublic(const CryptoKey &key)
+{
+    if (key.length == 0)
+        return true; // encryption disabled
+    // Match the defaultpsk family ignoring its last byte (getKey() bumps only that byte per 1-byte index).
+    if (key.length == (int)sizeof(defaultpsk) && memcmp(key.bytes, defaultpsk, sizeof(defaultpsk) - 1) == 0)
+        return true;
+    return false;
+}
+
+bool Channels::usesPublicKey(ChannelIndex chIndex)
+{
+    return cryptoKeyIsPublic(getKey(chIndex));
+}
+
 bool Channels::hasDefaultChannel()
 {
     // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default channel

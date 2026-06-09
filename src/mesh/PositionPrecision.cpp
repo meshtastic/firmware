@@ -16,7 +16,13 @@ uint32_t getPositionPrecisionForChannel(const meshtastic_Channel &channel)
 
 uint32_t getPositionPrecisionForChannel(uint8_t channelIndex)
 {
-    return getPositionPrecisionForChannel(channels.getByIndex(channelIndex));
+    uint32_t precision = getPositionPrecisionForChannel(channels.getByIndex(channelIndex));
+
+    // Never send a precise position on a publicly-decryptable channel (key check is gated on > ceiling).
+    if (precision > MAX_POSITION_PRECISION_PUBLIC_KEY && channels.usesPublicKey(channelIndex)) {
+        precision = MAX_POSITION_PRECISION_PUBLIC_KEY;
+    }
+    return precision;
 }
 
 static int32_t truncateCoordinate(int32_t coordinate, uint32_t precision)
