@@ -1057,6 +1057,11 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     if (channels.ensureLicensedOperation()) {
         sendWarning(licensedModeMessage);
     }
+    // Refresh derived state (primaryIndex in particular) BEFORE the precision clamp below. usesPublicKey()
+    // resolves a secondary channel's key against the primary, so it must see the post-update primaryIndex;
+    // running the clamp first could evaluate secondaries against the previous primary and skip the clamp/warning.
+    channels.onConfigChanged(); // tell the radios about this change
+
     // Persist the public-key precision clamp for all channels that may be affected (e.g. secondaries
     // that inherit a now-public primary key) and warn the client once if anything was coarsened.
     bool clamped = false;
@@ -1072,7 +1077,6 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     }
     if (clamped)
         sendWarning(publicChannelPrecisionMessage);
-    channels.onConfigChanged(); // tell the radios about this change
     saveChanges(SEGMENT_CHANNELS, false);
 }
 
