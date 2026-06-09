@@ -40,6 +40,7 @@ constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
 
 BLECharacteristic *fromNumCharacteristic;
 BLECharacteristic *BatteryCharacteristic;
+static int lastBatteryLevel = -1; // last value written to 0x2A19, to skip redundant writes/notifies
 BLECharacteristic *logRadioCharacteristic;
 BLEServer *bleServer;
 
@@ -718,6 +719,8 @@ void NimbleBluetooth::deinit()
 #endif
 
     BLEDevice::deinit(true);
+    BatteryCharacteristic = nullptr; // freed by deinit; clear so updateBatteryLevel() won't touch it
+    lastBatteryLevel = -1;
 #endif
 }
 
@@ -856,16 +859,31 @@ void NimbleBluetooth::setupService()
     BatteryCharacteristic = batteryService->createCharacteristic( // 0x2A19 is the Battery Level characteristic)
         (uint16_t)0x2a19, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
     BatteryCharacteristic->addDescriptor(batteryLevelDescriptor);
+    // Seed an initial 0-100 level so an early read of 0x2A19 returns a valid value.
+    uint8_t initialLevel = (powerStatus && powerStatus->getHasBattery()) ? powerStatus->getBatteryChargePercent() : 0;
+    if (initialLevel > 100)
+        initialLevel = 100;
+    BatteryCharacteristic->setValue(&initialLevel, 1);
+    lastBatteryLevel = initialLevel;
     batteryService->start();
 }
 
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    if ((config.bluetooth.enabled == true) && nimbleBluetooth && nimbleBluetooth->isConnected()) {
-        BatteryCharacteristic->setValue(&level, 1);
+    if (!config.bluetooth.enabled || !BatteryCharacteristic)
+        return;
+
+    if (level > 100) // 0x2A19 must stay within the BAS 0-100 range
+        level = 100;
+    if (level == lastBatteryLevel)
+        return;
+    lastBatteryLevel = level;
+
+    // Cache the value so a READ works without a subscriber; notify only when connected.
+    BatteryCharacteristic->setValue(&level, 1);
+    if (nimbleBluetooth && nimbleBluetooth->isConnected())
         BatteryCharacteristic->notify();
-    }
 }
 
 void NimbleBluetooth::clearBonds()
