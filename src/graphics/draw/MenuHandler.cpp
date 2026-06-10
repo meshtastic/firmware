@@ -265,13 +265,15 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 
             // Guard: without a reboot, reconfigure() applies the region directly, so reject
             // regions this node can't use up front: unrecognized codes, licensed-only regions,
-            // and radio hardware mismatches (2.4 GHz vs sub-GHz) — the same validation the
-            // admin set-config path applies. getRadio() used to catch hardware mismatches
-            // post-reboot only.
+            // and radio hardware mismatches (2.4 GHz vs sub-GHz) — the same checks the admin
+            // set-config path applies, but side-effect-free: ignoring a menu selection should
+            // not record a critical error or notify clients. getRadio() used to catch hardware
+            // mismatches post-reboot only.
             auto candidateLora = config.lora;
             candidateLora.region = selectedRegion;
-            if (!RadioInterface::validateConfigRegion(candidateLora)) {
-                LOG_WARN("Region selection invalid for this node; ignoring");
+            char regionErr[160];
+            if (!RadioInterface::checkConfigRegion(candidateLora, regionErr, sizeof(regionErr))) {
+                LOG_WARN("Ignoring region selection: %s", regionErr);
                 return;
             }
 

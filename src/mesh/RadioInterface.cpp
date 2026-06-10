@@ -903,30 +903,26 @@ const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConf
 }
 
 /**
- * Checks if a region is valid for the current settings.
+ * Checks if a region is valid for the current settings, with no side effects.
+ * Safe to call speculatively (e.g. from UI pickers). When errBuf is given, it
+ * receives the human-readable failure reason.
  * Returns false if not compatible.
  */
-bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig)
+bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf, size_t errLen)
 {
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
     // Reject unrecognized region codes (getRegion returns UNSET sentinel for unknown codes)
     if (newRegion->code != loraConfig.region) {
-        char err_string[160];
-        snprintf(err_string, sizeof(err_string), "Region code %d is not recognized", loraConfig.region);
-        LOG_ERROR("%s", err_string);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        sendErrorNotification(err_string);
+        if (errBuf)
+            snprintf(errBuf, errLen, "Region code %d is not recognized", loraConfig.region);
         return false;
     }
 
     // If you are not licensed, you can't use ham regions.
     if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {
-        char err_string[160];
-        snprintf(err_string, sizeof(err_string), "Region %s requires licensed mode", newRegion->name);
-        LOG_ERROR("%s", err_string);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        sendErrorNotification(err_string);
+        if (errBuf)
+            snprintf(errBuf, errLen, "Region %s requires licensed mode", newRegion->name);
         return false;
     }
 
@@ -941,12 +937,8 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
             unsupported = "sub-GHz";
         }
         if (unsupported) {
-            char err_string[160];
-            snprintf(err_string, sizeof(err_string), "Region %s needs %s, which this radio does not support", newRegion->name,
-                     unsupported);
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string);
+            if (errBuf)
+                snprintf(errBuf, errLen, "Region %s needs %s, which this radio does not support", newRegion->name, unsupported);
             return false;
         }
     }
@@ -955,7 +947,24 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
 }
 
 /**
- * Internal helper: validate or clamp a LoRa config against its region.
+ * Checks if a region is valid for the current settings. On failure, logs at ERROR,
+ * records a critical error, and sends a client notification.
+ * Returns false if not compatible.
+ */
+bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig)
+{
+    char err_string[160];
+    if (checkConfigRegion(loraConfig, err_string, sizeof(err_string)))
+        return true;
+
+    LOG_ERROR("%s", err_string);
+    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    sendErrorNotification(err_string);
+    return false;
+}
+
+/**
+ * Internal helper: check or clamp a LoRa config against its region.
  * When clamp==false, returns false on first error (pure validation).
  * When clamp==true, fixes invalid settings in-place and returns true.
  */

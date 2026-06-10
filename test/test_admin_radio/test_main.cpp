@@ -1006,6 +1006,40 @@ static void test_handleSetConfig_fromOthers_validPresetAccepted()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
 }
 
+static void test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected()
+{
+    // Rejecting a remote config must reject ALL of it: an invalid channel_num must not
+    // leak into config.lora alongside the restored region/preset.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.channel_num = 0;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.channel_num = 5000; // far beyond US slot count
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+}
+
+static void test_checkConfigRegion_quietCheckReportsReason()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    TEST_ASSERT_TRUE(RadioInterface::checkConfigRegion(cfg));
+
+    cfg.region = (meshtastic_Config_LoRaConfig_RegionCode)254;
+    char err[160] = {0};
+    TEST_ASSERT_FALSE(RadioInterface::checkConfigRegion(cfg, err, sizeof(err)));
+    TEST_ASSERT_TRUE_MESSAGE(strlen(err) > 0, "Expected a failure reason in errBuf");
+}
+
 static void test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion()
 {
     // Baseline: EU_866 (LITE profile)
@@ -1038,8 +1072,8 @@ static void test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejecte
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     initRegion();
 
-    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true,
-                                            meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST);
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST);
 
     testAdmin->handleSetConfig(c, true); // fromOthers = true
 
@@ -1150,6 +1184,8 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromOthers_invalidPresetRejected);
     RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
+    RUN_TEST(test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected);
+    RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
     RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);
     RUN_TEST(test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected);
 

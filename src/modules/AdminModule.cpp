@@ -851,9 +851,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 }
                 if (!swapRegion || !RadioInterface::validateConfigLora(validatedLora)) {
                     LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
-                    //  modem_preset set to use the old setting if the check fails
-                    validatedLora.region = oldLoraConfig.region;
-                    validatedLora.modem_preset = oldLoraConfig.modem_preset;
+                    // Rejecting means rejecting everything: a partial restore of region/preset
+                    // could still apply other fields the validation already deemed invalid.
+                    validatedLora = oldLoraConfig;
                 }
             } else {
                 LOG_WARN("Invalid LoRa config received from client, using corrected values");
