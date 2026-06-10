@@ -1144,11 +1144,16 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
-    // Display Region and Channel Utilization
-    if (currentResolution == ScreenResolution::UltraLow) {
-        drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+    if (!config.lora.tx_enabled) {
+        const char *txdisabled = "Transmit Disabled";
+        display->drawString(x, getTextPositions(display)[line], txdisabled);
     } else {
-        drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        // Display Region and Channel Utilization
+        if (currentResolution == ScreenResolution::UltraLow) {
+            drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        } else {
+            drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        }
     }
     char uptimeStr[32] = "";
     if (currentResolution != ScreenResolution::UltraLow) {

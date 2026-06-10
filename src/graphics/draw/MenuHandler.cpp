@@ -126,6 +126,7 @@ void launchReplyForMessage(const StoredMessage &message, bool freetext)
 
 menuHandler::screenMenus menuHandler::menuQueue = MenuNone;
 uint32_t menuHandler::pickedNodeNum = 0;
+meshtastic_Config_LoRaConfig_RegionCode menuHandler::pendingRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
@@ -172,6 +173,36 @@ void menuHandler::OnboardMessage()
         screen->runNow();
     };
     screen->showOverlayBanner(bannerOptions);
+}
+
+static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool isHam)
+{
+    config.lora.region = region;
+    config.lora.channel_num = 0; // Reset to default channel
+
+    if (isHam && adminModule) {
+        meshtastic_HamParameters hamParams = meshtastic_HamParameters_init_zero;
+        strncpy(hamParams.call_sign, "N0CALL", sizeof(hamParams.call_sign) - 1);
+        strncpy(hamParams.short_name, "N0CL", sizeof(hamParams.short_name));
+        hamParams.tx_power = config.lora.tx_power;
+        hamParams.frequency = config.lora.override_frequency;
+        adminModule->handleSetHamMode(hamParams);
+    }
+    auto changes = SEGMENT_CONFIG;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (crypto) {
+        crypto->ensurePkiKeys(config.security, owner);
+    }
+#endif
+    initRegion();
+    if (getEffectiveDutyCycle() < 100) {
+        config.lora.ignore_mqtt = true;
+    }
+    if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+        sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+        changes |= SEGMENT_MODULECONFIG;
+    }
+    service->reloadConfig(changes);
 }
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
@@ -244,27 +275,20 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
-            config.lora.region = selectedRegion;
-            auto changes = SEGMENT_CONFIG;
-
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-            if (crypto) {
-                crypto->ensurePkiKeys(config.security, owner);
+            bool hamMode = getRegion(selectedRegion)->profile->licensedOnly;
+            if (hamMode) {
+                LOG_INFO("User chose an amateur radio mode region");
+                pendingRegion = selectedRegion;
+                menuQueue = HamModeConfirm;
+                screen->runNow();
+            } else if (owner.is_licensed) {
+                LOG_INFO("Licensed user chose a non-ham region; prompting to revert licensed mode");
+                pendingRegion = selectedRegion;
+                menuQueue = LicensedToNormalConfirm;
+                screen->runNow();
+            } else {
+                applyLoraRegion(selectedRegion, false);
             }
-#endif
-            config.lora.tx_enabled = true;
-            initRegion();
-            if (getEffectiveDutyCycle() < 100) {
-                config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
-            }
-
-            if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                //  Default broker is in use, so subscribe to the appropriate MQTT root topic for this region
-                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
-                changes |= SEGMENT_MODULECONFIG;
-            }
-
-            service->reloadConfig(changes);
         });
 
     bannerOptions.durationMs = duration;
@@ -279,6 +303,38 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
     bannerOptions.InitialSelected = initialSelection;
 
     screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::hamModeConfirmMenu()
+{
+    static const char *confirmOptions[] = {"No", "Yes"};
+    BannerOverlayOptions confirmBanner;
+    confirmBanner.message = "I confirm I am a\nlicensed amateur\nradio operator";
+    confirmBanner.optionsArrayPtr = confirmOptions;
+    confirmBanner.optionsCount = 2;
+    confirmBanner.bannerCallback = [](int selected) {
+        if (selected == 1)
+            applyLoraRegion(pendingRegion, true);
+    };
+    screen->showOverlayBanner(confirmBanner);
+}
+
+void menuHandler::licensedToNormalConfirmMenu()
+{
+    static const char *confirmOptions[] = {"Keep licensed", "Revert to Normal"};
+    BannerOverlayOptions confirmBanner;
+    confirmBanner.message = "Revert licensed\nmode? This will\nre-enable encryption.";
+    confirmBanner.optionsArrayPtr = confirmOptions;
+    confirmBanner.optionsCount = 2;
+    confirmBanner.bannerCallback = [](int selected) {
+        if (selected == 1) {
+            owner.is_licensed = false;
+            config.lora.override_duty_cycle = false;
+            service->reloadOwner(false);
+        }
+        applyLoraRegion(pendingRegion, false);
+    };
+    screen->showOverlayBanner(confirmBanner);
 }
 
 void menuHandler::deviceRolePicker()
@@ -2823,6 +2879,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case ThemeMenu:
         themeMenu();
+        break;
+    case HamModeConfirm:
+        hamModeConfirmMenu();
+        break;
+    case LicensedToNormalConfirm:
+        licensedToNormalConfirmMenu();
         break;
     }
     menuQueue = MenuNone;
