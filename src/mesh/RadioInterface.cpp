@@ -857,18 +857,53 @@ uint32_t RadioInterface::getChannelNum()
 }
 
 /**
- * Send an error-level client notification. Safe to call when service is null (e.g. in tests).
+ * Send a client notification (error level unless specified). Safe to call when service is null (e.g. in tests).
  */
-static void sendErrorNotification(const char *msg)
+static void sendErrorNotification(const char *msg, meshtastic_LogRecord_Level level = meshtastic_LogRecord_Level_ERROR)
 {
     if (!service)
         return;
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (!cn)
         return;
-    cn->level = meshtastic_LogRecord_Level_ERROR;
+    cn->level = level;
     snprintf(cn->message, sizeof(cn->message), "%s", msg);
     service->sendClientNotification(cn);
+}
+
+// The EU_868/EU_866/EU_N_868 trio own mutually exclusive preset lists. Selecting a preset
+// locked to a sibling means the user wants that sibling region, not the default preset.
+static const meshtastic_Config_LoRaConfig_RegionCode SWAPPABLE_EU_REGIONS[] = {
+    meshtastic_Config_LoRaConfig_RegionCode_EU_868,
+    meshtastic_Config_LoRaConfig_RegionCode_EU_866,
+    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868,
+};
+
+/**
+ * If currentRegion is one of the swappable EU regions and preset belongs to a sibling in
+ * that trio, return the sibling region that owns the preset. Returns nullptr otherwise.
+ */
+const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConfig_RegionCode currentRegion,
+                                                      meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    bool currentIsSwappable = false;
+    for (auto code : SWAPPABLE_EU_REGIONS) {
+        if (code == currentRegion)
+            currentIsSwappable = true;
+    }
+    if (!currentIsSwappable)
+        return nullptr;
+
+    for (auto code : SWAPPABLE_EU_REGIONS) {
+        if (code == currentRegion)
+            continue;
+        const RegionInfo *sibling = getRegion(code);
+        for (size_t i = 0; i < sibling->getNumPresets(); i++) {
+            if (sibling->getAvailablePresets()[i] == preset)
+                return sibling;
+        }
+    }
+    return nullptr;
 }
 
 /**
@@ -925,6 +960,23 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             if (loraConfig.modem_preset == newRegion->getAvailablePresets()[i]) {
                 preset_valid = true;
                 break;
+            }
+        }
+        if (!preset_valid) {
+            // A preset locked to a sibling of the swappable EU regions swaps the region instead
+            // of clamping the preset, as long as the previous region was itself one of the trio.
+            // Only in clamp mode: validation must keep failing so callers route into the clamp.
+            const RegionInfo *swapRegion = clamp ? regionSwapForPreset(loraConfig.region, loraConfig.modem_preset) : nullptr;
+            if (swapRegion) {
+                snprintf(err_string, sizeof(err_string), "Preset %s swaps region %s to %s", presetName, newRegion->name,
+                         swapRegion->name);
+                LOG_INFO("%s", err_string);
+                sendErrorNotification(err_string, meshtastic_LogRecord_Level_INFO);
+
+                loraConfig.region = swapRegion->code;
+                newRegion = swapRegion;
+                check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+                preset_valid = true;
             }
         }
         if (!preset_valid) {

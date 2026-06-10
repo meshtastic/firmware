@@ -253,6 +253,11 @@ class RadioInterface
     // Make a candidate radio configuration valid, even if it isn't.
     static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
 
+    // If preset is locked to a sibling of currentRegion among the swappable EU regions
+    // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.
+    static const RegionInfo *regionSwapForPreset(meshtastic_Config_LoRaConfig_RegionCode currentRegion,
+                                                 meshtastic_Config_LoRaConfig_ModemPreset preset);
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 
