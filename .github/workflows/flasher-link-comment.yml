@@ -38,20 +38,21 @@ jobs:
             const run = context.payload.workflow_run;
             const { owner, repo } = context.repo;
 
-            // Resolve the PR number (run.pull_requests is empty for fork PRs)
-            let prNumber = run.pull_requests?.[0]?.number;
-            if (!prNumber) {
-              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                owner, repo, commit_sha: run.head_sha,
-              });
-              prNumber = (prs.find((pr) => pr.head.sha === run.head_sha) ?? prs[0])?.number;
-            }
-            if (!prNumber) {
-              core.info('No pull request associated with this run; skipping.');
+            // Resolve the PR by matching the run's head SHA against the repo's open
+            // PRs. workflow_run.pull_requests is empty for fork PRs, and
+            // listPullRequestsAssociatedWithCommit won't return an open fork PR by
+            // its head commit — but pulls.list includes fork PRs. Matching on head
+            // SHA also enforces that the run is for the PR's current commit, so stale
+            // re-runs of an outdated commit won't match.
+            const openPrs = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const pr = openPrs.find((p) => p.head.sha === run.head_sha);
+            if (!pr) {
+              core.info(`No open pull request matches commit ${run.head_sha}; skipping.`);
               return;
             }
-
-            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+            const prNumber = pr.number;
 
             // Only comment on PRs authored by members of the organization.
             // author_association MEMBER is computed by GitHub and reflects org
@@ -59,14 +60,6 @@ jobs:
             const allowedAssociations = ['OWNER', 'MEMBER'];
             if (!allowedAssociations.includes(pr.author_association)) {
               core.info(`Author association ${pr.author_association} is not an org member; skipping.`);
-              return;
-            }
-            if (pr.state !== 'open') {
-              core.info('Pull request is not open; skipping.');
-              return;
-            }
-            if (pr.head.sha !== run.head_sha) {
-              core.info('Run is for an outdated commit; skipping.');
               return;
             }
 
