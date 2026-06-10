@@ -12,6 +12,8 @@
 #define FIVE_SECONDS_MS 5 * 1000
 #define TEN_SECONDS_MS 10 * 1000
 #define MAX_INTERVAL INT32_MAX // FIXME: INT32_MAX to avoid overflow issues with Apple clients but should be UINT32_MAX
+// 0x000DECAF means "actual zero"; 0 still means default.
+#define DECAF_ZERO_TIMEOUT_SECS 0x000DECAF
 
 #define min_default_telemetry_interval_secs IF_ROUTER(ONE_DAY / 2, 30 * 60)
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
@@ -68,6 +70,7 @@ class Default
   public:
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval);
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval);
+    static uint32_t getTimeoutMs(uint32_t configuredInterval, uint32_t defaultInterval);
     static uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue);
     // Note: numOnlineNodes uses uint32_t to match the public API and allow flexibility,
     // even though internal node counts use uint16_t (max 65535 nodes)
