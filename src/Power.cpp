@@ -1640,9 +1640,12 @@ bool Power::cw2015Init()
 #endif
 
 #if defined(HAS_PPM) && HAS_PPM
+#if defined(XPOWERS_CHIP_SY6970) && !defined(SY6970_SLAVE_ADDRESS)
+#define SY6970_SLAVE_ADDRESS 0x6A
+#endif
 
 /**
- * Adapter class for BQ25896/BQ27220 Lipo battery charger.
+ * Adapter class for XPowers charger/BQ27220 Lipo battery reporting.
  */
 class LipoCharger : public HasBatteryLevel
 {
@@ -1650,13 +1653,30 @@ class LipoCharger : public HasBatteryLevel
     BQ27220 *bq = nullptr;
 
   public:
-    /**
-     * Init the I2C BQ25896 Lipo battery charger
-     */
     bool runOnce()
     {
         if (PPM == nullptr) {
             PPM = new XPowersPPM;
+#if defined(XPOWERS_CHIP_SY6970)
+            bool result = PPM->init(Wire, I2C_SDA, I2C_SCL, SY6970_SLAVE_ADDRESS);
+            if (result) {
+                LOG_INFO("PPM SY6970 init succeeded");
+
+                PPM->setSysPowerDownVoltage(3300);
+                PPM->setInputCurrentLimit(3250);
+                PPM->disableCurrentLimitPin();
+                PPM->setChargeTargetVoltage(4208);
+                PPM->setPrechargeCurr(64);
+                PPM->setChargerConstantCurr(1024);
+                PPM->enableMeasure();
+                PPM->enableCharge();
+            } else {
+                LOG_WARN("PPM SY6970 init failed");
+                delete PPM;
+                PPM = nullptr;
+                return false;
+            }
+#else
             bool result = PPM->init(Wire, I2C_SDA, I2C_SCL, BQ25896_ADDR);
             if (result) {
                 LOG_INFO("PPM BQ25896 init succeeded");
@@ -1693,6 +1713,7 @@ class LipoCharger : public HasBatteryLevel
                 PPM = nullptr;
                 return false;
             }
+#endif
         }
         if (bq == nullptr) {
             bq = new BQ27220;
