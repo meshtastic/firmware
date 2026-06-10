@@ -708,6 +708,91 @@ static void test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault()
 }
 
 // -----------------------------------------------------------------------
+// Region-locked preset swap tests (EU_868 / EU_866 / EU_N_868 trio)
+// -----------------------------------------------------------------------
+
+static void test_clampConfigLora_narrowPresetOnEU866SwapsToEUN868()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868, cfg.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST, cfg.modem_preset);
+}
+
+static void test_clampConfigLora_litePresetOnEU868SwapsToEU866()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_866, cfg.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW, cfg.modem_preset);
+}
+
+static void test_clampConfigLora_eu868PresetOnEUN868SwapsToEU868()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_N_868;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_868, cfg.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+}
+
+static void test_clampConfigLora_litePresetOnUSDoesNotSwap()
+{
+    // Previous region is not one of the swappable trio, so the preset clamps to the
+    // region default instead of swapping regions.
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, cfg.region);
+    TEST_ASSERT_EQUAL(us->getDefaultPreset(), cfg.modem_preset);
+}
+
+static void test_clampConfigLora_narrowPresetOnHam125cmDoesNotSwap()
+{
+    // ITU2_125CM shares the NARROW presets, so they are valid there and nothing changes
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM, cfg.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW, cfg.modem_preset);
+}
+
+static void test_validateConfigLora_siblingLockedPresetStillFailsValidation()
+{
+    // Validation (no clamp) must keep failing so callers route into clampConfigLora,
+    // which performs the region swap.
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST;
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
+}
+
+// -----------------------------------------------------------------------
 // RegionInfo preset list integrity tests
 // -----------------------------------------------------------------------
 
@@ -921,6 +1006,93 @@ static void test_handleSetConfig_fromOthers_validPresetAccepted()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
 }
 
+static void test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected()
+{
+    // Rejecting a remote config must reject ALL of it: an invalid channel_num must not
+    // leak into config.lora alongside the restored region/preset.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.channel_num = 0;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.channel_num = 5000; // far beyond US slot count
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+}
+
+static void test_regionInfo_supportsPreset()
+{
+    const RegionInfo *eu868 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+    TEST_ASSERT_TRUE(eu868->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_FALSE(eu868->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO));
+    TEST_ASSERT_FALSE(eu868->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST));
+
+    const RegionInfo *eu866 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_866);
+    TEST_ASSERT_TRUE(eu866->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW));
+    TEST_ASSERT_FALSE(eu866->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+}
+
+static void test_checkConfigRegion_quietCheckReportsReason()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    TEST_ASSERT_TRUE(RadioInterface::checkConfigRegion(cfg));
+
+    cfg.region = (meshtastic_Config_LoRaConfig_RegionCode)254;
+    char err[160] = {0};
+    TEST_ASSERT_FALSE(RadioInterface::checkConfigRegion(cfg, err, sizeof(err)));
+    TEST_ASSERT_TRUE_MESSAGE(strlen(err) > 0, "Expected a failure reason in errBuf");
+}
+
+static void test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion()
+{
+    // Baseline: EU_866 (LITE profile)
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+    initRegion();
+
+    // Remote admin keeps the region but selects a NARROW preset (locked to EU_N_868)
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_EU_866, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST);
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST, config.lora.modem_preset);
+
+    // Restore the region table pointer for subsequent tests
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    initRegion();
+}
+
+static void test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected()
+{
+    // Baseline: US is not one of the swappable trio, so a LITE preset must be rejected
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST);
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+}
+
 // -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
@@ -992,6 +1164,14 @@ void setup()
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);
     RUN_TEST(test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault);
 
+    // Region-locked preset swap
+    RUN_TEST(test_clampConfigLora_narrowPresetOnEU866SwapsToEUN868);
+    RUN_TEST(test_clampConfigLora_litePresetOnEU868SwapsToEU866);
+    RUN_TEST(test_clampConfigLora_eu868PresetOnEUN868SwapsToEU868);
+    RUN_TEST(test_clampConfigLora_litePresetOnUSDoesNotSwap);
+    RUN_TEST(test_clampConfigLora_narrowPresetOnHam125cmDoesNotSwap);
+    RUN_TEST(test_validateConfigLora_siblingLockedPresetStillFailsValidation);
+
     // RegionInfo preset list integrity
     RUN_TEST(test_presetsStd_hasNineEntries);
     RUN_TEST(test_presetsEU868_hasSevenEntries);
@@ -1016,6 +1196,11 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromOthers_invalidPresetRejected);
     RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
+    RUN_TEST(test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected);
+    RUN_TEST(test_regionInfo_supportsPreset);
+    RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
+    RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);
+    RUN_TEST(test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected);
 
     exit(UNITY_END());
 }
