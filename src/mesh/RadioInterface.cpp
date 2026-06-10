@@ -894,10 +894,8 @@ const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConf
         if (code == currentRegion)
             continue;
         const RegionInfo *sibling = getRegion(code);
-        for (size_t i = 0; i < sibling->getNumPresets(); i++) {
-            if (sibling->getAvailablePresets()[i] == preset)
-                return sibling;
-        }
+        if (sibling->supportsPreset(preset))
+            return sibling;
     }
     return nullptr;
 }
@@ -981,13 +979,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     if (loraConfig.use_preset) {
         check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
 
-        bool preset_valid = false;
-        for (size_t i = 0; i < newRegion->getNumPresets(); i++) {
-            if (loraConfig.modem_preset == newRegion->getAvailablePresets()[i]) {
-                preset_valid = true;
-                break;
-            }
-        }
+        bool preset_valid = newRegion->supportsPreset(loraConfig.modem_preset);
         if (!preset_valid) {
             // A preset locked to a sibling of the swappable EU regions swaps the region instead
             // of clamping the preset, as long as the previous region was itself one of the trio.

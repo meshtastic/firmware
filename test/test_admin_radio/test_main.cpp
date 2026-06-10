@@ -1028,6 +1028,18 @@ static void test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected()
     TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
 }
 
+static void test_regionInfo_supportsPreset()
+{
+    const RegionInfo *eu868 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+    TEST_ASSERT_TRUE(eu868->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_FALSE(eu868->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO));
+    TEST_ASSERT_FALSE(eu868->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST));
+
+    const RegionInfo *eu866 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_866);
+    TEST_ASSERT_TRUE(eu866->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW));
+    TEST_ASSERT_FALSE(eu866->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+}
+
 static void test_checkConfigRegion_quietCheckReportsReason()
 {
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
@@ -1185,6 +1197,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
     RUN_TEST(test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected);
+    RUN_TEST(test_regionInfo_supportsPreset);
     RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
     RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);
     RUN_TEST(test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected);
