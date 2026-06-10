@@ -2,6 +2,7 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "SafeFile.h"
+#include "concurrency/LockGuard.h"
 #include "graphics/draw/CompassRenderer.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
@@ -31,11 +32,14 @@ bool isRangeValid(float highest, float lowest)
     return (highest == highest) && (lowest == lowest) && (highest > lowest);
 }
 
-volatile float latestCompassAccelX = 0.0f;
-volatile float latestCompassAccelY = 0.0f;
-volatile float latestCompassAccelZ = 0.0f;
-volatile uint32_t latestCompassAccelAtMs = 0;
-volatile uint32_t latestCompassAccelSeq = 0;
+struct CompassAccelSample {
+    FusionVector accel = {};
+    uint32_t sampledAtMs = 0;
+    bool valid = false;
+};
+
+concurrency::Lock latestCompassAccelLock;
+CompassAccelSample latestCompassAccelSample;
 } // namespace
 
 // screen is defined in main.cpp
@@ -212,41 +216,27 @@ float MotionSensor::applyCompassOrientation(float heading)
 
 void MotionSensor::publishCompassAccelSample(float x, float y, float z)
 {
-    latestCompassAccelSeq++;
-    latestCompassAccelX = x;
-    latestCompassAccelY = y;
-    latestCompassAccelZ = z;
-    latestCompassAccelAtMs = millis();
-    latestCompassAccelSeq++;
+    concurrency::LockGuard guard(&latestCompassAccelLock);
+    latestCompassAccelSample.accel.axis.x = x;
+    latestCompassAccelSample.accel.axis.y = y;
+    latestCompassAccelSample.accel.axis.z = z;
+    latestCompassAccelSample.sampledAtMs = millis();
+    latestCompassAccelSample.valid = true;
 }
 
 bool MotionSensor::getLatestCompassAccelSample(FusionVector &accel, uint32_t &ageMs)
 {
-    float x = 0.0f, y = 0.0f, z = 0.0f;
     uint32_t sampledAtMs = 0;
-    uint32_t seqStart = 0;
-    uint32_t seqEnd = 0;
-
-    do {
-        seqStart = latestCompassAccelSeq;
-        if (seqStart & 1U) {
-            continue;
+    {
+        concurrency::LockGuard guard(&latestCompassAccelLock);
+        if (!latestCompassAccelSample.valid) {
+            return false;
         }
 
-        x = latestCompassAccelX;
-        y = latestCompassAccelY;
-        z = latestCompassAccelZ;
-        sampledAtMs = latestCompassAccelAtMs;
-        seqEnd = latestCompassAccelSeq;
-    } while ((seqStart != seqEnd) || (seqEnd & 1U));
-
-    if (sampledAtMs == 0) {
-        return false;
+        accel = latestCompassAccelSample.accel;
+        sampledAtMs = latestCompassAccelSample.sampledAtMs;
     }
 
-    accel.axis.x = x;
-    accel.axis.y = y;
-    accel.axis.z = z;
     ageMs = millis() - sampledAtMs;
     return true;
 }
