@@ -408,24 +408,32 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
-        DEBUG_HEAP_BEFORE;
-        meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
-        DEBUG_HEAP_AFTER("Router::send", p_decoded);
+        // The pre-encryption copy is only needed to feed MQTT::onSend; skip it
+        // entirely on builds/devices where MQTT is excluded or disabled.
+        meshtastic_MeshPacket *p_decoded = nullptr;
+#if !MESHTASTIC_EXCLUDE_MQTT
+        const bool needDecodedForMqtt = moduleConfig.mqtt.enabled && isFromUs(p) && mqtt;
+        if (needDecodedForMqtt) {
+            DEBUG_HEAP_BEFORE;
+            p_decoded = packetPool.allocCopy(*p);
+            DEBUG_HEAP_AFTER("Router::send", p_decoded);
+        }
+#endif
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
-            packetPool.release(p_decoded);
+            if (p_decoded)
+                packetPool.release(p_decoded);
             p->channel = 0; // Reset the channel to 0, so we don't use the failing hash again
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 #if !MESHTASTIC_EXCLUDE_MQTT
-        // Only publish to MQTT if we're the original transmitter of the packet
-        if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
+        if (p_decoded) {
             mqtt->onSend(*p, *p_decoded, chIndex);
+            packetPool.release(p_decoded);
         }
 #endif
-        packetPool.release(p_decoded);
     }
 
 #if HAS_UDP_MULTICAST
