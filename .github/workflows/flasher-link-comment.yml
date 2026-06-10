@@ -18,6 +18,18 @@ jobs:
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
+      # Per-board manifests carry the firmware's own metadata (activelySupported,
+      # displayName, ...) generated from each target's custom_meshtastic_* config.
+      - name: Download board manifests
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: manifest-*
+          path: ./manifests
+          merge-multiple: true
+
       - name: Post or update web flasher link comment
         uses: actions/github-script@v8
         with:
@@ -74,34 +86,52 @@ jobs:
               ? new Date(archArtifacts[0].expires_at).toISOString().slice(0, 10)
               : null;
 
-            // Per-board deep links from manifest-{platform}-{board}-{version} artifacts
-            const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const boardRe = new RegExp(`^manifest-([a-z0-9]+)-(.+)-${escapedVersion}$`);
-            let boards = artifacts
-              .map((a) => boardRe.exec(a.name))
-              .filter(Boolean)
-              .map((m) => ({ platform: m[1], board: m[2] }))
-              .sort((a, b) => a.board.localeCompare(b.board));
-
-            // Limit the list to devices the web flasher actively supports — the same
-            // activelySupported / non-portduino filter the flasher applies to its own
-            // device list — matching variant envs (-tft/-inkhud) to their base target.
-            // On a fetch failure, fall back to listing all built boards.
+            // Read each built board's manifest (.mt.json). activelySupported,
+            // displayName and architecture come straight from the board's
+            // custom_meshtastic_* platformio config, so the list is in sync with
+            // the firmware itself — no external device database needed.
+            const fs = require('fs');
+            let boards = [];
             try {
-              const hw = await (await fetch('https://api.meshtastic.org/resource/deviceHardware')).json();
-              const supported = new Set(
-                hw.filter((d) => d.activelySupported && !String(d.architecture || '').startsWith('portduino'))
-                  .map((d) => d.platformioTarget),
-              );
-              const baseTarget = (b) => b.replace(/-(tft|inkhud)$/, '');
-              boards = boards.filter((b) => supported.has(b.board) || supported.has(baseTarget(b.board)));
+              boards = fs.readdirSync('./manifests')
+                .filter((f) => f.endsWith('.mt.json'))
+                .map((f) => {
+                  try { return JSON.parse(fs.readFileSync(`./manifests/${f}`, 'utf8')); }
+                  catch { return null; }
+                })
+                .filter((m) => m && m.activelySupported === true && m.platformioTarget)
+                .map((m) => ({
+                  board: m.platformioTarget,
+                  platform: m.architecture || '',
+                  // displayName is maintainer-authored text; escape table-breaking pipes
+                  displayName: String(m.displayName || m.platformioTarget).replace(/\|/g, '\\|'),
+                  image: Array.isArray(m.images) && m.images[0] ? String(m.images[0]) : '',
+                }))
+                .sort((a, b) => a.board.localeCompare(b.board));
             } catch (e) {
-              core.warning(`Could not fetch device hardware list; listing all built boards. ${e.message}`);
+              core.warning(`Could not read board manifests: ${e.message}`);
             }
 
             const flasherUrl = `https://flasher.meshtastic.org/?pr=${prNumber}`;
+            // Device illustrations are served by the flasher from the same image
+            // names the manifest declares (custom_meshtastic_images). The flasher
+            // serves its SPA shell (HTML, 200) for unknown paths, so confirm each
+            // image really resolves to an image before linking it.
+            const imageBase = 'https://flasher.meshtastic.org/img/devices/';
+            await Promise.all(boards.map(async (b) => {
+              if (!b.image) return;
+              try {
+                const res = await fetch(`${imageBase}${encodeURIComponent(b.image)}`);
+                const type = res.headers.get('content-type') || '';
+                if (!res.ok || !type.startsWith('image/')) b.image = '';
+              } catch { b.image = ''; }
+            }));
+
             const boardLines = boards
-              .map((b) => `| [\`${b.board}\`](${flasherUrl}&device=${encodeURIComponent(b.board)}) | ${b.platform} |`)
+              .map((b) => {
+                const img = b.image ? `<img src="${imageBase}${encodeURIComponent(b.image)}" alt="" height="34">` : '';
+                return `| ${img} | ${b.displayName} | [\`${b.board}\`](${flasherUrl}&device=${encodeURIComponent(b.board)}) | ${b.platform} |`;
+              })
               .join('\n');
 
             // Shields.io badges. Only non-user-controlled, charset-constrained values
@@ -124,8 +154,8 @@ jobs:
             const boardTable = boards.length > 0 ? [
               `<details><summary>Supported boards built by this PR (${boards.length})</summary>`,
               '',
-              '| Board | Platform |',
-              '| --- | --- |',
+              '| | Device | Board | Platform |',
+              '| --- | --- | --- | --- |',
               boardLines,
               '',
               '</details>',
@@ -134,7 +164,7 @@ jobs:
 
             const body = [
               marker,
-              '## 🔦 Try this PR in the Web Flasher',
+              '## ⚡ Try this PR in the Web Flasher',
               '',
               `[![Flash this PR in the Web Flasher](${buttonUrl})](${flasherUrl})`,
               '',
