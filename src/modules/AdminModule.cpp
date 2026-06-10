@@ -1483,6 +1483,10 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     }
     channels.onConfigChanged();
 
+    if (strcmp(p.call_sign, "N0CALL") == 0) {
+        config.lora.tx_enabled = false;
+    }
+
     service->reloadOwner(false);
     saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
