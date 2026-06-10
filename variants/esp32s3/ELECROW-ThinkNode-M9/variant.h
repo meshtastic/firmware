@@ -7,19 +7,18 @@
 #define PIN_GPS_EN 11
 #define GPS_EN_ACTIVE LOW
 
+#define USE_POWERSAVE
+#define SLEEP_TIME 120
+
 /*Wire Interface*/
 #define WIRE_INTERFACES_COUNT 2
-// I2C keybuttons
-#define I2C_SCL1 21
-#define I2C_SDA1 20
+// I2C keyboard
+#define I2C_SCL 21
+#define I2C_SDA 20
 #define KB_INT 12
-// I2C peripheral`
-#define I2C_SCL 6
-#define I2C_SDA 7
-
-/*LED*/
-#define PIN_LED 13
-#define KB_LED 46
+// I2C peripheral
+#define I2C_SCL1 6
+#define I2C_SDA1 7
 
 /*BUZZER*/
 #define PIN_BUZZER 9
@@ -32,11 +31,9 @@
 
 /*GPS*/
 #define HAS_GPS 1
-#define GPS_L76K
-#define GPS_BAUDRATE 9600
+// #define GPS_BAUDRATE 115200
 #define PIN_GPS_RESET 5
 #define PIN_GPS_PPS 4
-#define PIN_GPS_STANDBY 10 // An output to wake GPS, low means allow sleep, high means force wake
 #define GPS_TX_PIN 3
 #define GPS_RX_PIN 2
 #define GPS_THREAD_INTERVAL 50
@@ -46,11 +43,7 @@
 #define SPI_SCK 40
 #define SPI_MISO 38
 
-/*SD Card*/
-#define SDCARD_CS 48
-
 /*Screen*/
-// #define USE_ST7789 1
 #define ST7789_CS 16
 #define ST7789_RS 15
 #define ST7789_TE 19
@@ -76,7 +69,7 @@
 #define TFT_INVERT_LIGHT true
 #define TFT_BACKLIGHT_ON LOW
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 5
+#define SCREEN_TRANSITION_FRAMERATE 10
 #define BRIGHTNESS_DEFAULT 128
 
 /*Lora radio*/
@@ -87,9 +80,10 @@
 #define LORA_CS 39
 #define LORA_RESET 45
 #define LORA_DIO0 41
+#define LORA_DIO1 42
 
 #define USE_LR1110
-#define LR1110_IRQ_PIN 42
+#define LR1110_IRQ_PIN LORA_DIO1
 #define LR1110_NRESET_PIN LORA_RESET
 #define LR1110_BUSY_PIN LORA_DIO0
 #define LR1110_SPI_NSS_PIN LORA_CS
@@ -101,3 +95,15 @@
 
 /*RTC*/
 #define PCF8563_RTC 0x51
+
+/*BATTERY*/
+#define BATTERY_PIN 13
+#define ADC_MULTIPLIER 2.0f
+#define BAT_MEASURE_ADC_UNIT ADC_UNIT_2
+#define ADC_CHANNEL ADC_CHANNEL_2
+#define ADC_ATTENUATION ADC_ATTEN_DB_12
+#define DEFAULT_VREF 1100
+#define BATTERY_SENSE_SAMPLES 15
+#define NUM_OCV_POINTS 11
+#define NUM_CELLS 1
+#define OCV_ARRAY 4260, 4180, 4050, 3950, 3850, 3780, 3730, 3680, 3600, 3500, 3400
