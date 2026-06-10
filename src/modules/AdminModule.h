@@ -67,7 +67,11 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
   private:
     bool handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
+
+  public:
     void handleSetHamMode(const meshtastic_HamParameters &req);
+
+  private:
     void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
     void handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent);
     void reboot(int32_t seconds);

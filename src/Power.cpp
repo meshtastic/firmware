@@ -14,6 +14,7 @@
  * For more information, see: https://meshtastic.org/
  */
 #include "power.h"
+#include "BluetoothCommon.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -962,6 +963,10 @@ void Power::readPowerStatus()
         lastLogTime = millis();
     }
     newStatus.notifyObservers(&powerStatus2);
+
+    // Mirror battery level to the BLE Battery Service (0x2A19); the platform layer clamps and dedupes.
+    if (hasBattery == OptTrue)
+        updateBatteryLevel(powerStatus2.getBatteryChargePercent());
 #ifdef DEBUG_HEAP
     if (lastheap != memGet.getFreeHeap()) {
         // Use stack-allocated buffer to avoid heap allocations in monitoring code

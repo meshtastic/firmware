@@ -55,10 +55,13 @@ class menuHandler
         FrameToggles,
         DisplayUnits,
         MessageBubblesMenu,
-        ThemeMenu
+        ThemeMenu,
+        HamModeConfirm,
+        LicensedToNormalConfirm
     };
     static screenMenus menuQueue;
     static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
+    static meshtastic_Config_LoRaConfig_RegionCode pendingRegion;
 
     static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);
@@ -111,6 +114,8 @@ class menuHandler
     static void messageBubblesMenu();
     static void themeMenu();
     static void textMessageMenu();
+    static void hamModeConfirmMenu();
+    static void licensedToNormalConfirmMenu();
 
   private:
     static void saveUIConfig();
