@@ -143,6 +143,10 @@ class RadioInterface
 
     virtual bool wideLora() { return false; }
 
+    /// Whether the radio can tune sub-GHz bands. False for 2.4 GHz-only chips (SX128x);
+    /// multiband chips like the LR1121 keep the default.
+    virtual bool supportsSubGhz() { return true; }
+
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }
 

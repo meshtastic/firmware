@@ -232,13 +232,15 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
-            // Guard: without a reboot, reconfigure() applies the region directly.
-            // Reject LORA_24 on sub-GHz-only hardware — getRadio() used to catch this post-reboot.
-            // TODO: change this to either use the validateLoraConfig() logic or at least check the region for wideLora
-            // rather than a hardcoded check for LORA_24.
-            if (selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_LORA_24 &&
-                !(RadioLibInterface::instance && RadioLibInterface::instance->wideLora())) {
-                LOG_WARN("Radio hardware does not support 2.4 GHz; ignoring region selection");
+            // Guard: without a reboot, reconfigure() applies the region directly, so reject
+            // regions this node can't use up front: unrecognized codes, licensed-only regions,
+            // and radio hardware mismatches (2.4 GHz vs sub-GHz) — the same validation the
+            // admin set-config path applies. getRadio() used to catch hardware mismatches
+            // post-reboot only.
+            auto candidateLora = config.lora;
+            candidateLora.region = selectedRegion;
+            if (!RadioInterface::validateConfigRegion(candidateLora)) {
+                LOG_WARN("Region selection invalid for this node; ignoring");
                 return;
             }
 

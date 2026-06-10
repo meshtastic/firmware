@@ -934,6 +934,27 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
         return false;
     }
 
+    // Hardware compatibility: wide-LoRa (2.4 GHz) regions need a wide-capable radio, and
+    // sub-GHz regions need a radio that can tune below 2.4 GHz (SX128x cannot). UNSET is
+    // always allowed since it is the "no region" state.
+    if (newRegion->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && RadioLibInterface::instance) {
+        const char *unsupported = nullptr;
+        if (newRegion->wideLora && !RadioLibInterface::instance->wideLora()) {
+            unsupported = "2.4 GHz";
+        } else if (!newRegion->wideLora && !RadioLibInterface::instance->supportsSubGhz()) {
+            unsupported = "sub-GHz";
+        }
+        if (unsupported) {
+            char err_string[160];
+            snprintf(err_string, sizeof(err_string), "Region %s needs %s, which this radio does not support", newRegion->name,
+                     unsupported);
+            LOG_ERROR("%s", err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            sendErrorNotification(err_string);
+            return false;
+        }
+    }
+
     return true;
 }
 
