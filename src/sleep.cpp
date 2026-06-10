@@ -28,6 +28,7 @@
 #include <driver/uart.h>
 
 esp_sleep_source_t wakeCause; // the reason we booted this time
+uint64_t lightSleepWakeGpioMask = 0;
 #endif
 #include "Throttle.h"
 
@@ -484,10 +485,16 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(res == ESP_OK);
 
     console->flush();
+    lightSleepWakeGpioMask = 0;
     res = esp_light_sleep_start();
     if (res != ESP_OK) {
         LOG_ERROR("esp_light_sleep_start result %d", res);
     }
+#if defined(SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP) && SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    else {
+        lightSleepWakeGpioMask = esp_sleep_get_gpio_wakeup_status();
+    }
+#endif
     // commented out because it's not that crucial;
     // if it sporadically happens the node will go into light sleep during the next round
     // assert(res == ESP_OK);
@@ -526,7 +533,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     notifyLightSleepEnd.notifyObservers(cause); // Button interrupts are reattached here
 
     if (cause == ESP_SLEEP_WAKEUP_GPIO) {
+#if defined(SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP) && SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+        LOG_INFO("Exit light sleep gpio mask 0x%08x%08x", (uint32_t)(lightSleepWakeGpioMask >> 32),
+                 (uint32_t)lightSleepWakeGpioMask);
+#else
         LOG_INFO("Exit light sleep gpio");
+#endif
         // If we woke because of a GPIO, it's possible power needs to run to handle.
         power->setIntervalFromNow(0);
         runASAP = true;

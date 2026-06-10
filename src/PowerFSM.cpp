@@ -87,6 +87,85 @@ static void t5BacklightOffForTimeout() {}
 static void t5BacklightOnFromUserInput() {}
 #endif
 
+// Low-active input IRQs should wake the screen just like the primary user button.
+static bool isLowActiveWakeInputPressed()
+{
+#ifdef BUTTON_PIN
+    if (!digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN))
+        return true;
+#endif
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
+    if (!digitalRead(INPUTDRIVER_TWO_WAY_ROCKER_BTN))
+        return true;
+#elif defined(INPUTDRIVER_ENCODER_BTN)
+    if (!digitalRead(INPUTDRIVER_ENCODER_BTN))
+        return true;
+#endif
+#ifdef KB_INT
+    if (!digitalRead(KB_INT))
+        return true;
+#endif
+#ifdef ROTARY_PRESS
+    if (!digitalRead(ROTARY_PRESS))
+        return true;
+#endif
+#ifdef BOARD_PCA9535_INT
+    if (!digitalRead(BOARD_PCA9535_INT))
+        return true;
+#endif
+#if defined(WAKE_ON_TOUCH) && defined(SCREEN_TOUCH_INT)
+    if (!digitalRead(SCREEN_TOUCH_INT))
+        return true;
+#endif
+
+    return false;
+}
+
+#ifdef ARCH_ESP32
+#if defined(SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP) && SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+static void addWakeInputPin(uint64_t &mask, int pin)
+{
+    if (pin >= 0 && pin < 64)
+        mask |= (1ULL << pin);
+}
+#endif
+
+static bool didWakeFromUserInputGpio(esp_sleep_wakeup_cause_t cause)
+{
+#if defined(SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP) && SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    if (cause != ESP_SLEEP_WAKEUP_GPIO)
+        return false;
+
+    uint64_t inputMask = 0;
+#ifdef BUTTON_PIN
+    addWakeInputPin(inputMask, config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#endif
+#ifdef ROTARY_PRESS
+    addWakeInputPin(inputMask, ROTARY_PRESS);
+#endif
+#ifdef KB_INT
+    addWakeInputPin(inputMask, KB_INT);
+#endif
+#ifdef BOARD_PCA9535_INT
+    addWakeInputPin(inputMask, BOARD_PCA9535_INT);
+#endif
+#if defined(WAKE_ON_TOUCH) && defined(SCREEN_TOUCH_INT)
+    addWakeInputPin(inputMask, SCREEN_TOUCH_INT);
+#endif
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
+    addWakeInputPin(inputMask, INPUTDRIVER_TWO_WAY_ROCKER_BTN);
+#elif defined(INPUTDRIVER_ENCODER_BTN)
+    addWakeInputPin(inputMask, INPUTDRIVER_ENCODER_BTN);
+#endif
+
+    return (lightSleepWakeGpioMask & inputMask) != 0;
+#else
+    (void)cause;
+    return false;
+#endif
+}
+#endif
+
 static void sdsEnter()
 {
     LOG_POWERFSM("State: SDS");
@@ -159,11 +238,7 @@ static void lsIdle()
             default:
                 // We woke for some other reason (button press, device IRQ interrupt)
 
-#ifdef BUTTON_PIN
-                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-#else
-                bool pressed = false;
-#endif
+                bool pressed = isLowActiveWakeInputPressed() || didWakeFromUserInputGpio(wakeCause2);
                 if (pressed) { // If we woke because of press, instead generate a PRESS event.
                     powerFSM.trigger(EVENT_PRESS);
                 } else {

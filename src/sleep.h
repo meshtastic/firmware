@@ -11,6 +11,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight, bool skipSaveNodeDb), 
 esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake);
 
 extern esp_sleep_source_t wakeCause;
+extern uint64_t lightSleepWakeGpioMask;
 #endif
 
 #ifdef HAS_PMU
