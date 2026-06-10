@@ -158,8 +158,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         ignoreRequest = true;
         return NULL;
     } else {
-        ignoreRequest = false; // Don't ignore requests anymore
-        meshtastic_User &u = owner;
+        ignoreRequest = false;     // Don't ignore requests anymore
+        meshtastic_User u = owner; // deliberate copy: the licensed strip below must not clobber the global owner state
 
         // Strip the public key if the user is licensed
         if (u.is_licensed && u.public_key.size > 0) {
