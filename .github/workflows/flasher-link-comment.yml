@@ -13,7 +13,7 @@ jobs:
   post-flasher-link:
     if: >
       github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.conclusion != 'cancelled' &&
       github.repository == 'meshtastic/firmware'
     continue-on-error: true
     runs-on: ubuntu-latest
@@ -77,28 +77,52 @@ jobs:
             // Per-board deep links from manifest-{platform}-{board}-{version} artifacts
             const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const boardRe = new RegExp(`^manifest-([a-z0-9]+)-(.+)-${escapedVersion}$`);
-            const boards = artifacts
+            let boards = artifacts
               .map((a) => boardRe.exec(a.name))
               .filter(Boolean)
               .map((m) => ({ platform: m[1], board: m[2] }))
               .sort((a, b) => a.board.localeCompare(b.board));
+
+            // Limit the list to devices the web flasher actively supports — the same
+            // activelySupported / non-portduino filter the flasher applies to its own
+            // device list — matching variant envs (-tft/-inkhud) to their base target.
+            // On a fetch failure, fall back to listing all built boards.
+            try {
+              const hw = await (await fetch('https://api.meshtastic.org/resource/deviceHardware')).json();
+              const supported = new Set(
+                hw.filter((d) => d.activelySupported && !String(d.architecture || '').startsWith('portduino'))
+                  .map((d) => d.platformioTarget),
+              );
+              const baseTarget = (b) => b.replace(/-(tft|inkhud)$/, '');
+              boards = boards.filter((b) => supported.has(b.board) || supported.has(baseTarget(b.board)));
+            } catch (e) {
+              core.warning(`Could not fetch device hardware list; listing all built boards. ${e.message}`);
+            }
 
             const flasherUrl = `https://flasher.meshtastic.org/?pr=${prNumber}`;
             const boardLines = boards
               .map((b) => `| [\`${b.board}\`](${flasherUrl}&device=${encodeURIComponent(b.board)}) | ${b.platform} |`)
               .join('\n');
 
-            const body = [
-              marker,
-              '## 🔦 Try this PR in the Web Flasher',
-              '',
-              `[**Flash firmware \`${version}\`** (commit \`${run.head_sha.slice(0, 7)}\`)](${flasherUrl})`,
-              '',
-              '> [!WARNING]',
-              '> This is an automated, unreviewed CI test build. Back up your device configuration',
-              '> before flashing, and only flash devices you are able to recover.',
-              '',
-              `<details><summary>Boards built by this PR (${boards.length})</summary>`,
+            // Shields.io badges. Only non-user-controlled, charset-constrained values
+            // (version, commit sha, counts, dates) go into badge URLs — never board
+            // names or the PR title — so the rendered comment cannot be spoofed.
+            const shieldText = (s) =>
+              encodeURIComponent(String(s).replace(/-/g, '--').replace(/_/g, '__').replace(/ /g, '_'));
+            const shield = (label, message, color) =>
+              `https://img.shields.io/badge/${shieldText(label)}-${shieldText(message)}-${color}`;
+            const buttonUrl =
+              `https://img.shields.io/badge/${shieldText('Flash this PR in the Web Flasher')}-2C2D3C?style=for-the-badge`;
+            const badges = [
+              `![firmware](${shield('firmware', version, '67EA94')})`,
+              `![commit](${shield('commit', run.head_sha.slice(0, 7), '2C2D3C')})`,
+              `![boards](${shield('boards', boards.length, '5C6BC0')})`,
+            ];
+            if (expiresAt) badges.push(`![expires](${shield('expires', expiresAt, '9A4E00')})`);
+
+            // Only render the board table when there are supported boards to list
+            const boardTable = boards.length > 0 ? [
+              `<details><summary>Supported boards built by this PR (${boards.length})</summary>`,
               '',
               '| Board | Platform |',
               '| --- | --- |',
@@ -106,7 +130,22 @@ jobs:
               '',
               '</details>',
               '',
-              `*Build artifacts expire${expiresAt ? ` on ${expiresAt}` : ' after 30 days'}. Updated for ${run.head_sha}.*`,
+            ] : [];
+
+            const body = [
+              marker,
+              '## 🔦 Try this PR in the Web Flasher',
+              '',
+              `[![Flash this PR in the Web Flasher](${buttonUrl})](${flasherUrl})`,
+              '',
+              badges.join(' '),
+              '',
+              '> [!WARNING]',
+              '> This is an automated, unreviewed CI test build. Back up your device configuration',
+              '> before flashing, and only flash devices you are able to recover.',
+              '',
+              ...boardTable,
+              `*Build artifacts expire${expiresAt ? ` on ${expiresAt}` : ' after 30 days'}. Updated for \`${run.head_sha.slice(0, 7)}\`.*`,
             ].join('\n');
 
             // Sticky comment: update in place when the marker is found
