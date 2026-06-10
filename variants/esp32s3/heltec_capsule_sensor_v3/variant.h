@@ -19,6 +19,7 @@
 #define GPS_RX_PIN 5
 #define GPS_TX_PIN 4
 #define PIN_GPS_RESET 3
+#define PIN_GPS_STANDBY 2
 #define GPS_RESET_MODE LOW
 #define PIN_GPS_PPS 1
 #define PIN_GPS_EN 21
