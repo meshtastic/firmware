@@ -41,10 +41,12 @@ jobs:
 
             const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
 
-            // Only comment on PRs from contributors and members
-            const allowedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'];
+            // Only comment on PRs authored by members of the organization.
+            // author_association MEMBER is computed by GitHub and reflects org
+            // membership (including concealed members); OWNER covers a repo owner.
+            const allowedAssociations = ['OWNER', 'MEMBER'];
             if (!allowedAssociations.includes(pr.author_association)) {
-              core.info(`Author association ${pr.author_association} is not eligible; skipping.`);
+              core.info(`Author association ${pr.author_association} is not an org member; skipping.`);
               return;
             }
             if (pr.state !== 'open') {
