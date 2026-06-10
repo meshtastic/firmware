@@ -287,7 +287,7 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     }
 
     if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-        sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+        snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
         changes |= SEGMENT_MODULECONFIG;
     }
     // Notify UI that changes are being applied
@@ -794,6 +794,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SET_REGION_ITU3_2M:
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M);
+        break;
+
+    case SET_REGION_ITU2_125CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM);
         break;
 
     // Roles
@@ -1500,6 +1504,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("ITU1_2M (144-146)", MenuAction::SET_REGION_ITU1_2M, MenuPage::EXIT));
         items.push_back(MenuItem("ITU2_2M (144-148)", MenuAction::SET_REGION_ITU2_2M, MenuPage::EXIT));
         items.push_back(MenuItem("ITU3_2M (144-148)", MenuAction::SET_REGION_ITU3_2M, MenuPage::EXIT));
+        items.push_back(MenuItem("ITU2_125CM (220-225)", MenuAction::SET_REGION_ITU2_125CM, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
