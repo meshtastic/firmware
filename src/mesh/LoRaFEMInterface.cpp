@@ -119,6 +119,13 @@ void LoRaFEMInterface::init(void)
     pinMode(LORA_KCT8103L_PA_CTX, OUTPUT);
     digitalWrite(LORA_KCT8103L_PA_CTX, LOW); // LNA enabled by default
     setLnaCanControl(true);
+#elif defined(USE_KCT8103L_PA_ONLY)
+    fem_type = KCT8103L_PA;
+    pinMode(LORA_KCT8103L_EN, OUTPUT);
+    digitalWrite(LORA_KCT8103L_EN, HIGH);
+    delay(1);
+    pinMode(LORA_KCT8103L_TX_RX, OUTPUT);
+    digitalWrite(LORA_KCT8103L_TX_RX, LOW);
 #endif
 }
 
@@ -148,6 +155,9 @@ void LoRaFEMInterface::setSleepModeEnable(void)
     // shutdown the PA
     digitalWrite(LORA_KCT8103L_PA_CSD, LOW);
     digitalWrite(LORA_PA_POWER, LOW);
+#elif defined(USE_KCT8103L_PA_ONLY)
+    // shutdown the PA
+    digitalWrite(LORA_KCT8103L_EN, LOW);
 #endif
 }
 
@@ -173,6 +183,9 @@ void LoRaFEMInterface::setTxModeEnable(void)
     enableFEMPower();
     digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
     digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
+#elif defined(USE_KCT8103L_PA_ONLY)
+    enableFEMPower();
+    digitalWrite(LORA_KCT8103L_TX_RX, HIGH);
 #endif
 }
 
@@ -206,6 +219,9 @@ void LoRaFEMInterface::setRxModeEnable(void)
     } else {
         digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
     }
+#elif defined(USE_KCT8103L_PA_ONLY)
+    enableFEMPower();
+    digitalWrite(LORA_KCT8103L_TX_RX, LOW);
 #endif
 }
 
@@ -247,6 +263,9 @@ void LoRaFEMInterface::setRxModeEnableWhenMCUSleep(void)
     rtc_gpio_hold_en((gpio_num_t)LORA_KCT8103L_PA_CSD);
     rtc_gpio_hold_en((gpio_num_t)LORA_KCT8103L_PA_CTX);
 #endif
+#elif defined(USE_KCT8103L_PA_ONLY)
+    enableFEMPower();
+    digitalWrite(LORA_KCT8103L_TX_RX, LOW);
 #endif
 }
 
