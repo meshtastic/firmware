@@ -90,8 +90,9 @@ class Default
             float bwKHz;
             uint8_t sf;
             uint8_t cr;
+            uint16_t preambleLength;
             if (config.lora.use_preset) {
-                modemPresetToParams(config.lora.modem_preset, false, bwKHz, sf, cr);
+                modemPresetToParams(config.lora.modem_preset, false, bwKHz, sf, cr, preambleLength);
             } else {
                 sf = config.lora.spread_factor;
                 bwKHz = bwCodeToKHz(config.lora.bandwidth);

@@ -186,8 +186,11 @@ static inline uint16_t bwKHzToCode(float bwKHz)
 }
 
 static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora, float &bwKHz, uint8_t &sf,
-                                       uint8_t &cr)
+                                       uint8_t &cr, uint16_t &preambleLength)
 {
+    // Set consistent preamble lengths: 12 for wide LoRa, 16 for standard
+    preambleLength = wideLora ? 12 : 16;
+
     switch (preset) {
     case PRESET(SHORT_TURBO):
         bwKHz = wideLora ? 1625.0f : 500.0f;
@@ -272,6 +275,17 @@ static inline float modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset 
     float bwKHz = 0;
     uint8_t sf = 0;
     uint8_t cr = 0;
-    modemPresetToParams(preset, wideLora, bwKHz, sf, cr);
+    uint16_t preambleLength = 0;
+    modemPresetToParams(preset, wideLora, bwKHz, sf, cr, preambleLength);
     return bwKHz;
+}
+
+static inline uint16_t modemPresetToPreambleLength(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora)
+{
+    float bwKHz = 0;
+    uint8_t sf = 0;
+    uint8_t cr = 0;
+    uint16_t preambleLength = 0;
+    modemPresetToParams(preset, wideLora, bwKHz, sf, cr, preambleLength);
+    return preambleLength;
 }
