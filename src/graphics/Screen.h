@@ -18,6 +18,7 @@ enum notificationTypeEnum {
     selection_picker,
     node_picker,
     number_picker,
+    hex_picker,
     text_input,
     // BLE pairing PIN banner. Treated specially by the lockdown short-circuit
     // in Screen.cpp: the PIN is ephemeral (regenerated per pair attempt) and
