@@ -193,24 +193,36 @@ void OnScreenKeyboardModule::drawPopup(OLEDDisplay *display)
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const uint16_t maxWrapWidth = display->width() - 40;
 
-    auto wrapText = [&](const char *text, uint16_t availableWidth) -> std::vector<std::string> {
-        std::vector<std::string> wrapped;
+    char lineStorage[maxContentLines + 1][64] = {};
+    const char *linePtrs[maxContentLines + 2] = {};
+    uint8_t lineCount = 0;
+
+    auto appendLine = [&](const std::string &line) {
+        if (line.empty() || lineCount >= maxContentLines + (hasTitle ? 1 : 0))
+            return;
+        strncpy(lineStorage[lineCount], line.c_str(), sizeof(lineStorage[lineCount]) - 1);
+        lineStorage[lineCount][sizeof(lineStorage[lineCount]) - 1] = '\0';
+        linePtrs[lineCount] = lineStorage[lineCount];
+        ++lineCount;
+    };
+
+    auto wrapText = [&](const char *text, uint16_t availableWidth) {
         std::string current;
         std::string word;
         const char *p = text;
-        while (*p && wrapped.size() < maxContentLines) {
+        while (*p && lineCount < maxContentLines + (hasTitle ? 1 : 0)) {
             while (*p && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) {
                 if (*p == '\n') {
                     if (!current.empty()) {
-                        wrapped.push_back(current);
+                        appendLine(current);
                         current.clear();
-                        if (wrapped.size() >= maxContentLines)
+                        if (lineCount >= maxContentLines + (hasTitle ? 1 : 0))
                             break;
                     }
                 }
                 ++p;
             }
-            if (!*p || wrapped.size() >= maxContentLines)
+            if (!*p || lineCount >= maxContentLines + (hasTitle ? 1 : 0))
                 break;
             word.clear();
             while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r')
@@ -223,9 +235,9 @@ void OnScreenKeyboardModule::drawPopup(OLEDDisplay *display)
                 current = test;
             else {
                 if (!current.empty()) {
-                    wrapped.push_back(current);
+                    appendLine(current);
                     current = word;
-                    if (wrapped.size() >= maxContentLines)
+                    if (lineCount >= maxContentLines + (hasTitle ? 1 : 0))
                         break;
                 } else {
                     current = word;
@@ -235,36 +247,26 @@ void OnScreenKeyboardModule::drawPopup(OLEDDisplay *display)
                 }
             }
         }
-        if (!current.empty() && wrapped.size() < maxContentLines)
-            wrapped.push_back(current);
-        return wrapped;
+        if (!current.empty() && lineCount < maxContentLines + (hasTitle ? 1 : 0))
+            appendLine(current);
     };
 
-    std::vector<std::string> allLines;
     if (hasTitle)
-        allLines.emplace_back(popupTitle);
+        appendLine(popupTitle);
 
     char buf[sizeof(popupMessage)];
     strncpy(buf, popupMessage, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
     char *paragraph = strtok(buf, "\n");
-    while (paragraph && allLines.size() < maxContentLines + (hasTitle ? 1 : 0)) {
-        auto wrapped = wrapText(paragraph, maxWrapWidth);
-        for (const auto &ln : wrapped) {
-            if (allLines.size() >= maxContentLines + (hasTitle ? 1 : 0))
-                break;
-            allLines.push_back(ln);
-        }
+    while (paragraph && lineCount < maxContentLines + (hasTitle ? 1 : 0)) {
+        wrapText(paragraph, maxWrapWidth);
         paragraph = strtok(nullptr, "\n");
     }
 
-    std::vector<const char *> ptrs;
-    for (const auto &ln : allLines)
-        ptrs.push_back(ln.c_str());
-    ptrs.push_back(nullptr);
+    linePtrs[lineCount] = nullptr;
 
     // Use the standard notification box drawing from NotificationRenderer
-    NotificationRenderer::drawNotificationBox(display, nullptr, ptrs.data(), allLines.size(), 0, 0);
+    NotificationRenderer::drawNotificationBox(display, nullptr, linePtrs, lineCount, 0, 0);
 }
 
 } // namespace graphics

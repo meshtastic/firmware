@@ -21,7 +21,7 @@ void TraceRouteModule::setResultText(const String &text)
 
 void TraceRouteModule::clearResultLines()
 {
-    resultLines.clear();
+    std::vector<String>().swap(resultLines);
     resultLinesDirty = false;
 }
 #if HAS_SCREEN

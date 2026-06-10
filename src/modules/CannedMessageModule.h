@@ -75,7 +75,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void updateDestinationSelectionList();
     void drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     bool isCharInputAllowed() const;
-    String drawWithCursor(String text, int cursor);
+    void drawWithCursor(char *buffer, size_t bufferSize, const char *text, size_t cursor);
 
     // === Emote Picker ===
     int handleEmotePickerInput(const InputEvent *event);
@@ -146,7 +146,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int visibleRows = 0;
     bool needsUpdate = true;
     unsigned long lastUpdateMillis = 0;
-    String searchQuery;
+    static constexpr size_t searchQuerySize = 33;
+    char searchQuery[searchQuerySize] = {0};
     String freetext;
 
     // === Message Storage ===
@@ -175,6 +176,9 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     unsigned long lastTouchMillis = 0;
     uint32_t lastFilterUpdate = 0;
     static constexpr uint32_t filterDebounceMs = 30;
+    size_t cachedDestinationNodeCount = 0;
+    char cachedDestinationSearchQuery[searchQuerySize] = {0};
+    bool destinationSelectionCacheValid = false;
     std::vector<uint8_t> activeChannelIndices;
     std::vector<NodeEntry> filteredNodes;
 
@@ -184,6 +188,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 #endif
 
     void updateState(cannedMessageModuleRunState, bool shouldRequestFocus = false);
+    void releaseDestinationSelectionCache();
+    void releaseFreetext();
 
     bool isUpEvent(const InputEvent *event);
     bool isDownEvent(const InputEvent *event);

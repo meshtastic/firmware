@@ -102,8 +102,8 @@ namespace graphics
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
 #define ASCII_BELL '\x07'
-// A text message frame + debug frame + all the node infos
-FrameCallback *normalFrames;
+// Base frames plus active module/favorite frames; grows only when the actual frameset needs it.
+static std::vector<FrameCallback> normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 #if GRAPHICS_TFT_COLORING_ENABLED
 static inline void prepareFrameColorRegions()
@@ -136,6 +136,7 @@ uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 // At some point, we're going to ask all of the modules if they would like to display a screen frame
 // we'll need to hold onto pointers for the modules that can draw a frame.
 std::vector<MeshModule *> moduleFrames;
+static uint8_t moduleFrameStart = 0;
 
 #if HAS_GPS
 // GeoCoord object for the screen
@@ -333,8 +334,14 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
         // otherwise, just display the module frame that's aligned with the current frame
         module_frame = state->currentFrame;
     }
-    MeshModule &pi = *moduleFrames.at(module_frame);
-    pi.drawFrame(display, state, x, y);
+    if (module_frame < moduleFrameStart)
+        return;
+
+    const uint8_t moduleIndex = module_frame - moduleFrameStart;
+    if (moduleIndex >= moduleFrames.size() || moduleFrames[moduleIndex] == nullptr)
+        return;
+
+    moduleFrames[moduleIndex]->drawFrame(display, state, x, y);
 }
 
 /**
@@ -402,9 +409,11 @@ SPIClass SPI1(HSPI);
 #endif
 
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
-    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
+    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(16)
 {
-    graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+    normalFrames.reserve(24);
+    indicatorIcons.reserve(24);
+    moduleFrames.reserve(8);
 
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
@@ -488,7 +497,6 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 
 Screen::~Screen()
 {
-    delete[] graphics::normalFrames;
 }
 
 /**
@@ -1142,183 +1150,130 @@ void Screen::setFrames(FrameFocus focus)
     LOG_DEBUG("Show standard frames");
     showingNormalScreen = true;
 
+    normalFrames.clear();
     indicatorIcons.clear();
 
-    size_t numframes = 0;
+    auto appendFrame = [this](FrameCallback frame, const uint8_t *icon) -> uint8_t {
+        normalFrames.emplace_back(frame);
+        indicatorIcons.push_back(icon);
+        return normalFrames.size() - 1;
+    };
 
     // If we have a critical fault, show it first
-    fsi.positions.fault = numframes;
+    fsi.positions.fault = normalFrames.size();
     if (error_code) {
-        normalFrames[numframes++] = NotificationRenderer::drawCriticalFaultFrame;
-        indicatorIcons.push_back(icon_error);
+        fsi.positions.fault = appendFrame(NotificationRenderer::drawCriticalFaultFrame, icon_error);
         focus = FOCUS_FAULT; // Change our "focus" parameter, to ensure we show the fault frame
     }
 
 #if defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
-        fsi.positions.clock = numframes;
 #if defined(OLED_TINY)
-        normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
+        fsi.positions.clock = appendFrame(graphics::ClockRenderer::drawAnalogClockFrame, digital_icon_clock);
 #else
-        normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
-                                                                 : graphics::ClockRenderer::drawDigitalClockFrame;
+        fsi.positions.clock = appendFrame(uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                                       : graphics::ClockRenderer::drawDigitalClockFrame,
+                                          digital_icon_clock);
 #endif
-        indicatorIcons.push_back(digital_icon_clock);
     }
 #endif
 
     if (!hiddenFrames.home) {
-        fsi.positions.home = numframes;
-        normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
-        indicatorIcons.push_back(icon_home);
+        fsi.positions.home = appendFrame(graphics::UIRenderer::drawDeviceFocused, icon_home);
     }
 
-    fsi.positions.textMessage = numframes;
-    normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
-    indicatorIcons.push_back(icon_mail);
+    fsi.positions.textMessage = appendFrame(graphics::MessageRenderer::drawTextMessageFrame, icon_mail);
 
 #ifndef USE_EINK
     if (!hiddenFrames.nodelist_nodes) {
-        fsi.positions.nodelist_nodes = numframes;
-        normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Nodes;
-        indicatorIcons.push_back(icon_nodes);
+        fsi.positions.nodelist_nodes = appendFrame(graphics::NodeListRenderer::drawDynamicListScreen_Nodes, icon_nodes);
     }
     if (!hiddenFrames.nodelist_location) {
-        fsi.positions.nodelist_location = numframes;
-        normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Location;
-        indicatorIcons.push_back(icon_list);
+        fsi.positions.nodelist_location = appendFrame(graphics::NodeListRenderer::drawDynamicListScreen_Location, icon_list);
     }
 #endif
 
 // Show detailed node views only on E-Ink builds
 #ifdef USE_EINK
     if (!hiddenFrames.nodelist_lastheard) {
-        fsi.positions.nodelist_lastheard = numframes;
-        normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
-        indicatorIcons.push_back(icon_nodes);
+        fsi.positions.nodelist_lastheard = appendFrame(graphics::NodeListRenderer::drawLastHeardScreen, icon_nodes);
     }
     if (!hiddenFrames.nodelist_hopsignal) {
-        fsi.positions.nodelist_hopsignal = numframes;
-        normalFrames[numframes++] = graphics::NodeListRenderer::drawHopSignalScreen;
-        indicatorIcons.push_back(icon_signal);
+        fsi.positions.nodelist_hopsignal = appendFrame(graphics::NodeListRenderer::drawHopSignalScreen, icon_signal);
     }
     if (!hiddenFrames.nodelist_distance) {
-        fsi.positions.nodelist_distance = numframes;
-        normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
-        indicatorIcons.push_back(icon_distance);
+        fsi.positions.nodelist_distance = appendFrame(graphics::NodeListRenderer::drawDistanceScreen, icon_distance);
     }
 #endif
 #if HAS_GPS
 #ifdef USE_EINK
     if (!hiddenFrames.nodelist_bearings) {
-        fsi.positions.nodelist_bearings = numframes;
-        normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
-        indicatorIcons.push_back(icon_list);
+        fsi.positions.nodelist_bearings = appendFrame(graphics::NodeListRenderer::drawNodeListWithCompasses, icon_list);
     }
 #endif
     if (!hiddenFrames.gps) {
-        fsi.positions.gps = numframes;
-        normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
-        indicatorIcons.push_back(icon_compass);
+        fsi.positions.gps = appendFrame(graphics::UIRenderer::drawCompassAndLocationScreen, icon_compass);
     }
 #endif
     if (RadioLibInterface::instance && !hiddenFrames.lora) {
-        fsi.positions.lora = numframes;
-        normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
-        indicatorIcons.push_back(icon_radio);
+        fsi.positions.lora = appendFrame(graphics::DebugRenderer::drawLoRaFocused, icon_radio);
     }
     if (!hiddenFrames.system) {
-        fsi.positions.system = numframes;
-        normalFrames[numframes++] = graphics::DebugRenderer::drawSystemScreen;
-        indicatorIcons.push_back(icon_system);
+        fsi.positions.system = appendFrame(graphics::DebugRenderer::drawSystemScreen, icon_system);
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
-        fsi.positions.clock = numframes;
-        normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
-                                                                 : graphics::ClockRenderer::drawDigitalClockFrame;
-        indicatorIcons.push_back(digital_icon_clock);
+        fsi.positions.clock = appendFrame(uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                                       : graphics::ClockRenderer::drawDigitalClockFrame,
+                                          digital_icon_clock);
     }
 #endif
     if (!hiddenFrames.chirpy) {
-        fsi.positions.chirpy = numframes;
-        normalFrames[numframes++] = graphics::DebugRenderer::drawChirpy;
-        indicatorIcons.push_back(chirpy_small);
+        fsi.positions.chirpy = appendFrame(graphics::DebugRenderer::drawChirpy, chirpy_small);
     }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (!hiddenFrames.wifi && isWifiAvailable()) {
-        fsi.positions.wifi = numframes;
-        normalFrames[numframes++] = graphics::DebugRenderer::drawDebugInfoWiFiTrampoline;
-        indicatorIcons.push_back(icon_wifi);
+        fsi.positions.wifi = appendFrame(graphics::DebugRenderer::drawDebugInfoWiFiTrampoline, icon_wifi);
     }
 #endif
 
-    // Beware of what changes you make in this code!
-    // We pass numframes into GetMeshModulesWithUIFrames() which is highly important!
-    // Inside of that callback, goes over to MeshModule.cpp and we run
-    // modulesWithUIFrames.resize(startIndex, nullptr), to insert nullptr
-    // entries until we're ready to start building the matching entries.
-    // We are doing our best to keep the normalFrames vector
-    // and the moduleFrames vector in lock step.
-    moduleFrames = MeshModule::GetMeshModulesWithUIFrames(numframes);
+    moduleFrameStart = normalFrames.size();
+    moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
     LOG_DEBUG("Show %d module frames", moduleFrames.size());
 
-    for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
-        // Draw the module frame, using the hack described above
-        if (*i != nullptr) {
-            normalFrames[numframes] = drawModuleFrame;
-
-            // Check if the module being drawn has requested focus
-            // We will honor this request later, if setFrames was triggered by a UIFrameEvent
-            MeshModule *m = *i;
-            if (m && m->isRequestingFocus())
-                fsi.positions.focusedModule = numframes;
-            if (m && m == waypointModule)
-                fsi.positions.waypoint = numframes;
-
-            indicatorIcons.push_back(icon_module);
-            numframes++;
-        }
+    for (MeshModule *m : moduleFrames) {
+        const uint8_t frameIndex = appendFrame(drawModuleFrame, icon_module);
+        if (m && m->isRequestingFocus())
+            fsi.positions.focusedModule = frameIndex;
+        if (m && m == waypointModule)
+            fsi.positions.waypoint = frameIndex;
     }
 
-    LOG_DEBUG("Added modules.  numframes: %d", numframes);
-
-    // We don't show the node info of our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    if (numMeshNodes > 0)
-        numMeshNodes--;
+    LOG_DEBUG("Added modules.  numframes: %d", normalFrames.size());
 
     if (!hiddenFrames.show_favorites) {
-        // Temporary array to hold favorite node frames
-        std::vector<FrameCallback> favoriteFrames;
-
+        uint8_t firstFavorite = 255;
+        uint8_t lastFavorite = 255;
         for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
             const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
             if (n && n->num != nodeDB->getNodeNum() && nodeInfoLiteIsFavorite(n)) {
-                favoriteFrames.push_back(graphics::UIRenderer::drawFavoriteNode);
+                const uint8_t frameIndex = appendFrame(graphics::UIRenderer::drawFavoriteNode, icon_node);
+                if (firstFavorite == 255)
+                    firstFavorite = frameIndex;
+                lastFavorite = frameIndex;
             }
         }
 
-        // Insert favorite frames *after* collecting them all
-        if (!favoriteFrames.empty()) {
-            fsi.positions.firstFavorite = numframes;
-            for (const auto &f : favoriteFrames) {
-                normalFrames[numframes++] = f;
-                indicatorIcons.push_back(icon_node);
-            }
-            fsi.positions.lastFavorite = numframes - 1;
-        } else {
-            fsi.positions.firstFavorite = 255;
-            fsi.positions.lastFavorite = 255;
-        }
+        fsi.positions.firstFavorite = firstFavorite;
+        fsi.positions.lastFavorite = lastFavorite;
     }
 
-    fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
-    this->frameCount = numframes; // Save frame count for use in custom overlay
-    LOG_DEBUG("Finished build frames. numframes: %d", numframes);
+    fsi.frameCount = normalFrames.size();   // Total framecount is used to apply FOCUS_PRESERVE
+    this->frameCount = normalFrames.size(); // Save frame count for use in custom overlay
+    LOG_DEBUG("Finished build frames. numframes: %d", normalFrames.size());
 
-    ui->setFrames(normalFrames, numframes);
+    ui->setFrames(normalFrames.data(), fsi.frameCount);
     ui->disableAllIndicators();
 
     // Add overlays: frame icons and alert banner)

@@ -44,6 +44,8 @@ extern MessageStore messageStore;
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
+#include <cctype>
+#include <new>
 
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
@@ -144,6 +146,36 @@ bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
 {
     return nodeInfoLiteHasUser(node) && node->public_key.size > 0;
 }
+
+static bool containsIgnoreCase(const char *text, const char *query)
+{
+    if (!query || !*query)
+        return true;
+    if (!text || !*text)
+        return false;
+
+    const size_t queryLen = strlen(query);
+    for (const char *p = text; *p; ++p) {
+        size_t i = 0;
+        while (i < queryLen && p[i] &&
+               std::tolower(static_cast<unsigned char>(p[i])) == std::tolower(static_cast<unsigned char>(query[i]))) {
+            ++i;
+        }
+        if (i == queryLen)
+            return true;
+    }
+    return false;
+}
+
+static bool activeChannelNameSeen(const std::vector<uint8_t> &activeChannelIndices, const char *name)
+{
+    for (uint8_t channelIndex : activeChannelIndices) {
+        const char *existingName = channels.getName(channelIndex);
+        if (existingName && strcmp(existingName, name) == 0)
+            return true;
+    }
+    return false;
+}
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
  *     starting points of the string this->messageStore
@@ -155,10 +187,9 @@ int CannedMessageModule::splitConfiguredMessages()
 {
     int i = 0;
 
-    String canned_messages = cannedMessageModuleConfig.messages;
-
     // Copy all message parts into the buffer
-    strncpy(this->messageBuffer, canned_messages.c_str(), sizeof(this->messageBuffer));
+    strncpy(this->messageBuffer, cannedMessageModuleConfig.messages, sizeof(this->messageBuffer) - 1);
+    this->messageBuffer[sizeof(this->messageBuffer) - 1] = '\0';
 
     // Temporary array to allow for insertion
     const char *tempMessages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT + 3] = {0};
@@ -222,7 +253,7 @@ void CannedMessageModule::resetSearch()
 {
     int previousDestIndex = destIndex;
 
-    searchQuery = "";
+    searchQuery[0] = '\0';
     updateDestinationSelectionList();
 
     // Adjust scrollIndex so previousDestIndex is still visible
@@ -238,26 +269,21 @@ void CannedMessageModule::resetSearch()
 }
 void CannedMessageModule::updateDestinationSelectionList()
 {
-    static size_t lastNumMeshNodes = 0;
-    static String lastSearchQuery = "";
-
     size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    bool nodesChanged = (numMeshNodes != lastNumMeshNodes);
-    lastNumMeshNodes = numMeshNodes;
+    bool nodesChanged = (numMeshNodes != cachedDestinationNodeCount);
+    cachedDestinationNodeCount = numMeshNodes;
 
     // Early exit if nothing changed
-    if (searchQuery == lastSearchQuery && !nodesChanged)
+    if (destinationSelectionCacheValid && strcmp(searchQuery, cachedDestinationSearchQuery) == 0 && !nodesChanged)
         return;
-    lastSearchQuery = searchQuery;
+    strncpy(cachedDestinationSearchQuery, searchQuery, sizeof(cachedDestinationSearchQuery) - 1);
+    cachedDestinationSearchQuery[sizeof(cachedDestinationSearchQuery) - 1] = '\0';
     needsUpdate = false;
 
     this->filteredNodes.clear();
     this->activeChannelIndices.clear();
 
     NodeNum myNodeNum = nodeDB->getNodeNum();
-    String lowerSearchQuery = searchQuery;
-    lowerSearchQuery.toLowerCase();
-
     // Preallocate space to reduce reallocation
     this->filteredNodes.reserve(numMeshNodes);
 
@@ -266,38 +292,27 @@ void CannedMessageModule::updateDestinationSelectionList()
         if (!node || node->num == myNodeNum || !nodeInfoLiteHasUser(node) || node->public_key.size != 32)
             continue;
 
-        const String &nodeName = node->long_name;
+        const char *nodeName = node->long_name;
+        const char *shortName = node->short_name;
 
-        if (searchQuery.length() == 0) {
+        if (searchQuery[0] == '\0') {
             this->filteredNodes.push_back({node, sinceLastSeen(node)});
-        } else {
-            // Avoid unnecessary lowercase conversion if already matched
-            String lowerNodeName = nodeName;
-            lowerNodeName.toLowerCase();
-
-            if (lowerNodeName.indexOf(lowerSearchQuery) != -1) {
-                this->filteredNodes.push_back({node, sinceLastSeen(node)});
-            }
+        } else if (containsIgnoreCase(nodeName, searchQuery) || containsIgnoreCase(shortName, searchQuery)) {
+            this->filteredNodes.push_back({node, sinceLastSeen(node)});
         }
     }
 
-    meshtastic_MeshPacket *p = allocDataPacket();
-    p->pki_encrypted = true;
-    p->channel = 0;
-
     // Populate active channels
-    std::vector<String> seenChannels;
-    seenChannels.reserve(channels.getNumChannels());
     for (uint8_t i = 0; i < channels.getNumChannels(); ++i) {
-        String name = channels.getName(i);
-        if (name.length() > 0 && std::find(seenChannels.begin(), seenChannels.end(), name) == seenChannels.end()) {
+        const char *name = channels.getName(i);
+        if (name && name[0] && !activeChannelNameSeen(activeChannelIndices, name)) {
             this->activeChannelIndices.push_back(i);
-            seenChannels.push_back(name);
         }
     }
 
     scrollIndex = 0; // Show first result at the top
     destIndex = 0;   // Highlight the first entry
+    destinationSelectionCacheValid = true;
     if (nodesChanged && runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
         LOG_INFO("Nodes changed, forcing UI refresh.");
         screen->forceDisplay();
@@ -480,7 +495,11 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
 void CannedMessageModule::updateState(cannedMessageModuleRunState newState, bool shouldRequestFocus)
 {
+    cannedMessageModuleRunState oldState = runState;
     runState = newState;
+    if (oldState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION && newState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        releaseDestinationSelectionCache();
+    }
     if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         inputBroker->menuMode =
             false; // Allow any key input to be sent to the message composer instead of being interpreted as menu navigation
@@ -490,6 +509,26 @@ void CannedMessageModule::updateState(cannedMessageModuleRunState newState, bool
     if (shouldRequestFocus) {
         requestFocus();
     }
+}
+
+void CannedMessageModule::releaseDestinationSelectionCache()
+{
+    searchQuery[0] = '\0';
+    cachedDestinationSearchQuery[0] = '\0';
+    cachedDestinationNodeCount = 0;
+    destinationSelectionCacheValid = false;
+    destIndex = 0;
+    scrollIndex = 0;
+
+    std::vector<uint8_t>().swap(activeChannelIndices);
+    std::vector<NodeEntry>().swap(filteredNodes);
+}
+
+void CannedMessageModule::releaseFreetext()
+{
+    freetext.~String();
+    new (&freetext) String();
+    cursor = 0;
 }
 
 bool CannedMessageModule::isUpEvent(const InputEvent *event)
@@ -547,11 +586,15 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 
     if (event->kbchar >= 32 && event->kbchar <= 126 && !isUp && !isDown && event->inputEvent != INPUT_BROKER_LEFT &&
         event->inputEvent != INPUT_BROKER_RIGHT && event->inputEvent != INPUT_BROKER_SELECT) {
-        this->searchQuery += (char)event->kbchar;
-        needsUpdate = true;
-        if ((millis() - lastFilterUpdate) > filterDebounceMs) {
-            runOnce(); // update filter immediately
-            lastFilterUpdate = millis();
+        size_t queryLen = strlen(searchQuery);
+        if (queryLen + 1 < sizeof(searchQuery)) {
+            searchQuery[queryLen] = static_cast<char>(event->kbchar);
+            searchQuery[queryLen + 1] = '\0';
+            needsUpdate = true;
+            if ((millis() - lastFilterUpdate) > filterDebounceMs) {
+                runOnce(); // update filter immediately
+                lastFilterUpdate = millis();
+            }
         }
         return 1;
     }
@@ -565,12 +608,13 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 
     // Handle backspace
     if (event->inputEvent == INPUT_BROKER_BACK) {
-        if (searchQuery.length() > 0) {
-            searchQuery.remove(searchQuery.length() - 1);
+        size_t queryLen = strlen(searchQuery);
+        if (queryLen > 0) {
+            searchQuery[queryLen - 1] = '\0';
             needsUpdate = true;
             runOnce();
         }
-        if (searchQuery.length() == 0) {
+        if (searchQuery[0] == '\0') {
             resetSearch();
             needsUpdate = false;
         }
@@ -641,7 +685,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
         updateState(returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
         returnToCannedList = false;
-        searchQuery = "";
+        searchQuery[0] = '\0';
 
         // UIFrameEvent e;
         // e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -671,8 +715,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
     if (runState != CANNED_MESSAGE_RUN_STATE_INACTIVE &&
         (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG)) {
         updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
-        freetext = "";
-        cursor = 0;
+        releaseFreetext();
         payload = 0;
         currentMessageIndex = -1;
 
@@ -762,8 +805,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
                         // Return to inactive state
                         this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
                         this->currentMessageIndex = -1;
-                        this->freetext = "";
-                        this->cursor = 0;
+                        this->releaseFreetext();
 
                         // Force display update to show normal screen
                         UIFrameEvent e;
@@ -822,8 +864,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Cancel (dismiss freetext screen)
     if (event->inputEvent == INPUT_BROKER_LEFT) {
         updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
-        freetext = "";
-        cursor = 0;
+        releaseFreetext();
         payload = 0;
         currentMessageIndex = -1;
 
@@ -946,8 +987,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG ||
         (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() == 0)) {
         updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
-        freetext = "";
-        cursor = 0;
+        releaseFreetext();
         payload = 0;
         currentMessageIndex = -1;
 
@@ -1187,8 +1227,7 @@ int32_t CannedMessageModule::runOnce()
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
-        this->freetext = "";
-        this->cursor = 0;
+        this->releaseFreetext();
         this->notifyObservers(&e);
         return 2000;
     }
@@ -1201,24 +1240,21 @@ int32_t CannedMessageModule::runOnce()
         this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
-        this->freetext = "";
-        this->cursor = 0;
+        this->releaseFreetext();
         this->notifyObservers(&e);
     }
     // Handle SENDING_ACTIVE state transition after virtual keyboard message
     else if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload == 0) {
         this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
         this->currentMessageIndex = -1;
-        this->freetext = "";
-        this->cursor = 0;
+        this->releaseFreetext();
         return INT32_MAX;
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
                !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
         // Reset module on inactivity
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
-        this->freetext = "";
-        this->cursor = 0;
+        this->releaseFreetext();
         this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
 
         // Clean up virtual keyboard if it exists during timeout
@@ -1240,8 +1276,7 @@ int32_t CannedMessageModule::runOnce()
 
                 // Clean up state but *don’t* deactivate yet
                 this->currentMessageIndex = -1;
-                this->freetext = "";
-                this->cursor = 0;
+                this->releaseFreetext();
 
                 // Tell Screen to jump straight to the TextMessage frame
                 e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
@@ -1267,8 +1302,7 @@ int32_t CannedMessageModule::runOnce()
 
                     // Clean up state
                     this->currentMessageIndex = -1;
-                    this->freetext = "";
-                    this->cursor = 0;
+                    this->releaseFreetext();
 
                     // Tell Screen to jump straight to the TextMessage frame
                     e.action = UIFrameEvent::Action::SWITCH_TO_TEXTMESSAGE;
@@ -1285,8 +1319,7 @@ int32_t CannedMessageModule::runOnce()
         }
         // fallback clean-up if nothing above returned
         this->currentMessageIndex = -1;
-        this->freetext = "";
-        this->cursor = 0;
+        this->releaseFreetext();
 
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->notifyObservers(&e);
@@ -1312,15 +1345,13 @@ int32_t CannedMessageModule::runOnce()
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = getPrevIndex();
-            this->freetext = "";
-            this->cursor = 0;
+            this->releaseFreetext();
             this->updateState(CANNED_MESSAGE_RUN_STATE_ACTIVE);
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = this->getNextIndex();
-            this->freetext = "";
-            this->cursor = 0;
+            this->releaseFreetext();
             this->updateState(CANNED_MESSAGE_RUN_STATE_ACTIVE);
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
@@ -1494,8 +1525,10 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
     display->setColor(OLEDDISPLAY_COLOR::WHITE);
 
-    display->drawStringMaxWidth(0, 0, display->getWidth(),
-                                cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
+    char msgWithCursor[meshtastic_Constants_DATA_PAYLOAD_LEN + 2];
+    cannedMessageModule->drawWithCursor(msgWithCursor, sizeof(msgWithCursor), cannedMessageModule->freetext.c_str(),
+                                        cannedMessageModule->cursor);
+    display->drawStringMaxWidth(0, 0, display->getWidth(), msgWithCursor);
 
     display->setFont(FONT_MEDIUM);
 
@@ -1681,8 +1714,11 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
 
     // Header
     int titleY = 2;
-    String titleText = "Select Destination";
-    titleText += searchQuery.length() > 0 ? " [" + searchQuery + "]" : " [ ]";
+    char titleText[64];
+    if (searchQuery[0])
+        snprintf(titleText, sizeof(titleText), "Select Destination [%s]", searchQuery);
+    else
+        snprintf(titleText, sizeof(titleText), "Select Destination [ ]");
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(display->getWidth() / 2, titleY, titleText);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1709,26 +1745,27 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
 
         int xOffset = 0;
         int yOffset = row * (FONT_HEIGHT_SMALL - 4) + rowYOffset;
-        std::string entryText;
+        char entryText[96] = "";
 
         // Draw Channels First
         if (itemIndex < numActiveChannels) {
             uint8_t channelIndex = this->activeChannelIndices[itemIndex];
             const char *channelName = channels.getName(channelIndex);
-            entryText = std::string("#") + (channelName ? channelName : "?");
+            snprintf(entryText, sizeof(entryText), "#%s", channelName ? channelName : "?");
         }
         // Then Draw Nodes
         else {
             int nodeIndex = itemIndex - numActiveChannels;
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
                 meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                const char *nodeName = nullptr;
                 if (node) {
                     if (display->getWidth() <= 64) {
-                        entryText = node->short_name;
+                        nodeName = node->short_name;
                     } else if (node->long_name[0]) {
-                        entryText = node->long_name;
+                        nodeName = node->long_name;
                     } else {
-                        entryText = node->short_name;
+                        nodeName = node->short_name;
                     }
                 }
 
@@ -1738,22 +1775,21 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                 if (availWidth < 0)
                     availWidth = 0;
                 char truncatedEntry[96];
-                graphics::UIRenderer::truncateStringWithEmotes(display, entryText.c_str(), truncatedEntry, sizeof(truncatedEntry),
+                graphics::UIRenderer::truncateStringWithEmotes(display, nodeName ? nodeName : "", truncatedEntry, sizeof(truncatedEntry),
                                                                availWidth);
-                entryText = truncatedEntry;
+                snprintf(entryText, sizeof(entryText), "%s", truncatedEntry);
 
                 // Prepend "* " if this is a favorite
                 if (nodeInfoLiteIsFavorite(node)) {
-                    entryText = "* " + entryText;
+                    snprintf(entryText, sizeof(entryText), "* %s", truncatedEntry);
                 }
-                graphics::UIRenderer::truncateStringWithEmotes(display, entryText.c_str(), truncatedEntry, sizeof(truncatedEntry),
-                                                               availWidth);
-                entryText = truncatedEntry;
+                graphics::UIRenderer::truncateStringWithEmotes(display, entryText, truncatedEntry, sizeof(truncatedEntry), availWidth);
+                snprintf(entryText, sizeof(entryText), "%s", truncatedEntry);
             }
         }
 
-        if (entryText.empty() || entryText == "Unknown")
-            entryText = "?";
+        if (entryText[0] == '\0' || strcmp(entryText, "Unknown") == 0)
+            snprintf(entryText, sizeof(entryText), "?");
 
         // Highlight background (if selected)
         if (itemIndex == destIndex) {
@@ -1763,7 +1799,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
         }
 
         // Draw entry text
-        graphics::UIRenderer::drawStringWithEmotes(display, xOffset + 2, yOffset, entryText.c_str(), FONT_HEIGHT_SMALL, 1, false);
+        graphics::UIRenderer::drawStringWithEmotes(display, xOffset + 2, yOffset, entryText, FONT_HEIGHT_SMALL, 1, false);
         display->setColor(WHITE);
 
         // Draw key icon (after highlight)
@@ -2022,8 +2058,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setColor(WHITE);
         {
             int inputY = 0 + y + FONT_HEIGHT_SMALL;
-            String msgWithCursor = this->drawWithCursor(this->freetext, this->cursor);
-            drawWrappedEmoteText(display, x, inputY, msgWithCursor.c_str(), display->getWidth() - x, FONT_HEIGHT_SMALL);
+            char msgWithCursor[meshtastic_Constants_DATA_PAYLOAD_LEN + 2];
+            this->drawWithCursor(msgWithCursor, sizeof(msgWithCursor), this->freetext.c_str(), this->cursor);
+            drawWrappedEmoteText(display, x, inputY, msgWithCursor, display->getWidth() - x, FONT_HEIGHT_SMALL);
         }
 #endif
         return;
@@ -2368,10 +2405,27 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
     }
 }
 
-String CannedMessageModule::drawWithCursor(String text, int cursor)
+void CannedMessageModule::drawWithCursor(char *buffer, size_t bufferSize, const char *text, size_t cursor)
 {
-    String result = text.substring(0, cursor) + "_" + text.substring(cursor);
-    return result;
+    if (!buffer || bufferSize == 0)
+        return;
+
+    const char *source = text ? text : "";
+    const size_t sourceLen = strlen(source);
+    const size_t cursorIndex = std::min(cursor, sourceLen);
+    const size_t beforeLen = std::min(cursorIndex, bufferSize - 1);
+
+    memcpy(buffer, source, beforeLen);
+    size_t outLen = beforeLen;
+
+    if (outLen < bufferSize - 1)
+        buffer[outLen++] = '_';
+
+    const size_t remaining = bufferSize - 1 - outLen;
+    const size_t afterLen = std::min(sourceLen - cursorIndex, remaining);
+    memcpy(buffer + outLen, source + cursorIndex, afterLen);
+    outLen += afterLen;
+    buffer[outLen] = '\0';
 }
 
 #endif

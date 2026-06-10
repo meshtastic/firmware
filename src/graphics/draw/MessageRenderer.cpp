@@ -154,8 +154,8 @@ static std::vector<uint32_t> seenPeers;
 // Public helper so menus / store can clear stale registries
 void clearThreadRegistries()
 {
-    seenChannels.clear();
-    seenPeers.clear();
+    std::vector<int>().swap(seenChannels);
+    std::vector<uint32_t>().swap(seenPeers);
 }
 
 // Setter so other code can switch threads
@@ -385,6 +385,58 @@ static void drawMessageScrollbar(OLEDDisplay *display, int visibleHeight, int to
     for (int i = 0; i < thumbHeight; i++) {
         display->setPixel(scrollbarX, thumbY + i);
     }
+}
+
+static void appendWrappedLines(OLEDDisplay *display, const char *messageBuf, int textWidth, std::vector<std::string> &allLines,
+                               size_t maxTotalLines, size_t maxWrappedLines)
+{
+    std::string line;
+    std::string word;
+    size_t wrappedCount = 0;
+
+    auto appendLine = [&](std::string &&newLine) -> bool {
+        if (newLine.empty())
+            return true;
+        if (allLines.size() >= maxTotalLines || wrappedCount >= maxWrappedLines)
+            return false;
+        allLines.emplace_back(std::move(newLine));
+        ++wrappedCount;
+        return true;
+    };
+
+    for (int i = 0; messageBuf[i]; ++i) {
+        char ch = messageBuf[i];
+        if ((unsigned char)messageBuf[i] == 0xE2 && (unsigned char)messageBuf[i + 1] == 0x80 &&
+            (unsigned char)messageBuf[i + 2] == 0x99) {
+            ch = '\''; // plain apostrophe
+            i += 2;    // skip over the extra UTF-8 bytes
+        }
+        if (ch == '\n') {
+            if (!word.empty())
+                line += word;
+            if (!appendLine(std::move(line)))
+                return;
+            line.clear();
+            word.clear();
+        } else if (ch == ' ') {
+            line += word + ' ';
+            word.clear();
+        } else {
+            word += ch;
+            std::string test = line + word;
+            uint16_t strWidth = graphics::UIRenderer::measureStringWithEmotes(display, test.c_str());
+            if (strWidth > textWidth) {
+                if (!line.empty() && !appendLine(std::move(line)))
+                    return;
+                line = word;
+                word.clear();
+            }
+        }
+    }
+
+    if (!word.empty())
+        line += word;
+    appendLine(std::move(line));
 }
 
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -646,19 +698,15 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         const char *msgText = MessageStore::getText(m);
 
         int wrapWidth = mine ? rightTextWidth : leftTextWidth;
-        std::vector<std::string> wrapped = generateLines(display, "", msgText, wrapWidth);
         // Per-message wrap-line limit: even if wrapping produces many lines, cap them to prevent
         // a single long message from consuming most or all of the cache.
         constexpr size_t MAX_WRAPPED_LINES_PER_MSG = 20U;
-        size_t wrappedCount = 0;
-        for (auto &ln : wrapped) {
-            if (allLines.size() >= MAX_CACHED_LINES || wrappedCount >= MAX_WRAPPED_LINES_PER_MSG)
-                break; // Cache limit or per-message limit reached; stop adding lines from this message
-            allLines.emplace_back(std::move(ln));
+        const size_t previousLineCount = allLines.size();
+        appendWrappedLines(display, msgText, wrapWidth, allLines, MAX_CACHED_LINES, MAX_WRAPPED_LINES_PER_MSG);
+        for (size_t i = previousLineCount; i < allLines.size(); ++i) {
             isMine.push_back(mine);
             isHeader.push_back(false);
             ackForLine.push_back(AckStatus::NONE);
-            ++wrappedCount;
         }
     }
 
@@ -1008,20 +1056,23 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
 
     std::vector<int> rowHeights;
     rowHeights.reserve(lines.size());
-    std::vector<graphics::EmoteRenderer::LineMetrics> lineMetrics;
-    lineMetrics.reserve(lines.size());
-
-    for (const auto &line : lines) {
-        lineMetrics.push_back(graphics::EmoteRenderer::analyzeLine(nullptr, line, FONT_HEIGHT_SMALL, emotes, numEmotes));
-    }
+    auto currentMetrics = graphics::EmoteRenderer::LineMetrics{};
+    auto nextMetrics = lines.empty()
+                           ? graphics::EmoteRenderer::LineMetrics{}
+                           : graphics::EmoteRenderer::analyzeLine(nullptr, lines[0], FONT_HEIGHT_SMALL, emotes, numEmotes);
 
     for (size_t idx = 0; idx < lines.size(); ++idx) {
+        currentMetrics = nextMetrics;
+        nextMetrics = (idx + 1 < lines.size())
+                          ? graphics::EmoteRenderer::analyzeLine(nullptr, lines[idx + 1], FONT_HEIGHT_SMALL, emotes, numEmotes)
+                          : graphics::EmoteRenderer::LineMetrics{};
+
         const int baseHeight = FONT_HEIGHT_SMALL;
         int lineHeight = baseHeight;
 
-        const int tallestEmote = lineMetrics[idx].tallestHeight;
-        const bool hasEmote = lineMetrics[idx].hasEmote;
-        const bool nextHasEmote = (idx + 1 < lines.size()) && lineMetrics[idx + 1].hasEmote;
+        const int tallestEmote = currentMetrics.tallestHeight;
+        const bool hasEmote = currentMetrics.hasEmote;
+        const bool nextHasEmote = (idx + 1 < lines.size()) && nextMetrics.hasEmote;
 
         if (isHeaderVec[idx]) {
             // Header line spacing
