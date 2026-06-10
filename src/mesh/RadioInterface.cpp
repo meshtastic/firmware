@@ -85,20 +85,30 @@ const RegionInfo regions[] = {
      */
     RDEF(EU_433, 433.0f, 434.0f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
     /*
-       https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
-       https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
-       https://www.legislation.gov.uk/uksi/1999/930/schedule/6/part/III/made/data.xht?view=snippet&wrap=true
+        https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
+        https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
+        https://www.legislation.gov.uk/uksi/1999/930/schedule/6/part/III/made/data.xht?view=snippet&wrap=true
 
-       audio_permitted = false per regulation
+        audio_permitted = false per regulation
 
-       Special Note:
-       The link above describes LoRaWAN's band plan, stating a power limit of 16 dBm. This is their own suggested specification,
-       we do not need to follow it. The European Union regulations clearly state that the power limit for this frequency range is
-       500 mW, or 27 dBm. It also states that we can use interference avoidance and spectrum access techniques (such as LBT +
-       AFA) to avoid a duty cycle. (Please refer to line P page 22 of this document.)
-       https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.01.01_60/en_30022002v030101p.pdf
-     */
+        Special Note:
+        The link above describes LoRaWAN's band plan, stating a power limit of 16 dBm. This is their own suggested specification,
+        we do not need to follow it. The European Union regulations clearly state that the power limit for this frequency range is
+        500 mW, or 27 dBm. It also states that we can use interference avoidance and spectrum access techniques (such as LBT +
+        AFA) to avoid a duty cycle. (Please refer to line P page 22 of this document.)
+        https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.01.01_60/en_30022002v030101p.pdf
+
+        EU 866MHz band (Band no. 46b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD)
+        Gives 4 channels at 865.7/866.3/866.9/867.5 MHz, 400 kHz gap plus 37.5 kHz padding between channels, 27 dBm,
+        duty cycle 2.5% (mobile) or 10% (fixed) https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006D0771(01)-20250123
+
+        EU 868MHz band: 3 channels at 869.410/869.4625/869.577 MHz
+        Channel centres at 869.442/869.525/869.608 MHz,
+        10.4 kHz padding on channels, 27 dBm, duty cycle 10%
+    */
     RDEF(EU_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_EU868, PRESET(LONG_FAST), 0),
+    RDEF(EU_866, 865.6f, 867.6f, 2.5, 27, false, false, PROFILE_LITE, PRESET(LITE_FAST), 0),
+    RDEF(EU_N_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_NARROW, PRESET(NARROW_SLOW), 1),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
@@ -275,20 +285,6 @@ const RegionInfo regions[] = {
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_STD, PRESET(LONG_FAST), 0),
-
-    /*
-        EU 866MHz band (Band no. 46b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD)
-        Gives 4 channels at 865.7/866.3/866.9/867.5 MHz, 400 kHz gap plus 37.5 kHz padding between channels, 27 dBm,
-        duty cycle 2.5% (mobile) or 10% (fixed) https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006D0771(01)-20250123
-    */
-    RDEF(EU_866, 865.6f, 867.6f, 2.5, 27, false, false, PROFILE_LITE, PRESET(LITE_FAST), 0),
-
-    /*
-        EU 868MHz band: 3 channels at 869.410/869.4625/869.577 MHz
-        Channel centres at 869.442/869.525/869.608 MHz,
-        10.4 kHz padding on channels, 27 dBm, duty cycle 10%
-    */
-    RDEF(EU_N_868, 869.4f, 869.65f, 10, 27, false, false, PROFILE_NARROW, PRESET(NARROW_SLOW), 1),
 
     /*
         This needs to be last. Same as US.
@@ -986,9 +982,16 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         if (!preset_valid) {
             // A preset locked to a sibling of the swappable EU regions swaps the region instead
             // of clamping the preset, as long as the previous region was itself one of the trio.
-            // Only in clamp mode: validation must keep failing so callers route into the clamp.
-            const RegionInfo *swapRegion = clamp ? regionSwapForPreset(loraConfig.region, loraConfig.modem_preset) : nullptr;
+            const RegionInfo *swapRegion = regionSwapForPreset(loraConfig.region, loraConfig.modem_preset);
             if (swapRegion) {
+                if (!clamp) {
+                    // Validation must still fail so callers route into the clamp, but quietly:
+                    // the clamp will accept this config by swapping regions, so don't record a
+                    // critical error or alarm the user over a change that is about to succeed.
+                    LOG_INFO("Preset %s implies region swap %s to %s, deferring to clamp", presetName, newRegion->name,
+                             swapRegion->name);
+                    return false;
+                }
                 snprintf(err_string, sizeof(err_string), "Preset %s swaps region %s to %s", presetName, newRegion->name,
                          swapRegion->name);
                 LOG_INFO("%s", err_string);
