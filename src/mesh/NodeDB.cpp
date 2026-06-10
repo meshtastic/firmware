@@ -1996,6 +1996,14 @@ bool NodeDB::saveDeviceStateToDisk()
 
 bool NodeDB::saveNodeDatabaseToDisk()
 {
+    // Don't persist the node DB until this device has a PKI keypair
+    // TODO: revisit when https://github.com/meshtastic/firmware/pull/10478 lands
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (owner.public_key.size != 32 && !owner.is_licensed) {
+        LOG_DEBUG("Skip NodeDB without key");
+        return true;
+    }
+#endif
 
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.

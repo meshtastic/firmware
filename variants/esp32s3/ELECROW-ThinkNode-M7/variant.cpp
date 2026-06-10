@@ -1,0 +1,5 @@
+void initVariant()
+{
+    pinMode(LED_PAIRING, OUTPUT);
+    digitalWrite(LED_PAIRING, !LED_STATE_ON); // Turn off the LED to start
+}

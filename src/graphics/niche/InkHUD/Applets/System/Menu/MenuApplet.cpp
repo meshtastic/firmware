@@ -796,6 +796,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M);
         break;
 
+    case SET_REGION_ITU2_125CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM);
+        break;
+
     // Roles
     case SET_ROLE_CLIENT:
         applyDeviceRole(meshtastic_Config_DeviceConfig_Role_CLIENT);
@@ -1500,6 +1504,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("ITU1_2M (144-146)", MenuAction::SET_REGION_ITU1_2M, MenuPage::EXIT));
         items.push_back(MenuItem("ITU2_2M (144-148)", MenuAction::SET_REGION_ITU2_2M, MenuPage::EXIT));
         items.push_back(MenuItem("ITU3_2M (144-148)", MenuAction::SET_REGION_ITU3_2M, MenuPage::EXIT));
+        items.push_back(MenuItem("ITU2_125CM (220-225)", MenuAction::SET_REGION_ITU2_125CM, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
