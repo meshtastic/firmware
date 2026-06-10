@@ -91,6 +91,7 @@ static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode
     size_t totalLen = headerLen + payloadLen;
     if (totalLen > bufSize)
         return 0;
+    // May need endian conversion for oddball platforms.
     memcpy(buf, &fromNode, sizeof(uint32_t));
     memcpy(buf + sizeof(uint32_t), &packetId, sizeof(uint32_t));
     memcpy(buf + sizeof(uint32_t) * 2, &portnum, sizeof(uint32_t));

@@ -50,7 +50,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         return true;
     }
     NodeNum sourceNum = getFrom(&mp);
-    auto node = nodeDB->getMeshNode(sourceNum);
+    const auto node = nodeDB->getMeshNode(sourceNum);
     if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed) {
         LOG_WARN("Dropping unsigned NodeInfo from node 0x%08x that previously signed", sourceNum);
         return true;

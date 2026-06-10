@@ -581,7 +581,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             // an unencrypted broadcast small enough to also carry a signature (see perhapsEncode()).
             // Unicast packets and oversized broadcasts are never signed, so they must not be
             // hard-failed here even if this node has signed before.
-            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
+            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
             if (node && nodeInfoLiteHasXeddsaSigned(node) && isBroadcast(p->to) &&
                 p->decoded.payload.size + XEDDSA_SIGNATURE_SIZE < meshtastic_Constants_DATA_PAYLOAD_LEN) {
                 LOG_WARN("Dropping unsigned broadcast from 0x%08x that previously signed", p->from);
