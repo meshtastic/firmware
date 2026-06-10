@@ -4,8 +4,11 @@
 #include "esp_task_wdt.h"
 #include "main.h"
 
-#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH && !MESHTASTIC_ENABLE_BLUETOOTHCLASSIC
 #include "nimble/NimbleBluetooth.h"
+#endif
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH && MESHTASTIC_ENABLE_BLUETOOTHCLASSIC
+#include "modules/esp32/BluetoothClassic.h"
 #endif
 
 #include <MeshtasticOTA.h>
@@ -39,6 +42,18 @@ void setBluetoothEnable(bool enable)
 #else
     if (config.bluetooth.enabled == true)
 #endif
+#if MESHTASTIC_ENABLE_BLUETOOTHCLASSIC
+    {
+        if (!bluetoothClassic) {
+            bluetoothClassic = new BluetoothClassic();
+        }
+        if (enable && !bluetoothClassic->isActive()) {
+            powerMon->setState(meshtastic_PowerMon_State_BT_On);
+            bluetoothClassic->setup();
+        }
+    }
+}
+#else
     {
         if (!nimbleBluetooth) {
             nimbleBluetooth = new NimbleBluetooth();
@@ -52,6 +67,7 @@ void setBluetoothEnable(bool enable)
         // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
     }
 }
+#endif
 #else
 void setBluetoothEnable(bool enable) {}
 void updateBatteryLevel(uint8_t level) {}

@@ -51,7 +51,10 @@
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
 #endif
-#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if MESHTASTIC_ENABLE_BLUETOOTHCLASSIC
+#include "modules/esp32/BluetoothClassic.h"
+BluetoothClassic *bluetoothClassic = nullptr;
+#elif !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 NimbleBluetooth *nimbleBluetooth = nullptr;
 #endif

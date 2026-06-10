@@ -409,7 +409,9 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
 #endif
 
     if (powerStatus->getHasBattery() == 1) {
-        updateBatteryLevel(powerStatus->getBatteryChargePercent());
+        if (!updateBatteryLevel) {
+            updateBatteryLevel(powerStatus->getBatteryChargePercent());
+        }
     }
 
     return node;
