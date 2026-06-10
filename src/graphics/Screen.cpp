@@ -271,7 +271,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 }
 
 // Called to trigger a banner with custom message and duration
-void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits,
+void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, bool useBase16,
                               std::function<void(uint32_t)> bannerCallback)
 {
 #ifdef USE_EINK
@@ -284,7 +284,10 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
-    NotificationRenderer::current_notification_type = notificationTypeEnum::number_picker;
+    if (useBase16)
+        NotificationRenderer::current_notification_type = notificationTypeEnum::hex_picker;
+    else
+        NotificationRenderer::current_notification_type = notificationTypeEnum::number_picker;
     NotificationRenderer::numDigits = digits;
     NotificationRenderer::currentNumber = 0;
 

@@ -2289,8 +2289,10 @@ void menuHandler::testMenu()
 
 void menuHandler::numberTest()
 {
-    screen->showNumberPicker("Pick a number\n ", 30000, 4,
-                             [](int number_picked) -> void { LOG_WARN("Nodenum: %u", number_picked); });
+    screen->showNumberPicker("Verify Nodenum:\n ", 30000, 8, true, [](int number_picked) -> void {
+        LOG_WARN("Nodenum: 0x%08x", number_picked);
+        keyVerificationModule->sendInitialRequest(number_picked);
+    });
 }
 
 void menuHandler::wifiBaseMenu()
@@ -2474,8 +2476,7 @@ void menuHandler::keyVerificationFinalPrompt()
         options.notificationType = graphics::notificationTypeEnum::selection_picker;
         options.bannerCallback = [=](int selected) {
             if (selected == 1) {
-                auto remoteNodePtr = nodeDB->getMeshNode(keyVerificationModule->getCurrentRemoteNode());
-                remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                keyVerificationModule->commitVerifiedRemoteNode();
             }
         };
         screen->showOverlayBanner(options);
