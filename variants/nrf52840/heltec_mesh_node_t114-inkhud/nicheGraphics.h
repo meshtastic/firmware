@@ -6,25 +6,24 @@
 
 // InkHUD-specific components
 // ---------------------------
-#include "graphics/niche/InkHUD/InkHUD.h"
+#include "graphics/niche/InkHUD.h"
+#include "graphics/niche/Inputs/TwoButton.h"
 
 // Applets
-#include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "graphics/niche/Applets/User/AllMessage/AllMessageApplet.h"
+#include "graphics/niche/Applets/User/DM/DMApplet.h"
+#include "graphics/niche/Applets/User/FavoritesMap/FavoritesMapApplet.h"
+#include "graphics/niche/Applets/User/Heard/HeardApplet.h"
+#include "graphics/niche/Applets/User/Positions/PositionsApplet.h"
+#include "graphics/niche/Applets/User/RecentsList/RecentsListApplet.h"
+#include "graphics/niche/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/EInk/HINK_E0213A289.h"        // WeAct 2.13"
-#include "graphics/niche/Drivers/EInk/HINK_E042A87.h"          // WeAct 4.2"
-#include "graphics/niche/Drivers/EInk/ZJY128296_029EAAMFGN.h"  // WeAct 2.9"
-#include "graphics/niche/Drivers/EInk/ZJY200200_0154DAAMFGN.h" // WeACt 1.54"
-
-#include "graphics/niche/Inputs/TwoButton.h"
+#include "graphics/eink/Drivers/HINK_E0213A289.h"        // WeAct 2.13"
+#include "graphics/eink/Drivers/HINK_E042A87.h"          // WeAct 4.2"
+#include "graphics/eink/Drivers/ZJY128296_029EAAMFGN.h"  // WeAct 2.9"
+#include "graphics/eink/Drivers/ZJY200200_0154DAAMFGN.h" // WeACt 1.54"
 
 #if !defined(INKHUD_BUILDCONF_DRIVER) || !defined(INKHUD_BUILDCONF_DISPLAYRESILIENCE)
 // cppcheck-suppress preprocessorErrorDirective

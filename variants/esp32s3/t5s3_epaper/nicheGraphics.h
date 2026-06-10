@@ -1,15 +1,16 @@
 /*
 
-Most of the Meshtastic firmware uses preprocessor macros throughout the code to support different hardware variants.
-NicheGraphics attempts a different approach:
+NicheGraphics setup for LILYGO T5 ePaper Pro (ED047TC1, 960x540, parallel via FastEPD).
 
-Per-device config takes place in this setupNicheGraphics() method
-(And a small amount in platformio.ini)
+Three envs share this directory:
+  - t5s3-epaper-v1     (BaseUI, BB_PANEL_LILYGO_T5PRO)
+  - t5s3-epaper-v2     (BaseUI, BB_PANEL_LILYGO_T5PRO_V2 + GPIO-expander setup)
+  - t5s3_epaper_inkhud (InkHUD on V2)
 
-This file sets up InkHUD for the LilyGo T5-E-Paper-S3-Pro.
+The active panel is selected by the T5_S3_EPAPER_PRO_V1 / T5_S3_EPAPER_PRO_V2 macros from platformio.ini.
 
-The board uses a 4.7" ED047TC1 parallel e-paper display (960×540, 8-bit parallel interface).
-This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver adapter.
+The 4.7" ED047TC1 is an 8-bit parallel e-paper panel, driven through the FastEPD library
+via the NicheGraphics EInkParallel driver and T5EpaperPanel profile.
 
 */
 
@@ -19,35 +20,79 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
-// InkHUD-specific components
-// ---------------------------
-#include "graphics/niche/InkHUD/InkHUD.h"
+#include "FastEPD.h"
+
+#include "graphics/BaseUIEInkDisplay.h"
+#include "graphics/eink/Drivers/EInkParallel.h"
+#include "graphics/eink/Panels/T5Epaper.h"
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#include "graphics/niche/InkHUD.h"
 
 // Applets
-#include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "graphics/niche/Applets/User/AllMessage/AllMessageApplet.h"
+#include "graphics/niche/Applets/User/DM/DMApplet.h"
+#include "graphics/niche/Applets/User/FavoritesMap/FavoritesMapApplet.h"
+#include "graphics/niche/Applets/User/Heard/HeardApplet.h"
+#include "graphics/niche/Applets/User/Positions/PositionsApplet.h"
+#include "graphics/niche/Applets/User/RecentsList/RecentsListApplet.h"
+#include "graphics/niche/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 
 // Shared NicheGraphics components
-// --------------------------------
-#include "graphics/niche/Drivers/EInk/ED047TC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
+#endif
 
+#if defined(T5_S3_EPAPER_PRO_V2)
+class T5V2Driver : public NicheGraphics::Drivers::EInkParallel
+{
+  public:
+    T5V2Driver() : EInkParallel(960, 540, BB_PANEL_LILYGO_T5PRO_V2, 28000000) {}
+
+  protected:
+    void postPanelInit() override
+    {
+        // V2 uses a GPIO expander; raise port-0 pins 0..7 high (as the legacy driver did).
+        FASTEPD *epd = fastEpd();
+        for (int i = 0; i < 8; i++) {
+            epd->ioPinMode(i, OUTPUT);
+            epd->ioWrite(i, HIGH);
+        }
+    }
+};
+#elif defined(T5_S3_EPAPER_PRO_V1)
+class T5V1Driver : public NicheGraphics::Drivers::EInkParallel
+{
+  public:
+    T5V1Driver() : EInkParallel(960, 540, BB_PANEL_LILYGO_T5PRO, 28000000) {}
+};
+#else
+#error "t5s3_epaper requires T5_S3_EPAPER_PRO_V1 or T5_S3_EPAPER_PRO_V2"
+#endif
+
+class T5EpaperPanel : public NicheGraphics::Panels::T5EpaperPanel
+{
+  protected:
+    NicheGraphics::Drivers::EInkParallel *makeDriver() override
+    {
+#if defined(T5_S3_EPAPER_PRO_V2)
+        return new T5V2Driver();
+#else
+        return new T5V1Driver();
+#endif
+    }
+};
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
 
     // E-Ink Driver
     // -----------------------------
-    // The ED047TC1 is a parallel display — no SPI bus setup needed.
-    // begin() args are part of the EInk interface but are ignored for parallel displays.
-
-    Drivers::EInk *driver = new Drivers::ED047TC1;
-    driver->begin(nullptr, 0, 0, 0);
+    // The ED047TC1 is a parallel display driven via the T5EpaperPanel profile.
+    // panel->create() builds the EInkParallel driver and calls begin() (SPI args ignored).
+    auto *panel = new T5EpaperPanel();
+    Drivers::EInk *driver = panel->create();
 
     // InkHUD
     // ----------------------------
@@ -85,7 +130,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false);           // Activated, not autoshown
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false);      // Activated, not autoshown
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
-    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // Not Active, not autoshown
+    inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false);   // Not Active, not autoshown
 
     // Enable reusable InkHUD touch status indicator for this touch-capable board.
     inkhud->setTouchEnabledProvider(isTouchInputEnabled);
@@ -115,5 +160,17 @@ void setupNicheGraphics()
 
     buttons->start();
 }
+#else
+void setupNicheGraphics() {}
 
+NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI()
+{
+    auto *panel = new T5EpaperPanel();
+    NicheGraphics::Drivers::EInk *driver = panel->create();
+    auto *display = new NicheGraphics::BaseUIEInkDisplay(driver, 0);
+    display->setDisplayResilience(20, 1.5f);
+    return display;
+}
 #endif
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

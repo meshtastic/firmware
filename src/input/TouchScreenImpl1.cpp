@@ -6,8 +6,8 @@
 #include <cstring>
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-#include "graphics/niche/InkHUD/InkHUD.h"
-#include "graphics/niche/InkHUD/SystemApplet.h"
+#include "graphics/niche/InkHUD.h"
+#include "graphics/niche/SystemApplet.h"
 #endif
 
 #if ARCH_PORTDUINO

@@ -14,9 +14,9 @@
 #include <cstring>
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-#include "graphics/niche/InkHUD/InkHUD.h"
-#include "graphics/niche/InkHUD/Persistence.h"
-#include "graphics/niche/InkHUD/SystemApplet.h"
+#include "graphics/niche/InkHUD.h"
+#include "graphics/niche/Persistence.h"
+#include "graphics/niche/SystemApplet.h"
 
 // Bridges touch events from TouchScreenImpl1 directly into InkHUD,
 // bypassing the InputBroker (which is excluded in InkHUD builds).
