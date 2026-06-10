@@ -229,6 +229,59 @@ void NotificationRenderer::resetBanner()
     }
 }
 
+bool NotificationRenderer::handleAlertBannerInput()
+{
+    if (current_notification_type != notificationTypeEnum::text_banner &&
+        current_notification_type != notificationTypeEnum::selection_picker) {
+        return false;
+    }
+
+    bool consumed = false;
+
+    if (alertBannerOptions > 0) {
+        if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
+            inEvent.inputEvent == INPUT_BROKER_ALT_PRESS || inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
+            curSelected--;
+            consumed = true;
+        } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_RIGHT ||
+                   inEvent.inputEvent == INPUT_BROKER_USER_PRESS || inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
+            curSelected++;
+            consumed = true;
+        } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
+            if (alertBannerCallback) {
+                int selected = curSelected;
+                if (optionsEnumPtr != nullptr) {
+                    selected = optionsEnumPtr[curSelected];
+                }
+                alertBannerCallback(selected);
+            }
+            resetBanner();
+            return true;
+        } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+                   alertBannerUntil != 0) {
+            resetBanner();
+            return true;
+        }
+
+        if (consumed) {
+            if (curSelected == -1)
+                curSelected = alertBannerOptions - 1;
+            if (curSelected == alertBannerOptions)
+                curSelected = 0;
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_ALT_LONG ||
+               inEvent.inputEvent == INPUT_BROKER_CANCEL) {
+        resetBanner();
+        return true;
+    }
+
+    if (consumed) {
+        // The selection moved immediately; prevent the overlay redraw from applying it again.
+        inEvent.inputEvent = INPUT_BROKER_NONE;
+    }
+    return consumed;
+}
+
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     // Handle text_input notifications first - they have their own timeout/banner logic
@@ -579,6 +632,10 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
 
 void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
+    if (handleAlertBannerInput() && alertBannerMessage[0] == '\0') {
+        return;
+    }
+
     // === Layout Configuration ===
     constexpr uint16_t vPadding = 2;
 
@@ -627,41 +684,6 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             maxWidth = optionWidths[i];
         if (optionWidths[i] + arrowsWidth > maxWidth)
             maxWidth = optionWidths[i] + arrowsWidth;
-    }
-
-    // Handle input
-    if (alertBannerOptions > 0) {
-        if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
-            inEvent.inputEvent == INPUT_BROKER_ALT_PRESS || inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
-            curSelected--;
-        } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_RIGHT ||
-                   inEvent.inputEvent == INPUT_BROKER_USER_PRESS || inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
-            curSelected++;
-        } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
-            if (optionsEnumPtr != nullptr) {
-                alertBannerCallback(optionsEnumPtr[curSelected]);
-                optionsEnumPtr = nullptr;
-            } else {
-                alertBannerCallback(curSelected);
-            }
-            resetBanner();
-            return;
-        } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
-                   alertBannerUntil != 0) {
-            resetBanner();
-            return;
-        }
-
-        if (curSelected == -1)
-            curSelected = alertBannerOptions - 1;
-        if (curSelected == alertBannerOptions)
-            curSelected = 0;
-    } else {
-        if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_ALT_LONG ||
-            inEvent.inputEvent == INPUT_BROKER_CANCEL) {
-            resetBanner();
-            return;
-        }
     }
 
     inEvent.inputEvent = INPUT_BROKER_NONE;
