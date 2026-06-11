@@ -31,7 +31,7 @@
 
 /*GPS*/
 #define HAS_GPS 1
-// #define GPS_BAUDRATE 115200
+#define GPS_BAUDRATE 115200
 #define PIN_GPS_RESET 5
 #define PIN_GPS_PPS 4
 #define GPS_TX_PIN 3
