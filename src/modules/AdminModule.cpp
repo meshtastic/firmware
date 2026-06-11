@@ -620,9 +620,13 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
  * Setter methods
  */
 
-void AdminModule::handleSetOwner(const meshtastic_User &o)
+void AdminModule::handleSetOwner(meshtastic_User &o)
 {
     int changed = 0;
+
+    // Apps built against the older 39-byte limit may send longer names; clamp
+    // before the changed-compare so re-sending the same long name is a no-op.
+    clampLongName(o.long_name);
 
     if (*o.long_name) {
         changed |= strcmp(owner.long_name, o.long_name);
