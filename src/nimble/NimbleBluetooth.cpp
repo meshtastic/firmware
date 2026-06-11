@@ -21,6 +21,7 @@
 #include "PowerStatus.h"
 
 #include "host/ble_gap.h"
+#include "host/ble_hs.h"
 #include "host/ble_store.h"
 
 namespace
@@ -46,6 +47,12 @@ BLEServer *bleServer;
 
 static bool passkeyShowing;
 static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
+
+// Set by onDisconnect (NimBLE task) to ask the main task to (re)start advertising. We must
+// not call NimBLE GAP APIs directly from the disconnect callback: a phone reconnecting with a
+// stale bond (e.g. after the device's NVS was wiped) triggers a MIC failure and a NimBLE host
+// reset, and re-entering ble_gap_adv_* while the host is mid-reset crashes (LoadProhibited).
+static std::atomic<bool> pendingStartAdvertising{false};
 
 static void clearPairingDisplay()
 {
@@ -155,6 +162,23 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
   protected:
     virtual int32_t runOnce() override
     {
+        // Restart advertising here (main task) if a disconnect asked us to. We defer this out
+        // of the NimBLE onDisconnect callback and gate it on ble_hs_synced() so we never
+        // re-enter the GAP API while the host is mid-reset -- the crash that happens when a
+        // phone reconnects with a stale bond to a freshly-wiped device.
+        if (pendingStartAdvertising) {
+            if (checkIsConnected()) {
+                pendingStartAdvertising = false; // a new physical connection beat us to it; nothing to do
+            } else if (ble_hs_synced()) {
+                pendingStartAdvertising = false;
+                if (nimbleBluetooth) {
+                    nimbleBluetooth->startAdvertising();
+                }
+            } else {
+                return 200; // host still re-syncing after a reset; retry shortly
+            }
+        }
+
         while (runOnceHasWorkToDo()) {
             /*
               PROCESS fromPhoneQueue BEFORE toPhoneQueue:
@@ -592,6 +616,16 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
     }
     void onAuthenticationComplete(ble_gap_conn_desc *desc) override
     {
+        // The library calls this on every BLE_GAP_EVENT_ENC_CHANGE, whether encryption
+        // succeeded or failed. A phone reconnecting with a stale bond (e.g. after the device's
+        // NVS was wiped) produces a *failed* encryption change here. Don't latch a
+        // connected/authenticated state in that case, or the notify/RSSI/battery paths will
+        // operate on a link that is actually being torn down.
+        if (desc == nullptr || !desc->sec_state.encrypted) {
+            LOG_WARN("BLE encryption change without an encrypted link; ignoring");
+            return;
+        }
+
         LOG_INFO("BLE authentication complete");
 
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
@@ -667,7 +701,15 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
 
         nimbleBluetoothConnHandle = BLE_HS_CONN_HANDLE_NONE;
 
-        ble->startAdvertising();
+        // Defer advertising restart to the main task (runOnce). Do NOT call startAdvertising()
+        // from here: if this disconnect was caused by a host reset (a phone reconnecting with a
+        // stale bond after an NVS wipe triggers a MIC failure -> host reset), re-entering the
+        // NimBLE GAP API now crashes. runOnce restarts once ble_hs_synced() is true again.
+        pendingStartAdvertising = true;
+        if (bluetoothPhoneAPI) {
+            bluetoothPhoneAPI->setIntervalFromNow(0);
+        }
+        concurrency::mainDelay.interrupt(); // wake the main loop to service the restart
     }
 };
 
