@@ -22,6 +22,9 @@
 #if HAS_ETHERNET && defined(ARCH_ESP32)
 #include <ETH.h>
 #endif // HAS_ETHERNET
+#if HAS_ETHERNET && defined(USE_CH390D)
+#include "ESP32_CH390.h"
+#endif // USE_CH390D
 #include "Default.h"
 #include <Throttle.h>
 #include <assert.h>
@@ -250,7 +253,7 @@ inline bool isConnectedToNetwork()
     if (ETH.connected())
         return true;
 #elif defined(USE_CH390D)
-    if (ETH.isConnected())
+    if (CH390.isConnected())
         return true;
 #endif
 
