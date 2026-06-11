@@ -365,6 +365,15 @@ extern void getMacAddr(uint8_t *dmac);
  * we use !macaddr (no colons).
  */
 meshtastic_User &owner = devicestate.owner;
+
+// The slim NodeInfoLite header defines the local long_name cap; the wire-facing
+// meshtastic_User stays wider so names from senders built against the older
+// 39-byte limit still decode (nanopb halts on string overflow).
+static_assert(MAX_LONG_NAME_BYTES + 1 == sizeof(meshtastic_NodeInfoLite::long_name),
+              "MAX_LONG_NAME_BYTES must match the NodeInfoLite storage width");
+static_assert(sizeof(meshtastic_User::long_name) > MAX_LONG_NAME_BYTES,
+              "wire User.long_name must be wider than the local cap so clampLongName stays in bounds");
+
 meshtastic_Position localPosition = meshtastic_Position_init_default;
 meshtastic_CriticalErrorCode error_code =
     meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
@@ -1514,6 +1523,7 @@ void NodeDB::installDefaultDeviceState()
 #else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %04x", getNodeNum() & 0x0ffff);
 #endif
+    clampLongName(owner.long_name); // vendor userprefs may exceed the local cap
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
     snprintf(owner.short_name, sizeof(owner.short_name), (const char *)USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
@@ -1727,8 +1737,9 @@ void NodeDB::loadFromDisk()
         if (nodeInfoLiteHasUser(us)) {
             LOG_WARN("Restoring owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for our node 0x%08x",
                      us->num);
-            memcpy(owner.long_name, us->long_name, sizeof(owner.long_name));
-            owner.long_name[sizeof(owner.long_name) - 1] = '\0';
+            // owner.long_name (40) is wider than the lite source (25); bound by the source
+            memcpy(owner.long_name, us->long_name, sizeof(us->long_name));
+            owner.long_name[sizeof(us->long_name) - 1] = '\0';
             memcpy(owner.short_name, us->short_name, sizeof(owner.short_name));
             owner.short_name[sizeof(owner.short_name) - 1] = '\0';
             owner.is_licensed = nodeInfoLiteIsLicensed(us);
@@ -1741,6 +1752,10 @@ void NodeDB::loadFromDisk()
     } else {
         LOG_INFO("Loaded saved devicestate version %d", devicestate.version);
     }
+
+    // Devicestate saved by firmware that allowed 39-byte names gets clamped on
+    // first load; from here on owner never carries more than the local cap.
+    clampLongName(owner.long_name);
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);

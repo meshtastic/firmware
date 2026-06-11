@@ -58,7 +58,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     /**
      * Setters
      */
-    void handleSetOwner(const meshtastic_User &o);
+    void handleSetOwner(meshtastic_User &o);
     void handleSetChannel(const meshtastic_Channel &cc);
 
   protected:

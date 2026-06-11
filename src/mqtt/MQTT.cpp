@@ -726,7 +726,9 @@ void MQTT::perhapsReportToMap()
 
     // Fill MapReport message
     meshtastic_MapReport mapReport = meshtastic_MapReport_init_default;
-    memcpy(mapReport.long_name, owner.long_name, sizeof(owner.long_name));
+    // owner.long_name (40) is wider than mapReport.long_name (25); bound by the destination
+    strncpy(mapReport.long_name, owner.long_name, sizeof(mapReport.long_name));
+    mapReport.long_name[sizeof(mapReport.long_name) - 1] = '\0';
     memcpy(mapReport.short_name, owner.short_name, sizeof(owner.short_name));
     mapReport.role = config.device.role;
     mapReport.hw_model = owner.hw_model;
