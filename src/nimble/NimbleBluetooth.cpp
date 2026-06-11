@@ -358,7 +358,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         setup. Not worth adjusting much.
         */
         LOG_INFO("BLE requestHighThroughputConnection");
-        bleServer->updateConnParams(conn_handle, 6, 12, 0, 600);
+        bleServer->requestConnParams(conn_handle, 6, 12, 0, 600);
     }
 
     void requestLowerPowerConnection(uint16_t conn_handle)
@@ -381,7 +381,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         per second.
         */
         LOG_INFO("BLE requestLowerPowerConnection");
-        bleServer->updateConnParams(conn_handle, 24, 40, 2, 600);
+        bleServer->requestConnParams(conn_handle, 24, 40, 2, 600);
     }
 };
 
@@ -631,7 +631,7 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
 #endif
 
         LOG_INFO("BLE conn %u peer MTU %u (target %u)", connHandle, pServer->getPeerMTU(connHandle), kPreferredBleMtu);
-        pServer->updateConnParams(connHandle, 6, 12, 0, 200);
+        pServer->requestConnParams(connHandle, 6, 12, 0, 200);
     }
 
     void onDisconnect(BLEServer *pServer, struct ble_gap_conn_desc *desc)

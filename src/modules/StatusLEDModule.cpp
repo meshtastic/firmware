@@ -240,6 +240,7 @@ void StatusLEDModule::setPowerLED(bool LEDon)
     }
 #endif
     uint8_t ledState = LEDon ? LED_STATE_ON : LED_STATE_OFF;
+    (void)ledState; // used only under platform-specific #ifdefs below
 #ifdef PCA_LED_POWER
     io.digitalWrite(PCA_LED_POWER, ledState);
 #endif

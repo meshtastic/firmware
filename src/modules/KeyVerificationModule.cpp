@@ -101,18 +101,19 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             LOG_INFO("Hash1 matches!");
             static const char *optionsArray[] = {"Reject", "Accept"};
             // Don't try to put the array definition in the macro. Does not work with curly braces.
+            // Lambda is defined outside IF_SCREEN so that [=, this] doesn't introduce a top-level
+            // comma inside the single-argument macro, which would cause a preprocessor error.
+            auto kvm_acceptCallback = [=, this](int selected) {
+                if (selected == 1) {
+                    auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
+                    if (remoteNodePtr)
+                        remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                }
+            };
             IF_SCREEN(graphics::BannerOverlayOptions options; options.message = message; options.durationMs = 30000;
                       options.optionsArrayPtr = optionsArray; options.optionsCount = 2;
                       options.notificationType = graphics::notificationTypeEnum::selection_picker;
-                      options.bannerCallback =
-                          [=](int selected) {
-                              if (selected == 1) {
-                                  auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
-                                  if (remoteNodePtr)
-                                      remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
-                              }
-                          };
-                      screen->showOverlayBanner(options);)
+                      options.bannerCallback = kvm_acceptCallback; screen->showOverlayBanner(options);)
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->level = meshtastic_LogRecord_Level_WARNING;
             sprintf(cn->message, "Final confirmation for incoming manual key verification %s", message);

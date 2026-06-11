@@ -1275,7 +1275,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int nameX = 0;
     int yOffset = (currentResolution == ScreenResolution::High) ? 0 : 5;
     const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
-    const char *shortName = owner.short_name ? owner.short_name : "";
+    const char *shortName = owner.short_name[0] ? owner.short_name : "";
     char combinedName[96];
     if (longName[0] && shortName[0]) {
         snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortName);
@@ -1527,7 +1527,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     if (gBootSplashBoldPass) {
         display->drawString(versionX + 1, y + 5, version);
     }
-    if (owner.short_name && owner.short_name[0]) {
+    if (owner.short_name[0]) {
         const char *shortName = owner.short_name;
         int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
         int shortNameX = x + SCREEN_WIDTH - shortNameW - 5;

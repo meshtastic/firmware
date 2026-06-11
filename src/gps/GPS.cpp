@@ -672,12 +672,15 @@ bool GPS::verifyCachedProbePresence()
         break;
     case GNSS_MODEL_MTK_L76B:
         cachedProbeModelName = "L76B";
+        [[fallthrough]];
     case GNSS_MODEL_MTK_PA1010D:
         if (cachedProbeModel == GNSS_MODEL_MTK_PA1010D)
             cachedProbeModelName = "PA1010D";
+        [[fallthrough]];
     case GNSS_MODEL_MTK_PA1616S:
         if (cachedProbeModel == GNSS_MODEL_MTK_PA1616S)
             cachedProbeModelName = "PA1616S";
+        [[fallthrough]];
     case GNSS_MODEL_LS20031:
         if (cachedProbeModel == GNSS_MODEL_LS20031)
             cachedProbeModelName = "LS20031";
@@ -686,6 +689,7 @@ bool GPS::verifyCachedProbePresence()
         break;
     case GNSS_MODEL_AG3335:
         cachedProbeModelName = "AG3335";
+        [[fallthrough]];
     case GNSS_MODEL_AG3352:
         if (cachedProbeModel == GNSS_MODEL_AG3352)
             cachedProbeModelName = "AG3352";
