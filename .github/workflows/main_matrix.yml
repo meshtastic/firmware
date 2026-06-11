@@ -82,8 +82,9 @@ jobs:
       fail-fast: false
       matrix:
         check: ${{ fromJson(needs.setup.outputs.check) }}
-    # Use 'arctastic' self-hosted runner pool when checking in the main repo
-    runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
+    # Runs on GitHub-hosted runners so checks don't compete with builds for the
+    # self-hosted 'arctastic' pool (which builds use).
+    runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     steps:
       - uses: actions/checkout@v6
@@ -286,11 +287,11 @@ jobs:
             --limit 1 --json databaseId --jq '.[0].databaseId // empty')
           if [ -n "$RUN_ID" ]; then
             ARTIFACT_NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
-              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | .name' | head -1)
+              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
             if [ -n "$ARTIFACT_NAME" ]; then
               gh run download "$RUN_ID" -R "${{ github.repository }}" \
                 --name "$ARTIFACT_NAME" --dir ./baseline-develop/
-              cp "./baseline-develop/${ARTIFACT_NAME}/current-sizes.json" ./develop-sizes.json
+              cp "./baseline-develop/current-sizes.json" ./develop-sizes.json
               echo "found=true" >> "$GITHUB_OUTPUT"
             else
               echo "found=false" >> "$GITHUB_OUTPUT"
@@ -311,11 +312,11 @@ jobs:
             --limit 1 --json databaseId --jq '.[0].databaseId // empty')
           if [ -n "$RUN_ID" ]; then
             ARTIFACT_NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
-              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | .name' | head -1)
+              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
             if [ -n "$ARTIFACT_NAME" ]; then
               gh run download "$RUN_ID" -R "${{ github.repository }}" \
                 --name "$ARTIFACT_NAME" --dir ./baseline-master/
-              cp "./baseline-master/${ARTIFACT_NAME}/current-sizes.json" ./master-sizes.json
+              cp "./baseline-master/current-sizes.json" ./master-sizes.json
               echo "found=true" >> "$GITHUB_OUTPUT"
             else
               echo "found=false" >> "$GITHUB_OUTPUT"
