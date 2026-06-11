@@ -67,6 +67,14 @@ void onConnect(uint16_t conn_handle)
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
 
+    // A new physical link must start unauthenticated. The auth slot is keyed by
+    // the (single, reused) bluetoothPhoneAPI instance, so a prior session's
+    // authorization can otherwise survive a quick reconnect. handleStartConfig()
+    // re-locks on every want_config too; this closes the window before that.
+    if (bluetoothPhoneAPI) {
+        bluetoothPhoneAPI->setAdminAuthorized(false);
+    }
+
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
@@ -401,7 +409,15 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         std::string configuredPasskeyText = std::to_string(configuredPasskey);
         std::string ble_message =
             "Bluetooth\nPIN\n[M]" + configuredPasskeyText.substr(0, 3) + " " + configuredPasskeyText.substr(3, 6);
-        screen->showSimpleBanner(ble_message.c_str(), 30000);
+        // Use the pairing_pin notification type so the lockdown UI short-
+        // circuit (Screen.cpp updateUiFrame) allows the overlay through
+        // even on a locked device — see H13 audit fix. The banner content
+        // is the per-attempt ephemeral pair PIN, not operator content.
+        graphics::BannerOverlayOptions opts;
+        opts.message = ble_message.c_str();
+        opts.durationMs = 30000;
+        opts.notificationType = graphics::notificationTypeEnum::pairing_pin;
+        screen->showOverlayBanner(opts);
     }
 #endif
     passkeyShowing = true;
