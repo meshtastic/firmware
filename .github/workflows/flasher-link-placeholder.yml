@@ -1,0 +1,62 @@
+name: Post Web Flasher Build Placeholder
+
+# Drops an immediate "build in progress" comment when a PR opens, so the web
+# flasher entry shows up right away. The real CI-driven workflow
+# (flasher-link-comment.yml) later replaces it in place via the shared marker.
+#
+# SECURITY: this uses pull_request_target (write token, runs for fork PRs) but is
+# safe because it never checks out or runs PR code and posts a fully static body
+# — no PR title, branch name, or other untrusted input is used anywhere.
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  post-placeholder:
+    if: github.repository == 'meshtastic/firmware'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post web flasher build-in-progress placeholder
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const marker = '<!-- web-flasher-link -->';
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+
+            // Trusted authors only (matches the real workflow). author_association
+            // can't reflect private org membership for the token, so concealed
+            // members appear as CONTRIBUTOR — include it, or maintainers are excluded.
+            const allowedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'];
+            if (!allowedAssociations.includes(pr.author_association)) {
+              core.info(`Author association ${pr.author_association} is not trusted; skipping.`);
+              return;
+            }
+
+            // Only seed a placeholder when no flasher comment exists yet — never
+            // overwrite a real (or existing placeholder) comment.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            if (comments.some((c) => c.body?.includes(marker))) {
+              core.info('Flasher comment already exists; nothing to do.');
+              return;
+            }
+
+            const body = [
+              marker,
+              '## ⚡ Try this PR in the Web Flasher',
+              '',
+              '> [!NOTE]',
+              '> Building this pull request… the flash button, badges and supported-board',
+              '> list will appear here automatically once CI finishes.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: pr.number, body,
+            });
