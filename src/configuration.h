@@ -573,5 +573,78 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define USE_ETHERNET_DEFAULT 0
 #endif
 
+// -----------------------------------------------------------------------------
+// MESHTASTIC_LOCKDOWN — runtime, client-toggleable hardening (nRF52 only)
+//
+// There is NO build flag to turn lockdown on or off. On nRF52 (CC310 hardware
+// crypto) the lockdown machinery is ALWAYS compiled in; whether it is ACTIVE
+// is decided entirely at runtime by EncryptedStorage::isLockdownActive()
+// (== a passphrase has been provisioned, i.e. /prefs/.dek exists). A device
+// that has never been provisioned — or that the operator disabled from the
+// client app — behaves exactly like stock firmware: plaintext storage, no
+// redaction, normal logging, normal display.
+//
+// The operator toggles lockdown from the client app:
+//   off -> on : provision a passphrase (AdminMessage.lockdown_auth). The
+//               firmware generates a DEK, encrypts the stored config, and
+//               authorizes the connection.
+//   on -> off : AdminMessage.lockdown_auth { disable=true } with the
+//               passphrase — decrypts storage back to plaintext and removes
+//               the DEK / token / monotonic-counter / backoff files, then
+//               reboots into normal mode. APPROTECT is the one thing that
+//               does NOT revert (see below).
+//
+// MESHTASTIC_LOCKDOWN here is an INTERNAL capability marker, auto-defined for
+// nRF52. It gates the UI bits (lock screen, pairing-PIN handling). It is NOT
+// something a variant sets. Flash-constrained nRF52 variants that genuinely
+// cannot afford the ~tens-of-KB of crypto + access-control code may opt OUT
+// with -DMESHTASTIC_EXCLUDE_LOCKDOWN=1.
+//
+//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL — per-connection auth + redaction,
+//                                        gated at runtime on isLockdownActive()
+//   MESHTASTIC_ENCRYPTED_STORAGE       — AES-128-CTR + HMAC-SHA256 at-rest
+//   MESHTASTIC_ENABLE_APPROTECT        — UICR APPROTECT capability. The actual
+//                                        one-way burn happens at runtime, only
+//                                        once provisioned, only on non-vulnerable
+//                                        silicon, and is STICKY: disabling
+//                                        lockdown does NOT (cannot) reverse it.
+//
+// DEBUG_MUTE is intentionally NOT coupled to lockdown — a capable-but-off
+// device must log normally. Define DEBUG_MUTE separately for a silent build.
+//
+// -DMESHTASTIC_LOCKDOWN_DEBUG=1 keeps the irreversible APPROTECT burn disabled
+// even when provisioned — for development so dev boards never lose SWD.
+// -----------------------------------------------------------------------------
+#if defined(ARCH_NRF52) && !defined(MESHTASTIC_EXCLUDE_LOCKDOWN)
+#define MESHTASTIC_LOCKDOWN 1
+#define MESHTASTIC_PHONEAPI_ACCESS_CONTROL 1
+#define MESHTASTIC_ENCRYPTED_STORAGE 1
+#ifndef MESHTASTIC_LOCKDOWN_DEBUG
+#define MESHTASTIC_ENABLE_APPROTECT 1
+#endif
+#endif
+
+#ifdef MESHTASTIC_LOCKDOWN
+
+// Per-boot uptime cap on unlocked sessions. 0 = unlimited (token-only
+// enforcement, the existing behavior). When non-zero, every passphrase
+// unlock (and every token-auto-unlock that inherits the value) arms a
+// timer; on expiry the device lockNow()s and reboots into locked state.
+// Bounds the total exposure window to bootsRemaining * this value if an
+// attacker has physical possession but not the passphrase.
+//
+// Override at build time. Suggested:
+//   carry device:        3600  (1h sessions, periodic re-auth from phone)
+//   tower / infra node:  0     (default — relies on token TTLs only)
+//
+// A future LockdownAuth.max_session_seconds proto field will let the
+// client set this per-token; until that lands the build-time value is
+// the only source.
+#ifndef MESHTASTIC_LOCKDOWN_SESSION_DEFAULT_SECONDS
+#define MESHTASTIC_LOCKDOWN_SESSION_DEFAULT_SECONDS 0
+#endif
+
+#endif // MESHTASTIC_LOCKDOWN
+
 #include "DebugConfiguration.h"
 #include "RF95Configuration.h"

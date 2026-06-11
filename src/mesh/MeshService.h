@@ -141,6 +141,12 @@ class MeshService
     /// Release the next ClientNotification packet to pool.
     void releaseClientNotificationToPool(meshtastic_ClientNotification *p) { clientNotificationPool.release(p); }
 
+    /// Bump fromNum to signal connected clients to poll for new FromRadio data.
+    /// Used by code paths (e.g. lockdown status queueing) that surface a new
+    /// FromRadio variant without going through one of the existing pool-backed
+    /// senders.
+    void nudgeFromNum() { fromNum++; }
+
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
      * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep

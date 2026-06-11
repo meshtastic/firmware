@@ -1,6 +1,8 @@
 // Tests for src/mesh/TypeConversions.cpp covering:
 //   - bitfield bit collapse on store + extraction round-trip
-//   - long_name / short_name truncation at the new max_size:25 / 5 boundaries
+//   - long_name / short_name truncation at the storage boundaries (wire User
+//     stays 40 wide for decoding legacy senders; NodeInfoLite stores 25 / 5)
+//   - wire-level decode acceptance of legacy 39-byte long_names
 //   - public_key / hw_model / role pass-through
 //   - thin vs bundled NodeInfo emission
 //
@@ -10,6 +12,8 @@
 #include "NodeDB.h"
 #include "TestUtil.h"
 #include "TypeConversions.h"
+#include "mesh-pb-constants.h"
+#include "meshUtils.h"
 #include <cstdio>
 #include <cstring>
 #include <unity.h>
@@ -126,6 +130,46 @@ void test_long_name_truncated_utf8_boundary_sanitized(void)
     // any invalid lead/continuation byte with '?'.
     TEST_ASSERT_EQUAL_INT('?', lite.long_name[22]);
     TEST_ASSERT_EQUAL_INT('?', lite.long_name[23]);
+}
+
+// ---------- wire decode width (decode-liberal, store-narrow) ------------------
+
+// Hand-built wire-format User payload: field 2 (long_name), wire type 2.
+static size_t makeUserPayload(uint8_t *buf, size_t nameLen)
+{
+    size_t i = 0;
+    buf[i++] = 0x12; // tag: field 2, length-delimited
+    buf[i++] = (uint8_t)nameLen;
+    for (size_t j = 0; j < nameLen; j++)
+        buf[i++] = (uint8_t)('A' + (j % 26));
+    return i;
+}
+
+void test_wire_decode_accepts_legacy_39_byte_long_name(void)
+{
+    // The longest name a sender built against the old max_size:40 can emit.
+    // nanopb halts on string overflow rather than truncating, so this only
+    // passes while the wire-facing meshtastic_User stays 40 wide.
+    uint8_t buf[64];
+    size_t len = makeUserPayload(buf, 39);
+    meshtastic_User u = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(buf, len, &meshtastic_User_msg, &u));
+    TEST_ASSERT_EQUAL_INT(39, (int)strlen(u.long_name));
+
+    // ...and the store boundary clamps it to the local cap.
+    meshtastic_NodeInfoLite lite = meshtastic_NodeInfoLite_init_default;
+    TypeConversions::CopyUserToNodeInfoLite(&lite, u);
+    TEST_ASSERT_EQUAL_INT(MAX_LONG_NAME_BYTES, (int)strlen(lite.long_name));
+}
+
+void test_wire_decode_rejects_name_beyond_wire_limit(void)
+{
+    // 45 bytes exceeds even the 40-byte wire buffer; the whole message is
+    // rejected (documents the hard outer bound).
+    uint8_t buf[64];
+    size_t len = makeUserPayload(buf, 45);
+    meshtastic_User u = meshtastic_User_init_zero;
+    TEST_ASSERT_FALSE(pb_decode_from_bytes(buf, len, &meshtastic_User_msg, &u));
 }
 
 // ---------- short_name truncation --------------------------------------------
@@ -383,6 +427,8 @@ void setup()
     RUN_TEST(test_long_name_truncates_when_too_long);
     RUN_TEST(test_long_name_round_trip_to_wire);
     RUN_TEST(test_long_name_truncated_utf8_boundary_sanitized);
+    RUN_TEST(test_wire_decode_accepts_legacy_39_byte_long_name);
+    RUN_TEST(test_wire_decode_rejects_name_beyond_wire_limit);
     RUN_TEST(test_short_name_passes_through);
     RUN_TEST(test_short_name_truncates_when_too_long);
     RUN_TEST(test_bitfield_is_licensed_round_trip);

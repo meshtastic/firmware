@@ -1,3 +1,6 @@
+#include "variant.h"
+#include "Arduino.h"
+
 void initVariant()
 {
     pinMode(LED_PAIRING, OUTPUT);

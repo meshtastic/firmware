@@ -1,6 +1,10 @@
 #include "configuration.h"
 #include <core_cm4.h>
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
+
 // Based on reading/modifying https://blog.feabhas.com/2013/02/developing-a-generic-hard-fault-handler-for-arm-cortex-m3cortex-m4/
 
 enum { r0, r1, r2, r3, r12, lr, pc, psr };
@@ -50,6 +54,16 @@ static void printMemErrorMsg(uint32_t cfsr)
 
 extern "C" void HardFault_Impl(uint32_t stack[])
 {
+    // M11 (audit): before any diagnostic / coredump path that could capture
+    // RAM contents, zero the DEK / KEK / ephemeralKEK so they aren't sitting
+    // in BSS for a fault dump to pick up. This is called from the asm naked
+    // HardFault_Handler entry above, so we're effectively in the chip's
+    // exception context — keep this strictly to in-RAM scrubbing, no flash
+    // I/O, no logging.
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    EncryptedStorage::secureWipeKeys();
+#endif
+
     FAULT_MSG("Hard Fault occurred! SCB->HFSR = 0x%08lx\n", SCB->HFSR);
 
     if ((SCB->HFSR & SCB_HFSR_FORCED_Msk) != 0) {

@@ -80,14 +80,19 @@ env.AddBuildMiddleware(_no_lto)
 # the weak `b .` Default_Handler stub -- i.e. LTO (or a deps bump, or a new ISR-owning library
 # that nobody added to LIB_ISR) silently dropped it. A dropped handler hangs the chip the
 # instant that IRQ fires; this turns a field hang into a red build. CI builds every nrf52840
-# target, so this runs on every PR automatically. All five are used by every nrf52840
-# Meshtastic build; if a board deliberately stops using one, edit this tuple on purpose.
+# target, so this runs on every PR automatically. If a board deliberately stops using one of
+# these, edit the tuples on purpose.
 _REQUIRED_STRONG = (
     "SWI2_EGU2_IRQHandler",  # SoftDevice BLE event (SD_EVT) -- advertising & connections
     "GPIOTE_IRQHandler",  # GPIO interrupts: radio DIO + buttons
     "RTC1_IRQHandler",  # FreeRTOS scheduler tick
+)
+# Owned by the TinyUSB stack, so only required when the board builds with USB at all.
+# Boards without native USB wiring (e.g. wio-sdk-wm1110's CH340 UART) strip TinyUSB via
+# disable_adafruit_usb.py / unflagging USE_TINYUSB, leaving these legitimately weak.
+_REQUIRED_STRONG_USB = (
     "USBD_IRQHandler",  # USB CDC (serial console + 1200bps DFU trigger)
-    "POWER_CLOCK_IRQHandler",  # HF/LF clock + power (HFCLK start for radio & SoftDevice)
+    "POWER_CLOCK_IRQHandler",  # USB power events (VBUS detect/ready) via TinyUSB hal
 )
 
 _tc = env.PioPlatform().get_package_dir("toolchain-gccarmnoneeabi") or ""
@@ -113,7 +118,13 @@ def _assert_isr_handlers_survived(source, target, env):
         f = line.split()
         if len(f) >= 3 and f[-1].endswith("_IRQHandler"):
             kind[f[-1]] = f[-2]
-    dropped = [h for h in _REQUIRED_STRONG if kind.get(h, "W").upper() != "T"]
+    required = list(_REQUIRED_STRONG)
+    defines = [
+        str(d[0] if isinstance(d, tuple) else d) for d in env.get("CPPDEFINES", [])
+    ]
+    if "USE_TINYUSB" in defines:
+        required += _REQUIRED_STRONG_USB
+    dropped = [h for h in required if kind.get(h, "W").upper() != "T"]
     if dropped:
         sys.stderr.write(
             "\n*** nrf52 LTO guard: interrupt handler(s) DROPPED: %s ***\n"
@@ -127,8 +138,7 @@ def _assert_isr_handlers_survived(source, target, env):
 
         Exit(1)  # canonical SCons build-abort -> red build
     print(
-        "nrf52_lto: ISR-handler guard OK -- %d critical handlers strong"
-        % len(_REQUIRED_STRONG)
+        "nrf52_lto: ISR-handler guard OK -- %d critical handlers strong" % len(required)
     )
 
 

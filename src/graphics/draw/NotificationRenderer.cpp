@@ -260,6 +260,12 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         break;
     case notificationTypeEnum::text_banner:
     case notificationTypeEnum::selection_picker:
+    case notificationTypeEnum::pairing_pin:
+        // pairing_pin is rendered the same as text_banner — it's just a
+        // text banner. The split type exists only so the lockdown UI
+        // short-circuit in Screen.cpp can recognise the BLE pair-PIN
+        // banner as the one safe banner to composite over the LOCKED
+        // frame.
         drawAlertBannerOverlay(display, state);
         break;
     case notificationTypeEnum::node_picker:

@@ -163,6 +163,47 @@ void test_above_max_codepoint()
     TEST_ASSERT_TRUE(sanitizeUtf8(buf, sizeof(buf)));
 }
 
+// --- clampLongName: local 24-byte cap over wider wire buffers ---
+
+void test_clamp_long_name_short_unchanged()
+{
+    char buf[40] = "Kevin Hester";
+    clampLongName(buf);
+    TEST_ASSERT_EQUAL_STRING("Kevin Hester", buf);
+}
+
+void test_clamp_long_name_exact_cap_unchanged()
+{
+    char buf[40] = "abcdefghijklmnopqrstuvwx"; // exactly 24 bytes
+    clampLongName(buf);
+    TEST_ASSERT_EQUAL_STRING("abcdefghijklmnopqrstuvwx", buf);
+}
+
+void test_clamp_long_name_truncates_39_bytes()
+{
+    char buf[40];
+    memset(buf, 'a', 39);
+    buf[39] = '\0';
+    clampLongName(buf);
+    TEST_ASSERT_EQUAL_INT(MAX_LONG_NAME_BYTES, (int)strlen(buf));
+}
+
+void test_clamp_long_name_fixes_partial_rune_at_cut()
+{
+    // 22 ASCII then a 4-byte emoji straddling the 24-byte boundary
+    char buf[40];
+    memset(buf, 'a', 22);
+    buf[22] = '\xF0';
+    buf[23] = '\x9F';
+    buf[24] = '\x8C';
+    buf[25] = '\x99';
+    buf[26] = '\0';
+    clampLongName(buf);
+    TEST_ASSERT_EQUAL_INT(24, (int)strlen(buf));
+    TEST_ASSERT_EQUAL_INT('?', buf[22]);
+    TEST_ASSERT_EQUAL_INT('?', buf[23]);
+}
+
 void setup()
 {
     UNITY_BEGIN();
@@ -190,6 +231,12 @@ void setup()
     RUN_TEST(test_zero_size);
     RUN_TEST(test_valid_max_codepoint);
     RUN_TEST(test_above_max_codepoint);
+
+    // clampLongName
+    RUN_TEST(test_clamp_long_name_short_unchanged);
+    RUN_TEST(test_clamp_long_name_exact_cap_unchanged);
+    RUN_TEST(test_clamp_long_name_truncates_39_bytes);
+    RUN_TEST(test_clamp_long_name_fixes_partial_rune_at_cut);
 
     exit(UNITY_END());
 }

@@ -207,3 +207,9 @@ bool sanitizeUtf8(char *buf, size_t bufSize)
 
     return replaced;
 }
+
+void clampLongName(char *longName)
+{
+    longName[MAX_LONG_NAME_BYTES] = '\0';
+    sanitizeUtf8(longName, MAX_LONG_NAME_BYTES + 1);
+}
