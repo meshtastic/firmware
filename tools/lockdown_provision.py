@@ -53,6 +53,9 @@ USAGE
     # Lock the device immediately (forces reboot into locked state):
     tools/lockdown_provision.py --port /dev/cu.usbmodem* lock-now --yes
 
+    # Turn lockdown OFF (runtime toggle; reverts storage to plaintext, reboots):
+    tools/lockdown_provision.py --port /dev/cu.usbmodem* disable
+
     # Just listen for LockdownStatus notifications:
     tools/lockdown_provision.py --port /dev/cu.usbmodem* watch --seconds 30
 """
@@ -105,6 +108,11 @@ _STATE_NAMES = {
     mesh_pb2.LockdownStatus.UNLOCKED: "UNLOCKED",
     mesh_pb2.LockdownStatus.UNLOCK_FAILED: "UNLOCK_FAILED",
 }
+# DISABLED arrived with the runtime-toggle schema. Guard so older bindings that
+# only know the original five states still import cleanly; without this a
+# capable-but-off boot would print an opaque "state=<num>" instead of DISABLED.
+if hasattr(mesh_pb2.LockdownStatus, "DISABLED"):
+    _STATE_NAMES[mesh_pb2.LockdownStatus.DISABLED] = "DISABLED"
 
 
 # Internal coordination between the FromRadio listener thread and the
@@ -302,6 +310,7 @@ def build_lockdown_auth(
     hours: int,
     max_session_seconds: int,
     lock_now: bool,
+    disable: bool = False,
 ):
     la = admin_pb2.LockdownAuth()
     if passphrase:
@@ -310,6 +319,17 @@ def build_lockdown_auth(
     la.valid_until_epoch = int(time.time()) + hours * 3600 if hours > 0 else 0
     la.max_session_seconds = max(0, max_session_seconds)
     la.lock_now = lock_now
+    if disable:
+        # disable lives on the runtime-toggle schema. Fail loudly on older
+        # bindings rather than silently sending an unlock the firmware would
+        # honour as a normal auth.
+        if not hasattr(la, "disable"):
+            sys.exit(
+                "error: your meshtastic Python package is too old for the\n"
+                "       runtime-toggle disable flow (LockdownAuth.disable\n"
+                "       missing). Update the protobuf bindings."
+            )
+        la.disable = True
     return la
 
 
@@ -441,6 +461,38 @@ def cmd_lock(iface, args) -> int:
     return _exit_code_for_status(status)
 
 
+def cmd_disable(iface, args) -> int:
+    # Runtime-toggle OFF. Unlike 'lock' (which reboots back into the locked
+    # state), 'disable' turns lockdown off entirely: the firmware re-verifies
+    # the passphrase to load the DEK, reverts at-rest encryption to plaintext,
+    # then reboots into normal mode. A non-empty passphrase is REQUIRED — the
+    # firmware rejects an empty one with UNLOCK_FAILED.
+    if not args.yes:
+        sys.stderr.write(
+            "WARNING: 'disable' turns lockdown OFF on this device. Stored files\n"
+            "         are reverted to plaintext, per-connection admin auth is no\n"
+            "         longer enforced, and the device reboots into normal mode.\n"
+            "         (APPROTECT is NOT reversed.)\n"
+        )
+        ans = input("Type 'yes' to continue: ").strip().lower()
+        if ans != "yes":
+            sys.exit("aborted")
+    pp = gather_passphrase(args, confirm=False)
+    # TTL/session fields are ignored by the firmware on a disable request.
+    la = build_lockdown_auth(pp, 0, 0, 0, lock_now=False, disable=True)
+    global _STATUS_FUTURE
+    _STATUS_FUTURE = StatusFuture()
+    send_lockdown_auth(iface, la, "disable")
+    # On success the firmware decrypts every stored file before broadcasting
+    # DISABLED, so a large node DB can take longer than the default wait — bump
+    # --wait if you see no status. The DISABLED broadcast precedes the reboot.
+    status = _await_status(args.wait)
+    if status is None:
+        sys.stderr.write("warning: no LockdownStatus received within wait window\n")
+        return 1
+    return _exit_code_for_status(status)
+
+
 def cmd_watch(_iface, args) -> int:
     print(
         f"[client] watching for LockdownStatus notifications for {args.seconds}s — Ctrl-C to exit early",
@@ -456,6 +508,13 @@ def cmd_watch(_iface, args) -> int:
 def _exit_code_for_status(status: mesh_pb2.LockdownStatus) -> int:
     """Map the final LockdownStatus to a shell exit code (M29)."""
     if status.state == mesh_pb2.LockdownStatus.UNLOCKED:
+        return 0
+    # DISABLED is a terminal success: a runtime-toggle 'disable' completed, or a
+    # capable-but-off device reported its state. Guarded for older bindings.
+    if (
+        hasattr(mesh_pb2.LockdownStatus, "DISABLED")
+        and status.state == mesh_pb2.LockdownStatus.DISABLED
+    ):
         return 0
     if status.state == mesh_pb2.LockdownStatus.UNLOCK_FAILED:
         sys.stderr.write(
@@ -556,6 +615,13 @@ def main() -> int:
         "lock", aliases=["lock-now"], help="send LOCK NOW; device reboots locked"
     )
     p_lock.set_defaults(func=cmd_lock)
+
+    p_disable = sub.add_parser(
+        "disable",
+        help="turn lockdown OFF (runtime toggle); requires passphrase, reverts to plaintext",
+    )
+    _add_passphrase_args(p_disable)
+    p_disable.set_defaults(func=cmd_disable)
 
     p_watch = sub.add_parser(
         "watch", help="just listen for LockdownStatus notifications"
