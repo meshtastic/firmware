@@ -31,7 +31,7 @@ jobs:
           merge-multiple: true
 
       - name: Post or update web flasher link comment
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- web-flasher-link -->';
