@@ -620,19 +620,20 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
  * Setter methods
  */
 
-void AdminModule::handleSetOwner(meshtastic_User &o)
+void AdminModule::handleSetOwner(const meshtastic_User &o)
 {
     int changed = 0;
 
-    // Apps built against the older 39-byte limit may send longer names; clamp
-    // before the changed-compare so re-sending the same long name is a no-op.
-    clampLongName(o.long_name);
-
     if (*o.long_name) {
-        changed |= strcmp(owner.long_name, o.long_name);
-        strncpy(owner.long_name, o.long_name, sizeof(owner.long_name));
+        // Apps built against the older 39-byte limit may send longer names; clamp
+        // before the changed-compare so re-sending the same long name is a no-op.
+        char longName[sizeof(o.long_name)];
+        strncpy(longName, o.long_name, sizeof(longName));
+        longName[sizeof(longName) - 1] = '\0';
+        clampLongName(longName);
+        changed |= strcmp(owner.long_name, longName);
+        strncpy(owner.long_name, longName, sizeof(owner.long_name));
         owner.long_name[sizeof(owner.long_name) - 1] = '\0';
-        sanitizeUtf8(owner.long_name, sizeof(owner.long_name));
     }
     if (*o.short_name) {
         changed |= strcmp(owner.short_name, o.short_name);
