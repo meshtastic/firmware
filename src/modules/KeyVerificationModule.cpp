@@ -103,7 +103,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             // Don't try to put the array definition in the macro. Does not work with curly braces.
             // Lambda is defined outside IF_SCREEN so that [=, this] doesn't introduce a top-level
             // comma inside the single-argument macro, which would cause a preprocessor error.
-            auto kvm_acceptCallback = [=, this](int selected) {
+            auto kvm_acceptCallback = [this](int selected) {
                 if (selected == 1) {
                     auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
                     if (remoteNodePtr)
