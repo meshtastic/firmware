@@ -26,6 +26,27 @@
 #ifndef SLEEP_TIME
 #define SLEEP_TIME 30
 #endif
+
+// T-Deck uses GPIO0 for the center trackball press. Avoid using that boot-strap
+// pin as a sleep wake source; a held GPIO0 during reset selects the bootloader.
+#if defined(T_DECK) && defined(INPUTDRIVER_ENCODER_BTN) && (INPUTDRIVER_ENCODER_BTN == 0)
+#define SKIP_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE
+#endif
+#if defined(INPUTDRIVER_ENCODER_BTN) && !defined(SKIP_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE)
+#define HAS_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE
+#endif
+
+static bool canUseLightSleepPowerSave()
+{
+#if defined(T_DECK)
+    // T-Deck's available input lines are either GPIO0/BOOT, polled I2C, or
+    // already-owned trackball ISR pins. Keep it in DARK until wake is reworked.
+    return false;
+#else
+    return true;
+#endif
+}
+
 #if MESHTASTIC_EXCLUDE_POWER_FSM
 FakeFsm powerFSM;
 void PowerFSM_setup(){};
@@ -97,7 +118,7 @@ static bool isLowActiveWakeInputPressed()
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
     if (!digitalRead(INPUTDRIVER_TWO_WAY_ROCKER_BTN))
         return true;
-#elif defined(INPUTDRIVER_ENCODER_BTN)
+#elif defined(HAS_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE)
     if (!digitalRead(INPUTDRIVER_ENCODER_BTN))
         return true;
 #endif
@@ -154,7 +175,7 @@ static bool didWakeFromUserInputGpio(esp_sleep_wakeup_cause_t cause)
 #endif
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
     addWakeInputPin(inputMask, INPUTDRIVER_TWO_WAY_ROCKER_BTN);
-#elif defined(INPUTDRIVER_ENCODER_BTN)
+#elif defined(HAS_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE)
     addWakeInputPin(inputMask, INPUTDRIVER_ENCODER_BTN);
 #endif
 
@@ -493,7 +514,7 @@ void PowerFSM_setup()
                              config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
 
-    if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
+    if (canUseLightSleepPowerSave() && (isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");

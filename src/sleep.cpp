@@ -29,6 +29,15 @@
 
 esp_sleep_source_t wakeCause; // the reason we booted this time
 uint64_t lightSleepWakeGpioMask = 0;
+
+// T-Deck's center trackball press is GPIO0. A held GPIO0 during any reset can
+// select the ESP32-S3 bootloader, so do not arm it as a sleep wake source.
+#if defined(T_DECK) && defined(INPUTDRIVER_ENCODER_BTN) && (INPUTDRIVER_ENCODER_BTN == 0)
+#define SKIP_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE
+#endif
+#if defined(INPUTDRIVER_ENCODER_BTN) && !defined(SKIP_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE)
+#define HAS_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE
+#endif
 #endif
 #include "Throttle.h"
 
@@ -455,7 +464,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
 #endif
-#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(INPUTDRIVER_ENCODER_BTN)
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(HAS_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE)
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
 #define INPUTDRIVER_WAKE_BTN_PIN INPUTDRIVER_TWO_WAY_ROCKER_BTN
 #else
@@ -478,6 +487,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         LOG_ERROR("esp_sleep_enable_gpio_wakeup result %d", res);
     }
     assert(res == ESP_OK);
+
     res = esp_sleep_enable_timer_wakeup(sleepUsec);
     if (res != ESP_OK) {
         LOG_ERROR("esp_sleep_enable_timer_wakeup result %d", res);
