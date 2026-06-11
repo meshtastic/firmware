@@ -81,7 +81,8 @@ No longer populated on PCB
 #define LORA_KCT8103L_EN      (0 + 15)  // CSD - KCT8103L chip enable (HIGH=on)
 #define LORA_KCT8103L_TX_RX   (0 + 16)  // TX or bypass control (HIGH=TX, LOW=RX)
 #define LORA_PA_POWER         LORA_KCT8103L_EN
-#define HAS_RF_PA_PIN         (0 + 13)   //HIGH has pa, LOW no pa
+#define RF_PA_DETECT_PIN      (0 + 13)  // HIGH=high-power PA, LOW=low-power
+#define RF_PA_HIGH_POWER_VALUE HIGH
 
 /*
  * SPI Interfaces
@@ -99,7 +100,7 @@ No longer populated on PCB
 
 #define GPS_L76K
 
-#define PIN_GPS_RESET (32 + 6) // P1.06, low for >100 ms resets the L76K.
+#define PIN_GPS_RESET (32 + 6)
 #define GPS_RESET_MODE LOW
 #define PIN_GPS_EN (0 + 7) // P0.07, VGNSS_Ctrl
 #define GPS_EN_ACTIVE LOW

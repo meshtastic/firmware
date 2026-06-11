@@ -57,6 +57,11 @@ static void releaseSleepHolds()
 void LoRaFEMInterface::init(void)
 {
     setLnaCanControl(false); // Default is uncontrollable
+#if defined(RF_PA_DETECT_PIN)
+    pinMode(RF_PA_DETECT_PIN, INPUT);
+    high_power_pa = (digitalRead(RF_PA_DETECT_PIN) == RF_PA_HIGH_POWER_VALUE);
+    LOG_INFO("Detected %s LoRa PA profile", high_power_pa ? "high-power" : "low-power");
+#endif
 #ifdef HELTEC_V4
     pinMode(LORA_PA_POWER, OUTPUT);
     digitalWrite(LORA_PA_POWER, HIGH);
@@ -276,6 +281,11 @@ void LoRaFEMInterface::setLNAEnable(bool enabled)
 
 int8_t LoRaFEMInterface::powerConversion(int8_t loraOutputPower)
 {
+#if defined(RF_PA_DETECT_PIN)
+    if (!high_power_pa) {
+        return loraOutputPower;
+    }
+#endif
 #ifdef HELTEC_V4
     const uint16_t gc1109_tx_gain[] = {11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7};
     const uint16_t kct8103l_tx_gain[] = {13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 12, 12, 11, 11, 10, 9, 8, 7};
