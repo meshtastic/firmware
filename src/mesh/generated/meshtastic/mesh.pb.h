@@ -774,7 +774,10 @@ typedef struct _meshtastic_User {
  Note: app developers are encouraged to also use the following standard
  node IDs "^all" (for broadcast), "^local" (for the locally connected node) */
     char id[16];
-    /* A full name for this user, i.e. "Kevin Hester" */
+    /* A full name for this user, i.e. "Kevin Hester"
+ Limited to 24 bytes of UTF-8: longer names are accepted from senders
+ built against the older 39-byte limit, but devices truncate them before
+ storing or rebroadcasting. Clients should enforce 24 bytes in their UI. */
     char long_name[40];
     /* A VERY short name, ideally two characters.
  Suitable for a tiny OLED screen */

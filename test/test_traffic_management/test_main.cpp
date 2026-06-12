@@ -1,4 +1,5 @@
 #include "TestUtil.h"
+#include <cstdlib>
 #include <unity.h>
 
 #if defined(ARCH_PORTDUINO)
