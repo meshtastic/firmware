@@ -11,7 +11,9 @@
 #include "PacketHistory.h"
 
 #include "TestUtil.h"
+#include <memory>
 #include <unity.h>
+#include <vector>
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -19,21 +21,53 @@
 static constexpr uint32_t OUR_NODE_NUM = 0xDEAD1234;
 static constexpr uint8_t OUR_RELAY_ID = 0x34; // getLastByteOfNodeNum(OUR_NODE_NUM)
 static constexpr uint32_t SMALL_CAPACITY = 8;
+static constexpr uint32_t SENDER_NODE_NUM = 0x01020311;
+static constexpr uint32_t DEST_NODE_NUM = 0x01020399;
+static constexpr uint32_t PACKET_ID = 0x12345678;
+static constexpr uint8_t DIRECTED_RELAY_ID = 0x22;
+static constexpr uint8_t DIRECTED_NEXT_HOP = 0x55;
+static constexpr uint8_t FALLBACK_RELAY_ID = 0x66;
 
 // ---------------------------------------------------------------------------
 // Per-test state
 // ---------------------------------------------------------------------------
+class MockNodeDB : public NodeDB
+{
+  public:
+    meshtastic_NodeInfoLite *getMeshNode(NodeNum n) override
+    {
+        for (auto &node : nodes) {
+            if (node.num == n) {
+                return &node;
+            }
+        }
+        return nullptr;
+    }
+
+    void addNode(NodeNum n)
+    {
+        meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_zero;
+        node.num = n;
+        nodes.push_back(node);
+    }
+
+  private:
+    std::vector<meshtastic_NodeInfoLite> nodes;
+};
+
+static std::unique_ptr<MockNodeDB> mockNodeDB;
 static PacketHistory *ph = nullptr;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 static meshtastic_MeshPacket makePacket(uint32_t from, uint32_t id, uint8_t hop_limit = 3,
-                                        uint8_t next_hop = NO_NEXT_HOP_PREFERENCE, uint8_t relay_node = 0)
+                                        uint8_t next_hop = NO_NEXT_HOP_PREFERENCE, uint8_t relay_node = 0, uint32_t to = 0)
 {
     meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
     p.from = from;
     p.id = id;
+    p.to = to;
     p.hop_limit = hop_limit;
     p.next_hop = next_hop;
     p.relay_node = relay_node;
@@ -45,7 +79,12 @@ static meshtastic_MeshPacket makePacket(uint32_t from, uint32_t id, uint8_t hop_
 // ---------------------------------------------------------------------------
 void setUp(void)
 {
+    mockNodeDB.reset(new MockNodeDB());
+    nodeDB = mockNodeDB.get();
     myNodeInfo.my_node_num = OUR_NODE_NUM;
+    mockNodeDB->addNode(OUR_NODE_NUM);
+    mockNodeDB->addNode(SENDER_NODE_NUM);
+    mockNodeDB->addNode(DEST_NODE_NUM);
     ph = new PacketHistory(SMALL_CAPACITY);
 }
 
@@ -53,6 +92,8 @@ void tearDown(void)
 {
     delete ph;
     ph = nullptr;
+    nodeDB = nullptr;
+    mockNodeDB.reset();
 }
 
 // ===========================================================================
@@ -511,6 +552,37 @@ void test_merge_heard_back_stores_relay_node(void)
 // Group 8 — Fallback-to-Flooding Detection
 // ===========================================================================
 
+void test_off_path_directed_duplicate_is_suppressed(void)
+{
+    auto directed = makePacket(SENDER_NODE_NUM, PACKET_ID, 2, DIRECTED_NEXT_HOP, DIRECTED_RELAY_ID, DEST_NODE_NUM);
+
+    TEST_ASSERT_FALSE(ph->wasSeenRecently(&directed, true));
+    TEST_ASSERT_TRUE(ph->wasSeenRecently(&directed, true));
+}
+
+void test_off_path_flood_from_unknown_relay_is_not_fallback(void)
+{
+    // A flood copy from a relay we never saw before should not be treated as fallback.
+    auto directed = makePacket(SENDER_NODE_NUM, PACKET_ID, 2, DIRECTED_NEXT_HOP, DIRECTED_RELAY_ID, DEST_NODE_NUM);
+    auto fallback = makePacket(SENDER_NODE_NUM, PACKET_ID, 2, NO_NEXT_HOP_PREFERENCE, FALLBACK_RELAY_ID, DEST_NODE_NUM);
+    bool wasFallback = false;
+
+    TEST_ASSERT_FALSE(ph->wasSeenRecently(&directed, true));
+    TEST_ASSERT_TRUE(ph->wasSeenRecently(&fallback, true, &wasFallback));
+    TEST_ASSERT_FALSE(wasFallback);
+}
+
+void test_destination_directed_duplicate_is_still_suppressed(void)
+{
+    auto directed = makePacket(SENDER_NODE_NUM, PACKET_ID, 2, DIRECTED_NEXT_HOP, DIRECTED_RELAY_ID, OUR_NODE_NUM);
+    auto fallback = makePacket(SENDER_NODE_NUM, PACKET_ID, 2, NO_NEXT_HOP_PREFERENCE, FALLBACK_RELAY_ID, OUR_NODE_NUM);
+    bool wasFallback = false;
+
+    TEST_ASSERT_FALSE(ph->wasSeenRecently(&directed, true));
+    TEST_ASSERT_TRUE(ph->wasSeenRecently(&fallback, true, &wasFallback));
+    TEST_ASSERT_FALSE(wasFallback);
+}
+
 void test_fallback_detected(void)
 {
     // The fallback condition requires wasRelayer(relay_node) && !wasRelayer(ourRelayID).
@@ -788,6 +860,9 @@ void setup()
     RUN_TEST(test_merge_heard_back_stores_relay_node);
 
     // Group 8 — Fallback-to-Flooding Detection
+    RUN_TEST(test_off_path_directed_duplicate_is_suppressed);
+    RUN_TEST(test_off_path_flood_from_unknown_relay_is_not_fallback);
+    RUN_TEST(test_destination_directed_duplicate_is_still_suppressed);
     RUN_TEST(test_fallback_detected);
     RUN_TEST(test_fallback_not_when_we_relayed);
     RUN_TEST(test_fallback_not_on_first_observation);
