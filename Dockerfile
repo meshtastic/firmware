@@ -3,7 +3,7 @@
 # trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
-FROM debian:trixie AS builder
+FROM debian:trixie-20260610 AS builder
 ARG PIO_ENV=native
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
