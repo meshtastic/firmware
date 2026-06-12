@@ -92,6 +92,7 @@ WarmNodeEntry *WarmNodeStore::place(NodeNum num, uint32_t lastHeard, const uint8
     const bool candidateKeyed = key32 && keyIsSet(key32);
 
     WarmNodeEntry *slot = find(num);
+    const bool sameNode = slot != nullptr;
     if (!slot) {
         // Pick a victim: any empty slot, else the oldest keyless entry, else
         // (only for keyed candidates) the oldest keyed entry.
@@ -120,7 +121,9 @@ WarmNodeEntry *WarmNodeStore::place(NodeNum num, uint32_t lastHeard, const uint8
     slot->last_heard = lastHeard;
     if (candidateKeyed)
         memcpy(slot->public_key, key32, 32);
-    else
+    else if (!sameNode)
+        // Repurposing a victim slot for a different node: clear its stale key.
+        // A keyless refresh of a node already here keeps the key we learned.
         memset(slot->public_key, 0, 32);
     return slot;
 }
@@ -331,10 +334,17 @@ void WarmNodeStore::load()
     uint8_t order[WARM_FLASH_PAGES];
     uint32_t seqs[WARM_FLASH_PAGES];
     uint8_t nValid = 0;
+    uint8_t nCorrupt = 0;
     for (uint8_t p = 0; p < WARM_FLASH_PAGES; p++) {
         WarmPageHeader h;
-        if (!ringReadHeader(p, h))
+        if (!ringReadHeader(p, h)) {
+            // An erased page reads back all-ones; any other magic is a
+            // partially-written or bit-rotted header we're dropping, so flag it
+            // rather than silently treating the loss as a clean empty ring.
+            if (h.magic != 0xFFFFFFFFu)
+                nCorrupt++;
             continue;
+        }
         uint8_t pos = nValid;
         while (pos > 0 && static_cast<int32_t>(h.seq - seqs[pos - 1]) < 0) {
             order[pos] = order[pos - 1];
@@ -350,7 +360,10 @@ void WarmNodeStore::load()
         activePage = 0xFF;
         writeSlot = 0;
         nextSeq = 1;
-        LOG_INFO("WarmStore: ring empty, starting fresh");
+        if (nCorrupt)
+            LOG_WARN("WarmStore: ring unreadable (%u corrupt page(s)), starting empty", nCorrupt);
+        else
+            LOG_INFO("WarmStore: ring empty, starting fresh");
         return;
     }
 
@@ -384,6 +397,8 @@ void WarmNodeStore::load()
             nextSeq = seqs[k] + 1;
         }
     }
+    if (nCorrupt)
+        LOG_WARN("WarmStore: dropped %u corrupt ring page(s) during replay; some warm nodes may be lost", nCorrupt);
     LOG_INFO("WarmStore: replayed %u ring records -> %u live nodes (page %u, slot %u)", (unsigned)replayed, (unsigned)count(),
              activePage, writeSlot);
 }

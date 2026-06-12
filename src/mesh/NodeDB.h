@@ -227,12 +227,19 @@ class NodeDB
     bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
 
     /*
-     * Sets a node either favorite or unfavorite
+     * Sets a node either favorite or unfavorite. Returns true if the node ends
+     * up in the requested state; false if the node is unknown or favouriting
+     * was refused by the protected-node cap (MAX_NUM_NODES - 2).
      */
-    void set_favorite(bool is_favorite, uint32_t nodeId);
+    bool set_favorite(bool is_favorite, uint32_t nodeId);
 
     /// Count of eviction-protected (favourite/ignored/manually-verified) nodes.
     int numProtectedNodes() const;
+
+    /// printf-style warning emitted when setProtectedFlag() refuses a node at
+    /// the cap. %s = verb (favorite/ignore), 0x%08x = node, %d = cap. Shared by
+    /// LOG_WARN here and AdminModule::sendWarning so the wording stays in sync.
+    static constexpr const char *PROTECTED_CAP_WARN_FMT = "Can't %s 0x%08x: protected-node limit (%d) reached";
 
     /// Turn an eviction-protection flag (favourite/ignored/verified) on or off,
     /// capped so the protected set never exceeds MAX_NUM_NODES-2 — keeping at
