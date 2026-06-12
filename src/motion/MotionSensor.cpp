@@ -33,7 +33,9 @@ bool isRangeValid(float highest, float lowest)
 }
 
 struct CompassAccelSample {
-    FusionVector accel = {};
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
     uint32_t sampledAtMs = 0;
     bool valid = false;
 };
@@ -217,14 +219,14 @@ float MotionSensor::applyCompassOrientation(float heading)
 void MotionSensor::publishCompassAccelSample(float x, float y, float z)
 {
     concurrency::LockGuard guard(&latestCompassAccelLock);
-    latestCompassAccelSample.accel.axis.x = x;
-    latestCompassAccelSample.accel.axis.y = y;
-    latestCompassAccelSample.accel.axis.z = z;
+    latestCompassAccelSample.x = x;
+    latestCompassAccelSample.y = y;
+    latestCompassAccelSample.z = z;
     latestCompassAccelSample.sampledAtMs = millis();
     latestCompassAccelSample.valid = true;
 }
 
-bool MotionSensor::getLatestCompassAccelSample(FusionVector &accel, uint32_t &ageMs)
+bool MotionSensor::getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs)
 {
     uint32_t sampledAtMs = 0;
     {
@@ -233,7 +235,9 @@ bool MotionSensor::getLatestCompassAccelSample(FusionVector &accel, uint32_t &ag
             return false;
         }
 
-        accel = latestCompassAccelSample.accel;
+        x = latestCompassAccelSample.x;
+        y = latestCompassAccelSample.y;
+        z = latestCompassAccelSample.z;
         sampledAtMs = latestCompassAccelSample.sampledAtMs;
     }
 

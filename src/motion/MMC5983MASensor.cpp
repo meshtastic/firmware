@@ -94,11 +94,13 @@ int32_t MMC5983MASensor::runOnce()
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     float heading;
-    FusionVector accel = {};
+    float accelX = 0.0f;
+    float accelY = 0.0f;
+    float accelZ = 0.0f;
     uint32_t accelAgeMs = 0;
 
-    if (getLatestCompassAccelSample(accel, accelAgeMs) && accelAgeMs <= MMC5983MA_ACCEL_STALE_MS) {
-        FusionVector ga = accel;
+    if (getLatestCompassAccelSample(accelX, accelY, accelZ, accelAgeMs) && accelAgeMs <= MMC5983MA_ACCEL_STALE_MS) {
+        FusionVector ga = {.axis = {accelX, accelY, accelZ}};
         FusionVector ma = {.axis = {magX, magY, magZ}};
         if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
             ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
