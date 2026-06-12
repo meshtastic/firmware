@@ -82,8 +82,9 @@ jobs:
       fail-fast: false
       matrix:
         check: ${{ fromJson(needs.setup.outputs.check) }}
-    # Use 'arctastic' self-hosted runner pool when checking in the main repo
-    runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
+    # Runs on GitHub-hosted runners so checks don't compete with builds for the
+    # self-hosted 'arctastic' pool (which builds use).
+    runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     steps:
       - uses: actions/checkout@v6

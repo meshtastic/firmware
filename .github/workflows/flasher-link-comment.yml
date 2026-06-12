@@ -54,12 +54,16 @@ jobs:
             }
             const prNumber = pr.number;
 
-            // Only comment on PRs authored by members of the organization.
-            // author_association MEMBER is computed by GitHub and reflects org
-            // membership (including concealed members); OWNER covers a repo owner.
-            const allowedAssociations = ['OWNER', 'MEMBER'];
+            // Restrict to trusted authors. NOTE: author_association is computed for
+            // the GITHUB_TOKEN, which cannot see *private/concealed* org memberships —
+            // those members come back as CONTRIBUTOR, not MEMBER. So gating on MEMBER
+            // alone silently excludes most maintainers. We allow the trusted set the
+            // token can actually identify (members, collaborators, and anyone with a
+            // previously merged PR). For strict members-only you'd need an org-read
+            // App/PAT token to call orgs.checkMembershipForUser.
+            const allowedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'];
             if (!allowedAssociations.includes(pr.author_association)) {
-              core.info(`Author association ${pr.author_association} is not an org member; skipping.`);
+              core.info(`Author association ${pr.author_association} is not trusted; skipping.`);
               return;
             }
 

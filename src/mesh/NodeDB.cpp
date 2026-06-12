@@ -36,6 +36,11 @@
 #include <power/PowerHAL.h>
 #include <vector>
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#include "security/SecureZero.h"
+#endif
+
 #ifdef ARCH_ESP32
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -365,6 +370,15 @@ extern void getMacAddr(uint8_t *dmac);
  * we use !macaddr (no colons).
  */
 meshtastic_User &owner = devicestate.owner;
+
+// The slim NodeInfoLite header defines the local long_name cap; the wire-facing
+// meshtastic_User stays wider so names from senders built against the older
+// 39-byte limit still decode (nanopb halts on string overflow).
+static_assert(MAX_LONG_NAME_BYTES + 1 == sizeof(meshtastic_NodeInfoLite::long_name),
+              "MAX_LONG_NAME_BYTES must match the NodeInfoLite storage width");
+static_assert(sizeof(meshtastic_User::long_name) > MAX_LONG_NAME_BYTES,
+              "wire User.long_name must be wider than the local cap so clampLongName stays in bounds");
+
 meshtastic_Position localPosition = meshtastic_Position_init_default;
 meshtastic_CriticalErrorCode error_code =
     meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
@@ -884,6 +898,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.security.private_key.size = 0;
     }
     config.security.public_key.size = 0;
+
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
@@ -1499,6 +1514,7 @@ void NodeDB::installDefaultDeviceState()
 #else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %04x", getNodeNum() & 0x0ffff);
 #endif
+    clampLongName(owner.long_name); // vendor userprefs may exceed the local cap
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
     snprintf(owner.short_name, sizeof(owner.short_name), (const char *)USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
@@ -1553,6 +1569,41 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
                                  void *dest_struct)
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // check if the file is encrypted and decrypt before protobuf decode
+    if (EncryptedStorage::isEncrypted(filename)) {
+        // ZeroizingArrayPtr wipes the decrypted plaintext (which contains config
+        // secrets — channel PSKs, security private_key, etc.) before delete[],
+        // so it isn't recoverable from the heap after this function returns.
+        auto decBuf = meshtastic_security::make_zeroizing_array(protoSize);
+        if (!decBuf) {
+            LOG_ERROR("OOM decrypting %s", filename);
+            return LoadFileResult::OTHER_FAILURE;
+        }
+        size_t decLen = 0;
+        if (EncryptedStorage::readAndDecrypt(filename, decBuf.get(), protoSize, decLen)) {
+            LOG_INFO("Load encrypted %s", filename);
+            pb_istream_t stream = pb_istream_from_buffer(decBuf.get(), decLen);
+            if (fields != &meshtastic_NodeDatabase_msg)
+                memset(dest_struct, 0, objSize);
+            if (!pb_decode(&stream, fields, dest_struct)) {
+                LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+                state = LoadFileResult::DECODE_FAILED;
+                storageCorruptThisLoad = true;
+            } else {
+                LOG_INFO("Loaded encrypted %s successfully", filename);
+                state = LoadFileResult::LOAD_SUCCESS;
+            }
+        } else {
+            LOG_ERROR("Decrypt failed for %s, treating as corrupt", filename);
+            state = LoadFileResult::DECODE_FAILED;
+            storageCorruptThisLoad = true;
+        }
+        return state;
+    }
+#endif
+
 #ifdef FSCom
     concurrency::LockGuard g(spiLock);
 
@@ -1587,6 +1638,13 @@ void NodeDB::loadFromDisk()
     // Mark the current device state as completely unusable, so that if we fail reading the entire file from
     // disk we will still factoryReset to restore things.
     devicestate.version = 0;
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Reset the per-load decrypt-failure tracker. Set by loadProto on any
+    // encrypted file that fails to decrypt or proto-decode; consumed by
+    // reloadFromDisk to surface storage corruption to the operator instead
+    // of silently falling back to defaults.
+    storageCorruptThisLoad = false;
+#endif
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -1630,6 +1688,39 @@ void NodeDB::loadFromDisk()
     }
 
 #endif
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Only take the locked-boot defaults path when lockdown is ACTIVE (the
+    // device is provisioned) AND storage is still locked. A lockdown-capable
+    // build that has never been provisioned — or that was disabled — falls
+    // through to the normal plaintext load below and behaves like stock.
+    if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
+        // Encrypted storage is locked. Install defaults and wait for the
+        // passphrase over BLE/serial; PhoneAPI::handleLockdownAuthInline
+        // calls reloadFromDisk() once the storage is unlocked.
+        LOG_WARN("NodeDB: Encrypted storage locked, using default config until unlocked");
+        installDefaultNodeDatabase();
+        installDefaultDeviceState();
+        installDefaultConfig();
+        installDefaultModuleConfig();
+        installDefaultChannels();
+
+        // Hold the radio silent until the operator unlocks. installDefaultConfig
+        // would otherwise honour USERPREFS_CONFIG_LORA_REGION (the common shape
+        // for managed deployments) and the LongFast default channel synthesised
+        // by installDefaultChannels, so the device would beacon nodeinfo /
+        // telemetry on the public default PSK before any unlock — and process
+        // incoming default-channel packets the same way. Forcing region=UNSET
+        // gates both TX and RX in RadioLibInterface (see the region==UNSET
+        // checks in startSend and readData); tx_enabled=false is belt-and-
+        // suspenders for any code path that does not consult region directly.
+        // reloadFromDisk() restores the persisted lora config when the
+        // operator unlocks.
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        config.lora.tx_enabled = false;
+        return;
+    }
+#endif
+
     // Arm the direct-into-map decode so satellite entries skip the temp vectors.
     {
         concurrency::LockGuard guard(&satelliteMutex);
@@ -1712,8 +1803,9 @@ void NodeDB::loadFromDisk()
         if (nodeInfoLiteHasUser(us)) {
             LOG_WARN("Restoring owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for our node 0x%08x",
                      us->num);
-            memcpy(owner.long_name, us->long_name, sizeof(owner.long_name));
-            owner.long_name[sizeof(owner.long_name) - 1] = '\0';
+            // owner.long_name (40) is wider than the lite source (25); bound by the source
+            memcpy(owner.long_name, us->long_name, sizeof(us->long_name));
+            owner.long_name[sizeof(us->long_name) - 1] = '\0';
             memcpy(owner.short_name, us->short_name, sizeof(owner.short_name));
             owner.short_name[sizeof(owner.short_name) - 1] = '\0';
             owner.is_licensed = nodeInfoLiteIsLicensed(us);
@@ -1726,6 +1818,10 @@ void NodeDB::loadFromDisk()
     } else {
         LOG_INFO("Loaded saved devicestate version %d", devicestate.version);
     }
+
+    // Devicestate saved by firmware that allowed 39-byte names gets clamped on
+    // first load; from here on owner never carries more than the local cap.
+    clampLongName(owner.long_name);
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
@@ -1861,6 +1957,40 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded UIConfig");
     }
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Ensure all config segments are persisted to encrypted storage.
+    // installDefaultConfig/installDefaultModuleConfig only set in-memory structs
+    // without saving to disk, so we force a save here to ensure encrypted files exist.
+    //
+    // Only when lockdown is ACTIVE. A capable-but-off device must leave its
+    // files as plaintext — encryptAndWrite would fail anyway (no DEK), but
+    // skipping the whole block avoids the wasted attempts and error logs.
+    if (EncryptedStorage::isLockdownActive()) {
+        const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
+                                      nodeDatabaseFileName};
+        const int segments[] = {SEGMENT_CONFIG, SEGMENT_MODULECONFIG, SEGMENT_CHANNELS, SEGMENT_DEVICESTATE,
+                                SEGMENT_NODEDATABASE};
+        int toSave = 0;
+        for (int i = 0; i < 5; i++) {
+            if (!EncryptedStorage::isEncrypted(filesToCheck[i])) {
+                toSave |= segments[i];
+            }
+        }
+        if (toSave) {
+            LOG_INFO("Lockdown: Saving unencrypted segments to encrypted storage (mask=0x%x)", toSave);
+            saveToDisk(toSave);
+        }
+
+        // Migrate any remaining plaintext proto files (from standard firmware upgrade)
+        for (const char *fn : filesToCheck) {
+            if (!EncryptedStorage::isEncrypted(fn)) {
+                LOG_INFO("Migrating %s to encrypted storage", fn);
+                EncryptedStorage::migrateFile(fn);
+            }
+        }
+    }
+#endif
+
     // 2.4.X - configuration migration to update new default intervals
     if (moduleConfig.version < 23) {
         LOG_DEBUG("ModuleConfig version %d is stale, upgrading to new default intervals", moduleConfig.version);
@@ -1898,6 +2028,87 @@ void NodeDB::loadFromDisk()
 #endif
 }
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+// Serializes reloadFromDisk against itself. Other readers of config /
+// channelFile / nodeDatabase don't take this lock today, so this only
+// prevents reload-vs-reload races (e.g. fast successive unlocks). It is
+// not a full data-race fix for those structs — that would require
+// thread-shared locking discipline across the whole codebase, beyond
+// the audit's M7 scope. The radio standby+reconfigure below keeps the
+// radio out of the window where SX12xx registers are mid-swap.
+static concurrency::Lock g_reloadFromDiskMutex;
+
+/**
+ * Re-run loadFromDisk() after encrypted storage is unlocked at runtime.
+ * Holds the radio in standby across the file IO + proto decode so the
+ * SX12xx is not mid-RX/TX when config.lora is overwritten, then calls
+ * reconfigure() to push the now-real settings to the chip.
+ *
+ * Returns true iff every encrypted file decrypted and decoded cleanly.
+ * On false the caller MUST treat storage as corrupt — see header.
+ */
+bool NodeDB::reloadFromDisk()
+{
+    concurrency::LockGuard guard(&g_reloadFromDiskMutex);
+    LOG_INFO("NodeDB: Reloading config from encrypted storage after unlock");
+
+    RadioInterface *rIface = router ? router->getRadioIface() : nullptr;
+
+    // Park the radio while config.lora / channelFile swap. Without this,
+    // a concurrent send or receive can read half-old / half-new state
+    // (channel keys, region, modem preset) and the SX12xx ends up in
+    // an inconsistent register set that only a reboot recovers from.
+    if (rIface)
+        rIface->sleep();
+
+    loadFromDisk();
+
+    if (storageCorruptThisLoad) {
+        LOG_ERROR("NodeDB: storage decrypt/decode failed during reload — surfacing as corrupt");
+        // Leave the radio sleeping. Caller will lock storage and emit
+        // a LOCKED(storage_corrupt) status; we must not reconfigure
+        // the chip with the locked-default placeholder values still
+        // sitting in config.lora.
+        return false;
+    }
+
+    // Push the now-real config to the radio.
+    if (rIface) {
+        channels.onConfigChanged();
+        rIface->reconfigure();
+    }
+    return true;
+}
+
+bool NodeDB::disableLockdownToPlaintext()
+{
+    concurrency::LockGuard guard(&g_reloadFromDiskMutex);
+    if (!EncryptedStorage::isUnlocked()) {
+        LOG_ERROR("NodeDB: disable requested but storage not unlocked");
+        return false;
+    }
+    LOG_INFO("NodeDB: reverting encrypted prefs to plaintext for lockdown disable");
+
+    // Decrypt each encrypted pref back to plaintext IN PLACE. Mirror of the
+    // plaintext->encrypted migrate loop above. Order does not matter here;
+    // EncryptedStorage::removeLockdownArtifacts() (which deletes the DEK,
+    // the commit point) only runs after every file is confirmed plaintext.
+    const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
+                                  nodeDatabaseFileName};
+    for (const char *fn : filesToCheck) {
+        if (!EncryptedStorage::migrateFileToPlaintext(fn)) {
+            LOG_ERROR("NodeDB: failed to revert %s to plaintext; aborting disable (device stays in lockdown)", fn);
+            return false;
+        }
+    }
+
+    // All files are plaintext now — remove the lockdown artifacts. Deleting
+    // /prefs/.dek is the atomic commit: after it, isLockdownActive() is false.
+    EncryptedStorage::removeLockdownArtifacts();
+    return true;
+}
+#endif
+
 /** Save a protobuf from a file, return true for success */
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
@@ -1909,6 +2120,38 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         LOG_ERROR("Error: trying to saveProto() on unsafe device power level.");
         return false;
     }
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Encrypt all files except uiconfig (no secrets) and the DEK file (self-encrypted).
+    // Only when lockdown is ACTIVE (provisioned). A lockdown-capable but DISABLED
+    // device has no DEK, so encryptAndWrite would fail and config would never
+    // persist — it must save plaintext exactly like stock firmware. Once enabled,
+    // the reloadFromDisk migrate pass re-saves these plaintext files encrypted.
+    if (EncryptedStorage::isLockdownActive() && strcmp(filename, uiconfigFileName) != 0) {
+        // ZeroizingArrayPtr wipes the unencrypted protobuf encoding (which contains
+        // config secrets — channel PSKs, security private_key, etc.) before delete[],
+        // so plaintext copies aren't left in heap memory after encryption completes.
+        auto pbBuf = meshtastic_security::make_zeroizing_array(protoSize);
+        if (!pbBuf) {
+            LOG_ERROR("OOM encoding %s for encryption", filename);
+            return false;
+        }
+
+        pb_ostream_t stream = pb_ostream_from_buffer(pbBuf.get(), protoSize);
+        if (!pb_encode(&stream, fields, dest_struct)) {
+            LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+            return false;
+        }
+
+        size_t encodedSize = stream.bytes_written;
+        bool ok = EncryptedStorage::encryptAndWrite(filename, pbBuf.get(), encodedSize, fullAtomic);
+
+        if (!ok) {
+            LOG_ERROR("EncryptedStorage: Failed to encrypt and write %s", filename);
+        }
+        return ok;
+    }
+#endif
 
     bool okay = false;
 #ifdef FSCom
@@ -2084,6 +2327,22 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         LOG_ERROR("Error: trying to saveToDiskNoRetry() on unsafe device power level.");
         return false;
     }
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // When lockdown is ACTIVE but storage is still locked, encryptAndWrite()
+    // returns false for every file. That would cause saveToDisk()'s nRF52 retry
+    // path to call FSCom.format(), wiping all encrypted proto files from flash.
+    // Return true here — "nothing to save, not an error."
+    //
+    // Gate on isLockdownActive(): a lockdown-capable but DISABLED device (never
+    // provisioned) also has isUnlocked()==false, but it must persist plaintext
+    // normally — skipping here would silently drop every config write (e.g. the
+    // LoRa region) until the device is provisioned.
+    if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
+        LOG_WARN("NodeDB: saveToDisk skipped — encrypted storage locked");
+        return true;
+    }
+#endif
 
     bool success = true;
 #ifdef FSCom
