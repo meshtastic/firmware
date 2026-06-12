@@ -11,6 +11,7 @@
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
+#include "WarmNodeStore.h"
 #include "concurrency/Lock.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
@@ -296,6 +297,20 @@ class NodeDB
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
+#if WARM_NODE_COUNT > 0
+    // Warm ("long-tail") tier: minimal {num, last_heard, public_key} records
+    // for nodes evicted from the hot store. See WarmNodeStore.h.
+    WarmNodeStore warmStore;
+#endif
+
+    /// Copy the 32-byte public key for node n — hot store first, then the warm
+    /// tier. Returns false if we don't know a key for n.
+    bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
+
+    /// last_heard of a hot-store node, or 0 if absent. Plain scan of meshNodes
+    /// with no allocation side effects (unlike getOrCreateMeshNode).
+    uint32_t hotNodeLastHeard(NodeNum n) const;
+
     // Thread-safe satellite-map accessors. Return false if absent or the
     // corresponding DB is compiled out.
     bool copyNodePosition(NodeNum n, meshtastic_PositionLite &out) const;
@@ -341,11 +356,17 @@ class NodeDB
         emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
         size_t nodeDatabaseSize;
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        // Always include satellite slots so backups from higher-cap peers
-        // decode without truncation, even when our build excludes the DBs.
-        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size) +
-               (MAX_NUM_NODES * meshtastic_NodePositionEntry_size) + (MAX_NUM_NODES * meshtastic_NodeTelemetryEntry_size) +
-               (MAX_NUM_NODES * meshtastic_NodeEnvironmentEntry_size) + (MAX_NUM_NODES * meshtastic_NodeStatusEntry_size);
+        // Decode-stream size ceiling only — no buffer of this size is ever
+        // allocated (load streams from the file). Sized for the largest file
+        // any previous firmware could have written (250-node ESP32-S3 builds,
+        // satellites uncapped), not the current MAX_NUM_NODES, so capacity
+        // downgrades and backups from higher-cap peers still decode; excess
+        // entries are trimmed after load.
+        // (not constexpr: portduino resolves MAX_NUM_NODES from runtime config)
+        const size_t loadCeiling = ((size_t)MAX_NUM_NODES > 250) ? (size_t)MAX_NUM_NODES : 250;
+        return nodeDatabaseSize + (loadCeiling * meshtastic_NodeInfoLite_size) +
+               (loadCeiling * meshtastic_NodePositionEntry_size) + (loadCeiling * meshtastic_NodeTelemetryEntry_size) +
+               (loadCeiling * meshtastic_NodeEnvironmentEntry_size) + (loadCeiling * meshtastic_NodeStatusEntry_size);
     }
 
     // returns true if the maximum number of nodes is reached or we are running low on memory
@@ -449,6 +470,21 @@ class NodeDB
 
     /// purge db entries without user info
     void cleanupMeshDB();
+
+    /// Trim each satellite map down to MAX_SATELLITE_NODES, dropping the
+    /// stalest entries (used after loading files written before the cap, or by
+    /// a build with a larger cap).
+    void enforceSatelliteCaps();
+
+#if WARM_NODE_COUNT > 0
+    /// On load, a database from a larger-cap build (notably the pre-fork 150-node
+    /// nRF52 hot store) can exceed MAX_NUM_NODES. Rank the hot store so the
+    /// freshest MAX_NUM_NODES survive and demote the oldest overflow into the
+    /// warm tier, preserving {num, last_heard, public_key} so PKI DMs keep
+    /// working instead of dropping those nodes on truncation. Caller truncates
+    /// the hot store to MAX_NUM_NODES afterwards.
+    void demoteOldestHotNodesToWarm();
+#endif
 
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultNodeDatabase(), installDefaultChannels(),
