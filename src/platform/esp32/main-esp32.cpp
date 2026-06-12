@@ -250,6 +250,22 @@ void cpuDeepSleep(uint32_t msecToWake)
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #endif
+#if defined(T_DECK_MAX) && SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
+#ifdef KB_INT
+    if (rtc_gpio_is_valid_gpio((gpio_num_t)KB_INT)) {
+        gpioMask |= (1ULL << KB_INT);
+        gpio_pullup_en((gpio_num_t)KB_INT);
+        LOG_INFO("setup KB_INT (GPIO%02d) for deep sleep wake", KB_INT);
+    }
+#endif
+#if defined(WAKE_ON_TOUCH) && defined(SCREEN_TOUCH_INT)
+    if (rtc_gpio_is_valid_gpio((gpio_num_t)SCREEN_TOUCH_INT)) {
+        gpioMask |= (1ULL << SCREEN_TOUCH_INT);
+        gpio_pullup_en((gpio_num_t)SCREEN_TOUCH_INT);
+        LOG_INFO("setup TOUCH_INT (GPIO%02d) for deep sleep wake", SCREEN_TOUCH_INT);
+    }
+#endif
+#endif
 
     // Not needed because both of the current boards have external pullups
     // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead

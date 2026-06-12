@@ -1,0 +1,118 @@
+#pragma once
+
+#include "TDeckMaxBoard.h"
+
+// Display (E-Ink)
+#define PIN_EINK_CS BOARD_EPD_CS
+#define PIN_EINK_BUSY BOARD_EPD_BUSY
+#define PIN_EINK_DC BOARD_EPD_DC
+#define PIN_EINK_RES BOARD_EPD_RST
+#define PIN_EINK_SCLK BOARD_EPD_SCK
+#define PIN_EINK_MOSI BOARD_EPD_MOSI
+// This board has a PWM frontlight, unlike older PIN_EINK_BL users where the pin can mean panel power.
+#define HAS_EINK_FRONTLIGHT
+#define PIN_EINK_BL BOARD_EPD_BL
+#define BRIGHTNESS_DEFAULT 130
+
+#define I2C_SDA SDA
+#define I2C_SCL SCL
+
+// CST328 touch screen (implementation in src/platform/extra_variants/t_deck_max/variant.cpp)
+#define HAS_TOUCHSCREEN 1
+#define CST328_PIN_INT BOARD_TOUCH_INT
+#define SCREEN_TOUCH_INT BOARD_TOUCH_INT
+// Keep CST328 usable while awake, but don't use its IRQ as a light-sleep wake source.
+// On T-Deck Max, touch wake after the 120s light-sleep cycle can reboot the ESP32-S3.
+
+#define USE_POWERSAVE
+#define SLEEP_TIME 120
+
+// GNSS
+#define HAS_GPS 1
+#define GPS_BAUDRATE 38400
+#define GPS_RX_PIN BOARD_GPS_RXD
+#define GPS_TX_PIN BOARD_GPS_TXD
+#define PIN_GPS_PPS BOARD_GPS_PPS
+
+#define BUTTON_PIN BOARD_BOOT_PIN
+
+// Vibration motor
+#define HAS_DRV2605 1
+
+// SPI interface SD card slot
+#define HAS_SDCARD
+#define SDCARD_USE_SPI1
+#define SPI_MOSI BOARD_SPI_MOSI
+#define SPI_SCK BOARD_SPI_SCK
+#define SPI_MISO BOARD_SPI_MISO
+#define SPI_CS BOARD_SD_CS
+#define SDCARD_CS SPI_CS
+#define SD_SPI_FREQUENCY 75000000U
+
+// TCA8418 keyboard
+#define KB_BL_PIN BOARD_KEYBOARD_LED
+#define KB_INT BOARD_KEYBOARD_INT
+#define CANNED_MESSAGE_MODULE_ENABLE 1
+
+// Audio codec ES8311
+#define HAS_I2S
+#define DAC_I2S_BCK BOARD_ES8311_SCLK
+#define DAC_I2S_WS BOARD_ES8311_LRCK
+#define DAC_I2S_DOUT BOARD_ES8311_DSDIN
+#define DAC_I2S_DIN BOARD_ES8311_ASDOUT
+#define DAC_I2S_MCLK BOARD_ES8311_MCLK
+
+// Gyroscope BHI260AP
+#define HAS_BHI260AP
+
+// Battery charger SY6970 and fuel gauge BQ27220
+#define HAS_PPM 1
+#define XPOWERS_CHIP_SY6970
+#define HAS_BQ27220 1
+#define BQ27220_I2C_SDA SDA
+#define BQ27220_I2C_SCL SCL
+#define BQ27220_DESIGN_CAPACITY 1500
+
+// External expansion chip XL9555
+#define USE_XL9555
+#define EXPANDS_MODEM_EN BOARD_XL9555_00_6609_EN
+#define EXPANDS_LORA_EN BOARD_XL9555_01_LORA_EN
+#define EXPANDS_GPS_EN BOARD_XL9555_02_GPS_EN
+#define EXPANDS_1V8_EN BOARD_XL9555_03_1V8_EN
+#define EXPANDS_LORA_SEL BOARD_XL9555_04_LORA_SEL
+#define EXPANDS_DRV_EN BOARD_XL9555_05_MOTOR_EN
+#define EXPANDS_AMP_EN BOARD_XL9555_06_AMPLIFIER
+#define EXPANDS_TOUCH_RST BOARD_XL9555_07_TOUCH_RST
+#define EXPANDS_MODEM_PWRKEY BOARD_XL9555_10_PWRKEY_EN
+#define EXPANDS_KB_RST BOARD_XL9555_11_KEY_RST
+#define EXPANDS_AUDIO_SEL BOARD_XL9555_12_AUDIO_SEL
+
+// LoRa
+#define USE_SX1262
+#define USE_SX1268
+
+#define LORA_SCK BOARD_LORA_SCK
+#define LORA_MISO BOARD_LORA_MISO
+#define LORA_MOSI BOARD_LORA_MOSI
+#define LORA_CS BOARD_LORA_CS
+
+#define LORA_DIO0 -1
+#define LORA_RESET BOARD_LORA_RST
+#define LORA_DIO1 BOARD_LORA_INT
+#define LORA_DIO2 BOARD_LORA_BUSY
+#define LORA_DIO3
+
+#define SX126X_CS LORA_CS
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_DIO2
+#define SX126X_RESET LORA_RESET
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 2.4
+
+// A7682E modem pins are defined but the expander-controlled rail stays off by default.
+#define MODEM_RI BOARD_A7682E_RI
+#define MODEM_DTR BOARD_A7682E_DTR
+#define MODEM_RX BOARD_A7682E_RXD
+#define MODEM_TX BOARD_A7682E_TXD
+
+#define HAS_PHYSICAL_KEYBOARD 1

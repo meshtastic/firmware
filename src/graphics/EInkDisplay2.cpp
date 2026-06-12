@@ -243,6 +243,25 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(0);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
+#elif defined(T_DECK_MAX)
+    pinMode(PIN_EINK_CS, OUTPUT);
+    digitalWrite(PIN_EINK_CS, HIGH);
+#ifdef SDCARD_CS
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+#endif
+#ifdef LORA_CS
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+#endif
+
+    LOG_INFO("T-Deck Max EPD init cs=%d dc=%d rst=%d busy=%d sck=%d mosi=%d", PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES,
+             PIN_EINK_BUSY, PIN_EINK_SCLK, PIN_EINK_MOSI);
+    auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+    adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+    adafruitDisplay->init(115200, true, 2, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    adafruitDisplay->setRotation(0);
+    adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
 #elif defined(M5_COREINK) || defined(T_DECK_PRO)
     auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
     adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
