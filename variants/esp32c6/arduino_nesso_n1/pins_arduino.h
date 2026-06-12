@@ -19,4 +19,3 @@ static const uint8_t SCK = 20;
 static const uint8_t SS = 23;
 
 #endif /* Pins_Arduino_h */
-
