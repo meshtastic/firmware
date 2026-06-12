@@ -864,7 +864,7 @@ void Power::shutdown()
 #endif
     }
 #endif
-#if !defined(ARCH_STM32)
+#if !defined(ARCH_STM32WL)
     playShutdownMelody();
 #endif
     nodeDB->saveToDisk();
