@@ -48,7 +48,7 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 130, "NodeInfoLite size increas
 #define MESHTASTIC_EXCLUDE_POSITIONDB 1
 #else
 #define MESHTASTIC_EXCLUDE_POSITIONDB 0
-#endif
+#endif // STM32WL
 #endif
 
 #ifndef MESHTASTIC_EXCLUDE_TELEMETRYDB
@@ -56,7 +56,7 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 130, "NodeInfoLite size increas
 #define MESHTASTIC_EXCLUDE_TELEMETRYDB 1
 #else
 #define MESHTASTIC_EXCLUDE_TELEMETRYDB 0
-#endif
+#endif // STM32WL
 #endif
 
 #ifndef MESHTASTIC_EXCLUDE_ENVIRONMENTDB
@@ -64,7 +64,7 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 130, "NodeInfoLite size increas
 #define MESHTASTIC_EXCLUDE_ENVIRONMENTDB 1
 #else
 #define MESHTASTIC_EXCLUDE_ENVIRONMENTDB 0
-#endif
+#endif // STM32WL
 #endif
 
 #ifndef MESHTASTIC_EXCLUDE_STATUSDB
@@ -72,31 +72,62 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 130, "NodeInfoLite size increas
 #define MESHTASTIC_EXCLUDE_STATUSDB 1
 #else
 #define MESHTASTIC_EXCLUDE_STATUSDB 0
-#endif
+#endif // STM32WL
 #endif
 
-/// max number of nodes allowed in the nodeDB
+/// max number of nodes allowed in the nodeDB (the full-NodeInfoLite "hot +
+/// short-tail" store).
+/// Long-tail identity retention for evicted nodes is handled by the warm tier
+/// (WARM_NODE_COUNT). 120 keeps nodes.proto (~14 KB typical / ~27 KB worst)
+/// comfortably inside the stock 28 KB nRF52 LittleFS alongside prefs and the
+/// message store — the warm tier persists outside LittleFS on nRF52840.
 #ifndef MAX_NUM_NODES
 #if defined(ARCH_STM32WL)
 #define MAX_NUM_NODES 10
-#elif defined(ARCH_NRF52)
-#define MAX_NUM_NODES 150
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#include "Esp.h"
-static inline int get_max_num_nodes()
-{
-    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Convert Bytes to MB
-    if (flash_size >= 15) {
-        return 250;
-    } else if (flash_size >= 7) {
-        return 200;
-    } else {
-        return 100;
-    }
-}
-#define MAX_NUM_NODES get_max_num_nodes()
 #else
-#define MAX_NUM_NODES 100
+#define MAX_NUM_NODES 120
+#endif // STM32WL
+#endif
+
+/// Cap on each satellite map (position/telemetry/environment/status). Only the
+/// MAX_SATELLITE_NODES most-recently-heard nodes keep satellite payloads; the
+/// rest of the hot store carries just the 96 B NodeInfoLite header. This is
+/// what bounds both heap (the maps are ~408 B/node worst case) and the
+/// satellite share of nodes.proto. Deliberately NOT scaled with MAX_NUM_NODES:
+/// the tier-1 "rich data" population stays at 40 regardless of how long the
+/// short tail grows.
+#ifndef MAX_SATELLITE_NODES
+#define MAX_SATELLITE_NODES 40
+#endif
+
+/// Warm tier: number of 40 B {num, last_heard, public_key} records retained
+/// for nodes evicted from the hot store, primarily so DMs to/from them keep
+/// decrypting. 0 disables the tier entirely. Persisted to /prefs/warm.dat,
+/// so the count is bounded by the platform's filesystem budget.
+#ifndef WARM_NODE_COUNT
+#if defined(ARCH_STM32WL)
+#define WARM_NODE_COUNT 0
+#elif defined(NRF52840_XXAA)
+// nRF52840: persisted in the dedicated 12 KB raw-flash record-ring below
+// LittleFS (3 × 4 KB pages, append + replay + compact-on-rotate; see
+// WarmNodeStore.h). 200 live entries across 306 record slots.
+//
+// Keyed on the NRF52840_XXAA build flag (a command-line -D from the board
+// definition, defined before any header is processed) rather than the
+// header-defined ARCH_NRF52. ARCH_NRF52 comes from platform/nrf52/architecture.h
+// via configuration.h, which some include chains (MeshTypes.h -> WarmNodeStore.h
+// -> here) reach AFTER mesh-pb-constants.h — so keying on it would let
+// WARM_NODE_COUNT resolve to the generic fallback and then fail the ring-sizing
+// static_assert in WarmNodeStore.h (which is itself gated on NRF52840_XXAA).
+#define WARM_NODE_COUNT 200
+#elif defined(ARCH_NRF52)
+// Other nRF52 (e.g. nRF52832): no raw-flash warm ring is reserved for these, so
+// keep the warm tier off rather than risk a file-backed default on tight flash.
+#define WARM_NODE_COUNT 0
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+#define WARM_NODE_COUNT 2000 // PSRAM-backed when available; warm.dat ~80 KB
+#else
+#define WARM_NODE_COUNT 320
 #endif
 #endif
 
