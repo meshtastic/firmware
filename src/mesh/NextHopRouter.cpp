@@ -98,22 +98,27 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
         // destination
         if (p->from != 0) {
             meshtastic_NodeInfoLite *origTx = nodeDB->getMeshNode(p->from);
-            if (origTx) {
-                // Either relayer of ACK was also a relayer of the packet, or we were the *only* relayer and the ACK came
-                // directly from the destination
-                // Single lookup for both relayer checks on the same (request_id, to) pair
-                bool wasAlreadyRelayer = false;
-                bool weWereSoleRelayer = false;
-                bool weWereRelayer = false;
-                checkRelayers(p->relay_node, ourRelayID, p->decoded.request_id, p->to, &wasAlreadyRelayer, &weWereRelayer,
-                              &weWereSoleRelayer);
-                if ((weWereRelayer && wasAlreadyRelayer) || (getHopsAway(*p) == 0 && weWereSoleRelayer)) {
-                    if (origTx->next_hop != p->relay_node) { // Not already set
-                        LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
-                                 p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);
-                        origTx->next_hop = p->relay_node;
-                    }
+            // Either relayer of ACK was also a relayer of the packet, or we were the *only* relayer and the ACK came
+            // directly from the destination. checkRelayers is read-only on PacketHistory and O(1), so we run it even
+            // when origTx is absent — that lets us still capture the confirmed hop into the TMM overflow cache below.
+            // Single lookup for both relayer checks on the same (request_id, to) pair
+            bool wasAlreadyRelayer = false;
+            bool weWereSoleRelayer = false;
+            bool weWereRelayer = false;
+            checkRelayers(p->relay_node, ourRelayID, p->decoded.request_id, p->to, &wasAlreadyRelayer, &weWereRelayer,
+                          &weWereSoleRelayer);
+            if ((weWereRelayer && wasAlreadyRelayer) || (getHopsAway(*p) == 0 && weWereSoleRelayer)) {
+                if (origTx && origTx->next_hop != p->relay_node) { // Not already set
+                    LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
+                             p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);
+                    origTx->next_hop = p->relay_node;
                 }
+#if HAS_TRAFFIC_MANAGEMENT
+                // Mirror the confirmed hop into the TMM overflow cache so it survives even when the source
+                // isn't (or is no longer) in the hot NodeDB. Same bidirectional confirmation gate as above.
+                if (trafficManagementModule)
+                    trafficManagementModule->setNextHop(p->from, p->relay_node);
+#endif
             }
         }
         if (!isToUs(p)) {
@@ -194,6 +199,7 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
     if (isBroadcast(to))
         return std::nullopt;
 
+    // Hot store first: a direct array hit on the live NodeDB entry.
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(to);
     if (node && node->next_hop) {
         // We are careful not to return the relay node as the next hop
@@ -203,6 +209,19 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         } else
             LOG_WARN("Next hop for 0x%x is 0x%x, same as relayer; set no pref", to, node->next_hop);
     }
+
+#if HAS_TRAFFIC_MANAGEMENT
+    // Fallback: TMM overflow cache holds confirmed hops for nodes that have aged
+    // out of the hot store. Same byte source/confidence as NodeInfoLite.next_hop.
+    if (trafficManagementModule) {
+        uint8_t hint = trafficManagementModule->getNextHopHint(to);
+        if (hint && hint != relay_node) {
+            // LOG_DEBUG("Next hop for 0x%x is 0x%x (TMM cache)", to, hint);
+            return hint;
+        }
+    }
+#endif
+
     return std::nullopt;
 }
 

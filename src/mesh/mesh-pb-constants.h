@@ -140,7 +140,7 @@ static inline int get_max_num_nodes()
 // Traffic Management module configuration
 // Enable per-variant by defining HAS_TRAFFIC_MANAGEMENT=1 in variant.h
 #ifndef HAS_TRAFFIC_MANAGEMENT
-#define HAS_TRAFFIC_MANAGEMENT 0
+#define HAS_TRAFFIC_MANAGEMENT 1
 #endif
 
 // HopScalingModule - variable hop module: dynamically adjusts broadcast hop_limit based on mesh density

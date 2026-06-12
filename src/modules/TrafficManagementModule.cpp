@@ -28,7 +28,6 @@ namespace
 
 constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL; // Cache cleanup interval
 constexpr uint32_t kUnknownResetMs = 60 * 1000UL;        // Unknown packet window
-constexpr uint8_t kMaxCuckooKicks = 16;                  // Max displacement chain length
 
 // NodeInfo direct response: enforced maximum hops by device role
 // Both use maxHops logic (respond when hopsAway <= threshold)
@@ -74,6 +73,21 @@ bool isWithinWindow(uint32_t nowMs, uint32_t startMs, uint32_t intervalMs)
     if (intervalMs == 0 || startMs == 0)
         return false;
     return (nowMs - startMs) < intervalMs;
+}
+
+/**
+ * Slide an 8-bit relative timestamp back by a wall-clock slab during epoch rebase.
+ *
+ * Entries older than the slab clamp to 0 (then reclaimed by the maintenance sweep);
+ * live entries keep their reconstructed age minus a sub-tick remainder. Each field
+ * slides by its own resolution's worth of ticks, so a single slab covers all three.
+ */
+inline void slideRelativeTime(uint8_t &ticks, uint32_t slabMs, uint16_t resolutionSecs)
+{
+    if (ticks == 0 || resolutionSecs == 0)
+        return;
+    uint32_t dec = slabMs / (static_cast<uint32_t>(resolutionSecs) * 1000UL);
+    ticks = (ticks > dec) ? static_cast<uint8_t>(ticks - dec) : 0;
 }
 
 /**
@@ -203,27 +217,16 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    TM_LOG_INFO("Allocating NodeInfo cache: target=%u occupancy=%u%% payload=%u bytes (PSRAM) tags=%u bytes (%u-bit, %u slots, "
-                "%u buckets x %u)",
-                static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoTargetOccupancyPercent()),
-                static_cast<unsigned>(nodeInfoTargetEntries() * sizeof(NodeInfoPayloadEntry)),
-                static_cast<unsigned>(nodeInfoIndexMetadataBudgetBytes()), static_cast<unsigned>(nodeInfoTagBits()),
-                static_cast<unsigned>(nodeInfoIndexSlots()), static_cast<unsigned>(nodeInfoBucketCount()),
-                static_cast<unsigned>(nodeInfoBucketSize()));
+    TM_LOG_INFO("Allocating NodeInfo cache: %u entries, %u bytes (PSRAM flat array)",
+                static_cast<unsigned>(nodeInfoTargetEntries()),
+                static_cast<unsigned>(nodeInfoTargetEntries() * sizeof(NodeInfoPayloadEntry)));
 
-    nodeInfoIndex = static_cast<uint8_t *>(calloc(nodeInfoIndexMetadataBudgetBytes(), sizeof(uint8_t)));
-    if (!nodeInfoIndex) {
-        TM_LOG_WARN("NodeInfo index allocation failed; direct responses will fall back to NodeDB");
+    nodeInfoPayload = static_cast<NodeInfoPayloadEntry *>(ps_calloc(nodeInfoTargetEntries(), sizeof(NodeInfoPayloadEntry)));
+    if (nodeInfoPayload) {
+        nodeInfoPayloadFromPsram = true;
+        TM_LOG_INFO("NodeInfo PSRAM cache ready");
     } else {
-        nodeInfoPayload = static_cast<NodeInfoPayloadEntry *>(ps_calloc(nodeInfoTargetEntries(), sizeof(NodeInfoPayloadEntry)));
-        if (nodeInfoPayload) {
-            nodeInfoPayloadFromPsram = true;
-            TM_LOG_INFO("NodeInfo bucketed cuckoo cache ready");
-        } else {
-            TM_LOG_WARN("NodeInfo PSRAM payload allocation failed; direct responses will fall back to NodeDB");
-            free(nodeInfoIndex);
-            nodeInfoIndex = nullptr;
-        }
+        TM_LOG_WARN("NodeInfo PSRAM payload allocation failed; direct responses will fall back to NodeDB");
     }
 #else
     TM_LOG_DEBUG("NodeInfo PSRAM cache not available on this target");
@@ -254,11 +257,6 @@ TrafficManagementModule::~TrafficManagementModule()
         else
             delete[] nodeInfoPayload;
         nodeInfoPayload = nullptr;
-    }
-
-    if (nodeInfoIndex) {
-        free(nodeInfoIndex);
-        nodeInfoIndex = nullptr;
     }
 }
 
@@ -292,17 +290,11 @@ void TrafficManagementModule::incrementStat(uint32_t *field)
 }
 
 // =============================================================================
-// Cuckoo Hash Table Operations
+// Flat Unified Cache Operations
 // =============================================================================
 
 /**
- * Find an existing entry for the given node.
- *
- * Cuckoo hashing guarantees that if an entry exists, it's in one of exactly
- * two locations: hash1(node) or hash2(node). This provides O(1) lookup.
- *
- * @param node NodeNum to search for
- * @return     Pointer to entry if found, nullptr otherwise
+ * Find an existing entry for the given node (linear scan).
  */
 TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findEntry(NodeNum node)
 {
@@ -313,35 +305,26 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findEntry(N
     if (!cache || node == 0)
         return nullptr;
 
-    // Check primary location
-    uint16_t h1 = cuckooHash1(node);
-    if (cache[h1].node == node)
-        return &cache[h1];
-
-    // Check alternate location
-    uint16_t h2 = cuckooHash2(node);
-    if (cache[h2].node == node)
-        return &cache[h2];
-
+    for (uint16_t i = 0; i < cacheSize(); i++) {
+        if (cache[i].node == node)
+            return &cache[i];
+    }
     return nullptr;
 #endif
 }
 
 /**
- * Find or create an entry for the given node using cuckoo hashing.
+ * Find or create an entry for the given node.
  *
- * If the node exists, returns the existing entry. Otherwise, attempts to
- * insert a new entry using cuckoo displacement:
- *
- * 1. Try to insert at h1(node) - if empty, done
- * 2. Try to insert at h2(node) - if empty, done
- * 3. Kick existing entry from h1 to its alternate location
- * 4. Repeat up to kMaxCuckooKicks times
- * 5. If cycle detected or max kicks exceeded, evict oldest entry
+ * One linear pass tracks the match, the first empty slot, and the eviction
+ * victim. When the cache is full, the victim is the stalest entry (largest
+ * of its three relative timestamps is smallest), preferring entries without
+ * a next_hop hint — those hints are the long-tail routing state the cache
+ * exists to keep, and the maintenance sweep never ages them out.
  *
  * @param node  NodeNum to find or create
  * @param isNew Set to true if a new entry was created
- * @return      Pointer to entry, or nullptr if allocation failed
+ * @return      Pointer to entry, or nullptr if the cache is unavailable
  */
 TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreateEntry(NodeNum node, bool *isNew)
 {
@@ -351,304 +334,76 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
         *isNew = false;
     return nullptr;
 #else
-    if (!cache || node == 0) {
-        if (isNew)
-            *isNew = false;
+    if (isNew)
+        *isNew = false;
+    if (!cache || node == 0)
         return nullptr;
-    }
 
-    // Check if entry already exists (O(1) lookup)
-    uint16_t h1 = cuckooHash1(node);
-    if (cache[h1].node == node) {
-        if (isNew)
-            *isNew = false;
-        return &cache[h1];
-    }
+    UnifiedCacheEntry *empty = nullptr;
+    UnifiedCacheEntry *victim = nullptr;
+    bool victimHasHop = true;
+    uint8_t victimRecency = UINT8_MAX;
 
-    uint16_t h2 = cuckooHash2(node);
-    if (cache[h2].node == node) {
-        if (isNew)
-            *isNew = false;
-        return &cache[h2];
-    }
-
-    // Entry doesn't exist - try to insert
-
-    // Prefer empty slot at h1
-    if (cache[h1].node == 0) {
-        memset(&cache[h1], 0, sizeof(UnifiedCacheEntry));
-        cache[h1].node = node;
-        if (isNew)
-            *isNew = true;
-        return &cache[h1];
-    }
-
-    // Try empty slot at h2
-    if (cache[h2].node == 0) {
-        memset(&cache[h2], 0, sizeof(UnifiedCacheEntry));
-        cache[h2].node = node;
-        if (isNew)
-            *isNew = true;
-        return &cache[h2];
-    }
-
-    // Both slots occupied - perform cuckoo displacement
-    // Start by kicking entry at h1 to its alternate location
-    UnifiedCacheEntry displaced = cache[h1];
-    memset(&cache[h1], 0, sizeof(UnifiedCacheEntry));
-    cache[h1].node = node;
-
-    for (uint8_t kicks = 0; kicks < kMaxCuckooKicks; kicks++) {
-        // Find alternate location for displaced entry
-        uint16_t altH1 = cuckooHash1(displaced.node);
-        uint16_t altH2 = cuckooHash2(displaced.node);
-        uint16_t altSlot = (altH1 == h1) ? altH2 : altH1;
-
-        if (cache[altSlot].node == 0) {
-            // Found empty slot - insert displaced entry
-            cache[altSlot] = displaced;
-            if (isNew)
-                *isNew = true;
-            return &cache[h1];
+    for (uint16_t i = 0; i < cacheSize(); i++) {
+        UnifiedCacheEntry &e = cache[i];
+        if (e.node == node)
+            return &e;
+        if (e.node == 0) {
+            if (!empty)
+                empty = &e;
+            continue;
         }
-
-        // Kick entry from alternate slot
-        UnifiedCacheEntry temp = cache[altSlot];
-        cache[altSlot] = displaced;
-        displaced = temp;
-        h1 = altSlot;
+        if (empty)
+            continue; // an empty slot beats any victim; stop scoring
+        const bool hasHop = e.next_hop != 0;
+        uint8_t recency = e.pos_time;
+        if (e.rate_time > recency)
+            recency = e.rate_time;
+        if (e.unknown_time > recency)
+            recency = e.unknown_time;
+        if (!victim || (hasHop == victimHasHop ? recency < victimRecency : !hasHop)) {
+            victim = &e;
+            victimHasHop = hasHop;
+            victimRecency = recency;
+        }
     }
 
-    // Cuckoo cycle detected or max kicks exceeded.
-    // The displaced entry has no valid cuckoo slot — drop it to preserve cache integrity.
-    // Placing it at an arbitrary slot would make it unreachable by findEntry().
-    TM_LOG_DEBUG("Cuckoo cycle, evicting node 0x%08x", displaced.node);
-
+    UnifiedCacheEntry *slot = empty ? empty : victim;
+    if (!slot)
+        return nullptr;
+    if (!empty)
+        TM_LOG_DEBUG("Unified cache full, evicting node 0x%08x", slot->node);
+    memset(slot, 0, sizeof(UnifiedCacheEntry));
+    slot->node = node;
     if (isNew)
         *isNew = true;
-    return &cache[cuckooHash1(node)];
+    return slot;
 #endif
 }
 
 const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findNodeInfoEntry(NodeNum node) const
 {
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoPayload || !nodeInfoIndex || node == 0)
+    if (!nodeInfoPayload || node == 0)
         return nullptr;
 
-    uint16_t payloadIndex = findNodeInfoPayloadIndex(node);
-    if (payloadIndex >= nodeInfoTargetEntries())
-        return nullptr;
-
-    return &nodeInfoPayload[payloadIndex];
+    for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
+        if (nodeInfoPayload[i].node == node)
+            return &nodeInfoPayload[i];
+    }
+    return nullptr;
 #else
     (void)node;
     return nullptr;
 #endif
 }
 
-uint16_t TrafficManagementModule::encodeNodeInfoTag(uint16_t payloadIndex) const
-{
-    if (payloadIndex >= nodeInfoTargetEntries())
-        return 0;
-    return static_cast<uint16_t>(payloadIndex + 1u);
-}
-
-uint16_t TrafficManagementModule::decodeNodeInfoPayloadIndex(uint16_t tag) const
-{
-    if (tag == 0 || tag > nodeInfoTargetEntries())
-        return UINT16_MAX;
-    return static_cast<uint16_t>(tag - 1u);
-}
-
-uint16_t TrafficManagementModule::getNodeInfoTag(uint16_t slot) const
-{
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoIndex || slot >= nodeInfoIndexSlots())
-        return 0;
-
-    const uint32_t bitOffset = static_cast<uint32_t>(slot) * nodeInfoTagBits();
-    const uint16_t byteOffset = static_cast<uint16_t>(bitOffset >> 3);
-    const uint8_t shift = static_cast<uint8_t>(bitOffset & 7u);
-    uint32_t packed = 0;
-
-    if (byteOffset < nodeInfoIndexMetadataBudgetBytes())
-        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset]);
-    if (static_cast<uint16_t>(byteOffset + 1u) < nodeInfoIndexMetadataBudgetBytes())
-        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset + 1u]) << 8;
-    if (static_cast<uint16_t>(byteOffset + 2u) < nodeInfoIndexMetadataBudgetBytes())
-        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset + 2u]) << 16;
-
-    return static_cast<uint16_t>((packed >> shift) & nodeInfoTagMask());
-#else
-    (void)slot;
-    return 0;
-#endif
-}
-
-void TrafficManagementModule::setNodeInfoTag(uint16_t slot, uint16_t tag)
-{
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoIndex || slot >= nodeInfoIndexSlots())
-        return;
-
-    const uint16_t normalizedTag = static_cast<uint16_t>(tag & nodeInfoTagMask());
-    const uint32_t bitOffset = static_cast<uint32_t>(slot) * nodeInfoTagBits();
-    const uint16_t byteOffset = static_cast<uint16_t>(bitOffset >> 3);
-    const uint8_t shift = static_cast<uint8_t>(bitOffset & 7u);
-    uint32_t packed = 0;
-
-    if (byteOffset < nodeInfoIndexMetadataBudgetBytes())
-        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset]);
-    if (static_cast<uint16_t>(byteOffset + 1u) < nodeInfoIndexMetadataBudgetBytes())
-        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset + 1u]) << 8;
-    if (static_cast<uint16_t>(byteOffset + 2u) < nodeInfoIndexMetadataBudgetBytes())
-        packed |= static_cast<uint32_t>(nodeInfoIndex[byteOffset + 2u]) << 16;
-
-    const uint32_t mask = static_cast<uint32_t>(nodeInfoTagMask()) << shift;
-    packed = (packed & ~mask) | ((static_cast<uint32_t>(normalizedTag) << shift) & mask);
-
-    if (byteOffset < nodeInfoIndexMetadataBudgetBytes())
-        nodeInfoIndex[byteOffset] = static_cast<uint8_t>(packed & 0xFFu);
-    if (static_cast<uint16_t>(byteOffset + 1u) < nodeInfoIndexMetadataBudgetBytes())
-        nodeInfoIndex[byteOffset + 1u] = static_cast<uint8_t>((packed >> 8) & 0xFFu);
-    if (static_cast<uint16_t>(byteOffset + 2u) < nodeInfoIndexMetadataBudgetBytes())
-        nodeInfoIndex[byteOffset + 2u] = static_cast<uint8_t>((packed >> 16) & 0xFFu);
-#else
-    (void)slot;
-    (void)tag;
-#endif
-}
-
-uint16_t TrafficManagementModule::findNodeInfoPayloadIndex(NodeNum node) const
-{
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoPayload || !nodeInfoIndex || node == 0)
-        return UINT16_MAX;
-
-    const uint16_t buckets[2] = {nodeInfoHash1(node), nodeInfoHash2(node)};
-
-    for (uint8_t b = 0; b < 2; b++) {
-        const uint16_t base = static_cast<uint16_t>(buckets[b] * nodeInfoBucketSize());
-        for (uint8_t slot = 0; slot < nodeInfoBucketSize(); slot++) {
-            uint16_t tag = getNodeInfoTag(static_cast<uint16_t>(base + slot));
-            if (tag == 0)
-                continue;
-
-            uint16_t payloadIndex = decodeNodeInfoPayloadIndex(tag);
-            if (payloadIndex >= nodeInfoTargetEntries())
-                continue;
-
-            if (nodeInfoPayload[payloadIndex].node == node)
-                return payloadIndex;
-        }
-    }
-
-    return UINT16_MAX;
-#else
-    (void)node;
-    return UINT16_MAX;
-#endif
-}
-
-bool TrafficManagementModule::removeNodeInfoIndexEntry(NodeNum node, uint16_t payloadIndex)
-{
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoIndex || node == 0 || payloadIndex >= nodeInfoTargetEntries())
-        return false;
-
-    const uint16_t payloadTag = encodeNodeInfoTag(payloadIndex);
-    if (payloadTag == 0)
-        return false;
-    const uint16_t buckets[2] = {nodeInfoHash1(node), nodeInfoHash2(node)};
-
-    for (uint8_t b = 0; b < 2; b++) {
-        const uint16_t base = static_cast<uint16_t>(buckets[b] * nodeInfoBucketSize());
-        for (uint8_t slot = 0; slot < nodeInfoBucketSize(); slot++) {
-            const uint16_t indexSlot = static_cast<uint16_t>(base + slot);
-            if (getNodeInfoTag(indexSlot) == payloadTag) {
-                setNodeInfoTag(indexSlot, 0);
-                return true;
-            }
-        }
-    }
-
-    return false;
-#else
-    (void)node;
-    (void)payloadIndex;
-    return false;
-#endif
-}
-
-uint16_t TrafficManagementModule::allocateNodeInfoPayloadSlot()
-{
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoPayload)
-        return UINT16_MAX;
-
-    for (uint16_t tries = 0; tries < nodeInfoTargetEntries(); tries++) {
-        uint16_t idx = static_cast<uint16_t>((nodeInfoAllocHint + tries) % nodeInfoTargetEntries());
-        if (nodeInfoPayload[idx].node == 0) {
-            nodeInfoAllocHint = static_cast<uint16_t>((idx + 1u) % nodeInfoTargetEntries());
-            return idx;
-        }
-    }
-#endif
-    return UINT16_MAX;
-}
-
-uint16_t TrafficManagementModule::evictNodeInfoPayloadSlot()
-{
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoPayload || !nodeInfoIndex)
-        return UINT16_MAX;
-
-    for (uint16_t tries = 0; tries < nodeInfoTargetEntries(); tries++) {
-        uint16_t idx = static_cast<uint16_t>(nodeInfoEvictCursor % nodeInfoTargetEntries());
-        nodeInfoEvictCursor = static_cast<uint16_t>((nodeInfoEvictCursor + 1u) % nodeInfoTargetEntries());
-
-        NodeNum oldNode = nodeInfoPayload[idx].node;
-        if (oldNode == 0)
-            continue;
-
-        removeNodeInfoIndexEntry(oldNode, idx); // best effort; cache tolerates occasional stale miss
-        nodeInfoPayload[idx].node = 0;
-        return idx;
-    }
-#endif
-    return UINT16_MAX;
-}
-
-bool TrafficManagementModule::tryInsertNodeInfoEntryInBucket(uint16_t bucket, uint16_t tag)
-{
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoIndex || !nodeInfoPayload || bucket >= nodeInfoBucketCount() || tag == 0)
-        return false;
-
-    const uint16_t base = static_cast<uint16_t>(bucket * nodeInfoBucketSize());
-    for (uint8_t slot = 0; slot < nodeInfoBucketSize(); slot++) {
-        const uint16_t indexSlot = static_cast<uint16_t>(base + slot);
-        const uint16_t existingTag = getNodeInfoTag(indexSlot);
-        if (existingTag == 0) {
-            setNodeInfoTag(indexSlot, tag);
-            return true;
-        }
-
-        // Opportunistically reuse stale tags that point at empty/invalid payload slots.
-        const uint16_t payloadIndex = decodeNodeInfoPayloadIndex(existingTag);
-        if (payloadIndex >= nodeInfoTargetEntries() || nodeInfoPayload[payloadIndex].node == 0) {
-            setNodeInfoTag(indexSlot, tag);
-            return true;
-        }
-    }
-#else
-    (void)bucket;
-    (void)tag;
-#endif
-    return false;
-}
-
+/**
+ * Find or create a NodeInfo payload entry (linear scan of the flat PSRAM
+ * array). One pass tracks the match, the first empty slot, and the LRU
+ * victim by lastObservedMs (wrap-safe age). NodeInfo traffic is low-rate,
+ * so the O(n) scan is negligible.
+ */
 TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node,
                                                                                                   bool *usedEmptySlot)
 {
@@ -656,88 +411,40 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
         *usedEmptySlot = false;
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoPayload || !nodeInfoIndex || node == 0)
+    if (!nodeInfoPayload || node == 0)
         return nullptr;
 
-    uint16_t existing = findNodeInfoPayloadIndex(node);
-    if (existing < nodeInfoTargetEntries())
-        return &nodeInfoPayload[existing];
+    NodeInfoPayloadEntry *empty = nullptr;
+    NodeInfoPayloadEntry *lru = nullptr;
+    uint32_t lruAge = 0;
+    const uint32_t now = millis();
 
-    const uint16_t beforeCount = countNodeInfoEntriesLocked();
-
-    uint16_t payloadIndex = allocateNodeInfoPayloadSlot();
-    if (payloadIndex == UINT16_MAX) {
-        payloadIndex = evictNodeInfoPayloadSlot();
-        if (payloadIndex == UINT16_MAX)
-            return nullptr;
-    }
-
-    nodeInfoPayload[payloadIndex].node = node;
-
-    // 4-way bucketed cuckoo insertion mirrors Cuckoo Filter practice from
-    // Fan et al. (CoNEXT 2014): high occupancy with short relocation chains.
-    uint16_t pending = encodeNodeInfoTag(payloadIndex);
-    uint16_t h1 = nodeInfoHash1(node);
-    uint16_t h2 = nodeInfoHash2(node);
-
-    if (!tryInsertNodeInfoEntryInBucket(h1, pending) && !tryInsertNodeInfoEntryInBucket(h2, pending)) {
-        uint16_t currentBucket = h1;
-        for (uint8_t kicks = 0; kicks < kMaxCuckooKicks; kicks++) {
-            const uint16_t base = static_cast<uint16_t>(currentBucket * nodeInfoBucketSize());
-            const uint16_t kickSlot = static_cast<uint16_t>((node + kicks) & (nodeInfoBucketSize() - 1u));
-            const uint16_t pos = static_cast<uint16_t>(base + kickSlot);
-
-            uint16_t displaced = getNodeInfoTag(pos);
-            setNodeInfoTag(pos, pending);
-            pending = displaced;
-
-            uint16_t displacedPayload = decodeNodeInfoPayloadIndex(pending);
-            if (displacedPayload >= nodeInfoTargetEntries()) {
-                pending = 0;
-                break;
-            }
-
-            NodeNum displacedNode = nodeInfoPayload[displacedPayload].node;
-            if (displacedNode == 0) {
-                pending = 0;
-                break;
-            }
-
-            uint16_t altH1 = nodeInfoHash1(displacedNode);
-            uint16_t altH2 = nodeInfoHash2(displacedNode);
-            uint16_t altBucket = (altH1 == currentBucket) ? altH2 : altH1;
-
-            if (tryInsertNodeInfoEntryInBucket(altBucket, pending)) {
-                pending = 0;
-                break;
-            }
-
-            currentBucket = altBucket;
+    for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
+        NodeInfoPayloadEntry &e = nodeInfoPayload[i];
+        if (e.node == node)
+            return &e;
+        if (e.node == 0) {
+            if (!empty)
+                empty = &e;
+            continue;
         }
-
-        if (pending != 0) {
-            uint16_t droppedPayload = decodeNodeInfoPayloadIndex(pending);
-            if (droppedPayload < nodeInfoTargetEntries())
-                nodeInfoPayload[droppedPayload].node = 0;
-            TM_LOG_DEBUG("NodeInfo bucketed cuckoo overflow, dropped payload idx=%u",
-                         static_cast<unsigned>(droppedPayload < nodeInfoTargetEntries() ? droppedPayload : UINT16_MAX));
+        if (empty)
+            continue;                                // an empty slot beats any victim; stop scoring
+        const uint32_t age = now - e.lastObservedMs; // unsigned subtraction is wrap-safe
+        if (!lru || age > lruAge) {
+            lru = &e;
+            lruAge = age;
         }
     }
 
-    uint16_t finalIndex = findNodeInfoPayloadIndex(node);
-    if (finalIndex >= nodeInfoTargetEntries()) {
-        // New entry did not survive insertion chain.
-        if (payloadIndex < nodeInfoTargetEntries() && nodeInfoPayload[payloadIndex].node == node)
-            nodeInfoPayload[payloadIndex].node = 0;
+    NodeInfoPayloadEntry *slot = empty ? empty : lru;
+    if (!slot)
         return nullptr;
-    }
-
-    if (usedEmptySlot) {
-        const uint16_t afterCount = countNodeInfoEntriesLocked();
-        *usedEmptySlot = afterCount > beforeCount;
-    }
-
-    return &nodeInfoPayload[finalIndex];
+    memset(slot, 0, sizeof(NodeInfoPayloadEntry));
+    slot->node = node;
+    if (usedEmptySlot)
+        *usedEmptySlot = (slot == empty);
+    return slot;
 #else
     (void)node;
     return nullptr;
@@ -747,12 +454,12 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
 uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
 {
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoIndex)
+    if (!nodeInfoPayload)
         return 0;
 
     uint16_t count = 0;
-    for (uint16_t i = 0; i < nodeInfoIndexSlots(); i++) {
-        if (getNodeInfoTag(i) != 0)
+    for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
+        if (nodeInfoPayload[i].node != 0)
             count++;
     }
     return count;
@@ -764,7 +471,7 @@ uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
 void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &mp)
 {
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!nodeInfoPayload || !nodeInfoIndex || mp.decoded.payload.size == 0)
+    if (!nodeInfoPayload || mp.decoded.payload.size == 0)
         return;
 
     meshtastic_User user = meshtastic_User_init_zero;
@@ -797,13 +504,81 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
     }
 
     if (usedEmptySlot) {
-        TM_LOG_INFO("NodeInfo PSRAM cache entries: %u/%u target (%u packed slots, %u-bit tags, %u-byte DRAM index)",
-                    static_cast<unsigned>(cachedCount), static_cast<unsigned>(nodeInfoTargetEntries()),
-                    static_cast<unsigned>(nodeInfoIndexSlots()), static_cast<unsigned>(nodeInfoTagBits()),
-                    static_cast<unsigned>(nodeInfoIndexMetadataBudgetBytes()));
+        TM_LOG_INFO("NodeInfo PSRAM cache entries: %u/%u", static_cast<unsigned>(cachedCount),
+                    static_cast<unsigned>(nodeInfoTargetEntries()));
     }
 #else
     (void)mp;
+#endif
+}
+
+// =============================================================================
+// Next-Hop Overflow Cache
+// =============================================================================
+//
+// A routing hint store. The byte is the last byte of the NodeNum to use as next
+// hop to reach `dest`. It is written ONLY from NextHopRouter's ACK-confirmed
+// decision (a bidirectionally-verified relay) — never inferred one-way from
+// relayed traffic. The TMM cache holds confirmed next-hops that have aged out of
+// the hot NodeDB (NodeInfoLite), and NextHopRouter::getNextHop() consults it as a
+// fallback after the hot store.
+
+void TrafficManagementModule::setNextHop(NodeNum dest, uint8_t nextHopByte)
+{
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+    if (!cache || dest == 0 || nextHopByte == 0)
+        return;
+
+    concurrency::LockGuard guard(&cacheLock);
+    bool isNew = false;
+    UnifiedCacheEntry *entry = findOrCreateEntry(dest, &isNew);
+    if (entry)
+        entry->next_hop = nextHopByte; // last-write-wins; only confirmed bytes reach here
+#else
+    (void)dest;
+    (void)nextHopByte;
+#endif
+}
+
+uint8_t TrafficManagementModule::getNextHopHint(NodeNum dest)
+{
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+    if (!cache || dest == 0)
+        return 0;
+
+    concurrency::LockGuard guard(&cacheLock);
+    UnifiedCacheEntry *entry = findEntry(dest);
+    return entry ? entry->next_hop : 0;
+#else
+    (void)dest;
+    return 0;
+#endif
+}
+
+void TrafficManagementModule::preloadNextHopsFromNodeDB()
+{
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+    if (!cache || !nodeDB)
+        return;
+
+    uint16_t seeded = 0;
+    concurrency::LockGuard guard(&cacheLock);
+    const size_t count = nodeDB->getNumMeshNodes();
+    for (size_t i = 0; i < count; i++) {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        if (!node || node->num == 0 || node->next_hop == 0)
+            continue;
+
+        bool isNew = false;
+        UnifiedCacheEntry *entry = findOrCreateEntry(node->num, &isNew);
+        // Don't clobber a freshly-learned confirmed hop with a (possibly stale) persisted one.
+        if (entry && entry->next_hop == 0) {
+            entry->next_hop = node->next_hop;
+            seeded++;
+        }
+    }
+
+    TM_LOG_INFO("Preloaded %u next-hop hints from NodeDB", static_cast<unsigned>(seeded));
 #endif
 }
 
@@ -825,6 +600,43 @@ void TrafficManagementModule::resetEpoch(uint32_t nowMs)
 
     // Full flush avoids stale dedup identity/counters surviving epoch rollover.
     memset(cache, 0, static_cast<size_t>(cacheSize()) * sizeof(UnifiedCacheEntry));
+#else
+    (void)nowMs;
+#endif
+}
+
+/**
+ * Sliding-epoch rebase — preserve cached state past the 8-bit timestamp horizon.
+ *
+ * Instead of flushing the whole cache when offsets approach overflow, advance the
+ * epoch by a fixed slab and shift every live entry's relative timestamps back by
+ * the same wall-clock amount. A valid entry's window is only a handful of ticks
+ * wide (TTL auto-scales with resolution), so live entries comfortably survive;
+ * already-expired entries clamp to 0 and are reclaimed by the maintenance sweep in
+ * the same locked pass. Reconstructed absolute time is preserved (minus a sub-tick
+ * remainder), so in-flight TTL checks remain correct across the rebase.
+ *
+ * Caller must hold cacheLock.
+ */
+void TrafficManagementModule::rebaseEpoch(uint32_t nowMs)
+{
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+    (void)nowMs;
+
+    // Slab stays well below the 200-tick reset threshold so a single rebase drops
+    // the offset back into range (~200 -> ~72 ticks) while live entries survive.
+    const uint32_t slabMs = 128UL * maxResolution() * 1000UL;
+    cacheEpochMs += slabMs;
+
+    TM_LOG_DEBUG("Rebasing cache epoch by %lus", static_cast<unsigned long>(slabMs / 1000UL));
+
+    for (uint16_t i = 0; i < cacheSize(); i++) {
+        if (cache[i].node == 0)
+            continue;
+        slideRelativeTime(cache[i].pos_time, slabMs, posTimeResolution);
+        slideRelativeTime(cache[i].rate_time, slabMs, rateTimeResolution);
+        slideRelativeTime(cache[i].unknown_time, slabMs, unknownTimeResolution);
+    }
 #else
     (void)nowMs;
 #endif
@@ -1042,11 +854,12 @@ int32_t TrafficManagementModule::runOnce()
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     const uint32_t nowMs = millis();
 
-    // Check if epoch reset needed (~3.5 hours approaching 8-bit minute overflow)
-    if (needsEpochReset(nowMs)) {
-        concurrency::LockGuard guard(&cacheLock);
-        resetEpoch(nowMs);
-        return kMaintenanceIntervalMs;
+    // Warm-start the next-hop cache from persisted NodeInfoLite hints once nodeDB
+    // is populated. Done here (not in the constructor) so nodeDB has finished
+    // loading. Takes its own lock, so call before acquiring the sweep guard below.
+    if (!nextHopPreloaded) {
+        preloadNextHopsFromNodeDB();
+        nextHopPreloaded = true;
     }
 
     // Calculate TTLs for cache expiration
@@ -1065,6 +878,13 @@ int32_t TrafficManagementModule::runOnce()
     const uint32_t sweepStartMs = millis();
 
     concurrency::LockGuard guard(&cacheLock);
+
+    // Slide the epoch instead of flushing when offsets approach 8-bit overflow.
+    // Rebase preserves live entries; only already-expired ones clamp to 0 and are
+    // reclaimed by the sweep below in this same locked pass.
+    if (needsEpochReset(nowMs))
+        rebaseEpoch(nowMs);
+
     for (uint16_t i = 0; i < cacheSize(); i++) {
         if (cache[i].node == 0)
             continue;
@@ -1104,6 +924,11 @@ int32_t TrafficManagementModule::runOnce()
             }
         }
 
+        // A confirmed next-hop hint has no TTL of its own and keeps the slot alive,
+        // so an aged-out routing hint outlives the dedup/rate/unknown state.
+        if (cache[i].next_hop != 0)
+            anyValid = true;
+
         // If all data expired, free the slot entirely
         if (!anyValid) {
             memset(&cache[i], 0, sizeof(UnifiedCacheEntry));
@@ -1118,11 +943,9 @@ int32_t TrafficManagementModule::runOnce()
                  static_cast<unsigned long>(millis() - sweepStartMs));
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (nodeInfoPayload && nodeInfoIndex) {
-        TM_LOG_DEBUG("NodeInfo PSRAM cache: %u/%u target (%u packed slots, %u buckets, %u-bit tags, %u-byte index)",
-                     static_cast<unsigned>(countNodeInfoEntriesLocked()), static_cast<unsigned>(nodeInfoTargetEntries()),
-                     static_cast<unsigned>(nodeInfoIndexSlots()), static_cast<unsigned>(nodeInfoBucketCount()),
-                     static_cast<unsigned>(nodeInfoTagBits()), static_cast<unsigned>(nodeInfoIndexMetadataBudgetBytes()));
+    if (nodeInfoPayload) {
+        TM_LOG_DEBUG("NodeInfo PSRAM cache: %u/%u", static_cast<unsigned>(countNodeInfoEntriesLocked()),
+                     static_cast<unsigned>(nodeInfoTargetEntries()));
     }
 #endif
 
@@ -1153,8 +976,11 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const int32_t lat_truncated = truncateLatLon(pos->latitude_i, precision);
     const int32_t lon_truncated = truncateLatLon(pos->longitude_i, precision);
     const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
-    const uint32_t minIntervalMs = secsToMs(Default::getConfiguredOrDefault(
-        moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
+    // Drop gate uses the RAW configured interval: 0 means "dedup disabled" (the
+    // contract documented below). The 12h default is only for resolution/TTL
+    // sizing (constructor / runOnce), not for deciding whether to drop — feeding
+    // the default here would silently turn the 0-disables-dedup contract off.
+    const uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
 
     bool isNew = false;
     concurrency::LockGuard guard(&cacheLock);
@@ -1218,7 +1044,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         // If the PSRAM cache exists but misses, we intentionally do not fall back
         // to the node-wide table. This keeps the PSRAM direct-reply path separate
         // from NodeInfoModule/NodeDB behavior when PSRAM is available.
-        if (nodeInfoPayload && nodeInfoIndex) {
+        if (nodeInfoPayload) {
             TM_LOG_DEBUG("NodeInfo PSRAM cache miss for node=0x%08x", p->to);
             return false;
         }
@@ -1378,7 +1204,9 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
         entry->unknown_count = 0;
     }
 
-    // Increment counter (saturates at 255)
+    // Increment counter (saturates at 255). Same saturation handling as
+    // isRateLimited: without it, a clamped threshold of 255 can never fire.
+    const bool alreadySaturated = (entry->unknown_count == UINT8_MAX);
     saturatingIncrement(entry->unknown_count);
 
     // Check against threshold
@@ -1386,7 +1214,7 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
     if (threshold > 255)
         threshold = 255;
 
-    bool drop = entry->unknown_count > threshold;
+    bool drop = entry->unknown_count > threshold || (alreadySaturated && threshold == 255);
     if (drop || entry->unknown_count == threshold) {
         TM_LOG_DEBUG("Unknown packets 0x%08x: count=%u threshold=%u -> %s", p->from, entry->unknown_count, threshold,
                      drop ? "DROP" : "at-limit");
