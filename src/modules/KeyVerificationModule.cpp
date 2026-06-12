@@ -101,11 +101,13 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             LOG_INFO("Hash1 matches!");
             static const char *optionsArray[] = {"Reject", "Accept"};
             // Don't try to put the array definition in the macro. Does not work with curly braces.
-            // Lambda is defined outside IF_SCREEN so that [=, this] doesn't introduce a top-level
-            // comma inside the single-argument macro, which would cause a preprocessor error.
-            auto kvm_acceptCallback = [this](int selected) {
+            // Lambda is defined outside IF_SCREEN so that the capture list doesn't introduce a
+            // top-level comma inside the single-argument macro, which would cause a preprocessor error.
+            // currentRemoteNode is captured by value so the callback acts on the node that triggered
+            // the banner even if currentRemoteNode changes before the user makes a selection.
+            auto kvm_acceptCallback = [this, remoteNode = currentRemoteNode](int selected) {
                 if (selected == 1) {
-                    auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
+                    auto remoteNodePtr = nodeDB->getMeshNode(remoteNode);
                     if (remoteNodePtr)
                         remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
                 }
