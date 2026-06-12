@@ -31,8 +31,8 @@ uint8_t gpio_ext_get(uint8_t address, uint8_t pin);
 #undef LORA_CS
 
 // battery charger BQ25896
-//#define HAS_PPM 1
-//#define XPOWERS_CHIP_BQ25896
+// #define HAS_PPM 1
+// #define XPOWERS_CHIP_BQ25896
 
 // battery quality management BQ27220
 #define HAS_BQ27220 1
@@ -80,7 +80,7 @@ uint8_t gpio_ext_get(uint8_t address, uint8_t pin);
 #define SCREEN_TRANSITION_FRAMERATE 5
 #define BRIGHTNESS_DEFAULT 130
 
-//#define HAS_TOUCHSCREEN 1
+// #define HAS_TOUCHSCREEN 1
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x38
 #define SCREEN_TOUCH_INT 3
