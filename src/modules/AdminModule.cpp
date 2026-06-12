@@ -463,7 +463,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                 if (screen)
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
             } else if (mp.from == 0) { // local request from the phone — tell the user why it didn't take
-                sendWarning("Can't favorite 0x%08x: protected-node limit (%d) reached", r->set_favorite_node, MAX_NUM_NODES - 2);
+                sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "favorite", r->set_favorite_node, MAX_NUM_NODES - 2);
             }
         }
         break;
@@ -490,7 +490,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                 nodeDB->eraseNodeSatellites(node->num);
                 saveChanges(SEGMENT_NODEDATABASE, false);
             } else if (mp.from == 0) { // local request from the phone — tell the user why it didn't take
-                sendWarning("Can't ignore 0x%08x: protected-node limit (%d) reached", r->set_ignored_node, MAX_NUM_NODES - 2);
+                sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", r->set_ignored_node, MAX_NUM_NODES - 2);
             }
         }
         break;

@@ -2993,15 +2993,20 @@ bool NodeDB::setProtectedFlag(meshtastic_NodeInfoLite *node, uint32_t mask, bool
     return false;
 }
 
-void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
+bool NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
 {
     meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
-    if (lite && nodeInfoLiteIsFavorite(lite) != is_favorite) {
-        if (setProtectedFlag(lite, NODEINFO_BITFIELD_IS_FAVORITE_MASK, is_favorite)) {
-            sortMeshDB();
-            saveNodeDatabaseToDisk();
-        }
+    if (!lite)
+        return false;
+    if (nodeInfoLiteIsFavorite(lite) == is_favorite)
+        return true; // already in the requested state
+    if (setProtectedFlag(lite, NODEINFO_BITFIELD_IS_FAVORITE_MASK, is_favorite)) {
+        sortMeshDB();
+        saveNodeDatabaseToDisk();
+        return true;
     }
+    LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", nodeId, MAX_NUM_NODES - 2);
+    return false;
 }
 
 bool NodeDB::isFavorite(uint32_t nodeId)
