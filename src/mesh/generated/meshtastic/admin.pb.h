@@ -93,6 +93,13 @@ typedef enum _meshtastic_AdminMessage_BackupLocation {
     meshtastic_AdminMessage_BackupLocation_SD = 1
 } meshtastic_AdminMessage_BackupLocation;
 
+typedef enum _meshtastic_AdminMessage_FindNodeResponse_Result {
+    meshtastic_AdminMessage_FindNodeResponse_Result_STARTED = 0,
+    meshtastic_AdminMessage_FindNodeResponse_Result_STOPPED = 1,
+    meshtastic_AdminMessage_FindNodeResponse_Result_NO_BUZZER = 2,
+    meshtastic_AdminMessage_FindNodeResponse_Result_BUZZER_DISABLED = 3
+} meshtastic_AdminMessage_FindNodeResponse_Result;
+
 /* Three stages of this request. */
 typedef enum _meshtastic_KeyVerificationAdmin_MessageType {
     /* This is the first stage, where a client initiates */
@@ -129,6 +136,22 @@ typedef struct _meshtastic_AdminMessage_OTAEvent {
  Used to verify the integrity of the firmware before applying an update. */
     meshtastic_AdminMessage_OTAEvent_ota_hash_t ota_hash;
 } meshtastic_AdminMessage_OTAEvent;
+
+/* Request that the node emit an audible find-node pattern. */
+typedef struct _meshtastic_AdminMessage_FindNodeRequest {
+    /* Duration to repeat the find-node pattern. Zero uses the firmware default. */
+    uint16_t duration_seconds;
+    /* Stop any active find-node pattern instead of starting a new one. */
+    bool stop;
+} meshtastic_AdminMessage_FindNodeRequest;
+
+/* Response to a find-node request. */
+typedef struct _meshtastic_AdminMessage_FindNodeResponse {
+    /* Result of the request. */
+    meshtastic_AdminMessage_FindNodeResponse_Result result;
+    /* Accepted duration in seconds. Zero for stop or failed requests. */
+    uint16_t duration_seconds;
+} meshtastic_AdminMessage_FindNodeResponse;
 
 typedef PB_BYTES_ARRAY_T(32) meshtastic_LockdownAuth_passphrase_t;
 /* Lockdown passphrase delivery payload.
@@ -454,6 +477,10 @@ typedef struct _meshtastic_AdminMessage {
         meshtastic_SharedContact add_contact;
         /* Initiate or respond to a key verification request */
         meshtastic_KeyVerificationAdmin key_verification;
+        /* Start or stop the audible find-node pattern. */
+        meshtastic_AdminMessage_FindNodeRequest find_node_request;
+        /* Result of a find-node request. */
+        meshtastic_AdminMessage_FindNodeResponse find_node_response;
         /* Tell the node to factory reset config everything; all device state and configuration will be returned to factory defaults and BLE bonds will be cleared. */
         int32_t factory_reset_device;
         /* Tell the node to reboot into the OTA Firmware in this many seconds (or <0 to cancel reboot)
@@ -514,6 +541,10 @@ extern "C" {
 #define _meshtastic_AdminMessage_BackupLocation_MAX meshtastic_AdminMessage_BackupLocation_SD
 #define _meshtastic_AdminMessage_BackupLocation_ARRAYSIZE ((meshtastic_AdminMessage_BackupLocation)(meshtastic_AdminMessage_BackupLocation_SD+1))
 
+#define _meshtastic_AdminMessage_FindNodeResponse_Result_MIN meshtastic_AdminMessage_FindNodeResponse_Result_STARTED
+#define _meshtastic_AdminMessage_FindNodeResponse_Result_MAX meshtastic_AdminMessage_FindNodeResponse_Result_BUZZER_DISABLED
+#define _meshtastic_AdminMessage_FindNodeResponse_Result_ARRAYSIZE ((meshtastic_AdminMessage_FindNodeResponse_Result)(meshtastic_AdminMessage_FindNodeResponse_Result_BUZZER_DISABLED+1))
+
 #define _meshtastic_KeyVerificationAdmin_MessageType_MIN meshtastic_KeyVerificationAdmin_MessageType_INITIATE_VERIFICATION
 #define _meshtastic_KeyVerificationAdmin_MessageType_MAX meshtastic_KeyVerificationAdmin_MessageType_DO_NOT_VERIFY
 #define _meshtastic_KeyVerificationAdmin_MessageType_ARRAYSIZE ((meshtastic_KeyVerificationAdmin_MessageType)(meshtastic_KeyVerificationAdmin_MessageType_DO_NOT_VERIFY+1))
@@ -526,6 +557,9 @@ extern "C" {
 
 
 #define meshtastic_AdminMessage_OTAEvent_reboot_ota_mode_ENUMTYPE meshtastic_OTAMode
+
+
+#define meshtastic_AdminMessage_FindNodeResponse_result_ENUMTYPE meshtastic_AdminMessage_FindNodeResponse_Result
 
 
 
@@ -543,6 +577,8 @@ extern "C" {
 #define meshtastic_AdminMessage_init_default     {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_default {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_default {_meshtastic_OTAMode_MIN, {0, {0}}}
+#define meshtastic_AdminMessage_FindNodeRequest_init_default {0, 0}
+#define meshtastic_AdminMessage_FindNodeResponse_init_default {_meshtastic_AdminMessage_FindNodeResponse_Result_MIN, 0}
 #define meshtastic_LockdownAuth_init_default     {{0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_HamParameters_init_default    {"", 0, 0, ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_default {0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
@@ -556,6 +592,8 @@ extern "C" {
 #define meshtastic_AdminMessage_init_zero        {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_zero {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_zero {_meshtastic_OTAMode_MIN, {0, {0}}}
+#define meshtastic_AdminMessage_FindNodeRequest_init_zero {0, 0}
+#define meshtastic_AdminMessage_FindNodeResponse_init_zero {_meshtastic_AdminMessage_FindNodeResponse_Result_MIN, 0}
 #define meshtastic_LockdownAuth_init_zero        {{0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_HamParameters_init_zero       {"", 0, 0, ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_zero {0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
@@ -574,6 +612,10 @@ extern "C" {
 #define meshtastic_AdminMessage_InputEvent_touch_y_tag 4
 #define meshtastic_AdminMessage_OTAEvent_reboot_ota_mode_tag 1
 #define meshtastic_AdminMessage_OTAEvent_ota_hash_tag 2
+#define meshtastic_AdminMessage_FindNodeRequest_duration_seconds_tag 1
+#define meshtastic_AdminMessage_FindNodeRequest_stop_tag 2
+#define meshtastic_AdminMessage_FindNodeResponse_result_tag 1
+#define meshtastic_AdminMessage_FindNodeResponse_duration_seconds_tag 2
 #define meshtastic_LockdownAuth_passphrase_tag   1
 #define meshtastic_LockdownAuth_boots_remaining_tag 2
 #define meshtastic_LockdownAuth_valid_until_epoch_tag 3
@@ -661,6 +703,8 @@ extern "C" {
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
 #define meshtastic_AdminMessage_add_contact_tag  66
 #define meshtastic_AdminMessage_key_verification_tag 67
+#define meshtastic_AdminMessage_find_node_request_tag 68
+#define meshtastic_AdminMessage_find_node_response_tag 69
 #define meshtastic_AdminMessage_factory_reset_device_tag 94
 #define meshtastic_AdminMessage_reboot_ota_seconds_tag 95
 #define meshtastic_AdminMessage_exit_simulator_tag 96
@@ -723,6 +767,8 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_ed
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,add_contact,add_contact),  66) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,key_verification,key_verification),  67) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,find_node_request,find_node_request),  68) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,find_node_response,find_node_response),  69) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_device,factory_reset_device),  94) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulator),  96) \
@@ -754,6 +800,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lockdown_auth,lockdown_auth)
 #define meshtastic_AdminMessage_payload_variant_store_ui_config_MSGTYPE meshtastic_DeviceUIConfig
 #define meshtastic_AdminMessage_payload_variant_add_contact_MSGTYPE meshtastic_SharedContact
 #define meshtastic_AdminMessage_payload_variant_key_verification_MSGTYPE meshtastic_KeyVerificationAdmin
+#define meshtastic_AdminMessage_payload_variant_find_node_request_MSGTYPE meshtastic_AdminMessage_FindNodeRequest
+#define meshtastic_AdminMessage_payload_variant_find_node_response_MSGTYPE meshtastic_AdminMessage_FindNodeResponse
 #define meshtastic_AdminMessage_payload_variant_ota_request_MSGTYPE meshtastic_AdminMessage_OTAEvent
 #define meshtastic_AdminMessage_payload_variant_sensor_config_MSGTYPE meshtastic_SensorConfig
 #define meshtastic_AdminMessage_payload_variant_lockdown_auth_MSGTYPE meshtastic_LockdownAuth
@@ -771,6 +819,18 @@ X(a, STATIC,   SINGULAR, UENUM,    reboot_ota_mode,   1) \
 X(a, STATIC,   SINGULAR, BYTES,    ota_hash,          2)
 #define meshtastic_AdminMessage_OTAEvent_CALLBACK NULL
 #define meshtastic_AdminMessage_OTAEvent_DEFAULT NULL
+
+#define meshtastic_AdminMessage_FindNodeRequest_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   duration_seconds,   1) \
+X(a, STATIC,   SINGULAR, BOOL,     stop,              2)
+#define meshtastic_AdminMessage_FindNodeRequest_CALLBACK NULL
+#define meshtastic_AdminMessage_FindNodeRequest_DEFAULT NULL
+
+#define meshtastic_AdminMessage_FindNodeResponse_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    result,            1) \
+X(a, STATIC,   SINGULAR, UINT32,   duration_seconds,   2)
+#define meshtastic_AdminMessage_FindNodeResponse_CALLBACK NULL
+#define meshtastic_AdminMessage_FindNodeResponse_DEFAULT NULL
 
 #define meshtastic_LockdownAuth_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BYTES,    passphrase,        1) \
@@ -860,6 +920,8 @@ X(a, STATIC,   OPTIONAL, UINT32,   set_accuracy,      1)
 extern const pb_msgdesc_t meshtastic_AdminMessage_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_InputEvent_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_OTAEvent_msg;
+extern const pb_msgdesc_t meshtastic_AdminMessage_FindNodeRequest_msg;
+extern const pb_msgdesc_t meshtastic_AdminMessage_FindNodeResponse_msg;
 extern const pb_msgdesc_t meshtastic_LockdownAuth_msg;
 extern const pb_msgdesc_t meshtastic_HamParameters_msg;
 extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePinsResponse_msg;
@@ -875,6 +937,8 @@ extern const pb_msgdesc_t meshtastic_SHTXX_config_msg;
 #define meshtastic_AdminMessage_fields &meshtastic_AdminMessage_msg
 #define meshtastic_AdminMessage_InputEvent_fields &meshtastic_AdminMessage_InputEvent_msg
 #define meshtastic_AdminMessage_OTAEvent_fields &meshtastic_AdminMessage_OTAEvent_msg
+#define meshtastic_AdminMessage_FindNodeRequest_fields &meshtastic_AdminMessage_FindNodeRequest_msg
+#define meshtastic_AdminMessage_FindNodeResponse_fields &meshtastic_AdminMessage_FindNodeResponse_msg
 #define meshtastic_LockdownAuth_fields &meshtastic_LockdownAuth_msg
 #define meshtastic_HamParameters_fields &meshtastic_HamParameters_msg
 #define meshtastic_NodeRemoteHardwarePinsResponse_fields &meshtastic_NodeRemoteHardwarePinsResponse_msg
@@ -888,6 +952,8 @@ extern const pb_msgdesc_t meshtastic_SHTXX_config_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_ADMIN_PB_H_MAX_SIZE meshtastic_AdminMessage_size
+#define meshtastic_AdminMessage_FindNodeRequest_size 6
+#define meshtastic_AdminMessage_FindNodeResponse_size 6
 #define meshtastic_AdminMessage_InputEvent_size  14
 #define meshtastic_AdminMessage_OTAEvent_size    36
 #define meshtastic_AdminMessage_size             511

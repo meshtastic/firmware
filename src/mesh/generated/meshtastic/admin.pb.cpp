@@ -15,6 +15,12 @@ PB_BIND(meshtastic_AdminMessage_InputEvent, meshtastic_AdminMessage_InputEvent, 
 PB_BIND(meshtastic_AdminMessage_OTAEvent, meshtastic_AdminMessage_OTAEvent, AUTO)
 
 
+PB_BIND(meshtastic_AdminMessage_FindNodeRequest, meshtastic_AdminMessage_FindNodeRequest, AUTO)
+
+
+PB_BIND(meshtastic_AdminMessage_FindNodeResponse, meshtastic_AdminMessage_FindNodeResponse, AUTO)
+
+
 PB_BIND(meshtastic_LockdownAuth, meshtastic_LockdownAuth, AUTO)
 
 
@@ -43,16 +49,3 @@ PB_BIND(meshtastic_SCD30_config, meshtastic_SCD30_config, AUTO)
 
 
 PB_BIND(meshtastic_SHTXX_config, meshtastic_SHTXX_config, AUTO)
-
-
-
-
-
-
-
-
-
-
-
-
-

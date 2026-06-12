@@ -5,6 +5,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "SPILock.h"
+#include "buzz/FindNodeBuzzer.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
@@ -600,6 +601,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_send_input_event_tag: {
         LOG_INFO("Client requesting to send input event");
         handleSendInputEvent(r->send_input_event);
+        break;
+    }
+    case meshtastic_AdminMessage_find_node_request_tag: {
+        LOG_INFO("Client requesting find-node buzzer");
+        handleFindNodeRequest(mp, r->find_node_request);
         break;
     }
 #ifdef ARCH_PORTDUINO
@@ -1386,6 +1392,42 @@ void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
     }
 }
 
+void AdminModule::handleFindNodeRequest(const meshtastic_MeshPacket &req, const meshtastic_AdminMessage_FindNodeRequest &request)
+{
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
+    r.which_payload_variant = meshtastic_AdminMessage_find_node_response_tag;
+
+    uint32_t acceptedDurationSeconds = 0;
+    FindNodeBuzzer::Result result = FindNodeBuzzer::Result::NoBuzzer;
+    if (findNodeBuzzer) {
+        result =
+            request.stop ? findNodeBuzzer->stop() : findNodeBuzzer->start(request.duration_seconds, &acceptedDurationSeconds);
+    }
+
+    switch (result) {
+    case FindNodeBuzzer::Result::Started:
+        r.find_node_response.result = meshtastic_AdminMessage_FindNodeResponse_Result_STARTED;
+        r.find_node_response.duration_seconds = acceptedDurationSeconds;
+        break;
+    case FindNodeBuzzer::Result::Stopped:
+        r.find_node_response.result = meshtastic_AdminMessage_FindNodeResponse_Result_STOPPED;
+        break;
+    case FindNodeBuzzer::Result::BuzzerDisabled:
+        r.find_node_response.result = meshtastic_AdminMessage_FindNodeResponse_Result_BUZZER_DISABLED;
+        break;
+    case FindNodeBuzzer::Result::NoBuzzer:
+    default:
+        r.find_node_response.result = meshtastic_AdminMessage_FindNodeResponse_Result_NO_BUZZER;
+        break;
+    }
+
+    setPassKey(&r);
+    myReply = allocDataProtobuf(r);
+    if (req.pki_encrypted) {
+        myReply->pki_encrypted = true;
+    }
+}
+
 void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req)
 {
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
@@ -1601,6 +1643,7 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_canned_message_module_messages_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_metadata_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_find_node_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_response_tag)
