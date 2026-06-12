@@ -15,7 +15,7 @@
 #endif
 
 #if defined(ARCH_STM32)
-// STM32WL
+// STM32
 #include "LittleFS.h"
 #define FSCom InternalFS
 #define FSBegin() FSCom.begin()
