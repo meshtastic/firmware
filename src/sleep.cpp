@@ -555,6 +555,8 @@ void enableModemSleep()
     esp32_config.max_freq_mhz = CONFIG_ESP32S2_DEFAULT_CPU_FREQ_MHZ;
 #elif CONFIG_IDF_TARGET_ESP32C6
     esp32_config.max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
+#elif CONFIG_IDF_TARGET_ESP32H2
+    esp32_config.max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
 #elif CONFIG_IDF_TARGET_ESP32C3
     esp32_config.max_freq_mhz = CONFIG_ESP32C3_DEFAULT_CPU_FREQ_MHZ;
 #elif CONFIG_IDF_TARGET_ESP32P4
