@@ -51,6 +51,7 @@ class ReClockI2C
         }
 
         LOG_DEBUG("I2C clock was already %uHz. Skipping", desiredClock);
+        setPreviousClock(0);
         return false;
     }
 
@@ -59,6 +60,7 @@ class ReClockI2C
         if (this->previousClock) {
             LOG_DEBUG("Restoring I2C clock to %uHz", this->previousClock);
             i2cBus->setClock(this->previousClock);
+            setPreviousClock(0);
             return true;
         }
         LOG_DEBUG("I2C clock was unknown. Not restored");
