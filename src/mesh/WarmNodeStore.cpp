@@ -47,14 +47,12 @@ WarmNodeStore::WarmNodeStore()
 {
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     entries = static_cast<WarmNodeEntry *>(ps_calloc(WARM_NODE_COUNT, sizeof(WarmNodeEntry)));
-    if (entries) {
-        entriesFromPsram = true;
-    } else {
+    if (!entries) {
         LOG_WARN("WarmStore: PSRAM allocation failed, falling back to heap");
-        entries = new WarmNodeEntry[WARM_NODE_COUNT]();
+        entries = static_cast<WarmNodeEntry *>(calloc(WARM_NODE_COUNT, sizeof(WarmNodeEntry)));
     }
 #else
-    entries = new WarmNodeEntry[WARM_NODE_COUNT]();
+    entries = static_cast<WarmNodeEntry *>(calloc(WARM_NODE_COUNT, sizeof(WarmNodeEntry)));
 #endif
 #if defined(ARCH_NRF52) && defined(NRF52840_XXAA)
     memset(pageOf, 0xFF, sizeof(pageOf));
@@ -63,12 +61,7 @@ WarmNodeStore::WarmNodeStore()
 
 WarmNodeStore::~WarmNodeStore()
 {
-    if (!entries)
-        return;
-    if (entriesFromPsram)
-        free(entries);
-    else
-        delete[] entries;
+    free(entries); // always malloc-family (calloc / ps_calloc)
     entries = nullptr;
 }
 
@@ -130,7 +123,7 @@ WarmNodeEntry *WarmNodeStore::place(NodeNum num, uint32_t lastHeard, const uint8
 
 bool WarmNodeStore::absorb(NodeNum num, uint32_t lastHeard, const uint8_t *key32)
 {
-    WarmNodeEntry *slot = place(num, lastHeard, key32);
+    const WarmNodeEntry *slot = place(num, lastHeard, key32);
     if (!slot)
         return false;
     persistEntry(*slot);

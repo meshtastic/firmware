@@ -54,6 +54,8 @@ class WarmNodeStore
   public:
     WarmNodeStore();
     ~WarmNodeStore();
+    WarmNodeStore(const WarmNodeStore &) = delete;
+    WarmNodeStore &operator=(const WarmNodeStore &) = delete;
 
     /// Remember an evicted hot node. Keyless candidates never displace keyed
     /// entries; otherwise the oldest (keyless-first) entry is replaced.
@@ -81,7 +83,6 @@ class WarmNodeStore
 
   private:
     WarmNodeEntry *entries = nullptr; // WARM_NODE_COUNT slots; PSRAM on ESP32 when available
-    bool entriesFromPsram = false;
     bool dirty = false;
 
     WarmNodeEntry *find(NodeNum num) const;
