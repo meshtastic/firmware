@@ -8,6 +8,7 @@
 #include "concurrency/OSThread.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
+#include "mesh/ble/BleAdvertisementMeshPlatform.h"
 #include "mesh/mesh-pb-constants.h"
 #include "sleep.h"
 #include <NimBLEDevice.h>
@@ -867,6 +868,11 @@ void NimbleBluetooth::setup()
     bleServer->setCallbacks(serverCallbacks, true);
     setupService();
     startAdvertising();
+#if HAS_BLE_MESH_ADVERTISING
+    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_ADVERTISEMENT_BROADCAST) {
+        initBleAdvertisementMeshPlatform();
+    }
+#endif
 }
 
 void NimbleBluetooth::setupService()
