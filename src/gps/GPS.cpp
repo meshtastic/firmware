@@ -689,6 +689,20 @@ bool GPS::verifyCachedProbePresence()
     case GNSS_MODEL_AG3352:
         if (cachedProbeModel == GNSS_MODEL_AG3352)
             cachedProbeModelName = "AG3352";
+#ifdef TRACKER_T1000_E
+        digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
+        digitalWrite(GPS_RTC_INT, HIGH);
+        delay(3);
+        digitalWrite(GPS_RTC_INT, LOW);
+        delay(50);
+        for (uint8_t i = 0; i < 25; ++i) {
+            _serial_gps->write("$PAIR382,1*2E\r\n");
+            delay(40);
+        }
+#elif defined(GNSS_AIROHA)
+        _serial_gps->write("$PAIR382,1*2E\r\n");
+        delay(20);
+#endif
         _serial_gps->write("$PAIR021*39\r\n");
         present = (getACK("$PAIR021,", 900) == GNSS_RESPONSE_OK);
         break;
@@ -741,7 +755,6 @@ bool GPS::verifyCachedProbePresence()
     if (!present) {
         LOG_WARN("Cached GPS probe is stale (%s @ %d), clearing cache", cachedProbeModelName, cachedProbeBaud);
         clearProbeCache();
-        cachedProbeFailedThisBoot = true;
         return false;
     }
 
@@ -762,13 +775,6 @@ bool GPS::setup()
 {
     if (!didSerialInit) {
         int msglen = 0;
-        if (cachedProbeFailedThisBoot) {
-            // If cached verification failed, suppress further probing until
-            // reboot.
-            didSerialInit = true;
-            return true;
-        }
-
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             if (!hasProbeCache && !triedProbeCache) {
                 (void)loadProbeCache();
@@ -777,12 +783,13 @@ bool GPS::setup()
             if (hasProbeCache && !triedProbeCache) {
                 triedProbeCache = true;
                 if (!verifyCachedProbePresence()) {
-                    // Cache was stale and got wiped; skip scanning this boot
-                    // and let next boot do a full probe.
-                    didSerialInit = true;
-                    return true;
+                    currentStep = 0;
+                    speedSelect = 0;
+                    probeTries = 0;
                 }
-            } else if (probeTries < GPS_PROBETRIES) {
+            }
+
+            if (gnssModel == GNSS_MODEL_UNKNOWN && probeTries < GPS_PROBETRIES) {
                 // No usable cache: walk common baud rates first.
                 gnssModel = probe(serialSpeeds[speedSelect]);
                 if (gnssModel != GNSS_MODEL_UNKNOWN) {
@@ -794,7 +801,7 @@ bool GPS::setup()
             }
             // Rare Serial Speeds
 #ifndef CONFIG_IDF_TARGET_ESP32C6
-            else if (probeTries == GPS_PROBETRIES) {
+            else if (gnssModel == GNSS_MODEL_UNKNOWN && probeTries == GPS_PROBETRIES) {
                 // Then try less common baud rates before giving up.
                 gnssModel = probe(rareSerialSpeeds[speedSelect]);
                 if (gnssModel != GNSS_MODEL_UNKNOWN) {
@@ -1125,6 +1132,15 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
             break;
         if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) // If hardware just waking now, clear buffer
             clearBuffer();
+#ifdef TRACKER_T1000_E
+        pinMode(GPS_VRTC_EN, OUTPUT);
+        digitalWrite(GPS_VRTC_EN, HIGH);
+        pinMode(GPS_SLEEP_INT, OUTPUT);
+        digitalWrite(GPS_SLEEP_INT, HIGH);
+        pinMode(GPS_RTC_INT, OUTPUT);
+        digitalWrite(GPS_RTC_INT, LOW);
+        pinMode(GPS_RESETB_OUT, INPUT_PULLUP);
+#endif
         powerMon->setState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
         writePinEN(true);                                         // Power (EN pin): on
         setPowerPMU(true);                                        // Power (PMU): on
@@ -1383,9 +1399,8 @@ int32_t GPS::runOnce()
         if (!setup())
             return currentDelay; // Setup failed, re-run in two seconds
 
-        if (cachedProbeFailedThisBoot || gnssModel == GNSS_MODEL_UNKNOWN) {
-            LOG_WARN("GPS not detected at cached settings; marked not present "
-                     "for this boot");
+        if (gnssModel == GNSS_MODEL_UNKNOWN) {
+            LOG_WARN("GPS not detected; marked not present for this boot");
             return disable();
         }
 
@@ -1585,6 +1600,9 @@ GnssModel_t GPS::probe(int serialSpeed)
         digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
         delay(10);
         digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+#ifdef TRACKER_T1000_E
+        delay(100);
+#endif
 
         // attempt to detect the chip based on boot messages
         std::vector<ChipInfo> passive_detect = {
@@ -1637,6 +1655,20 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
     case 3: {
         /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
+#ifdef TRACKER_T1000_E
+        digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
+        digitalWrite(GPS_RTC_INT, HIGH);
+        delay(3);
+        digitalWrite(GPS_RTC_INT, LOW);
+        delay(50);
+        for (uint8_t i = 0; i < 25; ++i) {
+            _serial_gps->write("$PAIR382,1*2E\r\n");
+            delay(40);
+        }
+#elif defined(GNSS_AIROHA)
+        _serial_gps->write("$PAIR382,1*2E\r\n");
+        delay(20);
+#endif
         _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF to reduce volume
         _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF to reduce volume
         _serial_gps->write("$PAIR513*3D\r\n");     // save configuration
@@ -1968,6 +2000,12 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
         if (t.tm_mon > -1) {
+#ifdef BUILD_EPOCH
+            time_t candidate = gm_mktime(&t);
+            if (candidate < BUILD_EPOCH || (uint64_t)candidate > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
+                return false;
+            }
+#endif
             if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
                 LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
                           t.tm_min, t.tm_sec, ti.age());
