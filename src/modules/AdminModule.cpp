@@ -108,11 +108,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         return handled;
     }
 #ifdef ARCH_PORTDUINO
-    // Simulator only: honor exit_simulator from the local client (from==0). The test harness sets
-    // pki_encrypted=true on all admin payloads; that causes the from==0 plain-admin branch below
-    // (which requires !pki_encrypted) to be skipped, routing into the PKC key-check instead. The
-    // simulator has no PKI key (region is UNSET so keygen never runs), so the PKC check rejects it
-    // and the daemon never exits — producing a 6-hour CI overrun. Local-origin + force_simradio only.
+    // Simulator only: honor exit_simulator unconditionally for the local client (from==0).
+    // The from==0 branch below now covers pki_encrypted local packets too, but is_managed
+    // can still block it. Rather than threading simulator awareness through the auth gates,
+    // intercept here before any auth logic runs. Local-origin + force_simradio only.
     // TODO: should a local client bypass admin auth at all? Fenced to the simulator for now.
     if (portduino_config.force_simradio && mp.from == 0 &&
         r->which_payload_variant == meshtastic_AdminMessage_exit_simulator_tag) {
