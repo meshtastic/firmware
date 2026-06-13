@@ -615,6 +615,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -DMESHTASTIC_LOCKDOWN_DEBUG=1 keeps the irreversible APPROTECT burn disabled
 // even when provisioned — for development so dev boards never lose SWD.
 // -----------------------------------------------------------------------------
+#if defined(ARCH_NRF52)
 #ifndef MESHTASTIC_ENABLE_LOCKDOWN
 #define MESHTASTIC_ENABLE_LOCKDOWN 0
 #endif
@@ -629,12 +630,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #endif
 
-#if defined(ARCH_NRF52) && MESHTASTIC_ENABLE_LOCKDOWN && !defined(MESHTASTIC_EXCLUDE_LOCKDOWN)
+#if MESHTASTIC_ENABLE_LOCKDOWN && !defined(MESHTASTIC_EXCLUDE_LOCKDOWN)
 #define MESHTASTIC_LOCKDOWN 1
 #define MESHTASTIC_PHONEAPI_ACCESS_CONTROL 1
 #define MESHTASTIC_ENCRYPTED_STORAGE 1
 #ifndef MESHTASTIC_LOCKDOWN_DEBUG
 #define MESHTASTIC_ENABLE_APPROTECT 1
+#endif
 #endif
 #endif
 
