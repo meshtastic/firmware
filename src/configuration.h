@@ -576,9 +576,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // MESHTASTIC_LOCKDOWN — runtime, client-toggleable hardening (nRF52 only)
 //
-// There is NO build flag to turn lockdown on or off. On nRF52 (CC310 hardware
-// crypto) the lockdown machinery is ALWAYS compiled in; whether it is ACTIVE
-// is decided entirely at runtime by EncryptedStorage::isLockdownActive()
+// Lockdown/protect support is opt-in at build time. Builds that need it pass
+// -DMESHTASTIC_ENABLE_LOCKDOWN=1. When enabled on nRF52 (CC310 hardware
+// crypto), whether it is ACTIVE is decided entirely at runtime by
+// EncryptedStorage::isLockdownActive()
 // (== a passphrase has been provisioned, i.e. /prefs/.dek exists). A device
 // that has never been provisioned — or that the operator disabled from the
 // client app — behaves exactly like stock firmware: plaintext storage, no
@@ -594,11 +595,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //               reboots into normal mode. APPROTECT is the one thing that
 //               does NOT revert (see below).
 //
-// MESHTASTIC_LOCKDOWN here is an INTERNAL capability marker, auto-defined for
-// nRF52. It gates the UI bits (lock screen, pairing-PIN handling). It is NOT
-// something a variant sets. Flash-constrained nRF52 variants that genuinely
-// cannot afford the ~tens-of-KB of crypto + access-control code may opt OUT
-// with -DMESHTASTIC_EXCLUDE_LOCKDOWN=1.
+// MESHTASTIC_LOCKDOWN here is an INTERNAL capability marker. It gates the UI
+// bits (lock screen, pairing-PIN handling). Flash-constrained nRF52 variants
+// that genuinely cannot afford the ~tens-of-KB of crypto + access-control code
+// may also opt out with -DMESHTASTIC_EXCLUDE_LOCKDOWN=1.
 //
 //   MESHTASTIC_PHONEAPI_ACCESS_CONTROL — per-connection auth + redaction,
 //                                        gated at runtime on isLockdownActive()
@@ -615,7 +615,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -DMESHTASTIC_LOCKDOWN_DEBUG=1 keeps the irreversible APPROTECT burn disabled
 // even when provisioned — for development so dev boards never lose SWD.
 // -----------------------------------------------------------------------------
-#if defined(ARCH_NRF52) && !defined(MESHTASTIC_EXCLUDE_LOCKDOWN)
+#ifndef MESHTASTIC_ENABLE_LOCKDOWN
+#define MESHTASTIC_ENABLE_LOCKDOWN 0
+#endif
+
+#if !MESHTASTIC_ENABLE_LOCKDOWN
+#undef MESHTASTIC_LOCKDOWN
+#undef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+#undef MESHTASTIC_ENCRYPTED_STORAGE
+#undef MESHTASTIC_ENABLE_APPROTECT
+#ifndef MESHTASTIC_EXCLUDE_LOCKDOWN
+#define MESHTASTIC_EXCLUDE_LOCKDOWN 1
+#endif
+#endif
+
+#if defined(ARCH_NRF52) && MESHTASTIC_ENABLE_LOCKDOWN && !defined(MESHTASTIC_EXCLUDE_LOCKDOWN)
 #define MESHTASTIC_LOCKDOWN 1
 #define MESHTASTIC_PHONEAPI_ACCESS_CONTROL 1
 #define MESHTASTIC_ENCRYPTED_STORAGE 1
