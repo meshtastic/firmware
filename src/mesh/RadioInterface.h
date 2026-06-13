@@ -123,6 +123,9 @@ class RadioInterface
 
     virtual ~RadioInterface() {}
 
+    /// Fires once per valid received LoRa packet (arg = sender NodeNum). Used e.g. to flash LED_LORA.
+    static Observable<uint32_t> loraRxPacketObservable;
+
     /**
      * Coerce LoRa config fields (bandwidth/spread_factor) derived from presets.
      * This is used during early bootstrapping so UIs that display these fields directly remain consistent.
