@@ -565,7 +565,7 @@ void TrafficManagementModule::preloadNextHopsFromNodeDB()
     concurrency::LockGuard guard(&cacheLock);
     const size_t count = nodeDB->getNumMeshNodes();
     for (size_t i = 0; i < count; i++) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
         if (!node || node->num == 0 || node->next_hop == 0)
             continue;
 
