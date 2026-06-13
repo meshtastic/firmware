@@ -231,6 +231,17 @@ class NodeDB
      */
     void set_favorite(bool is_favorite, uint32_t nodeId);
 
+    /// Count of eviction-protected (favourite/ignored/manually-verified) nodes.
+    int numProtectedNodes() const;
+
+    /// Turn an eviction-protection flag (favourite/ignored/verified) on or off,
+    /// capped so the protected set never exceeds MAX_NUM_NODES-2 — keeping at
+    /// least two always-evictable slots. Turning a flag off always succeeds;
+    /// turning one on for a node that isn't already protected returns false
+    /// (and changes nothing) once the cap is reached. Callers surface that to
+    /// the user where appropriate.
+    bool setProtectedFlag(meshtastic_NodeInfoLite *node, uint32_t mask, bool on);
+
     /*
      * Returns true if the node is in the NodeDB and marked as favorite
      */
@@ -296,6 +307,10 @@ class NodeDB
 
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
+    /// Find a node in our DB, create an empty NodeInfoLite if missing (evicting
+    /// the oldest non-protected node when full). Public so admin handlers can
+    /// register a node we have not heard from yet (e.g. to block it by ID).
+    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 
 #if WARM_NODE_COUNT > 0
     // Warm ("long-tail") tier: minimal {num, last_heard, public_key} records
@@ -454,8 +469,6 @@ class NodeDB
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;          // When last sorted the nodeDB
-    /// Find a node in our DB, create an empty NodeInfoLite if missing
-    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 
     /*
      * Internal boolean to track sorting paused
@@ -468,6 +481,12 @@ class NodeDB
     /// read our db from flash
     void loadFromDisk();
 
+#ifdef PIO_UNIT_TESTING
+    // Grant the unit-test shim access to the private maintenance paths below
+    // (migration / cleanup / eviction) without relaxing production access.
+    friend class NodeDBTestShim;
+#endif
+
     /// purge db entries without user info
     void cleanupMeshDB();
 
@@ -479,10 +498,9 @@ class NodeDB
 #if WARM_NODE_COUNT > 0
     /// On load, a database from a larger-cap build (notably the pre-fork 150-node
     /// nRF52 hot store) can exceed MAX_NUM_NODES. Rank the hot store so the
-    /// freshest MAX_NUM_NODES survive and demote the oldest overflow into the
-    /// warm tier, preserving {num, last_heard, public_key} so PKI DMs keep
-    /// working instead of dropping those nodes on truncation. Caller truncates
-    /// the hot store to MAX_NUM_NODES afterwards.
+    /// freshest survive and demote the oldest overflow into the warm tier,
+    /// preserving {num, last_heard, public_key} so PKI DMs keep working instead
+    /// of dropping those nodes on truncation.
     void demoteOldestHotNodesToWarm();
 #endif
 
@@ -605,6 +623,12 @@ inline bool nodeInfoLiteIsKeyManuallyVerified(const meshtastic_NodeInfoLite *n)
 inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
+}
+/// A node that the eviction/migration paths must not drop: a favourite, an
+/// ignored (blocked) node, or a manually-verified key.
+inline bool nodeInfoLiteIsProtected(const meshtastic_NodeInfoLite *n)
+{
+    return nodeInfoLiteIsFavorite(n) || nodeInfoLiteIsIgnored(n) || nodeInfoLiteIsKeyManuallyVerified(n);
 }
 
 inline void nodeInfoLiteSetBit(meshtastic_NodeInfoLite *n, uint32_t mask, bool value)

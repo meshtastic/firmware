@@ -182,7 +182,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                     LOG_INFO("PKC admin valid, but not auto-favoriting node %x because role==CLIENT_BASE", mp.from);
                 } else {
                     LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
-                    nodeInfoLiteSetBit(remoteNode, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+                    nodeDB->setProtectedFlag(remoteNode, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
                 }
             }
         } else {
@@ -472,10 +472,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client received set_favorite_node command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
         if (node != NULL) {
-            nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
-            saveChanges(SEGMENT_NODEDATABASE, false);
-            if (screen)
-                screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
+            if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                saveChanges(SEGMENT_NODEDATABASE, false);
+                if (screen)
+                    screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
+            } else if (mp.from == 0) { // local request from the phone — tell the user why it didn't take
+                sendWarning("Can't favorite 0x%08x: protected-node limit (%d) reached", r->set_favorite_node, MAX_NUM_NODES - 2);
+            }
         }
         break;
     }
@@ -492,13 +495,17 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_set_ignored_node_tag: {
         LOG_INFO("Client received set_ignored_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_ignored_node);
+        // Unlike the sibling node-targeted admin commands, create the entry if
+        // it's absent so the block sticks for a node we've not heard from yet
+        // (e.g. one a remote admin asks us to block) with no NodeInfo or key.
+        meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(r->set_ignored_node);
         if (node != NULL) {
-            nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
-            nodeDB->eraseNodeSatellites(node->num);
-            node->public_key.size = 0;
-            memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
+                nodeDB->eraseNodeSatellites(node->num);
+                saveChanges(SEGMENT_NODEDATABASE, false);
+            } else if (mp.from == 0) { // local request from the phone — tell the user why it didn't take
+                sendWarning("Can't ignore 0x%08x: protected-node limit (%d) reached", r->set_ignored_node, MAX_NUM_NODES - 2);
+            }
         }
         break;
     }
