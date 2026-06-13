@@ -20,6 +20,7 @@
 #include "LIS3DHSensor.h"
 #include "LSM6DS3Sensor.h"
 #include "MPU6050Sensor.h"
+#include "MPU9250Sensor.h"
 #include "MotionSensor.h"
 #ifdef HAS_QMA6100P
 #include "QMA6100PSensor.h"
@@ -120,6 +121,9 @@ class AccelerometerThread : public concurrency::OSThread
             sensor = new ICM20948Sensor(device);
             break;
 #endif
+        case ScanI2C::DeviceType::MPU9250:
+            sensor = new MPU9250Sensor(device);
+            break;
 #if __has_include(<ICM42670P.h>)
         case ScanI2C::DeviceType::ICM42607P:
             sensor = new ICM42607PSensor(device);
