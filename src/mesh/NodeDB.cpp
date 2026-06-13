@@ -2942,6 +2942,73 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
     return NULL;
 }
 
+ResolvedNode NodeDB::resolveLastByte(uint8_t lastByte, bool requireDirectNeighbor)
+{
+    ResolvedNode result; // defaults to {None, 0}
+
+    // 0 is the NO_RELAY_NODE / NO_NEXT_HOP_PREFERENCE sentinel (also what MQTT-sourced packets carry
+    // when hop_start==0). getLastByteOfNodeNum() never yields 0, so nothing can legitimately match.
+    if (lastByte == 0)
+        return result;
+
+    const NodeNum self = getNodeNum();
+    NodeNum firstMatch = 0;
+    uint8_t matches = 0;
+
+    for (size_t i = 0; i < numMeshNodes; i++) {
+        const meshtastic_NodeInfoLite *node = &meshNodes->at(i);
+
+        // Candidate gate: never resolve to ourselves, the sentinels, or an ignored node.
+        if (node->num == self || node->num == 0 || node->num == NODENUM_BROADCAST)
+            continue;
+        if (nodeInfoLiteIsIgnored(node))
+            continue;
+        if (getLastByteOfNodeNum(node->num) != lastByte) // cheapest discriminator last
+            continue;
+
+        // Relevance gate: is this node a plausible relay for the requested scope?
+        bool relevant;
+        if (requireDirectNeighbor) {
+            relevant = node->has_hops_away && node->hops_away == 0 && sinceLastSeen(node) < NEXTHOP_NEIGHBOR_FRESH_SECS;
+        } else {
+            const bool directNeighbor = node->has_hops_away && node->hops_away == 0;
+            const bool routerRole =
+                IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                          meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
+            relevant = directNeighbor || nodeInfoLiteIsFavorite(node) || routerRole;
+        }
+        if (!relevant)
+            continue;
+
+        if (++matches == 1) {
+            firstMatch = node->num;
+        } else {
+            // A second relevant candidate shares this byte: ambiguous. No further scanning can
+            // change that, so stop early and report the collision.
+            result.status = LastByteResolution::Ambiguous;
+            result.num = 0;
+            return result;
+        }
+    }
+
+    if (matches == 1) {
+        result.status = LastByteResolution::Unique;
+        result.num = firstMatch;
+    }
+    return result;
+}
+
+bool NodeDB::resolveUniqueLastByte(uint8_t lastByte, bool requireDirectNeighbor, NodeNum *outNum)
+{
+    ResolvedNode r = resolveLastByte(lastByte, requireDirectNeighbor);
+    if (r.status == LastByteResolution::Unique) {
+        if (outNum)
+            *outNum = r.num;
+        return true;
+    }
+    return false;
+}
+
 // returns true if the maximum number of nodes is reached or we are running low on memory
 bool NodeDB::isFull()
 {

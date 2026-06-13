@@ -114,6 +114,20 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
+/// Outcome of mapping a single on-wire last-byte (next_hop / relay_node) back to a full NodeNum.
+/// Because the wire only carries the last byte of a 32-bit node number, the mapping is ambiguous on
+/// dense meshes (the "birthday problem"). Callers must treat Ambiguous and None as "don't trust it".
+enum class LastByteResolution : uint8_t {
+    None,      ///< no relevant candidate node has this last byte
+    Unique,    ///< exactly one relevant candidate -> `num` is valid
+    Ambiguous, ///< two or more relevant candidates collide on this byte
+};
+
+struct ResolvedNode {
+    LastByteResolution status = LastByteResolution::None;
+    NodeNum num = 0; ///< valid only when status == Unique
+};
+
 /// Given a packet, return the number of hops used to reach this node.
 /// Returns defaultIfUnknown if the number of hops couldn't be determined.
 int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown = -1);
@@ -295,6 +309,23 @@ class NodeDB
 
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
+
+    /**
+     * Resolve a single on-wire last-byte (e.g. next_hop / relay_node) back to a unique full NodeNum,
+     * detecting last-byte collisions instead of silently picking the first match. A 1-byte id only
+     * needs to be unique among a node's plausible relays, not the whole mesh, so we scope the search:
+     *  - requireDirectNeighbor == true  : candidates are direct neighbors (hops_away==0) heard within
+     *                                     NEXTHOP_NEIGHBOR_FRESH_SECS. Use on the SEND path.
+     *  - requireDirectNeighbor == false : also accept favorites and router-role nodes (unknown hop
+     *                                     distance allowed). Use when learning / preserving hops.
+     * Ignored nodes, our own node, and the broadcast/0 sentinels are never candidates. On a tie the
+     * result is Ambiguous (no tie-break) so callers fall back to flooding rather than misroute.
+     */
+    ResolvedNode resolveLastByte(uint8_t lastByte, bool requireDirectNeighbor);
+
+    /// Convenience wrapper around resolveLastByte(): true iff exactly one relevant candidate matches.
+    /// Ambiguous and None both return false (the safe answer for learning / hop preservation).
+    bool resolveUniqueLastByte(uint8_t lastByte, bool requireDirectNeighbor, NodeNum *outNum = nullptr);
 
     // Thread-safe satellite-map accessors. Return false if absent or the
     // corresponding DB is compiled out.
