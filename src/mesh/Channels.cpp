@@ -440,6 +440,17 @@ bool Channels::usesPublicKey(ChannelIndex chIndex)
     return (psk.size == sizeof(defaultpsk) && memcmp(psk.bytes, defaultpsk, sizeof(defaultpsk) - 1) == 0);
 }
 
+bool Channels::isPublicChannel(ChannelIndex chIndex)
+{
+    const auto &ch = getByIndex(chIndex);
+    if (ch.settings.psk.size > 1)
+        return false;
+    const char *name = getName(chIndex);
+    const char *presetName =
+        DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+    return strcmp(name, presetName) == 0;
+}
+
 bool Channels::hasDefaultChannel()
 {
     // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default channel
