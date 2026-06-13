@@ -27,6 +27,12 @@
 #include "RadioInterface.h"
 #include "TypeConversions.h"
 #include "mesh/RadioLibInterface.h"
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+#include "mesh/PhoneAPI.h"
+#endif
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
 
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -76,6 +82,26 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // if handled == false, then let others look at this message also if they want
     bool handled = false;
     assert(r);
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // While storage is locked, drop every admin payload — both local and
+    // remote (PKC, mesh-relayed). Lockdown unlock is the prerequisite for
+    // any admin operation: operators must authenticate via lockdown_auth
+    // first. The lockdown_auth path itself is handled synchronously in
+    // PhoneAPI::handleToRadioPacket before reaching here, so the real
+    // unlock flow is not affected by this gate. Without this, a remote
+    // PKC-authorized peer (or a USERPREFS-baked admin_key) could drive
+    // factory_reset / set_config against a locked device before the
+    // operator has even unlocked it.
+    // Only gate when lockdown is ACTIVE. A lockdown-capable build that hasn't
+    // been provisioned (or was disabled) is not unlocked either, but must
+    // still serve admin normally — so check isLockdownActive() first.
+    if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
+        LOG_WARN("AdminModule: dropping admin payload — storage locked");
+        return handled;
+    }
+#endif
+
     bool fromOthers = !isFromUs(&mp);
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         return handled;
@@ -86,10 +112,27 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (messageIsResponse(r)) {
         LOG_DEBUG("Allow admin response message");
     } else if (mp.from == 0) {
+        // Local admin from a BLE/USB/TCP client. from == 0 cannot arrive from the
+        // mesh: RF drops packets without a sender (RadioLibInterface) and MQTT treats
+        // from == 0 as our own downlink and ignores it. Clients may set pki_encrypted
+        // on self-addressed admin (the python CLI does), so don't use it to reroute
+        // local packets into the remote-PKC key check.
+        //
+        // Under MESHTASTIC_PHONEAPI_ACCESS_CONTROL, the per-connection auth
+        // gate lives in PhoneAPI::handleToRadioPacket — any local admin
+        // payload other than lockdown_auth is dropped there if the
+        // originating connection is unauthorized. By the time we reach
+        // this branch the connection has already proven the passphrase,
+        // so is_managed needs no additional gate here.
+        //
+        // Without that build flag the legacy is_managed semantics still
+        // apply: refuse all plain local admin and require PKC instead.
+#ifndef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         if (config.security.is_managed) {
             LOG_INFO("Ignore local admin payload because is_managed");
             return handled;
         }
+#endif
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
             LOG_INFO("Ignore admin channel, legacy admin is disabled");
@@ -104,6 +147,17 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             (config.security.admin_key[2].size == 32 &&
              memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
             LOG_INFO("PKC admin payload with authorized sender key");
+
+            // Note: PKC admin does NOT automatically authorize the
+            // originating local PhoneAPI connection for content
+            // redaction purposes. PKC and the per-connection lockdown
+            // auth slot are independent gates — operators using PKC
+            // admin from a local app should still send lockdown_auth
+            // separately to unlock the redacted FromRadio stream.
+            // (The previous auto-authorize path read a shared
+            // g_currentContext set during synchronous PhoneAPI
+            // dispatch; by the time this Router-thread handler runs
+            // that pointer is unrelated, so the path was unsafe.)
 
             // Automatically favorite the node that is using the admin key
             auto remoteNode = nodeDB->getMeshNode(mp.from);
@@ -140,6 +194,17 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
     }
     switch (r->which_payload_variant) {
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // lockdown_auth is handled synchronously in
+    // PhoneAPI::handleToRadioPacket — see handleLockdownAuthInline. A
+    // packet should not normally reach AdminModule under that flag set,
+    // but if it ever does (e.g. injected via a non-PhoneAPI path), drop
+    // it silently rather than leaking a partial response.
+    case meshtastic_AdminMessage_lockdown_auth_tag:
+        LOG_WARN("AdminModule: lockdown_auth reached Router/AdminModule path; ignoring (should be handled in PhoneAPI)");
+        return handled;
+#endif // MESHTASTIC_ENCRYPTED_STORAGE
 
     /**
      * Getters
@@ -481,7 +546,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if HAS_SCREEN
         IF_SCREEN(screen->showSimpleBanner("Device is rebooting\ninto DFU mode.", 0));
 #endif
-#if defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
+#if defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32)
         enterDfuMode();
 #endif
         break;
@@ -625,10 +690,15 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     int changed = 0;
 
     if (*o.long_name) {
-        changed |= strcmp(owner.long_name, o.long_name);
-        strncpy(owner.long_name, o.long_name, sizeof(owner.long_name));
+        // Apps built against the older 39-byte limit may send longer names; clamp
+        // before the changed-compare so re-sending the same long name is a no-op.
+        char longName[sizeof(o.long_name)];
+        strncpy(longName, o.long_name, sizeof(longName));
+        longName[sizeof(longName) - 1] = '\0';
+        clampLongName(longName);
+        changed |= strcmp(owner.long_name, longName);
+        strncpy(owner.long_name, longName, sizeof(owner.long_name));
         owner.long_name[sizeof(owner.long_name) - 1] = '\0';
-        sanitizeUtf8(owner.long_name, sizeof(owner.long_name));
     }
     if (*o.short_name) {
         changed |= strcmp(owner.short_name, o.short_name);
@@ -829,7 +899,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 }
                 if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
                     //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                    sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+                    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
                 }
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             } else {
@@ -840,12 +910,38 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 
         if (!RadioInterface::validateConfigLora(validatedLora)) {
             if (fromOthers) {
-                LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
-                //  modem_preset set to use the old setting if the check fails
-                validatedLora.modem_preset = oldLoraConfig.modem_preset;
+                // A preset locked to a sibling EU region still swaps the region for remote admin;
+                // any other invalid config is rejected outright.
+                const RegionInfo *swapRegion =
+                    validatedLora.use_preset
+                        ? RadioInterface::regionSwapForPreset(validatedLora.region, validatedLora.modem_preset)
+                        : NULL;
+                if (swapRegion) {
+                    validatedLora.region = swapRegion->code;
+                }
+                if (!swapRegion || !RadioInterface::validateConfigLora(validatedLora)) {
+                    LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
+                    // Rejecting means rejecting everything: a partial restore of region/preset
+                    // could still apply other fields the validation already deemed invalid.
+                    validatedLora = oldLoraConfig;
+                }
             } else {
                 LOG_WARN("Invalid LoRa config received from client, using corrected values");
                 RadioInterface::clampConfigLora(validatedLora);
+            }
+            // A preset locked to a sibling EU region swaps the region during the clamp;
+            // apply the same housekeeping as an explicit region change.
+            if (validatedLora.region != oldLoraConfig.region) {
+                config.lora.region = validatedLora.region;
+                initRegion();
+                if (getEffectiveDutyCycle() < 100) {
+                    validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
+                }
+                if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+                    //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
+                    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
+                }
+                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             }
             //  use_preset and bandwidth are coerced into valid values by the check.
         }
@@ -895,22 +991,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // If the client set the key to blank, go ahead and regenerate so long as we're not in ham mode
-        if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            if (config.security.private_key.size != 32) {
-                crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-
-            } else {
-                if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                    config.security.public_key.size = 32;
-                }
-            }
+        // Only regenerate keys if the private key is not 32 bytes
+        if (config.security.private_key.size != 32) {
+            nodeDB->generateCryptoKeyPair();
         }
-#endif
-        owner.public_key.size = config.security.public_key.size;
-        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
-#if !MESHTASTIC_EXCLUDE_PKI
-        crypto->setDHPrivateKey(config.security.private_key.bytes);
+        // If user provided a private key of correct size but no public key, generate the public key from private key
+        else if (config.security.private_key.size == 32 && config.security.public_key.size == 0) {
+            nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
+        }
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
                                             config.security.admin_key[2].size == 32)) {
@@ -920,9 +1008,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             sendWarning(warning);
         }
 
-        if (config.security.debug_log_api_enabled == c.payload_variant.security.debug_log_api_enabled &&
-            config.security.serial_enabled == c.payload_variant.security.serial_enabled)
-            requiresReboot = false;
+        changes = SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+
+        requiresReboot = true;
 
         break;
     case meshtastic_Config_device_ui_tag:
@@ -1462,6 +1550,10 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
         sendWarning(licensedModeMessage);
     }
     channels.onConfigChanged();
+
+    if (strcmp(p.call_sign, "N0CALL") == 0) {
+        config.lora.tx_enabled = false;
+    }
 
     service->reloadOwner(false);
     saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);

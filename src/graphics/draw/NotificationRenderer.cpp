@@ -66,6 +66,15 @@ uint32_t pow_of_10(uint32_t n)
     return ret;
 }
 
+uint64_t pow_of_16(uint32_t n)
+{
+    uint64_t ret = 1;
+    for (uint32_t i = 0; i < n; i++) {
+        ret *= 16ULL;
+    }
+    return ret;
+}
+
 char graphics::NotificationRenderer::alertBannerLines[MAX_LINES + 1][64] = {};
 uint8_t graphics::NotificationRenderer::alertBannerLineCount = 0;
 graphics::NotificationRenderer::BannerFont graphics::NotificationRenderer::alertBannerLineFonts[MAX_LINES + 1] = {};
@@ -251,6 +260,12 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         break;
     case notificationTypeEnum::text_banner:
     case notificationTypeEnum::selection_picker:
+    case notificationTypeEnum::pairing_pin:
+        // pairing_pin is rendered the same as text_banner — it's just a
+        // text banner. The split type exists only so the lockdown UI
+        // short-circuit in Screen.cpp can recognise the BLE pair-PIN
+        // banner as the one safe banner to composite over the LOCKED
+        // frame.
         drawAlertBannerOverlay(display, state);
         break;
     case notificationTypeEnum::node_picker:
@@ -258,6 +273,9 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         break;
     case notificationTypeEnum::number_picker:
         drawNumberPicker(display, state);
+        break;
+    case notificationTypeEnum::hex_picker:
+        drawHexPicker(display, state);
         break;
     }
 }
@@ -332,6 +350,105 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
     for (uint16_t i = 0; i < numDigits; i++) {
         // Modulo minus modulo to return just the current number
         digits += std::to_string((currentNumber % (pow_of_10(numDigits - i))) / (pow_of_10(numDigits - i - 1))) + " ";
+        if (curSelected == i) {
+            arrowPointer += "^ ";
+        } else {
+            arrowPointer += "_ ";
+        }
+    }
+
+    linePointers[lineCount++] = digits.c_str();
+    linePointers[lineCount++] = arrowPointer.c_str();
+
+    drawNotificationBox(display, state, linePointers, totalLines, 0);
+}
+
+void NotificationRenderer::drawHexPicker(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    const char *lineStarts[MAX_LINES + 1] = {0};
+    uint16_t lineCount = 0;
+
+    // Parse lines
+    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
+    lineStarts[lineCount] = alertBannerMessage;
+
+    // Find lines
+    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
+        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
+        if (lineStarts[lineCount + 1][0] == '\n')
+            lineStarts[lineCount + 1] += 1;
+        lineCount++;
+    }
+    // modulo to extract
+    uint8_t this_digit = (currentNumber % (pow_of_16(numDigits - curSelected))) / (pow_of_16(numDigits - curSelected - 1));
+    // Handle input
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS ||
+        inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
+        if (this_digit == 15) {
+            currentNumber -= 15 * (pow_of_16(numDigits - curSelected - 1));
+        } else {
+            currentNumber += (pow_of_16(numDigits - curSelected - 1));
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS ||
+               inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
+        if (this_digit == 0) {
+            currentNumber += 15 * (pow_of_16(numDigits - curSelected - 1));
+        } else {
+            currentNumber -= (pow_of_16(numDigits - curSelected - 1));
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
+        if (inEvent.kbchar > 47 && inEvent.kbchar < 58) { // have a digit
+            currentNumber -= this_digit * (pow_of_16(numDigits - curSelected - 1));
+            currentNumber += (inEvent.kbchar - 48) * (pow_of_16(numDigits - curSelected - 1));
+            curSelected++;
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
+        curSelected++;
+    } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
+        curSelected--;
+    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+               alertBannerUntil != 0) {
+        resetBanner();
+        return;
+    }
+    if (curSelected == static_cast<int8_t>(numDigits)) {
+        alertBannerCallback(currentNumber);
+        resetBanner();
+        return;
+    }
+
+    inEvent.inputEvent = INPUT_BROKER_NONE;
+    if (alertBannerMessage[0] == '\0')
+        return;
+
+    uint16_t totalLines = lineCount + 2;
+    const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
+
+    // copy the linestarts to display to the linePointers holder
+    for (uint16_t i = 0; i < lineCount; i++) {
+        linePointers[i] = lineStarts[i];
+    }
+    std::string digits = " ";
+    std::string arrowPointer = " ";
+    for (uint16_t i = 0; i < numDigits; i++) {
+        // Modulo minus modulo to return just the current number
+        uint8_t digitValue = (currentNumber % (pow_of_16(numDigits - i))) / (pow_of_16(numDigits - i - 1));
+        if (digitValue < 10) {
+            digits += std::to_string(digitValue) + " ";
+        } else if (digitValue == 10) {
+            digits += "A ";
+        } else if (digitValue == 11) {
+            digits += "B ";
+        } else if (digitValue == 12) {
+            digits += "C ";
+        } else if (digitValue == 13) {
+            digits += "D ";
+        } else if (digitValue == 14) {
+            digits += "E ";
+        } else if (digitValue == 15) {
+            digits += "F ";
+        }
+
         if (curSelected == i) {
             arrowPointer += "^ ";
         } else {

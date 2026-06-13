@@ -155,8 +155,19 @@ class GPS : private concurrency::OSThread
      * @return true if we've acquired a new location
      */
     virtual bool lookForLocation();
+    // Load persisted GPS model+baud from /prefs.
+    bool loadProbeCache();
+    // Clear persisted GPS model+baud cache.
+    void clearProbeCache();
+    // Persist the currently detected GPS model+baud.
+    bool saveProbeCache() const;
+    // Verify the cached model+baud still maps to a live GPS device.
+    bool verifyCachedProbePresence();
 
     GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
+    int32_t detectedBaud = GPS_BAUDRATE;
+    int32_t cachedProbeBaud = 0;
+    GnssModel_t cachedProbeModel = GNSS_MODEL_UNKNOWN;
 
     TinyGPSPlus reader;
     uint8_t fixQual = 0; // fix quality from GPGGA
@@ -178,6 +189,12 @@ class GPS : private concurrency::OSThread
 
     uint8_t speedSelect = 0;
     uint8_t probeTries = 0;
+    // Cache file is successfully loaded.
+    bool hasProbeCache = false;
+    // Ensures cached probe is attempted once per boot.
+    bool triedProbeCache = false;
+    // Latched when cached presence check fails
+    bool cachedProbeFailedThisBoot = false;
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
