@@ -23,6 +23,7 @@ struct CryptoKey {
 
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
+#define XEDDSA_SIGNATURE_SIZE 64
 
 class CryptoEngine
 {
@@ -37,7 +38,12 @@ class CryptoEngine
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
     virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
     virtual bool ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user);
-
+#endif
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+    bool xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
+                     uint8_t *signature);
+    bool xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload,
+                       size_t payloadLen, const uint8_t *signature);
 #endif
     void setDHPrivateKey(uint8_t *_private_key);
     // The remotePublic key parameter takes the public_key bytes container from
@@ -85,6 +91,14 @@ class CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_PKI)
     uint8_t shared_key[32] = {0};
     uint8_t private_key[32] = {0};
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+    uint8_t xeddsa_public_key[32] = {0};
+    uint8_t xeddsa_private_key[32] = {0};
+    void curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubkey);
+    // Single-entry cache for curve_to_ed_pub conversion (avoids expensive field inversion per packet)
+    uint8_t cached_curve_pubkey[32] = {0};
+    uint8_t cached_ed_pubkey[32] = {0};
+#endif
 #endif
     /**
      * Init our 128 bit nonce for a new packet
