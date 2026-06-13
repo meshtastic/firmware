@@ -1551,7 +1551,10 @@ void NodeDB::cleanupMeshDB()
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
         meshtastic_NodeInfoLite &n = meshNodes->at(i);
-        if (nodeInfoLiteHasUser(&n)) {
+        // Keep ignored (blocked) nodes even without user info: a block set by
+        // bare node ID has no NodeInfo and would otherwise be purged here,
+        // silently dropping the block.
+        if (nodeInfoLiteHasUser(&n) || nodeInfoLiteIsIgnored(&n)) {
             if (n.public_key.size > 0) {
                 if (memfll(n.public_key.bytes, 0, n.public_key.size)) {
                     n.public_key.size = 0;
@@ -1725,23 +1728,26 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 #if WARM_NODE_COUNT > 0
 void NodeDB::demoteOldestHotNodesToWarm()
 {
-    if (numMeshNodes <= MAX_NUM_NODES)
+    const int keep = MAX_NUM_NODES;
+    if (numMeshNodes <= keep)
         return;
 
-    // Rank: favorites ahead of recency (a user-marked node is never demoted in
-    // favour of a more-recently-heard stranger), then most-recently-heard first.
-    // After the sort, [0, MAX_NUM_NODES) are the keepers and the tail is overflow.
-    std::sort(meshNodes->begin(), meshNodes->begin() + numMeshNodes,
+    // Favorites, ignored (blocked) and manually-verified nodes rank ahead of
+    // recency — the same protection getOrCreateMeshNode applies on eviction — so
+    // they are demoted only when the store is full of them. Within a class,
+    // most-recently-heard first. Index 0 is our own node and is left in place
+    // (sort begins at +1), as in the runtime eviction scan.
+    std::sort(meshNodes->begin() + 1, meshNodes->begin() + numMeshNodes,
               [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
-                  const bool fa = nodeInfoLiteIsFavorite(&a);
-                  const bool fb = nodeInfoLiteIsFavorite(&b);
-                  if (fa != fb)
-                      return fa;
+                  const bool ka = nodeInfoLiteIsProtected(&a);
+                  const bool kb = nodeInfoLiteIsProtected(&b);
+                  if (ka != kb)
+                      return ka;
                   return a.last_heard > b.last_heard;
               });
 
     int demoted = 0;
-    for (int i = MAX_NUM_NODES; i < numMeshNodes; i++) {
+    for (int i = keep; i < numMeshNodes; i++) {
         const meshtastic_NodeInfoLite &n = (*meshNodes)[i];
         if (n.num == 0)
             continue;
@@ -1750,7 +1756,8 @@ void NodeDB::demoteOldestHotNodesToWarm()
         warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr);
         demoted++;
     }
-    LOG_INFO("NodeDB migration: demoted %d oldest node(s) above MAX_NUM_NODES %d into the warm tier", demoted, MAX_NUM_NODES);
+    numMeshNodes = keep; // the resize() in loadFromDisk reclaims the demoted tail
+    LOG_INFO("NodeDB migration: demoted %d node(s) over %d into the warm tier (keepers preferred)", demoted, keep);
 }
 #endif
 
@@ -2796,16 +2803,12 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     info->num = contact.node_num;
     TypeConversions::CopyUserToNodeInfoLite(info, contact.user);
     if (contact.should_ignore) {
-        // If should_ignore is set,
-        // we need to clear the public key and other cruft, in addition to setting the node as ignored
-        nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+        // Block the contact and drop its rich satellite data, but keep the
+        // public key copied above — an ignored peer keeps a usable identity
+        // (a verifiable target) rather than a bare node number.
+        setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
         eraseNodeSatellites(contact.node_num);
-#if WARM_NODE_COUNT > 0
-        warmStore.remove(contact.node_num); // ignored: drop the retained key too
-#endif
-        info->public_key.size = 0;
-        memset(info->public_key.bytes, 0, sizeof(info->public_key.bytes));
     } else {
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
@@ -2824,12 +2827,12 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         } else {
             // Normal case: set is_favorite to prevent expiration.
             // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
-            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+            setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
         }
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
         if (contact.manually_verified) {
-            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK, true);
+            setProtectedFlag(info, NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK, true);
         }
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
@@ -2962,13 +2965,42 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     }
 }
 
+int NodeDB::numProtectedNodes() const
+{
+    int count = 0;
+    for (int i = 0; i < numMeshNodes; i++)
+        if (nodeInfoLiteIsProtected(&meshNodes->at(i)))
+            count++;
+    return count;
+}
+
+bool NodeDB::setProtectedFlag(meshtastic_NodeInfoLite *node, uint32_t mask, bool on)
+{
+    if (!node)
+        return false;
+    if (!on) {
+        nodeInfoLiteSetBit(node, mask, false);
+        return true;
+    }
+    // Adding a flag to a node that is already protected doesn't grow the
+    // protected set, so it's always allowed. A newly-protected node is refused
+    // once the protected set has reached MAX_NUM_NODES-2, leaving two evictable
+    // slots so getOrCreateMeshNode can always make room.
+    if (nodeInfoLiteIsProtected(node) || numProtectedNodes() < MAX_NUM_NODES - 2) {
+        nodeInfoLiteSetBit(node, mask, true);
+        return true;
+    }
+    return false;
+}
+
 void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
 {
     meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
     if (lite && nodeInfoLiteIsFavorite(lite) != is_favorite) {
-        nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_IS_FAVORITE_MASK, is_favorite);
-        sortMeshDB();
-        saveNodeDatabaseToDisk();
+        if (setProtectedFlag(lite, NODEINFO_BITFIELD_IS_FAVORITE_MASK, is_favorite)) {
+            sortMeshDB();
+            saveNodeDatabaseToDisk();
+        }
     }
 }
 
@@ -3174,6 +3206,12 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 (numMeshNodes)--;
             }
         }
+        // Don't append past the end of the vector. The protected-node cap
+        // (numProtectedNodes() <= MAX_NUM_NODES-2) means the eviction above frees
+        // a slot in normal operation; this guards the legacy case of a pre-cap
+        // database that is full of protected nodes — refuse rather than overrun.
+        if (numMeshNodes >= MAX_NUM_NODES)
+            return NULL;
         // add the node at the end
         lite = &meshNodes->at((numMeshNodes)++);
 

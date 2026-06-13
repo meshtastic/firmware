@@ -1618,9 +1618,10 @@ void menuHandler::manageNodeMenu()
             if (nodeInfoLiteIsIgnored(n)) {
                 nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
                 LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
-            } else {
-                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+            } else if (nodeDB->setProtectedFlag(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
                 LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
+            } else {
+                LOG_WARN("Can't ignore %08X: protected-node limit reached", menuHandler::pickedNodeNum);
             }
             nodeDB->notifyObservers(true);
             nodeDB->saveToDisk();
