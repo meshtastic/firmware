@@ -63,6 +63,8 @@ const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, false, true, 
 // Ham '100kHz' profile. 62.5kHz bandwidth coerced to 100kHz via padding.
 const RegionProfile PROFILE_HAM_100KHZ = {PRESETS_NARROW, 0, 0.01875f, false, true, 0, 1, 1};
 
+Observable<uint32_t> RadioInterface::loraRxPacketObservable;
+
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
     {                                                                                                                            \

@@ -1,6 +1,7 @@
 #include "StatusLEDModule.h"
 #include "MeshService.h"
 #include "configuration.h"
+#include "mesh/RadioInterface.h"
 #include <Arduino.h>
 
 /*
@@ -16,6 +17,9 @@ StatusLEDModule::StatusLEDModule() : concurrency::OSThread("StatusLEDModule")
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (inputBroker)
         inputObserver.observe(inputBroker);
+#endif
+#ifdef LED_LORA
+    loraRxObserver.observe(&RadioInterface::loraRxPacketObservable);
 #endif
 #ifdef NEOPIXEL_STATUS_POWER_PIN
     powerPixel.begin();
@@ -87,6 +91,18 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
 int StatusLEDModule::handleInputEvent(const InputEvent *event)
 {
     lastUserbuttonTime = millis();
+    return 0;
+}
+#endif
+#ifdef LED_LORA
+int StatusLEDModule::handleLoRaRx(uint32_t)
+{
+    // Briefly flash LED_LORA on each received packet. Turn it on now (we share the main thread with
+    // the radio's receive handler, so this is safe) and wake runOnce() at flash end to turn it off.
+    digitalWrite(LED_LORA, LED_STATE_ON);
+    LORA_LED_state = LED_STATE_ON;
+    LORA_LED_starttime = millis();
+    setIntervalFromNow(LORA_RX_LED_FLASH_MS);
     return 0;
 }
 #endif
@@ -225,6 +241,20 @@ int32_t StatusLEDModule::runOnce()
 #endif
 #ifdef Battery_LED_4
     digitalWrite(Battery_LED_4, chargeIndicatorLED4);
+#endif
+
+#ifdef LED_LORA
+    // End the LoRa-RX flash once its duration has elapsed; otherwise make sure we come back
+    // exactly at flash end (only ever clamp my_interval down, so other LED timing is preserved).
+    if (LORA_LED_state == LED_STATE_ON) {
+        uint32_t elapsed = millis() - LORA_LED_starttime;
+        if (elapsed >= LORA_RX_LED_FLASH_MS) {
+            digitalWrite(LED_LORA, LED_STATE_OFF);
+            LORA_LED_state = LED_STATE_OFF;
+        } else if ((uint32_t)my_interval > LORA_RX_LED_FLASH_MS - elapsed) {
+            my_interval = LORA_RX_LED_FLASH_MS - elapsed;
+        }
+    }
 #endif
 
     return (my_interval);

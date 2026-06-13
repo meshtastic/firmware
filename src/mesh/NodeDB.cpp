@@ -448,8 +448,6 @@ NodeDB::NodeDB()
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
-    // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
-    // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
@@ -469,31 +467,18 @@ NodeDB::NodeDB()
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-
-    if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        bool keygenSuccess = false;
-        keyIsLowEntropy = checkLowEntropyPublicKey(config.security.public_key);
-        if (config.security.private_key.size == 32 && !keyIsLowEntropy) {
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                keygenSuccess = true;
-            }
-        } else {
-            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-            keygenSuccess = true;
-        }
-        if (keygenSuccess) {
-            config.security.public_key.size = 32;
-            config.security.private_key.size = 32;
-            owner.public_key.size = 32;
-            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-        }
-    }
+    // Generate crypto keys if needed using consolidated function
+    // Set my node num uint32 value to bytes from the public key (if we have one)
+    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist
+    generateCryptoKeyPair(nullptr);
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
         crypto->setDHPrivateKey(config.security.private_key.bytes);
+        // Set my node num uint32 value to bytes from the new public key
+        myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
     }
 #endif
     // Include our owner in the node db under our nodenum
@@ -3071,6 +3056,99 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
     return false;
 }
 #endif
+
+bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
+{
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    // Only generate keys for non-licensed users and if LoRa region is set
+    if (owner.is_licensed || config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        return false;
+    }
+
+    bool keygenSuccess = false;
+    // Record whether the stored key is a known compromised/low-entropy key so main.cpp can warn the
+    // user. A detected low-entropy key is regenerated below, but the flag stays set so the
+    // "Compromised keys were detected and regenerated" notification still fires.
+    keyIsLowEntropy = checkLowEntropyPublicKey(config.security.public_key);
+
+    // If a specific private key was provided, use it
+    if (privateKey != nullptr) {
+        LOG_INFO("Using provided private key for PKI");
+        memcpy(config.security.private_key.bytes, privateKey, 32);
+        config.security.private_key.size = 32;
+        config.security.public_key.size = 32;
+
+        // Generate public key from the provided private key
+        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+            keygenSuccess = true;
+        } else {
+            LOG_ERROR("Failed to generate public key from provided private key");
+            return false;
+        }
+    }
+    // Try to regenerate public key from existing private key if it's valid and not low entropy
+    else if (config.security.private_key.size == 32 && !keyIsLowEntropy) {
+        config.security.public_key.size = 32;
+        LOG_DEBUG("Regenerate PKI public key from existing private key");
+        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+            keygenSuccess = true;
+        }
+    } else {
+        // Generate a new key pair
+        LOG_INFO("Generate new PKI keys");
+        config.security.public_key.size = 32;
+        config.security.private_key.size = 32;
+        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+        keygenSuccess = true;
+    }
+
+    // Update sizes and copy to owner if successful
+    if (keygenSuccess) {
+        owner.public_key.size = 32;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+
+        // Set the DH private key for crypto operations
+        LOG_DEBUG("Set DH private key for crypto operations");
+        crypto->setDHPrivateKey(config.security.private_key.bytes);
+
+        // Conditionally create new identity based on parameter
+        createNewIdentity();
+    }
+    return keygenSuccess;
+#else
+    return false;
+#endif
+}
+
+bool NodeDB::createNewIdentity()
+{
+    uint32_t oldNodeNum = getNodeNum();
+    uint32_t newNodeNum = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
+
+    // If the key hasn't changed, nothing to do
+    if (newNodeNum == oldNodeNum)
+        return false;
+
+    // Retire the old node entry
+    meshtastic_NodeInfoLite *node = getMeshNode(oldNodeNum);
+    if (node != NULL) {
+        LOG_DEBUG("Old node num %u is now %u", oldNodeNum, newNodeNum);
+        nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+        node->public_key.size = 0;
+        memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
+    }
+
+    // Drop satellite-store entries (position/telemetry/environment/status) keyed by the retired
+    // node number so stale data isn't left attached to the old identity.
+    eraseNodeSatellites(oldNodeNum);
+
+    myNodeInfo.my_node_num = newNodeNum;
+
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    TypeConversions::CopyUserToNodeInfoLite(info, owner);
+
+    return true;
+}
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
