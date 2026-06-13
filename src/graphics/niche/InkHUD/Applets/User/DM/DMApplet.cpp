@@ -2,6 +2,8 @@
 
 #include "./DMApplet.h"
 
+#include "MessageStore.h"
+
 using namespace NicheGraphics;
 
 void InkHUD::DMApplet::onActivate()
@@ -92,7 +94,7 @@ void InkHUD::DMApplet::onRender(bool full)
     // ===================
 
     // Parse any non-ascii chars in the message
-    std::string text = parse(latestMessage->dm.text);
+    std::string text = parse(std::string(MessageStore::getText(latestMessage->dm)));
 
     // Extra gap below the header
     int16_t textTop = headerDivY + padDivH;

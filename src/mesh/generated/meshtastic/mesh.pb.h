@@ -325,6 +325,14 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_T_IMPULSE_PLUS = 135,
     /* Lilygo T-Echo Card */
     meshtastic_HardwareModel_T_ECHO_CARD = 136,
+    /* Seeed Tracker L2 */
+    meshtastic_HardwareModel_SEEED_WIO_TRACKER_L2 = 137,
+    /* Elecrow CrowPanel Advance P4 models, ESP32-P4 and TFT with SX1262 radio plugin */
+    meshtastic_HardwareModel_CROWPANEL_P4 = 138,
+    /* Heltec Mesh Tower V2 */
+    meshtastic_HardwareModel_HELTEC_MESH_TOWER_V2 = 139,
+    /* Meshnology W10 */
+    meshtastic_HardwareModel_MESHNOLOGY_W10 = 140,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -621,7 +629,9 @@ typedef enum _meshtastic_MeshPacket_TransportMechanism {
     /* Arrived via Multicast UDP */
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP = 6,
     /* Arrived via API connection */
-    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API = 7
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API = 7,
+    /* Arrived via Unicast UDP */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8
 } meshtastic_MeshPacket_TransportMechanism;
 
 /* Log levels, chosen to match python logging conventions. */
@@ -658,7 +668,14 @@ typedef enum _meshtastic_LockdownStatus_State {
  token's TTL. */
     meshtastic_LockdownStatus_State_UNLOCKED = 3,
     /* Passphrase rejected. backoff_seconds is non-zero when rate-limited. */
-    meshtastic_LockdownStatus_State_UNLOCK_FAILED = 4
+    meshtastic_LockdownStatus_State_UNLOCK_FAILED = 4,
+    /* Lockdown is supported by this firmware but not currently active
+ (no passphrase has been provisioned, or it was disabled via
+ AdminMessage.lockdown_auth.disable). The device is operating in
+ normal, non-encrypted mode. Clients render the lockdown-mode
+ toggle as OFF on receiving this. Distinct from NEEDS_PROVISION,
+ which is only used during an in-progress enable flow. */
+    meshtastic_LockdownStatus_State_DISABLED = 5
 } meshtastic_LockdownStatus_State;
 
 /* Struct definitions */
@@ -765,7 +782,10 @@ typedef struct _meshtastic_User {
  Note: app developers are encouraged to also use the following standard
  node IDs "^all" (for broadcast), "^local" (for the locally connected node) */
     char id[16];
-    /* A full name for this user, i.e. "Kevin Hester" */
+    /* A full name for this user, i.e. "Kevin Hester"
+ Limited to 24 bytes of UTF-8: longer names are accepted from senders
+ built against the older 39-byte limit, but devices truncate them before
+ storing or rebroadcasting. Clients should enforce 24 bytes in their UI. */
     char long_name[40];
     /* A VERY short name, ideally two characters.
  Suitable for a tiny OLED screen */
@@ -1525,16 +1545,16 @@ extern "C" {
 #define _meshtastic_MeshPacket_Delayed_ARRAYSIZE ((meshtastic_MeshPacket_Delayed)(meshtastic_MeshPacket_Delayed_DELAYED_DIRECT+1))
 
 #define _meshtastic_MeshPacket_TransportMechanism_MIN meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL
-#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API
-#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API+1))
+#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP
+#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP+1))
 
 #define _meshtastic_LogRecord_Level_MIN meshtastic_LogRecord_Level_UNSET
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
 #define _meshtastic_LogRecord_Level_ARRAYSIZE ((meshtastic_LogRecord_Level)(meshtastic_LogRecord_Level_CRITICAL+1))
 
 #define _meshtastic_LockdownStatus_State_MIN meshtastic_LockdownStatus_State_STATE_UNSPECIFIED
-#define _meshtastic_LockdownStatus_State_MAX meshtastic_LockdownStatus_State_UNLOCK_FAILED
-#define _meshtastic_LockdownStatus_State_ARRAYSIZE ((meshtastic_LockdownStatus_State)(meshtastic_LockdownStatus_State_UNLOCK_FAILED+1))
+#define _meshtastic_LockdownStatus_State_MAX meshtastic_LockdownStatus_State_DISABLED
+#define _meshtastic_LockdownStatus_State_ARRAYSIZE ((meshtastic_LockdownStatus_State)(meshtastic_LockdownStatus_State_DISABLED+1))
 
 #define meshtastic_Position_location_source_ENUMTYPE meshtastic_Position_LocSource
 #define meshtastic_Position_altitude_source_ENUMTYPE meshtastic_Position_AltSource

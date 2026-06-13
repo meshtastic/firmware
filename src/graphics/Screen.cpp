@@ -41,6 +41,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/UIRenderer.h"
 #include "graphics/TFTColorRegions.h"
 #include "modules/CannedMessageModule.h"
+#include "security/LockdownDisplay.h"
 
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -50,6 +51,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "RadioLibInterface.h"
+#include "SPILock.h"
 #include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
@@ -118,8 +120,76 @@ static inline void prepareFrameColorRegions()
 }
 #endif
 
+#ifdef MESHTASTIC_LOCKDOWN
+// Static lock screen drawn in place of normal frames when
+// meshtastic_security::shouldRedactDisplay() returns true. Renders centered
+// "LOCKED" plus battery so the operator can see the device is alive and
+// charged without leaking any node/channel/message/position content.
+// Draw the LOCKED frame into the host-side framebuffer. Does NOT commit
+// to the panel — the caller is responsible for calling display->display()
+// once it has composited any overlays on top. Committing here would cause
+// visible flicker between "just LOCKED" and "LOCKED + banner overlay" when
+// the pairing-PIN special-case in updateUiFrame paints the overlay after
+// this returns.
+static void drawLockdownLockScreenIntoBuffer(OLEDDisplay *display)
+{
+    display->clear();
+
+    const int w = display->getWidth();
+    const int h = display->getHeight();
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_LARGE);
+    display->drawString(w / 2, h / 2 - FONT_HEIGHT_LARGE, "LOCKED");
+
+    display->setFont(FONT_SMALL);
+    char status[32] = "Connect to unlock";
+    if (powerStatus && powerStatus->getHasBattery()) {
+        int pct = powerStatus->getBatteryChargePercent();
+        snprintf(status, sizeof(status), "Battery %d%%", pct);
+    }
+    display->drawString(w / 2, h / 2 + 2, status);
+}
+
+// Convenience wrapper for callers that want the LOCKED frame committed
+// to the panel immediately and have no overlay to compose on top.
+static void drawLockdownLockScreen(OLEDDisplay *display)
+{
+    drawLockdownLockScreenIntoBuffer(display);
+    display->display();
+}
+#endif
+
 static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
+#ifdef MESHTASTIC_LOCKDOWN
+    if (meshtastic_security::shouldRedactDisplay() && screen != nullptr) {
+        OLEDDisplay *display = screen->getDisplayDevice();
+        // Paint LOCKED into the framebuffer WITHOUT committing. We commit
+        // exactly once at the bottom — after any overlay has been composed
+        // on top — so the panel never visibly transitions from "just LOCKED"
+        // to "LOCKED + overlay" mid-frame. Committing twice per cycle was
+        // the source of the H13 flicker.
+        drawLockdownLockScreenIntoBuffer(display);
+        // Special-case the BLE pairing PIN banner. The PIN is needed to
+        // complete first-pair against a locked device, but the lockdown
+        // short-circuit would otherwise hide the PIN entirely. The PIN is
+        // a per-attempt ephemeral pair-handshake artifact, not operator
+        // content, so compositing it over the LOCKED frame is safe.
+        //
+        // Calling ui->update() here would be wrong: it redraws the current
+        // carousel frame (the dashboard) into the framebuffer before the
+        // overlay paints, leaving operator content visible underneath the
+        // banner. Instead we invoke the banner overlay callback directly,
+        // which paints only the banner box on top of the LOCKED pixels we
+        // already have in the framebuffer.
+        if (NotificationRenderer::current_notification_type == notificationTypeEnum::pairing_pin) {
+            NotificationRenderer::drawBannercallback(display, ui->getUiState());
+        }
+        display->display();
+        return;
+    }
+#endif
 #if GRAPHICS_TFT_COLORING_ENABLED
     prepareFrameColorRegions();
 #endif
@@ -587,6 +657,21 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             setScreensaverFrames(einkScreensaver);
 #endif
 
+#ifdef MESHTASTIC_LOCKDOWN
+            // M19: before turning the panel off, paint a safe frame into the
+            // OLED's GDDRAM. The panel retains whatever was last written even
+            // while powered down, so when displayOn() is called later the
+            // screen would otherwise flash the previous frame's content for
+            // 16-50 ms before the next ui->update() lands. Painting the
+            // LOCKED frame now ensures the only thing the operator (or
+            // someone over their shoulder) can see on wake is the redacted
+            // view. Gated on lockdown — non-lockdown builds keep the
+            // previous frame as a UX cue that the display is just dimmed.
+            // dispdev is dereferenced unguarded throughout this file (incl.
+            // displayOff() just below), so no null check here.
+            drawLockdownLockScreen(dispdev);
+#endif
+
 #ifdef PIN_EINK_EN
             digitalWrite(PIN_EINK_EN, LOW);
 #elif defined(PCA_PIN_EINK_EN)
@@ -660,6 +745,10 @@ void Screen::setup()
         brightness = uiconfig.screen_brightness;
     }
 
+    // Restore which frames the user has hidden (persisted across reboots).
+    // Must happen before the first setFrames().
+    loadFrameVisibility();
+
     // Detect OLED subtype (if supported by board variant)
 #ifdef AutoOLEDWire_h
     if (isAUTOOled)
@@ -701,6 +790,27 @@ void Screen::setup()
     dispdev->setBrightness(brightness);
 #endif
     LOG_INFO("Applied screen brightness: %d", brightness);
+
+#if defined(MESHTASTIC_LOCKDOWN) && defined(USE_EINK)
+    // M20: e-ink panels physically retain the last-rendered image without
+    // power, so a power-cycled lockdown handheld would keep showing
+    // operator-identifying content (position, messages, node info) until
+    // the firmware's first natural refresh — which on e-ink can be seconds
+    // into boot. Force a full refresh to the LOCKED frame here, immediately
+    // after the display is initialised and before any other rendering, so
+    // the persistent pixels are wiped to the redacted view before an
+    // observer can see them.
+    if (meshtastic_security::shouldRedactDisplay()) {
+        drawLockdownLockScreen(dispdev);
+#if defined(USE_EINK_PARALLELDISPLAY)
+        // Parallel-display variants drive refresh through a different path;
+        // a bare drawLockdownLockScreen above lands the frame into the
+        // panel buffer and the next ui->update() commits it as normal.
+#else
+        static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#endif
+    }
+#endif
 
     // Set custom overlay callbacks
     static OverlayCallback overlays[] = {
@@ -809,10 +919,16 @@ void Screen::setOn(bool on, FrameCallback einkScreensaver)
     if (cardKbI2cImpl)
         cardKbI2cImpl->toggleBacklight(on);
 #endif
-    if (!on)
+    if (!on) {
+#ifdef MESHTASTIC_LOCKDOWN
+        // Screen powering off (idle timeout, shutdown, deep sleep) latches
+        // the screen-lock. Next time the display wakes it shows the LOCKED
+        // frame until a client authenticates with the passphrase.
+        meshtastic_security::lockScreen();
+#endif
         // We handle off commands immediately, because they might be called because the CPU is shutting down
         handleSetOn(false, einkScreensaver);
-    else
+    } else
         enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
 }
 
@@ -919,7 +1035,17 @@ int32_t Screen::runOnce()
 #endif
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (!NotificationRenderer::isOverlayBannerShowing() && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+    bool suppressRegionOnboard = false;
+#ifdef MESHTASTIC_LOCKDOWN
+    // While lockdown is active and storage is still locked, config.lora.region
+    // is a deliberate UNSET placeholder — the real region lives in encrypted
+    // storage and is restored on unlock (see NodeDB's locked-boot path). Don't
+    // pop the region picker over the lock screen: it would trap input, and the
+    // operator can't set a region until they unlock anyway.
+    suppressRegionOnboard = meshtastic_security::shouldRedactDisplay();
+#endif
+    if (!suppressRegionOnboard && !NotificationRenderer::isOverlayBannerShowing() &&
+        config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if defined(OLED_TINY)
         menuHandler::LoraRegionPicker();
 #else
@@ -1421,6 +1547,9 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
     if (frameName == "chirpy") {
         hiddenFrames.chirpy = !hiddenFrames.chirpy;
     }
+
+    // Save the new visibility state so it survives a reboot.
+    saveFrameVisibility();
 }
 
 bool Screen::isFrameHidden(const std::string &frameName) const
@@ -1459,6 +1588,167 @@ bool Screen::isFrameHidden(const std::string &frameName) const
     return false;
 }
 
+// ---------------------------------------------------------------------------
+// Frame visibility persistence
+//
+// The set of hideable frames varies by build (USE_EINK, HAS_GPS, ...), so we
+// serialize to a fixed bitmask where each frame name owns a permanent bit
+// position. Bits for frames that don't exist in the current build are simply
+// left untouched, which keeps the saved file portable across firmware variants.
+// ---------------------------------------------------------------------------
+namespace
+{
+static const char *frameVisibilityFileName = "/prefs/framevis";
+constexpr uint32_t FRAMEVIS_MAGIC = 0x53495646; // "FVIS" little-endian
+constexpr uint8_t FRAMEVIS_VERSION = 1;
+
+// Permanent bit assignments. Never renumber these; only append new ones.
+enum FrameVisBit : uint8_t {
+    FVBIT_TEXT_MESSAGE = 0,
+    FVBIT_WAYPOINT = 1,
+    FVBIT_WIFI = 2,
+    FVBIT_SYSTEM = 3,
+    FVBIT_HOME = 4,
+    FVBIT_CLOCK = 5,
+    FVBIT_NODELIST_NODES = 6,
+    FVBIT_NODELIST_LOCATION = 7,
+    FVBIT_NODELIST_LASTHEARD = 8,
+    FVBIT_NODELIST_HOPSIGNAL = 9,
+    FVBIT_NODELIST_DISTANCE = 10,
+    FVBIT_NODELIST_BEARINGS = 11,
+    FVBIT_GPS = 12,
+    FVBIT_LORA = 13,
+    FVBIT_SHOW_FAVORITES = 14,
+    FVBIT_CHIRPY = 15,
+};
+
+struct __attribute__((packed)) FrameVisFile {
+    uint32_t magic;
+    uint8_t version;
+    uint32_t mask;
+};
+
+inline void setBit(uint32_t &mask, uint8_t bit, bool value)
+{
+    if (value)
+        mask |= (1UL << bit);
+    else
+        mask &= ~(1UL << bit);
+}
+
+inline bool getBit(uint32_t mask, uint8_t bit)
+{
+    return (mask & (1UL << bit)) != 0;
+}
+} // namespace
+
+uint32_t Screen::packHiddenFrames() const
+{
+    uint32_t mask = 0;
+    setBit(mask, FVBIT_TEXT_MESSAGE, hiddenFrames.textMessage);
+    setBit(mask, FVBIT_WAYPOINT, hiddenFrames.waypoint);
+    setBit(mask, FVBIT_WIFI, hiddenFrames.wifi);
+    setBit(mask, FVBIT_SYSTEM, hiddenFrames.system);
+    setBit(mask, FVBIT_HOME, hiddenFrames.home);
+    setBit(mask, FVBIT_CLOCK, hiddenFrames.clock);
+#ifndef USE_EINK
+    setBit(mask, FVBIT_NODELIST_NODES, hiddenFrames.nodelist_nodes);
+    setBit(mask, FVBIT_NODELIST_LOCATION, hiddenFrames.nodelist_location);
+#endif
+#ifdef USE_EINK
+    setBit(mask, FVBIT_NODELIST_LASTHEARD, hiddenFrames.nodelist_lastheard);
+    setBit(mask, FVBIT_NODELIST_HOPSIGNAL, hiddenFrames.nodelist_hopsignal);
+    setBit(mask, FVBIT_NODELIST_DISTANCE, hiddenFrames.nodelist_distance);
+#endif
+#if HAS_GPS
+#ifdef USE_EINK
+    setBit(mask, FVBIT_NODELIST_BEARINGS, hiddenFrames.nodelist_bearings);
+#endif
+    setBit(mask, FVBIT_GPS, hiddenFrames.gps);
+#endif
+    setBit(mask, FVBIT_LORA, hiddenFrames.lora);
+    setBit(mask, FVBIT_SHOW_FAVORITES, hiddenFrames.show_favorites);
+    setBit(mask, FVBIT_CHIRPY, hiddenFrames.chirpy);
+    return mask;
+}
+
+void Screen::applyHiddenFramesMask(uint32_t mask)
+{
+    hiddenFrames.textMessage = getBit(mask, FVBIT_TEXT_MESSAGE);
+    hiddenFrames.waypoint = getBit(mask, FVBIT_WAYPOINT);
+    hiddenFrames.wifi = getBit(mask, FVBIT_WIFI);
+    hiddenFrames.system = getBit(mask, FVBIT_SYSTEM);
+    hiddenFrames.home = getBit(mask, FVBIT_HOME);
+    hiddenFrames.clock = getBit(mask, FVBIT_CLOCK);
+#ifndef USE_EINK
+    hiddenFrames.nodelist_nodes = getBit(mask, FVBIT_NODELIST_NODES);
+    hiddenFrames.nodelist_location = getBit(mask, FVBIT_NODELIST_LOCATION);
+#endif
+#ifdef USE_EINK
+    hiddenFrames.nodelist_lastheard = getBit(mask, FVBIT_NODELIST_LASTHEARD);
+    hiddenFrames.nodelist_hopsignal = getBit(mask, FVBIT_NODELIST_HOPSIGNAL);
+    hiddenFrames.nodelist_distance = getBit(mask, FVBIT_NODELIST_DISTANCE);
+#endif
+#if HAS_GPS
+#ifdef USE_EINK
+    hiddenFrames.nodelist_bearings = getBit(mask, FVBIT_NODELIST_BEARINGS);
+#endif
+    hiddenFrames.gps = getBit(mask, FVBIT_GPS);
+#endif
+    hiddenFrames.lora = getBit(mask, FVBIT_LORA);
+    hiddenFrames.show_favorites = getBit(mask, FVBIT_SHOW_FAVORITES);
+    hiddenFrames.chirpy = getBit(mask, FVBIT_CHIRPY);
+}
+
+void Screen::loadFrameVisibility()
+{
+#ifdef FSCom
+    spiLock->lock();
+    auto file = FSCom.open(frameVisibilityFileName, FILE_O_READ);
+    if (file) {
+        FrameVisFile data{};
+        bool ok = file.read((uint8_t *)&data, sizeof(data)) == sizeof(data) && data.magic == FRAMEVIS_MAGIC &&
+                  data.version == FRAMEVIS_VERSION;
+        file.close();
+        spiLock->unlock();
+        if (ok) {
+            applyHiddenFramesMask(data.mask);
+            LOG_INFO("Loaded frame visibility (mask 0x%08x)", data.mask);
+        } else {
+            LOG_WARN("Frame visibility file invalid, keeping defaults");
+        }
+        return;
+    }
+    spiLock->unlock();
+    LOG_DEBUG("No saved frame visibility, using defaults");
+#endif
+}
+
+void Screen::saveFrameVisibility()
+{
+#ifdef FSCom
+    spiLock->lock();
+    FSCom.mkdir("/prefs");
+    if (FSCom.exists(frameVisibilityFileName))
+        FSCom.remove(frameVisibilityFileName);
+
+    auto file = FSCom.open(frameVisibilityFileName, FILE_O_WRITE);
+    if (file) {
+        FrameVisFile data{};
+        data.magic = FRAMEVIS_MAGIC;
+        data.version = FRAMEVIS_VERSION;
+        data.mask = packHiddenFrames();
+        file.write((uint8_t *)&data, sizeof(data));
+        file.flush();
+        file.close();
+        LOG_INFO("Saved frame visibility (mask 0x%08x)", data.mask);
+    } else {
+        LOG_WARN("Failed to open %s for writing", frameVisibilityFileName);
+    }
+    spiLock->unlock();
+#endif
+}
+
 void Screen::handleStartFirmwareUpdateScreen()
 {
     LOG_DEBUG("Show firmware screen");
@@ -1471,6 +1761,15 @@ void Screen::handleStartFirmwareUpdateScreen()
 
 void Screen::blink()
 {
+#ifdef MESHTASTIC_LOCKDOWN
+    // L4: defensive guard. blink() paints arbitrary geometry, not node
+    // data, so it doesn't actually leak today. But it bypasses the normal
+    // ui->update() path that the lockdown short-circuit gates, so any
+    // future change that puts content into blink would silently leak past
+    // redaction. Refuse to draw when the redaction latch is set.
+    if (meshtastic_security::shouldRedactDisplay())
+        return;
+#endif
     setFastFramerate();
     uint8_t count = 10;
     dispdev->setBrightness(254);

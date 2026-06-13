@@ -25,6 +25,9 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#if HAS_VARIABLE_HOPS
+#include "modules/HopScalingModule.h"
+#endif
 #include "xmodem.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
@@ -32,6 +35,11 @@
 #include <pb_encode.h>
 #include <power/PowerHAL.h>
 #include <vector>
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#include "security/SecureZero.h"
+#endif
 
 #ifdef ARCH_ESP32
 #if HAS_WIFI
@@ -362,6 +370,15 @@ extern void getMacAddr(uint8_t *dmac);
  * we use !macaddr (no colons).
  */
 meshtastic_User &owner = devicestate.owner;
+
+// The slim NodeInfoLite header defines the local long_name cap; the wire-facing
+// meshtastic_User stays wider so names from senders built against the older
+// 39-byte limit still decode (nanopb halts on string overflow).
+static_assert(MAX_LONG_NAME_BYTES + 1 == sizeof(meshtastic_NodeInfoLite::long_name),
+              "MAX_LONG_NAME_BYTES must match the NodeInfoLite storage width");
+static_assert(sizeof(meshtastic_User::long_name) > MAX_LONG_NAME_BYTES,
+              "wire User.long_name must be wider than the local cap so clampLongName stays in bounds");
+
 meshtastic_Position localPosition = meshtastic_Position_init_default;
 meshtastic_CriticalErrorCode error_code =
     meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
@@ -431,8 +448,6 @@ NodeDB::NodeDB()
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
-    // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
-    // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
@@ -452,31 +467,18 @@ NodeDB::NodeDB()
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-
-    if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        bool keygenSuccess = false;
-        keyIsLowEntropy = checkLowEntropyPublicKey(config.security.public_key);
-        if (config.security.private_key.size == 32 && !keyIsLowEntropy) {
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                keygenSuccess = true;
-            }
-        } else {
-            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-            keygenSuccess = true;
-        }
-        if (keygenSuccess) {
-            config.security.public_key.size = 32;
-            config.security.private_key.size = 32;
-            owner.public_key.size = 32;
-            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-        }
-    }
+    // Generate crypto keys if needed using consolidated function
+    // Set my node num uint32 value to bytes from the public key (if we have one)
+    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist
+    generateCryptoKeyPair(nullptr);
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
         crypto->setDHPrivateKey(config.security.private_key.bytes);
+        // Set my node num uint32 value to bytes from the new public key
+        myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
     }
 #endif
     // Include our owner in the node db under our nodenum
@@ -896,6 +898,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.security.private_key.size = 0;
     }
     config.security.public_key.size = 0;
+
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
@@ -1511,6 +1514,7 @@ void NodeDB::installDefaultDeviceState()
 #else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %04x", getNodeNum() & 0x0ffff);
 #endif
+    clampLongName(owner.long_name); // vendor userprefs may exceed the local cap
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
     snprintf(owner.short_name, sizeof(owner.short_name), (const char *)USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
@@ -1565,6 +1569,41 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
                                  void *dest_struct)
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // check if the file is encrypted and decrypt before protobuf decode
+    if (EncryptedStorage::isEncrypted(filename)) {
+        // ZeroizingArrayPtr wipes the decrypted plaintext (which contains config
+        // secrets — channel PSKs, security private_key, etc.) before delete[],
+        // so it isn't recoverable from the heap after this function returns.
+        auto decBuf = meshtastic_security::make_zeroizing_array(protoSize);
+        if (!decBuf) {
+            LOG_ERROR("OOM decrypting %s", filename);
+            return LoadFileResult::OTHER_FAILURE;
+        }
+        size_t decLen = 0;
+        if (EncryptedStorage::readAndDecrypt(filename, decBuf.get(), protoSize, decLen)) {
+            LOG_INFO("Load encrypted %s", filename);
+            pb_istream_t stream = pb_istream_from_buffer(decBuf.get(), decLen);
+            if (fields != &meshtastic_NodeDatabase_msg)
+                memset(dest_struct, 0, objSize);
+            if (!pb_decode(&stream, fields, dest_struct)) {
+                LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+                state = LoadFileResult::DECODE_FAILED;
+                storageCorruptThisLoad = true;
+            } else {
+                LOG_INFO("Loaded encrypted %s successfully", filename);
+                state = LoadFileResult::LOAD_SUCCESS;
+            }
+        } else {
+            LOG_ERROR("Decrypt failed for %s, treating as corrupt", filename);
+            state = LoadFileResult::DECODE_FAILED;
+            storageCorruptThisLoad = true;
+        }
+        return state;
+    }
+#endif
+
 #ifdef FSCom
     concurrency::LockGuard g(spiLock);
 
@@ -1599,6 +1638,13 @@ void NodeDB::loadFromDisk()
     // Mark the current device state as completely unusable, so that if we fail reading the entire file from
     // disk we will still factoryReset to restore things.
     devicestate.version = 0;
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Reset the per-load decrypt-failure tracker. Set by loadProto on any
+    // encrypted file that fails to decrypt or proto-decode; consumed by
+    // reloadFromDisk to surface storage corruption to the operator instead
+    // of silently falling back to defaults.
+    storageCorruptThisLoad = false;
+#endif
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -1642,6 +1688,39 @@ void NodeDB::loadFromDisk()
     }
 
 #endif
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Only take the locked-boot defaults path when lockdown is ACTIVE (the
+    // device is provisioned) AND storage is still locked. A lockdown-capable
+    // build that has never been provisioned — or that was disabled — falls
+    // through to the normal plaintext load below and behaves like stock.
+    if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
+        // Encrypted storage is locked. Install defaults and wait for the
+        // passphrase over BLE/serial; PhoneAPI::handleLockdownAuthInline
+        // calls reloadFromDisk() once the storage is unlocked.
+        LOG_WARN("NodeDB: Encrypted storage locked, using default config until unlocked");
+        installDefaultNodeDatabase();
+        installDefaultDeviceState();
+        installDefaultConfig();
+        installDefaultModuleConfig();
+        installDefaultChannels();
+
+        // Hold the radio silent until the operator unlocks. installDefaultConfig
+        // would otherwise honour USERPREFS_CONFIG_LORA_REGION (the common shape
+        // for managed deployments) and the LongFast default channel synthesised
+        // by installDefaultChannels, so the device would beacon nodeinfo /
+        // telemetry on the public default PSK before any unlock — and process
+        // incoming default-channel packets the same way. Forcing region=UNSET
+        // gates both TX and RX in RadioLibInterface (see the region==UNSET
+        // checks in startSend and readData); tx_enabled=false is belt-and-
+        // suspenders for any code path that does not consult region directly.
+        // reloadFromDisk() restores the persisted lora config when the
+        // operator unlocks.
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        config.lora.tx_enabled = false;
+        return;
+    }
+#endif
+
     // Arm the direct-into-map decode so satellite entries skip the temp vectors.
     {
         concurrency::LockGuard guard(&satelliteMutex);
@@ -1724,8 +1803,9 @@ void NodeDB::loadFromDisk()
         if (nodeInfoLiteHasUser(us)) {
             LOG_WARN("Restoring owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for our node 0x%08x",
                      us->num);
-            memcpy(owner.long_name, us->long_name, sizeof(owner.long_name));
-            owner.long_name[sizeof(owner.long_name) - 1] = '\0';
+            // owner.long_name (40) is wider than the lite source (25); bound by the source
+            memcpy(owner.long_name, us->long_name, sizeof(us->long_name));
+            owner.long_name[sizeof(us->long_name) - 1] = '\0';
             memcpy(owner.short_name, us->short_name, sizeof(owner.short_name));
             owner.short_name[sizeof(owner.short_name) - 1] = '\0';
             owner.is_licensed = nodeInfoLiteIsLicensed(us);
@@ -1738,6 +1818,10 @@ void NodeDB::loadFromDisk()
     } else {
         LOG_INFO("Loaded saved devicestate version %d", devicestate.version);
     }
+
+    // Devicestate saved by firmware that allowed 39-byte names gets clamped on
+    // first load; from here on owner never carries more than the local cap.
+    clampLongName(owner.long_name);
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
@@ -1873,6 +1957,40 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded UIConfig");
     }
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Ensure all config segments are persisted to encrypted storage.
+    // installDefaultConfig/installDefaultModuleConfig only set in-memory structs
+    // without saving to disk, so we force a save here to ensure encrypted files exist.
+    //
+    // Only when lockdown is ACTIVE. A capable-but-off device must leave its
+    // files as plaintext — encryptAndWrite would fail anyway (no DEK), but
+    // skipping the whole block avoids the wasted attempts and error logs.
+    if (EncryptedStorage::isLockdownActive()) {
+        const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
+                                      nodeDatabaseFileName};
+        const int segments[] = {SEGMENT_CONFIG, SEGMENT_MODULECONFIG, SEGMENT_CHANNELS, SEGMENT_DEVICESTATE,
+                                SEGMENT_NODEDATABASE};
+        int toSave = 0;
+        for (int i = 0; i < 5; i++) {
+            if (!EncryptedStorage::isEncrypted(filesToCheck[i])) {
+                toSave |= segments[i];
+            }
+        }
+        if (toSave) {
+            LOG_INFO("Lockdown: Saving unencrypted segments to encrypted storage (mask=0x%x)", toSave);
+            saveToDisk(toSave);
+        }
+
+        // Migrate any remaining plaintext proto files (from standard firmware upgrade)
+        for (const char *fn : filesToCheck) {
+            if (!EncryptedStorage::isEncrypted(fn)) {
+                LOG_INFO("Migrating %s to encrypted storage", fn);
+                EncryptedStorage::migrateFile(fn);
+            }
+        }
+    }
+#endif
+
     // 2.4.X - configuration migration to update new default intervals
     if (moduleConfig.version < 23) {
         LOG_DEBUG("ModuleConfig version %d is stale, upgrading to new default intervals", moduleConfig.version);
@@ -1910,6 +2028,87 @@ void NodeDB::loadFromDisk()
 #endif
 }
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+// Serializes reloadFromDisk against itself. Other readers of config /
+// channelFile / nodeDatabase don't take this lock today, so this only
+// prevents reload-vs-reload races (e.g. fast successive unlocks). It is
+// not a full data-race fix for those structs — that would require
+// thread-shared locking discipline across the whole codebase, beyond
+// the audit's M7 scope. The radio standby+reconfigure below keeps the
+// radio out of the window where SX12xx registers are mid-swap.
+static concurrency::Lock g_reloadFromDiskMutex;
+
+/**
+ * Re-run loadFromDisk() after encrypted storage is unlocked at runtime.
+ * Holds the radio in standby across the file IO + proto decode so the
+ * SX12xx is not mid-RX/TX when config.lora is overwritten, then calls
+ * reconfigure() to push the now-real settings to the chip.
+ *
+ * Returns true iff every encrypted file decrypted and decoded cleanly.
+ * On false the caller MUST treat storage as corrupt — see header.
+ */
+bool NodeDB::reloadFromDisk()
+{
+    concurrency::LockGuard guard(&g_reloadFromDiskMutex);
+    LOG_INFO("NodeDB: Reloading config from encrypted storage after unlock");
+
+    RadioInterface *rIface = router ? router->getRadioIface() : nullptr;
+
+    // Park the radio while config.lora / channelFile swap. Without this,
+    // a concurrent send or receive can read half-old / half-new state
+    // (channel keys, region, modem preset) and the SX12xx ends up in
+    // an inconsistent register set that only a reboot recovers from.
+    if (rIface)
+        rIface->sleep();
+
+    loadFromDisk();
+
+    if (storageCorruptThisLoad) {
+        LOG_ERROR("NodeDB: storage decrypt/decode failed during reload — surfacing as corrupt");
+        // Leave the radio sleeping. Caller will lock storage and emit
+        // a LOCKED(storage_corrupt) status; we must not reconfigure
+        // the chip with the locked-default placeholder values still
+        // sitting in config.lora.
+        return false;
+    }
+
+    // Push the now-real config to the radio.
+    if (rIface) {
+        channels.onConfigChanged();
+        rIface->reconfigure();
+    }
+    return true;
+}
+
+bool NodeDB::disableLockdownToPlaintext()
+{
+    concurrency::LockGuard guard(&g_reloadFromDiskMutex);
+    if (!EncryptedStorage::isUnlocked()) {
+        LOG_ERROR("NodeDB: disable requested but storage not unlocked");
+        return false;
+    }
+    LOG_INFO("NodeDB: reverting encrypted prefs to plaintext for lockdown disable");
+
+    // Decrypt each encrypted pref back to plaintext IN PLACE. Mirror of the
+    // plaintext->encrypted migrate loop above. Order does not matter here;
+    // EncryptedStorage::removeLockdownArtifacts() (which deletes the DEK,
+    // the commit point) only runs after every file is confirmed plaintext.
+    const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
+                                  nodeDatabaseFileName};
+    for (const char *fn : filesToCheck) {
+        if (!EncryptedStorage::migrateFileToPlaintext(fn)) {
+            LOG_ERROR("NodeDB: failed to revert %s to plaintext; aborting disable (device stays in lockdown)", fn);
+            return false;
+        }
+    }
+
+    // All files are plaintext now — remove the lockdown artifacts. Deleting
+    // /prefs/.dek is the atomic commit: after it, isLockdownActive() is false.
+    EncryptedStorage::removeLockdownArtifacts();
+    return true;
+}
+#endif
+
 /** Save a protobuf from a file, return true for success */
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
@@ -1921,6 +2120,38 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         LOG_ERROR("Error: trying to saveProto() on unsafe device power level.");
         return false;
     }
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // Encrypt all files except uiconfig (no secrets) and the DEK file (self-encrypted).
+    // Only when lockdown is ACTIVE (provisioned). A lockdown-capable but DISABLED
+    // device has no DEK, so encryptAndWrite would fail and config would never
+    // persist — it must save plaintext exactly like stock firmware. Once enabled,
+    // the reloadFromDisk migrate pass re-saves these plaintext files encrypted.
+    if (EncryptedStorage::isLockdownActive() && strcmp(filename, uiconfigFileName) != 0) {
+        // ZeroizingArrayPtr wipes the unencrypted protobuf encoding (which contains
+        // config secrets — channel PSKs, security private_key, etc.) before delete[],
+        // so plaintext copies aren't left in heap memory after encryption completes.
+        auto pbBuf = meshtastic_security::make_zeroizing_array(protoSize);
+        if (!pbBuf) {
+            LOG_ERROR("OOM encoding %s for encryption", filename);
+            return false;
+        }
+
+        pb_ostream_t stream = pb_ostream_from_buffer(pbBuf.get(), protoSize);
+        if (!pb_encode(&stream, fields, dest_struct)) {
+            LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+            return false;
+        }
+
+        size_t encodedSize = stream.bytes_written;
+        bool ok = EncryptedStorage::encryptAndWrite(filename, pbBuf.get(), encodedSize, fullAtomic);
+
+        if (!ok) {
+            LOG_ERROR("EncryptedStorage: Failed to encrypt and write %s", filename);
+        }
+        return ok;
+    }
+#endif
 
     bool okay = false;
 #ifdef FSCom
@@ -1986,6 +2217,14 @@ bool NodeDB::saveDeviceStateToDisk()
 
 bool NodeDB::saveNodeDatabaseToDisk()
 {
+    // Don't persist the node DB until this device has a PKI keypair
+    // TODO: revisit when https://github.com/meshtastic/firmware/pull/10478 lands
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (owner.public_key.size != 32 && !owner.is_licensed) {
+        LOG_DEBUG("Skip NodeDB without key");
+        return true;
+    }
+#endif
 
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
@@ -2088,6 +2327,22 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         LOG_ERROR("Error: trying to saveToDiskNoRetry() on unsafe device power level.");
         return false;
     }
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // When lockdown is ACTIVE but storage is still locked, encryptAndWrite()
+    // returns false for every file. That would cause saveToDisk()'s nRF52 retry
+    // path to call FSCom.format(), wiping all encrypted proto files from flash.
+    // Return true here — "nothing to save, not an error."
+    //
+    // Gate on isLockdownActive(): a lockdown-capable but DISABLED device (never
+    // provisioned) also has isUnlocked()==false, but it must persist plaintext
+    // normally — skipping here would silently drop every config write (e.g. the
+    // LoRa region) until the device is provisioned.
+    if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
+        LOG_WARN("NodeDB: saveToDisk skipped — encrypted storage locked");
+        return true;
+    }
+#endif
 
     bool success = true;
 #ifdef FSCom
@@ -2538,6 +2793,14 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT
 
+#if HAS_VARIABLE_HOPS
+        // Only sample packets that arrived over LoRa.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && hopScalingModule) {
+            uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
+            hopScalingModule->samplePacketForHistogram(mp.from, hopCount);
+        }
+#endif
+
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
         const int8_t hopsAway = getHopsAway(mp);
         if (hopsAway >= 0) {
@@ -2780,6 +3043,99 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
     return false;
 }
 #endif
+
+bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
+{
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    // Only generate keys for non-licensed users and if LoRa region is set
+    if (owner.is_licensed || config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        return false;
+    }
+
+    bool keygenSuccess = false;
+    // Record whether the stored key is a known compromised/low-entropy key so main.cpp can warn the
+    // user. A detected low-entropy key is regenerated below, but the flag stays set so the
+    // "Compromised keys were detected and regenerated" notification still fires.
+    keyIsLowEntropy = checkLowEntropyPublicKey(config.security.public_key);
+
+    // If a specific private key was provided, use it
+    if (privateKey != nullptr) {
+        LOG_INFO("Using provided private key for PKI");
+        memcpy(config.security.private_key.bytes, privateKey, 32);
+        config.security.private_key.size = 32;
+        config.security.public_key.size = 32;
+
+        // Generate public key from the provided private key
+        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+            keygenSuccess = true;
+        } else {
+            LOG_ERROR("Failed to generate public key from provided private key");
+            return false;
+        }
+    }
+    // Try to regenerate public key from existing private key if it's valid and not low entropy
+    else if (config.security.private_key.size == 32 && !keyIsLowEntropy) {
+        config.security.public_key.size = 32;
+        LOG_DEBUG("Regenerate PKI public key from existing private key");
+        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+            keygenSuccess = true;
+        }
+    } else {
+        // Generate a new key pair
+        LOG_INFO("Generate new PKI keys");
+        config.security.public_key.size = 32;
+        config.security.private_key.size = 32;
+        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+        keygenSuccess = true;
+    }
+
+    // Update sizes and copy to owner if successful
+    if (keygenSuccess) {
+        owner.public_key.size = 32;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+
+        // Set the DH private key for crypto operations
+        LOG_DEBUG("Set DH private key for crypto operations");
+        crypto->setDHPrivateKey(config.security.private_key.bytes);
+
+        // Conditionally create new identity based on parameter
+        createNewIdentity();
+    }
+    return keygenSuccess;
+#else
+    return false;
+#endif
+}
+
+bool NodeDB::createNewIdentity()
+{
+    uint32_t oldNodeNum = getNodeNum();
+    uint32_t newNodeNum = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
+
+    // If the key hasn't changed, nothing to do
+    if (newNodeNum == oldNodeNum)
+        return false;
+
+    // Retire the old node entry
+    meshtastic_NodeInfoLite *node = getMeshNode(oldNodeNum);
+    if (node != NULL) {
+        LOG_DEBUG("Old node num %u is now %u", oldNodeNum, newNodeNum);
+        nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+        node->public_key.size = 0;
+        memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
+    }
+
+    // Drop satellite-store entries (position/telemetry/environment/status) keyed by the retired
+    // node number so stale data isn't left attached to the old identity.
+    eraseNodeSatellites(oldNodeNum);
+
+    myNodeInfo.my_node_num = newNodeNum;
+
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    TypeConversions::CopyUserToNodeInfoLite(info, owner);
+
+    return true;
+}
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
