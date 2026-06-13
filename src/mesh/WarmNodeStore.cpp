@@ -258,7 +258,7 @@ void WarmNodeStore::ringRotate()
     }
 
     // Capture live entries stranded in the page we're about to erase
-    int stranded[WARM_NODE_COUNT];
+    int stranded[WARM_NODE_COUNT] = {};
     int nStranded = 0;
     for (size_t i = 0; i < WARM_NODE_COUNT; i++) {
         if (entries[i].num && pageOf[i] == target)
@@ -324,8 +324,8 @@ void WarmNodeStore::load()
     concurrency::LockGuard g(spiLock);
 
     // Order valid pages by ascending seq so replay applies oldest first
-    uint8_t order[WARM_FLASH_PAGES];
-    uint32_t seqs[WARM_FLASH_PAGES];
+    uint8_t order[WARM_FLASH_PAGES] = {};
+    uint32_t seqs[WARM_FLASH_PAGES] = {};
     uint8_t nValid = 0;
     uint8_t nCorrupt = 0;
     for (uint8_t p = 0; p < WARM_FLASH_PAGES; p++) {
@@ -379,7 +379,7 @@ void WarmNodeStore::load()
                     memset(e, 0, sizeof(*e));
                 }
             } else {
-                WarmNodeEntry *e = place(rec.num, rec.last_heard, rec.public_key);
+                const WarmNodeEntry *e = place(rec.num, rec.last_heard, rec.public_key);
                 if (e)
                     pageOf[e - entries] = p;
             }
