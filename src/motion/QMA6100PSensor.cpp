@@ -2,8 +2,76 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_QMA6100P)
 
+#if defined(TRACKER_T1000_E) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+#include "platform/nrf52/T1000EI2C.h"
+#endif
+
 // Flag when an interrupt has been detected
 volatile static bool QMA6100P_IRQ = false;
+
+#if defined(TRACKER_T1000_E) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+namespace
+{
+bool qma6100pUpdateRegister(uint8_t address, uint8_t reg, uint8_t (*mutate)(uint8_t))
+{
+    uint8_t value = 0;
+    return T1000EI2C::readRegister(address, reg, value) && T1000EI2C::writeRegister(address, reg, mutate(value));
+}
+
+uint8_t qma6100pSetRange(uint8_t value)
+{
+    sfe_qma6100p_fsr_bitfield_t fsr;
+    fsr.all = value;
+    fsr.bits.range = QMA_6100P_MPU_ACCEL_SCALE;
+    return fsr.all;
+}
+
+uint8_t qma6100pEnableAccel(uint8_t value)
+{
+    sfe_qma6100p_pm_bitfield_t pm;
+    pm.all = value;
+    pm.bits.mode_bit = 1;
+    return pm.all;
+}
+
+uint8_t qma6100pConfigureIntPin(uint8_t value)
+{
+    return value | 0b00000010;
+}
+
+uint8_t qma6100pConfigureIntLatch(uint8_t value)
+{
+    return value | 0b10000001;
+}
+
+uint8_t qma6100pMapAnyMotionToInt1(uint8_t value)
+{
+    sfe_qma6100p_int_map1_bitfield_t intMap1;
+    intMap1.all = value;
+    intMap1.bits.int1_any_mot = 1;
+    return intMap1.all;
+}
+
+bool qma6100pInitBounded(uint8_t address)
+{
+    uint8_t chipID = 0;
+
+    T1000EI2C::restoreBus();
+    const bool ok = T1000EI2C::readRegister(address, SFE_QMA6100P_CHIP_ID, chipID) && chipID == QMA6100P_CHIP_ID &&
+                    T1000EI2C::writeRegister(address, SFE_QMA6100P_SR, 0xb6) &&
+                    T1000EI2C::writeRegister(address, SFE_QMA6100P_SR, 0) &&
+                    qma6100pUpdateRegister(address, SFE_QMA6100P_FSR, qma6100pSetRange) &&
+                    qma6100pUpdateRegister(address, SFE_QMA6100P_PM, qma6100pEnableAccel) &&
+                    T1000EI2C::writeRegister(address, SFE_QMA6100P_INT_EN2, 0b00000111) &&
+                    qma6100pUpdateRegister(address, SFE_QMA6100P_INT_MAP1, qma6100pMapAnyMotionToInt1) &&
+                    qma6100pUpdateRegister(address, SFE_QMA6100P_INTPINT_CONF, qma6100pConfigureIntPin) &&
+                    qma6100pUpdateRegister(address, SFE_QMA6100P_INT_CFG, qma6100pConfigureIntLatch);
+    T1000EI2C::restoreBus();
+
+    return ok;
+}
+} // namespace
+#endif
 
 // Interrupt service routine
 void QMA6100PSetInterrupt()
@@ -15,6 +83,20 @@ QMA6100PSensor::QMA6100PSensor(ScanI2C::FoundDevice foundDevice) : MotionSensor:
 
 bool QMA6100PSensor::init()
 {
+#if defined(TRACKER_T1000_E) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+    if (!qma6100pInitBounded(device.address.address)) {
+        LOG_WARN("QMA6100P init failed");
+        return false;
+    }
+    QMA6100P_IRQ = false;
+
+#ifdef QMA_6100P_INT_PIN
+    pinMode(QMA_6100P_INT_PIN, INPUT_PULLUP);
+    attachInterrupt(QMA_6100P_INT_PIN, QMA6100PSetInterrupt, FALLING);
+#endif
+
+    return true;
+#else
     // Initialise the sensor
     sensor = QMA6100PSingleton::GetInstance();
     if (!sensor->init(device))
@@ -22,6 +104,7 @@ bool QMA6100PSensor::init()
 
     // Enable simple Wake on Motion
     return sensor->setWakeOnMotion();
+#endif
 }
 
 #ifdef QMA_6100P_INT_PIN
@@ -40,6 +123,13 @@ int32_t QMA6100PSensor::runOnce()
 
 int32_t QMA6100PSensor::runOnce()
 {
+#if defined(TRACKER_T1000_E) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+    uint8_t tempVal = 0;
+    if (!T1000EI2C::readRegister(device.address.address, SFE_QMA6100P_INT_ST0, tempVal)) {
+        LOG_DEBUG("QMA6100PS isWakeOnMotion failed to read interrupts");
+        return MOTION_SENSOR_CHECK_INTERVAL_MS;
+    }
+#else
     // Wake on motion using polling  - this is not as efficient as using hardware interrupt pin (see above)
 
     uint8_t tempVal;
@@ -47,6 +137,7 @@ int32_t QMA6100PSensor::runOnce()
         LOG_DEBUG("QMA6100PS isWakeOnMotion failed to read interrupts");
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
+#endif
 
     if ((tempVal & 7) != 0) {
         // Wake up!
