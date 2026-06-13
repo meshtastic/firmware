@@ -614,6 +614,10 @@ void RadioLibInterface::handleReceiveInterrupt()
 
             printPacket("Lora RX", mp);
 
+#ifdef LED_LORA
+            loraRxPacketObservable.notifyObservers(mp->from);
+#endif
+
             airTime->logAirtime(RX_LOG, rxMsec);
 
             deliverToReceiver(mp);

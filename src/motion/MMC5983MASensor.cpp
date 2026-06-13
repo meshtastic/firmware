@@ -59,40 +59,40 @@ bool MMC5983MASensor::readMagnetometer(float &xGauss, float &yGauss, float &zGau
 }
 
 int32_t MMC5983MASensor::runOnce()
-    {
-        float magX = 0, magY = 0, magZ = 0;
-        if (!readMagnetometer(magX, magY, magZ)) {
-            return MOTION_SENSOR_CHECK_INTERVAL_MS;
-        }
-
-    #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
-        if (doCalibration) {
-            beginCalibrationDisplay(showingScreen);
-            updateCalibrationExtrema(magX, magY, magZ, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
-            finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ,
-                                    lowestZ);
-        }
-    #endif
-
-        magX -= (highestX + lowestX) / 2;
-        magY -= (highestY + lowestY) / 2;
-        magZ -= (highestZ + lowestZ) / 2;
-
-    #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
-        float heading = atan2f(magY, magX) * RAD_TO_DEG + MMC5983MA_HEADING_OFFSET_DEG;
-        if (heading < 0.0f) {
-            heading += 360.0f;
-        } else if (heading >= 360.0f) {
-            heading -= 360.0f;
-        }
-
-        heading = applyCompassOrientation(heading);
-        if (screen) {
-            screen->setHeading(heading);
-        }
-    #endif
-
+{
+    float magX = 0, magY = 0, magZ = 0;
+    if (!readMagnetometer(magX, magY, magZ)) {
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
+    }
+
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
+    if (doCalibration) {
+        beginCalibrationDisplay(showingScreen);
+        updateCalibrationExtrema(magX, magY, magZ, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+        finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ,
+                                   lowestZ);
+    }
+#endif
+
+    magX -= (highestX + lowestX) / 2;
+    magY -= (highestY + lowestY) / 2;
+    magZ -= (highestZ + lowestZ) / 2;
+
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
+    float heading = atan2f(magY, magX) * RAD_TO_DEG + MMC5983MA_HEADING_OFFSET_DEG;
+    if (heading < 0.0f) {
+        heading += 360.0f;
+    } else if (heading >= 360.0f) {
+        heading -= 360.0f;
+    }
+
+    heading = applyCompassOrientation(heading);
+    if (screen) {
+        screen->setHeading(heading);
+    }
+#endif
+
+    return MOTION_SENSOR_CHECK_INTERVAL_MS;
 }
 
 void MMC5983MASensor::calibrate(uint16_t forSeconds)

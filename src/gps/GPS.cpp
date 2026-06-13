@@ -47,7 +47,7 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 
 #if defined(ARCH_NRF52)
 Uart *GPS::_serial_gps = &GPS_SERIAL_PORT;
-#elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+#elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
 HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #elif defined(ARCH_RP2040)
 SerialUART *GPS::_serial_gps = &GPS_SERIAL_PORT;
@@ -642,7 +642,7 @@ bool GPS::verifyCachedProbePresence()
         return false;
     }
 
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
     _serial_gps->end();
     _serial_gps->begin(cachedProbeBaud);
 #elif defined(ARCH_RP2040)
@@ -1564,7 +1564,7 @@ GnssModel_t GPS::probe(int serialSpeed)
 
     switch (currentStep) {
     case 0: {
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
         _serial_gps->end();
         _serial_gps->begin(serialSpeed);
 #elif defined(ARCH_RP2040)
@@ -1921,7 +1921,7 @@ std::unique_ptr<GPS> GPS::createGps()
 #elif defined(ARCH_NRF52)
         _serial_gps->setPins(new_gps->rx_gpio, new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE);
-#elif defined(ARCH_STM32WL)
+#elif defined(ARCH_STM32)
         _serial_gps->setTx(new_gps->tx_gpio);
         _serial_gps->setRx(new_gps->rx_gpio);
         _serial_gps->begin(GPS_BAUDRATE);

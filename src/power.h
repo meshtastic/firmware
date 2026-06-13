@@ -17,7 +17,7 @@
 
 // Device specific curves go in variant.h
 #ifndef OCV_ARRAY
-#if defined(ARCH_STM32WL) && BATTERY_PIN == AVBAT
+#if defined(ARCH_STM32) && BATTERY_PIN == AVBAT
 // STM32 VDD/VBAT absolute maximum is 4V so use an LFP curve
 #define OCV_ARRAY 3650, 3400, 3340, 3320, 3300, 3280, 3270, 3260, 3240, 3200, 2500
 #else

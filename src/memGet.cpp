@@ -14,7 +14,7 @@
 #include <malloc.h>
 #include <unistd.h> // sbrk
 
-#ifdef ARCH_STM32WL
+#if defined(ARCH_STM32)
 // Returns the uncommitted sbrk headroom: addressable space between the current heap
 // break and the stack pointer that has not yet been committed to the arena.
 static uint32_t sbrkHeadroom()

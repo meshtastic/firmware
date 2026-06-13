@@ -12,10 +12,18 @@
 #include <Curve25519.h>
 #include <RNG.h>
 #include <SHA256.h>
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-#if !defined(ARCH_STM32WL)
-#define CryptRNG RNG
+
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+#include "XEdDSA.h"
+#include <Ed25519.h>
+
+#ifndef NUM_LIMBS_256BIT
+#define NUM_LIMBS_BITS(n) (((n) + sizeof(limb_t) * 8 - 1) / (8 * sizeof(limb_t)))
+#define NUM_LIMBS_256BIT NUM_LIMBS_BITS(256)
 #endif
+#endif
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
 
 /**
  * Create a public/private key pair with Curve25519.
@@ -46,6 +54,9 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     Curve25519::dh1(public_key, private_key);
     memcpy(pubKey, public_key, sizeof(public_key));
     memcpy(privKey, private_key, sizeof(private_key));
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+    XEdDSA::priv_curve_to_ed_keys(private_key, xeddsa_private_key, xeddsa_public_key);
+#endif
 }
 
 /**
@@ -65,12 +76,106 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
         }
         memcpy(private_key, privKey, sizeof(private_key));
         memcpy(public_key, pubKey, sizeof(public_key));
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+        XEdDSA::priv_curve_to_ed_keys(private_key, xeddsa_private_key, xeddsa_public_key);
+#endif
     } else {
         LOG_WARN("X25519 key generation failed due to blank private key");
         return false;
     }
     return true;
 }
+
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+/**
+ * Build a signing buffer that covers packet metadata and payload:
+ *   [fromNode(4) | packetId(4) | portnum(4) | payload(N)]
+ * This prevents replay, reattribution, and portnum redirection attacks.
+ */
+static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
+                                 const uint8_t *payload, size_t payloadLen)
+{
+    const size_t headerLen = sizeof(uint32_t) * 3;
+    size_t totalLen = headerLen + payloadLen;
+    if (totalLen > bufSize)
+        return 0;
+    // May need endian conversion for oddball platforms.
+    memcpy(buf, &fromNode, sizeof(uint32_t));
+    memcpy(buf + sizeof(uint32_t), &packetId, sizeof(uint32_t));
+    memcpy(buf + sizeof(uint32_t) * 2, &portnum, sizeof(uint32_t));
+    memcpy(buf + headerLen, payload, payloadLen);
+    return totalLen;
+}
+
+bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
+                               uint8_t *signature)
+{
+    if (memfll(xeddsa_private_key, 0, sizeof(xeddsa_private_key)))
+        return false;
+    uint8_t sigBuf[MAX_BLOCKSIZE];
+    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
+    if (sigLen == 0)
+        return false;
+    // the XEdDSA::sign function requires at least the first 32 bytes of signature to be pre-filled with randomness
+    HardwareRNG::fill(signature, 32);
+    XEdDSA::sign(signature, xeddsa_private_key, xeddsa_public_key, sigBuf, sigLen);
+    return true;
+}
+
+bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
+                                 const uint8_t *payload, size_t payloadLen, const uint8_t *signature)
+{
+    // Use cached Ed25519 key if the Curve25519 key matches, avoiding expensive field inversion
+    if (memcmp(pubKey, cached_curve_pubkey, 32) != 0) {
+        curve_to_ed_pub(pubKey, cached_ed_pubkey);
+        memcpy(cached_curve_pubkey, pubKey, 32);
+    }
+    uint8_t sigBuf[MAX_BLOCKSIZE];
+    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
+    if (sigLen == 0)
+        return false;
+    return XEdDSA::verify(signature, cached_ed_pubkey, sigBuf, sigLen);
+}
+
+void CryptoEngine::curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubkey)
+{
+
+    // Apply the birational map defined in RFC 7748, section 4.1 "Curve25519" to calculate an Ed25519 public
+    // key from a Curve25519 public key. Because the serialization format of Curve25519 public keys only
+    // contains the u coordinate, the x coordinate of the corresponding Ed25519 public key can't be uniquely
+    // calculated as defined by the birational map. The x coordinate is represented in the serialization
+    // format of Ed25519 public keys only in a single sign bit. XEdDSA always normalizes the Ed25519 public
+    // key to a sign bit of zero (the signer negates its key pair when needed), so this function clears the
+    // sign bit unconditionally below instead of taking it as an input.
+    fe u, y;
+    fe one;
+    fe u_minus_one, u_plus_one, u_plus_one_inv;
+
+    // Parse the Curve25519 public key input as a field element containing the u coordinate. RFC 7748,
+    // section 5 "The X25519 and X448 Functions", mandates that the most significant bit of the Curve25519
+    // public key has to be zeroized. This is handled by fe_frombytes internally.
+    fe_frombytes(u, curve_pubkey);
+
+    // Calculate the parameters (u - 1) and (u + 1)
+    fe_1(one);
+    fe_sub(u_minus_one, u, one);
+    fe_add(u_plus_one, u, one);
+
+    // Invert u + 1
+    fe_invert(u_plus_one_inv, u_plus_one);
+
+    // Calculate y = (u - 1) * inv(u + 1) (mod p)
+    fe_mul(y, u_minus_one, u_plus_one_inv);
+
+    // Serialize the field element containing the y coordinate to the Ed25519 public key output
+    fe_tobytes(ed_pubkey, y);
+
+    // Set the sign bit to zero
+    ed_pubkey[31] &= 0x7f;
+
+    // need to convert the pubkey y = ( u - 1) * inv( u + 1) (mod p).
+}
+#endif
 
 bool CryptoEngine::ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user)
 {

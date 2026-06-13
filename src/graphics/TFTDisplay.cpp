@@ -1533,8 +1533,7 @@ bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
     return true;
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) &&                                 \
-    !defined(HELTEC_MESH_NODE_T1)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1)
     return tft->touch() != nullptr;
 #else
     return false;
@@ -1553,8 +1552,7 @@ bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
     } else {
         return false;
     }
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) &&                                 \
-    !defined(HELTEC_MESH_NODE_T1)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1)
     return tft->getTouch(x, y);
 #else
     return false;

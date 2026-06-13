@@ -14,8 +14,8 @@
 #define FILE_O_READ "r"
 #endif
 
-#if defined(ARCH_STM32WL)
-// STM32WL
+#if defined(ARCH_STM32)
+// STM32
 #include "LittleFS.h"
 #define FSCom InternalFS
 #define FSBegin() FSCom.begin()
