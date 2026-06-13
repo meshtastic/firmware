@@ -44,6 +44,7 @@ jobs:
         run: |
           .pio/build/coverage/meshtasticd -s &
           PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
           timeout 20 bash -c "until ls -al /proc/$PID/fd | grep socket; do sleep 1; done"
           echo "Simulator started, launching python test..."
           python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
