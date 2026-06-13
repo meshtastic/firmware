@@ -111,8 +111,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // and only allowing responses from that remote.
     if (messageIsResponse(r)) {
         LOG_DEBUG("Allow admin response message");
-    } else if (mp.from == 0 && !mp.pki_encrypted) {
-        // Plain (non-PKC) local admin from BLE/USB client.
+    } else if (mp.from == 0) {
+        // Local admin from a BLE/USB/TCP client. from == 0 cannot arrive from the
+        // mesh: RF drops packets without a sender (RadioLibInterface) and MQTT treats
+        // from == 0 as our own downlink and ignores it. Clients may set pki_encrypted
+        // on self-addressed admin (the python CLI does), so don't use it to reroute
+        // local packets into the remote-PKC key check.
         //
         // Under MESHTASTIC_PHONEAPI_ACCESS_CONTROL, the per-connection auth
         // gate lives in PhoneAPI::handleToRadioPacket — any local admin
@@ -987,22 +991,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // If the client set the key to blank, go ahead and regenerate so long as we're not in ham mode
-        if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            if (config.security.private_key.size != 32) {
-                crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-
-            } else {
-                if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                    config.security.public_key.size = 32;
-                }
-            }
+        // Only regenerate keys if the private key is not 32 bytes
+        if (config.security.private_key.size != 32) {
+            nodeDB->generateCryptoKeyPair();
         }
-#endif
-        owner.public_key.size = config.security.public_key.size;
-        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
-#if !MESHTASTIC_EXCLUDE_PKI
-        crypto->setDHPrivateKey(config.security.private_key.bytes);
+        // If user provided a private key of correct size but no public key, generate the public key from private key
+        else if (config.security.private_key.size == 32 && config.security.public_key.size == 0) {
+            nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
+        }
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
                                             config.security.admin_key[2].size == 32)) {
@@ -1012,9 +1008,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             sendWarning(warning);
         }
 
-        if (config.security.debug_log_api_enabled == c.payload_variant.security.debug_log_api_enabled &&
-            config.security.serial_enabled == c.payload_variant.security.serial_enabled)
-            requiresReboot = false;
+        changes = SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+
+        requiresReboot = true;
 
         break;
     case meshtastic_Config_device_ui_tag:
