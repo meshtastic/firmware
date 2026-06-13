@@ -111,8 +111,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // and only allowing responses from that remote.
     if (messageIsResponse(r)) {
         LOG_DEBUG("Allow admin response message");
-    } else if (mp.from == 0 && !mp.pki_encrypted) {
-        // Plain (non-PKC) local admin from BLE/USB client.
+    } else if (mp.from == 0) {
+        // Local admin from a BLE/USB/TCP client. from == 0 cannot arrive from the
+        // mesh: RF drops packets without a sender (RadioLibInterface) and MQTT treats
+        // from == 0 as our own downlink and ignores it. Clients may set pki_encrypted
+        // on self-addressed admin (the python CLI does), so don't use it to reroute
+        // local packets into the remote-PKC key check.
         //
         // Under MESHTASTIC_PHONEAPI_ACCESS_CONTROL, the per-connection auth
         // gate lives in PhoneAPI::handleToRadioPacket — any local admin

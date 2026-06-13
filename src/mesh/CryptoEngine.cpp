@@ -6,18 +6,21 @@
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #include "HardwareRNG.h"
 #include "NodeDB.h"
-#include "XEdDSA.h"
 #include "aes-ccm.h"
 #include "meshUtils.h"
 #include <Crypto.h>
 #include <Curve25519.h>
-#include <Ed25519.h>
 #include <RNG.h>
 #include <SHA256.h>
+
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+#include "XEdDSA.h"
+#include <Ed25519.h>
 
 #ifndef NUM_LIMBS_256BIT
 #define NUM_LIMBS_BITS(n) (((n) + sizeof(limb_t) * 8 - 1) / (8 * sizeof(limb_t)))
 #define NUM_LIMBS_256BIT NUM_LIMBS_BITS(256)
+#endif
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
@@ -51,7 +54,9 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     Curve25519::dh1(public_key, private_key);
     memcpy(pubKey, public_key, sizeof(public_key));
     memcpy(privKey, private_key, sizeof(private_key));
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
     XEdDSA::priv_curve_to_ed_keys(private_key, xeddsa_private_key, xeddsa_public_key);
+#endif
 }
 
 /**
@@ -71,7 +76,9 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
         }
         memcpy(private_key, privKey, sizeof(private_key));
         memcpy(public_key, pubKey, sizeof(public_key));
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
         XEdDSA::priv_curve_to_ed_keys(private_key, xeddsa_private_key, xeddsa_public_key);
+#endif
     } else {
         LOG_WARN("X25519 key generation failed due to blank private key");
         return false;
@@ -79,6 +86,7 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
     return true;
 }
 
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
 /**
  * Build a signing buffer that covers packet metadata and payload:
  *   [fromNode(4) | packetId(4) | portnum(4) | payload(N)]
@@ -167,6 +175,7 @@ void CryptoEngine::curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubk
 
     // need to convert the pubkey y = ( u - 1) * inv( u + 1) (mod p).
 }
+#endif
 
 bool CryptoEngine::ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user)
 {

@@ -559,6 +559,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         if (p->decoded.has_bitfield)
             p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
         if (p->decoded.xeddsa_signature.size == XEDDSA_SIGNATURE_SIZE) {
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
             if (node && node->public_key.size == 32) {
@@ -588,6 +589,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 return DecodeState::DECODE_FAILURE;
             }
         }
+#endif
 
         /* Not actually ever used.
         // Decompress if needed. jm
@@ -659,6 +661,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.has_bitfield = true;
             p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
             p->decoded.bitfield |= (p->decoded.want_response << BITFIELD_WANT_RESPONSE_SHIFT);
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
             // Sign broadcast packets if payload + signature fits within the max Data payload.
             // The actual encoded size is checked after pb_encode (TOO_LARGE).
             if (!p->pki_encrypted && isBroadcast(p->to) &&
@@ -669,6 +672,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                     LOG_DEBUG("XEdDSA signed packet 0x%08x", p->id);
                 }
             }
+#endif
         }
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
