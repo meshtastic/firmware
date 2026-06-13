@@ -56,6 +56,8 @@ void initVariant()
     digitalWrite(DHT_POWER, HIGH);
     pinMode(Battery_POWER, OUTPUT);
     digitalWrite(Battery_POWER, HIGH);
+    pinMode(PIN_GPS_EN, OUTPUT);
+    digitalWrite(PIN_GPS_EN, HIGH);
 }
 
 // called from main-nrf52.cpp during the cpuDeepSleep() function
