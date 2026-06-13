@@ -86,6 +86,10 @@ class Channels
     // Returns true if the channel has the default name and PSK
     bool isDefaultChannel(ChannelIndex chIndex);
 
+    // Returns true if the channel is public: PSK is 0 or 1 bytes (no key or a well-known
+    // default-index shorthand) AND the name matches the modem-preset name.
+    bool isPublicChannel(ChannelIndex chIndex);
+
     // Returns true if we can be reached via a channel with the default settings given a region and modem preset
     bool hasDefaultChannel();
 

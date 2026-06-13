@@ -2,6 +2,7 @@
 
 #if HAS_TRAFFIC_MANAGEMENT
 
+#include "Channels.h"
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -761,7 +762,8 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     // GPS jitter within the configured precision.
 
     if (!isFromUs(&mp) && !isToUs(&mp)) {
-        if (cfg.position_dedup_enabled && mp.decoded.portnum == meshtastic_PortNum_POSITION_APP) {
+        if (cfg.position_dedup_enabled && channels.isPublicChannel(mp.channel) &&
+            mp.decoded.portnum == meshtastic_PortNum_POSITION_APP) {
             meshtastic_Position pos = meshtastic_Position_init_zero;
             if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Position_msg, &pos)) {
                 if (shouldDropPosition(&mp, &pos, nowMs)) {

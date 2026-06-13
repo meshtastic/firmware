@@ -489,6 +489,8 @@ NodeDB::NodeDB()
 #endif
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    if (!info)
+        return;
     TypeConversions::CopyUserToNodeInfoLite(info, owner);
 
     // If node database has not been saved for the first time, save it now
@@ -2832,7 +2834,8 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // Block the contact and drop its rich satellite data, but keep the
         // public key copied above — an ignored peer keeps a usable identity
         // (a verifiable target) rather than a bare node number.
-        setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+        if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true))
+            LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
         eraseNodeSatellites(contact.node_num);
     } else {
@@ -2853,12 +2856,14 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         } else {
             // Normal case: set is_favorite to prevent expiration.
             // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
-            setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true))
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", contact.node_num, MAX_NUM_NODES - 2);
         }
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
         if (contact.manually_verified) {
-            setProtectedFlag(info, NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK, true);
+            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK, true))
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "verify", contact.node_num, MAX_NUM_NODES - 2);
         }
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
@@ -3395,6 +3400,8 @@ bool NodeDB::createNewIdentity()
     myNodeInfo.my_node_num = newNodeNum;
 
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    if (!info)
+        return false;
     TypeConversions::CopyUserToNodeInfoLite(info, owner);
 
     return true;
