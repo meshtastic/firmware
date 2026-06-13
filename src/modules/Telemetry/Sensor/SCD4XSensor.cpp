@@ -100,7 +100,7 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     float temperature, humidity;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
     reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
@@ -108,7 +108,7 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     error = scd4x.getDataReadyStatus(dataReady);
     if (error != SCD4X_NO_ERROR || !dataReady) {
 #ifdef SCD4X_I2C_CLOCK_SPEED
-        LOG_INFO("%s: restoring clock speed", sensorName);
+        LOG_DEBUG("%s: restoring clock speed", sensorName);
         reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
         LOG_ERROR("SCD4X: Data is not ready");
@@ -118,7 +118,7 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     error = scd4x.readMeasurement(co2, temperature, humidity);
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s: restoring clock speed", sensorName);
+    LOG_DEBUG("%s: restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
