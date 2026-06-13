@@ -151,7 +151,7 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
     if (writtenBytes != bufferSize) {
-        LOG_ERROR("%s: Error writting on I2C bus", sensorName);
+        LOG_ERROR("%s: Error writing on I2C bus", sensorName);
         return false;
     }
 
@@ -573,7 +573,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     delay(50); // without this there is an error on the deviceReset function
 
     if (!sendCommand(SEN5X_RESET)) {
-        LOG_ERROR("%s: error reseting device", sensorName);
+        LOG_ERROR("%s: error resetting device", sensorName);
         return false;
     }
     delay(200); // From Sensirion Datasheet

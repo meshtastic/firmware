@@ -59,7 +59,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     }
 
 #ifdef PMSA003I_I2C_CLOCK_SPEED
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, PMSA003I_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: attempting to reclock speed to %uHz", sensorName, PMSA003I_I2C_CLOCK_SPEED);
     reClockI2C.setClock(PMSA003I_I2C_CLOCK_SPEED);
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
 
@@ -67,7 +67,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     if (_bus->available() < PMSA003I_FRAME_LENGTH) {
         LOG_WARN("%s: read failed: incomplete data (%d bytes)", sensorName, _bus->available());
 #ifdef PMSA003I_I2C_CLOCK_SPEED
-        LOG_INFO("%s: restoring clock speed", sensorName);
+        LOG_DEBUG("%s: restoring clock speed", sensorName);
         reClockI2C.restoreClock();
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
         return false;
@@ -78,7 +78,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     }
 
 #ifdef PMSA003I_I2C_CLOCK_SPEED
-    LOG_INFO("%s: restoring clock speed", sensorName);
+    LOG_DEBUG("%s: restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
 
