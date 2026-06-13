@@ -45,6 +45,7 @@ extern const RegionProfile PROFILE_UNDEF;
 extern const RegionProfile PROFILE_LITE;
 extern const RegionProfile PROFILE_NARROW;
 extern const RegionProfile PROFILE_HAM_20KHZ;
+extern const RegionProfile PROFILE_HAM_100KHZ;
 
 // Map from old region names to new region enums
 struct RegionInfo {
@@ -64,6 +65,14 @@ struct RegionInfo {
     // Preset accessors (delegate through profile)
     meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return defaultPreset; }
     const meshtastic_Config_LoRaConfig_ModemPreset *getAvailablePresets() const { return profile->presets; }
+    bool supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset preset) const
+    {
+        for (size_t i = 0; profile->presets[i] != MODEM_PRESET_END; i++) {
+            if (profile->presets[i] == preset)
+                return true;
+        }
+        return false;
+    }
     size_t getNumPresets() const
     {
         size_t n = 0;
@@ -129,7 +138,7 @@ static inline float bwCodeToKHz(uint16_t bwCode)
     if (bwCode == 10)
         return 10.4f;
     if (bwCode == 16)
-        return 15.625f;
+        return 15.6f;
     if (bwCode == 21)
         return 20.8f;
     if (bwCode == 31)
@@ -241,12 +250,12 @@ static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset 
         sf = 8;
         break;
     case PRESET(TINY_FAST):
-        bwKHz = 15.625f;
+        bwKHz = 15.6f;
         cr = 5;
         sf = 7;
         break;
     case PRESET(TINY_SLOW):
-        bwKHz = 15.625f;
+        bwKHz = 15.6f;
         cr = 6;
         sf = 8;
         break;

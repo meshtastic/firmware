@@ -234,6 +234,9 @@ typedef struct _meshtastic_HamParameters {
     float frequency;
     /* Optional short name of user */
     char short_name[5];
+    /* Optional long name of user
+ Appended to callsign */
+    char long_name[15];
 } meshtastic_HamParameters;
 
 /* Response envelope for node_remote_hardware_pins */
@@ -544,7 +547,7 @@ extern "C" {
 #define meshtastic_AdminMessage_InputEvent_init_default {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_default {_meshtastic_OTAMode_MIN, {0, {0}}}
 #define meshtastic_LockdownAuth_init_default     {{0, {0}}, 0, 0, 0, 0, 0}
-#define meshtastic_HamParameters_init_default    {"", 0, 0, ""}
+#define meshtastic_HamParameters_init_default    {"", 0, 0, "", ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_default {0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
 #define meshtastic_SharedContact_init_default    {0, false, meshtastic_User_init_default, 0, 0}
 #define meshtastic_KeyVerificationAdmin_init_default {_meshtastic_KeyVerificationAdmin_MessageType_MIN, 0, 0, false, 0}
@@ -557,7 +560,7 @@ extern "C" {
 #define meshtastic_AdminMessage_InputEvent_init_zero {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_zero {_meshtastic_OTAMode_MIN, {0, {0}}}
 #define meshtastic_LockdownAuth_init_zero        {{0, {0}}, 0, 0, 0, 0, 0}
-#define meshtastic_HamParameters_init_zero       {"", 0, 0, ""}
+#define meshtastic_HamParameters_init_zero       {"", 0, 0, "", ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_zero {0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 #define meshtastic_SharedContact_init_zero       {0, false, meshtastic_User_init_zero, 0, 0}
 #define meshtastic_KeyVerificationAdmin_init_zero {_meshtastic_KeyVerificationAdmin_MessageType_MIN, 0, 0, false, 0}
@@ -584,6 +587,7 @@ extern "C" {
 #define meshtastic_HamParameters_tx_power_tag    2
 #define meshtastic_HamParameters_frequency_tag   3
 #define meshtastic_HamParameters_short_name_tag  4
+#define meshtastic_HamParameters_long_name_tag   5
 #define meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag 1
 #define meshtastic_SharedContact_node_num_tag    1
 #define meshtastic_SharedContact_user_tag        2
@@ -786,7 +790,8 @@ X(a, STATIC,   SINGULAR, BOOL,     disable,           6)
 X(a, STATIC,   SINGULAR, STRING,   call_sign,         1) \
 X(a, STATIC,   SINGULAR, INT32,    tx_power,          2) \
 X(a, STATIC,   SINGULAR, FLOAT,    frequency,         3) \
-X(a, STATIC,   SINGULAR, STRING,   short_name,        4)
+X(a, STATIC,   SINGULAR, STRING,   short_name,        4) \
+X(a, STATIC,   SINGULAR, STRING,   long_name,         5)
 #define meshtastic_HamParameters_CALLBACK NULL
 #define meshtastic_HamParameters_DEFAULT NULL
 
@@ -891,7 +896,7 @@ extern const pb_msgdesc_t meshtastic_SHTXX_config_msg;
 #define meshtastic_AdminMessage_InputEvent_size  14
 #define meshtastic_AdminMessage_OTAEvent_size    36
 #define meshtastic_AdminMessage_size             511
-#define meshtastic_HamParameters_size            31
+#define meshtastic_HamParameters_size            47
 #define meshtastic_KeyVerificationAdmin_size     25
 #define meshtastic_LockdownAuth_size             56
 #define meshtastic_NodeRemoteHardwarePinsResponse_size 496
