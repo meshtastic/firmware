@@ -485,14 +485,25 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     bool decrypted = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
+    // Resolve the sender's public key: prefer the one stored in NodeDB, otherwise fall back to a
+    // not-yet-verified key held during an in-progress key-verification handshake. The latter lets us
+    // DH-decode the follow-on PKI packet before the peer's key has been committed to NodeDB.
+    meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
+    bool haveRemoteKey = false;
+    auto *fromNode = nodeDB->getMeshNode(p->from);
+    if (fromNode != nullptr && fromNode->public_key.size > 0) {
+        remotePublic = fromNode->public_key;
+        haveRemoteKey = true;
+    } else if (crypto->getPendingPublicKey(p->from, remotePublic)) {
+        haveRemoteKey = true;
+    }
     // Attempt PKI decryption first
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
-        nodeDB->getMeshNode(p->from)->public_key.size > 0 && nodeDB->getMeshNode(p->to) != nullptr &&
-        nodeDB->getMeshNode(p->to)->public_key.size > 0 && rawSize > MESHTASTIC_PKC_OVERHEAD) {
+    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && haveRemoteKey &&
+        nodeDB->getMeshNode(p->to) != nullptr && nodeDB->getMeshNode(p->to)->public_key.size > 0 &&
+        rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->public_key, p->id, rawSize, p->encrypted.bytes,
-                                      bytes)) {
+        if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
             LOG_INFO("PKI Decryption worked!");
 
             meshtastic_Data decodedtmp;
@@ -503,7 +514,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
-                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->public_key.bytes, 32);
+                memcpy(&p->public_key.bytes, remotePublic.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
@@ -677,6 +688,19 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+        // Resolve the destination's public key: prefer NodeDB, otherwise (for a key-verification
+        // follow-on packet that explicitly requested PKI) fall back to the not-yet-verified key held
+        // during an in-progress handshake. This lets us DH-encode the follow-on packet before the
+        // peer's key has been committed to NodeDB.
+        meshtastic_NodeInfoLite_public_key_t destPublic = {0, {0}};
+        bool haveDestKey = false;
+        if (node != nullptr && node->public_key.size == 32) {
+            destPublic = node->public_key;
+            haveDestKey = true;
+        } else if (p->pki_encrypted && p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP &&
+                   crypto->getPendingPublicKey(p->to, destPublic)) {
+            haveDestKey = true;
+        }
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
         // First, only PKC encrypt packets we are originating
@@ -694,23 +718,29 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             config.security.private_key.size == 32 && !isBroadcast(p->to) &&
             // Some portnums either make no sense to send with PKC
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
-            p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
+            p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP &&
+            // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
+            // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
+            // uses the pending key resolved into haveDestKey/destPublic above.
+            // Though possible the first packet each direction should go non-pkc
+            // to handle the case where the remote node has our key, but we don't have theirs.
+            !(p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP && !haveDestKey)) {
             LOG_DEBUG("Use PKI!");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
-            // Check for a known public key for the destination
-            if (node == nullptr || node->public_key.size != 32) {
+            // Check for a usable public key for the destination (NodeDB or a pending key-verification key)
+            if (!haveDestKey) {
                 LOG_WARN("Unknown public key for destination node 0x%08x (portnum %d), refusing to send legacy DM", p->to,
                          p->decoded.portnum);
                 return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
             }
-            if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
+            if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) && node != nullptr &&
                 memcmp(p->public_key.bytes, node->public_key.bytes, 32) != 0) {
                 LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,
                          *node->public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), node->public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+            crypto->encryptCurve25519(p->to, getFrom(p), destPublic, p->id, numbytes, bytes, p->encrypted.bytes);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
