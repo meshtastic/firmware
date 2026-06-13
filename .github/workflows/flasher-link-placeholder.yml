@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Post web flasher build-in-progress placeholder
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- web-flasher-link -->';
