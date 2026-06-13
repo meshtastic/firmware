@@ -154,21 +154,21 @@ bool SFA30Sensor::getMetrics(meshtastic_Telemetry *measurement)
     float temperature = 0.0;
 
 #ifdef SFA30_I2C_CLOCK_SPEED
-    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s attempting to reclock speed to %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
     reClockI2C.setClock(SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
     if (this->isError(sfa30.readMeasuredValues(hcho, humidity, temperature))) {
         LOG_WARN("%s: No values", sensorName);
 #ifdef SFA30_I2C_CLOCK_SPEED
-        LOG_INFO("%s restoring clock speed", sensorName);
+        LOG_DEBUG("%s restoring clock speed", sensorName);
         reClockI2C.restoreClock();
 #endif /* SFA30_I2C_CLOCK_SPEED */
         return false;
     }
 
 #ifdef SFA30_I2C_CLOCK_SPEED
-    LOG_INFO("%s restoring clock speed", sensorName);
+    LOG_DEBUG("%s restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
