@@ -251,9 +251,15 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         power = -9;
 
     err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
+        // Do not abort here: `power` is derived from operator-settable config (tx_power and
+        // SX126X_MAX_POWER). A value above the chip's RadioLib limit (+22 dBm for SX126x) returns
+        // RADIOLIB_ERR_INVALID_OUTPUT_POWER. asserting would abort the daemon mid-reconfigure, before
+        // reloadConfig() persists the new config, so the offending setting silently reverts and the
+        // daemon crash-loops. Record the error and continue, matching the setFrequency() handling above.
         LOG_ERROR("SX126X setOutputPower %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    }
 
     // Apply RX gain mode — valid in STDBY (datasheet §9.6), matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
