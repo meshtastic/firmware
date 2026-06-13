@@ -80,6 +80,12 @@ namespace
 constexpr uint32_t GPS_PROBE_CACHE_MAGIC = 0x47504348UL; // "GPCH"
 constexpr uint16_t GPS_PROBE_CACHE_VERSION = 1;
 constexpr const char *GPS_PROBE_CACHE_FILE = "/prefs/gps_probe_cache.dat";
+constexpr int MIN_PLAUSIBLE_GPS_YEAR = 2020;
+constexpr int MAX_PLAUSIBLE_GPS_YEAR = 2100;
+#ifdef TRACKER_T1000_E
+constexpr uint32_t T1000_E_AIROHA_WAKE_MS = 1000;
+constexpr uint32_t T1000_E_AIROHA_WAKE_INTERVAL_MS = 40;
+#endif
 
 struct GPSProbeCacheRecord {
     uint32_t magic;
@@ -99,6 +105,45 @@ bool isValidProbeBaud(uint32_t baud)
 {
     // Conservative sanity range for UART baud values.
     return baud >= 1200 && baud <= 921600;
+}
+
+template <typename T> void wakeAirohaForActiveProbe(T *serialGps)
+{
+#ifdef TRACKER_T1000_E
+    digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
+    digitalWrite(GPS_RTC_INT, HIGH);
+    delay(3);
+    digitalWrite(GPS_RTC_INT, LOW);
+    delay(50);
+
+    const uint32_t start = millis();
+    do {
+        serialGps->write("$PAIR382,1*2E\r\n");
+        delay(T1000_E_AIROHA_WAKE_INTERVAL_MS);
+    } while (Throttle::isWithinTimespanMs(start, T1000_E_AIROHA_WAKE_MS));
+#elif defined(GNSS_AIROHA)
+    serialGps->write("$PAIR382,1*2E\r\n");
+    delay(20);
+#else
+    (void)serialGps;
+#endif
+}
+
+bool isPlausibleNmeaTime(const struct tm &t)
+{
+    const int year = t.tm_year + 1900;
+    if (year < MIN_PLAUSIBLE_GPS_YEAR || year > MAX_PLAUSIBLE_GPS_YEAR) {
+        return false;
+    }
+
+#ifdef BUILD_EPOCH
+    const int64_t candidate = static_cast<int64_t>(gm_mktime(&t));
+    const int64_t minEpoch = static_cast<int64_t>(BUILD_EPOCH);
+    const int64_t maxEpoch = minEpoch + static_cast<int64_t>(FORTY_YEARS);
+    return candidate >= minEpoch && candidate <= maxEpoch;
+#else
+    return true;
+#endif
 }
 
 template <typename T> bool sawNmeaSentenceAtBaud(T *serialGps, uint32_t timeoutMs)
@@ -689,20 +734,7 @@ bool GPS::verifyCachedProbePresence()
     case GNSS_MODEL_AG3352:
         if (cachedProbeModel == GNSS_MODEL_AG3352)
             cachedProbeModelName = "AG3352";
-#ifdef TRACKER_T1000_E
-        digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
-        digitalWrite(GPS_RTC_INT, HIGH);
-        delay(3);
-        digitalWrite(GPS_RTC_INT, LOW);
-        delay(50);
-        for (uint8_t i = 0; i < 25; ++i) {
-            _serial_gps->write("$PAIR382,1*2E\r\n");
-            delay(40);
-        }
-#elif defined(GNSS_AIROHA)
-        _serial_gps->write("$PAIR382,1*2E\r\n");
-        delay(20);
-#endif
+        wakeAirohaForActiveProbe(_serial_gps);
         _serial_gps->write("$PAIR021*39\r\n");
         present = (getACK("$PAIR021,", 900) == GNSS_RESPONSE_OK);
         break;
@@ -1655,20 +1687,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
     case 3: {
         /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
-#ifdef TRACKER_T1000_E
-        digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
-        digitalWrite(GPS_RTC_INT, HIGH);
-        delay(3);
-        digitalWrite(GPS_RTC_INT, LOW);
-        delay(50);
-        for (uint8_t i = 0; i < 25; ++i) {
-            _serial_gps->write("$PAIR382,1*2E\r\n");
-            delay(40);
-        }
-#elif defined(GNSS_AIROHA)
-        _serial_gps->write("$PAIR382,1*2E\r\n");
-        delay(20);
-#endif
+        wakeAirohaForActiveProbe(_serial_gps);
         _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF to reduce volume
         _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF to reduce volume
         _serial_gps->write("$PAIR513*3D\r\n");     // save configuration
@@ -2000,12 +2019,9 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
         if (t.tm_mon > -1) {
-#ifdef BUILD_EPOCH
-            time_t candidate = gm_mktime(&t);
-            if (candidate < BUILD_EPOCH || (uint64_t)candidate > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
+            if (!isPlausibleNmeaTime(t)) {
                 return false;
             }
-#endif
             if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
                 LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
                           t.tm_min, t.tm_sec, ti.age());
