@@ -76,6 +76,32 @@ bool SEN5XSensor::findModel()
     return true;
 }
 
+bool SEN5XSensor::probe(TwoWire *bus, uint8_t address, ScanI2C::I2CPort port)
+{
+    LOG_INFO("SEN5X: probing sensor");
+
+    _bus = bus;
+    _address = address;
+#ifdef SEN5X_I2C_CLOCK_SPEED
+    _port = port;
+    reClockI2C.setup(_bus, _port);
+#endif /* SEN5X_I2C_CLOCK_SPEED */
+
+    delay(50); // without this there is an error on the deviceReset function
+
+    if (!sendCommand(SEN5X_RESET)) {
+        LOG_ERROR("SEN5X: error resetting device");
+        return false;
+    }
+    delay(200); // From Sensirion Datasheet
+
+    if (!findModel()) {
+        LOG_ERROR("SEN5X: error finding sensor model");
+        return false;
+    }
+    return true;
+}
+
 bool SEN5XSensor::sendCommand(uint16_t command)
 {
     uint8_t nothing;
