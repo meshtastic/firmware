@@ -334,7 +334,7 @@ bool SEN5XSensor::vocStateToSensor()
     }
 
     if (!sendCommand(SEN5X_STOP_MEASUREMENT)) {
-        LOG_ERROR("%s: Error stoping measurement", sensorName);
+        LOG_ERROR("%s: Error stopping measurement", sensorName);
         return false;
     }
     delay(200); // From Sensirion Datasheet
@@ -526,7 +526,7 @@ bool SEN5XSensor::startCleaning()
 
     // Note that cleaning command can only be run when the sensor is in measurement mode
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
-        LOG_ERROR("%s: Error starting measurment mode", sensorName);
+        LOG_ERROR("%s: Error starting measurement mode", sensorName);
         return false;
     }
     delay(50); // From Sensirion Datasheet

@@ -71,7 +71,7 @@ bool SFA30Sensor::isError(uint16_t response)
 void SFA30Sensor::sleep()
 {
 #ifdef SFA30_I2C_CLOCK_SPEED
-    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s attempting to reclock speed to %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
     reClockI2C.setClock(SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
@@ -81,11 +81,11 @@ void SFA30Sensor::sleep()
     };
 
 #ifdef SFA30_I2C_CLOCK_SPEED
-    LOG_INFO("%s restoring clock speed", sensorName);
+    LOG_DEBUG("%s restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
-    LOG_INFO("%s: stop measurement", sensorName);
+    LOG_DEBUG("%s: stop measurement", sensorName);
     state = State::IDLE;
     measureStarted = 0;
 }
@@ -93,21 +93,21 @@ void SFA30Sensor::sleep()
 uint32_t SFA30Sensor::wakeUp()
 {
 #ifdef SFA30_I2C_CLOCK_SPEED
-    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s attempting to reclock speed to %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
     reClockI2C.setClock(SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
-    LOG_INFO("Waking up %s", sensorName);
+    LOG_DEBUG("Waking up %s", sensorName);
     if (this->isError(sfa30.startContinuousMeasurement())) {
 #ifdef SFA30_I2C_CLOCK_SPEED
-        LOG_INFO("%s restoring clock speed", sensorName);
+        LOG_DEBUG("%s restoring clock speed", sensorName);
         reClockI2C.restoreClock();
 #endif /* SFA30_I2C_CLOCK_SPEED */
         return 0;
     }
 
 #ifdef SFA30_I2C_CLOCK_SPEED
-    LOG_INFO("%s restoring clock speed", sensorName);
+    LOG_DEBUG("%s restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
