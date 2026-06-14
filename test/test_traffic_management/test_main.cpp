@@ -329,6 +329,7 @@ static void test_tm_positionDedup_dropsDuplicateWithinWindow(void)
     moduleConfig.traffic_management.position_dedup_enabled = true;
     moduleConfig.traffic_management.position_precision_bits = 16;
     moduleConfig.traffic_management.position_min_interval_secs = 300;
+    installWellKnownPrimaryChannel(); // dedup only runs on a well-known channel (gate in handleReceived)
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
@@ -354,6 +355,7 @@ static void test_tm_positionDedup_allowsMovedPosition(void)
     moduleConfig.traffic_management.position_dedup_enabled = true;
     moduleConfig.traffic_management.position_precision_bits = 16;
     moduleConfig.traffic_management.position_min_interval_secs = 300;
+    installWellKnownPrimaryChannel(); // dedup only runs on a well-known channel (gate in handleReceived)
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
