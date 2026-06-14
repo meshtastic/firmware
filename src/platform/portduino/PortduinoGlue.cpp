@@ -1063,6 +1063,7 @@ bool loadConfig(const char *configPath)
                     TCPPort = (portduino_config.api_port);
                 }
             }
+            portduino_config.udp_unicast_peer = (yamlConfig["General"]["UDPUnicastPeer"]).as<std::string>("");
             portduino_config.mac_address = (yamlConfig["General"]["MACAddress"]).as<std::string>("");
             if (portduino_config.mac_address != "") {
                 portduino_config.mac_address_explicit = true;

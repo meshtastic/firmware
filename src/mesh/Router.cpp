@@ -434,6 +434,13 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
+#ifdef ARCH_PORTDUINO
+    // Mirror every outbound packet to the meshswitch routing daemon, if a unicast peer is configured.
+    if (udpUnicastConnector) {
+        udpUnicastConnector->onSend(p);
+    }
+#endif
+
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
     return iface->send(p);
 }
@@ -462,6 +469,34 @@ bool Router::findInTxQueue(NodeNum from, PacketId id)
 void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
     // FIXME, update nodedb here for any packet that passes through us
+}
+
+bool attemptAESDecrypt(meshtastic_MeshPacket *p, size_t rawSize)
+{
+    memcpy(bytes, p->encrypted.bytes, rawSize);
+    // Try to decrypt the packet if we can
+    crypto->decrypt(p->from, p->id, rawSize, bytes);
+
+    // printBytes("plaintext", bytes, p->encrypted.size);
+
+    // Take those raw bytes and convert them back into a well structured protobuf we can understand
+    meshtastic_Data decodedtmp;
+    memset(&decodedtmp, 0, sizeof(decodedtmp));
+    if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
+        LOG_DEBUG("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)", p->id);
+    } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
+        LOG_DEBUG("Invalid portnum (bad psk?)");
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    } else if (!owner.is_licensed && isToUs(p) && decodedtmp.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
+        LOG_WARN("Rejecting legacy DM");
+        return false;
+#endif
+    } else {
+        p->decoded = decodedtmp;
+        p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
+        return true;
+    }
+    return false;
 }
 
 DecodeState perhapsDecode(meshtastic_MeshPacket *p)
@@ -523,30 +558,26 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
             // Try to use this hash/channel pair
             if (channels.decryptForHash(chIndex, p->channel)) {
-                // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf. Create a
-                // fresh copy for each decrypt attempt.
-                memcpy(bytes, p->encrypted.bytes, rawSize);
-                // Try to decrypt the packet if we can
-                crypto->decrypt(p->from, p->id, rawSize, bytes);
+                decrypted = attemptAESDecrypt(p, rawSize);
+                if (decrypted) {
+                    LOG_DEBUG("Packet decrypted using channel %d", chIndex);
+                    break;
+                }
 
-                // printBytes("plaintext", bytes, p->encrypted.size);
-
-                // Take those raw bytes and convert them back into a well structured protobuf we can understand
-                meshtastic_Data decodedtmp;
-                memset(&decodedtmp, 0, sizeof(decodedtmp));
-                if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
-                    LOG_DEBUG("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)", p->id);
-                } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
-                    LOG_DEBUG("Invalid portnum (bad psk?)");
-#if !(MESHTASTIC_EXCLUDE_PKI)
-                } else if (!owner.is_licensed && isToUs(p) && decodedtmp.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
-                    LOG_WARN("Rejecting legacy DM");
-                    return DecodeState::DECODE_FAILURE;
-#endif
-                } else {
-                    p->decoded = decodedtmp;
-                    p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
-                    decrypted = true;
+                // We have a sticky problem here in a specific case.
+                // If we're routing packets between presets over UDP
+                // The channel hash may be bogus.
+                // So we probably need to try to decrypt with every channel
+                // even if the hash doesn't match, to see if any of them work.
+                // If we find one that works, we can just re-write the hash
+            } else if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP) {
+                // On Portduino, we allow UDP packets to bypass the channel hash check, since the hash may not be
+                // correct for packets coming over UDP from the meshswitch daemon.
+                // This allows us to support routing between presets over UDP even if the channel hashes don't match.
+                channels.setCrypto(chIndex);
+                decrypted = attemptAESDecrypt(p, rawSize);
+                if (decrypted) {
+                    LOG_DEBUG("Packet decrypted using channel %d with UDP bypass", chIndex);
                     break;
                 }
             }
