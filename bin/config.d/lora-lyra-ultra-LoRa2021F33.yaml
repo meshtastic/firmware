@@ -1,0 +1,39 @@
+# For the NiceRF LoRa2021F33 module, on the LuckFox Ultra boards.
+# Pin assignment is based on  wehooper4's Luckfox Ultra Hats
+#
+# Ubuntu use luckfox-config to configure spi0 as:
+# CS=10, CLK=8, MOSI=6, MISO=7 Max spi speed: 2000000
+#
+# For use with Armbian luckfox-lyra-ultra-w
+# Enable overlay 'luckfox-lyra-ultra-w-spi0-cs0-spidev' with armbian-config
+
+Meta:
+  name: Luckfox Ultra NiceRF LoRa2021F33
+  support: community
+  compatible:
+    - luckfox-pico-ultra # Armbian
+    - luckfox-lyra-ultra # Armbian
+
+Lora:
+  Module: lr2021
+  DIO3_TCXO_VOLTAGE: 1.8
+  # Defaults for LR2021, but can be overridden by user config
+  # LR2021_MAX_POWER: 22
+  # LR2021_MAX_POWER_HF: 22
+  # LR2021_IRQ_DIO_NUM: 9
+  CS: 10
+  IRQ: 5
+  Busy: 11
+  Reset: 9
+
+  spidev: spidev0.0 #pins are (CS=10, CLK=8, MOSI=6, MISO=7)
+  spiSpeed: 2000000
+
+  # NiceRF LoRa2021F33 module
+  rfswitch_table:
+    pins: [DIO5, DIO6, DIO8]
+    MODE_STBY: [LOW, LOW, LOW]
+    MODE_RX: [LOW, LOW, LOW]
+    MODE_TX: [LOW, HIGH, LOW]
+    MODE_RX_HF: [HIGH, LOW, LOW]
+    MODE_TX_HF: [LOW, LOW, HIGH]
