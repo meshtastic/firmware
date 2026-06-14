@@ -140,7 +140,7 @@ bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint1
 #include "../modules/Telemetry/Sensor/SEN5XSensor.h"
 bool probeSEN5X(TwoWire *i2cBus, uint8_t address, ScanI2C::I2CPort port)
 {
-    SEN5XSensor sen5xsensor = SEN5XSensor();
+    SEN5XSensor sen5xsensor;
     return sen5xsensor.probe(i2cBus, address, port);
 }
 #endif

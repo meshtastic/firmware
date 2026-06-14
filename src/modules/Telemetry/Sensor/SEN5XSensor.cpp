@@ -86,16 +86,8 @@ bool SEN5XSensor::probe(TwoWire *bus, uint8_t address, ScanI2C::I2CPort port)
     reClockI2C.setup(_bus, _port);
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
-    delay(50); // without this there is an error on the deviceReset function
-
-    if (!sendCommand(SEN5X_RESET)) {
-        LOG_ERROR("SEN5X: error resetting device");
-        return false;
-    }
-    delay(200); // From Sensirion Datasheet
-
     if (!findModel()) {
-        LOG_ERROR("SEN5X: error finding sensor model");
+        LOG_DEBUG("SEN5X: can't find SEN5X model");
         return false;
     }
     return true;
