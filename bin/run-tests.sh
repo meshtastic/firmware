@@ -81,15 +81,26 @@ fi
 PIO_RC=${PIPESTATUS[0]}
 
 # --- Outcome detection -------------------------------------------------------
-# Failure markers across all three reporting formats + build/crash signatures.
-FAIL_RE='\[FAILED\]|\[ERRORED\]|:FAIL:|[1-9][0-9]* failed|[0-9]+ Tests [1-9][0-9]* Failures|error:|undefined reference|Segmentation fault|terminate called|SIGHUP|SIGSEGV|SIGABRT'
-# A positive success summary must be present to call anything green (absence != success).
-PASS_RE='test cases: *[0-9]+ succeeded|[0-9]+ Tests 0 Failures'
+# The SAME outcome is spelled differently depending on which layer emitted the line — this is
+# the trap that produces false greens (grepping ":PASS" misses pio's "[PASSED]", grepping
+# "[FAILED]" misses Unity's ":FAIL:"). So every regex below matches BOTH spellings:
+#   pass:  Unity per-assertion ":PASS"   | pio per-suite "[PASSED]"      | summary "N succeeded"
+#   fail:  Unity per-assertion ":FAIL:"  | pio per-suite "[FAILED]"      | summary "M failed"
+#   error: pio build/crash "[ERRORED]"   | Unity "M Failures"            | compiler "error:"
+# Match \b after :PASS/:FAIL so ":PASSED"/":FAILED" forms are also caught either way.
+FAIL_RE=':FAIL\b|\[FAILED\]|\[ERRORED\]|[1-9][0-9]* failed|[0-9]+ Tests [1-9][0-9]* Failures|error:|undefined reference|Segmentation fault|terminate called|SIGHUP|SIGSEGV|SIGABRT'
+# Positive proof tests actually ran & passed (absence != success). Accept any pass spelling:
+# the per-test/per-suite tokens OR a success summary line.
+PASS_RE=':PASS\b|\[PASSED\]|test cases: *[0-9]+ succeeded|[0-9]+ Tests 0 Failures'
 
-# Suites that actually produced a verdict line: "coverage:test_x [PASSED|FAILED|ERRORED]".
+# Suites that produced a per-suite verdict. pio emits "coverage:test_x [PASSED|FAILED|ERRORED]";
+# a SKIPPED suite (hardware-only on native) is "accounted for" too, so it doesn't read as missing.
 mapfile -t RAN_SUITES < <(grep -oE "${ENV}:test_[a-z0-9_]+ \[(PASSED|FAILED|ERRORED)\]" "$LOG" |
 	sed -E "s/^${ENV}:(test_[a-z0-9_]+) .*/\1/" | sort -u)
 RAN_COUNT=${#RAN_SUITES[@]}
+# Suites pio explicitly skipped (don't count these as "missing" in the canonical cross-check).
+mapfile -t SKIPPED_SUITES < <(grep -oE "${ENV}:test_[a-z0-9_]+.*\bSKIPPED\b" "$LOG" |
+	grep -oE "test_[a-z0-9_]+" | sort -u)
 
 verdict_red() {
 	local detail
@@ -112,11 +123,13 @@ if ! grep -qE "$PASS_RE" "$LOG"; then
 	exit 1
 fi
 
-# AMBER: everything that ran passed, but (full run only) fewer suites ran than exist in test/.
-if [[ -z $FILTER && $RAN_COUNT -lt $EXPECTED_COUNT ]]; then
+# AMBER: everything that ran passed, but (full run only) a canonical suite neither ran NOR was
+# explicitly skipped — i.e. it silently went missing. SKIPPED suites are accounted for.
+ACCOUNTED_COUNT=$((RAN_COUNT + ${#SKIPPED_SUITES[@]}))
+if [[ -z $FILTER && $ACCOUNTED_COUNT -lt $EXPECTED_COUNT ]]; then
 	missing=()
 	for s in "${ALL_SUITES[@]}"; do
-		printf '%s\n' "${RAN_SUITES[@]}" | grep -qx "$s" || missing+=("$s")
+		printf '%s\n' "${RAN_SUITES[@]}" "${SKIPPED_SUITES[@]}" | grep -qx "$s" || missing+=("$s")
 	done
 	echo ""
 	echo "RESULT: AMBER ${RAN_COUNT}/${EXPECTED_COUNT} suites ran (missing: ${missing[*]}) — all that ran passed"
