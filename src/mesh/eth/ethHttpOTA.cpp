@@ -121,6 +121,27 @@ static void jsonEscapeInfo(char *dst, size_t dstsize, const char *src)
     dst[j] = '\0';
 }
 
+// Map device role enum to its canonical name; clientarea expects the string (e.g. "CLIENT").
+static const char *roleName(meshtastic_Config_DeviceConfig_Role role)
+{
+    switch (role) {
+    case meshtastic_Config_DeviceConfig_Role_CLIENT: return "CLIENT";
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE: return "CLIENT_MUTE";
+    case meshtastic_Config_DeviceConfig_Role_ROUTER: return "ROUTER";
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT: return "ROUTER_CLIENT";
+    case meshtastic_Config_DeviceConfig_Role_REPEATER: return "REPEATER";
+    case meshtastic_Config_DeviceConfig_Role_TRACKER: return "TRACKER";
+    case meshtastic_Config_DeviceConfig_Role_SENSOR: return "SENSOR";
+    case meshtastic_Config_DeviceConfig_Role_TAK: return "TAK";
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN: return "CLIENT_HIDDEN";
+    case meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND: return "LOST_AND_FOUND";
+    case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER: return "TAK_TRACKER";
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_LATE: return "ROUTER_LATE";
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_BASE: return "CLIENT_BASE";
+    default: return "UNKNOWN";
+    }
+}
+
 void handleOtaInfo(IStreamReadWrite &client)
 {
     // owner.* and config.* come from NodeDB; clientarea reads these for the node card
@@ -133,10 +154,10 @@ void handleOtaInfo(IStreamReadWrite &client)
     char body[384];
     int n = snprintf(body, sizeof(body),
                      "{\"pio_env\":\"%s\",\"firmware_version\":\"%s\",\"hw_model\":%d,"
-                     "\"owner_long_name\":\"%s\",\"owner_short_name\":\"%s\",\"role\":%d,"
+                     "\"owner_long_name\":\"%s\",\"owner_short_name\":\"%s\",\"role\":\"%s\","
                      "\"uptime_s\":%lu}",
                      optstr(APP_ENV), optstr(APP_VERSION), (int)HW_VENDOR, longName, shortName,
-                     (int)config.device.role, (unsigned long)(millis() / 1000));
+                     roleName(config.device.role), (unsigned long)(millis() / 1000));
     if (n < 0)
         n = 0;
     else if (n >= (int)sizeof(body))
