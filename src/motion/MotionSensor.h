@@ -67,6 +67,8 @@ class MotionSensor
     static void updateCalibrationExtrema(float x, float y, float z, float &highestX, float &lowestX, float &highestY,
                                          float &lowestY, float &highestZ, float &lowestZ);
     static float applyCompassOrientation(float heading);
+    static void publishCompassAccelSample(float x, float y, float z);
+    static bool getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs);
 
     ScanI2C::FoundDevice device;
 

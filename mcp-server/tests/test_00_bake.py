@@ -44,7 +44,7 @@ _ESP32_ARCHES = {
     "esp32-c6",
     "esp32c6",
 }
-_NRF52_ARCHES = {"nrf52", "nrf52840", "nrf52832"}
+_NRF52_ARCHES = {"nrf52", "nrf52840"}
 
 
 def _wait_port_free(port: str, *, timeout_s: float = 15.0, role: str = "") -> None:

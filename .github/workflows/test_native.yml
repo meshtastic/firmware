@@ -37,13 +37,33 @@ jobs:
           sed -i -e "s#${PWD}#.#" coverage_base.info # Make paths relative.
 
       - name: Integration test
+        # Cap the whole step: if the simulator ever fails to exit (e.g. the
+        # exit_simulator admin path regresses again) the job must fail fast,
+        # not run to GitHub's 6-hour limit.
+        timeout-minutes: 5
         run: |
           .pio/build/coverage/meshtasticd -s &
           PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
           timeout 20 bash -c "until ls -al /proc/$PID/fd | grep socket; do sleep 1; done"
           echo "Simulator started, launching python test..."
           python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
-          wait
+          # The Python harness sends exit_simulator and exits; the simulator is
+          # expected to terminate on its own. Give it a moment, then verify.
+          # If it is still alive the exit handshake is broken — fail loudly and
+          # do NOT fall through to `wait`, which would otherwise block until the
+          # job's hard timeout.
+          for i in $(seq 1 10); do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "::error title=Simulator did not exit::meshtasticd ignored exit_simulator and is still running after the integration test. The exit_simulator admin path is broken (see AdminModule::handleReceivedProtobuf, ARCH_PORTDUINO bypass). Killing it to avoid a 6-hour CI overrun."
+            kill -9 "$PID" 2>/dev/null || true
+            wait "$PID" 2>/dev/null || true
+            exit 1
+          fi
+          wait "$PID" 2>/dev/null || true
 
       - name: Capture coverage information
         if: always() # run this step even if previous step failed

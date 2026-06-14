@@ -193,8 +193,6 @@ class GPS : private concurrency::OSThread
     bool hasProbeCache = false;
     // Ensures cached probe is attempted once per boot.
     bool triedProbeCache = false;
-    // Latched when cached presence check fails
-    bool cachedProbeFailedThisBoot = false;
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
