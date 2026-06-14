@@ -8,6 +8,7 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 #include "NodeDB.h"
+#include "modules/ControlPointModule.h"
 
 NextHopRouter::NextHopRouter() {}
 
@@ -26,8 +27,23 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
     p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // First set the relayer to us
     wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
-    p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE); // set the next hop
-    LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
+    uint8_t relayId = p->relay_node;
+
+    // Try to use ControlPointModule if it knows a preferred relay
+    std::optional<uint8_t> nextHopFromControlPoint;
+    if (controlPointModule) {
+        nextHopFromControlPoint = controlPointModule->choosePreferredRelay(p->to);
+    }
+
+    if (nextHopFromControlPoint.has_value() &&
+        nextHopFromControlPoint.value() != relayId) {
+        p->next_hop = nextHopFromControlPoint.value();
+        LOG_DEBUG("ControlPoint: next hop for packet with dest %x set to %x", p->to, p->next_hop);
+    } else {
+        // Otherwise use standard Meshtastic behavior
+        p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE);
+        LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
+    }
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
@@ -191,21 +207,21 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
  */
 std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
 {
-    if (isBroadcast(to))
+    if (isBroadcast(to)) {
         return std::nullopt;
+    }
 
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(to);
     if (node && node->next_hop) {
-        // We are careful not to return the relay node as the next hop
         if (node->next_hop != relay_node) {
-            // LOG_DEBUG("Next hop for 0x%x is 0x%x", to, node->next_hop);
             return node->next_hop;
-        } else
+        } else {
             LOG_WARN("Next hop for 0x%x is 0x%x, same as relayer; set no pref", to, node->next_hop);
+        }
     }
+
     return std::nullopt;
 }
-
 PendingPacket *NextHopRouter::findPendingPacket(GlobalPacketId key)
 {
     auto old = pending.find(key); // If we have an old record, someone messed up because id got reused

@@ -3,6 +3,7 @@
 #include "buzz/BuzzerFeedbackThread.h"
 #include "modules/SystemCommandsModule.h"
 #endif
+#include "modules/ControlPointModule.h"
 #include "modules/StatusLEDModule.h"
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
 #include "ReplyBotModule.h"
@@ -123,6 +124,9 @@ void setupModules()
     }
 #endif
     statusLEDModule = new StatusLEDModule();
+
+    controlPointModule = new ControlPointModule();
+
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
     new ReplyBotModule();
 #endif
