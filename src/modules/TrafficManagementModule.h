@@ -51,8 +51,11 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     //   NextHopRouter from its ACK-confirmed decision (see sniffReceived). The
     //   byte must come from a bidirectionally-verified relay, not one-way inference.
     // getNextHopHint: return the cached next-hop byte for `dest`, 0 if unknown.
+    // clearNextHop: forget any cached next hop for `dest` (setNextHop refuses to store
+    //   0, so this is the way NextHopRouter decays a stale/failing overflow route).
     void setNextHop(NodeNum dest, uint8_t nextHopByte);
     uint8_t getNextHopHint(NodeNum dest);
+    void clearNextHop(NodeNum dest);
 
     // Warm-start the next-hop cache from persisted NodeInfoLite hints so confirmed
     // hops survive later hot-store (NodeDB) eviction. Idempotent; runs once after

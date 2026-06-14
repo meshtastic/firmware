@@ -536,6 +536,21 @@ uint8_t TrafficManagementModule::getNextHopHint(NodeNum dest)
 #endif
 }
 
+void TrafficManagementModule::clearNextHop(NodeNum dest)
+{
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+    if (!cache || dest == 0)
+        return;
+
+    concurrency::LockGuard guard(&cacheLock);
+    UnifiedCacheEntry *entry = findEntry(dest);
+    if (entry)
+        entry->next_hop = 0; // keep the entry (other stats), just drop the routing hint
+#else
+    (void)dest;
+#endif
+}
+
 bool TrafficManagementModule::preloadNextHopsFromNodeDB()
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
