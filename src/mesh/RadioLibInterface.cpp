@@ -608,7 +608,16 @@ void RadioLibInterface::handleReceiveInterrupt()
 
             mp->which_payload_variant =
                 meshtastic_MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
-            assert(((uint32_t)payloadLen) <= sizeof(mp->encrypted.bytes));
+            if ((uint32_t)payloadLen > sizeof(mp->encrypted.bytes)) {
+                LOG_WARN("Drop oversized RX packet (%d > %u)", payloadLen, (unsigned)sizeof(mp->encrypted.bytes));
+                packetPool.release(mp);
+                // The outer else branch already incremented rxGood for this packet;
+                // undo that and reclassify as rxBad so num_packets_rx isn't double-counted.
+                rxGood--;
+                rxBad++;
+                airTime->logAirtime(RX_ALL_LOG, rxMsec);
+                return;
+            }
             memcpy(mp->encrypted.bytes, radioBuffer.payload, payloadLen);
             mp->encrypted.size = payloadLen;
 
