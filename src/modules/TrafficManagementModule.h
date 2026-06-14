@@ -52,7 +52,9 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // Warm-start the next-hop cache from persisted NodeInfoLite hints so confirmed
     // hops survive later hot-store (NodeDB) eviction. Idempotent; runs once after
     // nodeDB is populated (lazily on first maintenance pass).
-    void preloadNextHopsFromNodeDB();
+    // @return true if it actually ran (prereqs met / nothing to do); false if
+    //   prerequisites (cache, nodeDB) weren't ready yet, so the caller should retry.
+    bool preloadNextHopsFromNodeDB();
 
     /**
      * Check if this packet should have its hops exhausted.
@@ -63,6 +65,17 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     {
         return exhaustRequested && exhaustRequestedFrom == getFrom(&mp) && exhaustRequestedId == mp.id;
     }
+
+    // Injectable monotonic clock (ms). All TMM time reads go through clockMs() so unit tests can
+    // advance a virtual timebase instead of sleeping real seconds across the 6 min/360 s tick.
+    // Mirrors HopScalingModule::s_testNowMs. Writable from tests as TrafficManagementModule::s_testNowMs;
+    // ignored in production (clockMs() returns millis()).
+    inline static uint32_t s_testNowMs = 0;
+#ifdef PIO_UNIT_TESTING
+    static uint32_t clockMs() { return s_testNowMs; }
+#else
+    static uint32_t clockMs() { return millis(); }
+#endif
 
   protected:
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
@@ -149,9 +162,9 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static constexpr uint32_t kRateTimeTickMs = 300'000UL;   // 5 min/tick
     static constexpr uint32_t kUnknownTimeTickMs = 60'000UL; // 1 min/tick
 
-    static uint8_t currentPosTick() { return static_cast<uint8_t>(millis() / kPosTimeTickMs); }
-    static uint8_t currentRateTick() { return static_cast<uint8_t>((millis() / kRateTimeTickMs) & 0x0F); }
-    static uint8_t currentUnknownTick() { return static_cast<uint8_t>((millis() / kUnknownTimeTickMs) & 0x0F); }
+    static uint8_t currentPosTick() { return static_cast<uint8_t>(clockMs() / kPosTimeTickMs); }
+    static uint8_t currentRateTick() { return static_cast<uint8_t>((clockMs() / kRateTimeTickMs) & 0x0F); }
+    static uint8_t currentUnknownTick() { return static_cast<uint8_t>((clockMs() / kUnknownTimeTickMs) & 0x0F); }
     // =========================================================================
     // Position Fingerprint
     // =========================================================================

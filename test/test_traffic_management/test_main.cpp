@@ -12,8 +12,6 @@
 #if HAS_TRAFFIC_MANAGEMENT
 
 #include "airtime.h"
-#if HAS_VARIABLE_HOPS
-#endif
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
@@ -181,6 +179,10 @@ static void resetTrafficConfig()
     mockNodeDB->resetNodes();
     mockNodeDB->clearCachedNode();
     nodeDB = mockNodeDB;
+
+    // Virtual clock base (1 h in, so tick subtraction never underflows). Tests advance time by
+    // bumping TrafficManagementModule::s_testNowMs instead of sleeping real seconds across a tick.
+    TrafficManagementModule::s_testNowMs = 3600000;
 }
 
 static meshtastic_MeshPacket makeDecodedPacket(meshtastic_PortNum port, NodeNum from, NodeNum to = NODENUM_BROADCAST)
@@ -738,8 +740,6 @@ static void test_tm_alterReceived_exhaustsRelayedTelemetryBroadcast(void)
     TEST_ASSERT_EQUAL_UINT32(1, stats.hop_exhausted_packets);
 }
 
-#if HAS_VARIABLE_HOPS
-#endif // HAS_VARIABLE_HOPS
 /**
  * Verify hop exhaustion skips unicast and local-origin packets.
  * Important to avoid mutating traffic that should retain normal forwarding behavior.
@@ -776,8 +776,9 @@ static void test_tm_positionDedup_allowsDuplicateAfterIntervalExpires(void)
 {
     moduleConfig.traffic_management.position_dedup_enabled = true;
     moduleConfig.traffic_management.position_precision_bits = 16;
-    // 360 s = 1 pos-tick (kPosTimeTickMs); testDelay advances past one tick period.
+    // 360 s = 1 pos-tick (kPosTimeTickMs); advance the virtual clock past one tick period.
     moduleConfig.traffic_management.position_min_interval_secs = 360;
+    installWellKnownPrimaryChannel(); // dedup only runs on a well-known channel (gate in handleReceived)
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
@@ -786,7 +787,7 @@ static void test_tm_positionDedup_allowsDuplicateAfterIntervalExpires(void)
 
     ProcessMessage r1 = module.handleReceived(first);
     ProcessMessage r2 = module.handleReceived(second);
-    testDelay(360001); // advance past one 6-min pos-tick
+    TrafficManagementModule::s_testNowMs += 360001; // advance past one 6-min pos-tick (virtual clock)
     ProcessMessage r3 = module.handleReceived(third);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
@@ -900,6 +901,7 @@ static void test_tm_positionDedup_cacheFlush_doesNotDropFirstPacketAfterFlush(vo
     moduleConfig.traffic_management.position_dedup_enabled = true;
     moduleConfig.traffic_management.position_precision_bits = 16;
     moduleConfig.traffic_management.position_min_interval_secs = 300;
+    installWellKnownPrimaryChannel(); // dedup only runs on a well-known channel (gate in handleReceived)
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
@@ -930,6 +932,7 @@ static void test_tm_positionDedup_priorRateState_doesNotDropFirstFingerprintZero
     moduleConfig.traffic_management.rate_limit_enabled = true;
     moduleConfig.traffic_management.rate_limit_window_secs = 60;
     moduleConfig.traffic_management.rate_limit_max_packets = 10;
+    installWellKnownPrimaryChannel(); // dedup only runs on a well-known channel (gate in handleReceived)
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket telemetry = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode);
@@ -954,7 +957,7 @@ static void test_tm_positionDedup_priorRateState_doesNotDropFirstFingerprintZero
 static void test_tm_rateLimit_resetsAfterWindowExpires(void)
 {
     moduleConfig.traffic_management.rate_limit_enabled = true;
-    // 300 s = 1 rate-tick (kRateTimeTickMs); testDelay advances past one tick period.
+    // 300 s = 1 rate-tick (kRateTimeTickMs); advance the virtual clock past one tick period.
     moduleConfig.traffic_management.rate_limit_window_secs = 300;
     moduleConfig.traffic_management.rate_limit_max_packets = 1;
     TrafficManagementModuleTestShim module;
@@ -962,7 +965,7 @@ static void test_tm_rateLimit_resetsAfterWindowExpires(void)
 
     ProcessMessage r1 = module.handleReceived(packet);
     ProcessMessage r2 = module.handleReceived(packet);
-    testDelay(300001); // advance past one 5-min rate-tick
+    TrafficManagementModule::s_testNowMs += 300001; // advance past one 5-min rate-tick (virtual clock)
     ProcessMessage r3 = module.handleReceived(packet);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
@@ -984,7 +987,7 @@ static void test_tm_unknownPackets_resetAfterWindowExpires(void)
 
     ProcessMessage r1 = module.handleReceived(packet);
     ProcessMessage r2 = module.handleReceived(packet);
-    testDelay(300001); // advance past 5 unknown-ticks (kUnknownWindowTicks=5 × 60s)
+    TrafficManagementModule::s_testNowMs += 300001; // advance past 5 unknown-ticks (5 × 60s) (virtual clock)
     ProcessMessage r3 = module.handleReceived(packet);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
@@ -1225,8 +1228,6 @@ static void test_tm_nextHop_keptAliveAcrossMaintenanceSweep(void)
 
     TEST_ASSERT_EQUAL_UINT8(0x42, module.getNextHopHint(kTargetNode));
 }
-#if HAS_VARIABLE_HOPS
-#endif // HAS_VARIABLE_HOPS
 } // namespace
 
 void setUp(void)
@@ -1264,8 +1265,6 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb);
 #endif
     RUN_TEST(test_tm_alterReceived_exhaustsRelayedTelemetryBroadcast);
-#if HAS_VARIABLE_HOPS
-#endif
     RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
     RUN_TEST(test_tm_positionDedup_allowsDuplicateAfterIntervalExpires);
     RUN_TEST(test_tm_positionDedup_intervalZero_neverDrops);
@@ -1287,8 +1286,6 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nextHop_servedAfterNodeDbRoll);
     RUN_TEST(test_tm_nextHop_preloadDoesNotClobberLearned);
     RUN_TEST(test_tm_nextHop_keptAliveAcrossMaintenanceSweep);
-#if HAS_VARIABLE_HOPS
-#endif
     exit(UNITY_END());
 }
 
