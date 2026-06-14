@@ -1,8 +1,10 @@
 #if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "LR11x0Interface.h"
+#include "RadioExternalPa.h"
 #include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
+#include "main.h"
 #include "mesh/NodeDB.h"
 #ifdef LR11X0_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
@@ -53,6 +55,8 @@ template <typename T> bool LR11x0Interface<T>::init()
     pinMode(LR11X0_POWER_EN, OUTPUT);
     digitalWrite(LR11X0_POWER_EN, HIGH);
 #endif
+
+    enableFan();
 
 #if ARCH_PORTDUINO
     float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
@@ -184,8 +188,10 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > LR1110_MAX_POWER) // This chip has lower power limits than some
-        power = LR1110_MAX_POWER;
+    // Re-apply regulatory limits and any external-PA power mapping. applyModemConfig()
+    // (run by the base reconfigure()) reset `power` to the requested total, so without
+    // this a runtime tx_power change would skip region clamping and external-PA mapping.
+    limitPower(LR1110_MAX_POWER);
     if ((power > LR1120_MAX_POWER) && (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) // 2.4G power limit
         power = LR1120_MAX_POWER;
 
@@ -236,6 +242,7 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void LR11x0Interface<T>::configHardwareForSend()
 {
+    radioExternalPaTxEnable(); // bias an external PA (if any) before we transmit
     RadioLibInterface::configHardwareForSend();
 }
 
@@ -249,6 +256,8 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 #else
 
     setStandby();
+
+    radioExternalPaRxIdle(); // drop external PA bias while receiving/idle
 
     lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.  Not sure why this is needed.
 
@@ -336,6 +345,8 @@ template <typename T> bool LR11x0Interface<T>::sleep()
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_DEBUG("LR11x0 entering sleep mode");
     setStandby(); // Stop any pending operations
+
+    radioExternalPaSleep(); // power down an external PA (if any)
 
     // turn off TCXO if it was powered
     lora.setTCXO(0);
