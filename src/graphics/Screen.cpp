@@ -233,6 +233,16 @@ static inline float wrapHeading360(float heading)
     return heading;
 }
 
+static inline float wrapDelta180(float delta)
+{
+    if (delta > 180.0f) {
+        delta -= 360.0f;
+    } else if (delta < -180.0f) {
+        delta += 360.0f;
+    }
+    return delta;
+}
+
 void Screen::setHeading(float heading)
 {
     const float wrappedHeading = wrapHeading360(heading);
@@ -244,37 +254,30 @@ void Screen::setHeading(float heading)
     }
 
     // Interpolate using shortest-path angular delta to avoid jumps around 0/360.
-    float delta = wrappedHeading - compassHeading;
-    if (delta > 180.0f) {
-        delta -= 360.0f;
-    } else if (delta < -180.0f) {
-        delta += 360.0f;
-    }
+    float delta = wrapDelta180(wrappedHeading - compassHeading);
 
     // Adaptive filtering:
     // - Strong damping for tiny deltas (jitter)
     // - Faster response for larger turns
     const float absDelta = (delta >= 0.0f) ? delta : -delta;
-    if (absDelta < 1.0f) {
-        return;
-    }
+    if (absDelta >= 1.0f) {
+        float alpha = 0.35f;
+        if (absDelta > 25.0f) {
+            alpha = 0.85f;
+        } else if (absDelta > 10.0f) {
+            alpha = 0.65f;
+        }
 
-    float alpha = 0.35f;
-    if (absDelta > 25.0f) {
-        alpha = 0.85f;
-    } else if (absDelta > 10.0f) {
-        alpha = 0.65f;
-    }
+        float step = delta * alpha;
+        const float maxStep = 12.0f;
+        if (step > maxStep) {
+            step = maxStep;
+        } else if (step < -maxStep) {
+            step = -maxStep;
+        }
 
-    float step = delta * alpha;
-    const float maxStep = 12.0f;
-    if (step > maxStep) {
-        step = maxStep;
-    } else if (step < -maxStep) {
-        step = -maxStep;
+        compassHeading = wrapHeading360(compassHeading + step);
     }
-
-    compassHeading = wrapHeading360(compassHeading + step);
 }
 
 // ==============================
