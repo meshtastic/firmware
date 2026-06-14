@@ -6,6 +6,13 @@
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
 #include "target_specific.h"
+#if HAS_ETHERNET && defined(HAS_ETHERNET_API)
+#include "mesh/eth/ethApiServer.h"
+#endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API)
+#include "mesh/eth/ethCert.h"
+#include "mesh/eth/ethTlsApiServer.h"
+#endif
 #ifdef USE_ARDUINO_ETHERNET
 #include <Ethernet.h> // arduino-libraries/Ethernet — supports W5100/W5200/W5500
 // Shorter DHCP timeout so LoRa startup isn't blocked when no DHCP server is present.
@@ -154,6 +161,20 @@ static int32_t reconnectETH()
             }
 #endif
 
+#if HAS_ETHERNET && defined(HAS_ETHERNET_API)
+            initEthApiServer();
+#endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API)
+            // Phase 2.1-bis — cert gen runs on its own OSThread so ECDSA keygen
+            // + DER encoding + LittleFS write don't share the Periodic stack
+            // (which overflowed in the original inline attempt). The thread
+            // polls for a non-zero IP itself and runs once.
+            initEthCertThread();
+            // Phase 2.2 — TLS server skeleton on TCP/443. The worker waits
+            // until the cert thread signals isEthCertReady() before binding.
+            initEthTlsApiServer();
+#endif
+
             ethStartupComplete = true;
         }
     }
@@ -179,6 +200,8 @@ static int32_t reconnectETH()
         timeClient.end(); // W5100S: release UDP socket for other services
     }
 #endif
+
+    // ethApiServer runs on its own OSThread (20ms ticks) — not polled here.
 
     return 5000; // every 5 seconds
 }
