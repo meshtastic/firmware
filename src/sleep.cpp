@@ -28,6 +28,16 @@
 #include <driver/uart.h>
 
 esp_sleep_source_t wakeCause; // the reason we booted this time
+uint64_t lightSleepWakeGpioMask = 0;
+
+// T-Deck's center trackball press is GPIO0. A held GPIO0 during any reset can
+// select the ESP32-S3 bootloader, so do not arm it as a sleep wake source.
+#if defined(T_DECK) && defined(INPUTDRIVER_ENCODER_BTN) && (INPUTDRIVER_ENCODER_BTN == 0)
+#define SKIP_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE
+#endif
+#if defined(INPUTDRIVER_ENCODER_BTN) && !defined(SKIP_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE)
+#define HAS_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE
+#endif
 #endif
 #include "Throttle.h"
 
@@ -454,7 +464,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
 #endif
-#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(INPUTDRIVER_ENCODER_BTN)
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(HAS_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE)
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
 #define INPUTDRIVER_WAKE_BTN_PIN INPUTDRIVER_TWO_WAY_ROCKER_BTN
 #else
@@ -477,6 +487,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         LOG_ERROR("esp_sleep_enable_gpio_wakeup result %d", res);
     }
     assert(res == ESP_OK);
+
     res = esp_sleep_enable_timer_wakeup(sleepUsec);
     if (res != ESP_OK) {
         LOG_ERROR("esp_sleep_enable_timer_wakeup result %d", res);
@@ -484,10 +495,16 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(res == ESP_OK);
 
     console->flush();
+    lightSleepWakeGpioMask = 0;
     res = esp_light_sleep_start();
     if (res != ESP_OK) {
         LOG_ERROR("esp_light_sleep_start result %d", res);
     }
+#if defined(SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP) && SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    else {
+        lightSleepWakeGpioMask = esp_sleep_get_gpio_wakeup_status();
+    }
+#endif
     // commented out because it's not that crucial;
     // if it sporadically happens the node will go into light sleep during the next round
     // assert(res == ESP_OK);
@@ -526,7 +543,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     notifyLightSleepEnd.notifyObservers(cause); // Button interrupts are reattached here
 
     if (cause == ESP_SLEEP_WAKEUP_GPIO) {
+#if defined(SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP) && SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+        LOG_INFO("Exit light sleep gpio mask 0x%08x%08x", (uint32_t)(lightSleepWakeGpioMask >> 32),
+                 (uint32_t)lightSleepWakeGpioMask);
+#else
         LOG_INFO("Exit light sleep gpio");
+#endif
         // If we woke because of a GPIO, it's possible power needs to run to handle.
         power->setIntervalFromNow(0);
         runASAP = true;

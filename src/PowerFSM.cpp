@@ -26,6 +26,27 @@
 #ifndef SLEEP_TIME
 #define SLEEP_TIME 30
 #endif
+
+// T-Deck uses GPIO0 for the center trackball press. Avoid using that boot-strap
+// pin as a sleep wake source; a held GPIO0 during reset selects the bootloader.
+#if defined(T_DECK) && defined(INPUTDRIVER_ENCODER_BTN) && (INPUTDRIVER_ENCODER_BTN == 0)
+#define SKIP_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE
+#endif
+#if defined(INPUTDRIVER_ENCODER_BTN) && !defined(SKIP_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE)
+#define HAS_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE
+#endif
+
+static bool canUseLightSleepPowerSave()
+{
+#if defined(T_DECK)
+    // T-Deck's available input lines are either GPIO0/BOOT, polled I2C, or
+    // already-owned trackball ISR pins. Keep it in DARK until wake is reworked.
+    return false;
+#else
+    return true;
+#endif
+}
+
 #if MESHTASTIC_EXCLUDE_POWER_FSM
 FakeFsm powerFSM;
 void PowerFSM_setup(){};
@@ -85,6 +106,85 @@ static void t5BacklightOffForSleep() {}
 static void t5BacklightWakeFromSleep() {}
 static void t5BacklightOffForTimeout() {}
 static void t5BacklightOnFromUserInput() {}
+#endif
+
+// Low-active input IRQs should wake the screen just like the primary user button.
+static bool isLowActiveWakeInputPressed()
+{
+#ifdef BUTTON_PIN
+    if (!digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN))
+        return true;
+#endif
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
+    if (!digitalRead(INPUTDRIVER_TWO_WAY_ROCKER_BTN))
+        return true;
+#elif defined(HAS_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE)
+    if (!digitalRead(INPUTDRIVER_ENCODER_BTN))
+        return true;
+#endif
+#ifdef KB_INT
+    if (!digitalRead(KB_INT))
+        return true;
+#endif
+#ifdef ROTARY_PRESS
+    if (!digitalRead(ROTARY_PRESS))
+        return true;
+#endif
+#ifdef BOARD_PCA9535_INT
+    if (!digitalRead(BOARD_PCA9535_INT))
+        return true;
+#endif
+#if defined(WAKE_ON_TOUCH) && defined(SCREEN_TOUCH_INT)
+    if (!digitalRead(SCREEN_TOUCH_INT))
+        return true;
+#endif
+
+    return false;
+}
+
+#ifdef ARCH_ESP32
+#if defined(SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP) && SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+static void addWakeInputPin(uint64_t &mask, int pin)
+{
+    if (pin >= 0 && pin < 64)
+        mask |= (1ULL << pin);
+}
+#endif
+
+static bool didWakeFromUserInputGpio(esp_sleep_wakeup_cause_t cause)
+{
+#if defined(SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP) && SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    if (cause != ESP_SLEEP_WAKEUP_GPIO)
+        return false;
+
+    uint64_t inputMask = 0;
+#ifdef BUTTON_PIN
+    addWakeInputPin(inputMask, config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#endif
+#ifdef ROTARY_PRESS
+    addWakeInputPin(inputMask, ROTARY_PRESS);
+#endif
+#ifdef KB_INT
+    addWakeInputPin(inputMask, KB_INT);
+#endif
+#ifdef BOARD_PCA9535_INT
+    addWakeInputPin(inputMask, BOARD_PCA9535_INT);
+#endif
+#if defined(WAKE_ON_TOUCH) && defined(SCREEN_TOUCH_INT)
+    addWakeInputPin(inputMask, SCREEN_TOUCH_INT);
+#endif
+#if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
+    addWakeInputPin(inputMask, INPUTDRIVER_TWO_WAY_ROCKER_BTN);
+#elif defined(HAS_INPUTDRIVER_ENCODER_BTN_SLEEP_WAKE)
+    addWakeInputPin(inputMask, INPUTDRIVER_ENCODER_BTN);
+#endif
+
+    return (lightSleepWakeGpioMask & inputMask) != 0;
+#else
+    (void)cause;
+    return false;
+#endif
+}
 #endif
 
 static void sdsEnter()
@@ -159,11 +259,7 @@ static void lsIdle()
             default:
                 // We woke for some other reason (button press, device IRQ interrupt)
 
-#ifdef BUTTON_PIN
-                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-#else
-                bool pressed = false;
-#endif
+                bool pressed = isLowActiveWakeInputPressed() || didWakeFromUserInputGpio(wakeCause2);
                 if (pressed) { // If we woke because of press, instead generate a PRESS event.
                     powerFSM.trigger(EVENT_PRESS);
                 } else {
@@ -422,7 +518,7 @@ void PowerFSM_setup()
                              config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
 
-    if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
+    if (canUseLightSleepPowerSave() && (isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
