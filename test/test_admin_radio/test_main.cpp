@@ -1112,6 +1112,26 @@ void tearDown(void)
     testAdmin = nullptr;
 }
 
+// -----------------------------------------------------------------------
+// US region factory default preset (LONG_TURBO for FCC §15.247). A fresh board adopts its region's
+// default via getDefaultPreset() in installDefaultConfig() — there is no runtime "upgrade" path.
+// -----------------------------------------------------------------------
+
+static void test_usRegionDefaultPresetIsLongTurbo()
+{
+    // FCC §15.247: the US region's default preset is the 500 kHz LONG_TURBO, so a fresh US board is
+    // born compliant.
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+                      getRegion(meshtastic_Config_LoRaConfig_RegionCode_US)->getDefaultPreset());
+}
+
+static void test_nonUsRegionDefaultPresetUnchanged()
+{
+    // Only US changed: every other region still defaults to LONG_FAST.
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                      getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868)->getDefaultPreset());
+}
+
 void setup()
 {
     delay(10);
@@ -1179,6 +1199,10 @@ void setup()
     RUN_TEST(test_defaultPresetIsInAvailablePresets);
     RUN_TEST(test_regionFieldsAreSane);
     RUN_TEST(test_onlyLORA24HasWideLora);
+
+    // US region factory default preset
+    RUN_TEST(test_usRegionDefaultPresetIsLongTurbo);
+    RUN_TEST(test_nonUsRegionDefaultPresetUnchanged);
 
     // OVERRIDE_SLOT_PRESET_HASH (-1) slot formula tests
     RUN_TEST(test_overrideSlotPresetHash_longFast_customChannelMatchesDefaultNameSlot);

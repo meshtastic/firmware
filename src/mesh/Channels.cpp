@@ -82,7 +82,7 @@ void Channels::initDefaultLoraConfig()
 {
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
 
-    loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
+    loraConfig.modem_preset = getRegion(loraConfig.region)->getDefaultPreset(); // region default (US: LONG_TURBO for FCC)
     loraConfig.use_preset = true;
     loraConfig.tx_power = 0; // default
     loraConfig.channel_num = 0;
