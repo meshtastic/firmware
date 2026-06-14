@@ -390,7 +390,7 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
     NodeInfoPayloadEntry *empty = nullptr;
     NodeInfoPayloadEntry *lru = nullptr;
     uint32_t lruAge = 0;
-    const uint32_t now = millis();
+    const uint32_t now = clockMs();
 
     for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
         NodeInfoPayloadEntry &e = nodeInfoPayload[i];
@@ -466,7 +466,7 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         // richer context than "just the user protobuf" when PSRAM is present.
         // This path is intentionally independent from NodeInfoModule/NodeDB.
         entry->user = user;
-        entry->lastObservedMs = millis();
+        entry->lastObservedMs = clockMs();
         entry->lastObservedRxTime = mp.rx_time;
         entry->sourceChannel = mp.channel;
         entry->hasDecodedBitfield = mp.decoded.has_bitfield;
@@ -528,11 +528,11 @@ uint8_t TrafficManagementModule::getNextHopHint(NodeNum dest)
 #endif
 }
 
-void TrafficManagementModule::preloadNextHopsFromNodeDB()
+bool TrafficManagementModule::preloadNextHopsFromNodeDB()
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     if (!cache || !nodeDB)
-        return;
+        return false; // prerequisites not ready yet — caller should retry on a later pass
 
     uint16_t seeded = 0;
     concurrency::LockGuard guard(&cacheLock);
@@ -552,6 +552,9 @@ void TrafficManagementModule::preloadNextHopsFromNodeDB()
     }
 
     TM_LOG_INFO("Preloaded %u next-hop hints from NodeDB", static_cast<unsigned>(seeded));
+    return true;
+#else
+    return true; // nothing to preload on a cache-less build; don't keep retrying
 #endif
 }
 
@@ -607,7 +610,12 @@ uint8_t TrafficManagementModule::computePositionFingerprint(int32_t lat_truncate
     uint8_t latBits = (static_cast<uint32_t>(lat_truncated) >> shift) & ((1u << bitsToTake) - 1);
     uint8_t lonBits = (static_cast<uint32_t>(lon_truncated) >> shift) & ((1u << bitsToTake) - 1);
 
-    return static_cast<uint8_t>((latBits << 4) | lonBits);
+    const uint8_t fp = static_cast<uint8_t>((latBits << 4) | lonBits);
+    // 0 is the "no position seen" sentinel for pos_fingerprint, so a real position that happens to
+    // hash to 0 must not collide with it (otherwise its duplicates would never dedup). Remap 0 -> 0xFF,
+    // mirroring NodeDB::getLastByteOfNodeNum()'s 0 -> 0xFF idiom. Cost: the 0x00 bucket merges into
+    // 0xFF (one extra collision in 256 — negligible; the fingerprint already collides every 16 cells).
+    return fp ? fp : 0xFF;
 }
 
 // =============================================================================
@@ -632,7 +640,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     incrementStat(&stats.packets_inspected);
 
     const auto &cfg = moduleConfig.traffic_management;
-    const uint32_t nowMs = millis();
+    const uint32_t nowMs = TrafficManagementModule::clockMs();
 
     // -------------------------------------------------------------------------
     // Undecoded Packet Handling
@@ -811,15 +819,15 @@ int32_t TrafficManagementModule::runOnce()
         return INT32_MAX;
 
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-    const uint32_t nowMs = millis();
+    const uint32_t nowMs = TrafficManagementModule::clockMs();
 
     // Warm-start the next-hop cache from persisted NodeInfoLite hints once nodeDB
     // is populated. Done here (not in the constructor) so nodeDB has finished
     // loading. Takes its own lock, so call before acquiring the sweep guard below.
-    if (!nextHopPreloaded) {
-        preloadNextHopsFromNodeDB();
+    // Only latch the one-shot guard once the preload actually ran; if nodeDB wasn't
+    // ready yet, retry on the next maintenance pass instead of skipping it forever.
+    if (!nextHopPreloaded && preloadNextHopsFromNodeDB())
         nextHopPreloaded = true;
-    }
 
     // Free-running tick counters (no epoch needed).
     // TTL expressed in ticks: pos 4× interval (default 44 ticks ≈ 4.4h),
@@ -843,7 +851,7 @@ int32_t TrafficManagementModule::runOnce()
     // Sweep cache and clear expired entries
     uint16_t activeEntries = 0;
     uint16_t expiredEntries = 0;
-    const uint32_t sweepStartMs = millis();
+    const uint32_t sweepStartMs = TrafficManagementModule::clockMs();
 
     const auto &cfg = moduleConfig.traffic_management;
     concurrency::LockGuard guard(&cacheLock);
@@ -900,7 +908,7 @@ int32_t TrafficManagementModule::runOnce()
 
     TM_LOG_DEBUG("Maintenance: %u active, %u expired, %u/%u slots, %lums elapsed", activeEntries, expiredEntries,
                  static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()),
-                 static_cast<unsigned long>(millis() - sweepStartMs));
+                 static_cast<unsigned long>(TrafficManagementModule::clockMs() - sweepStartMs));
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     if (nodeInfoPayload) {
@@ -1056,7 +1064,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         reply->decoded.bitfield |= BITFIELD_OK_TO_MQTT_MASK;
 
     if (hasCachedUser && cachedLastObservedMs != 0) {
-        uint32_t ageMs = millis() - cachedLastObservedMs;
+        uint32_t ageMs = clockMs() - cachedLastObservedMs;
         TM_LOG_DEBUG("NodeInfo PSRAM hit node=0x%08x age=%lu ms src_ch=%u req_ch=%u rx_time=%lu", p->to,
                      static_cast<unsigned long>(ageMs), static_cast<unsigned>(cachedSourceChannel),
                      static_cast<unsigned>(p->channel), static_cast<unsigned long>(cachedLastObservedRxTime));
