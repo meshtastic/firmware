@@ -143,46 +143,6 @@ bool probeSEN5X(TwoWire *i2cBus, uint8_t address, ScanI2C::I2CPort port)
     SEN5XSensor sen5xsensor = SEN5XSensor();
     return sen5xsensor.probe(i2cBus, address, port);
 }
-
-// FIXME Move to a separate file for detection of sensors that require more complex interactions?
-// For SEN5X detection
-// Note, this code needs to be called before setting the I2C bus speed
-// for the screen at high speed. The speed needs to be at 100kHz, otherwise
-// detection will not work
-// String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
-// {
-//     uint8_t cmd[] = {0xD0, 0x14};
-//     uint8_t response[48] = {0};
-
-//     i2cBus->beginTransmission(address);
-//     i2cBus->write(cmd, 2);
-//     if (i2cBus->endTransmission() != 0)
-//         return "";
-
-//     delay(20);
-//     if (i2cBus->requestFrom(address, (uint8_t)48) != 48)
-//         return "";
-
-//     for (int i = 0; i < 48 && i2cBus->available(); ++i) {
-//         response[i] = i2cBus->read();
-//     }
-
-//     char productName[33] = {0};
-//     int j = 0;
-//     for (int i = 0; i < 48 && j < 32; i += 3) {
-//         if (response[i] >= 32 && response[i] <= 126)
-//             productName[j++] = response[i];
-//         else
-//             break;
-
-//         if (response[i + 1] >= 32 && response[i + 1] <= 126)
-//             productName[j++] = response[i + 1];
-//         else
-//             break;
-//     }
-
-//     return String(productName);
-// }
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
