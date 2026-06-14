@@ -2,6 +2,7 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && __has_include(<SensirionI2cScd30.h>)
 
+#include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include <SensirionI2cScd30.h>
@@ -14,6 +15,10 @@ class SCD30Sensor : public TelemetrySensor
     SensirionI2cScd30 scd30;
     TwoWire *_bus{};
     uint8_t _address{};
+#ifdef SCD30_I2C_CLOCK_SPEED
+    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
+    ReClockI2C reClockI2C;
+#endif
 
     bool performFRC(uint16_t targetCO2);
     bool setASC(bool ascEnabled);
