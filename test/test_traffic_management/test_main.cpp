@@ -151,8 +151,8 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
 {
   public:
     using TrafficManagementModule::alterReceived;
+    using TrafficManagementModule::flushCache;
     using TrafficManagementModule::handleReceived;
-    using TrafficManagementModule::resetEpoch;
     using TrafficManagementModule::runOnce;
 
     bool ignoreRequestFlag() const { return ignoreRequest; }
@@ -774,7 +774,8 @@ static void test_tm_positionDedup_allowsDuplicateAfterIntervalExpires(void)
 {
     moduleConfig.traffic_management.position_dedup_enabled = true;
     moduleConfig.traffic_management.position_precision_bits = 16;
-    moduleConfig.traffic_management.position_min_interval_secs = 1;
+    // 360 s = 1 pos-tick (kPosTimeTickMs); testDelay advances past one tick period.
+    moduleConfig.traffic_management.position_min_interval_secs = 360;
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
@@ -783,7 +784,7 @@ static void test_tm_positionDedup_allowsDuplicateAfterIntervalExpires(void)
 
     ProcessMessage r1 = module.handleReceived(first);
     ProcessMessage r2 = module.handleReceived(second);
-    testDelay(1200);
+    testDelay(360001); // advance past one 6-min pos-tick
     ProcessMessage r3 = module.handleReceived(third);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
@@ -892,7 +893,7 @@ static void test_tm_positionDedup_precisionZero_allowsDistinctPositions(void)
  * Verify epoch reset invalidates stale position identity for dedup.
  * Important so reset paths cannot leak prior packet identity into new windows.
  */
-static void test_tm_positionDedup_epochReset_doesNotDropFirstPacketAfterReset(void)
+static void test_tm_positionDedup_cacheFlush_doesNotDropFirstPacketAfterFlush(void)
 {
     moduleConfig.traffic_management.position_dedup_enabled = true;
     moduleConfig.traffic_management.position_precision_bits = 16;
@@ -900,12 +901,12 @@ static void test_tm_positionDedup_epochReset_doesNotDropFirstPacketAfterReset(vo
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
-    meshtastic_MeshPacket afterReset = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket afterFlush = makePositionPacket(kRemoteNode, 374221234, -1220845678);
     meshtastic_MeshPacket duplicate = makePositionPacket(kRemoteNode, 374221234, -1220845678);
 
     ProcessMessage r1 = module.handleReceived(first);
-    module.resetEpoch(millis());
-    ProcessMessage r2 = module.handleReceived(afterReset);
+    module.flushCache();
+    ProcessMessage r2 = module.handleReceived(afterFlush);
     ProcessMessage r3 = module.handleReceived(duplicate);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
@@ -951,14 +952,15 @@ static void test_tm_positionDedup_priorRateState_doesNotDropFirstFingerprintZero
 static void test_tm_rateLimit_resetsAfterWindowExpires(void)
 {
     moduleConfig.traffic_management.rate_limit_enabled = true;
-    moduleConfig.traffic_management.rate_limit_window_secs = 1;
+    // 300 s = 1 rate-tick (kRateTimeTickMs); testDelay advances past one tick period.
+    moduleConfig.traffic_management.rate_limit_window_secs = 300;
     moduleConfig.traffic_management.rate_limit_max_packets = 1;
     TrafficManagementModuleTestShim module;
     meshtastic_MeshPacket packet = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode);
 
     ProcessMessage r1 = module.handleReceived(packet);
     ProcessMessage r2 = module.handleReceived(packet);
-    testDelay(1200);
+    testDelay(300001); // advance past one 5-min rate-tick
     ProcessMessage r3 = module.handleReceived(packet);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
@@ -975,13 +977,12 @@ static void test_tm_unknownPackets_resetAfterWindowExpires(void)
 {
     moduleConfig.traffic_management.drop_unknown_enabled = true;
     moduleConfig.traffic_management.unknown_packet_threshold = 1;
-    moduleConfig.traffic_management.rate_limit_window_secs = 1;
     TrafficManagementModuleTestShim module;
     meshtastic_MeshPacket packet = makeUnknownPacket(kRemoteNode);
 
     ProcessMessage r1 = module.handleReceived(packet);
     ProcessMessage r2 = module.handleReceived(packet);
-    testDelay(1200);
+    testDelay(300001); // advance past 5 unknown-ticks (kUnknownWindowTicks=5 × 60s)
     ProcessMessage r3 = module.handleReceived(packet);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
@@ -1269,7 +1270,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_positionDedup_precisionAbove32_usesDefaultPrecision);
     RUN_TEST(test_tm_positionDedup_precision32_allowsDistinctPositions);
     RUN_TEST(test_tm_positionDedup_precisionZero_allowsDistinctPositions);
-    RUN_TEST(test_tm_positionDedup_epochReset_doesNotDropFirstPacketAfterReset);
+    RUN_TEST(test_tm_positionDedup_cacheFlush_doesNotDropFirstPacketAfterFlush);
     RUN_TEST(test_tm_positionDedup_priorRateState_doesNotDropFirstFingerprintZero);
     RUN_TEST(test_tm_rateLimit_resetsAfterWindowExpires);
     RUN_TEST(test_tm_unknownPackets_resetAfterWindowExpires);

@@ -6,6 +6,7 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PositionPrecision.h"
 #include "Router.h"
 #include "TypeConversions.h"
 #include "airtime.h"
@@ -14,6 +15,7 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include <Arduino.h>
+#include <algorithm>
 #include <cstring>
 
 #define TM_LOG_DEBUG(fmt, ...) LOG_DEBUG("[TM] " fmt, ##__VA_ARGS__)
@@ -28,7 +30,6 @@ namespace
 {
 
 constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL; // Cache cleanup interval
-constexpr uint32_t kUnknownResetMs = 60 * 1000UL;        // Unknown packet window
 
 // NodeInfo direct response: enforced maximum hops by device role
 // Both use maxHops logic (respond when hopsAway <= threshold)
@@ -63,32 +64,6 @@ uint8_t sanitizePositionPrecision(uint8_t precision)
 
     // Someone done messed up if we reach here
     return 32;
-}
-
-/**
- * Check if a timestamp is within a time window.
- * Handles wrap-around correctly using unsigned subtraction.
- */
-bool isWithinWindow(uint32_t nowMs, uint32_t startMs, uint32_t intervalMs)
-{
-    if (intervalMs == 0 || startMs == 0)
-        return false;
-    return (nowMs - startMs) < intervalMs;
-}
-
-/**
- * Slide an 8-bit relative timestamp back by a wall-clock slab during epoch rebase.
- *
- * Entries older than the slab clamp to 0 (then reclaimed by the maintenance sweep);
- * live entries keep their reconstructed age minus a sub-tick remainder. Each field
- * slides by its own resolution's worth of ticks, so a single slab covers all three.
- */
-inline void slideRelativeTime(uint8_t &ticks, uint32_t slabMs, uint16_t resolutionSecs)
-{
-    if (ticks == 0 || resolutionSecs == 0)
-        return;
-    uint32_t dec = slabMs / (static_cast<uint32_t>(resolutionSecs) * 1000UL);
-    ticks = (ticks > dec) ? static_cast<uint8_t>(ticks - dec) : 0;
 }
 
 /**
@@ -177,23 +152,11 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     encryptedOk = true;   // Can process encrypted packets
     stats = meshtastic_TrafficManagementStats_init_zero;
 
-    // Initialize rolling epoch for relative timestamps
-    cacheEpochMs = millis();
-
-    // Calculate adaptive time resolutions from config (config changes require reboot)
-    // Resolution = max(60, min(339, interval/2)) for ~24 hour range with good precision
-    posTimeResolution = calcTimeResolution(Default::getConfiguredOrDefault(
-        moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
-    rateTimeResolution = calcTimeResolution(moduleConfig.traffic_management.rate_limit_window_secs);
-    unknownTimeResolution = calcTimeResolution(kUnknownResetMs / 1000); // ~5 min default
-
     const auto &cfg = moduleConfig.traffic_management;
     TM_LOG_INFO("Enabled: pos_dedup=%d nodeinfo_resp=%d rate_limit=%d drop_unknown=%d exhaust_telem=%d exhaust_pos=%d "
                 "preserve_hops=%d",
                 cfg.position_dedup_enabled, cfg.nodeinfo_direct_response, cfg.rate_limit_enabled, cfg.drop_unknown_enabled,
                 cfg.exhaust_hop_telemetry, cfg.exhaust_hop_position, cfg.router_preserve_hops);
-    TM_LOG_DEBUG("Time resolutions: pos=%us, rate=%us, unknown=%us", posTimeResolution, rateTimeResolution,
-                 unknownTimeResolution);
 
 // Allocate unified cache (10 bytes/entry for all platforms)
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
@@ -357,11 +320,20 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
         if (empty)
             continue; // an empty slot beats any victim; stop scoring
         const bool hasHop = e.next_hop != 0;
-        uint8_t recency = e.pos_time;
-        if (e.rate_time > recency)
-            recency = e.rate_time;
-        if (e.unknown_time > recency)
-            recency = e.unknown_time;
+        // Age in pos-ticks (8-bit modular, wraps correctly). Entries with no
+        // pos state (pos_time==0) score as maximally old (age=currentPosTick()).
+        const uint8_t nowPosTick = currentPosTick();
+        const uint8_t posAge = static_cast<uint8_t>(nowPosTick - e.pos_time);
+        // Blend in rate/unknown ages scaled to pos-tick units (coarser = conservative).
+        const uint8_t rateAgePosScale =
+            static_cast<uint8_t>(static_cast<uint8_t>((currentRateTick() - e.getRateTime()) & 0x0F) * 5 / 3);
+        const uint8_t unknownAgePosScale =
+            static_cast<uint8_t>(static_cast<uint8_t>((currentUnknownTick() - e.getUnknownTime()) & 0x0F) / 6);
+        uint8_t recency = posAge;
+        if (e.rate_count != 0 && rateAgePosScale > recency)
+            recency = rateAgePosScale;
+        if (e.unknown_count != 0 && unknownAgePosScale > recency)
+            recency = unknownAgePosScale;
         if (!victim || (hasHop == victimHasHop ? recency < victimRecency : !hasHop)) {
             victim = &e;
             victimHasHop = hasHop;
@@ -587,59 +559,11 @@ void TrafficManagementModule::preloadNextHopsFromNodeDB()
 // Epoch Management
 // =============================================================================
 
-/**
- * Reset the timestamp epoch when relative offsets approach overflow.
- *
- * Called when epoch age exceeds ~19 hours (approaching 8-bit minute overflow).
- * Invalidates all cached per-node traffic state.
- */
-void TrafficManagementModule::resetEpoch(uint32_t nowMs)
+void TrafficManagementModule::flushCache()
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-    TM_LOG_DEBUG("Resetting cache epoch");
-    cacheEpochMs = nowMs;
-
-    // Full flush avoids stale dedup identity/counters surviving epoch rollover.
+    TM_LOG_DEBUG("Flushing cache");
     memset(cache, 0, static_cast<size_t>(cacheSize()) * sizeof(UnifiedCacheEntry));
-#else
-    (void)nowMs;
-#endif
-}
-
-/**
- * Sliding-epoch rebase — preserve cached state past the 8-bit timestamp horizon.
- *
- * Instead of flushing the whole cache when offsets approach overflow, advance the
- * epoch by a fixed slab and shift every live entry's relative timestamps back by
- * the same wall-clock amount. A valid entry's window is only a handful of ticks
- * wide (TTL auto-scales with resolution), so live entries comfortably survive;
- * already-expired entries clamp to 0 and are reclaimed by the maintenance sweep in
- * the same locked pass. Reconstructed absolute time is preserved (minus a sub-tick
- * remainder), so in-flight TTL checks remain correct across the rebase.
- *
- * Caller must hold cacheLock.
- */
-void TrafficManagementModule::rebaseEpoch(uint32_t nowMs)
-{
-#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-    (void)nowMs;
-
-    // Slab stays well below the 200-tick reset threshold so a single rebase drops
-    // the offset back into range (~200 -> ~72 ticks) while live entries survive.
-    const uint32_t slabMs = 128UL * maxResolution() * 1000UL;
-    cacheEpochMs += slabMs;
-
-    TM_LOG_DEBUG("Rebasing cache epoch by %lus", static_cast<unsigned long>(slabMs / 1000UL));
-
-    for (uint16_t i = 0; i < cacheSize(); i++) {
-        if (cache[i].node == 0)
-            continue;
-        slideRelativeTime(cache[i].pos_time, slabMs, posTimeResolution);
-        slideRelativeTime(cache[i].rate_time, slabMs, rateTimeResolution);
-        slideRelativeTime(cache[i].unknown_time, slabMs, unknownTimeResolution);
-    }
-#else
-    (void)nowMs;
 #endif
 }
 
@@ -822,6 +746,39 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     const bool shouldExhaust =
         ((channelBusy && isTelemetry && cfg.exhaust_hop_telemetry) || (isPosition && cfg.exhaust_hop_position));
 
+    // -------------------------------------------------------------------------
+    // Relayed Position Precision Clamp
+    // -------------------------------------------------------------------------
+    // Clamp relayed position broadcasts to the channel's configured precision
+    // ceiling. Guards against forwarding more-precise coordinates than the
+    // channel is intended to carry (e.g. a LongFast channel set to 13-bit /
+    // ~1.5 km). chanPrec==0 means position sharing is disabled on the channel;
+    // skip — not our job to zero positions on relay.
+    // Ham mode (owner.is_licensed) is exempt.
+    // Compile USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS to extend to private channels.
+    if (!owner.is_licensed && isPosition && isBroadcast(mp.to)) {
+#ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
+        const bool shouldClamp = true;
+#else
+        const bool shouldClamp = channels.isWellKnownChannel(mp.channel);
+#endif
+        if (shouldClamp) {
+            const uint32_t chanPrec = getPositionPrecisionForChannel(mp.channel);
+            if (chanPrec > 0) {
+                meshtastic_Position pos = meshtastic_Position_init_default;
+                if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Position_msg, &pos)) {
+                    const uint32_t packetPrec = pos.precision_bits > 0 ? pos.precision_bits : 32u;
+                    if (packetPrec > chanPrec) {
+                        applyPositionPrecision(pos, chanPrec);
+                        mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
+                                                                     &meshtastic_Position_msg, &pos);
+                        logAction("clamp", &mp, "precision");
+                    }
+                }
+            }
+        }
+    }
+
     if (!shouldExhaust || !isBroadcast(mp.to))
         return;
 
@@ -864,28 +821,32 @@ int32_t TrafficManagementModule::runOnce()
         nextHopPreloaded = true;
     }
 
-    // Calculate TTLs for cache expiration
+    // Free-running tick counters (no epoch needed).
+    // TTL expressed in ticks: pos 4× interval (default 44 ticks ≈ 4.4h),
+    // rate 2× window (default 24 ticks = 2h), unknown fixed 12 ticks (12 min).
     const uint32_t positionIntervalMs = secsToMs(Default::getConfiguredOrDefault(
         moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
-    const uint32_t positionTtlMs = positionIntervalMs * 4;
+    const uint8_t posTtlTicks =
+        static_cast<uint8_t>(std::min(static_cast<uint32_t>(255), (positionIntervalMs * 4) / kPosTimeTickMs));
 
-    const uint32_t rateIntervalMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
-    const uint32_t rateTtlMs = (rateIntervalMs > 0) ? rateIntervalMs * 2 : (10 * 60 * 1000UL);
+    const uint32_t rateWindowMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
+    const uint8_t rateTtlTicks = static_cast<uint8_t>(
+        std::min(static_cast<uint32_t>(15), (rateWindowMs > 0 ? rateWindowMs * 2 : 24 * kRateTimeTickMs) / kRateTimeTickMs));
 
-    const uint32_t unknownTtlMs = kUnknownResetMs * 5;
+    // unknown: fixed 12-tick TTL (12 min — 4 ticks past the 5-min default window)
+    const uint8_t unknownTtlTicks = 12;
+
+    const uint8_t nowPosTick = currentPosTick();
+    const uint8_t nowRateTick = currentRateTick();
+    const uint8_t nowUnknownTick = currentUnknownTick();
 
     // Sweep cache and clear expired entries
     uint16_t activeEntries = 0;
     uint16_t expiredEntries = 0;
     const uint32_t sweepStartMs = millis();
 
+    const auto &cfg = moduleConfig.traffic_management;
     concurrency::LockGuard guard(&cacheLock);
-
-    // Slide the epoch instead of flushing when offsets approach 8-bit overflow.
-    // Rebase preserves live entries; only already-expired ones clamp to 0 and are
-    // reclaimed by the sweep below in this same locked pass.
-    if (needsEpochReset(nowMs))
-        rebaseEpoch(nowMs);
 
     for (uint16_t i = 0; i < cacheSize(); i++) {
         if (cache[i].node == 0)
@@ -893,10 +854,9 @@ int32_t TrafficManagementModule::runOnce()
 
         bool anyValid = false;
 
-        // Check and clear expired position data
-        if (cache[i].pos_time != 0) {
-            uint32_t posTimeMs = fromRelativePosTime(cache[i].pos_time);
-            if (!isWithinWindow(nowMs, posTimeMs, positionTtlMs)) {
+        // Check and clear expired position data (presence: pos_fingerprint != 0)
+        if (cache[i].pos_fingerprint != 0) {
+            if (static_cast<uint8_t>(nowPosTick - cache[i].pos_time) >= posTtlTicks) {
                 cache[i].pos_fingerprint = 0;
                 cache[i].pos_time = 0;
             } else {
@@ -904,23 +864,21 @@ int32_t TrafficManagementModule::runOnce()
             }
         }
 
-        // Check and clear expired rate limit data
-        if (cache[i].rate_time != 0) {
-            uint32_t rateTimeMs = fromRelativeRateTime(cache[i].rate_time);
-            if (!isWithinWindow(nowMs, rateTimeMs, rateTtlMs)) {
+        // Check and clear expired rate limit data (gated on feature; presence: rate_count != 0)
+        if (cfg.rate_limit_enabled && cache[i].rate_count != 0) {
+            if ((static_cast<uint8_t>(nowRateTick - cache[i].getRateTime()) & 0x0F) >= rateTtlTicks) {
                 cache[i].rate_count = 0;
-                cache[i].rate_time = 0;
+                cache[i].setRateTime(0);
             } else {
                 anyValid = true;
             }
         }
 
-        // Check and clear expired unknown tracking data
-        if (cache[i].unknown_time != 0) {
-            uint32_t unknownTimeMs = fromRelativeUnknownTime(cache[i].unknown_time);
-            if (!isWithinWindow(nowMs, unknownTimeMs, unknownTtlMs)) {
+        // Check and clear expired unknown tracking data (gated on feature; presence: unknown_count != 0)
+        if (cfg.drop_unknown_enabled && cache[i].unknown_count != 0) {
+            if ((static_cast<uint8_t>(nowUnknownTick - cache[i].getUnknownTime()) & 0x0F) >= unknownTtlTicks) {
                 cache[i].unknown_count = 0;
-                cache[i].unknown_time = 0;
+                cache[i].setUnknownTime(0);
             } else {
                 anyValid = true;
             }
@@ -990,19 +948,26 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     if (!entry)
         return false;
 
-    // Compare fingerprint and check time window
-    // When minIntervalMs == 0, deduplication is disabled (withinInterval = false means never drop)
-    const bool hasPositionState = !isNew && entry->pos_time != 0;
+    // Compare fingerprint and check time window.
+    // When minIntervalMs == 0, deduplication is disabled (withinInterval = false means never drop).
+    // Presence: pos_fingerprint != 0 (zero fingerprint from real coordinates is astronomically unlikely).
+    const bool hasPositionState = !isNew && entry->pos_fingerprint != 0;
     const bool samePosition = hasPositionState && entry->pos_fingerprint == fingerprint;
+    const uint8_t nowPosTick = currentPosTick();
+    // Clamp to [1, 255]: intervals shorter than one tick still dedup within the same tick.
+    const uint8_t windowTicks =
+        (minIntervalMs == 0) ? 0
+                             : static_cast<uint8_t>(std::min(static_cast<uint32_t>(UINT8_MAX),
+                                                             std::max(static_cast<uint32_t>(1), minIntervalMs / kPosTimeTickMs)));
     const bool withinInterval =
-        hasPositionState && (minIntervalMs != 0) && isWithinWindow(nowMs, fromRelativePosTime(entry->pos_time), minIntervalMs);
+        hasPositionState && (windowTicks != 0) && (static_cast<uint8_t>(nowPosTick - entry->pos_time) < windowTicks);
 
     TM_LOG_DEBUG("Position dedup 0x%08x: fp=0x%02x prev=0x%02x same=%d within=%d new=%d", p->from, fingerprint,
                  entry->pos_fingerprint, samePosition, withinInterval, isNew);
 
-    // Update cache entry
+    // Update cache entry (raw tick; 0 is a valid tick value)
     entry->pos_fingerprint = fingerprint;
-    entry->pos_time = toRelativePosTime(nowMs);
+    entry->pos_time = nowPosTick;
 
     // Drop only if same position AND within the minimum interval
     return samePosition && withinInterval;
@@ -1156,9 +1121,14 @@ bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
     if (!entry)
         return false;
 
-    // Check if window has expired
-    if (isNew || !isWithinWindow(nowMs, fromRelativeRateTime(entry->rate_time), windowMs)) {
-        entry->rate_time = toRelativeRateTime(nowMs);
+    // Window ticks: clamp to [1,15] so zero windowMs (config error) opens a new window.
+    const uint8_t windowTicks = static_cast<uint8_t>(std::min(static_cast<uint32_t>(15), windowMs / kRateTimeTickMs));
+    const uint8_t nowRateTick = currentRateTick();
+    const bool windowExpired =
+        isNew || entry->rate_count == 0 ||
+        ((static_cast<uint8_t>(nowRateTick - entry->getRateTime()) & 0x0F) >= std::max(static_cast<uint8_t>(1), windowTicks));
+    if (windowExpired) {
+        entry->setRateTime(nowRateTick);
         entry->rate_count = 1;
         return false;
     }
@@ -1190,9 +1160,8 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
     if (!moduleConfig.traffic_management.drop_unknown_enabled || moduleConfig.traffic_management.unknown_packet_threshold == 0)
         return false;
 
-    uint32_t windowMs = kUnknownResetMs;
-    if (moduleConfig.traffic_management.rate_limit_window_secs > 0)
-        windowMs = secsToMs(moduleConfig.traffic_management.rate_limit_window_secs);
+    // Fixed 5-tick (5 min) unknown window; capped at 12 ticks (12 min max).
+    static constexpr uint8_t kUnknownWindowTicks = 5;
 
     bool isNew = false;
     concurrency::LockGuard guard(&cacheLock);
@@ -1200,9 +1169,12 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
     if (!entry)
         return false;
 
-    // Check if window has expired
-    if (isNew || !isWithinWindow(nowMs, fromRelativeUnknownTime(entry->unknown_time), windowMs)) {
-        entry->unknown_time = toRelativeUnknownTime(nowMs);
+    // Check if window has expired (presence: unknown_count != 0)
+    const uint8_t nowUnknownTick = currentUnknownTick();
+    const bool windowExpired = isNew || entry->unknown_count == 0 ||
+                               ((static_cast<uint8_t>(nowUnknownTick - entry->getUnknownTime()) & 0x0F) >= kUnknownWindowTicks);
+    if (windowExpired) {
+        entry->setUnknownTime(nowUnknownTick);
         entry->unknown_count = 0;
     }
 
