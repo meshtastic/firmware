@@ -1,5 +1,3 @@
-#pragma once
-
 #ifndef RECLOCK_I2C_
 #define RECLOCK_I2C_
 
@@ -16,7 +14,7 @@
     https://github.com/earlephilhower/arduino-pico/blob/master/libraries/Wire/src/Wire.h#L60
     https://github.com/stm32duino/Arduino_Core_STM32/blob/main/libraries/Wire/src/Wire.h#L103
     For cases when I2C speed is different to the ones defined by sensors (see defines in sensor classes)
-    we need to reclock I2C and set it back to the previous stablished speed.
+    we need to reclock I2C and set it back to the previous established speed.
     Only for cases where we can know it (ESP32 or known screen) we can do this.
 */
 
