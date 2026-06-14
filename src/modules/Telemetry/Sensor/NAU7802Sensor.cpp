@@ -38,7 +38,7 @@ bool NAU7802Sensor::getMetrics(meshtastic_Telemetry *measurement)
     LOG_DEBUG("NAU7802 getMetrics");
     nau7802.powerUp();
     // Wait for the sensor to become ready for one second max
-    uint32_t start = millis();
+    uint32_t start = Time::getMillis();
     while (!nau7802.available()) {
         delay(100);
         if (!Throttle::isWithinTimespanMs(start, 1000)) {

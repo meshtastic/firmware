@@ -149,7 +149,7 @@ meshtastic_MeshPacket *NeighborInfoModule::allocReply()
     meshtastic_MeshPacket *reply = allocDataProtobuf(neighborInfo);
 
     if (reply) {
-        lastSentReply = millis(); // Track when we sent this reply
+        lastSentReply = Time::getMillis(); // Track when we sent this reply
     }
     return reply;
 }

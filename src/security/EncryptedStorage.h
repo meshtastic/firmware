@@ -2,6 +2,7 @@
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
 
+#include "Time.h"
 #include <cstddef>
 #include <cstdint>
 
@@ -225,7 +226,7 @@ uint32_t getBackoffSecondsRemaining();
 //
 // Independent of the wall-clock and boot-count TTLs on the token. Caps how
 // long a single auto-unlocked session can keep storage unlocked, measured
-// in firmware millis() since the unlock. Reboot resets the counter, so an
+// in firmware Time::getMillis() since the unlock. Reboot resets the counter, so an
 // attacker who power-cycles to dodge the timer still burns a boot count.
 // Combined hard cap: bootsRemaining * sessionMaxSeconds total exposure.
 //

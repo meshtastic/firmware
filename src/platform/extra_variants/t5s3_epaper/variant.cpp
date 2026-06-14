@@ -116,10 +116,10 @@ void showTouchIndicator(const char *text)
     return;
 #else
     // Keep repeated notifications low profile and non-spammy.
-    if ((millis() - lastTouchIndicatorMs) < 500) {
+    if ((Time::getMillis() - lastTouchIndicatorMs) < 500) {
         return;
     }
-    lastTouchIndicatorMs = millis();
+    lastTouchIndicatorMs = Time::getMillis();
     if (screen) {
         screen->showSimpleBanner(text, 1400);
     }
@@ -182,7 +182,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
   protected:
     int32_t runOnce() override
     {
-        const uint32_t now = millis();
+        const uint32_t now = Time::getMillis();
 
         if (now < touchResumeBlockUntilMs) {
             resetStateAndStop();
@@ -279,7 +279,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
         if (touchLightSleepActive) {
             return;
         }
-        const uint32_t now = millis();
+        const uint32_t now = Time::getMillis();
         if (now < touchResumeBlockUntilMs) {
             return;
         }
@@ -288,7 +288,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
         }
 
         state = State::IRQ_PENDING;
-        irqAtMs = millis();
+        irqAtMs = Time::getMillis();
         startThread();
     }
 
@@ -549,7 +549,7 @@ struct TouchLightSleepEndObserver {
         }
 
         touchStateEpoch++;
-        touchResumeBlockUntilMs = millis() + 150;
+        touchResumeBlockUntilMs = Time::getMillis() + 150;
         touchIndicatorRefreshPending = !isTouchInputEnabled();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
         // Clear sleep-time touch overlay after wake.
@@ -578,7 +578,7 @@ bool readTouch(int16_t *x, int16_t *y)
     }
 
     // Let buses and peripherals settle briefly after light-sleep wake.
-    if (millis() < touchResumeBlockUntilMs) {
+    if (Time::getMillis() < touchResumeBlockUntilMs) {
         return false;
     }
 
@@ -595,12 +595,12 @@ bool readTouch(int16_t *x, int16_t *y)
         LOG_DEBUG("touchscreen1: wakeup() on deferred resume");
         touch.wakeup();
         touchNeedsWake = false;
-        suppressUntilMs = millis() + 60;
+        suppressUntilMs = Time::getMillis() + 60;
         return false;
     }
 
     // After a recovery pulse, emit a brief "released" window so gesture state can reset.
-    if (suppressUntilMs != 0 && millis() < suppressUntilMs) {
+    if (suppressUntilMs != 0 && Time::getMillis() < suppressUntilMs) {
         return false;
     }
 #endif
@@ -662,7 +662,7 @@ void lateInitVariant()
                 }
 
                 static uint32_t lastHomeMs = 0;
-                const uint32_t now = millis();
+                const uint32_t now = Time::getMillis();
                 if ((uint32_t)(now - lastHomeMs) < 220) {
                     return; // debounce repeated key reports while still touched
                 }

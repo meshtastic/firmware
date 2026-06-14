@@ -1,6 +1,7 @@
 #if defined(T_DECK_PRO)
 
 #include "TDeckProKeyboard.h"
+#include "Time.h"
 
 #define _TCA8418_COLS 10
 #define _TCA8418_ROWS 4
@@ -97,7 +98,7 @@ void TDeckProKeyboard::pressed(uint8_t key)
     if (state == Init || state == Busy) {
         return;
     }
-    if (modifierFlag && (millis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
+    if (modifierFlag && (Time::getMillis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
         modifierFlag = 0;
     }
 
@@ -111,7 +112,7 @@ void TDeckProKeyboard::pressed(uint8_t key)
     next_key = row * _TCA8418_COLS + col;
     state = Held;
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     tap_interval = now - last_tap;
 
     updateModifierFlag(next_key);
@@ -147,7 +148,7 @@ void TDeckProKeyboard::released()
         return;
     }
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     last_tap = now;
 
     if (TDeckProTapMap[last_key][modifierFlag % TDeckProTapMod[last_key]] == Key::BL_TOGGLE) {

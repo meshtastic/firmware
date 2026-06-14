@@ -232,7 +232,7 @@ static void clearAuthSlot_LH(const PhoneAPI *p)
 
 PhoneAPI::PhoneAPI()
 {
-    lastContactMsec = millis();
+    lastContactMsec = Time::getMillis();
     std::fill(std::begin(recentToRadioPacketIds), std::end(recentToRadioPacketIds), 0);
 }
 
@@ -310,7 +310,7 @@ void PhoneAPI::handleStartConfig()
     spiLock->unlock();
     LOG_DEBUG("Got %d files in manifest", filesManifest.size());
 
-    LOG_INFO("Start API client config millis=%u", millis());
+    LOG_INFO("Start API client config millis=%u", Time::getMillis());
     // Protect against concurrent BLE callbacks: they run in NimBLE's FreeRTOS task and also touch nodeInfoQueue.
     {
         concurrency::LockGuard guard(&nodeInfoMutex);
@@ -412,7 +412,7 @@ bool PhoneAPI::checkConnectionTimeout()
 bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
-    lastContactMsec = millis();
+    lastContactMsec = Time::getMillis();
 
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, &meshtastic_ToRadio_msg, &toRadioScratch)) {
@@ -887,7 +887,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_OTHER_NODEINFOS: {
         if (readIndex == 2) { //  readIndex==2 will be true for the first non-us node
-            LOG_INFO("Start sending nodeinfos millis=%u", millis());
+            LOG_INFO("Start sending nodeinfos millis=%u", Time::getMillis());
         }
 
         meshtastic_NodeInfo infoToSend = {};
@@ -911,7 +911,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.node_info = infoToSend;
             prefetchNodeInfos();
         } else {
-            LOG_DEBUG("Done sending %d of %d nodeinfos millis=%u", readIndex, nodeDB->getNumMeshNodes(), millis());
+            LOG_DEBUG("Done sending %d of %d nodeinfos millis=%u", readIndex, nodeDB->getNumMeshNodes(), Time::getMillis());
             nodeInfoMutex.lock();
             nodeInfoQueue.clear();
             nodeInfoMutex.unlock();
@@ -1038,7 +1038,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
 void PhoneAPI::sendConfigComplete()
 {
-    LOG_INFO("Config Send Complete millis=%u", millis());
+    LOG_INFO("Config Send Complete millis=%u", Time::getMillis());
     const bool shouldReplaySatellites = (config_nonce != SPECIAL_NONCE_ONLY_CONFIG);
     // The phone sees config_complete_id first (treats sync as done), then the cached
     // satellite-DB packets (positions / telemetry / environment / status) trickle in
@@ -1213,7 +1213,7 @@ void PhoneAPI::beginReplayPositions()
     // got our position bundled in STATE_SEND_OWN_NODEINFO.
     replayPositionOrder = nodeDB->snapshotPositionNodeNums(nodeDB->getNodeNum());
     replayPositionIndex = 0;
-    LOG_INFO("Begin position replay: %u entries millis=%u", (unsigned)replayPositionOrder.size(), millis());
+    LOG_INFO("Begin position replay: %u entries millis=%u", (unsigned)replayPositionOrder.size(), Time::getMillis());
 #endif
 }
 
@@ -1249,7 +1249,7 @@ void PhoneAPI::beginReplayTelemetry()
 #else
     replayTelemetryOrder = nodeDB->snapshotTelemetryNodeNums(nodeDB->getNodeNum());
     replayTelemetryIndex = 0;
-    LOG_INFO("Begin telemetry replay: %u entries millis=%u", (unsigned)replayTelemetryOrder.size(), millis());
+    LOG_INFO("Begin telemetry replay: %u entries millis=%u", (unsigned)replayTelemetryOrder.size(), Time::getMillis());
 #endif
 }
 
@@ -1312,7 +1312,7 @@ void PhoneAPI::beginReplayEnvironment()
 #else
     replayEnvironmentOrder = nodeDB->snapshotEnvironmentNodeNums(nodeDB->getNodeNum());
     replayEnvironmentIndex = 0;
-    LOG_INFO("Begin environment replay: %u entries millis=%u", (unsigned)replayEnvironmentOrder.size(), millis());
+    LOG_INFO("Begin environment replay: %u entries millis=%u", (unsigned)replayEnvironmentOrder.size(), Time::getMillis());
 #endif
 }
 
@@ -1371,7 +1371,7 @@ void PhoneAPI::beginReplayStatus()
 #else
     replayStatusOrder = nodeDB->snapshotStatusNodeNums(nodeDB->getNodeNum());
     replayStatusIndex = 0;
-    LOG_INFO("Begin status replay: %u entries millis=%u", (unsigned)replayStatusOrder.size(), millis());
+    LOG_INFO("Begin status replay: %u entries millis=%u", (unsigned)replayStatusOrder.size(), Time::getMillis());
 #endif
 }
 
@@ -1455,19 +1455,19 @@ void PhoneAPI::advanceReplayPhase()
 {
     switch (replayPhase) {
     case REPLAY_PHASE_POSITIONS:
-        LOG_DEBUG("Replay drain: positions done (count=%u) millis=%u", (unsigned)replayPositionIndex, millis());
+        LOG_DEBUG("Replay drain: positions done (count=%u) millis=%u", (unsigned)replayPositionIndex, Time::getMillis());
         replayPhase = REPLAY_PHASE_TELEMETRY;
         break;
     case REPLAY_PHASE_TELEMETRY:
-        LOG_DEBUG("Replay drain: telemetry done (count=%u) millis=%u", (unsigned)replayTelemetryIndex, millis());
+        LOG_DEBUG("Replay drain: telemetry done (count=%u) millis=%u", (unsigned)replayTelemetryIndex, Time::getMillis());
         replayPhase = REPLAY_PHASE_ENVIRONMENT;
         break;
     case REPLAY_PHASE_ENVIRONMENT:
-        LOG_DEBUG("Replay drain: environment done (count=%u) millis=%u", (unsigned)replayEnvironmentIndex, millis());
+        LOG_DEBUG("Replay drain: environment done (count=%u) millis=%u", (unsigned)replayEnvironmentIndex, Time::getMillis());
         replayPhase = REPLAY_PHASE_STATUS;
         break;
     case REPLAY_PHASE_STATUS:
-        LOG_INFO("Replay drain complete (status count=%u) millis=%u", (unsigned)replayStatusIndex, millis());
+        LOG_INFO("Replay drain complete (status count=%u) millis=%u", (unsigned)replayStatusIndex, Time::getMillis());
         replayPositionOrder.clear();
         replayPositionOrder.shrink_to_fit();
         replayTelemetryOrder.clear();
@@ -1704,7 +1704,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         p.want_ack = true;
     }
 
-    lastPortNumToRadio[p.decoded.portnum] = millis();
+    lastPortNumToRadio[p.decoded.portnum] = Time::getMillis();
     service->handleToRadio(p);
     return true;
 }
@@ -1892,7 +1892,7 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         revokeAllAuth();
         queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "", 0, 0, 0);
         zeroPassphrase();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::getMillis() + DEFAULT_REBOOT_SECONDS * 1000;
         return true;
     }
 

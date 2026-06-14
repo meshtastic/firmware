@@ -48,7 +48,7 @@ static uint8_t replybotCooldownIdx = 0;
 // entry table as needed.
 static bool replybotRateLimited(uint32_t from, uint32_t cooldownMs)
 {
-    const uint32_t now = millis();
+    const uint32_t now = Time::getMillis();
     for (auto &e : replybotCooldown) {
         if (e.from == from) {
             // Found existing entry; check if cooldown expired

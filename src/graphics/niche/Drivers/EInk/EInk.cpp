@@ -1,4 +1,5 @@
 #include "./EInk.h"
+#include "Time.h"
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
@@ -32,7 +33,7 @@ void EInk::beginPolling(uint32_t interval, uint32_t expectedDuration)
 {
     updateRunning = true;
     pollingInterval = interval;
-    pollingBegunAt = millis();
+    pollingBegunAt = Time::getMillis();
 
     // To minimize load, we can choose to delay polling for a few seconds, if we know roughly how long the update will take
     // By default, expectedDuration is 0, and we'll start polling immediately
@@ -47,7 +48,7 @@ int32_t EInk::runOnce()
 {
     // Check for polling timeout
     // Manually set at 10 seconds, in case some big task holds up the firmware's cooperative multitasking
-    if (millis() - pollingBegunAt > 10000)
+    if (Time::getMillis() - pollingBegunAt > 10000)
         failed = true;
 
     // Handle failure

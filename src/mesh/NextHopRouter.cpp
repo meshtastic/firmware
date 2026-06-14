@@ -283,7 +283,7 @@ PendingPacket *NextHopRouter::startRetransmission(meshtastic_MeshPacket *p, uint
  */
 int32_t NextHopRouter::doRetransmissions()
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     int32_t d = INT32_MAX;
 
     // FIXME, we should use a better datastructure rather than walking through this map.
@@ -350,7 +350,7 @@ void NextHopRouter::setNextTx(PendingPacket *pending)
 {
     assert(iface);
     auto d = iface->getRetransmissionMsec(pending->packet);
-    pending->nextTxMsec = millis() + d;
+    pending->nextTxMsec = Time::getMillis() + d;
     LOG_DEBUG("Setting next retransmission in %u msecs: ", d);
     printPacket("", pending->packet);
     setReceivedMessage(); // Run ASAP, so we can figure out our correct sleep time

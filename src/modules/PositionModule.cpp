@@ -283,7 +283,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
     meshtastic_MeshPacket *reply = allocPositionPacket();
     if (reply) {
-        lastSentReply = millis(); // Track when we sent this reply
+        lastSentReply = Time::getMillis(); // Track when we sent this reply
     }
     return reply;
 }
@@ -446,7 +446,7 @@ int32_t PositionModule::runOnce()
         return RUNONCE_INTERVAL;
 
     // We limit our GPS broadcasts to a max rate
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     uint32_t intervalMs = Default::getConfiguredOrDefaultMsScaled(
         config.position.position_broadcast_secs, default_broadcast_interval_secs, numOnlineNodes, TrafficType::POSITION);
     uint32_t msSinceLastSend = now - lastGpsSend;
@@ -598,7 +598,7 @@ void PositionModule::handleNewPosition()
         if (!nodeDB->copyNodePosition(node->num, selfPos))
             return;
         auto smartPosition = getDistanceTraveledSinceLastSend(selfPos);
-        uint32_t msSinceLastSend = millis() - lastGpsSend;
+        uint32_t msSinceLastSend = Time::getMillis() - lastGpsSend;
         if (smartPosition.hasTraveledOverThreshold &&
             Throttle::execute(
                 &lastGpsSend, minimumTimeThreshold, []() { positionModule->sendOurPosition(); },

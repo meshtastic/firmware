@@ -516,8 +516,8 @@ bool SEN5XSensor::startCleaning()
     // This message will be always printed so the user knows the device it's not hung
     LOG_INFO("SEN5X: Started fan cleaning it will take 10 seconds...");
 
-    uint16_t started = millis();
-    while (millis() - started < 10500) {
+    uint16_t started = Time::getMillis();
+    while (Time::getMillis() - started < 10500) {
         delay(500);
     }
     LOG_INFO("SEN5X: Cleaning done!!");

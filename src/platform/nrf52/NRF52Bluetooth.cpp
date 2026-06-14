@@ -425,8 +425,8 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     passkeyShowing = true;
 
     if (match_request) {
-        uint32_t start_time = millis();
-        while (millis() < start_time + 30000) {
+        uint32_t start_time = Time::getMillis();
+        while (Time::getMillis() < start_time + 30000) {
             if (!Bluefruit.connected(conn_handle))
                 break;
         }

@@ -14,7 +14,7 @@
 class SerialModule : public StreamAPI, private concurrency::OSThread
 {
     bool firstTime = 1;
-    unsigned long lastNmeaTime = millis();
+    unsigned long lastNmeaTime = Time::getMillis();
     char outbuf[90] = "";
 
   public:

@@ -2,6 +2,7 @@
 #include "FSCommon.h"
 #include "RTC.h"
 #include "SPILock.h"
+#include "Time.h"
 #include <Throttle.h>
 
 #ifdef FSCom
@@ -50,7 +51,7 @@ void TransmitHistory::loadFromDisk()
                         history[entry.key] = makeStoredTimestamp(entry.epochSeconds, entry.flags);
                         // Do NOT seed lastMillis here.
                         //
-                        // getLastSentToMeshMillis() reconstructs a millis()-relative value
+                        // getLastSentToMeshMillis() reconstructs a Time::getMillis()-relative value
                         // from the stored epoch, and Throttle::isWithinTimespanMs() uses
                         // the same unsigned subtraction pattern. Once getTime() has a valid
                         // wall-clock epoch comparable to stored values, recent reboots still
@@ -61,7 +62,7 @@ void TransmitHistory::loadFromDisk()
                         // contribute, but boot-relative entries still suppress near-term reboot
                         // chatter via a narrow recovery window.
                         //
-                        // If we seeded lastMillis to millis() here, every loaded entry would
+                        // If we seeded lastMillis to Time::getMillis() here, every loaded entry would
                         // appear to have been sent at boot time, regardless of the true age
                         // of the last transmission. That was the regression behind #9901.
                     }
@@ -81,7 +82,7 @@ void TransmitHistory::loadFromDisk()
 
 void TransmitHistory::setLastSentToMesh(uint16_t key)
 {
-    lastMillis[key] = millis();
+    lastMillis[key] = Time::getMillis();
     uint32_t now = getTime();
     if (now >= 2) {
         const uint8_t flags = (getRTCQuality() == RTCQualityNone) ? ENTRY_FLAG_BOOT_RELATIVE : ENTRY_FLAG_NONE;
@@ -94,7 +95,7 @@ void TransmitHistory::setLastSentToMesh(uint16_t key)
         // after boot so a crash-reboot loop can't avoid persisting.
         if (lastDiskSave == 0 || !Throttle::isWithinTimespanMs(lastDiskSave, SAVE_INTERVAL_MS)) {
             if (saveToDisk()) {
-                lastDiskSave = millis();
+                lastDiskSave = Time::getMillis();
             }
         }
     }
@@ -151,7 +152,7 @@ uint32_t TransmitHistory::getLastSentAbsoluteMillis(uint32_t storedEpoch) const
         return 0;
     }
 
-    return millis() - msAgo;
+    return Time::getMillis() - msAgo;
 }
 
 uint32_t TransmitHistory::getLastSentBootRelativeMillis(uint32_t storedSeconds) const
@@ -167,7 +168,7 @@ uint32_t TransmitHistory::getLastSentBootRelativeMillis(uint32_t storedSeconds) 
         if (secondsAgo > BOOT_RELATIVE_RECOVERY_WINDOW_SEC) {
             return 0;
         }
-        return millis() - (secondsAgo * 1000);
+        return Time::getMillis() - (secondsAgo * 1000);
     }
 
     uint32_t secondsAhead = storedSeconds - now;
@@ -175,7 +176,7 @@ uint32_t TransmitHistory::getLastSentBootRelativeMillis(uint32_t storedSeconds) 
         return 0;
     }
 
-    return millis();
+    return Time::getMillis();
 }
 
 uint32_t TransmitHistory::getLastSentToMeshMillis(uint16_t key) const
@@ -192,13 +193,13 @@ uint32_t TransmitHistory::getLastSentToMeshMillis(uint16_t key) const
         return 0; // No stored time — module has never sent
     }
 
-    // Convert to a millis()-relative timestamp: millis() - msAgo.
+    // Convert to a Time::getMillis()-relative timestamp: Time::getMillis() - msAgo.
     //
     // The result may wrap if msAgo is larger than the current uptime, and that is
     // intentional. Throttle::isWithinTimespanMs() also uses unsigned subtraction,
     // so the reconstructed age is preserved across wraparound:
-    // - recent reboot, 5 min ago   -> (millis() - lastMs) == 300000, still throttled
-    // - long reboot, 30 min ago    -> (millis() - lastMs) == 1800000, allowed
+    // - recent reboot, 5 min ago   -> (Time::getMillis() - lastMs) == 300000, still throttled
+    // - long reboot, 30 min ago    -> (Time::getMillis() - lastMs) == 1800000, allowed
     if ((it->second.flags & ENTRY_FLAG_BOOT_RELATIVE) != 0) {
         return getLastSentBootRelativeMillis(it->second.seconds);
     }
@@ -286,7 +287,7 @@ void TransmitHistory::loadFromDisk() {}
 
 void TransmitHistory::setLastSentToMesh(uint16_t key)
 {
-    lastMillis[key] = millis();
+    lastMillis[key] = Time::getMillis();
 }
 
 uint32_t TransmitHistory::getLastSentToMeshEpoch(uint16_t key) const

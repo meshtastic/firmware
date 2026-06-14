@@ -186,7 +186,7 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
 
     if (backPacket->tx_after) {
         // Check if there's a late packet at the queue end
-        auto now = millis();
+        auto now = Time::getMillis();
         if (backPacket->tx_after < now && (!p->tx_after || backPacket->tx_after > p->tx_after)) {
             int32_t dt = (int32_t)(backPacket->tx_after - now);
             if (p->tx_after) {

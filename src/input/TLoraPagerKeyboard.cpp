@@ -125,7 +125,7 @@ void TLoraPagerKeyboard::pressed(uint8_t key)
         hapticFeedback();
     }
 
-    if (modifierFlag && (millis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
+    if (modifierFlag && (Time::getMillis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
         modifierFlag = 0;
     }
 
@@ -139,7 +139,7 @@ void TLoraPagerKeyboard::pressed(uint8_t key)
     next_key = row * _TCA8418_COLS + col;
     state = Held;
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     tap_interval = now - last_tap;
 
     updateModifierFlag(next_key);
@@ -175,7 +175,7 @@ void TLoraPagerKeyboard::released()
         return;
     }
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     last_tap = now;
 
     if (TLoraPagerTapMap[last_key][modifierFlag % TLoraPagerTapMod[last_key]] == Key::BL_TOGGLE) {

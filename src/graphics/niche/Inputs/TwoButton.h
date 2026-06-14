@@ -68,7 +68,7 @@ class TwoButton : protected concurrency::OSThread
         uint32_t debounceLength = 50;       // Minimum length for shortpress, in ms
         uint32_t longpressLength = 500;     // How long after button down to fire longpress, in ms
         volatile State state = State::REST; // Internal state
-        volatile uint32_t irqAtMillis;      // millis() when button went down
+        volatile uint32_t irqAtMillis;      // Time::getMillis() when button went down
 
         // Per-button event callbacks
         static void noop(){};

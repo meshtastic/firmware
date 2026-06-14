@@ -37,7 +37,7 @@ int32_t StreamAPI::readStream(const char *buf, uint16_t bufLen)
     } else {
         handleRecStream(buf, bufLen);
         // we had bytes available this time, so assume we might have them next time also
-        lastRxMsec = millis();
+        lastRxMsec = Time::getMillis();
         return 0;
     }
 }
@@ -161,7 +161,7 @@ int32_t StreamAPI::readStream()
         }
 
         // we had bytes available this time, so assume we might have them next time also
-        lastRxMsec = millis();
+        lastRxMsec = Time::getMillis();
         return 0;
     }
 }

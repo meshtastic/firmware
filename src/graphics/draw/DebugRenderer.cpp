@@ -270,7 +270,7 @@ void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
             display->drawString(x + 1, y, "USB");
     }
 
-    uint32_t currentMillis = millis();
+    uint32_t currentMillis = Time::getMillis();
     uint32_t seconds = currentMillis / 1000;
     uint32_t minutes = seconds / 60;
     uint32_t hours = minutes / 60;
@@ -703,7 +703,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
-        getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
+        getUptimeStr(Time::getMillis(), "Up: ", uptimeStr, sizeof(uptimeStr));
         textWidth = display->getStringWidth(uptimeStr);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);

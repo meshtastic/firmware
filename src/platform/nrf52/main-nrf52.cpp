@@ -268,7 +268,7 @@ void preFSBegin()
     if (!(NRF_POWER->RESETREAS == 0 && NRF_POWER->GPREGRET == NRF52_MAGIC_LFS_IS_CORRUPT))
         return;
     NRF_POWER->GPREGRET = 0;
-    millis_until_formatting_again = millis() + MULTIPLE_CORRUPTION_DELAY_MILLIS;
+    millis_until_formatting_again = Time::getMillis() + MULTIPLE_CORRUPTION_DELAY_MILLIS;
     InternalFS.format();
     LOG_INFO("LittleFS format complete; restoring default settings");
 }
@@ -276,9 +276,9 @@ void preFSBegin()
 extern "C" void lfs_assert(const char *reason)
 {
     LOG_ERROR("LittleFS corruption detected: %s", reason);
-    if (millis_until_formatting_again > millis()) {
+    if (millis_until_formatting_again > Time::getMillis()) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
-        const long millis_remain = millis_until_formatting_again - millis();
+        const long millis_remain = millis_until_formatting_again - Time::getMillis();
         LOG_WARN("Pausing %d seconds to avoid wear on flash storage", millis_remain / 1000);
         delay(millis_remain);
     }

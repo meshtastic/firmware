@@ -1,6 +1,7 @@
 #include "SimRadio.h"
 #include "MeshService.h"
 #include "Router.h"
+#include "Time.h"
 
 SimRadio::SimRadio() : NotifiedWorkerThread("SimRadio")
 {
@@ -262,7 +263,7 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
         receivingPacket = nullptr;
         return;
     } else if (sendingPacket) {
-        uint32_t airtimeLeft = tillRun(millis());
+        uint32_t airtimeLeft = tillRun(Time::getMillis());
         if (airtimeLeft <= 0) {
             LOG_WARN("Transmitting packet was already done");
             handleTransmitInterrupt(); // Finish sending first

@@ -60,14 +60,14 @@ bool ButtonThread::initButton(const ButtonConfig &config)
     userButton.attachLongPressStart(
         [](void *callerThread) -> void {
             ButtonThread *thread = (ButtonThread *)callerThread;
-            // if (millis() > 30000) // hold off 30s after boot
+            // if (Time::getMillis() > 30000) // hold off 30s after boot
             thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
         },
         this);
     userButton.attachLongPressStop(
         [](void *callerThread) -> void {
             ButtonThread *thread = (ButtonThread *)callerThread;
-            // if (millis() > 30000) // hold off 30s after boot
+            // if (Time::getMillis() > 30000) // hold off 30s after boot
             thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
         },
         this);
@@ -123,7 +123,7 @@ int32_t ButtonThread::runOnce()
     canSleep = true; // Assume we should not keep the board awake
 
     // Check for combination timeout
-    if (waitingForLongPress && (millis() - shortPressTime) > BUTTON_COMBO_TIMEOUT_MS) {
+    if (waitingForLongPress && (Time::getMillis() - shortPressTime) > BUTTON_COMBO_TIMEOUT_MS) {
         waitingForLongPress = false;
     }
 
@@ -138,29 +138,29 @@ int32_t ButtonThread::runOnce()
     if (buttonCurrentlyPressed && !buttonWasPressed) {
         if (_pressHandler)
             _pressHandler();
-        buttonPressStartTime = millis();
+        buttonPressStartTime = Time::getMillis();
         leadUpPlayed = false;
         leadUpSequenceActive = false;
         resetLeadUpSequence();
     }
 #ifdef INPUT_DEBUG
     if (buttonCurrentlyPressed)
-        LOG_WARN("Button held for %u ms", millis() - buttonPressStartTime);
+        LOG_WARN("Button held for %u ms", Time::getMillis() - buttonPressStartTime);
 #endif
 
     // Progressive lead-up sound system
-    if (!_suppressLeadUp && buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS) {
+    if (!_suppressLeadUp && buttonCurrentlyPressed && (Time::getMillis() - buttonPressStartTime) >= BUTTON_LEADUP_MS) {
 
         // Start the progressive sequence if not already active
         if (!leadUpSequenceActive) {
             leadUpSequenceActive = true;
-            lastLeadUpNoteTime = millis();
+            lastLeadUpNoteTime = Time::getMillis();
             playNextLeadUpNote(); // Play the first note immediately
         }
         // Continue playing notes at intervals
-        else if ((millis() - lastLeadUpNoteTime) >= 400) { // 400ms interval between notes
+        else if ((Time::getMillis() - lastLeadUpNoteTime) >= 400) { // 400ms interval between notes
             if (playNextLeadUpNote()) {
-                lastLeadUpNoteTime = millis();
+                lastLeadUpNoteTime = Time::getMillis();
             } else {
                 leadUpPlayed = true;
             }
@@ -193,7 +193,7 @@ int32_t ButtonThread::runOnce()
 
             // Start tracking for potential combination
             waitingForLongPress = true;
-            shortPressTime = millis();
+            shortPressTime = Time::getMillis();
 
             break;
         }
@@ -205,7 +205,7 @@ int32_t ButtonThread::runOnce()
 
             // Check if this is part of a short-press + long-press combination
             if (_shortLong != INPUT_BROKER_NONE && waitingForLongPress &&
-                (millis() - shortPressTime) <= BUTTON_COMBO_TIMEOUT_MS) {
+                (Time::getMillis() - shortPressTime) <= BUTTON_COMBO_TIMEOUT_MS) {
                 evt.inputEvent = _shortLong;
                 // evt.kbchar = _shortLong;
                 this->notifyObservers(&evt);
@@ -279,10 +279,10 @@ int32_t ButtonThread::runOnce()
         // may wake the board immediately.
         case BUTTON_EVENT_LONG_RELEASED: {
 
-            LOG_INFO("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
+            LOG_INFO("LONG PRESS RELEASE AFTER %u MILLIS", Time::getMillis() - buttonPressStartTime);
             // Require press started after boot holdoff to avoid phantom shutdown from floating pins
-            if (millis() > 30000 && buttonPressStartTime > 30000 && _longLongPress != INPUT_BROKER_NONE &&
-                (millis() - buttonPressStartTime) >= _longLongPressTime && leadUpPlayed) {
+            if (Time::getMillis() > 30000 && buttonPressStartTime > 30000 && _longLongPress != INPUT_BROKER_NONE &&
+                (Time::getMillis() - buttonPressStartTime) >= _longLongPressTime && leadUpPlayed) {
                 evt.inputEvent = _longLongPress;
                 this->notifyObservers(&evt);
             }

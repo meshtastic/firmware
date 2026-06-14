@@ -54,7 +54,7 @@ void OSThread::setIntervalFromNow(unsigned long _interval)
     interval = _interval;
 
     // Cache the next run based on the last_run
-    _cached_next_run = millis() + interval;
+    _cached_next_run = Time::getMillis() + interval;
 }
 
 bool OSThread::shouldRun(unsigned long time)

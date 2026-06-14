@@ -385,13 +385,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
         int s = 1; // Reboot in 1 second, hard coded
         LOG_INFO("Reboot in %d seconds", s);
-        rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        rebootAtMsec = (s < 0) ? 0 : (Time::getMillis() + s * 1000);
         break;
     }
     case meshtastic_AdminMessage_shutdown_seconds_tag: {
         int32_t s = r->shutdown_seconds;
         LOG_INFO("Shutdown in %d seconds", s);
-        shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        shutdownAtMsec = (s < 0) ? 0 : (Time::getMillis() + s * 1000);
         break;
     }
     case meshtastic_AdminMessage_get_device_metadata_request_tag: {
@@ -1501,7 +1501,7 @@ void AdminModule::reboot(int32_t seconds)
     LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
         screen->showSimpleBanner("Rebooting...", 0); // stays on screen
-    rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+    rebootAtMsec = (seconds < 0) ? 0 : (Time::getMillis() + seconds * 1000);
 }
 
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
@@ -1580,11 +1580,11 @@ AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_AP
 
 void AdminModule::setPassKey(meshtastic_AdminMessage *res)
 {
-    if (session_time == 0 || millis() / 1000 > session_time + 150) {
+    if (session_time == 0 || Time::getMillis() / 1000 > session_time + 150) {
         for (int i = 0; i < 8; i++) {
             session_passkey[i] = random();
         }
-        session_time = millis() / 1000;
+        session_time = Time::getMillis() / 1000;
     }
     memcpy(res->session_passkey.bytes, session_passkey, 8);
     res->session_passkey.size = 8;
@@ -1597,7 +1597,7 @@ bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
 { // check that the key in the packet is still valid
     printBytes("Incoming session key: ", res->session_passkey.bytes, 8);
     printBytes("Expected session key: ", session_passkey, 8);
-    return (session_time + 300 > millis() / 1000 && res->session_passkey.size == 8 &&
+    return (session_time + 300 > Time::getMillis() / 1000 && res->session_passkey.size == 8 &&
             memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
 }
 

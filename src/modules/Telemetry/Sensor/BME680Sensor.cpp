@@ -163,7 +163,7 @@ void BME680Sensor::updateState()
         }
     } else {
         /* Update every STATE_SAVE_PERIOD minutes */
-        if ((stateUpdateCounter * STATE_SAVE_PERIOD) < millis()) {
+        if ((stateUpdateCounter * STATE_SAVE_PERIOD) < Time::getMillis()) {
             LOG_DEBUG("%s state update every %d minutes", sensorName, STATE_SAVE_PERIOD / 60000);
             update = true;
             stateUpdateCounter++;

@@ -71,13 +71,13 @@ void scrollUp()
     if (scrollIndex > 0)
         scrollIndex--;
 
-    popupTime = millis(); // show popup
+    popupTime = Time::getMillis(); // show popup
 }
 
 void scrollDown()
 {
     scrollIndex++;
-    popupTime = millis();
+    popupTime = Time::getMillis();
 }
 
 // =============================
@@ -717,7 +717,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     graphics::drawCommonFooter(display, x, y);
 
     // Scroll Popup Overlay
-    if (millis() - popupTime < POPUP_DURATION_MS) {
+    if (Time::getMillis() - popupTime < POPUP_DURATION_MS) {
         popupTotal = totalEntries;
 
         popupStart = startIndex + 1;
@@ -786,7 +786,7 @@ void drawDynamicListScreen_Nodes(OLEDDisplay *display, OLEDDisplayUiState *state
     static ListMode_Node lastRenderedMode = MODE_COUNT_NODE;
     static unsigned long modeStartTime = 0;
 
-    unsigned long now = millis();
+    unsigned long now = Time::getMillis();
 
 #if defined(OLED_TINY)
     display->clear();
@@ -822,7 +822,7 @@ void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *st
     static ListMode_Location lastRenderedMode = MODE_COUNT_LOCATION;
     static unsigned long modeStartTime = 0;
 
-    unsigned long now = millis();
+    unsigned long now = Time::getMillis();
 
 #if defined(OLED_TINY)
     display->clear();
@@ -896,7 +896,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
 #if defined(OLED_TINY)
     display->clear();
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     if (now - lastSwitchTime >= 2000) {
         display->display();
         lastSwitchTime = now;

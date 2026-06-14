@@ -13,7 +13,7 @@ class HostMetricsModule : private concurrency::OSThread, public ProtobufModule<m
           ProtobufModule("HostMetrics", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         uptimeWrapCount = 0;
-        uptimeLastMs = millis();
+        uptimeLastMs = Time::getMillis();
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(setStartDelay()); // Wait until NodeInfo is sent
     }

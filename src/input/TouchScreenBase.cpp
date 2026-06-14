@@ -77,11 +77,11 @@ int32_t TouchScreenBase::runOnce()
     if (x < 0 || y < 0) // T-deck can emit phantom touch events with a negative value when turning off the screen
         touched = false;
     if (touched) {
-        _lastTouchSeenMs = millis();
+        _lastTouchSeenMs = Time::getMillis();
         this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_ACTIVE_FAST : TOUCH_POLL_INTERVAL_ACTIVE);
         _last_x = x;
         _last_y = y;
-    } else if (_touchedOld && ((uint32_t)millis() - _lastTouchSeenMs) < TOUCH_RELEASE_GRACE_MS) {
+    } else if (_touchedOld && ((uint32_t)Time::getMillis() - _lastTouchSeenMs) < TOUCH_RELEASE_GRACE_MS) {
         // Treat brief no-touch samples as continuous touch to preserve long-press detection.
         touched = true;
     }
@@ -89,12 +89,12 @@ int32_t TouchScreenBase::runOnce()
         if (touched) {
             hapticFeedback();
             _state = TOUCH_EVENT_OCCURRED;
-            _start = millis();
+            _start = Time::getMillis();
             _first_x = x;
             _first_y = y;
         } else {
             _state = TOUCH_EVENT_CLEARED;
-            time_t duration = millis() - _start;
+            time_t duration = Time::getMillis() - _start;
             x = _last_x;
             y = _last_y;
             this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_RELEASE_FAST : TOUCH_POLL_INTERVAL_RELEASE);
@@ -151,7 +151,7 @@ int32_t TouchScreenBase::runOnce()
             LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
         }
     } else {
-        if (_tapped && (time_t(millis()) - _start) > TIME_LONG_PRESS - 50) {
+        if (_tapped && (time_t(Time::getMillis()) - _start) > TIME_LONG_PRESS - 50) {
             _tapped = false;
             e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
             LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
@@ -167,9 +167,9 @@ int32_t TouchScreenBase::runOnce()
 #endif
 
     // fire LONG_PRESS event without the need for release
-    if (allowLongPress && touched && (time_t(millis()) - _start) > TIME_LONG_PRESS) {
+    if (allowLongPress && touched && (time_t(Time::getMillis()) - _start) > TIME_LONG_PRESS) {
         // tricky: prevent reoccurring events and another touch event when releasing
-        _start = millis() + 30000;
+        _start = Time::getMillis() + 30000;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
         LOG_DEBUG("action LONG PRESS(%d/%d)", _last_x, _last_y);
     }

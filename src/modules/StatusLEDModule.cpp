@@ -66,18 +66,18 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
         switch (bluetoothStatus->getConnectionState()) {
         case meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED: {
             ble_state = unpaired;
-            PAIRING_LED_starttime = millis();
+            PAIRING_LED_starttime = Time::getMillis();
             break;
         }
         case meshtastic::BluetoothStatus::ConnectionState::PAIRING: {
             ble_state = pairing;
-            PAIRING_LED_starttime = millis();
+            PAIRING_LED_starttime = Time::getMillis();
             break;
         }
         case meshtastic::BluetoothStatus::ConnectionState::CONNECTED: {
             if (ble_state != connected) {
                 ble_state = connected;
-                PAIRING_LED_starttime = millis();
+                PAIRING_LED_starttime = Time::getMillis();
             }
         }
         }
@@ -90,7 +90,7 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 int StatusLEDModule::handleInputEvent(const InputEvent *event)
 {
-    lastUserbuttonTime = millis();
+    lastUserbuttonTime = Time::getMillis();
     return 0;
 }
 #endif
@@ -101,7 +101,7 @@ int StatusLEDModule::handleLoRaRx(uint32_t)
     // the radio's receive handler, so this is safe) and wake runOnce() at flash end to turn it off.
     digitalWrite(LED_LORA, LED_STATE_ON);
     LORA_LED_state = LED_STATE_ON;
-    LORA_LED_starttime = millis();
+    LORA_LED_starttime = Time::getMillis();
     setIntervalFromNow(LORA_RX_LED_FLASH_MS);
     return 0;
 }
@@ -118,15 +118,15 @@ int32_t StatusLEDModule::runOnce()
     } else if (power_state == charged) {
         CHARGE_LED_state = LED_STATE_ON;
     } else if (power_state == critical) {
-        if (POWER_LED_starttime + 30000 < millis() && !doing_fast_blink) {
+        if (POWER_LED_starttime + 30000 < Time::getMillis() && !doing_fast_blink) {
             doing_fast_blink = true;
-            POWER_LED_starttime = millis();
+            POWER_LED_starttime = Time::getMillis();
         }
         if (doing_fast_blink) {
             PAIRING_LED_state = LED_STATE_OFF;
             CHARGE_LED_state = !CHARGE_LED_state;
             my_interval = 250;
-            if (POWER_LED_starttime + 2000 < millis()) {
+            if (POWER_LED_starttime + 2000 < Time::getMillis()) {
                 doing_fast_blink = false;
                 CHARGE_LED_state = LED_STATE_OFF;
             }
@@ -158,7 +158,7 @@ int32_t StatusLEDModule::runOnce()
         }
     }
 #endif
-    if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < millis() || doing_fast_blink) {
+    if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < Time::getMillis() || doing_fast_blink) {
         PAIRING_LED_state = LED_STATE_OFF;
     } else if (ble_state == unpaired) {
         if (slowTrack) {
@@ -182,7 +182,7 @@ int32_t StatusLEDModule::runOnce()
     bool chargeIndicatorLED2 = LED_STATE_OFF;
     bool chargeIndicatorLED3 = LED_STATE_OFF;
     bool chargeIndicatorLED4 = LED_STATE_OFF;
-    if (lastUserbuttonTime + 10 * 1000 > millis() || CHARGE_LED_state == LED_STATE_ON) {
+    if (lastUserbuttonTime + 10 * 1000 > Time::getMillis() || CHARGE_LED_state == LED_STATE_ON) {
         // should this be off at very low percentages?
         chargeIndicatorLED1 = LED_STATE_ON;
         if (powerStatus && powerStatus->getBatteryChargePercent() >= 25)
@@ -247,7 +247,7 @@ int32_t StatusLEDModule::runOnce()
     // End the LoRa-RX flash once its duration has elapsed; otherwise make sure we come back
     // exactly at flash end (only ever clamp my_interval down, so other LED timing is preserved).
     if (LORA_LED_state == LED_STATE_ON) {
-        uint32_t elapsed = millis() - LORA_LED_starttime;
+        uint32_t elapsed = Time::getMillis() - LORA_LED_starttime;
         if (elapsed >= LORA_RX_LED_FLASH_MS) {
             digitalWrite(LED_LORA, LED_STATE_OFF);
             LORA_LED_state = LED_STATE_OFF;

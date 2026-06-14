@@ -221,7 +221,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                            // plugged in
     }
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
 #ifndef USE_EINK
     if (isCharging && now - lastBlinkShared > 500) {

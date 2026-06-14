@@ -965,7 +965,7 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     res->println("Restarting");
 
     LOG_DEBUG("Restarted on HTTP(s) Request");
-    webServerThread->requestRestart = (millis() / 1000) + 5;
+    webServerThread->requestRestart = (Time::getMillis() / 1000) + 5;
 }
 
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)

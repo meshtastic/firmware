@@ -233,7 +233,7 @@ void CannedMessageModule::resetSearch()
     int maxScrollIndex = std::max(0, totalEntries - visibleRows);
     scrollIndex = std::min(std::max(previousDestIndex - (visibleRows / 2), 0), maxScrollIndex);
 
-    lastUpdateMillis = millis();
+    lastUpdateMillis = Time::getMillis();
     requestFocus();
 }
 void CannedMessageModule::updateDestinationSelectionList()
@@ -416,7 +416,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT, true);
         payload = INPUT_BROKER_MATRIXKEY;
         currentMessageIndex = event->kbchar - 1;
-        lastTouchMillis = millis();
+        lastTouchMillis = Time::getMillis();
         return 1;
     }
 
@@ -549,9 +549,9 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         event->inputEvent != INPUT_BROKER_RIGHT && event->inputEvent != INPUT_BROKER_SELECT) {
         this->searchQuery += (char)event->kbchar;
         needsUpdate = true;
-        if ((millis() - lastFilterUpdate) > filterDebounceMs) {
+        if ((Time::getMillis() - lastFilterUpdate) > filterDebounceMs) {
             runOnce(); // update filter immediately
-            lastFilterUpdate = millis();
+            lastFilterUpdate = Time::getMillis();
         }
         return 1;
     }
@@ -882,7 +882,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         }
 
         if (valid) {
-            lastTouchMillis = millis();
+            lastTouchMillis = Time::getMillis();
             runOnce();
             payload = 0;
             return true; // STOP: We handled a VKB touch
@@ -911,7 +911,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         currentMessageIndex = -1;
         updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT);
-        lastTouchMillis = millis();
+        lastTouchMillis = Time::getMillis();
         runOnce();
         return true;
     }
@@ -919,7 +919,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Backspace
     if (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() > 0) {
         payload = 0x08;
-        lastTouchMillis = millis();
+        lastTouchMillis = Time::getMillis();
         requestFocus();
         runOnce();
         return true;
@@ -928,7 +928,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Move cursor left
     if (event->inputEvent == INPUT_BROKER_LEFT) {
         payload = INPUT_BROKER_LEFT;
-        lastTouchMillis = millis();
+        lastTouchMillis = Time::getMillis();
         requestFocus();
         runOnce();
         return true;
@@ -936,7 +936,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Move cursor right
     if (event->inputEvent == INPUT_BROKER_RIGHT) {
         payload = INPUT_BROKER_RIGHT;
-        lastTouchMillis = millis();
+        lastTouchMillis = Time::getMillis();
         requestFocus();
         runOnce();
         return true;
@@ -967,7 +967,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Printable ASCII (add char to draft)
     if (event->kbchar >= 32 && event->kbchar <= 126) {
         payload = event->kbchar;
-        lastTouchMillis = millis();
+        lastTouchMillis = Time::getMillis();
         runOnce();
         return true;
     }
@@ -1090,7 +1090,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     // Always use our local time, consistent with other paths
     uint32_t nowSecs = getValidTime(RTCQuality::RTCQualityDevice, true);
-    sm.timestamp = (nowSecs > 0) ? nowSecs : millis() / 1000;
+    sm.timestamp = (nowSecs > 0) ? nowSecs : Time::getMillis() / 1000;
     sm.isBootRelative = (nowSecs == 0);
 
     sm.sender = nodeDB->getNodeNum(); // us
@@ -1380,13 +1380,13 @@ int32_t CannedMessageModule::runOnce()
                 break;
             }
         }
-        this->lastTouchMillis = millis();
+        this->lastTouchMillis = Time::getMillis();
         this->notifyObservers(&e);
         return INACTIVATE_AFTER_MS;
     }
 
     if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
-        this->lastTouchMillis = millis();
+        this->lastTouchMillis = Time::getMillis();
         this->notifyObservers(&e);
         return INACTIVATE_AFTER_MS;
     }

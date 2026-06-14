@@ -449,7 +449,7 @@ std::string MeshPacketSerializer::JsonSerializeEncrypted(const meshtastic_MeshPa
     Json::Value jsonObj(Json::objectValue);
 
     jsonObj["id"] = (Json::UInt)mp->id;
-    jsonObj["time_ms"] = (double)millis();
+    jsonObj["time_ms"] = (double)Time::getMillis();
     jsonObj["timestamp"] = (Json::UInt)mp->rx_time;
     jsonObj["to"] = (Json::UInt)mp->to;
     jsonObj["from"] = (Json::UInt)mp->from;

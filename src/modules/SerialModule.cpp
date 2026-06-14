@@ -240,13 +240,13 @@ int32_t SerialModule::runOnce()
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA) && HAS_GPS) {
                 // in NMEA mode send out GGA every 2 seconds, Don't read from Port
                 if (!Throttle::isWithinTimespanMs(lastNmeaTime, 2000)) {
-                    lastNmeaTime = millis();
+                    lastNmeaTime = Time::getMillis();
                     printGGA(outbuf, sizeof(outbuf), localPosition);
                     serialPrint->printf("%s", outbuf);
                 }
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) && HAS_GPS) {
                 if (!Throttle::isWithinTimespanMs(lastNmeaTime, 10000)) {
-                    lastNmeaTime = millis();
+                    lastNmeaTime = Time::getMillis();
                     uint32_t readIndex = 0;
                     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     while (tempNodeInfo != NULL) {
@@ -671,7 +671,7 @@ void SerialModule::processWXSerial()
         if (dirAvg < 0) {
             dirAvg += 360.0;
         }
-        lastAveraged = millis();
+        lastAveraged = Time::getMillis();
 
         // make a telemetry packet with the data
         meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;

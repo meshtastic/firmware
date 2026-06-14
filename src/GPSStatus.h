@@ -83,7 +83,7 @@ class GPSStatus : public Status
 
     uint32_t getNumSatellites() const { return p.sats_in_view; }
 
-    /// Return millis() when the last GPS fix occurred (0 = never)
+    /// Return Time::getMillis() when the last GPS fix occurred (0 = never)
     uint32_t getLastFixMillis() const { return lastFixMillis; }
 
     bool matches(const GPSStatus *newStatus) const
@@ -118,7 +118,7 @@ class GPSStatus : public Status
         if (isDirty) {
             if (hasLock) {
                 // Record time of last valid GPS fix
-                lastFixMillis = millis();
+                lastFixMillis = Time::getMillis();
 
                 // In debug logs, identify position by @timestamp:stage (stage 3 = notify)
                 LOG_DEBUG("New GPS pos@%x:3 lat=%f lon=%f alt=%d pdop=%.2f track=%.2f speed=%.2f sats=%d", p.timestamp,

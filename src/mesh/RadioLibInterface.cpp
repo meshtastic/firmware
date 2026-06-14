@@ -123,7 +123,7 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
     // Handle false detections
     if (detected) {
         if (!activeReceiveStart) {
-            activeReceiveStart = millis();
+            activeReceiveStart = Time::getMillis();
         } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec)) {
             if (!(irq & syncWordHeaderValidFlag)) {
                 // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
@@ -261,7 +261,7 @@ void RadioLibInterface::updateNoiseFloor()
         return;
     }
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     if (now - lastNoiseFloorUpdate < NOISE_FLOOR_UPDATE_INTERVAL_MS) {
         return;
     }
@@ -384,7 +384,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
             } else {
                 meshtastic_MeshPacket *txp = txQueue.getFront();
                 assert(txp);
-                long delay_remaining = txp->tx_after ? txp->tx_after - millis() : 0;
+                long delay_remaining = txp->tx_after ? txp->tx_after - Time::getMillis() : 0;
                 if (delay_remaining > 0) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, false);
@@ -424,7 +424,7 @@ void RadioLibInterface::setTransmitDelay()
 
     if (p->tx_after) {
         unsigned long add_delay = p->rx_rssi ? getTxDelayMsecWeighted(p) : getTxDelayMsec();
-        unsigned long now = millis();
+        unsigned long now = Time::getMillis();
         p->tx_after = min(max(p->tx_after + add_delay, now + add_delay), now + 2 * getTxDelayMsecWeightedWorst(p->rx_snr));
         notifyLater(p->tx_after - now, TRANSMIT_DELAY_COMPLETED, false);
     } else if (p->rx_snr == 0 && p->rx_rssi == 0) {
@@ -466,10 +466,11 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     // Look for non-late packets only, so we don't do this twice!
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, false);
     if (p) {
-        p->tx_after = millis() + getTxDelayMsecWeightedWorst(p->rx_snr);
+        p->tx_after = Time::getMillis() + getTxDelayMsecWeightedWorst(p->rx_snr);
         bool dropped = false;
         if (txQueue.enqueue(p, &dropped)) {
-            LOG_DEBUG("Move existing queued packet to the late rebroadcast window %dms from now", p->tx_after - millis());
+            LOG_DEBUG("Move existing queued packet to the late rebroadcast window %dms from now",
+                      p->tx_after - Time::getMillis());
         } else {
             packetPool.release(p);
         }
@@ -702,7 +703,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
             // bits
             enableInterrupt(isrTxLevel0);
-            lastTxStart = millis();
+            lastTxStart = Time::getMillis();
             printPacket("Started Tx", txp);
 #ifdef LED_LORA
             digitalWrite(LED_LORA, LED_STATE_ON);
