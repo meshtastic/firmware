@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package meshtastic;
+
+// Control point service payload.
+//
+// Transport:
+//   Data.portnum = PRIVATE_APP
+//   Data.payload = serialized ControlPointMessage
+message ControlPointMessage {
+  uint32 schema_version = 1;
+  bool is_control_point = 2;
+  uint32 node_priority = 3;
+  uint32 route_cost = 4;
+  uint32 current_load = 5;
+  bool aggregation_enabled = 6;
+  repeated TransportDirectionMetric directions = 7;
+}
+
+message TransportDirectionMetric {
+  fixed32 neighbor_node_id = 1;
+  uint32 direction_quality = 2;
+  uint32 direction_cost = 3;
+  uint32 direction_load = 4;
+}

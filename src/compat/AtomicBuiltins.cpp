@@ -12,7 +12,7 @@
 
 static portMUX_TYPE atomicBuiltinsMux = portMUX_INITIALIZER_UNLOCKED;
 
-extern "C" unsigned int __atomic_fetch_add_4(volatile void *ptr, unsigned int val, int memmodel)
+extern "C" __attribute__((weak)) unsigned int __atomic_fetch_add_4(volatile void *ptr, unsigned int val, int memmodel)
 {
     (void)memmodel;
 
@@ -25,7 +25,7 @@ extern "C" unsigned int __atomic_fetch_add_4(volatile void *ptr, unsigned int va
     return old;
 }
 
-extern "C" unsigned int __atomic_fetch_sub_4(volatile void *ptr, unsigned int val, int memmodel)
+extern "C" __attribute__((weak)) unsigned int __atomic_fetch_sub_4(volatile void *ptr, unsigned int val, int memmodel)
 {
     (void)memmodel;
 
@@ -38,7 +38,7 @@ extern "C" unsigned int __atomic_fetch_sub_4(volatile void *ptr, unsigned int va
     return old;
 }
 
-extern "C" unsigned int __atomic_exchange_4(volatile void *ptr, unsigned int val, int memmodel)
+extern "C" __attribute__((weak)) unsigned int __atomic_exchange_4(volatile void *ptr, unsigned int val, int memmodel)
 {
     (void)memmodel;
 
