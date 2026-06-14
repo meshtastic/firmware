@@ -10,6 +10,7 @@
 #include "ethHttpOTA.h"
 #include "ethStreamAdapter.h"
 #include "otaShared.h"
+#include "NodeDB.h"
 #include <Arduino.h>
 #include <ErriezCRC32.h>
 #include <Updater.h>
@@ -104,12 +105,42 @@ void handleOtaOptions(IStreamReadWrite &client, const char *methods)
     client.print("Connection: close\r\n\r\n");
 }
 
+// Minimal JSON string escaping for owner names (quotes / backslash / control chars).
+static void jsonEscapeInfo(char *dst, size_t dstsize, const char *src)
+{
+    size_t j = 0;
+    for (size_t i = 0; src && src[i] && j + 2 < dstsize; i++) {
+        unsigned char c = (unsigned char)src[i];
+        if (c == '"' || c == '\\') {
+            dst[j++] = '\\';
+            dst[j++] = (char)c;
+        } else if (c >= 0x20) {
+            dst[j++] = (char)c;
+        }
+    }
+    dst[j] = '\0';
+}
+
 void handleOtaInfo(IStreamReadWrite &client)
 {
-    char body[256];
+    // owner.* and config.* come from NodeDB; clientarea reads these for the node card
+    // (long/short name + role) and falls back to the bare IP when they are absent.
+    char longName[2 * sizeof(owner.long_name)];
+    char shortName[2 * sizeof(owner.short_name)];
+    jsonEscapeInfo(longName, sizeof(longName), owner.long_name);
+    jsonEscapeInfo(shortName, sizeof(shortName), owner.short_name);
+
+    char body[384];
     int n = snprintf(body, sizeof(body),
-                     "{\"pio_env\":\"%s\",\"firmware_version\":\"%s\",\"hw_model\":%d,\"uptime_s\":%lu}",
-                     optstr(APP_ENV), optstr(APP_VERSION), (int)HW_VENDOR, (unsigned long)(millis() / 1000));
+                     "{\"pio_env\":\"%s\",\"firmware_version\":\"%s\",\"hw_model\":%d,"
+                     "\"owner_long_name\":\"%s\",\"owner_short_name\":\"%s\",\"role\":%d,"
+                     "\"uptime_s\":%lu}",
+                     optstr(APP_ENV), optstr(APP_VERSION), (int)HW_VENDOR, longName, shortName,
+                     (int)config.device.role, (unsigned long)(millis() / 1000));
+    if (n < 0)
+        n = 0;
+    else if (n >= (int)sizeof(body))
+        n = (int)sizeof(body) - 1; // truncated; Content-Length must match bytes actually sent
 
     writeStatus(client, 200, "OK");
     writeCORS(client, "GET, OPTIONS");
