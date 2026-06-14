@@ -251,9 +251,16 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         power = -9;
 
     err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setOutputPower %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    if (err != RADIOLIB_ERR_NONE) {
+        // Do not abort here: `power` is derived from operator-settable config (tx_power and
+        // SX126X_MAX_POWER). A value above the driver's allowed max (e.g. +22 dBm on SX1262/SX1268,
+        // lower on SX1261) returns RADIOLIB_ERR_INVALID_OUTPUT_POWER. Asserting would abort the daemon
+        // mid-reconfigure, before reloadConfig() persists the new config, so the offending setting
+        // silently reverts and the daemon crash-loops. Log it, record a critical error, and continue --
+        // the radio keeps its previously applied Tx power -- matching the setFrequency() handling above.
+        LOG_ERROR("SX126X setOutputPower %d dBm rejected (%s%d); keeping previous Tx power", power, radioLibErr, err);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    }
 
     // Apply RX gain mode — valid in STDBY (datasheet §9.6), matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
