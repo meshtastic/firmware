@@ -376,6 +376,12 @@ class NodeDB
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 #endif
 
+    /// Consolidate crypto key generation logic used across multiple modules
+    /// @param privateKey Optional 32-byte private key to use. If nullptr, generates new random keys.
+    bool generateCryptoKeyPair(const uint8_t *privateKey = nullptr);
+
+    bool createNewIdentity();
+
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
@@ -387,6 +393,38 @@ class NodeDB
         const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
         newStatus.notifyObservers(&status);
     }
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    /// Re-run loadFromDisk() after the encrypted storage is unlocked at runtime.
+    /// Trigger: PhoneAPI::handleLockdownAuthInline sets lockdownReloadPending
+    /// on a successful provisionPassphrase / unlockWithPassphrase; the main
+    /// loop in main.cpp services the flag and calls this method on the main
+    /// thread. The transport callback stack (BLE/USB) is too small for the
+    /// file IO + MAX_NUM_NODES vector reserve + proto decode this triggers.
+    ///
+    /// Returns true iff every encrypted file decrypted and decoded cleanly.
+    /// On false the caller MUST treat the storage as corrupt: leave the
+    /// connection unauthenticated, emit a LOCKED(storage_corrupt) status,
+    /// and refuse to call setAdminAuthorized — otherwise a subsequent
+    /// set_config would re-encrypt a wrong baseline (the locked-default
+    /// values still resident in `config` / `channelFile` / `nodeDatabase`)
+    /// and overwrite the operator's persisted state.
+    bool reloadFromDisk();
+
+    /// Disable lockdown: decrypt every encrypted pref file back to plaintext,
+    /// then remove the DEK / token / counter / backoff artifacts. Requires
+    /// EncryptedStorage to be unlocked (DEK in RAM). Returns false if any
+    /// file failed to revert — in which case the DEK is still present and the
+    /// device remains in lockdown so the operator can retry. APPROTECT is not
+    /// reversed. Called from the main loop via lockdownDisablePending.
+    bool disableLockdownToPlaintext();
+
+    /// Set by loadProto when any encrypted file fails to decrypt or decode.
+    /// Tracked across an entire loadFromDisk pass so reloadFromDisk can
+    /// surface the condition without callers re-walking each loadProto
+    /// result. Cleared at the top of every loadFromDisk run.
+    bool storageCorruptThisLoad = false;
+#endif
 
   private:
     mutable concurrency::Lock satelliteMutex;
@@ -487,7 +525,9 @@ extern uint32_t error_address;
 #define NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_IS_UNMESSAGABLE_SHIFT)
 #define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT 8
 #define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT)
-// Bits 9..31 reserved for future single-bit flags.
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 9
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1u << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
+// Bits 10..31 reserved for future single-bit flags.
 
 // Convenience accessors so call sites read like the old struct fields.
 inline bool nodeInfoLiteHasUser(const meshtastic_NodeInfoLite *n)
@@ -525,6 +565,10 @@ inline bool nodeInfoLiteIsMuted(const meshtastic_NodeInfoLite *n)
 inline bool nodeInfoLiteIsKeyManuallyVerified(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK);
+}
+inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
 }
 
 inline void nodeInfoLiteSetBit(meshtastic_NodeInfoLite *n, uint32_t mask, bool value)
