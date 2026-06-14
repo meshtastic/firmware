@@ -73,8 +73,8 @@ class Screen
     void showOverlayBanner(BannerOverlayOptions) {}
     void setFrames(FrameFocus focus) {}
     void endAlert() {}
-    bool getIsI2CScreen() { return false; }
-    uint32_t getI2cFrequency() { return 0; }
+    const bool getIsI2cScreen() { return false; }
+    const uint32_t getI2cFrequency() { return 0; }
     ScanI2C::I2CPort getI2CPort() { return ScanI2C::I2CPort::NO_I2C; }
 };
 } // namespace graphics
@@ -263,18 +263,18 @@ class Screen : public concurrency::OSThread
     Screen &operator=(const Screen &) = delete;
 
     ScanI2C::DeviceAddress address_found;
-    bool getIsI2CScreen() { return isI2cScreen; }
+    const bool getIsI2cScreen() { return isI2cScreen; }
     // Return I2C Speed, or 0 if none
-    uint32_t getI2cFrequency()
+    const uint32_t getI2cFrequency()
     {
-        if (getIsI2CScreen())
+        if (getIsI2cScreen())
             return dispdev->getI2cFrequency();
         else
             return 0;
     }
-    ScanI2C::I2CPort getI2CPort()
+    const ScanI2C::I2CPort getI2CPort()
     {
-        if (getIsI2CScreen())
+        if (getIsI2cScreen())
             return address_found.port;
         else
             return ScanI2C::I2CPort::NO_I2C;
