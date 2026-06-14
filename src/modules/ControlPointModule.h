@@ -25,7 +25,7 @@ static constexpr uint32_t CONTROL_POINT_MAX_ROUTE_COST = 1000000;
 static constexpr uint32_t CONTROL_POINT_MAX_LOAD = 100;
 static constexpr uint32_t CONTROL_POINT_MIN_PRIORITY = 1;
 
-class ControlPointModule : public ProtobufModule<meshtastic_ControlPointMessage>
+class ControlPointModule : public ProtobufModule<meshtastic_ControlPointMessage>, private concurrency::OSThread
 {
 public:
     ControlPointModule();
@@ -40,8 +40,7 @@ protected:
                             meshtastic_ControlPointMessage *msg) override;
 
     bool wantPacket(const meshtastic_MeshPacket *p) override;
-    int32_t runOnce();
-
+    int32_t runOnce() override;
 private:
     std::vector<ControlPointPeerMetric> peerMetrics;
 

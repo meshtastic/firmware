@@ -8,7 +8,8 @@ ControlPointModule *controlPointModule = nullptr;
 ControlPointModule::ControlPointModule()
     : ProtobufModule<meshtastic_ControlPointMessage>("control_point",
                                                      meshtastic_PortNum_PRIVATE_APP,
-                                                     &meshtastic_ControlPointMessage_msg)
+                                                     &meshtastic_ControlPointMessage_msg),
+      concurrency::OSThread("control_point")
 {
 }
 
