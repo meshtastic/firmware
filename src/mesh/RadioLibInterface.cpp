@@ -8,6 +8,9 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -366,6 +369,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt();
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::reconfigureForBeaconTX(this, txQueue.getFront());
+#endif
         startReceive();
         setTransmitDelay();
         break;
@@ -388,9 +394,18 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 if (delay_remaining > 0) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, false);
+#if !MESHTASTIC_EXCLUDE_BEACON
+                } else if (MeshBeaconModule::reconfigureForBeaconTX(this, txp)) {
+                    setTransmitDelay();
+#endif
                 } else {
                     if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-                        startReceive();      // try receiving this packet, afterwards we'll be trying to transmit again
+#if !MESHTASTIC_EXCLUDE_BEACON
+                        if (!MeshBeaconModule::hasTargetRadioSettings(txp))
+#endif
+                        {
+                            startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
+                        }
                         setTransmitDelay();
                     } else {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
@@ -522,6 +537,10 @@ void RadioLibInterface::completeSending()
         if (!isFromUs(p))
             txRelay++;
         printPacket("Completed sending", p);
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(p);
+        MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+#endif
 
         // We are done sending that packet, release it
         packetPool.release(p);

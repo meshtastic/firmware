@@ -34,6 +34,9 @@
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
 #include "security/EncryptedStorage.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -309,6 +312,17 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     case meshtastic_AdminMessage_set_module_config_tag:
         LOG_DEBUG("Client set module config");
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // broadcast_send_as_node: remote admins may only set this to their own node ID.
+        if (mp.from != 0 && r->set_module_config.which_payload_variant == meshtastic_ModuleConfig_mesh_beacon_tag) {
+            auto &b = const_cast<meshtastic_ModuleConfig_MeshBeaconConfig &>(r->set_module_config.payload_variant.mesh_beacon);
+            if (b.broadcast_send_as_node != 0 && b.broadcast_send_as_node != mp.from) {
+                LOG_WARN("Beacon: rejecting broadcast_send_as_node %#08lx from node %#08lx (must match sender)",
+                         b.broadcast_send_as_node, mp.from);
+                b.broadcast_send_as_node = moduleConfig.mesh_beacon.broadcast_send_as_node;
+            }
+        }
+#endif
         if (!handleSetModuleConfig(r->set_module_config)) {
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         }
@@ -1146,6 +1160,57 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_traffic_management = true;
         moduleConfig.traffic_management = c.payload_variant.traffic_management;
         break;
+#if !MESHTASTIC_EXCLUDE_BEACON
+    case meshtastic_ModuleConfig_mesh_beacon_tag: {
+        LOG_INFO("Set module config: MeshBeacon");
+        auto &b = const_cast<meshtastic_ModuleConfig_MeshBeaconConfig &>(c.payload_variant.mesh_beacon);
+        // Hard cap at 100 chars.
+        b.broadcast_message[100] = '\0';
+        // Enforce interval minimum (0 means unset/use default).
+        if (b.broadcast_interval_secs != 0 && b.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
+            b.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
+        // Validate broadcast_on_preset against broadcast_on_region (or current region if unset).
+        if (b.has_broadcast_on_preset) {
+            meshtastic_Config_LoRaConfig probe = config.lora;
+            probe.use_preset = true;
+            probe.modem_preset = b.broadcast_on_preset;
+            if (b.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                probe.region = b.broadcast_on_region;
+            if (!RadioInterface::validateConfigLora(probe)) {
+                LOG_WARN("Beacon: broadcast_on_preset %d invalid for region, clearing", b.broadcast_on_preset);
+                b.has_broadcast_on_preset = false;
+                b.has_broadcast_on_channel = false;
+            }
+        }
+        // Validate broadcast_offer_preset against broadcast_offer_region (or current region if unset).
+        if (b.has_broadcast_offer_preset) {
+            meshtastic_Config_LoRaConfig probe = config.lora;
+            probe.use_preset = true;
+            probe.modem_preset = b.broadcast_offer_preset;
+            if (b.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                probe.region = b.broadcast_offer_region;
+            if (!RadioInterface::validateConfigLora(probe)) {
+                LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clearing", b.broadcast_offer_preset);
+                b.has_broadcast_offer_preset = false;
+            }
+        }
+        // Validate broadcast_offer_region is a known region code.
+        if (b.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+            const RegionInfo *r = getRegion(b.broadcast_offer_region);
+            if (r->code != b.broadcast_offer_region) {
+                LOG_WARN("Beacon: broadcast_offer_region %d invalid, clearing", b.broadcast_offer_region);
+                b.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+            }
+        }
+        moduleConfig.has_mesh_beacon = true;
+        moduleConfig.mesh_beacon = b;
+        shouldReboot = false;
+        // Payload content changed — invalidate the broadcaster's cache.
+        if (meshBeaconBroadcastModule)
+            meshBeaconBroadcastModule->invalidateCache();
+        break;
+    }
+#endif
     }
     saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
     return true;
