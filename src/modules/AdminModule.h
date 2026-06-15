@@ -88,6 +88,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 static constexpr const char *licensedModeMessage =
     "Licensed mode activated, removing admin channel and encryption from all channels";
 
+static constexpr const char *publicChannelPrecisionMessage =
+    "Precise position is not allowed on a public (open / known-key) channel; reduced to coarse precision";
+
 extern AdminModule *adminModule;
 
 void disableBluetooth();
