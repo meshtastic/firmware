@@ -4,9 +4,9 @@
 
 #include "DisplayFormatters.h"
 #include "GPS.h"
-#include "MessageStore.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
