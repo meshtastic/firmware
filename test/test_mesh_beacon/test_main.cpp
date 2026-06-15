@@ -1100,6 +1100,15 @@ void tearDown(void)
     delete testAdmin;
     testAdmin = nullptr;
 
+    // Drain any packets the listener delivered via sendToPhone() (toPhoneQueue takes ownership and
+    // nothing else dequeues them in tests) so they are returned to packetPool — otherwise they leak
+    // and LeakSanitizer aborts the process at exit.
+    if (mockSvc) {
+        meshtastic_MeshPacket *p;
+        while ((p = mockSvc->getForPhone()) != nullptr)
+            mockSvc->releaseToPool(p);
+    }
+
     service = nullptr;
     delete mockSvc;
     mockSvc = nullptr;
