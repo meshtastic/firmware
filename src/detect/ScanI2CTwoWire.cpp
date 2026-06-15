@@ -584,10 +584,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0x6A) {
                     type = LSM6DS3;
                     logFoundDevice("LSM6DS3", (uint8_t)addr.address);
-                } else if (registerValue == 0x6b) {
+                } else if (registerValue == 0x6B) {
                     type = ISM330DHCX;
                     logFoundDevice("ISM330DHCX", (uint8_t)addr.address);
-                    break;
                 } else {
                     type = QMI8658;
                     logFoundDevice("QMI8658", (uint8_t)addr.address);
