@@ -1366,6 +1366,10 @@ void NodeDB::installDefaultModuleConfig()
     memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconOnPsk, sizeof(beaconOnPsk));
     moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
 #endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NUM
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    moduleConfig.mesh_beacon.broadcast_on_channel.channel_num = USERPREFS_MESH_BEACON_ON_CHANNEL_NUM;
+#endif
 #ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
     moduleConfig.mesh_beacon.broadcast_legacy_split = USERPREFS_MESH_BEACON_LEGACY_SPLIT;
 #endif

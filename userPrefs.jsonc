@@ -70,6 +70,7 @@
   // "USERPREFS_MESH_BEACON_ON_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_868",          // Region to use when transmitting beacons
   // "USERPREFS_MESH_BEACON_ON_CHANNEL_NAME": "'LongFast'",      // Channel name to use on the TX radio config - uses default if unset.
   // "USERPREFS_MESH_BEACON_ON_CHANNEL_PSK": "{ 0x01 }",         // PSK for the TX channel (0x01 = Meshtastic default PSK)
+  // "USERPREFS_MESH_BEACON_ON_CHANNEL_NUM": "0",               // LoRa channel/frequency slot to use on the TX radio config - zero is default, 20 is standard for US LongFast, etc.
   // "USERPREFS_MESH_BEACON_LEGACY_SPLIT": "true",               // When both text and offer are present, split into a separate MESH_BEACON_APP (offer) and TEXT_MESSAGE_APP (text) for legacy client compatibility
   // "USERPREFS_RINGTONE_NAG_SECS": "60",
   // "USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS": "43200",
