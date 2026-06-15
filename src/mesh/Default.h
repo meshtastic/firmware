@@ -37,6 +37,14 @@ enum class TrafficType { POSITION, TELEMETRY };
 #define default_traffic_mgmt_position_precision_bits 19                // ~90m grid cells (±45m)
 #define default_traffic_mgmt_position_min_interval_secs (11 * 60 * 60) // 11 hours between identical positions
 
+// Base hop grace for hop-trimming; the only tunable. Infra/specialty senders derive +1,
+// deprecated roles -1 (see Default::hopTrimGrace).
+#ifdef USERPREFS_TMM_HOP_TRIM_GRACE_BASE
+#define default_traffic_mgmt_hop_trim_grace_base USERPREFS_TMM_HOP_TRIM_GRACE_BASE
+#else
+#define default_traffic_mgmt_hop_trim_grace_base 2
+#endif
+
 // Hop scaling defaults
 #define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count
 #define default_hop_scaling_max_target_nodes 80          // generous extension ceiling (2 × min)
@@ -76,6 +84,9 @@ class Default
                                                    TrafficType type);
     static uint8_t getConfiguredOrDefaultHopLimit(uint8_t configured);
     static uint32_t getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue);
+    // Hops of grace a relayed broadcast gets over the local hop-scaling cap before its reach is
+    // clamped. Keyed on the sender's role and the packet portnum; derived from the base grace.
+    static uint8_t hopTrimGrace(meshtastic_Config_DeviceConfig_Role role, meshtastic_PortNum portnum);
 
   private:
     // Note: Kept as uint32_t to match the public API parameter type
