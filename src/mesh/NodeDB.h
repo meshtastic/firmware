@@ -11,6 +11,7 @@
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
+#include "WarmNodeStore.h"
 #include "concurrency/Lock.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
@@ -226,9 +227,27 @@ class NodeDB
     bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
 
     /*
-     * Sets a node either favorite or unfavorite
+     * Sets a node either favorite or unfavorite. Returns true if the node ends
+     * up in the requested state; false if the node is unknown or favouriting
+     * was refused by the protected-node cap (MAX_NUM_NODES - 2).
      */
-    void set_favorite(bool is_favorite, uint32_t nodeId);
+    bool set_favorite(bool is_favorite, uint32_t nodeId);
+
+    /// Count of eviction-protected (favourite/ignored/manually-verified) nodes.
+    int numProtectedNodes() const;
+
+    /// printf-style warning emitted when setProtectedFlag() refuses a node at
+    /// the cap. %s = verb (favorite/ignore), 0x%08x = node, %d = cap. Shared by
+    /// LOG_WARN here and AdminModule::sendWarning so the wording stays in sync.
+    static constexpr const char *PROTECTED_CAP_WARN_FMT = "Can't %s 0x%08x: protected-node limit (%d) reached";
+
+    /// Turn an eviction-protection flag (favourite/ignored/verified) on or off,
+    /// capped so the protected set never exceeds MAX_NUM_NODES-2 — keeping at
+    /// least two always-evictable slots. Turning a flag off always succeeds;
+    /// turning one on for a node that isn't already protected returns false
+    /// (and changes nothing) once the cap is reached. Callers surface that to
+    /// the user where appropriate.
+    bool setProtectedFlag(meshtastic_NodeInfoLite *node, uint32_t mask, bool on);
 
     /*
      * Returns true if the node is in the NodeDB and marked as favorite
@@ -295,6 +314,24 @@ class NodeDB
 
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
+    /// Find a node in our DB, create an empty NodeInfoLite if missing (evicting
+    /// the oldest non-protected node when full). Public so admin handlers can
+    /// register a node we have not heard from yet (e.g. to block it by ID).
+    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+
+#if WARM_NODE_COUNT > 0
+    // Warm ("long-tail") tier: minimal {num, last_heard, public_key} records
+    // for nodes evicted from the hot store. See WarmNodeStore.h.
+    WarmNodeStore warmStore;
+#endif
+
+    /// Copy the 32-byte public key for node n — hot store first, then the warm
+    /// tier. Returns false if we don't know a key for n.
+    bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
+
+    /// last_heard of a hot-store node, or 0 if absent. Plain scan of meshNodes
+    /// with no allocation side effects (unlike getOrCreateMeshNode).
+    uint32_t hotNodeLastHeard(NodeNum n) const;
 
     // Thread-safe satellite-map accessors. Return false if absent or the
     // corresponding DB is compiled out.
@@ -341,11 +378,17 @@ class NodeDB
         emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
         size_t nodeDatabaseSize;
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        // Always include satellite slots so backups from higher-cap peers
-        // decode without truncation, even when our build excludes the DBs.
-        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size) +
-               (MAX_NUM_NODES * meshtastic_NodePositionEntry_size) + (MAX_NUM_NODES * meshtastic_NodeTelemetryEntry_size) +
-               (MAX_NUM_NODES * meshtastic_NodeEnvironmentEntry_size) + (MAX_NUM_NODES * meshtastic_NodeStatusEntry_size);
+        // Decode-stream size ceiling only — no buffer of this size is ever
+        // allocated (load streams from the file). Sized for the largest file
+        // any previous firmware could have written (250-node ESP32-S3 builds,
+        // satellites uncapped), not the current MAX_NUM_NODES, so capacity
+        // downgrades and backups from higher-cap peers still decode; excess
+        // entries are trimmed after load.
+        // (not constexpr: portduino resolves MAX_NUM_NODES from runtime config)
+        const size_t loadCeiling = ((size_t)MAX_NUM_NODES > 250) ? (size_t)MAX_NUM_NODES : 250;
+        return nodeDatabaseSize + (loadCeiling * meshtastic_NodeInfoLite_size) +
+               (loadCeiling * meshtastic_NodePositionEntry_size) + (loadCeiling * meshtastic_NodeTelemetryEntry_size) +
+               (loadCeiling * meshtastic_NodeEnvironmentEntry_size) + (loadCeiling * meshtastic_NodeStatusEntry_size);
     }
 
     // returns true if the maximum number of nodes is reached or we are running low on memory
@@ -433,8 +476,6 @@ class NodeDB
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;          // When last sorted the nodeDB
-    /// Find a node in our DB, create an empty NodeInfoLite if missing
-    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 
     /*
      * Internal boolean to track sorting paused
@@ -447,8 +488,28 @@ class NodeDB
     /// read our db from flash
     void loadFromDisk();
 
+#ifdef PIO_UNIT_TESTING
+    // Grant the unit-test shim access to the private maintenance paths below
+    // (migration / cleanup / eviction) without relaxing production access.
+    friend class NodeDBTestShim;
+#endif
+
     /// purge db entries without user info
     void cleanupMeshDB();
+
+    /// Trim each satellite map down to MAX_SATELLITE_NODES, dropping the
+    /// stalest entries (used after loading files written before the cap, or by
+    /// a build with a larger cap).
+    void enforceSatelliteCaps();
+
+#if WARM_NODE_COUNT > 0
+    /// On load, a database from a larger-cap build (notably the pre-fork 150-node
+    /// nRF52 hot store) can exceed MAX_NUM_NODES. Rank the hot store so the
+    /// freshest survive and demote the oldest overflow into the warm tier,
+    /// preserving {num, last_heard, public_key} so PKI DMs keep working instead
+    /// of dropping those nodes on truncation.
+    void demoteOldestHotNodesToWarm();
+#endif
 
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultNodeDatabase(), installDefaultChannels(),
@@ -569,6 +630,12 @@ inline bool nodeInfoLiteIsKeyManuallyVerified(const meshtastic_NodeInfoLite *n)
 inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
+}
+/// A node that the eviction/migration paths must not drop: a favourite, an
+/// ignored (blocked) node, or a manually-verified key.
+inline bool nodeInfoLiteIsProtected(const meshtastic_NodeInfoLite *n)
+{
+    return nodeInfoLiteIsFavorite(n) || nodeInfoLiteIsIgnored(n) || nodeInfoLiteIsKeyManuallyVerified(n);
 }
 
 inline void nodeInfoLiteSetBit(meshtastic_NodeInfoLite *n, uint32_t mask, bool value)
