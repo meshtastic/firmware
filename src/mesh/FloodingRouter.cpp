@@ -8,6 +8,9 @@
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 
 FloodingRouter::FloodingRouter() {}
 
@@ -68,6 +71,16 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 {
     // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
     if (isRebroadcaster() && iface && p->hop_limit > 0) {
+#if HAS_TRAFFIC_MANAGEMENT
+        // Hop-trimming refuses this "higher-hopcount wins" upgrade: it raises hop_limit and bypasses
+        // the alterReceived clamp, silently undoing the trim. For a trim-eligible packet, keep our
+        // already-trimmed queued copy and consume the fatter dupe rather than rebroadcasting it.
+        if (trafficManagementModule && trafficManagementModule->wouldHopTrim(*p)) {
+            LOG_DEBUG("Hop-trim: refusing higher-hopcount upgrade for 0x%08x (keeping trimmed copy)", p->id);
+            rxDupe++;
+            return true;
+        }
+#endif
         // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
         // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
         uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining

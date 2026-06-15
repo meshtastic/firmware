@@ -196,6 +196,8 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
         if (ostream) {
             const auto *vec = static_cast<const std::vector<meshtastic_NodeInfoLite> *>(iter->pData);
             for (auto item : *vec) {
+                item.snr_q4 = (int32_t)(item.snr * 4.0f);
+                item.snr = 0.0f;
                 if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
                 if (!pb_encode_submessage(ostream, meshtastic_NodeInfoLite_fields, &item))
@@ -205,8 +207,12 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
         if (istream && istream->bytes_left) {
             meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_zero;
             auto *vec = static_cast<std::vector<meshtastic_NodeInfoLite> *>(iter->pData);
-            if (pb_decode(istream, meshtastic_NodeInfoLite_fields, &node))
+            if (pb_decode(istream, meshtastic_NodeInfoLite_fields, &node)) {
+                if (node.snr_q4)
+                    node.snr = node.snr_q4 / 4.0f;
+                node.snr_q4 = 0;
                 vec->push_back(node);
+            }
         }
         return true;
     }
@@ -483,6 +489,8 @@ NodeDB::NodeDB()
 #endif
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    if (!info)
+        return;
     TypeConversions::CopyUserToNodeInfoLite(info, owner);
 
     // If node database has not been saved for the first time, save it now
@@ -688,6 +696,39 @@ template <typename Map> std::vector<NodeNum> snapshotSatelliteNodeNums(const Map
     }
     return result;
 }
+
+// Drop the stalest entry of `map` (staleness proxied via the owner's
+// last_heard; 0 = owner evicted, i.e. an orphan — first out). Never evicts our
+// own node's entry. Caller holds satelliteMutex. Returns false if nothing
+// could be evicted.
+template <typename Map> bool evictStalestSatellite(NodeDB &db, Map &map)
+{
+    auto victim = map.end();
+    uint32_t victimTs = UINT32_MAX;
+    for (auto it = map.begin(); it != map.end(); ++it) {
+        if (it->first == db.getNodeNum())
+            continue;
+        uint32_t ts = db.hotNodeLastHeard(it->first);
+        if (ts < victimTs) {
+            victimTs = ts;
+            victim = it;
+        }
+    }
+    if (victim == map.end())
+        return false;
+    map.erase(victim);
+    return true;
+}
+
+// Keep `map` within MAX_SATELLITE_NODES ahead of inserting `incoming` (the
+// tier-1/tier-2 split: only the freshest MAX_SATELLITE_NODES nodes carry
+// satellite payloads). Caller holds satelliteMutex.
+template <typename Map> void evictSatelliteOverCap(NodeDB &db, Map &map, NodeNum incoming)
+{
+    if (map.size() < MAX_SATELLITE_NODES || map.count(incoming))
+        return;
+    evictStalestSatellite(db, map);
+}
 } // namespace
 
 void NodeDB::resetRadioConfig(bool is_fresh_install)
@@ -727,6 +768,12 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     if (transmitHistory) {
         transmitHistory->clear();
     }
+#if WARM_NODE_COUNT > 0
+    // On nRF52840 the warm tier lives in raw flash outside /prefs, so rmDir
+    // didn't touch it; clear it and persist the empty store.
+    warmStore.clear();
+    warmStore.saveIfDirty();
+#endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultNodeDatabase();
     installDefaultDeviceState();
@@ -1062,6 +1109,20 @@ void NodeDB::initConfigIntervals()
 #endif
 }
 
+// Always-on traffic management defaults. Only booleans are written; every
+// numeric field stays 0 and resolves to its default_traffic_mgmt_* macro at
+// use (e.g. position dedup precision/interval), so fork-wide tuning changes
+// take effect without another migration. Rate limiting and the features that
+// exhaust or reshape relayed traffic (exhaust_hop_*, drop_unknown_enabled,
+// nodeinfo_direct_response) stay opt-in.
+static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
+{
+    mc.has_traffic_management = true;
+    mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
+    mc.traffic_management.enabled = true;
+    mc.traffic_management.position_dedup_enabled = true;
+}
+
 void NodeDB::installDefaultModuleConfig()
 {
     LOG_INFO("Install default ModuleConfig");
@@ -1164,6 +1225,8 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
+
+    installTrafficManagementDefaults(moduleConfig);
 
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;
@@ -1298,6 +1361,9 @@ void NodeDB::resetNodes(bool keepFavorites)
         std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     }
     (void)ourNum;
+#if WARM_NODE_COUNT > 0
+    warmStore.clear(); // warm entries are never favorites; a DB reset clears them too
+#endif
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
     saveDeviceStateToDisk();
@@ -1319,6 +1385,10 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
               meshtastic_NodeInfoLite());
     if (removed)
         eraseNodeSatellites(nodeNum);
+#if WARM_NODE_COUNT > 0
+    // Explicit user removal: don't let the warm tier resurrect the node
+    warmStore.remove(nodeNum);
+#endif
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveNodeDatabaseToDisk();
 }
@@ -1432,6 +1502,7 @@ void NodeDB::setNodeStatus(NodeNum n, const meshtastic_StatusMessage &status)
     (void)status;
 #else
     concurrency::LockGuard guard(&satelliteMutex);
+    evictSatelliteOverCap(*this, nodeStatus, n);
     nodeStatus[n] = status;
 #endif
 }
@@ -1443,6 +1514,7 @@ void NodeDB::touchNodePositionTime(NodeNum n, uint32_t time)
     (void)time;
 #else
     concurrency::LockGuard guard(&satelliteMutex);
+    evictSatelliteOverCap(*this, nodePositions, n);
     nodePositions[n].time = time;
 #endif
 }
@@ -1464,12 +1536,43 @@ void NodeDB::eraseNodeSatellites(NodeNum n)
 #endif
 }
 
+void NodeDB::enforceSatelliteCaps()
+{
+    concurrency::LockGuard guard(&satelliteMutex);
+    auto trim = [this](auto &map, const char *name) {
+        const size_t before = map.size();
+        while (map.size() > MAX_SATELLITE_NODES) {
+            if (!evictStalestSatellite(*this, map))
+                break;
+        }
+        if (map.size() != before)
+            LOG_INFO("Trimmed %s satellites %u -> %u (cap %d)", name, (unsigned)before, (unsigned)map.size(),
+                     MAX_SATELLITE_NODES);
+    };
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    trim(nodePositions, "position");
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    trim(nodeTelemetry, "telemetry");
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    trim(nodeEnvironment, "environment");
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    trim(nodeStatus, "status");
+#endif
+    (void)trim; // all four maps may be compiled out
+}
+
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
         meshtastic_NodeInfoLite &n = meshNodes->at(i);
-        if (nodeInfoLiteHasUser(&n)) {
+        // Keep ignored (blocked) nodes even without user info: a block set by
+        // bare node ID has no NodeInfo and would otherwise be purged here,
+        // silently dropping the block.
+        if (nodeInfoLiteHasUser(&n) || nodeInfoLiteIsIgnored(&n)) {
             if (n.public_key.size > 0) {
                 if (memfll(n.public_key.bytes, 0, n.public_key.size)) {
                     n.public_key.size = 0;
@@ -1482,8 +1585,15 @@ void NodeDB::cleanupMeshDB()
         } else {
             // No user info - drop this node and its satellites
             const NodeNum gone = n.num;
-            if (gone)
+            if (gone) {
+#if WARM_NODE_COUNT > 0
+                // Keep any key we learned (e.g. via a DM before the NodeInfo
+                // exchange completed) rather than losing it with the purge.
+                if (n.public_key.size == 32)
+                    warmStore.absorb(gone, n.last_heard, n.public_key.bytes);
+#endif
                 eraseNodeSatellites(gone);
+            }
             removed++;
         }
     }
@@ -1633,6 +1743,42 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     return state;
 }
 
+#if WARM_NODE_COUNT > 0
+void NodeDB::demoteOldestHotNodesToWarm()
+{
+    const int keep = MAX_NUM_NODES;
+    if (numMeshNodes <= keep)
+        return;
+
+    // Favorites, ignored (blocked) and manually-verified nodes rank ahead of
+    // recency — the same protection getOrCreateMeshNode applies on eviction — so
+    // they are demoted only when the store is full of them. Within a class,
+    // most-recently-heard first. Index 0 is our own node and is left in place
+    // (sort begins at +1), as in the runtime eviction scan.
+    std::sort(meshNodes->begin() + 1, meshNodes->begin() + numMeshNodes,
+              [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
+                  const bool ka = nodeInfoLiteIsProtected(&a);
+                  const bool kb = nodeInfoLiteIsProtected(&b);
+                  if (ka != kb)
+                      return ka;
+                  return a.last_heard > b.last_heard;
+              });
+
+    int demoted = 0;
+    for (int i = keep; i < numMeshNodes; i++) {
+        const meshtastic_NodeInfoLite &n = (*meshNodes)[i];
+        if (n.num == 0)
+            continue;
+        // Keep the public key if we have one (40 B warm record); keyless nodes
+        // still get a placeholder so re-admission restores last_heard.
+        warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr);
+        demoted++;
+    }
+    numMeshNodes = keep; // the resize() in loadFromDisk reclaims the demoted tail
+    LOG_INFO("NodeDB migration: demoted %d node(s) over %d into the warm tier (keepers preferred)", demoted, keep);
+}
+#endif
+
 void NodeDB::loadFromDisk()
 {
     // Mark the current device state as completely unusable, so that if we fail reading the entire file from
@@ -1776,11 +1922,31 @@ void NodeDB::loadFromDisk()
                  nodeDatabase.nodes.size(), posCount, telCount, envCount, statusCount);
     }
 
+#if WARM_NODE_COUNT > 0
+    // Load the warm tier first so a hot-store migration below merges into the
+    // persisted set instead of being clobbered by the on-disk warm snapshot.
+    warmStore.load();
+    // A database from a larger-cap build (the pre-fork 150-node nRF52 hot store)
+    // can exceed MAX_NUM_NODES. Demote the oldest overflow into the warm tier
+    // before we truncate, so their public keys survive for PKI DMs.
+    demoteOldestHotNodesToWarm();
+#endif
+
     if (numMeshNodes > MAX_NUM_NODES) {
         LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
     meshNodes->resize(MAX_NUM_NODES);
+
+    // Files written before the satellite cap (or by a larger-cap build) can
+    // carry more satellite entries than we keep; trim to the freshest.
+    enforceSatelliteCaps();
+
+#if WARM_NODE_COUNT > 0
+    // Persist the migrated entries now so they survive a reboot before the next
+    // node-DB save cadence.
+    warmStore.saveIfDirty();
+#endif
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1936,6 +2102,16 @@ void NodeDB::loadFromDisk()
         } else {
             LOG_INFO("Loaded saved moduleConfig version %d", moduleConfig.version);
         }
+    }
+
+    // Always-on traffic management: a device that has NEVER configured TMM
+    // (has_traffic_management false — AdminModule always sets the has_ flag on
+    // write, even when disabling) gets the fork defaults. Explicitly configured
+    // devices keep their exact settings.
+    if (!moduleConfig.has_traffic_management) {
+        LOG_INFO("Traffic management never configured, installing always-on defaults");
+        installTrafficManagementDefaults(moduleConfig);
+        saveToDisk(SEGMENT_MODULECONFIG);
     }
 
     state = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
@@ -2302,7 +2478,6 @@ bool NodeDB::saveNodeDatabaseToDisk()
 #else
     nodeDatabase.status.clear();
 #endif
-
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
     bool ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
@@ -2315,6 +2490,11 @@ bool NodeDB::saveNodeDatabaseToDisk()
     nodeDatabase.environment.shrink_to_fit();
     nodeDatabase.status.clear();
     nodeDatabase.status.shrink_to_fit();
+#if WARM_NODE_COUNT > 0
+    // Same cadence as the node DB; failure is logged but must not propagate —
+    // a false return from here would trigger saveToDisk()'s fsFormat() path.
+    warmStore.saveIfDirty();
+#endif
     return ok;
 }
 
@@ -2551,6 +2731,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
 #else
     {
         concurrency::LockGuard guard(&satelliteMutex);
+        evictSatelliteOverCap(*this, nodePositions, nodeId);
         meshtastic_PositionLite &slot = nodePositions[nodeId]; // creates default-zero entry if missing
 
         if (src == RX_SRC_LOCAL) {
@@ -2608,6 +2789,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         }
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
         concurrency::LockGuard guard(&satelliteMutex);
+        evictSatelliteOverCap(*this, nodeTelemetry, nodeId);
         nodeTelemetry[nodeId] = t.variant.device_metrics;
 #endif
     } else if (t.which_variant == meshtastic_Telemetry_environment_metrics_tag) {
@@ -2618,6 +2800,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         }
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
+        evictSatelliteOverCap(*this, nodeEnvironment, nodeId);
         nodeEnvironment[nodeId] = t.variant.environment_metrics;
 #endif
     } else {
@@ -2648,13 +2831,13 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     info->num = contact.node_num;
     TypeConversions::CopyUserToNodeInfoLite(info, contact.user);
     if (contact.should_ignore) {
-        // If should_ignore is set,
-        // we need to clear the public key and other cruft, in addition to setting the node as ignored
-        nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+        // Block the contact and drop its rich satellite data, but keep the
+        // public key copied above — an ignored peer keeps a usable identity
+        // (a verifiable target) rather than a bare node number.
+        if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true))
+            LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
         eraseNodeSatellites(contact.node_num);
-        info->public_key.size = 0;
-        memset(info->public_key.bytes, 0, sizeof(info->public_key.bytes));
     } else {
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
@@ -2673,12 +2856,14 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         } else {
             // Normal case: set is_favorite to prevent expiration.
             // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
-            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true))
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", contact.node_num, MAX_NUM_NODES - 2);
         }
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
         if (contact.manually_verified) {
-            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK, true);
+            if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK, true))
+                LOG_WARN(PROTECTED_CAP_WARN_FMT, "verify", contact.node_num, MAX_NUM_NODES - 2);
         }
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
@@ -2811,14 +2996,48 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     }
 }
 
-void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
+int NodeDB::numProtectedNodes() const
+{
+    int count = 0;
+    for (int i = 0; i < numMeshNodes; i++)
+        if (nodeInfoLiteIsProtected(&meshNodes->at(i)))
+            count++;
+    return count;
+}
+
+bool NodeDB::setProtectedFlag(meshtastic_NodeInfoLite *node, uint32_t mask, bool on)
+{
+    if (!node)
+        return false;
+    if (!on) {
+        nodeInfoLiteSetBit(node, mask, false);
+        return true;
+    }
+    // Adding a flag to a node that is already protected doesn't grow the
+    // protected set, so it's always allowed. A newly-protected node is refused
+    // once the protected set has reached MAX_NUM_NODES-2, leaving two evictable
+    // slots so getOrCreateMeshNode can always make room.
+    if (nodeInfoLiteIsProtected(node) || numProtectedNodes() < MAX_NUM_NODES - 2) {
+        nodeInfoLiteSetBit(node, mask, true);
+        return true;
+    }
+    return false;
+}
+
+bool NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
 {
     meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
-    if (lite && nodeInfoLiteIsFavorite(lite) != is_favorite) {
-        nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_IS_FAVORITE_MASK, is_favorite);
+    if (!lite)
+        return false;
+    if (nodeInfoLiteIsFavorite(lite) == is_favorite)
+        return true; // already in the requested state
+    if (setProtectedFlag(lite, NODEINFO_BITFIELD_IS_FAVORITE_MASK, is_favorite)) {
         sortMeshDB();
         saveNodeDatabaseToDisk();
+        return true;
     }
+    LOG_WARN(PROTECTED_CAP_WARN_FMT, "favorite", nodeId, MAX_NUM_NODES - 2);
+    return false;
 }
 
 bool NodeDB::isFavorite(uint32_t nodeId)
@@ -2948,6 +3167,30 @@ bool NodeDB::isFull()
     return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
 }
 
+uint32_t NodeDB::hotNodeLastHeard(NodeNum n) const
+{
+    for (int i = 0; i < numMeshNodes; i++)
+        if (meshNodes->at(i).num == n)
+            return meshNodes->at(i).last_heard;
+    return 0;
+}
+
+bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
+{
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (info && info->public_key.size == 32) {
+        out = info->public_key;
+        return true;
+    }
+#if WARM_NODE_COUNT > 0
+    if (warmStore.copyKey(n, out.bytes)) {
+        out.size = 32;
+        return true;
+    }
+#endif
+    return false;
+}
+
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
@@ -2984,7 +3227,14 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             }
 
             if (oldestIndex != -1) {
-                eraseNodeSatellites(meshNodes->at(oldestIndex).num);
+                const meshtastic_NodeInfoLite &evicted = meshNodes->at(oldestIndex);
+#if WARM_NODE_COUNT > 0
+                // Demote to the warm tier so the identity (and crucially the
+                // PKI key) outlives the hot-store slot.
+                warmStore.absorb(evicted.num, evicted.last_heard,
+                                 evicted.public_key.size == 32 ? evicted.public_key.bytes : NULL);
+#endif
+                eraseNodeSatellites(evicted.num);
                 // Shove the remaining nodes down the chain
                 for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
                     meshNodes->at(i) = meshNodes->at(i + 1);
@@ -2992,12 +3242,30 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 (numMeshNodes)--;
             }
         }
+        // Don't append past the end of the vector. The protected-node cap
+        // (numProtectedNodes() <= MAX_NUM_NODES-2) means the eviction above frees
+        // a slot in normal operation; this guards the legacy case of a pre-cap
+        // database that is full of protected nodes — refuse rather than overrun.
+        if (numMeshNodes >= MAX_NUM_NODES)
+            return NULL;
         // add the node at the end
         lite = &meshNodes->at((numMeshNodes)++);
 
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
+#if WARM_NODE_COUNT > 0
+        // Re-admission: restore what the warm tier kept for this node
+        WarmNodeEntry warm;
+        if (warmStore.take(n, warm)) {
+            lite->last_heard = warm.last_heard;
+            if (!memfll(warm.public_key, 0, sizeof(warm.public_key))) {
+                lite->public_key.size = 32;
+                memcpy(lite->public_key.bytes, warm.public_key, 32);
+            }
+            LOG_INFO("Rehydrated node 0x%x from warm tier (key=%d)", n, lite->public_key.size == 32);
+        }
+#endif
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
     }
 
@@ -3132,6 +3400,8 @@ bool NodeDB::createNewIdentity()
     myNodeInfo.my_node_num = newNodeNum;
 
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    if (!info)
+        return false;
     TypeConversions::CopyUserToNodeInfoLite(info, owner);
 
     return true;

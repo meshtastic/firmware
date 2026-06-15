@@ -404,6 +404,24 @@ bool Channels::isDefaultChannel(ChannelIndex chIndex)
     return false;
 }
 
+bool Channels::isWellKnownChannel(ChannelIndex chIndex)
+{
+    const auto &ch = getByIndex(chIndex);
+    // Absent (unencrypted) or single-byte PSK — all the well-known key indexes
+    if (ch.settings.psk.size > 1)
+        return false;
+
+    const char *name = getName(chIndex);
+    for (int p = _meshtastic_Config_LoRaConfig_ModemPreset_MIN; p <= _meshtastic_Config_LoRaConfig_ModemPreset_MAX; p++) {
+        const char *presetName =
+            DisplayFormatters::getModemPresetDisplayName(static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(p), false, true);
+        // Presets without a display name fall through to "Invalid" — never a match
+        if (strcmp(presetName, "Invalid") != 0 && strcmp(name, presetName) == 0)
+            return true;
+    }
+    return false;
+}
+
 bool cryptoKeyIsPublic(const CryptoKey &key)
 {
     if (key.length == 0)
