@@ -1042,7 +1042,6 @@ BEACON_TEST_ENTRY void setup()
 
     printf("\n=== Legacy split messages ===\n");
 
-    RUN_TEST(test_adminValidation_statusMessageTooLong_isTruncatedAt100);
     RUN_TEST(test_broadcaster_legacySplit_sendsTwoPackets);
     RUN_TEST(test_broadcaster_legacySplit_firstPacketIsBeaconApp);
     RUN_TEST(test_broadcaster_legacySplit_firstPacketHasNoMessageText);

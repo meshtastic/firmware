@@ -242,13 +242,23 @@ void MeshBeaconBroadcastModule::sendBeacon()
         p->rx_time = getValidTime(RTCQualityFromNet);
     };
 
-    // ── Main packet ─────────────────────────────────────────────────────────
+    // ── Main packet(s) ──────────────────────────────────────────────────────
     //
-    // broadcast_legacy_split: when both text and offer are present, split into
-    //   A) MESH_BEACON_APP carrying only the offer (no text) on the beacon config.
-    //   B) TEXT_MESSAGE_APP carrying only the message text on the normal config.
-    // This lets nodes that only decode TEXT_MESSAGE_APP still receive the text.
-    if (bcfg.broadcast_legacy_split && hasRadioContent && hasText || hasRadioContent && !hasText) {
+    // broadcast_legacy_split: when both text and offer are present, send TWO packets,
+    //   A) MESH_BEACON_APP carrying only the offer (no text) on the beacon config, and
+    //   B) TEXT_MESSAGE_APP carrying only the message text on the normal config,
+    // so nodes that only decode TEXT_MESSAGE_APP still receive the text. Otherwise a
+    // single packet is sent (offer-only, text-only, or the combined offer+text path).
+    //
+    // These are independent decisions, NOT a mutually-exclusive if/else chain: the split
+    // case must emit both A and B. Conditions are spelled out as named booleans to avoid
+    // the && / || precedence trap (and a prior bug where the split case dropped the text).
+    const bool splitBoth = bcfg.broadcast_legacy_split && hasRadioContent && hasText;
+    const bool sendOfferOnly = splitBoth || (hasRadioContent && !hasText);
+    const bool sendTextOnly = splitBoth || (!hasRadioContent && hasText);
+    const bool sendCombined = !bcfg.broadcast_legacy_split && hasRadioContent && hasText;
+
+    if (sendOfferOnly) {
         // Packet A: offer-only MESH_BEACON_APP (message field intentionally empty).
         meshtastic_MeshBeacon offerOnly = meshtastic_MeshBeacon_init_zero;
         if (bcfg.has_broadcast_offer_channel) {
@@ -275,7 +285,9 @@ void MeshBeaconBroadcastModule::sendBeacon()
             setTargetRadioSettings(pA, targetPreset, targetSlot);
         LOG_INFO("Beacon: split-A MESH_BEACON_APP (offer only) from=%#08lx", pA->from);
         router->send(pA);
-    } else if (bcfg.broadcast_legacy_split && hasRadioContent && hasText || !hasRadioContent && hasText) {
+    }
+
+    if (sendTextOnly) {
         // Packet B: text-only TEXT_MESSAGE_APP on the beacon radio config (no sidecar).
         meshtastic_MeshPacket *pB = allocDataPacket();
         if (!pB) {
@@ -291,7 +303,9 @@ void MeshBeaconBroadcastModule::sendBeacon()
             setTargetRadioSettings(pB, targetPreset, targetSlot);
         LOG_INFO("Beacon: split-B TEXT_MESSAGE_APP msg='%.40s' from=%#08lx", bcfg.broadcast_message, pB->from);
         router->send(pB);
-    } else if (hasRadioContent && hasText) {
+    }
+
+    if (sendCombined) {
         // Combined path: MESH_BEACON_APP carrying offer + optional message text.
         if (payloadCacheDirty)
             rebuildCache();
