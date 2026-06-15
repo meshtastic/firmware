@@ -17,11 +17,29 @@
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
 #include "modules/TrafficManagementModule.h"
+#if HAS_VARIABLE_HOPS
+#include "modules/HopScalingModule.h"
+#endif
 #include <climits>
 #include <cstring>
 #include <memory>
 #include <pb_encode.h>
 #include <vector>
+
+#if HAS_VARIABLE_HOPS
+// Must be at global scope and named exactly HopScalingTestShim: HopScalingModule befriends
+// `::HopScalingTestShim` under PIO_UNIT_TESTING to expose the private rollHour() (mirrors the
+// shim in test_hop_scaling). Used to warm getLastRequiredHop() via fake time.
+class HopScalingTestShim : public HopScalingModule
+{
+  public:
+    using HopScalingModule::getLastRequiredHop;
+    using HopScalingModule::runOnce;
+    using HopScalingModule::samplePacketForHistogram;
+    void rollHourTest() { rollHour(); }
+    void setDenom(uint8_t d) { setSamplingDenominator(d); }
+};
+#endif
 
 namespace
 {
@@ -179,6 +197,13 @@ static void resetTrafficConfig()
     mockNodeDB->resetNodes();
     mockNodeDB->clearCachedNode();
     nodeDB = mockNodeDB;
+
+#if HAS_VARIABLE_HOPS
+    // Hop-trimming reads the global hopScalingModule; default to none so the existing tests
+    // (which don't warm a histogram) see wouldHopTrim()==false and are unaffected.
+    hopScalingModule = nullptr;
+    HopScalingModule::s_testNowMs = 3600000;
+#endif
 
     // Virtual clock base (1 h in, so tick subtraction never underflows). Tests advance time by
     // bumping TrafficManagementModule::s_testNowMs instead of sleeping real seconds across a tick.
@@ -1228,6 +1253,222 @@ static void test_tm_nextHop_keptAliveAcrossMaintenanceSweep(void)
 
     TEST_ASSERT_EQUAL_UINT8(0x42, module.getNextHopHint(kTargetNode));
 }
+
+#if HAS_VARIABLE_HOPS
+// ---------------------------------------------------------------------------
+// Hop-trimming (clamp relayed broadcast total reach to the local hop-scaling budget)
+// ---------------------------------------------------------------------------
+// We warm a real HopScalingModule histogram via fake time + sampled traffic so
+// getLastRequiredHop() converges below HOP_MAX, exactly like test_hop_scaling. The TMM clamp
+// reads the *global* hopScalingModule, so we point it at the shim. Because the histogram->hop
+// map is a threshold (not an exact cap), each test reads the warmed `cap` back and computes its
+// expectations relative to it (budget = cap + grace).
+
+// Warm with a dense-local distribution; cap settles low (< HOP_MAX). Returns the resulting cap.
+static uint8_t warmHopScalingCap(HopScalingTestShim &shim)
+{
+    static constexpr uint32_t HOUR_MS = 3600UL * 1000UL;
+    const uint16_t denseLocal[HOP_MAX + 1] = {25, 30, 15, 5, 10, 15, 10, 0};
+    shim.setDenom(HopScalingModule::DENOM_MIN);
+    for (uint8_t roll = 0; roll < 16; ++roll) {
+        HopScalingModule::s_testNowMs += HOUR_MS;
+        uint16_t ordinal = 0;
+        for (uint8_t hop = 0; hop <= HOP_MAX; ++hop)
+            for (uint16_t n = 0; n < denseLocal[hop]; ++n)
+                shim.samplePacketForHistogram(0xABCD0000u + (ordinal++) * 33u, hop);
+        shim.rollHourTest();
+    }
+    shim.runOnce();
+    return shim.getLastRequiredHop();
+}
+
+// Relayed broadcast from kRemoteNode with explicit hop fields; optionally seed the sender role.
+static meshtastic_MeshPacket makeRelayed(meshtastic_PortNum port, uint32_t hopStart, uint32_t hopLimit,
+                                         meshtastic_Config_DeviceConfig_Role senderRole, bool knownSender = true)
+{
+    installWellKnownPrimaryChannel();
+    mockNodeDB->clearCachedNode();
+    if (knownSender) {
+        mockNodeDB->setCachedNode(kRemoteNode);
+        mockNodeDB->setCachedNodeRole(senderRole);
+    }
+    meshtastic_MeshPacket p = makeDecodedPacket(port, kRemoteNode, NODENUM_BROADCAST);
+    p.hop_start = hopStart;
+    p.hop_limit = hopLimit;
+    return p;
+}
+
+// Run the clamp on an over-budget packet (hopsAway=0, hop_limit far above any budget) for the
+// given sender role/port, and return the resulting hop_limit (== budget = cap + grace).
+static uint32_t trimmedReachForRole(HopScalingTestShim &shim, uint8_t cap, meshtastic_PortNum port,
+                                    meshtastic_Config_DeviceConfig_Role role, bool knownSender)
+{
+    hopScalingModule = &shim;
+    meshtastic_MeshPacket p = makeRelayed(port, cap + 5, cap + 5, role, knownSender);
+    TrafficManagementModuleTestShim module;
+    module.alterReceived(p);
+    return p.hop_limit;
+}
+
+static void test_tm_hopTrim_clampsNearSenderPreservingHopsAway(void)
+{
+    HopScalingTestShim shim;
+    const uint8_t cap = warmHopScalingCap(shim);
+    hopScalingModule = &shim;
+    TEST_ASSERT_TRUE(cap < HOP_MAX); // histogram warmed -> feature engages
+
+    const uint8_t grace = 2; // CLIENT baseline
+    const uint8_t budget = cap + grace;
+    const uint32_t hopsAway = 1;
+    // hop_limit above budget; allowedForward = budget - hopsAway.
+    meshtastic_MeshPacket p = makeRelayed(meshtastic_PortNum_TELEMETRY_APP, budget + 2 + hopsAway, budget + 2,
+                                          meshtastic_Config_DeviceConfig_Role_CLIENT);
+    TrafficManagementModuleTestShim module;
+    module.alterReceived(p);
+
+    TEST_ASSERT_EQUAL_UINT32(budget - hopsAway, p.hop_limit);      // trimmed to allowedForward
+    TEST_ASSERT_EQUAL_UINT32(hopsAway, p.hop_start - p.hop_limit); // hopsAway preserved (hop_start pulled down)
+    hopScalingModule = nullptr;
+}
+
+static void test_tm_hopTrim_fullGraceNearOrigin(void)
+{
+    HopScalingTestShim shim;
+    const uint8_t cap = warmHopScalingCap(shim);
+    hopScalingModule = &shim;
+    const uint8_t budget = cap + 2; // CLIENT
+
+    // hopsAway = 0, fat hop_limit -> trimmed down to the full budget.
+    meshtastic_MeshPacket p =
+        makeRelayed(meshtastic_PortNum_POSITION_APP, budget + 3, budget + 3, meshtastic_Config_DeviceConfig_Role_CLIENT);
+    TrafficManagementModuleTestShim module;
+    module.alterReceived(p);
+
+    TEST_ASSERT_EQUAL_UINT32(budget, p.hop_limit);
+    TEST_ASSERT_EQUAL_UINT32(0, p.hop_start - p.hop_limit);
+    hopScalingModule = nullptr;
+}
+
+static void test_tm_hopTrim_underBudgetUntouched(void)
+{
+    HopScalingTestShim shim;
+    (void)warmHopScalingCap(shim);
+    hopScalingModule = &shim;
+
+    // Remaining (1) is at/under allowedForward, so the min() never lowers it.
+    meshtastic_MeshPacket p = makeRelayed(meshtastic_PortNum_TELEMETRY_APP, 2, 1, meshtastic_Config_DeviceConfig_Role_CLIENT);
+    TrafficManagementModuleTestShim module;
+    module.alterReceived(p);
+
+    TEST_ASSERT_EQUAL_UINT32(1, p.hop_limit);
+    TEST_ASSERT_EQUAL_UINT32(2, p.hop_start);
+    hopScalingModule = nullptr;
+}
+
+static void test_tm_hopTrim_farPacketStopsWithoutFinalHop(void)
+{
+    HopScalingTestShim shim;
+    const uint8_t cap = warmHopScalingCap(shim);
+    hopScalingModule = &shim;
+    const uint8_t budget = cap + 2;       // CLIENT
+    const uint32_t hopsAway = budget + 1; // already past the budget
+
+    meshtastic_MeshPacket p =
+        makeRelayed(meshtastic_PortNum_TELEMETRY_APP, hopsAway + 2, 2, meshtastic_Config_DeviceConfig_Role_CLIENT);
+    TrafficManagementModuleTestShim module;
+    module.alterReceived(p);
+
+    TEST_ASSERT_EQUAL_UINT32(0, p.hop_limit);       // not rebroadcast
+    TEST_ASSERT_FALSE(module.shouldExhaustHops(p)); // crucially: NO final hop (unlike exhaust_hop_*)
+    hopScalingModule = nullptr;
+}
+
+static void test_tm_hopTrim_graceByRoleAndPort(void)
+{
+    HopScalingTestShim shim;
+    const uint8_t cap = warmHopScalingCap(shim);
+
+    const auto TEL = meshtastic_PortNum_TELEMETRY_APP;
+    const auto POS = meshtastic_PortNum_POSITION_APP;
+
+    // Infra / specialty -> +3
+    TEST_ASSERT_EQUAL_UINT32(cap + 3, trimmedReachForRole(shim, cap, TEL, meshtastic_Config_DeviceConfig_Role_ROUTER, true));
+    TEST_ASSERT_EQUAL_UINT32(cap + 3, trimmedReachForRole(shim, cap, TEL, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, true));
+    TEST_ASSERT_EQUAL_UINT32(
+        cap + 3, trimmedReachForRole(shim, cap, TEL, meshtastic_Config_DeviceConfig_Role_SENSOR, true)); // sensor telem
+    TEST_ASSERT_EQUAL_UINT32(
+        cap + 3, trimmedReachForRole(shim, cap, POS, meshtastic_Config_DeviceConfig_Role_TRACKER, true)); // tracker pos
+    // Sensor OFF its specialty (position) -> baseline +2
+    TEST_ASSERT_EQUAL_UINT32(cap + 2, trimmedReachForRole(shim, cap, POS, meshtastic_Config_DeviceConfig_Role_SENSOR, true));
+    // Deprecated -> +1 (below baseline)
+    TEST_ASSERT_EQUAL_UINT32(cap + 1, trimmedReachForRole(shim, cap, TEL, meshtastic_Config_DeviceConfig_Role_REPEATER, true));
+    TEST_ASSERT_EQUAL_UINT32(cap + 1,
+                             trimmedReachForRole(shim, cap, TEL, meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT, true));
+    // Unknown sender (no NodeDB entry) -> baseline +2
+    TEST_ASSERT_EQUAL_UINT32(cap + 2, trimmedReachForRole(shim, cap, TEL, meshtastic_Config_DeviceConfig_Role_CLIENT, false));
+    hopScalingModule = nullptr;
+}
+
+static void test_tm_hopTrim_coldMeshNoOp(void)
+{
+    HopScalingTestShim shim; // unwarmed -> getLastRequiredHop() == HOP_MAX
+    TEST_ASSERT_EQUAL_UINT8(HOP_MAX, shim.getLastRequiredHop());
+    hopScalingModule = &shim;
+
+    meshtastic_MeshPacket p = makeRelayed(meshtastic_PortNum_TELEMETRY_APP, 7, 7, meshtastic_Config_DeviceConfig_Role_CLIENT);
+    TrafficManagementModuleTestShim module;
+    module.alterReceived(p);
+
+    TEST_ASSERT_EQUAL_UINT32(7, p.hop_limit); // no trim on a cold/quiet mesh
+    hopScalingModule = nullptr;
+}
+
+static void test_tm_hopTrim_neverRaisesOnReclamp(void)
+{
+    HopScalingTestShim shim;
+    const uint8_t cap = warmHopScalingCap(shim);
+    hopScalingModule = &shim;
+    const uint8_t budget = cap + 2;
+
+    meshtastic_MeshPacket p =
+        makeRelayed(meshtastic_PortNum_TELEMETRY_APP, budget + 3, budget + 3, meshtastic_Config_DeviceConfig_Role_CLIENT);
+    TrafficManagementModuleTestShim module;
+    module.alterReceived(p);
+    const uint32_t afterFirst = p.hop_limit;
+    module.alterReceived(p); // re-clamp must not raise it
+    TEST_ASSERT_EQUAL_UINT32(afterFirst, p.hop_limit);
+    hopScalingModule = nullptr;
+}
+
+static void test_tm_hopTrim_wouldHopTrimGatesUpgradeSuppression(void)
+{
+    HopScalingTestShim shim;
+    (void)warmHopScalingCap(shim);
+    hopScalingModule = &shim;
+    TrafficManagementModuleTestShim module;
+
+    // Eligible: decoded telemetry broadcast on a well-known channel, warm mesh.
+    meshtastic_MeshPacket eligible =
+        makeRelayed(meshtastic_PortNum_TELEMETRY_APP, 6, 6, meshtastic_Config_DeviceConfig_Role_CLIENT);
+    TEST_ASSERT_TRUE(module.wouldHopTrim(eligible));
+
+    // Unicast -> not reach-amplified -> not trimmed.
+    meshtastic_MeshPacket unicast = eligible;
+    unicast.to = kTargetNode;
+    TEST_ASSERT_FALSE(module.wouldHopTrim(unicast));
+
+    // Ineligible portnum (text) -> not trimmed.
+    meshtastic_MeshPacket text =
+        makeRelayed(meshtastic_PortNum_TEXT_MESSAGE_APP, 6, 6, meshtastic_Config_DeviceConfig_Role_CLIENT);
+    TEST_ASSERT_FALSE(module.wouldHopTrim(text));
+
+    // Cold mesh -> not trimmed.
+    HopScalingTestShim cold;
+    hopScalingModule = &cold;
+    TEST_ASSERT_FALSE(module.wouldHopTrim(eligible));
+    hopScalingModule = nullptr;
+}
+#endif // HAS_VARIABLE_HOPS
 } // namespace
 
 void setUp(void)
@@ -1286,6 +1527,16 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nextHop_servedAfterNodeDbRoll);
     RUN_TEST(test_tm_nextHop_preloadDoesNotClobberLearned);
     RUN_TEST(test_tm_nextHop_keptAliveAcrossMaintenanceSweep);
+#if HAS_VARIABLE_HOPS
+    RUN_TEST(test_tm_hopTrim_clampsNearSenderPreservingHopsAway);
+    RUN_TEST(test_tm_hopTrim_fullGraceNearOrigin);
+    RUN_TEST(test_tm_hopTrim_underBudgetUntouched);
+    RUN_TEST(test_tm_hopTrim_farPacketStopsWithoutFinalHop);
+    RUN_TEST(test_tm_hopTrim_graceByRoleAndPort);
+    RUN_TEST(test_tm_hopTrim_coldMeshNoOp);
+    RUN_TEST(test_tm_hopTrim_neverRaisesOnReclamp);
+    RUN_TEST(test_tm_hopTrim_wouldHopTrimGatesUpgradeSuppression);
+#endif
     exit(UNITY_END());
 }
 
