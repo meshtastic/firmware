@@ -202,7 +202,7 @@ bool doPreflightSleep()
 static void waitEnterSleep(bool skipPreflight = false)
 {
     if (!skipPreflight) {
-        uint32_t now = millis();
+        uint32_t now = Time::getMillis();
         while (!doPreflightSleep()) {
             delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 

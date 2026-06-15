@@ -757,7 +757,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
         return;
     display->clear();
 #if defined(OLED_TINY)
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     if (now - lastSwitchTime >= 10000) // 10000 ms = 10 秒
     {
         display->display();
@@ -1157,7 +1157,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
     char uptimeStr[32] = "";
     if (currentResolution != ScreenResolution::UltraLow) {
-        getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
+        getUptimeStr(Time::getMillis(), "Up: ", uptimeStr, sizeof(uptimeStr));
     }
     display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr), getTextPositions(display)[line++], uptimeStr);
 
@@ -1640,7 +1640,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
         // === Second Row: Last GPS Fix ===
         if (gpsStatus->getLastFixMillis() > 0) {
-            uint32_t delta = millis() - gpsStatus->getLastFixMillis();
+            uint32_t delta = Time::getMillis() - gpsStatus->getLastFixMillis();
             char uptimeStr[32];
 #if defined(USE_EINK)
             // E-Ink: skip seconds, show only days/hours/mins
@@ -1805,7 +1805,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     // Detect frame change and record time
     if (frameToHighlight != lastFrameIndex) {
         lastFrameIndex = frameToHighlight;
-        lastFrameChangeTime = millis();
+        lastFrameChangeTime = Time::getMillis();
     }
 
     const int iconSize = (currentResolution == ScreenResolution::High) ? 16 : 8;
@@ -1830,7 +1830,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
 
-    const bool navBarVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
+    const bool navBarVisible = Time::getMillis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
     const int y = navBarVisible ? (SCREEN_HEIGHT - iconSize - 1) : SCREEN_HEIGHT;
 
 #if defined(USE_EINK)
@@ -1842,17 +1842,17 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (navBarVisible && !navBarPrevVisible) {
         EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Fast refresh when showing nav bar
         cosmeticRefreshDone = false;
-        navBarLastShown = millis();
+        navBarLastShown = Time::getMillis();
     }
 
     if (!navBarVisible && navBarPrevVisible) {
         EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Fast refresh when hiding nav bar
-        navBarLastShown = millis();               // Mark when it disappeared
+        navBarLastShown = Time::getMillis();      // Mark when it disappeared
     }
 
     if (!navBarVisible && navBarLastShown != 0 && !cosmeticRefreshDone) {
-        if (millis() - navBarLastShown > 10000) {  // 10s after hidden
-            EINK_ADD_FRAMEFLAG(display, COSMETIC); // One-time ghost cleanup
+        if (Time::getMillis() - navBarLastShown > 10000) { // 10s after hidden
+            EINK_ADD_FRAMEFLAG(display, COSMETIC);         // One-time ghost cleanup
             cosmeticRefreshDone = true;
         }
     }

@@ -159,7 +159,7 @@ static int32_t reconnectETH()
     }
 
 #ifndef DISABLE_NTP
-    if (isEthernetAvailable() && (ntp_renew < millis())) {
+    if (isEthernetAvailable() && (ntp_renew < Time::getMillis())) {
 
         LOG_INFO("Update NTP time from %s", config.network.ntp_server);
         if (timeClient.update()) {
@@ -171,10 +171,10 @@ static int32_t reconnectETH()
 
             perhapsSetRTC(RTCQualityNTP, &tv);
 
-            ntp_renew = millis() + 43200 * 1000; // success, refresh every 12 hours
+            ntp_renew = Time::getMillis() + 43200 * 1000; // success, refresh every 12 hours
         } else {
             LOG_ERROR("NTP Update failed");
-            ntp_renew = millis() + 300 * 1000; // failure, retry every 5 minutes
+            ntp_renew = Time::getMillis() + 300 * 1000; // failure, retry every 5 minutes
         }
         timeClient.end(); // W5100S: release UDP socket for other services
     }

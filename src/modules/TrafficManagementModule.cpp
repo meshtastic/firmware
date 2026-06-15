@@ -163,7 +163,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     stats = meshtastic_TrafficManagementStats_init_zero;
 
     // Initialize rolling epoch for relative timestamps
-    cacheEpochMs = millis();
+    cacheEpochMs = Time::getMillis();
 
     // Calculate adaptive time resolutions from config (config changes require reboot)
     // Resolution = max(60, min(339, interval/2)) for ~24 hour range with good precision
@@ -786,7 +786,7 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         // richer context than "just the user protobuf" when PSRAM is present.
         // This path is intentionally independent from NodeInfoModule/NodeDB.
         entry->user = user;
-        entry->lastObservedMs = millis();
+        entry->lastObservedMs = Time::getMillis();
         entry->lastObservedRxTime = mp.rx_time;
         entry->sourceChannel = mp.channel;
         entry->hasDecodedBitfield = mp.decoded.has_bitfield;
@@ -895,7 +895,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     incrementStat(&stats.packets_inspected);
 
     const auto &cfg = moduleConfig.traffic_management;
-    const uint32_t nowMs = millis();
+    const uint32_t nowMs = Time::getMillis();
 
     // -------------------------------------------------------------------------
     // Undecoded Packet Handling
@@ -1040,7 +1040,7 @@ int32_t TrafficManagementModule::runOnce()
         return INT32_MAX;
 
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-    const uint32_t nowMs = millis();
+    const uint32_t nowMs = Time::getMillis();
 
     // Check if epoch reset needed (~3.5 hours approaching 8-bit minute overflow)
     if (needsEpochReset(nowMs)) {
@@ -1062,7 +1062,7 @@ int32_t TrafficManagementModule::runOnce()
     // Sweep cache and clear expired entries
     uint16_t activeEntries = 0;
     uint16_t expiredEntries = 0;
-    const uint32_t sweepStartMs = millis();
+    const uint32_t sweepStartMs = Time::getMillis();
 
     concurrency::LockGuard guard(&cacheLock);
     for (uint16_t i = 0; i < cacheSize(); i++) {
@@ -1115,7 +1115,7 @@ int32_t TrafficManagementModule::runOnce()
 
     TM_LOG_DEBUG("Maintenance: %u active, %u expired, %u/%u slots, %lums elapsed", activeEntries, expiredEntries,
                  static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()),
-                 static_cast<unsigned long>(millis() - sweepStartMs));
+                 static_cast<unsigned long>(Time::getMillis() - sweepStartMs));
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     if (nodeInfoPayload && nodeInfoIndex) {
@@ -1263,7 +1263,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         reply->decoded.bitfield |= BITFIELD_OK_TO_MQTT_MASK;
 
     if (hasCachedUser && cachedLastObservedMs != 0) {
-        uint32_t ageMs = millis() - cachedLastObservedMs;
+        uint32_t ageMs = Time::getMillis() - cachedLastObservedMs;
         TM_LOG_DEBUG("NodeInfo PSRAM hit node=0x%08x age=%lu ms src_ch=%u req_ch=%u rx_time=%lu", p->to,
                      static_cast<unsigned long>(ageMs), static_cast<unsigned>(cachedSourceChannel),
                      static_cast<unsigned>(p->channel), static_cast<unsigned long>(cachedLastObservedRxTime));

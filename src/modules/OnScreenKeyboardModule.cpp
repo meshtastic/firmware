@@ -158,7 +158,7 @@ void OnScreenKeyboardModule::showPopup(const char *title, const char *content, u
     popupTitle[sizeof(popupTitle) - 1] = '\0';
     strncpy(popupMessage, content, sizeof(popupMessage) - 1);
     popupMessage[sizeof(popupMessage) - 1] = '\0';
-    popupUntil = millis() + durationMs;
+    popupUntil = Time::getMillis() + durationMs;
     popupVisible = true;
 }
 
@@ -180,7 +180,7 @@ void OnScreenKeyboardModule::drawPopup(OLEDDisplay *display)
 {
     if (!popupVisible)
         return;
-    if (millis() > popupUntil || popupMessage[0] == '\0') {
+    if (Time::getMillis() > popupUntil || popupMessage[0] == '\0') {
         popupVisible = false;
         return;
     }

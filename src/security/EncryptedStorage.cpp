@@ -95,7 +95,7 @@ static uint32_t backoffDelay(uint8_t attempts)
     return delay;
 }
 
-// RAM-only: millis() at the most recent failed attempt this boot. Lets us
+// RAM-only: Time::getMillis() at the most recent failed attempt this boot. Lets us
 // enforce within-boot backoff without relying on RTC. Reset to 0 each boot.
 static uint32_t s_lastFailMillis = 0;
 
@@ -1068,21 +1068,21 @@ uint32_t getBackoffSecondsRemaining()
 void setSession(uint32_t maxSeconds)
 {
     s_sessionMaxMs = maxSeconds * 1000UL;
-    s_sessionStartedMs = millis();
+    s_sessionStartedMs = Time::getMillis();
 }
 
 bool isSessionExpired()
 {
     if (s_sessionMaxMs == 0)
         return false;
-    return (millis() - s_sessionStartedMs) > s_sessionMaxMs;
+    return (Time::getMillis() - s_sessionStartedMs) > s_sessionMaxMs;
 }
 
 uint32_t getSessionRemainingSeconds()
 {
     if (s_sessionMaxMs == 0)
         return 0;
-    uint32_t elapsedMs = millis() - s_sessionStartedMs;
+    uint32_t elapsedMs = Time::getMillis() - s_sessionStartedMs;
     if (elapsedMs >= s_sessionMaxMs)
         return 0;
     return (s_sessionMaxMs - elapsedMs) / 1000UL;
@@ -1111,7 +1111,7 @@ uint8_t consumeSessionBoot()
 #endif
     s_bootsRemaining = newBoots;
     // Re-arm the uptime session in place. setSession() with the same
-    // duration resets s_sessionStartedMs = millis(), starting the next
+    // duration resets s_sessionStartedMs = Time::getMillis(), starting the next
     // session window without rebooting.
     setSession(s_sessionMaxMs / 1000UL);
     return newBoots;
@@ -1188,7 +1188,7 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
     // triggers a block — so the policy is robust whether RTC is valid, never
     // synced, or being spoofed within reasonable bounds:
     //
-    //   1. Within-boot: millis() since the last failure on THIS boot. RAM-only,
+    //   1. Within-boot: Time::getMillis() since the last failure on THIS boot. RAM-only,
     //      reliable, immune to RTC tampering.
     //   2. Wall-clock: lastFailEpoch vs getValidTime(). Only checked when the
     //      RTC is actually valid (getValidTime() returns 0 otherwise) AND the
@@ -1206,9 +1206,9 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
             uint32_t delay = backoffDelay(attempts);
             uint32_t maxRemaining = 0;
 
-            // (1) within-boot enforcement using millis()
+            // (1) within-boot enforcement using Time::getMillis()
             if (s_lastFailMillis != 0) {
-                uint32_t elapsedSec = (millis() - s_lastFailMillis) / 1000u;
+                uint32_t elapsedSec = (Time::getMillis() - s_lastFailMillis) / 1000u;
                 if (elapsedSec < delay) {
                     uint32_t r = delay - elapsedSec;
                     if (r > maxRemaining)
@@ -1284,7 +1284,7 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
         writeBackoff(reservedAttempts, 0, now);
     }
     auto onFailure = [reservedAttempts]() {
-        s_lastFailMillis = millis();
+        s_lastFailMillis = Time::getMillis();
         if (s_lastFailMillis == 0)
             s_lastFailMillis = 1; // sentinel: never 0 after a real fail
         s_backoffSecondsRemaining = backoffDelay(reservedAttempts);

@@ -172,6 +172,16 @@ typedef struct _meshtastic_ModuleConfig_NeighborInfoConfig {
     bool transmit_over_lora;
 } meshtastic_ModuleConfig_NeighborInfoConfig;
 
+/* RouterRetirementModule Config — auto-demote an unattended router/router_late
+ (hand-stubbed; .proto + regeneration pending, see .notes/router-retirement-proto.md) */
+typedef struct _meshtastic_ModuleConfig_RouterRetirementConfig {
+    /* Whether automatic router retirement is enabled (default false) */
+    bool enabled;
+    /* Cumulative-uptime threshold per demotion rung, in seconds.
+ 0 => firmware default (~3 months). */
+    uint32_t step_threshold_secs;
+} meshtastic_ModuleConfig_RouterRetirementConfig;
+
 /* Detection Sensor Module Config */
 typedef struct _meshtastic_ModuleConfig_DetectionSensorConfig {
     /* Whether the Module is enabled */
@@ -516,6 +526,8 @@ typedef struct _meshtastic_ModuleConfig {
         meshtastic_ModuleConfig_TrafficManagementConfig traffic_management;
         /* TAK team/role configuration for TAK_TRACKER */
         meshtastic_ModuleConfig_TAKConfig tak;
+        /* Router retirement (auto-demote unattended routers) */
+        meshtastic_ModuleConfig_RouterRetirementConfig router_retirement;
     } payload_variant;
 } meshtastic_ModuleConfig;
 
@@ -585,6 +597,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MapReportSettings_init_default {0, 0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0, 0, 0, {meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_default {0, 0, 0}
+#define meshtastic_ModuleConfig_RouterRetirementConfig_init_default {0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
@@ -604,6 +617,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MapReportSettings_init_zero {0, 0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, 0, {meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0, 0}
+#define meshtastic_ModuleConfig_RouterRetirementConfig_init_zero {0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
@@ -637,6 +651,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_NeighborInfoConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_NeighborInfoConfig_update_interval_tag 2
 #define meshtastic_ModuleConfig_NeighborInfoConfig_transmit_over_lora_tag 3
+#define meshtastic_ModuleConfig_RouterRetirementConfig_enabled_tag 1
+#define meshtastic_ModuleConfig_RouterRetirementConfig_step_threshold_secs_tag 2
 #define meshtastic_ModuleConfig_DetectionSensorConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_DetectionSensorConfig_minimum_broadcast_secs_tag 2
 #define meshtastic_ModuleConfig_DetectionSensorConfig_state_broadcast_secs_tag 3
@@ -759,6 +775,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_statusmessage_tag 14
 #define meshtastic_ModuleConfig_traffic_management_tag 15
 #define meshtastic_ModuleConfig_tak_tag          16
+#define meshtastic_ModuleConfig_router_retirement_tag 17
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_ModuleConfig_FIELDLIST(X, a) \
@@ -777,7 +794,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,detection_sensor,payload_var
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,paxcounter,payload_variant.paxcounter),  13) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,statusmessage,payload_variant.statusmessage),  14) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,traffic_management,payload_variant.traffic_management),  15) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak,payload_variant.tak),  16)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak,payload_variant.tak),  16) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,router_retirement,payload_variant.router_retirement),  17)
 #define meshtastic_ModuleConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_DEFAULT NULL
 #define meshtastic_ModuleConfig_payload_variant_mqtt_MSGTYPE meshtastic_ModuleConfig_MQTTConfig
@@ -796,6 +814,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak,payload_variant.tak),  1
 #define meshtastic_ModuleConfig_payload_variant_statusmessage_MSGTYPE meshtastic_ModuleConfig_StatusMessageConfig
 #define meshtastic_ModuleConfig_payload_variant_traffic_management_MSGTYPE meshtastic_ModuleConfig_TrafficManagementConfig
 #define meshtastic_ModuleConfig_payload_variant_tak_MSGTYPE meshtastic_ModuleConfig_TAKConfig
+#define meshtastic_ModuleConfig_payload_variant_router_retirement_MSGTYPE meshtastic_ModuleConfig_RouterRetirementConfig
 
 #define meshtastic_ModuleConfig_MQTTConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -834,6 +853,12 @@ X(a, STATIC,   SINGULAR, UINT32,   update_interval,   2) \
 X(a, STATIC,   SINGULAR, BOOL,     transmit_over_lora,   3)
 #define meshtastic_ModuleConfig_NeighborInfoConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_NeighborInfoConfig_DEFAULT NULL
+
+#define meshtastic_ModuleConfig_RouterRetirementConfig_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   step_threshold_secs,   2)
+#define meshtastic_ModuleConfig_RouterRetirementConfig_CALLBACK NULL
+#define meshtastic_ModuleConfig_RouterRetirementConfig_DEFAULT NULL
 
 #define meshtastic_ModuleConfig_DetectionSensorConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -999,6 +1024,7 @@ extern const pb_msgdesc_t meshtastic_ModuleConfig_MQTTConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_MapReportSettings_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_RemoteHardwareConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_NeighborInfoConfig_msg;
+extern const pb_msgdesc_t meshtastic_ModuleConfig_RouterRetirementConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_DetectionSensorConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_AudioConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_PaxcounterConfig_msg;
@@ -1020,6 +1046,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MapReportSettings_fields &meshtastic_ModuleConfig_MapReportSettings_msg
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_fields &meshtastic_ModuleConfig_RemoteHardwareConfig_msg
 #define meshtastic_ModuleConfig_NeighborInfoConfig_fields &meshtastic_ModuleConfig_NeighborInfoConfig_msg
+#define meshtastic_ModuleConfig_RouterRetirementConfig_fields &meshtastic_ModuleConfig_RouterRetirementConfig_msg
 #define meshtastic_ModuleConfig_DetectionSensorConfig_fields &meshtastic_ModuleConfig_DetectionSensorConfig_msg
 #define meshtastic_ModuleConfig_AudioConfig_fields &meshtastic_ModuleConfig_AudioConfig_msg
 #define meshtastic_ModuleConfig_PaxcounterConfig_fields &meshtastic_ModuleConfig_PaxcounterConfig_msg
@@ -1045,6 +1072,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MQTTConfig_size  224
 #define meshtastic_ModuleConfig_MapReportSettings_size 14
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
+#define meshtastic_ModuleConfig_RouterRetirementConfig_size 8
 #define meshtastic_ModuleConfig_PaxcounterConfig_size 30
 #define meshtastic_ModuleConfig_RangeTestConfig_size 12
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96

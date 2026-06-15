@@ -82,7 +82,7 @@ class TwoButtonExtended : protected concurrency::OSThread
         // Per-button config
         uint8_t pin = 0xFF;                 // 0xFF: unset
         volatile State state = State::REST; // Internal state
-        volatile uint32_t irqAtMillis;      // millis() when button went down
+        volatile uint32_t irqAtMillis;      // Time::getMillis() when button went down
 
         // Per-button event callbacks
         static void noop(){};

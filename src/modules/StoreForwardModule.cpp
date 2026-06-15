@@ -45,7 +45,7 @@ int32_t StoreForwardModule::runOnce()
             }
         } else if (this->heartbeat && (!Throttle::isWithinTimespanMs(lastHeartbeat, heartbeatInterval * 1000)) &&
                    airTime->isTxAllowedChannelUtil(true)) {
-            lastHeartbeat = millis();
+            lastHeartbeat = Time::getMillis();
             LOG_INFO("Send heartbeat");
             meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
             sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_HEARTBEAT;
@@ -374,7 +374,7 @@ void StoreForwardModule::statsSend(uint32_t to)
     sf.variant.stats.messages_total = this->records;
     sf.variant.stats.messages_saved = this->packetHistoryTotalCount;
     sf.variant.stats.messages_max = this->records;
-    sf.variant.stats.up_time = millis() / 1000;
+    sf.variant.stats.up_time = Time::getMillis() / 1000;
     sf.variant.stats.requests = this->requests;
     sf.variant.stats.requests_history = this->requests_history;
     sf.variant.stats.heartbeat = this->heartbeat;
@@ -510,8 +510,8 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         if (is_client) {
             LOG_DEBUG("StoreAndForward_RequestResponse_ROUTER_BUSY");
             // retry in messages_saved * packetTimeMax ms
-            retry_delay = millis() + getNumAvailablePackets(this->busyTo, this->last_time) * packetTimeMax *
-                                         (p->rr == meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
+            retry_delay = Time::getMillis() + getNumAvailablePackets(this->busyTo, this->last_time) * packetTimeMax *
+                                                  (p->rr == meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
         }
         break;
 
@@ -523,7 +523,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             if (p->which_variant == meshtastic_StoreAndForward_heartbeat_tag) {
                 heartbeatInterval = p->variant.heartbeat.period;
             }
-            lastHeartbeat = millis();
+            lastHeartbeat = Time::getMillis();
             LOG_INFO("StoreAndForward Heartbeat received");
         }
         break;

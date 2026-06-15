@@ -11,7 +11,7 @@
 namespace graphics
 {
 
-VirtualKeyboard::VirtualKeyboard() : cursorRow(0), cursorCol(0), lastActivityTime(millis())
+VirtualKeyboard::VirtualKeyboard() : cursorRow(0), cursorCol(0), lastActivityTime(Time::getMillis())
 {
     initializeKeyboard();
     // Set cursor to H(2, 5)
@@ -735,12 +735,12 @@ void VirtualKeyboard::setCallback(std::function<void(const std::string &)> callb
 
 void VirtualKeyboard::resetTimeout()
 {
-    lastActivityTime = millis();
+    lastActivityTime = Time::getMillis();
 }
 
 bool VirtualKeyboard::isTimedOut() const
 {
-    return (millis() - lastActivityTime) > TIMEOUT_MS;
+    return (Time::getMillis() - lastActivityTime) > TIMEOUT_MS;
 }
 
 } // namespace graphics

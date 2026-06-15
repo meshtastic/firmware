@@ -138,7 +138,7 @@ int32_t RemoteHardwareModule::runOnce()
 
         if (!Throttle::isWithinTimespanMs(lastWatchMsec, WATCH_INTERVAL_MSEC)) {
             uint64_t curVal = digitalReads(watchGpios, availablePins);
-            lastWatchMsec = millis();
+            lastWatchMsec = Time::getMillis();
 
             if (curVal != previousWatch) {
                 previousWatch = curVal;

@@ -1,6 +1,7 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
 #include "./RecentsListApplet.h"
+#include "Time.h"
 
 #include "RTC.h"
 
@@ -85,7 +86,7 @@ void InkHUD::RecentsListApplet::seenNow(NodeNum nodeNum)
 
     Age a;
     a.nodeNum = nodeNum;
-    a.seenAtMs = millis();
+    a.seenAtMs = Time::getMillis();
 
     ages.push_front(a);
 }
@@ -122,8 +123,8 @@ void InkHUD::RecentsListApplet::prune()
 // Is a timestamp old enough that it would make a node inactive, and in need of purging?
 bool InkHUD::RecentsListApplet::isActive(uint32_t seenAtMs)
 {
-    uint32_t now = millis();
-    uint32_t secsAgo = (now - seenAtMs) / 1000UL; // millis() overflow safe
+    uint32_t now = Time::getMillis();
+    uint32_t secsAgo = (now - seenAtMs) / 1000UL; // Time::getMillis() overflow safe
 
     return (secsAgo < settings->recentlyActiveSeconds);
 }

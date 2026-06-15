@@ -8,7 +8,7 @@
  * TransmitHistory persists the last broadcast transmit time (epoch seconds) per portnum
  * to the filesystem so that throttle checks survive reboots/crashes.
  *
- * On boot, modules call getLastSentToMeshMillis() to recover a millis()-relative timestamp
+ * On boot, modules call getLastSentToMeshMillis() to recover a Time::getMillis()-relative timestamp
  * from the stored epoch time, which plugs directly into existing throttle logic.
  *
  * On every broadcast transmit, modules call setLastSentToMesh() which updates the
@@ -58,13 +58,13 @@ class TransmitHistory
     uint32_t getLastSentToMeshEpoch(uint16_t key) const;
 
     /**
-     * Convert a stored epoch timestamp into a millis()-relative timestamp suitable
+     * Convert a stored epoch timestamp into a Time::getMillis()-relative timestamp suitable
      * for use with Throttle::isWithinTimespanMs().
      *
      * Returns 0 if no valid time is stored or if the stored time is in the future
      * (which shouldn't happen but guards against clock weirdness).
      *
-     * Example: if the stored epoch is 300 seconds ago, and millis() is currently 10000,
+     * Example: if the stored epoch is 300 seconds ago, and Time::getMillis() is currently 10000,
      * this returns 10000 - 300000 (wrapped appropriately for uint32_t arithmetic).
      */
     uint32_t getLastSentToMeshMillis(uint16_t key) const;
@@ -127,9 +127,9 @@ class TransmitHistory
     static StoredTimestamp decodeLegacyTimestamp(uint32_t seconds);
 
     std::map<uint16_t, StoredTimestamp> history; // key -> persisted transmit time
-    std::map<uint16_t, uint32_t> lastMillis;     // key -> millis() value (for runtime throttle)
+    std::map<uint16_t, uint32_t> lastMillis;     // key -> Time::getMillis() value (for runtime throttle)
     bool dirty = false;
-    uint32_t lastDiskSave = 0; // millis() of last disk flush
+    uint32_t lastDiskSave = 0; // Time::getMillis() of last disk flush
 };
 
 extern TransmitHistory *transmitHistory;

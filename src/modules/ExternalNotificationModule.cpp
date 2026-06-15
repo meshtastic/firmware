@@ -78,7 +78,7 @@ int32_t ExternalNotificationModule::runOnce()
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
-        if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
+        if ((nagCycleCutoff < Time::getMillis()) && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
             nagCycleCutoff = UINT32_MAX;
             ExternalNotificationModule::stopNow();
@@ -90,16 +90,16 @@ int32_t ExternalNotificationModule::runOnce()
         if (isNagging) {
             delay = (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                   : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
-            if (externalTurnedOn[0] + delay < millis()) {
+            if (externalTurnedOn[0] + delay < Time::getMillis()) {
                 setExternalState(0, !getExternal(0));
             }
-            if (externalTurnedOn[1] + delay < millis()) {
+            if (externalTurnedOn[1] + delay < Time::getMillis()) {
                 setExternalState(1, !getExternal(1));
             }
             // Only toggle buzzer output if not using PWM mode (to avoid conflict with RTTTL)
-            if (!moduleConfig.external_notification.use_pwm && externalTurnedOn[2] + delay < millis()) {
+            if (!moduleConfig.external_notification.use_pwm && externalTurnedOn[2] + delay < Time::getMillis()) {
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
-                          millis());
+                          Time::getMillis());
                 setExternalState(2, !getExternal(2));
             }
 #if defined(HAS_RGB_LED)
@@ -136,7 +136,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (moduleConfig.external_notification.use_i2s_as_buzzer) {
             if (audioThread->isPlaying()) {
                 // Continue playing
-            } else if (isNagging && (nagCycleCutoff >= millis())) {
+            } else if (isNagging && (nagCycleCutoff >= Time::getMillis())) {
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
             // we need fast updates to play the RTTTL
@@ -147,7 +147,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz()) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
-            } else if (isNagging && (nagCycleCutoff >= millis())) {
+            } else if (isNagging && (nagCycleCutoff >= Time::getMillis())) {
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
@@ -185,7 +185,7 @@ bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
 void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 {
     externalCurrentState[index] = on;
-    externalTurnedOn[index] = millis();
+    externalTurnedOn[index] = Time::getMillis();
 
     switch (index) {
     case 1:
@@ -408,9 +408,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                                                          (moduleConfig.external_notification.alert_message_buzzer && !is_muted));
 
             if (genericShouldAlert || vibraShouldAlert || buzzerShouldAlert) {
-                nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
-                                                 ? (moduleConfig.external_notification.nag_timeout * 1000)
-                                                 : moduleConfig.external_notification.output_ms);
+                nagCycleCutoff = Time::getMillis() + (moduleConfig.external_notification.nag_timeout
+                                                          ? (moduleConfig.external_notification.nag_timeout * 1000)
+                                                          : moduleConfig.external_notification.output_ms);
                 LOG_INFO("Toggling nagCycleCutoff to %lu", nagCycleCutoff);
                 isNagging = true;
             }

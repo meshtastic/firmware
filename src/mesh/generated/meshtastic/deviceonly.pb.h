@@ -139,6 +139,9 @@ typedef struct _meshtastic_DeviceState {
     /* The mesh's nodes with their available gpio pins for RemoteHardware module */
     pb_size_t node_remote_hardware_pins_count;
     meshtastic_NodeRemoteHardwarePin node_remote_hardware_pins[12];
+    /* Cumulative uptime (seconds) accrued while unmanaged, for router retirement.
+ Resets on any admin session or on a demotion step. (hand-stubbed; proto pending) */
+    uint32_t router_retirement_credit_secs;
 } meshtastic_DeviceState;
 
 typedef struct _meshtastic_NodePositionEntry {
@@ -220,7 +223,7 @@ extern "C" {
 #define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0}
 #define meshtastic_UserLite_init_default         {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_NodeInfoLite_init_default     {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, 0}
-#define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
+#define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}, 0}
 #define meshtastic_NodePositionEntry_init_default {0, false, meshtastic_PositionLite_init_default}
 #define meshtastic_NodeTelemetryEntry_init_default {0, false, meshtastic_DeviceMetrics_init_default}
 #define meshtastic_NodeEnvironmentEntry_init_default {0, false, meshtastic_EnvironmentMetrics_init_default}
@@ -231,7 +234,7 @@ extern "C" {
 #define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0}
 #define meshtastic_UserLite_init_zero            {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_NodeInfoLite_init_zero        {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, 0}
-#define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
+#define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}, 0}
 #define meshtastic_NodePositionEntry_init_zero   {0, false, meshtastic_PositionLite_init_zero}
 #define meshtastic_NodeTelemetryEntry_init_zero  {0, false, meshtastic_DeviceMetrics_init_zero}
 #define meshtastic_NodeEnvironmentEntry_init_zero {0, false, meshtastic_EnvironmentMetrics_init_zero}
@@ -277,6 +280,7 @@ extern "C" {
 #define meshtastic_DeviceState_did_gps_reset_tag 11
 #define meshtastic_DeviceState_rx_waypoint_tag   12
 #define meshtastic_DeviceState_node_remote_hardware_pins_tag 13
+#define meshtastic_DeviceState_router_retirement_credit_secs_tag 14
 #define meshtastic_NodePositionEntry_num_tag     1
 #define meshtastic_NodePositionEntry_position_tag 2
 #define meshtastic_NodeTelemetryEntry_num_tag    1
@@ -349,7 +353,8 @@ X(a, STATIC,   SINGULAR, UINT32,   version,           8) \
 X(a, STATIC,   SINGULAR, BOOL,     no_save,           9) \
 X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    11) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  rx_waypoint,      12) \
-X(a, STATIC,   REPEATED, MESSAGE,  node_remote_hardware_pins,  13)
+X(a, STATIC,   REPEATED, MESSAGE,  node_remote_hardware_pins,  13) \
+X(a, STATIC,   SINGULAR, UINT32,    router_retirement_credit_secs,  14)
 #define meshtastic_DeviceState_CALLBACK NULL
 #define meshtastic_DeviceState_DEFAULT NULL
 #define meshtastic_DeviceState_my_node_MSGTYPE meshtastic_MyNodeInfo
@@ -454,7 +459,7 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_BackupPreferences_size
 #define meshtastic_BackupPreferences_size        2432
 #define meshtastic_ChannelFile_size              718
-#define meshtastic_DeviceState_size              1944
+#define meshtastic_DeviceState_size              1950
 #define meshtastic_NodeEnvironmentEntry_size     170
 #define meshtastic_NodeInfoLite_size             112
 #define meshtastic_NodePositionEntry_size        42

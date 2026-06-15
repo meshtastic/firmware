@@ -1,5 +1,6 @@
 #include "ExpressLRSFiveWay.h"
 #include "Throttle.h"
+#include "Time.h"
 
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
 
@@ -79,7 +80,7 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
     if (keyInProcess == NO_PRESS) {
         // New key down
         if (newKey != NO_PRESS) {
-            keyDownStart = millis();
+            keyDownStart = Time::getMillis();
             // DBGLN("down=%u", newKey);
         }
     } else {
@@ -114,7 +115,7 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
 // Meshtastic: runs at regular intervals
 int32_t ExpressLRSFiveWay::runOnce()
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     // Dismiss any alert frames after 2 seconds
     // Feedback for GPS toggle / adhoc ping
@@ -203,7 +204,7 @@ void ExpressLRSFiveWay::toggleGPS()
         gps->toggleGpsMode();
         screen->startAlert("GPS Toggled");
         alerting = true;
-        alertingSinceMs = millis();
+        alertingSinceMs = Time::getMillis();
     }
 #endif
 }
@@ -226,7 +227,7 @@ void ExpressLRSFiveWay::sendAdhocPing()
     });
 
     alerting = true;
-    alertingSinceMs = millis();
+    alertingSinceMs = Time::getMillis();
 }
 
 // Shutdown the node (enter deep-sleep)

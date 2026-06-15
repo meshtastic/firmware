@@ -83,7 +83,7 @@ static void handleWebResponse()
                     static uint32_t lastHeapWarning = 0;
                     if (lastHeapWarning == 0 || !Throttle::isWithinTimespanMs(lastHeapWarning, 30000)) {
                         LOG_WARN("Low heap (%u bytes), skipping HTTPS processing", freeHeap);
-                        lastHeapWarning = millis();
+                        lastHeapWarning = Time::getMillis();
                     }
                 }
             }
@@ -170,14 +170,14 @@ void createSSLCert()
 
         LOG_DEBUG("Waiting for SSL Cert to be generated");
         while (!isCertReady) {
-            if ((millis() / 500) % 2) {
+            if ((Time::getMillis() / 500) % 2) {
                 if (runLoop) {
                     LOG_DEBUG(".");
 
                     yield();
                     esp_task_wdt_reset();
 #if HAS_SCREEN
-                    if (millis() / 1000 >= 3) {
+                    if (Time::getMillis() / 1000 >= 3) {
                         if (screen)
                             screen->setSSLFrames();
                     }
@@ -199,17 +199,17 @@ WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
     if (!config.network.wifi_enabled && !config.network.eth_enabled) {
         disable();
     }
-    lastActivityTime = millis();
+    lastActivityTime = Time::getMillis();
 }
 
 void WebServerThread::markActivity()
 {
-    lastActivityTime = millis();
+    lastActivityTime = Time::getMillis();
 }
 
 int32_t WebServerThread::getAdaptiveInterval()
 {
-    uint32_t currentTime = millis();
+    uint32_t currentTime = Time::getMillis();
     uint32_t timeSinceActivity;
 
     if (currentTime >= lastActivityTime) {
@@ -235,7 +235,7 @@ int32_t WebServerThread::runOnce()
 
     handleWebResponse();
 
-    if (requestRestart && (millis() / 1000) > requestRestart) {
+    if (requestRestart && (Time::getMillis() / 1000) > requestRestart) {
         ESP.restart();
     }
 

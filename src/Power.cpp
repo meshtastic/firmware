@@ -425,7 +425,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
         if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
-            last_read_time_ms = millis();
+            last_read_time_ms = Time::getMillis();
 
             uint32_t raw = 0;
             float scaled = 0;
@@ -803,12 +803,12 @@ bool Power::setup()
 
 void Power::powerCommandsCheck()
 {
-    if (rebootAtMsec && millis() > rebootAtMsec) {
+    if (rebootAtMsec && Time::getMillis() > rebootAtMsec) {
         LOG_INFO("Rebooting");
         reboot();
     }
 
-    if (shutdownAtMsec && millis() > shutdownAtMsec) {
+    if (shutdownAtMsec && Time::getMillis() > shutdownAtMsec) {
         shutdownAtMsec = 0;
         shutdown();
     }
@@ -960,7 +960,7 @@ void Power::readPowerStatus()
     if (hasBattery == OptTrue && !Throttle::isWithinTimespanMs(lastLogTime, 50 * 1000)) {
         LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(),
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
-        lastLogTime = millis();
+        lastLogTime = Time::getMillis();
     }
     newStatus.notifyObservers(&powerStatus2);
 

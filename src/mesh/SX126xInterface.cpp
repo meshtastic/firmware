@@ -431,9 +431,9 @@ template <typename T> void SX126xInterface<T>::resetAGC()
 
     // 4. Wait for calibration to complete (BUSY pin goes low)
     module.hal->delay(5);
-    uint32_t start = millis();
+    uint32_t start = Time::getMillis();
     while (module.hal->digitalRead(module.getGpio())) {
-        if (millis() - start > 50)
+        if (Time::getMillis() - start > 50)
             break;
         module.hal->yield();
     }

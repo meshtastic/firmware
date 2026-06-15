@@ -19,7 +19,8 @@ void PaxcounterModule::handlePaxCounterReportRequest()
 {
     // The libpax library already updated our data structure, just before invoking this callback.
     LOG_INFO("PaxcounterModule: libpax reported new data: wifi=%d; ble=%d; uptime=%lu",
-             paxcounterModule->count_from_libpax.wifi_count, paxcounterModule->count_from_libpax.ble_count, millis() / 1000);
+             paxcounterModule->count_from_libpax.wifi_count, paxcounterModule->count_from_libpax.ble_count,
+             Time::getMillis() / 1000);
     paxcounterModule->reportedDataSent = false;
     paxcounterModule->setIntervalFromNow(0);
 }
@@ -43,12 +44,12 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
         return false;
 
     LOG_INFO("PaxcounterModule: send pax info wifi=%d; ble=%d; uptime=%lu", count_from_libpax.wifi_count,
-             count_from_libpax.ble_count, millis() / 1000);
+             count_from_libpax.ble_count, Time::getMillis() / 1000);
 
     meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
     pl.wifi = count_from_libpax.wifi_count;
     pl.ble = count_from_libpax.ble_count;
-    pl.uptime = millis() / 1000;
+    pl.uptime = Time::getMillis() / 1000;
 
     meshtastic_MeshPacket *p = allocDataProtobuf(pl);
     p->to = dest;
@@ -72,7 +73,7 @@ meshtastic_MeshPacket *PaxcounterModule::allocReply()
     meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
     pl.wifi = count_from_libpax.wifi_count;
     pl.ble = count_from_libpax.ble_count;
-    pl.uptime = millis() / 1000;
+    pl.uptime = Time::getMillis() / 1000;
     return allocDataProtobuf(pl);
 }
 
@@ -140,7 +141,7 @@ void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->setFont(FONT_SMALL);
     display->drawStringf(display->getWidth() / 2 + x, graphics::getTextPositions(display)[line++], buffer,
                          "WiFi: %d\nBLE: %d\nUptime: %ds", count_from_libpax.wifi_count, count_from_libpax.ble_count,
-                         millis() / 1000);
+                         Time::getMillis() / 1000);
     graphics::drawCommonFooter(display, x, y);
 }
 #endif // HAS_SCREEN

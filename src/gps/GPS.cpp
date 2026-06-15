@@ -116,7 +116,7 @@ template <typename T> void wakeAirohaForActiveProbe(T *serialGps)
     digitalWrite(GPS_RTC_INT, LOW);
     delay(50);
 
-    const uint32_t start = millis();
+    const uint32_t start = Time::getMillis();
     do {
         serialGps->write("$PAIR382,1*2E\r\n");
         delay(T1000_E_AIROHA_WAKE_INTERVAL_MS);
@@ -150,11 +150,11 @@ template <typename T> bool sawNmeaSentenceAtBaud(T *serialGps, uint32_t timeoutM
 {
     // Lightweight passive check: look for at least one complete
     // "$...,<field>\n" style NMEA sentence.
-    const uint32_t deadline = millis() + timeoutMs;
+    const uint32_t deadline = Time::getMillis() + timeoutMs;
     bool sawDollar = false;
     bool sawComma = false;
 
-    while ((int32_t)(millis() - deadline) < 0) {
+    while ((int32_t)(Time::getMillis() - deadline) < 0) {
         while (serialGps->available()) {
             char c = static_cast<char>(serialGps->read());
             if (c == '$') {
@@ -345,11 +345,11 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     uint8_t buffer[768] = {0};
     uint8_t b;
     int bytesRead = 0;
-    uint32_t startTimeout = millis() + waitMillis;
+    uint32_t startTimeout = Time::getMillis() + waitMillis;
 #ifdef GPS_DEBUG
     std::string debugmsg = "";
 #endif
-    while (millis() < startTimeout) {
+    while (Time::getMillis() < startTimeout) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();
 
@@ -378,7 +378,7 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 
 GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
 {
-    uint32_t startTime = millis();
+    uint32_t startTime = Time::getMillis();
     uint8_t buffer[CAS_ACK_NACK_MSG_SIZE] = {0};
     uint8_t bufferPos = 0;
 
@@ -415,7 +415,7 @@ GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMilli
             // Check for an ACK-ACK for the specified class and message id
             if ((msg_cls == 0x05) && (msg_msg_id == 0x01) && payload_cls == class_id && payload_msg == msg_id) {
 #ifdef GPS_DEBUG
-                LOG_INFO("Got ACK for class %02X message %02X in %dms", class_id, msg_id, millis() - startTime);
+                LOG_INFO("Got ACK for class %02X message %02X in %dms", class_id, msg_id, Time::getMillis() - startTime);
 #endif
                 return GNSS_RESPONSE_OK;
             }
@@ -423,7 +423,7 @@ GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMilli
             // Check for an ACK-NACK for the specified class and message id
             if ((msg_cls == 0x05) && (msg_msg_id == 0x00) && payload_cls == class_id && payload_msg == msg_id) {
 #ifdef GPS_DEBUG
-                LOG_WARN("Got NACK for class %02X message %02X in %dms", class_id, msg_id, millis() - startTime);
+                LOG_WARN("Got NACK for class %02X message %02X in %dms", class_id, msg_id, Time::getMillis() - startTime);
 #endif
                 return GNSS_RESPONSE_NAK;
             }
@@ -443,7 +443,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
     uint8_t ack = 0;
     const uint8_t ackP[2] = {class_id, msg_id};
     uint8_t buf[10] = {0xB5, 0x62, 0x05, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
-    uint32_t startTime = millis();
+    uint32_t startTime = Time::getMillis();
     const char frame_errors[] = "More than 100 frame errors";
     int sCounter = 0;
 #ifdef GPS_DEBUG
@@ -464,7 +464,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
     while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (ack > 9) {
 #ifdef GPS_DEBUG
-            LOG_INFO("Got ACK for class %02X message %02X in %dms", class_id, msg_id, millis() - startTime);
+            LOG_INFO("Got ACK for class %02X message %02X in %dms", class_id, msg_id, Time::getMillis() - startTime);
 #endif
             return GNSS_RESPONSE_OK; // ACK received
         }
@@ -518,7 +518,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
 int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis)
 {
     uint16_t ubxFrameCounter = 0;
-    uint32_t startTime = millis();
+    uint32_t startTime = Time::getMillis();
     uint16_t needRead = 0;
 
     while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
@@ -574,7 +574,8 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
                 } else {
                     // return payload length
 #ifdef GPS_DEBUG
-                    LOG_INFO("Got ACK for class %02X message %02X in %dms", requestedClass, requestedID, millis() - startTime);
+                    LOG_INFO("Got ACK for class %02X message %02X in %dms", requestedClass, requestedID,
+                             Time::getMillis() - startTime);
 #endif
                     return needRead;
                 }
@@ -1501,13 +1502,13 @@ int32_t GPS::runOnce()
             if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
                 shouldPublish = true;
-            } else if (!hasValidLocation || prev_fixQual == 0 || (fixHoldEnds + GPS_THREAD_INTERVAL) < millis()) {
+            } else if (!hasValidLocation || prev_fixQual == 0 || (fixHoldEnds + GPS_THREAD_INTERVAL) < Time::getMillis()) {
                 hasValidLocation = true;
                 // Hold for up to 20secs after getting a lock to download ephemeris etc
                 uint32_t holdTime = updateInterval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS;
                 if (holdTime > GPS_FIX_HOLD_MAX_MS)
                     holdTime = GPS_FIX_HOLD_MAX_MS;
-                fixHoldEnds = millis() + holdTime;
+                fixHoldEnds = Time::getMillis() + holdTime;
 #ifdef GPS_DEBUG
                 LOG_DEBUG("Holding for %ums after lock", holdTime);
 #endif
@@ -1529,7 +1530,7 @@ int32_t GPS::runOnce()
         }
 
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
-        bool holdExpired = (fixHoldEnds != 0 && millis() > fixHoldEnds);
+        bool holdExpired = (fixHoldEnds != 0 && Time::getMillis() > fixHoldEnds);
         if (shouldPublish || tooLong || holdExpired) {
             if (gotTime && hasValidLocation) {
                 shouldPublish = true;
@@ -1546,7 +1547,7 @@ int32_t GPS::runOnce()
 
 #ifdef GPS_DEBUG
         } else if (fixHoldEnds != 0) {
-            LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - millis(), p.sats_in_view);
+            LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - Time::getMillis(), p.sats_in_view);
 #endif
         }
     }
@@ -1836,8 +1837,8 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
 
     auto response = std::unique_ptr<char[]>(new char[bufferSize]); // Dynamically allocate based on baud rate
     uint16_t responseLen = 0;
-    unsigned long start = millis();
-    while (millis() - start < timeout) {
+    unsigned long start = Time::getMillis();
+    while (Time::getMillis() - start < timeout) {
         if (_serial_gps->available()) {
             char c = _serial_gps->read();
 

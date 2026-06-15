@@ -50,7 +50,7 @@ int32_t UpDownInterruptBase::runOnce()
 {
     InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
-    unsigned long now = millis();
+    unsigned long now = Time::getMillis();
 
     // Read all button states once at the beginning
     bool pressButtonPressed = !digitalRead(_pinPress);

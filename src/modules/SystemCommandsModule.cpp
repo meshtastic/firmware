@@ -59,10 +59,10 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         if (!config.bluetooth.enabled) {
             disableBluetooth();
             IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF\nRebooting", 3000));
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 2000;
+            rebootAtMsec = Time::getMillis() + DEFAULT_REBOOT_SECONDS * 2000;
         } else {
             IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            rebootAtMsec = Time::getMillis() + DEFAULT_REBOOT_SECONDS * 1000;
         }
 #else
         if (!config.bluetooth.enabled) {
@@ -70,7 +70,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
             IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF", 3000));
         } else {
             IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            rebootAtMsec = Time::getMillis() + DEFAULT_REBOOT_SECONDS * 1000;
         }
 #endif
         return 0;
@@ -80,7 +80,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 #if HAS_SCREEN
         messageStore.saveToFlash();
 #endif
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::getMillis() + DEFAULT_REBOOT_SECONDS * 1000;
         // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         return true;
     }
@@ -113,7 +113,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         return true;
     // Power control
     case INPUT_BROKER_SHUTDOWN:
-        shutdownAtMsec = millis();
+        shutdownAtMsec = Time::getMillis();
         return true;
     // factory reset
     case INPUT_BROKER_FACTORY_RST:
@@ -124,7 +124,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         LOG_INFO("Reboot in %d seconds", DEFAULT_REBOOT_SECONDS);
         if (screen)
             screen->showSimpleBanner("Rebooting...", 0); // stays on screen
-        rebootAtMsec = (DEFAULT_REBOOT_SECONDS < 0) ? 0 : (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        rebootAtMsec = (DEFAULT_REBOOT_SECONDS < 0) ? 0 : (Time::getMillis() + DEFAULT_REBOOT_SECONDS * 1000);
         return true;
 
     default:

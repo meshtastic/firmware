@@ -19,7 +19,7 @@ DropzoneModule *dropzoneModule;
 int32_t DropzoneModule::runOnce()
 {
     // Send on a 5 second delay from receiving the matching request
-    if (startSendConditions != 0 && (startSendConditions + 5000U) < millis()) {
+    if (startSendConditions != 0 && (startSendConditions + 5000U) < Time::getMillis()) {
         service->sendToMesh(sendConditions(), RX_SRC_LOCAL);
         startSendConditions = 0;
     }
@@ -35,13 +35,13 @@ ProcessMessage DropzoneModule::handleReceived(const meshtastic_MeshPacket &mp)
     sprintf(matchCompare, "%s conditions", owner.short_name);
     if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
-        startSendConditions = millis();
+        startSendConditions = Time::getMillis();
     }
 
     sprintf(matchCompare, "%s conditions", owner.long_name);
     if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
-        startSendConditions = millis();
+        startSendConditions = Time::getMillis();
     }
     return ProcessMessage::CONTINUE;
 }

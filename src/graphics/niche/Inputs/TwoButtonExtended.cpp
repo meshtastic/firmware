@@ -265,7 +265,7 @@ void TwoButtonExtended::isrPrimary()
         TwoButtonExtended *b = TwoButtonExtended::getInstance();
         if (b->buttons[0].state == State::REST) {
             b->buttons[0].state = State::IRQ;
-            b->buttons[0].irqAtMillis = millis();
+            b->buttons[0].irqAtMillis = Time::getMillis();
             b->startThread();
         }
         isrRunning = false;
@@ -283,7 +283,7 @@ void TwoButtonExtended::isrSecondary()
         TwoButtonExtended *b = TwoButtonExtended::getInstance();
         if (b->buttons[1].state == State::REST) {
             b->buttons[1].state = State::IRQ;
-            b->buttons[1].irqAtMillis = millis();
+            b->buttons[1].irqAtMillis = Time::getMillis();
             b->startThread();
         }
         isrRunning = false;
@@ -301,7 +301,7 @@ void TwoButtonExtended::isrJoystickUp()
         TwoButtonExtended *b = TwoButtonExtended::getInstance();
         if (b->joystick[Direction::UP].state == State::REST) {
             b->joystick[Direction::UP].state = State::IRQ;
-            b->joystick[Direction::UP].irqAtMillis = millis();
+            b->joystick[Direction::UP].irqAtMillis = Time::getMillis();
             b->startThread();
         }
         isrRunning = false;
@@ -317,7 +317,7 @@ void TwoButtonExtended::isrJoystickDown()
         TwoButtonExtended *b = TwoButtonExtended::getInstance();
         if (b->joystick[Direction::DOWN].state == State::REST) {
             b->joystick[Direction::DOWN].state = State::IRQ;
-            b->joystick[Direction::DOWN].irqAtMillis = millis();
+            b->joystick[Direction::DOWN].irqAtMillis = Time::getMillis();
             b->startThread();
         }
         isrRunning = false;
@@ -333,7 +333,7 @@ void TwoButtonExtended::isrJoystickLeft()
         TwoButtonExtended *b = TwoButtonExtended::getInstance();
         if (b->joystick[Direction::LEFT].state == State::REST) {
             b->joystick[Direction::LEFT].state = State::IRQ;
-            b->joystick[Direction::LEFT].irqAtMillis = millis();
+            b->joystick[Direction::LEFT].irqAtMillis = Time::getMillis();
             b->startThread();
         }
         isrRunning = false;
@@ -349,7 +349,7 @@ void TwoButtonExtended::isrJoystickRight()
         TwoButtonExtended *b = TwoButtonExtended::getInstance();
         if (b->joystick[Direction::RIGHT].state == State::REST) {
             b->joystick[Direction::RIGHT].state = State::IRQ;
-            b->joystick[Direction::RIGHT].irqAtMillis = millis();
+            b->joystick[Direction::RIGHT].irqAtMillis = Time::getMillis();
             b->startThread();
         }
         isrRunning = false;
@@ -415,7 +415,7 @@ int32_t TwoButtonExtended::runOnce()
         // An existing press continues
         // Not held long enough to register as longpress
         case POLLING_UNFIRED: {
-            uint32_t length = millis() - buttons[i].irqAtMillis;
+            uint32_t length = Time::getMillis() - buttons[i].irqAtMillis;
 
             // If button released since last thread tick,
             if (digitalRead(buttons[i].pin) != buttons[i].activeLogic) {
@@ -470,7 +470,7 @@ int32_t TwoButtonExtended::runOnce()
         // An existing press continues
         // Not held long enough to register as press
         case POLLING_UNFIRED: {
-            uint32_t length = millis() - joystick[i].irqAtMillis;
+            uint32_t length = Time::getMillis() - joystick[i].irqAtMillis;
 
             // If button released since last thread tick,
             if (digitalRead(joystick[i].pin) != joystickActiveLogic) {

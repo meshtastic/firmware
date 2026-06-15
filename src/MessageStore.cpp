@@ -70,7 +70,7 @@ static inline void assignTimestamp(StoredMessage &sm)
         sm.timestamp = nowSecs;
         sm.isBootRelative = false;
     } else {
-        sm.timestamp = millis() / 1000;
+        sm.timestamp = Time::getMillis() / 1000;
         sm.isBootRelative = true;
     }
 }
@@ -129,7 +129,7 @@ static inline void markMessageStoreUnsaved()
     g_messageStoreHasUnsavedChanges = true;
 
     if (g_lastAutoSaveMs == 0) {
-        g_lastAutoSaveMs = millis();
+        g_lastAutoSaveMs = Time::getMillis();
     }
 }
 
@@ -139,7 +139,7 @@ static inline void autosaveTick(MessageStore *store)
     if (!store)
         return;
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     if (g_lastAutoSaveMs == 0) {
         g_lastAutoSaveMs = now;
@@ -304,7 +304,7 @@ void MessageStore::saveToFlash()
 
     // Reset autosave state after any save
     g_messageStoreHasUnsavedChanges = false;
-    g_lastAutoSaveMs = millis();
+    g_lastAutoSaveMs = Time::getMillis();
 }
 
 void MessageStore::loadFromFlash()
@@ -338,7 +338,7 @@ void MessageStore::loadFromFlash()
 #endif
     // Loading messages does not trigger an autosave
     g_messageStoreHasUnsavedChanges = false;
-    g_lastAutoSaveMs = millis();
+    g_lastAutoSaveMs = Time::getMillis();
 }
 
 #else
@@ -362,7 +362,7 @@ void MessageStore::clearAllMessages()
 
 #if ENABLE_MESSAGE_PERSISTENCE
     g_messageStoreHasUnsavedChanges = false;
-    g_lastAutoSaveMs = millis();
+    g_lastAutoSaveMs = Time::getMillis();
 #endif
 }
 
@@ -470,7 +470,7 @@ void MessageStore::upgradeBootRelativeTimestamps()
     if (nowSecs == 0)
         return; // Still no valid RTC
 
-    uint32_t bootNow = millis() / 1000;
+    uint32_t bootNow = Time::getMillis() / 1000;
 
     auto fix = [&](std::deque<StoredMessage> &dq) {
         for (auto &m : dq) {

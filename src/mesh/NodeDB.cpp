@@ -2520,7 +2520,7 @@ void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context)
     if (Throttle::isWithinTimespanMs(lastLogMs, HOPSTART_DROP_LOG_INTERVAL_MS)) {
         return;
     }
-    lastLogMs = millis();
+    lastLogMs = Time::getMillis();
     const bool decoded = (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag);
     const bool hasBitfield = decoded && p.decoded.has_bitfield;
     LOG_DEBUG(
@@ -2759,7 +2759,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
         if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
             saveToDisk(SEGMENT_NODEDATABASE);
-            lastNodeDbSave = millis();
+            lastNodeDbSave = Time::getMillis();
         } else {
             LOG_DEBUG("Defer NodeDB saveToDisk for now");
         }
@@ -2888,7 +2888,7 @@ void NodeDB::pause_sort(bool paused)
 void NodeDB::sortMeshDB()
 {
     if (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5))) {
-        lastSort = millis();
+        lastSort = Time::getMillis();
         bool changed = true;
         while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
             changed = false;
@@ -2911,7 +2911,7 @@ void NodeDB::sortMeshDB()
                 }
             }
         }
-        LOG_INFO("Sort took %u milliseconds", millis() - lastSort);
+        LOG_INFO("Sort took %u milliseconds", Time::getMillis() - lastSort);
     }
 }
 
@@ -3140,7 +3140,7 @@ bool NodeDB::createNewIdentity()
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
     bool success = false;
-    lastBackupAttempt = millis();
+    lastBackupAttempt = Time::getMillis();
 #ifdef FSCom
     if (location == meshtastic_AdminMessage_BackupLocation_FLASH) {
         meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;

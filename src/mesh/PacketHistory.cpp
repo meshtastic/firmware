@@ -92,8 +92,8 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         r.relayed_by[0] = p->relay_node;
     }
 
-    r.rxTimeMsec = millis(); //
-    if (r.rxTimeMsec == 0)   // =0 every 49.7 days? 0 is special
+    r.rxTimeMsec = Time::getMillis(); //
+    if (r.rxTimeMsec == 0)            // =0 every 49.7 days? 0 is special
         r.rxTimeMsec = 1;
 
 #if VERBOSE_PACKET_HISTORY
@@ -154,7 +154,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 #if VERBOSE_PACKET_HISTORY
             LOG_DEBUG("Packet History - Was Seen Recently: s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d wUpd BEFORE",
                       found->sender, found->id, found->next_hop, found->relayed_by[0], found->relayed_by[1], found->relayed_by[2],
-                      millis() - found->rxTimeMsec);
+                      Time::getMillis() - found->rxTimeMsec);
 #endif
             // Only update the relayer if it heard us directly (meaning hopLimit is decreased by 1)
             uint8_t startIdx = weWillRelay ? 1 : 0;
@@ -194,7 +194,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
             r.next_hop = found->next_hop; // keep the original next_hop (such that we check whether we were originally asked)
 #if VERBOSE_PACKET_HISTORY
             LOG_DEBUG("Packet History - Was Seen Recently: s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d wUpd AFTER", r.sender,
-                      r.id, r.next_hop, r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], millis() - r.rxTimeMsec);
+                      r.id, r.next_hop, r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], Time::getMillis() - r.rxTimeMsec);
 #endif
             // TODO: have direct *found entry - can modify directly without local copy _vs_ not convolute the code by this
         }
@@ -305,7 +305,7 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
                 LOG_DEBUG("Packet History - find: s=%08x id=%08x FOUND nh=%02x rby=%02x %02x %02x age=%d slot=%d/%d",
                           recentPackets[idx].sender, recentPackets[idx].id, recentPackets[idx].next_hop,
                           recentPackets[idx].relayed_by[0], recentPackets[idx].relayed_by[1], recentPackets[idx].relayed_by[2],
-                          millis() - (recentPackets[idx].rxTimeMsec), idx, recentPacketsCapacity);
+                          Time::getMillis() - (recentPackets[idx].rxTimeMsec), idx, recentPacketsCapacity);
 #endif
                 return &recentPackets[idx];
             }
@@ -332,7 +332,7 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
 /** Insert/Replace oldest PacketRecord in recentPackets. */
 void PacketHistory::insert(const PacketRecord &r)
 {
-    uint32_t now_millis = millis(); // Should not jump with time changes
+    uint32_t now_millis = Time::getMillis(); // Should not jump with time changes
     uint32_t OldtrxTimeMsec = 0;
     PacketRecord *base = recentPackets.get();
     PacketRecord *tu = NULL; // Will insert here.
@@ -410,7 +410,7 @@ void PacketHistory::insert(const PacketRecord &r)
         LOG_INFO("Packet History - insert: Reusing slot aged %.3fs TRACE %s", OldtrxTimeMsec / 1000.,
                  (tu->id == r.id && tu->sender == r.sender) ? "MATCHED PACKET" : "OLDEST SLOT");
     } else {
-        LOG_INFO("Packet History - insert: Using new slot @uptime %.3fs TRACE NEW", millis() / 1000.);
+        LOG_INFO("Packet History - insert: Using new slot @uptime %.3fs TRACE NEW", Time::getMillis() / 1000.);
     }
 #endif
 
@@ -479,8 +479,8 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
 
 #if VERBOSE_PACKET_HISTORY >= 2
     LOG_DEBUG("Packet History - was relayer: s=%08x id=%08x nh=%02x age=%d rls=%02x %02x %02x InHistory,check:%02x",
-              found->sender, found->id, found->next_hop, millis() - found->rxTimeMsec, found->relayed_by[0], found->relayed_by[1],
-              found->relayed_by[2], relayer);
+              found->sender, found->id, found->next_hop, Time::getMillis() - found->rxTimeMsec, found->relayed_by[0],
+              found->relayed_by[1], found->relayed_by[2], relayer);
 #endif
     return wasRelayer(relayer, *found, wasSole);
 }
