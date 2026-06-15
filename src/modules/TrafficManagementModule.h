@@ -41,6 +41,11 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     void resetStats();
     void recordRouterHopPreserved();
 
+    // True if this relayed broadcast is subject to hop-trimming (no mutation). Drives the clamp in
+    // alterReceived and lets FloodingRouter refuse the higher-hopcount upgrade that would undo it.
+    // Always false when the feature is compiled out.
+    bool wouldHopTrim(const meshtastic_MeshPacket &p) const;
+
     // Next-hop overflow cache (routing hint).
     // setNextHop: store a confirmed last-byte next hop for `dest`. Called by
     //   NextHopRouter from its ACK-confirmed decision (see sniffReceived). The
