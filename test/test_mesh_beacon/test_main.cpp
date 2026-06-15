@@ -73,6 +73,11 @@ class MockRouter : public Router
 
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
+        // Capture the primary channel as seen AT send() time. sendBeaconPacket() temporarily swaps
+        // the beacon channel into the primary slot around this call so perhapsEncode keys off it,
+        // so this snapshot reflects which channel the packet would actually be encrypted on.
+        if (channelFile.channels_count > 0)
+            primaryAtSend.push_back(channels.getByIndex(channels.getPrimaryIndex()).settings);
         sentPackets.push_back(*p);
         packetPool.release(p);
         return ERRNO_OK;
@@ -83,6 +88,7 @@ class MockRouter : public Router
     void enqueueReceivedMessage(meshtastic_MeshPacket *p) override { packetPool.release(p); }
 
     std::vector<meshtastic_MeshPacket> sentPackets;
+    std::vector<meshtastic_ChannelSettings> primaryAtSend;
 };
 
 // ---------------------------------------------------------------------------
@@ -157,6 +163,22 @@ static void resetConfig()
     myNodeInfo.my_node_num = kLocalNode;
 
     initRegion();
+}
+
+// Install a single PRIMARY channel with an explicit name + PSK so the beacon channel-swap path
+// (sendBeaconPacket) has a real primary slot to save/restore and to read the active PSK from.
+static void installTestPrimaryChannel(const char *name, const uint8_t *psk, size_t pskLen)
+{
+    channelFile.channels_count = 1;
+    meshtastic_Channel &ch = channelFile.channels[0];
+    ch = meshtastic_Channel_init_zero;
+    ch.index = 0;
+    ch.has_settings = true;
+    ch.role = meshtastic_Channel_Role_PRIMARY;
+    strncpy(ch.settings.name, name, sizeof(ch.settings.name) - 1);
+    ch.settings.psk.size = (pb_size_t)pskLen;
+    memcpy(ch.settings.psk.bytes, psk, pskLen);
+    channels.onConfigChanged(); // set primaryIndex + recompute hashes
 }
 
 // ===========================================================================
@@ -982,6 +1004,75 @@ static void test_broadcaster_legacySplit_secondPacketIsTextMessage(void)
     TEST_ASSERT_EQUAL_STRING_LEN(msg, (const char *)pB.decoded.payload.bytes, pB.decoded.payload.size);
 }
 
+// ===========================================================================
+// Group 7: Beacon-channel PSK swap (broadcast_on_channel override)
+// ===========================================================================
+
+/**
+ * When broadcast_on_channel overrides the primary channel's name/PSK, the packet must be encrypted
+ * on the BEACON channel, not the primary. perhapsEncode keys off the primary slot, so sendBeaconPacket
+ * temporarily installs the beacon channel there for the send and restores it after. Verify both: the
+ * primary slot IS the beacon channel during send(), and it is restored afterwards (no leak).
+ */
+static void test_broadcaster_channelPskOverride_swapsBeaconChannelAndRestores(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true; // gives the beacon radio content to send
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_on_channel.name, "BeaconCh",
+            sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1);
+    static const uint8_t beaconPsk[16] = {0xBB, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                                          0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
+    moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconPsk);
+    memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconPsk, sizeof(beaconPsk));
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    // During send(), the primary slot must hold the BEACON channel (so encryption uses its PSK).
+    TEST_ASSERT_TRUE_MESSAGE(mockRouter->primaryAtSend.size() >= 1, "expected at least one send");
+    const meshtastic_ChannelSettings &atSend = mockRouter->primaryAtSend[0];
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("BeaconCh", atSend.name, "primary must be the beacon channel during send");
+    TEST_ASSERT_EQUAL_UINT(sizeof(beaconPsk), atSend.psk.size);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0xBB, atSend.psk.bytes[0], "encryption must use the beacon channel PSK");
+
+    // After send(), the primary channel must be restored to the original (no leak into normal traffic).
+    const meshtastic_ChannelSettings &after = channels.getByIndex(channels.getPrimaryIndex()).settings;
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", after.name, "primary channel must be restored after send");
+    TEST_ASSERT_EQUAL_UINT(sizeof(homePsk), after.psk.size);
+    TEST_ASSERT_EQUAL_UINT8(0xAA, after.psk.bytes[0]);
+}
+
+/**
+ * Without a broadcast_on_channel override, the beacon must transmit on the primary channel unchanged
+ * (no swap). Guards against the swap firing — and churning the channel table — when it isn't needed.
+ */
+static void test_broadcaster_noChannelOverride_doesNotSwapPrimary(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    // No broadcast_on_channel override.
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_TRUE_MESSAGE(mockRouter->primaryAtSend.size() >= 1, "expected at least one send");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", mockRouter->primaryAtSend[0].name,
+                                     "primary must stay unchanged when no channel override is set");
+}
+
 } // namespace
 
 // ===========================================================================
@@ -1080,6 +1171,11 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_legacySplit_firstPacketIsBeaconApp);
     RUN_TEST(test_broadcaster_legacySplit_firstPacketHasNoMessageText);
     RUN_TEST(test_broadcaster_legacySplit_secondPacketIsTextMessage);
+
+    printf("\n=== Beacon-channel PSK swap ===\n");
+
+    RUN_TEST(test_broadcaster_channelPskOverride_swapsBeaconChannelAndRestores);
+    RUN_TEST(test_broadcaster_noChannelOverride_doesNotSwapPrimary);
 
     exit(UNITY_END());
 }

@@ -59,6 +59,15 @@ class MeshBeaconModule
     static bool beaconTxConfigInvalid(const meshtastic_MeshPacket *p);
 
   protected:
+    /**
+     * Build the ChannelSettings the beacon transmits on: the base (primary) channel overlaid with
+     * any broadcast_on_channel overrides, defaulting an empty name to the target preset's display
+     * name. Shared by the encrypt-time channel swap and the radio-thread RF swap so the channel
+     * key + hash are identical at both points.
+     */
+    static meshtastic_ChannelSettings beaconChannelSettings(const meshtastic_ChannelSettings &base,
+                                                            meshtastic_Config_LoRaConfig_ModemPreset preset);
+
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
     static uint16_t originalLoraChannel;
     static meshtastic_Config_LoRaConfig_RegionCode originalRegion;
@@ -72,9 +81,10 @@ class MeshBeaconModule
  *
  * Packet flow:
  *  Normal (combined):  one MESH_BEACON_APP carrying offer + message on the beacon radio config.
- *  Legacy split:       two packets when both text and offer are present and broadcast_legacy_split=true:
- *                        A) MESH_BEACON_APP with offer only (no text) on the beacon radio config.
- *                        B) TEXT_MESSAGE_APP with the text on the normal radio config.
+ *  Legacy split:       two packets when both text and offer are present and broadcast_legacy_split=true,
+ *                      both sent on the same beacon radio settings:
+ *                        A) MESH_BEACON_APP with offer only (no text).
+ *                        B) TEXT_MESSAGE_APP with the text (for clients that only decode TEXT_MESSAGE_APP).
  */
 class MeshBeaconBroadcastModule : private MeshBeaconModule,
                                   public ProtobufModule<meshtastic_MeshBeacon>,
@@ -93,6 +103,10 @@ class MeshBeaconBroadcastModule : private MeshBeaconModule,
   protected:
     void sendBeacon();
     void rebuildCache();
+
+    // Send one beacon packet. When broadcast_on_channel overrides the primary channel's name/PSK,
+    // the packet is encrypted with the beacon channel's key (not the primary's) — see definition.
+    void sendBeaconPacket(meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset targetPreset);
 
     bool payloadCacheDirty = true;
     uint8_t payloadCache[meshtastic_MeshBeacon_size] = {};
