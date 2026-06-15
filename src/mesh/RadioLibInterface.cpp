@@ -395,6 +395,15 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, false);
 #if !MESHTASTIC_EXCLUDE_BEACON
+                } else if (MeshBeaconModule::beaconTxConfigInvalid(txp)) {
+                    // The beacon's target radio config is invalid (bad preset/region, or an
+                    // unlicensed node keying up on a ham-only region). Drop the packet — never
+                    // transmit it on the current (home) config — and move on to the next queued packet.
+                    LOG_DEBUG("Beacon: invalid TX radio config, dropping packet 0x%08x", txp->id);
+                    meshtastic_MeshPacket *bad = txQueue.dequeue();
+                    MeshBeaconModule::clearTargetRadioSettings(bad);
+                    packetPool.release(bad);
+                    setTransmitDelay();
                 } else if (MeshBeaconModule::reconfigureForBeaconTX(this, txp)) {
                     setTransmitDelay();
 #endif

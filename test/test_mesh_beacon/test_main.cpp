@@ -821,6 +821,39 @@ static void test_listener_receiveWithNoOffer_cacheStaysInvalid(void)
 }
 
 /**
+ * Verify received beacon text is delivered to the local phone queue and NOT re-injected
+ * into the mesh. Regression guard for the bug where handleToRadio() rebroadcast the text
+ * from this node (amplification + re-attribution). The fix uses sendToPhone().
+ */
+static void test_listener_textMessage_deliveredToPhoneNotMesh(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.listen_enabled = true;
+
+    MeshBeaconListenerModuleTestShim listener;
+    MeshBeaconListenerModule::lastReceivedOffer = {};
+
+    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
+    strncpy(b.message, "hello mesh", sizeof(b.message) - 1);
+
+    meshtastic_MeshPacket mp = makeBeaconPacket(b);
+    listener.handleReceivedProtobuf(mp, &b);
+
+    // The listener must NOT send anything onto the mesh.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(),
+                                     "Received beacon text must not be re-injected into the mesh");
+
+    // It must hand exactly one TEXT_MESSAGE_APP packet to the phone, preserving the real sender.
+    meshtastic_MeshPacket *toPhone = service->getForPhone();
+    TEST_ASSERT_NOT_NULL_MESSAGE(toPhone, "Beacon text must be delivered to the phone queue");
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_TEXT_MESSAGE_APP, toPhone->decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(kRemoteNode, toPhone->from, "Phone must see the original beaconer as sender");
+    TEST_ASSERT_EQUAL_STRING("hello mesh", (const char *)toPhone->decoded.payload.bytes);
+    service->releaseToPool(toPhone);
+}
+
+/**
  * Verify wantPacket returns false for MESH_BEACON_APP when listen_enabled is false.
  * Important to confirm the module opts out of processing when its config flag is cleared.
  */
@@ -1037,6 +1070,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_listener_offerOnly_isCached);
     RUN_TEST(test_listener_nullBeacon_isDropped);
     RUN_TEST(test_listener_receiveWithNoOffer_cacheStaysInvalid);
+    RUN_TEST(test_listener_textMessage_deliveredToPhoneNotMesh);
     RUN_TEST(test_listener_wantPacket_falseWhenDisabled);
     RUN_TEST(test_listener_wantPacket_trueWhenEnabled);
 

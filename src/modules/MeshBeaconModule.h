@@ -50,6 +50,14 @@ class MeshBeaconModule
      */
     static void clearTargetRadioSettings(const meshtastic_MeshPacket *p);
 
+    /**
+     * True if p is tagged for a beacon radio switch whose target config must NOT be transmitted:
+     * preset invalid for the target region, or an unlicensed node would key up on a ham-only
+     * (licensed-only) region. The radio driver drops such packets rather than sending them on the
+     * current config. False for any packet without a sidecar entry (normal traffic is never affected).
+     */
+    static bool beaconTxConfigInvalid(const meshtastic_MeshPacket *p);
+
   protected:
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
     static uint16_t originalLoraChannel;

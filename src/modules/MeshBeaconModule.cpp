@@ -88,6 +88,32 @@ void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
     }
 }
 
+bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
+{
+    meshtastic_Config_LoRaConfig_ModemPreset preset;
+    if (!getTargetRadioSettings(p, &preset, nullptr))
+        return false; // not a beacon-switch packet — nothing to validate, normal traffic unaffected
+
+    const auto &bcfg = moduleConfig.mesh_beacon;
+    const meshtastic_Config_LoRaConfig_RegionCode region =
+        (bcfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? bcfg.broadcast_on_region
+                                                                                    : config.lora.region;
+
+    // An unlicensed node must never key up on a ham-only (licensed-only) region. The reverse is
+    // allowed: a licensed (ham) node may operate in a non-ham region — and the switch only touches
+    // preset/region/channel, never owner.is_licensed, so it cannot deactivate licensed mode.
+    const RegionInfo *r = getRegion(region);
+    if (r && r->profile->licensedOnly && !owner.is_licensed)
+        return true;
+
+    // Preset must be valid for the target region.
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.use_preset = true;
+    probe.modem_preset = preset;
+    probe.region = region;
+    return !RadioInterface::validateConfigLora(probe);
+}
+
 bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p)
 {
     meshtastic_ChannelSettings *c = &channels.getByIndex(channels.getPrimaryIndex()).settings;
@@ -99,7 +125,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
                memcmp(c->psk.bytes, target.psk.bytes, c->psk.size) != 0 || c->channel_num != target.channel_num;
     };
 
-    if (p && getTargetRadioSettings(p, &targetPreset, &targetSlot) && true) {
+    if (p && getTargetRadioSettings(p, &targetPreset, &targetSlot)) {
 
         const auto &bcfg = moduleConfig.mesh_beacon;
         meshtastic_Config_LoRaConfig_RegionCode targetRegion;
@@ -125,13 +151,12 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
             targetRegion == config.lora.region && !channelDiffers(targetChannel))
             return false;
 
-        // Guard: skip TX if preset is invalid for the target region.
-        meshtastic_Config_LoRaConfig broadcastOnSetting = config.lora;
-        broadcastOnSetting.use_preset = true;
-        broadcastOnSetting.modem_preset = targetPreset;
-        broadcastOnSetting.region = targetRegion;
-        if (!RadioInterface::validateConfigLora(broadcastOnSetting)) {
-            LOG_WARN("Beacon: preset %d invalid for region %d, skipping radio switch", targetPreset, targetRegion);
+        // Guard: never key up on an invalid target config — bad preset for the region, or an
+        // unlicensed node keying up on a ham-only region. Refuse the switch here so we never
+        // transmit on it; the radio driver drops the packet outright (see RadioLibInterface,
+        // beaconTxConfigInvalid) rather than letting it fall through onto the current config.
+        if (beaconTxConfigInvalid(p)) {
+            LOG_DEBUG("Beacon: target preset %d/region %d invalid (or ham mismatch), not switching", targetPreset, targetRegion);
             return false;
         }
 
@@ -235,6 +260,13 @@ void MeshBeaconBroadcastModule::sendBeacon()
     // Stamp common fields shared by every outgoing beacon packet.
     const auto stampPacket = [&](meshtastic_MeshPacket *p) {
         p->to = NODENUM_BROADCAST;
+        // broadcast_send_as_node overrides the source NodeNum. NOTE: this is a *node-ID* spoof
+        // only — it rewrites the 'from' field but does NOT forge any signature. Once 'from' is
+        // not us, the packet is no longer isFromUs(), so Router::perhapsEncode() skips XEdDSA
+        // signing and receivers get an unsigned packet attributed to another node.
+        // When broadcast_send_as_node == 0 the beacon is genuinely from us and Router::perhapsEncode()
+        // signs it under the same XEdDSA broadcast policy as normal channel messages (signed iff the
+        // payload + signature fits the Data payload) — beacons need no special-case signing here.
         p->from = (bcfg.broadcast_send_as_node != 0) ? bcfg.broadcast_send_as_node : nodeDB->getNodeNum();
         p->hop_limit = 0; // all beacon packets are zero hopped to limit spamming.
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -363,14 +395,20 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
 {
     const bool hasOfferContent =
         b && (b->has_offer_channel || b->offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET || b->has_offer_preset);
-    if (!b || (strlen(b->message) == 0 && !hasOfferContent))
+    const pb_size_t msgLen = b ? (pb_size_t)strnlen(b->message, sizeof(b->message) - 1) : 0;
+    const bool hasText = msgLen > 0;
+    if (!b || (!hasText && !hasOfferContent))
         return false;
 
-    if (strlen(b->message) > 0)
+    if (hasText)
         LOG_INFO("Beacon: received from %#08lx: '%.40s'", mp.from, b->message);
 
-    if (strlen(b->message) > 0) {
-        // Deliver text to the local inbox as a TEXT_MESSAGE_APP packet.
+    if (hasText) {
+        // Surface the text to the locally connected phone/client ONLY, as a TEXT_MESSAGE_APP
+        // packet. This is a local inbox delivery, NOT a mesh retransmit: we use sendToPhone()
+        // (queues toward the phone) rather than handleToRadio(), which would re-inject the
+        // packet into the mesh from this node — amplifying traffic and re-attributing the text
+        // to us. The original 'from' (the real beaconer) is preserved for the phone.
         meshtastic_MeshPacket *txt = packetPool.allocCopy(mp);
         if (!txt) {
             LOG_WARN("Beacon: failed to alloc inbox copy");
@@ -379,10 +417,9 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
         txt->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
         txt->to = nodeDB->getNodeNum();
         memset(txt->decoded.payload.bytes, 0, sizeof(txt->decoded.payload.bytes));
-        txt->decoded.payload.size = (pb_size_t)strnlen(b->message, sizeof(b->message) - 1);
+        txt->decoded.payload.size = msgLen;
         memcpy(txt->decoded.payload.bytes, b->message, txt->decoded.payload.size);
-        service->handleToRadio(*txt);
-        packetPool.release(txt);
+        service->sendToPhone(txt); // takes ownership of txt — do not release
     }
 
     // Cache any offer for the client app — never auto-applied.
@@ -394,11 +431,12 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
             lastReceivedOffer.channel = b->offer_channel;
         lastReceivedOffer.region = b->offer_region;
         lastReceivedOffer.preset = b->offer_preset;
-        lastReceivedOffer.received_at = getValidTime(RTCQualityFromNet);
+        lastReceivedOffer.received_at =
+            getValidTime(RTCQualityFromNet); // 0 if no RTC fix yet — consumers must not treat 0 as valid
         LOG_INFO("Beacon: stored offer from %#08lx (preset=%d)", mp.from, b->offer_preset);
     }
 
-    if (strlen(b->message) > 0)
+    if (hasText)
         powerFSM.trigger(EVENT_RECEIVED_MSG);
     notifyObservers(&mp);
     return false;
