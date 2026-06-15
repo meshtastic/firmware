@@ -18,6 +18,19 @@
 #include <algorithm>
 #include <cstring>
 
+#if HAS_VARIABLE_HOPS
+#include "HopScalingModule.h"
+#endif
+
+// Hop-trimming: clamp a relayed broadcast's reach to the local hop-scaling cap + role grace.
+// ON by default; needs HAS_VARIABLE_HOPS (the histogram source) and is killed by defining
+// USERPREFS_TMM_HOP_TRIM_DISABLE.
+#if HAS_VARIABLE_HOPS && !defined(USERPREFS_TMM_HOP_TRIM_DISABLE)
+#define TMM_HOP_TRIM_ENABLED 1
+#else
+#define TMM_HOP_TRIM_ENABLED 0
+#endif
+
 #define TM_LOG_DEBUG(fmt, ...) LOG_DEBUG("[TM] " fmt, ##__VA_ARGS__)
 #define TM_LOG_INFO(fmt, ...) LOG_INFO("[TM] " fmt, ##__VA_ARGS__)
 #define TM_LOG_WARN(fmt, ...) LOG_WARN("[TM] " fmt, ##__VA_ARGS__)
@@ -37,6 +50,14 @@ constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL; // Cache cleanup interv
 // Note: nodeinfo_direct_response must also be enabled for this to take effect
 constexpr uint32_t kRouterDefaultMaxHops = 3; // Routers: max 3 hops (can set lower via config)
 constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot increase)
+
+#if TMM_HOP_TRIM_ENABLED
+// Relayed broadcasts subject to hop-trimming: the high-volume routine position/telemetry traffic.
+constexpr bool hopTrimEligiblePort(meshtastic_PortNum portnum)
+{
+    return portnum == meshtastic_PortNum_POSITION_APP || portnum == meshtastic_PortNum_TELEMETRY_APP;
+}
+#endif
 
 /**
  * Convert seconds to milliseconds with overflow protection.
@@ -715,6 +736,39 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     return ProcessMessage::CONTINUE;
 }
 
+bool TrafficManagementModule::wouldHopTrim(const meshtastic_MeshPacket &p) const
+{
+#if TMM_HOP_TRIM_ENABLED
+    if (!moduleConfig.has_traffic_management || !moduleConfig.traffic_management.enabled)
+        return false;
+    // Decryptable broadcasts only; never our own (we scale those at Router::send).
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || isFromUs(&p) || !isBroadcast(p.to))
+        return false;
+    if (!hopTrimEligiblePort(p.decoded.portnum))
+        return false;
+    // Self-gating: getLastRequiredHop() is HOP_MAX until the histogram warms, so this engages
+    // only on a busy enough mesh for hop-scaling to be in effect.
+    if (!hopScalingModule || hopScalingModule->getLastRequiredHop() >= HOP_MAX)
+        return false;
+        // Channel gate, mirroring the precision clamp: well-known channels only unless opted in.
+#ifndef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
+    if (!channels.isWellKnownChannel(p.channel))
+        return false;
+#endif
+    // router_preserve_hops wins for infra: if we're a router deliberately preserving hops on
+    // non-position/telemetry traffic, don't trim it either (those keep full reach by operator choice).
+    if (moduleConfig.traffic_management.router_preserve_hops &&
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                  meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) &&
+        p.decoded.portnum != meshtastic_PortNum_POSITION_APP && p.decoded.portnum != meshtastic_PortNum_TELEMETRY_APP)
+        return false;
+    return true;
+#else
+    (void)p;
+    return false;
+#endif
+}
+
 void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
 {
     if (!moduleConfig.has_traffic_management || !moduleConfig.traffic_management.enabled)
@@ -774,6 +828,27 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
             }
         }
     }
+
+    // Hop-trimming — clamp relayed broadcast reach to budget = localCap + role grace. allowedForward
+    // decays with distance (budget - hopsAway); at 0 the packet is not rebroadcast (hop_limit=0, no
+    // exhaustRequested = no final hop). hop_start drops by the same delta so hopsAway stays honest.
+#if TMM_HOP_TRIM_ENABLED
+    if (wouldHopTrim(mp)) {
+        const uint8_t localCap = hopScalingModule->getLastRequiredHop();
+        const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(getFrom(&mp));
+        const meshtastic_Config_DeviceConfig_Role senderRole = sender ? sender->role : meshtastic_Config_DeviceConfig_Role_CLIENT;
+        const uint8_t budget = static_cast<uint8_t>(localCap + Default::hopTrimGrace(senderRole, mp.decoded.portnum));
+        const uint8_t hopsAway = (mp.hop_start >= mp.hop_limit) ? static_cast<uint8_t>(mp.hop_start - mp.hop_limit) : 0;
+        const uint8_t allowedForward = budget > hopsAway ? static_cast<uint8_t>(budget - hopsAway) : 0;
+        if (mp.hop_limit > allowedForward) {
+            logAction("trim", &mp, allowedForward ? "hop-trim" : "hop-trim-stop");
+            mp.hop_start = static_cast<uint8_t>(mp.hop_start - (mp.hop_limit - allowedForward));
+            mp.hop_limit = allowedForward;
+            if (allowedForward == 0)
+                incrementStat(&stats.hop_exhausted_packets); // trim-to-0 is, in effect, a hop exhaust
+        }
+    }
+#endif
 
     if (!shouldExhaust || !isBroadcast(mp.to))
         return;
