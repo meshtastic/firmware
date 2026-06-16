@@ -20,7 +20,7 @@
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 0
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 5
+#define SCREEN_TRANSITION_FRAMERATE 30
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
 #define USE_TFTDISPLAY 1
 #define HAS_PHYSICAL_KEYBOARD 1
@@ -53,7 +53,7 @@
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 // ratio of voltage divider = 2.0 (RD2=100k, RD3=100k)
 #define ADC_MULTIPLIER 2.11 // 2.0 + 10% for correction of display undervoltage.
-#define ADC_CHANNEL ADC1_GPIO4_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_3
 
 // keyboard
 #define I2C_SDA 18 // I2C pins for this board

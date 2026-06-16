@@ -4,12 +4,14 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <assert.h>
+#include <map>
 #include <pb_encode.h>
 #include <string>
 #include <vector>
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
+#include "concurrency/Lock.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
@@ -82,7 +84,9 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define SEGMENT_CHANNELS 8
 #define SEGMENT_NODEDATABASE 16
 
-#define DEVICESTATE_CUR_VER 24
+#define DEVICESTATE_CUR_VER 25
+// Lowest on-disk version we still know how to load. v24 saves are migrated
+// at boot via the parallel deviceonly_legacy descriptor and re-saved as v25.
 #define DEVICESTATE_MIN_VER 24
 
 extern meshtastic_DeviceState devicestate;
@@ -165,6 +169,21 @@ class NodeDB
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
     pb_size_t numMeshNodes;
+
+    // Satellite per-NodeNum maps. std::map avoids unordered_map's bucket-array
+    // preallocation; O(log N) lookup is fine at these sizes.
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    std::map<NodeNum, meshtastic_PositionLite> nodePositions;
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    std::map<NodeNum, meshtastic_DeviceMetrics> nodeTelemetry;
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    std::map<NodeNum, meshtastic_EnvironmentMetrics> nodeEnvironment;
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    std::map<NodeNum, meshtastic_StatusMessage> nodeStatus;
+#endif
 
     bool keyIsLowEntropy = false;
     bool hasWarned = false;
@@ -277,6 +296,43 @@ class NodeDB
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
+    // Thread-safe satellite-map accessors. Return false if absent or the
+    // corresponding DB is compiled out.
+    bool copyNodePosition(NodeNum n, meshtastic_PositionLite &out) const;
+    bool copyNodeTelemetry(NodeNum n, meshtastic_DeviceMetrics &out) const;
+    bool copyNodeEnvironment(NodeNum n, meshtastic_EnvironmentMetrics &out) const;
+    bool copyNodeStatus(NodeNum n, meshtastic_StatusMessage &out) const;
+    std::vector<NodeNum> snapshotPositionNodeNums(NodeNum exclude) const;
+    std::vector<NodeNum> snapshotTelemetryNodeNums(NodeNum exclude) const;
+    std::vector<NodeNum> snapshotEnvironmentNodeNums(NodeNum exclude) const;
+    std::vector<NodeNum> snapshotStatusNodeNums(NodeNum exclude) const;
+
+    void setNodeStatus(NodeNum n, const meshtastic_StatusMessage &status);
+    void touchNodePositionTime(NodeNum n, uint32_t time);
+
+    bool hasNodePosition(NodeNum n) const
+    {
+        meshtastic_PositionLite scratch;
+        return copyNodePosition(n, scratch);
+    }
+    bool hasNodeTelemetry(NodeNum n) const
+    {
+        meshtastic_DeviceMetrics scratch;
+        return copyNodeTelemetry(n, scratch);
+    }
+    bool hasNodeEnvironment(NodeNum n) const
+    {
+        meshtastic_EnvironmentMetrics scratch;
+        return copyNodeEnvironment(n, scratch);
+    }
+    bool hasNodeStatus(NodeNum n) const
+    {
+        meshtastic_StatusMessage scratch;
+        return copyNodeStatus(n, scratch);
+    }
+
+    void eraseNodeSatellites(NodeNum n);
+
     UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
 
     size_t getMaxNodesAllocatedSize()
@@ -285,7 +341,11 @@ class NodeDB
         emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
         size_t nodeDatabaseSize;
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size);
+        // Always include satellite slots so backups from higher-cap peers
+        // decode without truncation, even when our build excludes the DBs.
+        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size) +
+               (MAX_NUM_NODES * meshtastic_NodePositionEntry_size) + (MAX_NUM_NODES * meshtastic_NodeTelemetryEntry_size) +
+               (MAX_NUM_NODES * meshtastic_NodeEnvironmentEntry_size) + (MAX_NUM_NODES * meshtastic_NodeStatusEntry_size);
     }
 
     // returns true if the maximum number of nodes is reached or we are running low on memory
@@ -316,6 +376,12 @@ class NodeDB
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 #endif
 
+    /// Consolidate crypto key generation logic used across multiple modules
+    /// @param privateKey Optional 32-byte private key to use. If nullptr, generates new random keys.
+    bool generateCryptoKeyPair(const uint8_t *privateKey = nullptr);
+
+    bool createNewIdentity();
+
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
@@ -328,7 +394,40 @@ class NodeDB
         newStatus.notifyObservers(&status);
     }
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    /// Re-run loadFromDisk() after the encrypted storage is unlocked at runtime.
+    /// Trigger: PhoneAPI::handleLockdownAuthInline sets lockdownReloadPending
+    /// on a successful provisionPassphrase / unlockWithPassphrase; the main
+    /// loop in main.cpp services the flag and calls this method on the main
+    /// thread. The transport callback stack (BLE/USB) is too small for the
+    /// file IO + MAX_NUM_NODES vector reserve + proto decode this triggers.
+    ///
+    /// Returns true iff every encrypted file decrypted and decoded cleanly.
+    /// On false the caller MUST treat the storage as corrupt: leave the
+    /// connection unauthenticated, emit a LOCKED(storage_corrupt) status,
+    /// and refuse to call setAdminAuthorized — otherwise a subsequent
+    /// set_config would re-encrypt a wrong baseline (the locked-default
+    /// values still resident in `config` / `channelFile` / `nodeDatabase`)
+    /// and overwrite the operator's persisted state.
+    bool reloadFromDisk();
+
+    /// Disable lockdown: decrypt every encrypted pref file back to plaintext,
+    /// then remove the DEK / token / counter / backoff artifacts. Requires
+    /// EncryptedStorage to be unlocked (DEK in RAM). Returns false if any
+    /// file failed to revert — in which case the DEK is still present and the
+    /// device remains in lockdown so the operator can retry. APPROTECT is not
+    /// reversed. Called from the main loop via lockdownDisablePending.
+    bool disableLockdownToPlaintext();
+
+    /// Set by loadProto when any encrypted file fails to decrypt or decode.
+    /// Tracked across an entire loadFromDisk pass so reloadFromDisk can
+    /// surface the condition without callers re-walking each loadProto
+    /// result. Cleared at the top of every loadFromDisk run.
+    bool storageCorruptThisLoad = false;
+#endif
+
   private:
+    mutable concurrency::Lock satelliteMutex;
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
@@ -363,6 +462,16 @@ class NodeDB
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
     void sortMeshDB();
+
+    // Defined in NodeDBLegacyMigration.cpp. Decodes /prefs/nodes.proto via
+    // the legacy descriptor and copies entries into the v25 layout. Caller
+    // is responsible for save / install-default on the result.
+    bool migrateLegacyNodeDatabase();
+
+    // Route satellite-store decode entries straight into our maps instead of
+    // temp vectors. Must be paired — disarm before any other NodeDatabase decode.
+    void armNodeDatabaseDecodeTargets();
+    void disarmNodeDatabaseDecodeTargets();
 };
 
 extern NodeDB *nodeDB;
@@ -397,10 +506,80 @@ extern meshtastic_CriticalErrorCode error_code;
  * A numeric error address (nonzero if available)
  */
 extern uint32_t error_address;
+// Bit assignments for meshtastic_NodeInfoLite.bitfield.
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT 0
-#define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK (1 << NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT)
+#define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK (1u << NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT)
 #define NODEINFO_BITFIELD_IS_MUTED_SHIFT 1
-#define NODEINFO_BITFIELD_IS_MUTED_MASK (1 << NODEINFO_BITFIELD_IS_MUTED_SHIFT)
+#define NODEINFO_BITFIELD_IS_MUTED_MASK (1u << NODEINFO_BITFIELD_IS_MUTED_SHIFT)
+#define NODEINFO_BITFIELD_VIA_MQTT_SHIFT 2
+#define NODEINFO_BITFIELD_VIA_MQTT_MASK (1u << NODEINFO_BITFIELD_VIA_MQTT_SHIFT)
+#define NODEINFO_BITFIELD_IS_FAVORITE_SHIFT 3
+#define NODEINFO_BITFIELD_IS_FAVORITE_MASK (1u << NODEINFO_BITFIELD_IS_FAVORITE_SHIFT)
+#define NODEINFO_BITFIELD_IS_IGNORED_SHIFT 4
+#define NODEINFO_BITFIELD_IS_IGNORED_MASK (1u << NODEINFO_BITFIELD_IS_IGNORED_SHIFT)
+#define NODEINFO_BITFIELD_HAS_USER_SHIFT 5
+#define NODEINFO_BITFIELD_HAS_USER_MASK (1u << NODEINFO_BITFIELD_HAS_USER_SHIFT)
+#define NODEINFO_BITFIELD_IS_LICENSED_SHIFT 6
+#define NODEINFO_BITFIELD_IS_LICENSED_MASK (1u << NODEINFO_BITFIELD_IS_LICENSED_SHIFT)
+#define NODEINFO_BITFIELD_IS_UNMESSAGABLE_SHIFT 7
+#define NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_IS_UNMESSAGABLE_SHIFT)
+#define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT 8
+#define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT)
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 9
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1u << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
+// Bits 10..31 reserved for future single-bit flags.
+
+// Convenience accessors so call sites read like the old struct fields.
+inline bool nodeInfoLiteHasUser(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_HAS_USER_MASK);
+}
+inline bool nodeInfoLiteViaMqtt(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_VIA_MQTT_MASK);
+}
+inline bool nodeInfoLiteIsFavorite(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_IS_FAVORITE_MASK);
+}
+inline bool nodeInfoLiteIsIgnored(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_IS_IGNORED_MASK);
+}
+inline bool nodeInfoLiteIsLicensed(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_IS_LICENSED_MASK);
+}
+inline bool nodeInfoLiteHasIsUnmessagable(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK);
+}
+inline bool nodeInfoLiteIsUnmessagable(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_IS_UNMESSAGABLE_MASK);
+}
+inline bool nodeInfoLiteIsMuted(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK);
+}
+inline bool nodeInfoLiteIsKeyManuallyVerified(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK);
+}
+inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
+}
+
+inline void nodeInfoLiteSetBit(meshtastic_NodeInfoLite *n, uint32_t mask, bool value)
+{
+    if (!n)
+        return;
+    if (value)
+        n->bitfield |= mask;
+    else
+        n->bitfield &= ~mask;
+}
 
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \

@@ -2,6 +2,8 @@
 
 #include "./DMApplet.h"
 
+#include "MessageStore.h"
+
 using namespace NicheGraphics;
 
 void InkHUD::DMApplet::onActivate()
@@ -66,10 +68,10 @@ void InkHUD::DMApplet::onRender(bool full)
     // - shortname and long name, if available, or
     // - node id
     meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(latestMessage->dm.sender);
-    if (sender && sender->has_user) {
+    if (nodeInfoLiteHasUser(sender)) {
         header += parseShortName(sender); // May be last-four of node if unprintable (emoji, etc)
         header += " (";
-        header += parse(sender->user.long_name);
+        header += parse(sender->long_name);
         header += ")";
     } else
         header += hexifyNodeNum(latestMessage->dm.sender);
@@ -92,7 +94,7 @@ void InkHUD::DMApplet::onRender(bool full)
     // ===================
 
     // Parse any non-ascii chars in the message
-    std::string text = parse(latestMessage->dm.text);
+    std::string text = parse(std::string(MessageStore::getText(latestMessage->dm)));
 
     // Extra gap below the header
     int16_t textTop = headerDivY + padDivH;

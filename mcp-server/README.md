@@ -166,15 +166,73 @@ rather than auto-`sudo`'ing mid-run.
 
 ## Environment variables
 
-| Var                        | Default                                                     | Purpose                                                             |
-| -------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- |
-| `MESHTASTIC_FIRMWARE_ROOT` | walks up from cwd for `platformio.ini`                      | Pin the firmware repo                                               |
-| `MESHTASTIC_PIO_BIN`       | `~/.platformio/penv/bin/pio` → `$PATH` `pio` → `platformio` | Override `pio` location                                             |
-| `MESHTASTIC_ESPTOOL_BIN`   | `<firmware>/.venv/bin/esptool` → `$PATH`                    | Override esptool                                                    |
-| `MESHTASTIC_NRFUTIL_BIN`   | `$PATH`                                                     | Override nrfutil                                                    |
-| `MESHTASTIC_PICOTOOL_BIN`  | `$PATH`                                                     | Override picotool                                                   |
-| `MESHTASTIC_MCP_SEED`      | `mcp-<user>-<host>`                                         | PSK seed for test-harness session (CI override)                     |
-| `MESHTASTIC_MCP_FLASH_LOG` | `<mcp-server>/tests/flash.log`                              | Tee target for pio/esptool/nrfutil subprocess output (TUI tails it) |
+| Var                        | Default                                                     | Purpose                                                                                                          |
+| -------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `MESHTASTIC_FIRMWARE_ROOT` | walks up from cwd for `platformio.ini`                      | Pin the firmware repo                                                                                            |
+| `MESHTASTIC_PIO_BIN`       | `~/.platformio/penv/bin/pio` → `$PATH` `pio` → `platformio` | Override `pio` location                                                                                          |
+| `MESHTASTIC_ESPTOOL_BIN`   | `<firmware>/.venv/bin/esptool` → `$PATH`                    | Override esptool                                                                                                 |
+| `MESHTASTIC_NRFUTIL_BIN`   | `$PATH`                                                     | Override nrfutil                                                                                                 |
+| `MESHTASTIC_PICOTOOL_BIN`  | `$PATH`                                                     | Override picotool                                                                                                |
+| `MESHTASTIC_MCP_SEED`      | `mcp-<user>-<host>`                                         | PSK seed for test-harness session (CI override)                                                                  |
+| `MESHTASTIC_MCP_FLASH_LOG` | `<mcp-server>/tests/flash.log`                              | Tee target for pio/esptool/nrfutil subprocess output (TUI tails it)                                              |
+| `MESHTASTIC_MCP_TCP_HOST`  | unset                                                       | `host` or `host:port` of a `meshtasticd` daemon to surface as a TCP device (see "TCP / native-host nodes" below) |
+
+## TCP / native-host nodes
+
+The `native-macos` and `native` PlatformIO envs build a headless `meshtasticd`
+binary that runs on the host (Apple Silicon / Intel macOS, or Linux Portduino).
+The daemon exposes the meshtastic TCP API on port `4403` rather than a USB
+serial endpoint — point the MCP server at it via `MESHTASTIC_MCP_TCP_HOST`:
+
+```bash
+# 1. Build + run a daemon on this host (see variants/native/portduino/platformio.ini
+#    for full Homebrew prereqs and CH341 LoRa-adapter setup).
+pio run -e native-macos
+~/.meshtasticd/meshtasticd
+
+# 2. Point the MCP server at it.
+export MESHTASTIC_MCP_TCP_HOST=localhost     # or host:port, default port 4403
+```
+
+**First-run gotcha — MAC address.** `meshtasticd` derives its MAC from the
+USB adapter's serial-number / product strings. Many cheap CH341 dongles
+(MeshStick included — VID 0x1A86 / PID 0x5512) ship with `iSerialNumber=0`
+and `iProduct=0`, so the daemon aborts on boot with `*** Blank MAC Address
+not allowed!`. Set the MAC explicitly in `config.yaml`:
+
+```yaml
+# Under General:
+MACAddress: 02:CA:FE:BA:BE:01
+```
+
+Use a locally-administered address (first byte's second-LSB set, e.g.
+`02:*` / `06:*` / `0A:*` / `0E:*`) to avoid colliding with a real OUI.
+
+There is also a `--hwid AA:BB:CC:DD:EE:FF` CLI flag visible in
+`meshtasticd --help`, but it is **currently broken** in
+`MAC_from_string()` (`src/platform/portduino/PortduinoGlue.cpp`): the
+function strips colons from its parameter but then reads bytes from the
+global `portduino_config.mac_address`, so `--hwid` is silently overridden
+when `MACAddress:` is also set, and crashes the daemon (uncaught
+`std::invalid_argument: stoi: no conversion`) when it isn't. Use the YAML
+form until that's fixed upstream.
+
+`list_devices` will surface the daemon as `tcp://localhost:4403` with
+`likely_meshtastic=True`, so `device_info`, `list_nodes`, `get_config`,
+`set_config`, `set_owner`, `send_text`, `userprefs_*`, and the admin RPCs
+auto-select it when no `port` is passed. Pass `port="tcp://other-host:9999"`
+explicitly to target a different daemon.
+
+**Tools that don't apply to a TCP/native node** (no USB hardware to operate
+on) raise a clear `ConnectionError` rather than failing mysteriously:
+`pio_flash`, `erase_and_flash`, `update_flash`, `touch_1200bps`,
+`serial_open` (use info/admin tools directly), and the vendor escape hatches
+`esptool_*`, `nrfutil_*`, `picotool_*`. `pio_flash` against a `native*` env
+similarly raises — there's no upload step; use `build` and run the binary
+directly.
+
+The pytest harness in `tests/` still assumes USB-attached devices per role —
+TCP-aware fixtures are not part of this surface yet.
 
 ## Hardware Test Suite
 

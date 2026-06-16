@@ -2,6 +2,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+#include "input/InputBroker.h"
+#endif
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -59,12 +62,31 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
-#if HAS_WIFI || defined(USE_WS5500)
+#ifdef ARCH_NRF54L15
+void nrf54l15Setup();
+void nrf54l15Loop();
+NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
+#endif
+
+#ifdef MESHTASTIC_ENABLE_APPROTECT
+#include "security/APProtect.h"
+#endif
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+#include "mesh/PhoneAPI.h"
+#endif
+#ifdef MESHTASTIC_LOCKDOWN
+#include "security/LockdownDisplay.h"
+#endif
+
+#if HAS_WIFI || defined(USE_WS5500) || defined(USE_CH390D)
 #include "mesh/api/WiFiServerAPI.h"
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
 #include "mesh/api/ethServerAPI.h"
 #include "mesh/eth/ethClient.h"
 #endif
@@ -126,6 +148,10 @@ void printPartitionTable()
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
+#endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#include "motion/MagnetometerThread.h"
+MagnetometerThread *magnetometerThread = nullptr;
 #endif
 
 #ifdef HAS_I2S
@@ -197,6 +223,8 @@ bool osk_found = false;
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the Accelerometer (if found)
 ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
+// The I2C address of the Magnetometer (if found)
+ScanI2C::DeviceAddress magnetometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the RGB LED (if found)
 ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 /// The I2C address of our Air Quality Indicator (if found)
@@ -245,7 +273,7 @@ const char *getDeviceName()
 uint32_t timeLastPowered = 0;
 
 static OSThread *powerFSMthread;
-OSThread *ambientLightingThread;
+AmbientLightingThread *ambientLightingThread;
 
 RadioLibHal *RadioLibHAL = NULL;
 
@@ -335,141 +363,12 @@ void setup()
 
 #ifdef WIFI_LED
     pinMode(WIFI_LED, OUTPUT);
-    digitalWrite(WIFI_LED, LOW);
+    digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
 
 #ifdef BLE_LED
     pinMode(BLE_LED, OUTPUT);
-#ifdef BLE_LED_INVERTED
-    digitalWrite(BLE_LED, HIGH);
-#else
-    digitalWrite(BLE_LED, LOW);
-#endif
-#endif
-
-#if defined(T_DECK)
-    // GPIO10 manages all peripheral power supplies
-    // Turn on peripheral power immediately after MUC starts.
-    // If some boards are turned on late, ESP32 will reset due to low voltage.
-    // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) ,
-    // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
-    pinMode(KB_POWERON, OUTPUT);
-    digitalWrite(KB_POWERON, HIGH);
-    // T-Deck has all three SPI peripherals (TFT, SD, LoRa) attached to the same SPI bus
-    // We need to initialize all CS pins in advance otherwise there will be SPI communication issues
-    // e.g. when detecting the SD card
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    delay(100);
-#elif defined(T_DECK_PRO)
-    pinMode(LORA_EN, OUTPUT);
-    digitalWrite(LORA_EN, HIGH);
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(PIN_EINK_CS, OUTPUT);
-    digitalWrite(PIN_EINK_CS, HIGH);
-#if PIN_EINK_RES >= 0
-    pinMode(PIN_EINK_RES, OUTPUT);
-    digitalWrite(PIN_EINK_RES, HIGH);
-#endif
-    pinMode(CST328_PIN_RST, OUTPUT);
-    digitalWrite(CST328_PIN_RST, HIGH);
-#elif defined(T_LORA_PAGER)
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    pinMode(KB_INT, INPUT_PULLUP);
-    // io expander
-    io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
-    io.pinMode(EXPANDS_DRV_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_DRV_EN, HIGH);
-    io.pinMode(EXPANDS_AMP_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_AMP_EN, LOW);
-    io.pinMode(EXPANDS_LORA_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_LORA_EN, HIGH);
-    io.pinMode(EXPANDS_GPS_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPS_EN, HIGH);
-    io.pinMode(EXPANDS_KB_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_KB_EN, HIGH);
-    io.pinMode(EXPANDS_SD_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_SD_EN, HIGH);
-    io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
-    io.pinMode(EXPANDS_SD_PULLEN, INPUT);
-#elif defined(HACKADAY_COMMUNICATOR)
-    pinMode(KB_INT, INPUT);
     digitalWrite(BLE_LED, LED_STATE_OFF);
-#endif
-
-#if defined(T_DECK)
-    // GPIO10 manages all peripheral power supplies
-    // Turn on peripheral power immediately after MUC starts.
-    // If some boards are turned on late, ESP32 will reset due to low voltage.
-    // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) ,
-    // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
-    pinMode(KB_POWERON, OUTPUT);
-    digitalWrite(KB_POWERON, HIGH);
-    // T-Deck has all three SPI peripherals (TFT, SD, LoRa) attached to the same SPI bus
-    // We need to initialize all CS pins in advance otherwise there will be SPI communication issues
-    // e.g. when detecting the SD card
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    delay(100);
-#elif defined(T_DECK_PRO)
-    pinMode(LORA_EN, OUTPUT);
-    digitalWrite(LORA_EN, HIGH);
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(PIN_EINK_CS, OUTPUT);
-    digitalWrite(PIN_EINK_CS, HIGH);
-#if PIN_EINK_RES >= 0
-    pinMode(PIN_EINK_RES, OUTPUT);
-    digitalWrite(PIN_EINK_RES, HIGH);
-#endif
-    pinMode(CST328_PIN_RST, OUTPUT);
-    digitalWrite(CST328_PIN_RST, HIGH);
-#elif defined(T_LORA_PAGER)
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(TFT_CS, OUTPUT);
-    digitalWrite(TFT_CS, HIGH);
-    pinMode(KB_INT, INPUT_PULLUP);
-    // io expander
-    io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
-    io.pinMode(EXPANDS_DRV_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_DRV_EN, HIGH);
-    io.pinMode(EXPANDS_AMP_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_AMP_EN, LOW);
-    io.pinMode(EXPANDS_LORA_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_LORA_EN, HIGH);
-    io.pinMode(EXPANDS_GPS_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPS_EN, HIGH);
-    io.pinMode(EXPANDS_KB_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_KB_EN, HIGH);
-    io.pinMode(EXPANDS_SD_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_SD_EN, HIGH);
-    io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
-    io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
-    io.pinMode(EXPANDS_SD_PULLEN, INPUT);
-#elif defined(HACKADAY_COMMUNICATOR)
-    pinMode(KB_INT, INPUT);
 #endif
 
     concurrency::hasBeenSetup = true;
@@ -492,6 +391,14 @@ void setup()
 #ifdef DEBUG_PORT
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
+
+    // M23 (audit): APPROTECT engagement moved below fsInit() so we can gate
+    // on EncryptedStorage::isProvisioned(). Engaging on an unprovisioned dev
+    // board permanently locks SWD before the operator has even set a
+    // passphrase — a misconfigured CI build flashed to a developer device
+    // would brick its debug port on first boot. Now we only engage when the
+    // device has a DEK file on flash, i.e. the operator has explicitly
+    // committed to lockdown via passphrase provisioning.
 
 #ifdef UNPHONE
     unphone.printStore();
@@ -523,7 +430,12 @@ void setup()
 #endif
 #endif
 
-#if defined(DEBUG_MUTE) && defined(DEBUG_PORT)
+    // The DEBUG_MUTE "we are muted, FYI" banner spills APP_VERSION / APP_ENV /
+    // APP_REPO out the USB CDC even with logging otherwise suppressed — a free
+    // firmware-fingerprinting primitive for an attacker holding the cable.
+    // Under MESHTASTIC_LOCKDOWN we want the device to look uniformly silent
+    // until the operator authenticates, so skip the banner entirely there.
+#if defined(DEBUG_MUTE) && defined(DEBUG_PORT) && !defined(MESHTASTIC_LOCKDOWN)
     DEBUG_PORT.printf("\r\n\r\n//\\ E S H T /\\ S T / C\r\n");
     DEBUG_PORT.printf("Version %s for %s from %s\r\n", optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
     DEBUG_PORT.printf("Debug mute is enabled, there will be no serial output.\r\n");
@@ -549,6 +461,11 @@ void setup()
 #if defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE); // turn on the display power
+#endif
+
+#if defined(PIN_SENSOR_EN)
+    pinMode(PIN_SENSOR_EN, OUTPUT);
+    digitalWrite(PIN_SENSOR_EN, PIN_SENSOR_EN_ACTIVE); // turn on sensor power
 #endif
 
 #if defined(BIAS_T_ENABLE)
@@ -589,6 +506,38 @@ void setup()
     OSThread::setup();
 
     fsInit();
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    EncryptedStorage::initLocked();
+    if (!EncryptedStorage::isUnlocked()) {
+        if (!EncryptedStorage::isProvisioned()) {
+            LOG_WARN("Lockdown: Device not provisioned — connect and set a passphrase to unlock storage");
+        } else {
+            LOG_WARN("Lockdown: Device locked — connect and provide passphrase to unlock storage");
+        }
+    }
+#endif
+
+#if defined(MESHTASTIC_ENABLE_APPROTECT) && defined(MESHTASTIC_ENCRYPTED_STORAGE)
+    // M23 (audit): only engage the irreversible UICR APPROTECT lockout once
+    // the device has been provisioned with a passphrase. A misconfigured
+    // CI build of a lockdown variant flashed to a developer board would
+    // otherwise burn SWD on first boot before the operator has even set a
+    // passphrase, taking the board out of the dev/recovery workflow with
+    // no real security benefit (there's no DEK to protect yet). Once a
+    // DEK file exists, the operator has committed to lockdown — engaging
+    // APPROTECT then is the protection they asked for.
+    if (EncryptedStorage::isProvisioned()) {
+        enableAPProtect();
+    } else {
+        LOG_INFO("APPROTECT deferred: device not yet provisioned");
+    }
+#elif defined(MESHTASTIC_ENABLE_APPROTECT)
+    // Lockdown without encrypted storage shouldn't be reachable per
+    // configuration.h, but if it ever is, fall back to the unconditional
+    // engagement.
+    enableAPProtect();
+#endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #if defined(I2C_SDA1) && defined(ARCH_RP2040)
@@ -791,6 +740,11 @@ void setup()
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
 #endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+    auto mag_info = i2cScanner->firstMagnetometer();
+    magnetometer_found = mag_info.type != ScanI2C::DeviceType::NONE ? mag_info.address : magnetometer_found;
+    LOG_DEBUG("mag_info = %i", mag_info.type);
+#endif
 
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA226, meshtastic_TelemetrySensorType_INA226);
@@ -803,6 +757,8 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMI8658, meshtastic_TelemetrySensorType_QMI8658);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC5883L, meshtastic_TelemetrySensorType_QMC5883L);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::HMC5883L, meshtastic_TelemetrySensorType_QMC5883L);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MMC5983MA, meshtastic_TelemetrySensorType_MMC5983MA);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM42607P, meshtastic_TelemetrySensorType_ICM42607P);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
@@ -824,6 +780,9 @@ void setup()
 
 #ifdef ARCH_NRF52
     nrf52Setup();
+#endif
+#ifdef ARCH_NRF54L15
+    nrf54l15Setup();
 #endif
 
 #ifdef ARCH_RP2040
@@ -860,8 +819,20 @@ void setup()
 #elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #else
-    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO) {
         screen_model = config.display.oled;
+
+        // Fix: update geometry for SH1107 128x128 selected via menu
+        if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128) {
+            screen_geometry = GEOMETRY_128_128;
+            screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // normalize
+        }
+    }
+#endif
+#ifdef OLED_GEOMETRY_OVERRIDE
+    // Per-variant geometry (e.g. 72x40 micro-OLEDs). Takes precedence over the
+    // default GEOMETRY_128_64 set at the top of setup().
+    screen_geometry = OLED_GEOMETRY_OVERRIDE;
 #endif
 #endif
 
@@ -869,6 +840,11 @@ void setup()
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
+    }
+#endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+    if (mag_info.type != ScanI2C::DeviceType::NONE) {
+        magnetometerThread = new MagnetometerThread(mag_info.type);
     }
 #endif
 
@@ -1159,6 +1135,11 @@ uint32_t rebootAtMsec;     // If not zero we will reboot at this time (used to r
 uint32_t shutdownAtMsec;   // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for OTA handoff)
 
+#if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
+volatile bool lockdownReloadPending;  // see main.h — deferred NodeDB reload after lockdown unlock
+volatile bool lockdownDisablePending; // see main.h — deferred decrypt-revert after lockdown disable
+#endif
+
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
 // This will suppress the current delay and instead try to run ASAP.
 bool runASAP;
@@ -1210,7 +1191,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
 // Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
-#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL) || defined(CONFIG_IDF_TARGET_ESP32C6)
+#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
 #endif
 
@@ -1243,11 +1224,93 @@ void loop()
 {
     runASAP = false;
 
+#if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
+    if (lockdownDisablePending) {
+        lockdownDisablePending = false;
+        LOG_INFO("Lockdown: disabling — reverting encrypted storage to plaintext");
+        if (nodeDB->disableLockdownToPlaintext()) {
+            LOG_INFO("Lockdown: disabled, rebooting into normal mode");
+            PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_DISABLED, "", 0, 0, 0);
+            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        } else {
+            // Revert failed mid-way (a file couldn't be decrypted/rewritten).
+            // The DEK file is still present (it's deleted last), so the device
+            // stays in lockdown and the operator can retry disable. Surface
+            // the failure rather than leaving the client hanging.
+            LOG_ERROR("Lockdown: disable revert failed — device remains in lockdown");
+            PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "disable_failed", 0, 0, 0);
+        }
+    }
+
+    if (lockdownReloadPending) {
+        lockdownReloadPending = false;
+        LOG_INFO("Lockdown: reloading config from disk after unlock");
+        bool reloadOk = nodeDB->reloadFromDisk();
+        if (!reloadOk) {
+            // Storage decrypt/decode failed during reload. Treat as
+            // unrecoverable for this boot: lock storage, revoke any
+            // auth that managed to slip through (defense in depth — the
+            // cold-unlock path doesn't authorize until completion, but
+            // a concurrent re-verify-path call from another connection
+            // might have), and notify clients. Storage will be locked
+            // on next boot anyway; deferring to the user-visible
+            // notification path is sufficient for now.
+            LOG_ERROR("Lockdown: reload failed — locking and notifying clients");
+            EncryptedStorage::lockNow();
+            PhoneAPI::revokeAllAuth();
+        }
+        PhoneAPI::completePendingUnlocks(reloadOk);
+    }
+
+    // Periodic session-expiry check. Cheap — millis() comparison. Don't
+    // hammer it every loop tick; once a second is plenty.
+    static uint32_t lastSessionCheckMs = 0;
+    if (millis() - lastSessionCheckMs > 1000) {
+        lastSessionCheckMs = millis();
+        if (rebootAtMsec == 0 && EncryptedStorage::isUnlocked() && EncryptedStorage::isSessionExpired()) {
+            // The session expired. Two paths:
+            //   1. Budget remains (bootsRemaining > 0): decrement the
+            //      on-flash boot count in place, revoke per-connection
+            //      auth, re-engage screen redaction, re-arm the uptime
+            //      timer — all WITHOUT rebooting. Storage stays unlocked
+            //      so the mesh keeps routing. Clients must re-authenticate
+            //      to see content again. The decrement is what enforces
+            //      the rollback ceiling — bootsRemaining ticks down
+            //      monotonically whether the device reboots or not.
+            //   2. Budget exhausted (bootsRemaining == 0): no more
+            //      sessions to grant. Hard lock (token deleted, DEK
+            //      zeroed) and reboot. Operator must re-enter passphrase.
+            if (EncryptedStorage::getBootsRemaining() == 0) {
+                LOG_WARN("Lockdown: session limit reached and boot budget exhausted, locking and rebooting");
+                EncryptedStorage::lockNow();
+                PhoneAPI::revokeAllAuth();
+                PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "session_budget_exhausted", 0, 0, 0);
+                rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            } else {
+                uint8_t newBoots = EncryptedStorage::consumeSessionBoot();
+                LOG_WARN("Lockdown: session expired, rolled to next budget slot (boots=%u remaining)", newBoots);
+                PhoneAPI::revokeAllAuth();
+                meshtastic_security::lockScreen();
+                // Signal clients that they need to re-auth on this
+                // connection. Storage is still unlocked (DEK in RAM,
+                // mesh keeps routing) but per-connection auth is gone.
+                // Reusing the LOCKED(needs_auth) post-config emission
+                // pattern so existing clients don't need a new state.
+                PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "needs_auth", newBoots,
+                                                  EncryptedStorage::getValidUntilEpoch(), 0);
+            }
+        }
+    }
+#endif
+
 #ifdef ARCH_ESP32
     esp32Loop();
 #endif
 #ifdef ARCH_NRF52
     nrf52Loop();
+#endif
+#ifdef ARCH_NRF54L15
+    nrf54l15Loop();
 #endif
     power->powerCommandsCheck();
 
@@ -1322,7 +1385,7 @@ void loop()
     }
 #endif
 #endif
-#if HAS_SCREEN && ENABLE_MESSAGE_PERSISTENCE
+#if (HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)) && ENABLE_MESSAGE_PERSISTENCE
     messageStoreAutosaveTick();
 #endif
     long delayMsec = mainController.runOrDelay();
