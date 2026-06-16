@@ -17,11 +17,15 @@ test = [
   "pytest-timeout>=2.3",
   "coverage[toml]>=7",
   "pyyaml>=6",
-  # textual is required by the `meshtastic-mcp-test-tui` script (see
-  # `src/meshtastic_mcp/cli/test_tui.py`). Bundled into `test` rather than a
-  # separate `[tui]` extra because v1 expects test operators are the only
-  # consumers; revisit if install cost pushes back.
-  "textual>=0.50",
+]
+# Web stack (FastAPI backend + pywebview desktop window) that replaces the
+# Textual TUI. Serves the built Vue SPA in `web/static`. Camera streaming
+# reuses the `[ui]` extra (opencv-python-headless).
+web = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "aiosqlite>=0.19",
+  "pywebview>=5.0",
 ]
 # UI test tier + `capture_screen` MCP tool. Optional because the ML OCR
 # model alone is ~100 MB and camera hardware is user-supplied.
@@ -32,19 +36,15 @@ ui = [
   "numpy>=1.26",
   "easyocr>=1.7",
   "Pillow>=10.0",
-  # Renders the latest camera capture as Unicode half-blocks in the TUI
-  # (MESHTASTIC_UI_TUI_CAMERA=1). Terminal-agnostic — no kitty / sixel
-  # dependency. Pure Python, tiny.
-  "rich-pixels>=3.0",
 ]
 ui-min = ["opencv-python-headless>=4.9", "numpy>=1.26"]
 
 [project.scripts]
 meshtastic-mcp = "meshtastic_mcp.__main__:main"
-# Live TUI wrapping run-tests.sh — shells out to the same script the plain
-# CLI uses, tails pytest-reportlog for per-test state, and polls the device
-# list at startup + post-run (port lock forces it to stay idle during the run).
-meshtastic-mcp-test-tui = "meshtastic_mcp.cli.test_tui:main"
+# Web stack replacing the Textual TUI: a FastAPI backend (REST + WebSocket)
+# that reuses the library modules and serves the Vue SPA, opened in a
+# pywebview window (`--browser` to serve only).
+meshtastic-mcp-web = "meshtastic_mcp.web.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

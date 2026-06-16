@@ -10,6 +10,47 @@
         "isDefault": true
       },
       "label": "PlatformIO: Build"
+    },
+    {
+      "label": "FleetSuite",
+      "detail": "Build the SPA if needed and open the FleetSuite desktop window",
+      "type": "shell",
+      "command": "./scripts/fleetsuite.sh",
+      "options": { "cwd": "${workspaceFolder}/mcp-server" },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "group": "none"
+    },
+    {
+      "label": "FleetSuite: Dev (HMR)",
+      "detail": "Run the backend + Vite dev server with hot-reload",
+      "type": "shell",
+      "command": "./scripts/fleetsuite.sh --dev",
+      "options": { "cwd": "${workspaceFolder}/mcp-server" },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "isBackground": true
+    },
+    {
+      "label": "FleetSuite: Rebuild + Run",
+      "detail": "Force a fresh SPA build, then open the window",
+      "type": "shell",
+      "command": "./scripts/fleetsuite.sh --rebuild",
+      "options": { "cwd": "${workspaceFolder}/mcp-server" },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
     }
   ]
 }

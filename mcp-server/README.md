@@ -174,7 +174,7 @@ rather than auto-`sudo`'ing mid-run.
 | `MESHTASTIC_NRFUTIL_BIN`   | `$PATH`                                                     | Override nrfutil                                                                                                 |
 | `MESHTASTIC_PICOTOOL_BIN`  | `$PATH`                                                     | Override picotool                                                                                                |
 | `MESHTASTIC_MCP_SEED`      | `mcp-<user>-<host>`                                         | PSK seed for test-harness session (CI override)                                                                  |
-| `MESHTASTIC_MCP_FLASH_LOG` | `<mcp-server>/tests/flash.log`                              | Tee target for pio/esptool/nrfutil subprocess output (TUI tails it)                                              |
+| `MESHTASTIC_MCP_FLASH_LOG` | `<mcp-server>/tests/flash.log`                              | Tee target for pio/esptool/nrfutil subprocess output (web UI tails it)                                           |
 | `MESHTASTIC_MCP_TCP_HOST`  | unset                                                       | `host` or `host:port` of a `meshtasticd` daemon to surface as a TCP device (see "TCP / native-host nodes" below) |
 
 ## TCP / native-host nodes
@@ -333,31 +333,51 @@ captures just become 1×1 black PNGs.
   **Meshtastic debug** section attached on failure with a 200-line firmware
   log tail + device-state dump. Open this first on failures.
 - `junit.xml` — CI-parseable.
-- `reportlog.jsonl` — `pytest-reportlog` event stream; consumed by the TUI.
+- `reportlog.jsonl` — `pytest-reportlog` event stream; consumed by the web UI.
 - `fwlog.jsonl` — firmware log mirror (`meshtastic.log.line` pubsub → JSONL).
 - `flash.log` — tee of all pio / esptool / nrfutil / picotool subprocess
   output during the run (driven by `MESHTASTIC_MCP_FLASH_LOG`).
 
-### Live TUI
+### Web UI (FleetSuite)
+
+A Vue 3 + Tailwind desktop web app replaces the old Textual TUI. It serves a
+FastAPI backend (REST + WebSocket) that reuses the library modules and a
+SQLite registry of devices and cameras. See [web-ui/README.md](web-ui/README.md).
+
+**One command** (bootstraps the venv, web deps, npm packages, and SPA build on
+first run, then launches):
 
 ```bash
-.venv/bin/meshtastic-mcp-test-tui
-.venv/bin/meshtastic-mcp-test-tui tests/mesh    # pytest args pass through
+./scripts/fleetsuite.sh            # open the native desktop window
+./scripts/fleetsuite.sh --browser  # serve only → http://127.0.0.1:8765
+./scripts/fleetsuite.sh --dev      # backend + Vite dev server with hot-reload
+./scripts/fleetsuite.sh --rebuild  # force a fresh SPA build first
 ```
 
-Textual-based wrapper over `run-tests.sh` with a live test tree, tier
-counters, pytest output pane, firmware-log pane, and a device-status strip.
-Key bindings: `r` re-run focused, `f` filter, `d` failure detail, `g` open
-`report.html`, `x` export reproducer bundle, `l` cycle fw-log filter, `q`
-quit (SIGINT → SIGTERM → SIGKILL escalation).
+In **VS Code**: Run Task → **FleetSuite** (or _FleetSuite: Dev (HMR)_). Or do it
+by hand:
 
-Set `MESHTASTIC_UI_TUI_CAMERA=1` to mount a bottom-of-screen **UI camera**
-panel. Left side: the latest capture PNG rendered as Unicode half-blocks
-(via `rich-pixels`, works in any terminal — no kitty/sixel required).
-Right side: live transcript tail ("step 3 — frame 4/8 name=nodelist_nodes
-— OCR: Nodes 2/2") so you can see every event-injection and its result
-as each UI test runs. Requires the `[ui]` extras for image rendering; the
-transcript alone works without them.
+```bash
+.venv/bin/pip install -e '.[web]'           # FastAPI + uvicorn + aiosqlite + pywebview
+(cd web-ui && npm install && npm run build)  # build the SPA into web/static
+.venv/bin/meshtastic-mcp-web                  # opens a native pywebview window
+.venv/bin/meshtastic-mcp-web --browser        # serve only → http://127.0.0.1:8765
+```
+
+Two views: **Fleet** (per-device cards keyed by USB serial that follow a device
+across changing ports, with live serial logs, packet/telemetry, test history,
+full device control, and an assignable live USB camera feed) and **Test Suite**
+(run/stop `run-tests.sh`, live tier counters + test tree, pytest/flash/firmware
+log panes, run history). The header shows the firmware branch/SHA/dirty live.
+
+**Native nodes (Docker).** The Fleet view can run Linux-native `meshtasticd`
+nodes in Docker (no radio, sim mode) and manage them as TCP devices — run /
+stop / restart / remove, live `docker logs`, config/send-text/inject-NodeDB over
+`tcp://`. By default it builds the checkout's own image from `Dockerfile`; set
+`MESHTASTIC_NATIVE_IMAGE` (e.g. `meshtastic/meshtasticd:latest`) to use a
+prebuilt image instead.
+
+For development with HMR, run `scripts/web-dev.sh` (backend + Vite together).
 
 ### Slash commands
 

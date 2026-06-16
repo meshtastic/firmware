@@ -33,3 +33,10 @@ tests/reproducers/
 # UI-tier camera captures + per-test transcripts. Regenerated every run;
 # left on disk for human review between runs.
 tests/ui_captures/
+
+# Web stack (FleetSuite): node deps + the built SPA Vite emits into the
+# package (regenerated via `cd web-ui && npm run build`). The SQLite registry
+# lives under .mtlog/ (already ignored above).
+web-ui/node_modules/
+web-ui/dist/
+src/meshtastic_mcp/web/static/
