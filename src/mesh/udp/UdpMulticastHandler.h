@@ -78,9 +78,9 @@ class UdpMulticastHandler final
                 return;
             }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
-            // Preserve the whole MeshPacket as received: channel (0 for PKI DMs) and pki_encrypted are
-            // copied verbatim so the receiver attempts PKI decryption instead of falling back to
-            // channel decoding (hash 0x0). Do not clear/normalize those fields here.
+            // Preserve the whole MeshPacket as received: while payload_variant is encrypted, `channel` is a hash (and is 0 for PKI DMs),
+            // so it must be copied verbatim for the router to attempt PKI/channel decryption.
+            // Keep pki_encrypted/public_key too so downstream auth/metadata can reflect PKI usage correctly.
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             // Unset received SNR/RSSI
             p->rx_snr = 0;
