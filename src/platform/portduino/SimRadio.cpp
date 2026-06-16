@@ -252,6 +252,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
 
     // pb_encode_to_bytes writes into decoded.payload, which aliases `encrypted` in the union, so all
     // reads of p->encrypted above must be complete before this point.
+    p->decoded = meshtastic_Data_init_zero;
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Compressed_msg, &c);
