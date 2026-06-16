@@ -223,20 +223,26 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
     }
 
     meshtastic_Compressed c = meshtastic_Compressed_init_default;
+    // The Compressed wrapper is re-encoded back into decoded.payload.bytes (the same 233-byte field
+    // its data is copied from), so the carried bytes must leave room for the protobuf framing or
+    // pb_encode_to_bytes() below overflows and silently drops the loopback payload. meshtastic_Compressed_size
+    // is the max encoded size for a full data field, so (meshtastic_Compressed_size - sizeof(c.data.bytes))
+    // is the worst-case framing overhead to reserve.
+    constexpr size_t loopbackCapacity = sizeof(p->decoded.payload.bytes) - (meshtastic_Compressed_size - sizeof(c.data.bytes));
     if (carryEncrypted) {
         // Sentinel portnum UNKNOWN_APP marks the payload as ciphertext for unpackAndReceive().
         c.portnum = meshtastic_PortNum_UNKNOWN_APP;
-        if (p->encrypted.size <= sizeof(c.data.bytes)) {
+        if (p->encrypted.size <= loopbackCapacity) {
             memcpy(&c.data.bytes, p->encrypted.bytes, p->encrypted.size);
             c.data.size = p->encrypted.size;
         } else {
             LOG_WARN("Encrypted payload (%u) exceeds sim loopback capacity (%u)! Send empty payload", (unsigned)p->encrypted.size,
-                     (unsigned)sizeof(c.data.bytes));
+                     (unsigned)loopbackCapacity);
         }
     } else {
         c.portnum = p->decoded.portnum;
         // LOG_DEBUG("Send back to simulator with portNum %d", p->decoded.portnum);
-        if (p->decoded.payload.size <= sizeof(c.data.bytes)) {
+        if (p->decoded.payload.size <= loopbackCapacity) {
             memcpy(&c.data.bytes, p->decoded.payload.bytes, p->decoded.payload.size);
             c.data.size = p->decoded.payload.size;
         } else {
