@@ -82,7 +82,7 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
 {
     // Do NOT override explicit broadcast replies
     // Only reuse lastDest in LaunchRepeatDestination()
-    
+
     if (newDest == 0) {
         dest = NODENUM_BROADCAST;
     } else {

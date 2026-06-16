@@ -526,7 +526,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         transmitHistory->clear();
     }
 #if HAS_SCREEN
-        messageStore.clearAllMessages();
+    messageStore.clearAllMessages();
 #endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultNodeDatabase();
