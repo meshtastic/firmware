@@ -76,22 +76,45 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 130, "NodeInfoLite size increas
 #endif // MESHTASTIC_EXCLUDE_STATUSDB
 
 /// Max nodes in the hot store (full NodeInfoLite). Evicted nodes' identities
-/// live in the warm tier (WARM_NODE_COUNT). 120 keeps nodes.proto inside the
-/// stock 28 KB nRF52 LittleFS; the warm tier persists outside it on nRF52840.
+/// live in the warm tier (WARM_NODE_COUNT). nRF52840 caps at 120 to keep
+/// nodes.proto inside the stock 28 KB LittleFS; flash-rich platforms (ESP32-S3,
+/// portduino) keep their larger hot store and lean on warm only for the tail.
 #ifndef MAX_NUM_NODES
 #if defined(ARCH_STM32WL)
 #define MAX_NUM_NODES 10
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+#include "Esp.h"
+static inline int get_max_num_nodes()
+{
+    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Convert Bytes to MB
+    if (flash_size >= 15) {
+        return 250;
+    } else if (flash_size >= 7) {
+        return 200;
+    } else {
+        return 100;
+    }
+}
+#define MAX_NUM_NODES get_max_num_nodes()
+#elif defined(ARCH_PORTDUINO)
+#define MAX_NUM_NODES 250 // native host: no flash/RAM constraint; match the ESP32-S3 top tier
 #else
-#define MAX_NUM_NODES 120
-#endif // STM32WL
-#endif // MAX_NUM_NODES
+#define MAX_NUM_NODES 120 // nRF52840 (28 KB LittleFS) and generic ESP32
+#endif                    // platform
+#endif                    // MAX_NUM_NODES
 
 /// Per-map cap (position/telemetry/environment/status): only the freshest
 /// MAX_SATELLITE_NODES nodes keep satellite payloads, the rest just the
-/// NodeInfoLite header. Bounds heap + nodes.proto; not scaled with MAX_NUM_NODES.
+/// NodeInfoLite header. RAM-bound (the maps are internal-SRAM, not PSRAM), so
+/// flash-rich hosts get a cap >= their hot store (satellites for every node, as
+/// before the cap existed) while constrained parts stay at 40.
 #ifndef MAX_SATELLITE_NODES
-#define MAX_SATELLITE_NODES 40
-#endif
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARCH_PORTDUINO)
+#define MAX_SATELLITE_NODES 250
+#else
+#define MAX_SATELLITE_NODES 40 // nRF52840 (28 KB LittleFS) and generic ESP32
+#endif                         // platform
+#endif                         // MAX_SATELLITE_NODES
 
 /// Warm tier: 40 B {num, last_heard, public_key} records kept for evicted nodes
 /// so DMs to/from them keep decrypting. 0 disables it; size is per-platform
@@ -136,8 +159,8 @@ static_assert(sizeof(meshtastic_NodeInfoLite) <= 130, "NodeInfoLite size increas
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000
 #else
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 0
-#endif
-#endif
+#endif // HAS_TRAFFIC_MANAGEMENT
+#endif // TRAFFIC_MANAGEMENT_CACHE_SIZE
 
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
 /// returns the encoded packet size

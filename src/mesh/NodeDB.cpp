@@ -1761,6 +1761,10 @@ void NodeDB::demoteOldestHotNodesToWarm()
         // Keep the public key if we have one (40 B warm record); keyless nodes
         // still get a placeholder so re-admission restores last_heard.
         warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr);
+        // Demotion drops the node from the header table, so drop its satellites
+        // too (the eviction chokepoint) — they'd otherwise orphan until the next
+        // enforceSatelliteCaps pass.
+        eraseNodeSatellites(n.num);
         demoted++;
     }
     numMeshNodes = keep; // the resize() in loadFromDisk reclaims the demoted tail
