@@ -99,6 +99,8 @@ class ScanI2C
         CW2015,
         SCD30,
         ADS1115,
+        IIS2MDCTR,
+        ISM330DHCX,
         ESP32_OTA_COPROCESSOR
     } DeviceType;
 
