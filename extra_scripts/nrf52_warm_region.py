@@ -2,20 +2,17 @@
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 #
-# Post-link guard for the warm-node-store raw-flash region on nrf52840.
+# Post-link guard for the warm-node-store raw-flash region on nRF52840.
 #
-# The top 3 app-region flash pages below LittleFS (0xEA000-0xED000, reclaimed by
-# whole-image LTO; LittleFS itself stays stock at 0xED000) are reserved for the WarmNodeStore record-ring
-# (src/mesh/WarmNodeStore.h, 3-page record-ring). Our own linker script
-# (src/platform/nrf52/nrf52840_s140_v7.ld) already caps the image at 0xEA000,
-# but many boards (e.g. rak4631) link with the framework-default script whose
-# FLASH region still ends at 0xED000 -- those would silently place code in the
-# reserved pages if the image ever grew that large, and the first warm-store
-# save would then brick the firmware. This guard turns that into a red build.
+# The 3 app-region pages below LittleFS (0xEA000-0xED000, reclaimed by whole-image
+# LTO) are reserved for the WarmNodeStore record-ring (see WarmNodeStore.h). Our
+# linker script (nrf52840_s140_v7.ld) caps the image at 0xEA000, but boards on the
+# framework-default script (FLASH ending at 0xED000) could silently place code in
+# those pages — the first warm-store save would then brick the device. This turns
+# that into a build failure.
 #
-# Image flash end = __etext (end of code/rodata in flash) + sizeof(.data)
-# (which is loaded at LMA __etext). Symbols come from the framework's
-# nrf52_common.ld.
+# Image flash end = __etext + sizeof(.data) (loaded at LMA __etext); symbols from
+# the framework's nrf52_common.ld.
 import os
 
 Import("env")

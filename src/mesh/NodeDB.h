@@ -241,12 +241,10 @@ class NodeDB
     /// LOG_WARN here and AdminModule::sendWarning so the wording stays in sync.
     static constexpr const char *PROTECTED_CAP_WARN_FMT = "Can't %s 0x%08x: protected-node limit (%d) reached";
 
-    /// Turn an eviction-protection flag (favourite/ignored/verified) on or off,
-    /// capped so the protected set never exceeds MAX_NUM_NODES-2 — keeping at
-    /// least two always-evictable slots. Turning a flag off always succeeds;
-    /// turning one on for a node that isn't already protected returns false
-    /// (and changes nothing) once the cap is reached. Callers surface that to
-    /// the user where appropriate.
+    /// Turn an eviction-protection flag (favourite/ignored/verified) on/off. Off
+    /// always succeeds; on returns false (no change) once the protected set hits
+    /// the cap (MAX_NUM_NODES-2), keeping >=2 always-evictable slots. Callers
+    /// surface the refusal to the user.
     bool setProtectedFlag(meshtastic_NodeInfoLite *node, uint32_t mask, bool on);
 
     /*
@@ -378,12 +376,10 @@ class NodeDB
         emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
         size_t nodeDatabaseSize;
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        // Decode-stream size ceiling only — no buffer of this size is ever
-        // allocated (load streams from the file). Sized for the largest file
-        // any previous firmware could have written (250-node ESP32-S3 builds,
-        // satellites uncapped), not the current MAX_NUM_NODES, so capacity
-        // downgrades and backups from higher-cap peers still decode; excess
-        // entries are trimmed after load.
+        // Decode-stream size ceiling only — no buffer this big is allocated (load
+        // streams from the file). Sized for the largest file any prior firmware
+        // could write (250-node ESP32-S3, satellites uncapped) so capacity
+        // downgrades / peer backups still decode; excess is trimmed after load.
         // (not constexpr: portduino resolves MAX_NUM_NODES from runtime config)
         const size_t loadCeiling = ((size_t)MAX_NUM_NODES > 250) ? (size_t)MAX_NUM_NODES : 250;
         return nodeDatabaseSize + (loadCeiling * meshtastic_NodeInfoLite_size) +
@@ -508,11 +504,10 @@ class NodeDB
     void nodeDBSelfCare();
 
 #if WARM_NODE_COUNT > 0
-    /// On load, a database from a larger-cap build (notably the pre-fork 150-node
-    /// nRF52 hot store) can exceed MAX_NUM_NODES. Rank the hot store so the
-    /// freshest survive and demote the oldest overflow into the warm tier,
-    /// preserving {num, last_heard, public_key} so PKI DMs keep working instead
-    /// of dropping those nodes on truncation.
+    /// A database from a larger-cap build (e.g. the pre-fork 150-node nRF52 store)
+    /// can exceed MAX_NUM_NODES on load. Rank the hot store, demote the oldest
+    /// overflow into the warm tier preserving {num, last_heard, public_key} so PKI
+    /// DMs survive instead of dropping on truncation.
     void demoteOldestHotNodesToWarm();
 #endif
 

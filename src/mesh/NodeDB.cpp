@@ -1741,11 +1741,9 @@ void NodeDB::demoteOldestHotNodesToWarm()
     if (numMeshNodes <= keep)
         return;
 
-    // Favorites, ignored (blocked) and manually-verified nodes rank ahead of
-    // recency — the same protection getOrCreateMeshNode applies on eviction — so
-    // they are demoted only when the store is full of them. Within a class,
-    // most-recently-heard first. Index 0 is our own node and is left in place
-    // (sort begins at +1), as in the runtime eviction scan.
+    // Protected nodes (favorite/ignored/verified) outrank recency and are demoted
+    // only when the store is full of them; within a class, most-recently-heard
+    // wins. Index 0 is self and stays put (sort from +1), as in runtime eviction.
     std::sort(meshNodes->begin() + 1, meshNodes->begin() + numMeshNodes,
               [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
                   const bool ka = nodeInfoLiteIsProtected(&a);
@@ -1770,9 +1768,6 @@ void NodeDB::demoteOldestHotNodesToWarm()
 }
 #endif
 
-// Node-DB self-care, run once getNodeNum() is valid (ctor after keygen, and
-// reloadFromDisk): confirm self, demote/trim only NON-self overflow, pin self to
-// index0, rewrite once if healed (never while storage is locked).
 void NodeDB::nodeDBSelfCare()
 {
     if (!meshNodes)
@@ -1781,19 +1776,18 @@ void NodeDB::nodeDBSelfCare()
     const NodeNum self = getNodeNum();
     const bool nodesOverCap = numMeshNodes > MAX_NUM_NODES;
 
-    // (2) Confirm self is present and its key matches what we just (re)derived.
-    // A non-empty DB that doesn't contain us means a foreign/over-cap or corrupt
+    // Confirm self is present and its key matches what we just (re)derived. A
+    // non-empty DB that doesn't contain us means a foreign/over-cap or corrupt
     // nodes.proto was loaded; an empty DB is just a fresh device (no warning).
     meshtastic_NodeInfoLite *selfNode = getMeshNode(self);
     if (!selfNode && numMeshNodes > 0) {
-        LOG_WARN("NodeDB self-care: our node 0x%08x is absent from the loaded DB; re-adding (foreign/over-cap file?)",
-                 (unsigned)self);
+        LOG_WARN("NodeDB self-care: self 0x%08x absent from DB, re-adding", (unsigned)self);
     } else if (selfNode && owner.public_key.size == 32 && selfNode->public_key.size == 32 &&
                memcmp(selfNode->public_key.bytes, owner.public_key.bytes, 32) != 0) {
-        LOG_WARN("NodeDB self-care: our node 0x%08x has a mismatched public key in the DB; refreshing", (unsigned)self);
+        LOG_WARN("NodeDB self-care: self 0x%08x key mismatch, refreshing", (unsigned)self);
     }
 
-    // (3) Maintenance that must never touch self. Pin self to index 0 first so
+    // Maintenance that must never touch self. Pin self to index 0 first so
     // the positional demote/eviction scans (which skip index 0) provably exclude
     // us, wherever the loaded file happened to place our row.
     if (selfNode && numMeshNodes > 0 && selfNode != &meshNodes->at(0)) {
@@ -1805,7 +1799,7 @@ void NodeDB::nodeDBSelfCare()
         demoteOldestHotNodesToWarm(); // demotes oldest NON-self overflow; index 0 (us) left in place
 #endif
     if (numMeshNodes > MAX_NUM_NODES) {
-        LOG_WARN("NodeDB self-care: %d nodes over cap %d, truncating", numMeshNodes, MAX_NUM_NODES);
+        LOG_WARN("NodeDB self-care: %d over cap %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
     // Normalise the backing store to the hot cap so getOrCreateMeshNode always
@@ -1824,7 +1818,7 @@ void NodeDB::nodeDBSelfCare()
             std::swap(meshNodes->at(0), *info);
     }
 
-    // (4) One-shot rewrite: only when we healed something, and never while storage
+    // One-shot rewrite: only when we healed something, and never while storage
     // is locked — a locked boot loads placeholder defaults that must not be written
     // over the encrypted store; reloadFromDisk() re-runs self-care once unlocked.
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE

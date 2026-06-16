@@ -20,30 +20,17 @@
 #if WARM_NODE_COUNT > 0
 
 /**
- * Warm ("long-tail") node tier
+ * Warm ("long-tail") node tier.
  *
- * Holds a minimal identity record for nodes evicted from the hot NodeInfoLite
- * store: NodeNum, last_heard and the Curve25519 public key. The tier exists
- * primarily so DMs to/from an evicted node keep encrypting/decrypting — the
- * public key is expensive to re-learn (requires a NodeInfo exchange) while
- * everything else in NodeInfoLite is rebuilt from traffic within seconds.
+ * Minimal identity record (NodeNum, last_heard, Curve25519 public key) for nodes
+ * evicted from the hot NodeInfoLite store, so DMs to/from them keep encrypting —
+ * the key is expensive to re-learn, the rest rebuilds from traffic in seconds.
+ * Flat fixed array, linear scan (only on hot-store misses), LRU by last_heard
+ * with keyed entries outranking keyless.
  *
- * Flat fixed-capacity array, linear scan (lookups happen only on hot-store
- * misses), LRU eviction by last_heard with key-bearing entries outranking
- * keyless ones.
- *
- * Persistence:
- *  - nRF52840: a dedicated 12 KB raw-flash record-ring (3 × 4 KB pages at
- *    0xEA000, directly below the stock LittleFS partition). Mutations append
- *    40 B upsert/tombstone records via the same SoftDevice-safe flash HAL
- *    InternalFS uses; boot replays the pages in sequence order. When the
- *    active page fills, the oldest page is reclaimed: live entries stranded
- *    in it are re-appended first (compaction), then it is erased and becomes
- *    the new head. The app image must end below the region —
- *    nrf52840_s140_v7.ld enforces this at link time and
- *    extra_scripts/nrf52_warm_region.py guards boards on the framework
- *    default linker script.
- *  - everywhere else: /prefs/warm.dat snapshot on the node-DB save cadence.
+ * Persistence: nRF52840 uses a 12 KB raw-flash record-ring below LittleFS
+ * (append + replay + compact-on-rotate — see the backend in WarmNodeStore.cpp,
+ * link-guarded by nrf52840_s140_v7.ld). Everywhere else: /prefs/warm.dat.
  */
 struct WarmNodeEntry {
     NodeNum num;            // 0 = empty slot
@@ -52,9 +39,9 @@ struct WarmNodeEntry {
 };
 static_assert(sizeof(WarmNodeEntry) == 40, "WarmNodeEntry must stay 40 B — persistence format depends on it");
 
-// NRF52840_XXAA is explicit: nRF52832 also defines ARCH_NRF52 but only has
-// 512 KB flash (top at 0x80000), so 0xEA000 would be past its flash end.
-#if defined(ARCH_NRF52) && defined(NRF52840_XXAA)
+// Gated on NRF52840_XXAA: the ring sits at 0xEA000
+// valid only on the 1 MB-flash nRF52840.
+#if defined(NRF52840_XXAA)
 #define WARM_FLASH_PAGE_SIZE 4096u
 #define WARM_FLASH_PAGES 3u
 #define WARM_FLASH_REGION_BASE (0xED000u - WARM_FLASH_PAGES * WARM_FLASH_PAGE_SIZE) // 0xEA000
@@ -86,10 +73,11 @@ class WarmNodeStore
     size_t count() const;
     size_t capacity() const { return entries ? WARM_NODE_COUNT : 0; }
 
+#if MESHTASTIC_NODEDB_MIGRATION_VERBOSE
     /// Debug: dump every live warm entry (num / last_heard / has-key) to the
-    /// serial console. `reason` tags the dump so triggers are distinguishable.
-    /// Cheap linear walk; debug visibility only.
+    /// console. Compiled out unless MESHTASTIC_NODEDB_MIGRATION_VERBOSE.
     void dumpToLog(const char *reason = "dump") const;
+#endif
 
     /// Load persisted entries (called once at boot, after the node DB loads).
     void load();
@@ -113,8 +101,8 @@ class WarmNodeStore
     void persistRemove(NodeNum num, int storeSlot);
     void persistClear();
 
-#if defined(ARCH_NRF52) && defined(NRF52840_XXAA)
-    // ---- raw-flash record-ring state ----
+#if defined(NRF52840_XXAA)
+    // nRF52840 raw-flash record-ring state.
     struct WarmPageHeader {
         uint32_t magic; // WARM_RING_MAGIC
         uint32_t seq;   // page generation; 0xFFFFFFFF = erased/unused
@@ -123,10 +111,12 @@ class WarmNodeStore
     static constexpr uint16_t kRecordsPerPage = (WARM_FLASH_PAGE_SIZE - sizeof(WarmPageHeader)) / sizeof(WarmNodeEntry); // 102
     static_assert(WARM_NODE_COUNT <= 2 * ((WARM_FLASH_PAGE_SIZE - 8) / 40), "live set must fit the ring with one page reclaimed");
 
-    uint8_t activePage = 0xFF;       // 0xFF = no page opened yet (fresh/erased ring)
+    static constexpr uint8_t kNoPage = 0xFF; // "no page" sentinel for activePage / pageOf[]
+
+    uint8_t activePage = kNoPage;    // no page opened yet (fresh/erased ring)
     uint16_t writeSlot = 0;          // next free record slot in the active page
     uint32_t nextSeq = 1;            // seq for the next page opened
-    uint8_t pageOf[WARM_NODE_COUNT]; // flash page holding each RAM slot's newest record; 0xFF = none
+    uint8_t pageOf[WARM_NODE_COUNT]; // flash page holding each RAM slot's newest record; kNoPage = none
 
     void ringAppend(const WarmNodeEntry &rec, int storeSlot /* -1 for tombstones */);
     void ringRotate();               // reclaim oldest page, compacting stranded live entries

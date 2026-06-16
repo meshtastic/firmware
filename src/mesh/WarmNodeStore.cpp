@@ -10,7 +10,7 @@
 #include <ErriezCRC32.h>
 #include <vector>
 
-#if defined(ARCH_NRF52) && defined(NRF52840_XXAA)
+#if defined(NRF52840_XXAA)
 #include "flash/flash_nrf5x.h"
 #define WARM_RING_MAGIC 0x474E5257u // "WRNG"
 // A tombstone is an entry record whose last_heard is all-ones — getTime()
@@ -33,7 +33,7 @@ static_assert(sizeof(WarmStoreHeader) == 16, "header layout is part of the persi
 #ifdef FSCom
 static const char *warmFileName = "/prefs/warm.dat";
 #endif
-#endif // defined(ARCH_NRF52) && defined(NRF52840_XXAA)
+#endif // NRF52840_XXAA
 
 static inline bool keyIsSet(const uint8_t key[32])
 {
@@ -48,14 +48,14 @@ WarmNodeStore::WarmNodeStore()
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     entries = static_cast<WarmNodeEntry *>(ps_calloc(WARM_NODE_COUNT, sizeof(WarmNodeEntry)));
     if (!entries) {
-        LOG_WARN("WarmStore: PSRAM allocation failed, falling back to heap");
+        LOG_WARN("WarmStore: PSRAM alloc failed, using heap");
         entries = static_cast<WarmNodeEntry *>(calloc(WARM_NODE_COUNT, sizeof(WarmNodeEntry)));
     }
 #else
     entries = static_cast<WarmNodeEntry *>(calloc(WARM_NODE_COUNT, sizeof(WarmNodeEntry)));
 #endif
-#if defined(ARCH_NRF52) && defined(NRF52840_XXAA)
-    memset(pageOf, 0xFF, sizeof(pageOf));
+#if defined(NRF52840_XXAA)
+    memset(pageOf, kNoPage, sizeof(pageOf));
 #endif
 }
 
@@ -146,6 +146,7 @@ bool WarmNodeStore::take(NodeNum num, WarmNodeEntry &out)
     return true;
 }
 
+#if MESHTASTIC_NODEDB_MIGRATION_VERBOSE
 void WarmNodeStore::dumpToLog(const char *reason) const
 {
     if (!entries) {
@@ -164,6 +165,7 @@ void WarmNodeStore::dumpToLog(const char *reason) const
     }
     LOG_MIGRATION("WarmStore dump (%s): <== end (%u entries)", reason, shown);
 }
+#endif // MESHTASTIC_NODEDB_MIGRATION_VERBOSE
 
 bool WarmNodeStore::copyKey(NodeNum num, uint8_t out[32]) const
 {
@@ -194,8 +196,8 @@ void WarmNodeStore::clear()
     if (!entries)
         return;
     memset(entries, 0, WARM_NODE_COUNT * sizeof(WarmNodeEntry));
-#if defined(ARCH_NRF52) && defined(NRF52840_XXAA)
-    memset(pageOf, 0xFF, sizeof(pageOf));
+#if defined(NRF52840_XXAA)
+    memset(pageOf, kNoPage, sizeof(pageOf));
 #endif
     persistClear();
 }
@@ -220,16 +222,14 @@ bool WarmNodeStore::saveIfDirty()
     return ok;
 }
 
-#if defined(ARCH_NRF52) && defined(NRF52840_XXAA)
+#if defined(NRF52840_XXAA)
 
-// ---- Raw-flash record-ring backend (nRF52840 only; nRF52832 uses file backend) ---
-// 3 × 4 KB pages directly below LittleFS. Mutations append 40 B records (an
-// entry snapshot, or a tombstone with last_heard == 0xFFFFFFFF) through the
-// shared flash_nrf5x page cache; saveIfDirty() is the durability point. When
-// the active page fills, the oldest page is reclaimed: live entries whose
-// newest record is stranded there get re-appended first, then the page is
-// erased and becomes the new head. All flash access happens under spiLock
-// because the page cache is shared with InternalFS/LittleFS.
+// Raw-flash record-ring backend (nRF52840).
+// 3 × 4 KB pages below LittleFS. Mutations append 40 B records (entry snapshot,
+// or tombstone with last_heard == 0xFFFFFFFF) via the shared flash_nrf5x page
+// cache; saveIfDirty() is the durability point. A full page reclaims the oldest
+// (stranded live entries re-appended, then erased). Flash access holds spiLock —
+// the page cache is shared with InternalFS/LittleFS.
 
 bool WarmNodeStore::ringReadHeader(uint8_t page, WarmPageHeader &h) const
 {
@@ -237,7 +237,7 @@ bool WarmNodeStore::ringReadHeader(uint8_t page, WarmPageHeader &h) const
     return h.magic == WARM_RING_MAGIC && h.seq != 0xFFFFFFFFu;
 }
 
-// Erase `page` and stamp a fresh header. Caller holds spiLock.
+// Caller holds spiLock.
 void WarmNodeStore::ringOpenPage(uint8_t page)
 {
     // Drop any cached state for the page before the real erase, so a later
@@ -252,14 +252,12 @@ void WarmNodeStore::ringOpenPage(uint8_t page)
     writeSlot = 0;
 }
 
-// Reclaim the oldest (or an unused) page and compact stranded live entries
-// into it. Caller holds spiLock. May recurse once via ringAppend when the
-// stranded set fills the fresh page exactly — bounded by the page count and
-// the WARM_NODE_COUNT <= 2 * kRecordsPerPage static_assert.
+// Caller holds spiLock. May recurse once via ringAppend if the stranded set
+// fills the fresh page exactly — bounded by WARM_NODE_COUNT <= 2*kRecordsPerPage.
 void WarmNodeStore::ringRotate()
 {
     uint8_t target = 0;
-    if (activePage != 0xFF) {
+    if (activePage != kNoPage) {
         // Lowest-seq valid page, preferring erased pages; never the active one
         uint32_t bestSeq = 0;
         bool found = false;
@@ -287,7 +285,7 @@ void WarmNodeStore::ringRotate()
         if (entries[i].num && pageOf[i] == target)
             stranded[nStranded++] = static_cast<int>(i);
         if (pageOf[i] == target)
-            pageOf[i] = 0xFF;
+            pageOf[i] = kNoPage;
     }
 
     ringOpenPage(target);
@@ -296,10 +294,10 @@ void WarmNodeStore::ringRotate()
         ringAppend(entries[stranded[k]], stranded[k]);
 }
 
-// Append one record. Caller holds spiLock.
+// Caller holds spiLock.
 void WarmNodeStore::ringAppend(const WarmNodeEntry &rec, int storeSlot)
 {
-    if (activePage == 0xFF || writeSlot >= kRecordsPerPage)
+    if (activePage == kNoPage || writeSlot >= kRecordsPerPage)
         ringRotate();
     const uint32_t addr =
         WARM_FLASH_PAGE_ADDR(activePage) + sizeof(WarmPageHeader) + static_cast<uint32_t>(writeSlot) * sizeof(WarmNodeEntry);
@@ -377,7 +375,7 @@ void WarmNodeStore::load()
         writeSlot = 0;
         nextSeq = 1;
         if (nCorrupt)
-            LOG_WARN("WarmStore: ring unreadable (%u corrupt page(s)), starting empty", nCorrupt);
+            LOG_WARN("WarmStore: ring unreadable (%u bad page(s)), empty", nCorrupt);
         else
             LOG_INFO("WarmStore: ring empty, starting fresh");
         return;
@@ -414,7 +412,7 @@ void WarmNodeStore::load()
         }
     }
     if (nCorrupt)
-        LOG_WARN("WarmStore: dropped %u corrupt ring page(s) during replay; some warm nodes may be lost", nCorrupt);
+        LOG_WARN("WarmStore: dropped %u corrupt ring page(s), some nodes lost", nCorrupt);
     LOG_INFO("WarmStore: replayed %u ring records -> %u live nodes (page %u, slot %u)", (unsigned)replayed, (unsigned)count(),
              activePage, writeSlot);
 }
@@ -430,7 +428,7 @@ bool WarmNodeStore::save()
     return true;
 }
 
-#else // !(defined(ARCH_NRF52) && defined(NRF52840_XXAA)) --------------------
+#else // !NRF52840_XXAA --------------------
 
 void WarmNodeStore::persistEntry(const WarmNodeEntry &e)
 {
@@ -529,6 +527,6 @@ bool WarmNodeStore::save()
 }
 
 #endif // FSCom
-#endif // defined(ARCH_NRF52) && defined(NRF52840_XXAA)
+#endif // NRF52840_XXAA
 
 #endif // WARM_NODE_COUNT > 0
