@@ -4,7 +4,7 @@
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
 # Ensure the Alpine version is updated in both stages of the container!
-FROM alpine:3.23 AS builder
+FROM alpine:3.24 AS builder
 ARG PIO_ENV=native
 
 # Enable Alpine community repository (for 'py3-grpcio-tools')
@@ -35,7 +35,7 @@ RUN bash ./bin/build-native.sh "$PIO_ENV" && \
 
 # ##### PRODUCTION BUILD #############
 
-FROM alpine:3.23
+FROM alpine:3.24
 LABEL org.opencontainers.image.title="Meshtastic" \
       org.opencontainers.image.description="Alpine Meshtastic daemon" \
       org.opencontainers.image.url="https://meshtastic.org" \

@@ -245,48 +245,6 @@ jobs:
           path: ./*.elf
           retention-days: 30
 
-  shame:
-    if: github.repository == 'meshtastic/firmware'
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    needs: [build]
-    steps:
-      - uses: actions/checkout@v6
-        if: github.event_name == 'pull_request'
-        with:
-          filter: blob:none # means we download all the git history but none of the commit (except ones with checkout like the head)
-          fetch-depth: 0
-      - name: Download the current manifests
-        uses: actions/download-artifact@v8
-        with:
-          path: ./manifests-new/
-          pattern: manifest-*
-          merge-multiple: true
-      - name: Upload combined manifests for later commit and global stats crunching.
-        uses: actions/upload-artifact@v7
-        id: upload-manifest
-        with:
-          name: manifests-${{ github.sha }}
-          overwrite: true
-          path: manifests-new/*.mt.json
-      - name: Find the merge base
-        if: github.event_name == 'pull_request'
-        run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
-        env:
-          base: ${{ github.base_ref }}
-          head: ${{ github.sha }}
-      # Currently broken (for-loop through EVERY artifact -- rate limiting)
-      # - name: Download the old manifests
-      #   if: github.event_name == 'pull_request'
-      #   run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
-      #   env:
-      #     GH_TOKEN: ${{ github.token }}
-      #     merge_base: ${{ env.MERGE_BASE }}
-      #     repo: ${{ github.repository }}
-      # - name: Do scan and post comment
-      #   if: github.event_name == 'pull_request'
-      #   run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
-
   release-artifacts:
     permissions: # Needed for 'gh release upload'.
       contents: write
