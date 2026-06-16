@@ -127,6 +127,8 @@ bool WarmNodeStore::absorb(NodeNum num, uint32_t lastHeard, const uint8_t *key32
     if (!slot)
         return false;
     persistEntry(*slot);
+    LOG_MIGRATION("WarmStore absorb 0x%08x key=%d last_heard=%u (now %u/%u)", (unsigned)num, keyIsSet(slot->public_key) ? 1 : 0,
+                  (unsigned)lastHeard, (unsigned)count(), (unsigned)capacity());
     return true;
 }
 
@@ -139,7 +141,28 @@ bool WarmNodeStore::take(NodeNum num, WarmNodeEntry &out)
     const int idx = static_cast<int>(e - entries);
     memset(e, 0, sizeof(*e));
     persistRemove(num, idx);
+    LOG_MIGRATION("WarmStore take(rehydrate) 0x%08x key=%d (now %u/%u)", (unsigned)num, keyIsSet(out.public_key) ? 1 : 0,
+                  (unsigned)count(), (unsigned)capacity());
     return true;
+}
+
+void WarmNodeStore::dumpToLog(const char *reason) const
+{
+    if (!entries) {
+        LOG_MIGRATION("WarmStore dump (%s): backend not allocated", reason);
+        return;
+    }
+    LOG_MIGRATION("WarmStore dump (%s): %u live / %u cap ==>", reason, (unsigned)count(), (unsigned)capacity());
+    unsigned shown = 0;
+    for (size_t i = 0; i < WARM_NODE_COUNT; i++) {
+        const WarmNodeEntry &e = entries[i];
+        if (e.num == 0)
+            continue;
+        LOG_MIGRATION("  warm[%3u] 0x%08x last_heard=%u key=%d", (unsigned)i, (unsigned)e.num, (unsigned)e.last_heard,
+                      keyIsSet(e.public_key) ? 1 : 0);
+        shown++;
+    }
+    LOG_MIGRATION("WarmStore dump (%s): <== end (%u entries)", reason, shown);
 }
 
 bool WarmNodeStore::copyKey(NodeNum num, uint8_t out[32]) const

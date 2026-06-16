@@ -488,9 +488,10 @@ NodeDB::NodeDB()
         myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
     }
 #endif
-    // Include our owner in the node db under our nodenum
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    TypeConversions::CopyUserToNodeInfoLite(info, owner);
+    // Identity is now established, so run the self-care pass on the store
+    // loadFromDisk() deliberately left untrimmed: confirm self, trim/demote only
+    // non-self overflow, pin self to index 0, rewrite once if healed.
+    nodeDBSelfCare();
 
     // If node database has not been saved for the first time, save it now
 #ifdef FSCom
@@ -1522,18 +1523,21 @@ void NodeDB::eraseNodeSatellites(NodeNum n)
 #endif
 }
 
-void NodeDB::enforceSatelliteCaps()
+bool NodeDB::enforceSatelliteCaps()
 {
     concurrency::LockGuard guard(&satelliteMutex);
-    auto trim = [this](auto &map, const char *name) {
+    bool trimmedAny = false;
+    auto trim = [this, &trimmedAny](auto &map, const char *name) {
         const size_t before = map.size();
         while (map.size() > MAX_SATELLITE_NODES) {
             if (!evictStalestSatellite(*this, map))
                 break;
         }
-        if (map.size() != before)
-            LOG_INFO("Trimmed %s satellites %u -> %u (cap %d)", name, (unsigned)before, (unsigned)map.size(),
-                     MAX_SATELLITE_NODES);
+        if (map.size() != before) {
+            trimmedAny = true;
+            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %d)", name, (unsigned)before, (unsigned)map.size(),
+                          MAX_SATELLITE_NODES);
+        }
     };
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
     trim(nodePositions, "position");
@@ -1548,6 +1552,7 @@ void NodeDB::enforceSatelliteCaps()
     trim(nodeStatus, "status");
 #endif
     (void)trim; // all four maps may be compiled out
+    return trimmedAny;
 }
 
 void NodeDB::cleanupMeshDB()
@@ -1761,9 +1766,81 @@ void NodeDB::demoteOldestHotNodesToWarm()
         demoted++;
     }
     numMeshNodes = keep; // the resize() in loadFromDisk reclaims the demoted tail
-    LOG_INFO("NodeDB migration: demoted %d node(s) over %d into the warm tier (keepers preferred)", demoted, keep);
+    LOG_MIGRATION("NodeDB migration: demoted %d node(s) over %d into the warm tier (keepers preferred)", demoted, keep);
 }
 #endif
+
+// Node-DB self-care, run once getNodeNum() is valid (ctor after keygen, and
+// reloadFromDisk): confirm self, demote/trim only NON-self overflow, pin self to
+// index0, rewrite once if healed (never while storage is locked).
+void NodeDB::nodeDBSelfCare()
+{
+    if (!meshNodes)
+        return;
+
+    const NodeNum self = getNodeNum();
+    const bool nodesOverCap = numMeshNodes > MAX_NUM_NODES;
+
+    // (2) Confirm self is present and its key matches what we just (re)derived.
+    // A non-empty DB that doesn't contain us means a foreign/over-cap or corrupt
+    // nodes.proto was loaded; an empty DB is just a fresh device (no warning).
+    meshtastic_NodeInfoLite *selfNode = getMeshNode(self);
+    if (!selfNode && numMeshNodes > 0) {
+        LOG_WARN("NodeDB self-care: our node 0x%08x is absent from the loaded DB; re-adding (foreign/over-cap file?)",
+                 (unsigned)self);
+    } else if (selfNode && owner.public_key.size == 32 && selfNode->public_key.size == 32 &&
+               memcmp(selfNode->public_key.bytes, owner.public_key.bytes, 32) != 0) {
+        LOG_WARN("NodeDB self-care: our node 0x%08x has a mismatched public key in the DB; refreshing", (unsigned)self);
+    }
+
+    // (3) Maintenance that must never touch self. Pin self to index 0 first so
+    // the positional demote/eviction scans (which skip index 0) provably exclude
+    // us, wherever the loaded file happened to place our row.
+    if (selfNode && numMeshNodes > 0 && selfNode != &meshNodes->at(0)) {
+        std::swap(meshNodes->at(0), *selfNode);
+    }
+
+#if WARM_NODE_COUNT > 0
+    if (nodesOverCap)
+        demoteOldestHotNodesToWarm(); // demotes oldest NON-self overflow; index 0 (us) left in place
+#endif
+    if (numMeshNodes > MAX_NUM_NODES) {
+        LOG_WARN("NodeDB self-care: %d nodes over cap %d, truncating", numMeshNodes, MAX_NUM_NODES);
+        numMeshNodes = MAX_NUM_NODES;
+    }
+    // Normalise the backing store to the hot cap so getOrCreateMeshNode always
+    // has spare slots to append into (it indexes meshNodes->at(numMeshNodes++)).
+    meshNodes->resize(MAX_NUM_NODES);
+
+    const bool satsTrimmed = enforceSatelliteCaps();
+
+    // Ensure self exists, sits at index 0, and carries current owner info — after
+    // any demotion has freed a slot. Covers the foreign/fixture case where the
+    // loaded file did not contain us at all.
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(self);
+    if (info) {
+        TypeConversions::CopyUserToNodeInfoLite(info, owner);
+        if (info != &meshNodes->at(0))
+            std::swap(meshNodes->at(0), *info);
+    }
+
+    // (4) One-shot rewrite: only when we healed something, and never while storage
+    // is locked — a locked boot loads placeholder defaults that must not be written
+    // over the encrypted store; reloadFromDisk() re-runs self-care once unlocked.
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    const bool storageLocked = EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked();
+#else
+    const bool storageLocked = false;
+#endif
+    if ((nodesOverCap || satsTrimmed) && !storageLocked) {
+        LOG_MIGRATION("NodeDB self-care: healed store (nodes-over-cap:%s sats-trimmed:%s); rewriting nodes.proto once",
+                      nodesOverCap ? "yes" : "no", satsTrimmed ? "yes" : "no");
+        saveNodeDatabaseToDisk();
+#if WARM_NODE_COUNT > 0
+        warmStore.saveIfDirty();
+#endif
+    }
+}
 
 void NodeDB::loadFromDisk()
 {
@@ -1787,6 +1864,7 @@ void NodeDB::loadFromDisk()
         rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
     spiLock->unlock();
 #endif
+
 #ifdef FSCom
 #if defined(FACTORY_INSTALL) && !defined(ARCH_PORTDUINO)
     spiLock->lock();
@@ -1801,7 +1879,7 @@ void NodeDB::loadFromDisk()
         }
     }
     spiLock->unlock();
-#endif
+#endif // FACTORY_INSTALL, not PORTDUINO
     spiLock->lock();
     if (FSCom.exists(legacyPrefFileName)) {
         spiLock->unlock();
@@ -1819,7 +1897,8 @@ void NodeDB::loadFromDisk()
         spiLock->unlock();
     }
 
-#endif
+#endif // FSCom
+
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     // Only take the locked-boot defaults path when lockdown is ACTIVE (the
     // device is provisioned) AND storage is still locked. A lockdown-capable
@@ -1908,30 +1987,13 @@ void NodeDB::loadFromDisk()
                  nodeDatabase.nodes.size(), posCount, telCount, envCount, statusCount);
     }
 
+    // Left UNTRIMMED on purpose: trim/demote/satellite-cap/self-pin/rewrite all
+    // run in nodeDBSelfCare() once getNodeNum() is valid (still 0 here on a cold
+    // boot, so we could only assume index 0 == self — the very bug being fixed).
 #if WARM_NODE_COUNT > 0
-    // Load the warm tier first so a hot-store migration below merges into the
-    // persisted set instead of being clobbered by the on-disk warm snapshot.
+    // Load the warm tier so its on-disk snapshot is available before the node DB
+    // is exercised (and before nodeDBSelfCare() demotes any overflow into it).
     warmStore.load();
-    // A database from a larger-cap build (the pre-fork 150-node nRF52 hot store)
-    // can exceed MAX_NUM_NODES. Demote the oldest overflow into the warm tier
-    // before we truncate, so their public keys survive for PKI DMs.
-    demoteOldestHotNodesToWarm();
-#endif
-
-    if (numMeshNodes > MAX_NUM_NODES) {
-        LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
-        numMeshNodes = MAX_NUM_NODES;
-    }
-    meshNodes->resize(MAX_NUM_NODES);
-
-    // Files written before the satellite cap (or by a larger-cap build) can
-    // carry more satellite entries than we keep; trim to the freshest.
-    enforceSatelliteCaps();
-
-#if WARM_NODE_COUNT > 0
-    // Persist the migrated entries now so they survive a reboot before the next
-    // node-DB save cadence.
-    warmStore.saveIfDirty();
 #endif
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
@@ -2223,6 +2285,11 @@ bool NodeDB::reloadFromDisk()
         // sitting in config.lora.
         return false;
     }
+
+    // loadFromDisk() leaves the store untrimmed; run self-care now (getNodeNum()
+    // is valid at runtime) to trim/demote non-self overflow, pin self to index 0
+    // and normalise the backing store before the node DB is exercised again.
+    nodeDBSelfCare();
 
     // Push the now-real config to the radio.
     if (rIface) {
@@ -3236,7 +3303,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
             }
-            LOG_INFO("Rehydrated node 0x%x from warm tier (key=%d)", n, lite->public_key.size == 32);
+            LOG_MIGRATION("Rehydrated node 0x%x from warm tier (key=%d)", n, lite->public_key.size == 32);
         }
 #endif
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());

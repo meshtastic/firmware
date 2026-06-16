@@ -5,6 +5,18 @@
 #include <stdint.h>
 #include <string.h>
 
+// Verbose tracing for the warm-store migration + NodeDB self-care. Per-event /
+// per-boot chatter routes through this so it can be silenced in one place (set
+// to 0) once they're proven; genuine LOG_WARN anomalies stay unconditional.
+#ifndef MESHTASTIC_NODEDB_MIGRATION_VERBOSE
+#define MESHTASTIC_NODEDB_MIGRATION_VERBOSE 1
+#endif
+#if MESHTASTIC_NODEDB_MIGRATION_VERBOSE
+#define LOG_MIGRATION(...) LOG_INFO(__VA_ARGS__)
+#else
+#define LOG_MIGRATION(...) ((void)0)
+#endif
+
 #if WARM_NODE_COUNT > 0
 
 /**
@@ -73,6 +85,11 @@ class WarmNodeStore
     void clear();
     size_t count() const;
     size_t capacity() const { return entries ? WARM_NODE_COUNT : 0; }
+
+    /// Debug: dump every live warm entry (num / last_heard / has-key) to the
+    /// serial console. `reason` tags the dump so triggers are distinguishable.
+    /// Cheap linear walk; debug visibility only.
+    void dumpToLog(const char *reason = "dump") const;
 
     /// Load persisted entries (called once at boot, after the node DB loads).
     void load();

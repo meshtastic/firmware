@@ -499,8 +499,13 @@ class NodeDB
 
     /// Trim each satellite map down to MAX_SATELLITE_NODES, dropping the
     /// stalest entries (used after loading files written before the cap, or by
-    /// a build with a larger cap).
-    void enforceSatelliteCaps();
+    /// a build with a larger cap). Returns true iff anything was trimmed.
+    bool enforceSatelliteCaps();
+
+    /// Node-DB self-care; call only once identity is established (getNodeNum()
+    /// valid). Confirms self is present, trims/demotes only NON-self overflow, and
+    /// rewrites the store once when something changed (never while storage locked).
+    void nodeDBSelfCare();
 
 #if WARM_NODE_COUNT > 0
     /// On load, a database from a larger-cap build (notably the pre-fork 150-node
