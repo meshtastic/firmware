@@ -131,6 +131,8 @@ int32_t StatusLEDModule::runOnce()
                 CHARGE_LED_state = LED_STATE_OFF;
             }
         }
+    } else {
+        CHARGE_LED_state = LED_STATE_OFF;
     }
 // If we want a LED to be dedicated to the simple hearbeat, we can use that instead of the charge LED
 #if defined(LED_HEARTBEAT)
