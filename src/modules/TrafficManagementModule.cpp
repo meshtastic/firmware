@@ -67,31 +67,6 @@ uint8_t sanitizePositionPrecision(uint8_t precision)
 }
 
 /**
- * Truncate lat/lon to specified precision for position deduplication.
- *
- * The truncation works by masking off lower bits and rounding to the center
- * of the resulting grid cell. This creates a stable truncated value even
- * when GPS jitter causes small coordinate changes.
- *
- * @param value     Raw latitude_i or longitude_i from position
- * @param precision Number of significant bits to keep (0-32)
- * @return          Truncated and centered coordinate value
- */
-int32_t truncateLatLon(int32_t value, uint8_t precision)
-{
-    if (precision == 0 || precision >= 32)
-        return value;
-
-    // Create mask to zero out lower bits
-    uint32_t mask = UINT32_MAX << (32 - precision);
-    uint32_t truncated = static_cast<uint32_t>(value) & mask;
-
-    // Add half the truncation step to center in the grid cell
-    truncated += (1u << (31 - precision));
-    return static_cast<int32_t>(truncated);
-}
-
-/**
  * Saturating increment for uint8_t counters.
  * Prevents overflow by capping at UINT8_MAX (255).
  */
@@ -941,8 +916,8 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
                                                         default_traffic_mgmt_position_precision_bits);
     precision = sanitizePositionPrecision(precision);
 
-    const int32_t lat_truncated = truncateLatLon(pos->latitude_i, precision);
-    const int32_t lon_truncated = truncateLatLon(pos->longitude_i, precision);
+    const int32_t lat_truncated = truncateCoordinate(pos->latitude_i, precision);
+    const int32_t lon_truncated = truncateCoordinate(pos->longitude_i, precision);
     const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
     // Drop gate uses the RAW configured interval: 0 means "dedup disabled" (the
     // contract documented below). The 12h default is only for resolution/TTL

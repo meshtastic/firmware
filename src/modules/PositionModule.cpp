@@ -448,15 +448,8 @@ bool PositionModule::positionUnchangedSinceLastSend(const meshtastic_PositionLit
     if (precisionBits == 0 || precisionBits >= 32)
         return false; // sharing disabled or full precision: don't suppress
 
-    meshtastic_Position cur = meshtastic_Position_init_default;
-    cur.latitude_i = selfPos.latitude_i;
-    cur.longitude_i = selfPos.longitude_i;
-    meshtastic_Position prev = meshtastic_Position_init_default;
-    prev.latitude_i = lastGpsLatitude;
-    prev.longitude_i = lastGpsLongitude;
-    applyPositionPrecision(cur, precisionBits);
-    applyPositionPrecision(prev, precisionBits);
-    return cur.latitude_i == prev.latitude_i && cur.longitude_i == prev.longitude_i;
+    return truncateCoordinate(selfPos.latitude_i, precisionBits) == truncateCoordinate(lastGpsLatitude, precisionBits) &&
+           truncateCoordinate(selfPos.longitude_i, precisionBits) == truncateCoordinate(lastGpsLongitude, precisionBits);
 }
 
 int32_t PositionModule::runOnce()
