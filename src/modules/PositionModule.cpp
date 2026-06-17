@@ -434,7 +434,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
 bool PositionModule::positionUnchangedSinceLastSend(const meshtastic_PositionLite &selfPos, bool useConfiguredPrecision)
 {
-    if (lastGpsLatitude == 0 && lastGpsLongitude == 0)
+    if (lastGpsSend == 0)
         return false; // no prior broadcast to compare against
 
     // Broadcast channel = the one sendOurPosition() would pick (first with non-zero on-wire

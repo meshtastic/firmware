@@ -2992,10 +2992,12 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // Block the contact and drop its rich satellite data, but keep the
         // public key copied above — an ignored peer keeps a usable identity
         // (a verifiable target) rather than a bare node number.
-        if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true))
+        if (setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
+            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
+            eraseNodeSatellites(contact.node_num);
+        } else {
             LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
-        nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
-        eraseNodeSatellites(contact.node_num);
+        }
     } else {
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
