@@ -262,8 +262,8 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
     } else if (q == RTCQualityGPS) {
         shouldSet = true;
         LOG_DEBUG("Reapply GPS time: %ld secs", printableEpoch);
-    } else if (q == RTCQualityNTP && !Throttle::isWithinTimespanMs(lastSetMsec, (12 * 60 * 60 * 1000UL))) {
-        // Every 12 hrs we will slam in a new NTP or Phone GPS / NTP time, to correct for local RTC clock drift
+    } else if (q == RTCQualityNTP && !Throttle::isWithinTimespanMs(lastSetMsec, (30 * 60 * 1000UL))) {
+        // Every 30 minutes we will slam in a new NTP or Phone GPS / NTP time, to correct for local RTC clock drift
         shouldSet = true;
         LOG_DEBUG("Reapply external time to correct clock drift %ld secs", printableEpoch);
     } else {
