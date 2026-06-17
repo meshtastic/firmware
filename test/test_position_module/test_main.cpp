@@ -1,5 +1,5 @@
-#include "PositionModule.h"
 #include "TestUtil.h"
+#include "modules/PositionModule.h"
 #include <unity.h>
 
 // These exercise PositionModule's pure broadcast-policy helpers (stationary detection and the
