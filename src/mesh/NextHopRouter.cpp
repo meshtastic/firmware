@@ -223,7 +223,7 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         // isn't trusted on the next DM's first (and on dense meshes, slowest) attempt. We only act on
         // a health record that still matches the stored byte; a next_hop set by another path (e.g.
         // TraceRouteModule) with no matching record is left authoritative.
-        RouteHealth *h = findRouteHealth(to);
+        const RouteHealth *h = findRouteHealth(to);
         if (h && h->lastNextHop == node->next_hop && isRouteStale(*h, millis())) {
             LOG_INFO("Next hop 0x%x for 0x%x is stale (age/fails); flood and clear", node->next_hop, to);
             node->next_hop = NO_NEXT_HOP_PREFERENCE; // clear persisted route
@@ -255,7 +255,7 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
     if (trafficManagementModule) {
         uint8_t hint = trafficManagementModule->getNextHopHint(to);
         if (hint && hint != relay_node) {
-            RouteHealth *h = findRouteHealth(to);
+            const RouteHealth *h = findRouteHealth(to);
             if (h && h->lastNextHop == hint && isRouteStale(*h, millis())) {
                 LOG_INFO("TMM next hop 0x%x for 0x%x is stale (age/fails); flood and clear", hint, to);
                 trafficManagementModule->clearNextHop(to); // clear overflow route (setNextHop won't store 0)

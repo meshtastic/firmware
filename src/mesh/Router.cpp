@@ -122,7 +122,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     // decrement (the safe default).
     NodeNum resolved = 0;
     if (nodeDB->resolveUniqueLastByte(p->relay_node, /*requireDirectNeighbor=*/false, &resolved)) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(resolved);
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(resolved);
         if (node && nodeInfoLiteIsFavorite(node) && nodeInfoLiteHasUser(node) &&
             IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
