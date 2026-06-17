@@ -1413,9 +1413,10 @@ void AdminModule::handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &r
 void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
 {
 #if WARM_NODE_COUNT > 0 && MESHTASTIC_NODEDB_MIGRATION_VERBOSE
-    // Debug aid: dump the warm tier to the console on a metadata request (e.g.
-    // `meshtastic --info`), so an operator can inspect it over USB/BLE.
-    if (nodeDB)
+    // Debug aid: dump the warm tier to the console on a local metadata request
+    // (e.g. `meshtastic --info` over USB/BLE). Gated to req.from == 0 so remote
+    // or admin polling can't spam the console.
+    if (nodeDB && req.from == 0)
         nodeDB->warmStore.dumpToLog("admin get_metadata");
 #endif
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;

@@ -1572,8 +1572,8 @@ void menuHandler::manageNodeMenu()
                 nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
             } else {
                 LOG_INFO("Adding node %08X to favorites", menuHandler::pickedNodeNum);
-                if (!nodeDB->set_favorite(true, menuHandler::pickedNodeNum))
-                    LOG_WARN(NodeDB::PROTECTED_CAP_WARN_FMT, "favorite", menuHandler::pickedNodeNum, MAX_NUM_NODES - 2);
+                // set_favorite() already logs PROTECTED_CAP_WARN_FMT on a cap refusal; don't double-log here.
+                nodeDB->set_favorite(true, menuHandler::pickedNodeNum);
             }
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
