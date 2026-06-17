@@ -315,11 +315,12 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
             static_cast<uint8_t>(static_cast<uint8_t>((currentRateTick() - e.getRateTime()) & 0x0F) * 5 / 3);
         const uint8_t unknownAgePosScale =
             static_cast<uint8_t>(static_cast<uint8_t>((currentUnknownTick() - e.getUnknownTime()) & 0x0F) / 6);
-        uint8_t recency = posAge;
-        if (e.rate_count != 0 && rateAgePosScale > recency)
-            recency = rateAgePosScale;
-        if (e.unknown_count != 0 && unknownAgePosScale > recency)
-            recency = unknownAgePosScale;
+        uint8_t recencyAge = posAge;
+        if (e.rate_count != 0 && rateAgePosScale > recencyAge)
+            recencyAge = rateAgePosScale;
+        if (e.unknown_count != 0 && unknownAgePosScale > recencyAge)
+            recencyAge = unknownAgePosScale;
+        const uint8_t recency = static_cast<uint8_t>(UINT8_MAX - recencyAge);
         if (!victim || (hasHop == victimHasHop ? recency < victimRecency : !hasHop)) {
             victim = &e;
             victimHasHop = hasHop;
@@ -817,8 +818,10 @@ int32_t TrafficManagementModule::runOnce()
         nextHopPreloaded = true;
 
     // Free-running tick counters (no epoch needed).
-    // TTL expressed in ticks: pos 4× interval (default 44 ticks ≈ 4.4h),
-    // rate 2× window (default 24 ticks = 2h), unknown fixed 12 ticks (12 min).
+    // TTL expressed in ticks:
+    // pos: 4× position_min_interval_secs (clamped to 255 ticks @ 6 min/tick)
+    // rate: 2× rate_limit_window_secs (clamped to 15 ticks @ 5 min/tick; only relevant when rate_limit_enabled)
+    // unknown: fixed 12 ticks @ 1 min/tick (only relevant when drop_unknown_enabled)
     const uint32_t positionIntervalMs = secsToMs(Default::getConfiguredOrDefault(
         moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
     const uint8_t posTtlTicks =
