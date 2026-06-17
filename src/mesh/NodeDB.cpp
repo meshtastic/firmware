@@ -768,6 +768,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         LOG_ERROR("Could not remove rangetest.csv file");
     }
 #endif
+
     spiLock->unlock();
 
     // rmDir above nuked the .dat file, but TransmitHistory's in-memory
@@ -778,12 +779,14 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 #if HAS_SCREEN
     messageStore.clearAllMessages();
 #endif
+
 #if WARM_NODE_COUNT > 0
     // On nRF52840 the warm tier lives in raw flash outside /prefs, so rmDir
     // didn't touch it; clear it and persist the empty store.
     warmStore.clear();
     warmStore.saveIfDirty();
 #endif
+
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultNodeDatabase();
     installDefaultDeviceState();
@@ -798,6 +801,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
         nvs_flash_erase();
 #endif
+
 #ifdef ARCH_NRF52
         LOG_INFO("Clear bluetooth bonds!");
         bond_print_list(BLE_GAP_ROLE_PERIPH);
@@ -820,12 +824,15 @@ void NodeDB::installDefaultNodeDatabase()
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
     nodePositions.clear();
 #endif
+
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
     nodeTelemetry.clear();
 #endif
+
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
     nodeEnvironment.clear();
 #endif
+
 #if !MESHTASTIC_EXCLUDE_STATUSDB
     nodeStatus.clear();
 #endif
@@ -888,34 +895,42 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
     config.lora.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #else
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_USE_PRESET
     config.lora.use_preset = USERPREFS_LORACONFIG_USE_PRESET;
 #else
     config.lora.use_preset = true;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_BANDWIDTH
     config.lora.bandwidth = USERPREFS_LORACONFIG_BANDWIDTH;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_SPREAD_FACTOR
     config.lora.spread_factor = USERPREFS_LORACONFIG_SPREAD_FACTOR;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_CODING_RATE
     config.lora.coding_rate = USERPREFS_LORACONFIG_CODING_RATE;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
     config.lora.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
 #endif
+
     config.lora.hop_limit = HOP_RELIABLE;
 #ifdef USERPREFS_CONFIG_LORA_IGNORE_MQTT
     config.lora.ignore_mqtt = USERPREFS_CONFIG_LORA_IGNORE_MQTT;
 #else
     config.lora.ignore_mqtt = false;
 #endif
+
     // Initialize admin_key_count to zero
     byte numAdminKeys = 0;
 
@@ -945,6 +960,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         numAdminKeys++;
     }
 #endif
+
     config.security.admin_key_count = numAdminKeys;
 
     if (shouldPreserveKey) {
@@ -959,6 +975,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
+
 #if defined(USERPREFS_CONFIG_GPS_MODE)
     config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
 #elif !HAS_GPS || GPS_DEFAULT_NOT_PRESENT
@@ -971,11 +988,13 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
 #endif
+
 #ifdef USERPREFS_CONFIG_SMART_POSITION_ENABLED
     config.position.position_broadcast_smart_enabled = USERPREFS_CONFIG_SMART_POSITION_ENABLED;
 #else
     config.position.position_broadcast_smart_enabled = true;
 #endif
+
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = default_broadcast_smart_minimum_interval_secs;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
@@ -995,6 +1014,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     // default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
 #endif
+
     config.bluetooth.fixed_pin = defaultBLEPin;
 
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
@@ -1006,7 +1026,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     if (st7789_id == 0xFFFFFF) {
         hasScreen = false;
     }
-#endif
+#endif // HELTEC_MESH_NODE_T114
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
     if (portduino_config.displayPanel)
@@ -1026,6 +1046,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
 #endif
+
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
@@ -1038,8 +1059,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.network.enabled_protocols = USERPREFS_NETWORK_ENABLED_PROTOCOLS;
 #else
     config.network.enabled_protocols = 0;
-#endif
-#endif
+#endif // Network enabled protocols
+#endif // UDP Multicast
 
 #ifdef USERPREFS_NETWORK_WIFI_ENABLED
     config.network.wifi_enabled = USERPREFS_NETWORK_WIFI_ENABLED;
@@ -1066,16 +1087,20 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef DISPLAY_FLIP_SCREEN
     config.display.flip_screen = true;
 #endif
+
 #ifdef RAK4630
     config.display.wake_on_tap_or_motion = true;
 #endif
+
 #if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
+
 #ifdef COMPASS_ORIENTATION
     config.display.compass_orientation = COMPASS_ORIENTATION;
 #endif
+
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
     if (MeshtasticOTA::isUpdated()) {
         MeshtasticOTA::recoverConfig(&config.network);
@@ -1099,6 +1124,7 @@ void NodeDB::initConfigIntervals()
 #else
     config.position.gps_update_interval = default_gps_update_interval;
 #endif
+
 #ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
     config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
 #else
@@ -1135,22 +1161,26 @@ void NodeDB::installDefaultModuleConfig()
     defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
     moduleConfig.external_notification.enabled = true;
 #endif
+
 #if defined(PIN_BUZZER)
     moduleConfig.external_notification.output_buzzer = PIN_BUZZER;
     moduleConfig.external_notification.use_pwm = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
 #endif
+
 #if defined(PIN_VIBRATION)
     moduleConfig.external_notification.output_vibra = PIN_VIBRATION;
     moduleConfig.external_notification.alert_message_vibra = true;
     moduleConfig.external_notification.output_ms = 500;
 #endif
+
 #if defined(LED_NOTIFICATION)
     moduleConfig.external_notification.output = LED_NOTIFICATION;
     moduleConfig.external_notification.active = LED_STATE_ON;
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
 #endif
+
 #if defined(PIN_VIBRATION)
     moduleConfig.external_notification.nag_timeout = 2;
 #elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
@@ -1167,14 +1197,16 @@ void NodeDB::installDefaultModuleConfig()
         moduleConfig.external_notification.nag_timeout = 0;
 #else
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
-#endif
-#endif
+#endif // HAS_TFT
+#endif // HAS_I2S
+
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
-#endif
+#endif // NANO_G2_ULTRA
+
 #ifdef T_LORA_PAGER
     moduleConfig.canned_message.updown1_enabled = true;
     moduleConfig.canned_message.inputbroker_pin_a = ROTARY_A;
@@ -1184,35 +1216,43 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.canned_message.inputbroker_event_ccw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar(29);
     moduleConfig.canned_message.inputbroker_event_press = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
 #endif
+
     moduleConfig.has_canned_message = true;
+
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
     moduleConfig.mqtt.enabled = true;
 #endif
+
 #ifdef USERPREFS_MQTT_ADDRESS
     strncpy(moduleConfig.mqtt.address, USERPREFS_MQTT_ADDRESS, sizeof(moduleConfig.mqtt.address));
 #else
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
 #endif
+
 #ifdef USERPREFS_MQTT_USERNAME
     strncpy(moduleConfig.mqtt.username, USERPREFS_MQTT_USERNAME, sizeof(moduleConfig.mqtt.username));
 #else
     strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
 #endif
+
 #ifdef USERPREFS_MQTT_PASSWORD
     strncpy(moduleConfig.mqtt.password, USERPREFS_MQTT_PASSWORD, sizeof(moduleConfig.mqtt.password));
 #else
     strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
 #endif
+
 #ifdef USERPREFS_MQTT_ROOT_TOPIC
     strncpy(moduleConfig.mqtt.root, USERPREFS_MQTT_ROOT_TOPIC, sizeof(moduleConfig.mqtt.root));
 #else
     strncpy(moduleConfig.mqtt.root, default_mqtt_root, sizeof(moduleConfig.mqtt.root));
 #endif
+
 #ifdef USERPREFS_MQTT_ENCRYPTION_ENABLED
     moduleConfig.mqtt.encryption_enabled = USERPREFS_MQTT_ENCRYPTION_ENABLED;
 #else
     moduleConfig.mqtt.encryption_enabled = default_mqtt_encryption_enabled;
 #endif
+
 #ifdef USERPREFS_MQTT_TLS_ENABLED
     moduleConfig.mqtt.tls_enabled = USERPREFS_MQTT_TLS_ENABLED;
 #else
@@ -1306,11 +1346,13 @@ void NodeDB::initModuleConfigIntervals()
 #else
     moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
 #endif
+
 #ifdef USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL
     moduleConfig.telemetry.environment_update_interval = USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL;
 #else
     moduleConfig.telemetry.environment_update_interval = 0;
 #endif
+
 #ifdef USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED
     moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED;
 #endif
@@ -1358,6 +1400,7 @@ void NodeDB::resetNodes(bool keepFavorites)
 #if WARM_NODE_COUNT > 0
     warmStore.clear(); // warm entries are never favorites; a DB reset clears them too
 #endif
+
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
     saveDeviceStateToDisk();
@@ -1383,6 +1426,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
     // Explicit user removal: don't let the warm tier resurrect the node
     warmStore.remove(nodeNum);
 #endif
+
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveNodeDatabaseToDisk();
 }
@@ -1519,12 +1563,15 @@ void NodeDB::eraseNodeSatellites(NodeNum n)
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
     nodePositions.erase(n);
 #endif
+
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
     nodeTelemetry.erase(n);
 #endif
+
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
     nodeEnvironment.erase(n);
 #endif
+
 #if !MESHTASTIC_EXCLUDE_STATUSDB
     nodeStatus.erase(n);
 #endif
@@ -1549,15 +1596,19 @@ bool NodeDB::enforceSatelliteCaps()
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
     trim(nodePositions, "position");
 #endif
+
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
     trim(nodeTelemetry, "telemetry");
 #endif
+
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
     trim(nodeEnvironment, "environment");
 #endif
+
 #if !MESHTASTIC_EXCLUDE_STATUSDB
     trim(nodeStatus, "status");
 #endif
+
     (void)trim; // all four maps may be compiled out
     return trimmedAny;
 }
@@ -1590,6 +1641,7 @@ void NodeDB::cleanupMeshDB()
                 if (n.public_key.size == 32)
                     warmStore.absorb(gone, n.last_heard, n.public_key.bytes);
 #endif
+
                 eraseNodeSatellites(gone);
             }
             removed++;
@@ -1622,12 +1674,15 @@ void NodeDB::installDefaultDeviceState()
 #else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %04x", getNodeNum() & 0x0ffff);
 #endif
+
     clampLongName(owner.long_name); // vendor userprefs may exceed the local cap
+
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
     snprintf(owner.short_name, sizeof(owner.short_name), (const char *)USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
     snprintf(owner.short_name, sizeof(owner.short_name), "%04x", getNodeNum() & 0x0ffff);
 #endif
+
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
     owner.has_is_unmessagable = true;
@@ -1809,6 +1864,7 @@ void NodeDB::nodeDBSelfCare()
     if (nodesOverCap)
         demoteOldestHotNodesToWarm(); // demotes oldest NON-self overflow; index 0 (us) left in place
 #endif
+
     if (numMeshNodes > MAX_NUM_NODES) {
         LOG_WARN("NodeDB self-care: %d over cap %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
@@ -1837,6 +1893,7 @@ void NodeDB::nodeDBSelfCare()
 #else
     const bool storageLocked = false;
 #endif
+
     if ((nodesOverCap || satsTrimmed) && !storageLocked) {
         LOG_MIGRATION("NodeDB self-care: healed store (nodes-over-cap:%s sats-trimmed:%s); rewriting nodes.proto once",
                       nodesOverCap ? "yes" : "no", satsTrimmed ? "yes" : "no");
@@ -1859,6 +1916,7 @@ void NodeDB::loadFromDisk()
     // of silently falling back to defaults.
     storageCorruptThisLoad = false;
 #endif
+
     migrationSavePending = false;
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
@@ -1971,24 +2029,28 @@ void NodeDB::loadFromDisk()
 #else
             0u;
 #endif
+
         const unsigned telCount =
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
             (unsigned)nodeTelemetry.size();
 #else
             0u;
 #endif
+
         const unsigned envCount =
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
             (unsigned)nodeEnvironment.size();
 #else
             0u;
 #endif
+
         const unsigned statusCount =
 #if !MESHTASTIC_EXCLUDE_STATUSDB
             (unsigned)nodeStatus.size();
 #else
             0u;
 #endif
+
         LOG_INFO("Loaded saved nodedatabase v%d: %d nodes, %u pos, %u tel, %u env, %u status", nodeDatabase.version,
                  nodeDatabase.nodes.size(), posCount, telCount, envCount, statusCount);
     }
@@ -2072,18 +2134,23 @@ void NodeDB::loadFromDisk()
 #ifdef USERPREFS_CONFIG_LORA_REGION
     config.lora.region = USERPREFS_CONFIG_LORA_REGION;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_USE_PRESET
     config.lora.use_preset = USERPREFS_LORACONFIG_USE_PRESET;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_BANDWIDTH
     config.lora.bandwidth = USERPREFS_LORACONFIG_BANDWIDTH;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_SPREAD_FACTOR
     config.lora.spread_factor = USERPREFS_LORACONFIG_SPREAD_FACTOR;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_CODING_RATE
     config.lora.coding_rate = USERPREFS_LORACONFIG_CODING_RATE;
 #endif
+
 #ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
     config.lora.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
 #endif
@@ -2100,6 +2167,7 @@ void NodeDB::loadFromDisk()
 #if defined(USERPREFS_USE_ADMIN_KEY_0) || defined(USERPREFS_USE_ADMIN_KEY_1) || defined(USERPREFS_USE_ADMIN_KEY_2)
     uint16_t sum = 0;
 #endif
+
 #ifdef USERPREFS_USE_ADMIN_KEY_0
 
     for (uint8_t b = 0; b < 32; b++) {
@@ -2423,6 +2491,7 @@ bool NodeDB::saveChannelsToDisk()
     FSCom.mkdir("/prefs");
     spiLock->unlock();
 #endif
+
     return saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
 }
 
@@ -2478,6 +2547,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
     FSCom.mkdir("/prefs");
     spiLock->unlock();
 #endif
+
     // Project the maps into the on-disk vectors just before encoding; cleared
     // again on the way out so we don't carry duplicate state.
     concurrency::LockGuard guard(&satelliteMutex);
@@ -2494,6 +2564,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
 #else
     nodeDatabase.positions.clear();
 #endif
+
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
     nodeDatabase.telemetry.clear();
     nodeDatabase.telemetry.reserve(nodeTelemetry.size());
@@ -2507,6 +2578,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
 #else
     nodeDatabase.telemetry.clear();
 #endif
+
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
     nodeDatabase.environment.clear();
     nodeDatabase.environment.reserve(nodeEnvironment.size());
@@ -2520,6 +2592,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
 #else
     nodeDatabase.environment.clear();
 #endif
+
 #if !MESHTASTIC_EXCLUDE_STATUSDB
     nodeDatabase.status.clear();
     nodeDatabase.status.reserve(nodeStatus.size());
@@ -2533,6 +2606,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
 #else
     nodeDatabase.status.clear();
 #endif
+
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
     bool ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
@@ -2585,6 +2659,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     FSCom.mkdir("/prefs");
     spiLock->unlock();
 #endif
+
     if (saveWhat & SEGMENT_CONFIG) {
         config.has_device = true;
         config.has_display = true;
@@ -2847,6 +2922,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         evictSatelliteOverCap(*this, nodeTelemetry, nodeId);
         nodeTelemetry[nodeId] = t.variant.device_metrics;
 #endif
+
     } else if (t.which_variant == meshtastic_Telemetry_environment_metrics_tag) {
         if (src == RX_SRC_LOCAL) {
             LOG_DEBUG("updateTelemetry LOCAL env");
@@ -2858,6 +2934,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         evictSatelliteOverCap(*this, nodeEnvironment, nodeId);
         nodeEnvironment[nodeId] = t.variant.environment_metrics;
 #endif
+
     } else {
         return; // air_quality / power / local_stats / health: not stored per-node
     }
