@@ -702,8 +702,12 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     // GPS jitter within the configured precision.
 
     if (!isFromUs(&mp) && !isToUs(&mp)) {
-        if (cfg.position_dedup_enabled && channels.isWellKnownChannel(mp.channel) &&
-            mp.decoded.portnum == meshtastic_PortNum_POSITION_APP) {
+#ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
+        const bool dedupChannelOk = true;
+#else
+        const bool dedupChannelOk = channels.isWellKnownChannel(mp.channel);
+#endif
+        if (cfg.position_dedup_enabled && dedupChannelOk && mp.decoded.portnum == meshtastic_PortNum_POSITION_APP) {
             meshtastic_Position pos = meshtastic_Position_init_zero;
             if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Position_msg, &pos)) {
                 if (shouldDropPosition(&mp, &pos, nowMs)) {
