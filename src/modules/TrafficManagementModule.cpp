@@ -838,11 +838,12 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
         const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(getFrom(&mp));
         const meshtastic_Config_DeviceConfig_Role senderRole = sender ? sender->role : meshtastic_Config_DeviceConfig_Role_CLIENT;
         const uint8_t budget = static_cast<uint8_t>(localCap + Default::hopTrimGrace(senderRole, mp.decoded.portnum));
-        const uint8_t hopsAway = (mp.hop_start >= mp.hop_limit) ? static_cast<uint8_t>(mp.hop_start - mp.hop_limit) : 0;
+        const bool hopStartValid = (mp.hop_start >= mp.hop_limit);
+        const uint8_t hopsAway = hopStartValid ? static_cast<uint8_t>(mp.hop_start - mp.hop_limit) : 0;
         const uint8_t allowedForward = budget > hopsAway ? static_cast<uint8_t>(budget - hopsAway) : 0;
         if (mp.hop_limit > allowedForward) {
             logAction("trim", &mp, allowedForward ? "hop-trim" : "hop-trim-stop");
-            mp.hop_start = static_cast<uint8_t>(mp.hop_start - (mp.hop_limit - allowedForward));
+            mp.hop_start = hopStartValid ? static_cast<uint8_t>(hopsAway + allowedForward) : allowedForward;
             mp.hop_limit = allowedForward;
             if (allowedForward == 0)
                 incrementStat(&stats.hop_exhausted_packets); // trim-to-0 is, in effect, a hop exhaust
