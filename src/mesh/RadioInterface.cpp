@@ -621,6 +621,14 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
     const RegionProfile *groupProfile[sizeof(map.groups) / sizeof(map.groups[0])] = {};
 
     for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
+        // No room left to map any further region; once full we can't add more, so
+        // log once and stop. An incomplete map means clients won't constrain the
+        // omitted regions, so this must be discoverable rather than silent.
+        if (map.region_groups_count >= maxRegions) {
+            LOG_ERROR("Region preset map full at %u regions; remaining regions omitted", (unsigned)maxRegions);
+            break;
+        }
+
         // Find the group this region belongs to, or create it.
         int gi = -1;
         for (pb_size_t g = 0; g < map.groups_count; g++) {
@@ -630,8 +638,12 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
             }
         }
         if (gi < 0) {
-            if (map.groups_count >= maxGroups)
-                continue; // out of group slots (should not happen for the current table)
+            if (map.groups_count >= maxGroups) {
+                // Out of group slots (should not happen for the current table). The
+                // region can't be advertised; skip it but make the gap visible.
+                LOG_ERROR("Region preset map out of group slots (%u); region %d omitted", (unsigned)maxGroups, r->code);
+                continue;
+            }
             gi = map.groups_count++;
             groupProfile[gi] = r->profile;
             meshtastic_LoRaPresetGroup &grp = map.groups[gi];
@@ -642,12 +654,10 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
                 grp.presets[grp.presets_count++] = r->profile->presets[i];
         }
 
-        // Map this region to its group.
-        if (map.region_groups_count < maxRegions) {
-            meshtastic_LoRaRegionPresets &rg = map.region_groups[map.region_groups_count++];
-            rg.region = r->code;
-            rg.group_index = (uint8_t)gi;
-        }
+        // Map this region to its group (capacity checked at the top of the loop).
+        meshtastic_LoRaRegionPresets &rg = map.region_groups[map.region_groups_count++];
+        rg.region = r->code;
+        rg.group_index = (uint8_t)gi;
     }
 }
 

@@ -223,10 +223,13 @@ static void test_regionPresetMap_coversAllRegionsWithinBounds()
     const size_t known = countKnownRegions();
     TEST_ASSERT_EQUAL_UINT((unsigned)known, (unsigned)map.region_groups_count);
 
-    // Bounds from mesh.options.
+    // Bounds derived from the generated nanopb arrays (mesh.options max_count), so
+    // this stays correct if those bounds change.
+    const size_t maxGroups = sizeof(map.groups) / sizeof(map.groups[0]);
+    const size_t maxRegions = sizeof(map.region_groups) / sizeof(map.region_groups[0]);
     TEST_ASSERT_GREATER_THAN_UINT(0, map.groups_count);
-    TEST_ASSERT_LESS_OR_EQUAL_UINT(8, map.groups_count);
-    TEST_ASSERT_LESS_OR_EQUAL_UINT(38, map.region_groups_count);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxGroups, map.groups_count);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxRegions, map.region_groups_count);
 
     // Each known region appears exactly once.
     for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
@@ -253,9 +256,11 @@ static void test_regionPresetMap_matchesRegionTable()
         const meshtastic_LoRaPresetGroup &grp = map.groups[gi];
         const RegionInfo *r = getRegion(code);
 
-        // Group's list is non-empty, within bounds, and is the region's full list.
+        // Group's list is non-empty, within the generated array bound, and is the
+        // region's full list.
+        const size_t maxPresets = sizeof(grp.presets) / sizeof(grp.presets[0]);
         TEST_ASSERT_GREATER_THAN_UINT(0, grp.presets_count);
-        TEST_ASSERT_LESS_OR_EQUAL_UINT(11, grp.presets_count);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxPresets, grp.presets_count);
         TEST_ASSERT_EQUAL_UINT((unsigned)r->getNumPresets(), (unsigned)grp.presets_count);
 
         // Every advertised preset is legal in this region.

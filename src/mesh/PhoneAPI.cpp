@@ -518,9 +518,9 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     STATE_SEND_OWN_NODEINFO,
     STATE_SEND_METADATA,
     STATE_SEND_REGION_PRESETS, // region -> valid modem presets (one message)
-    STATE_SEND_CHANNELS
+    STATE_SEND_CHANNELS,
     STATE_SEND_CONFIG,
-    STATE_SEND_MODULE_CONFIG,
+    STATE_SEND_MODULECONFIG,
     STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to the client
     STATE_SEND_FILEMANIFEST,
     STATE_SEND_COMPLETE_ID,

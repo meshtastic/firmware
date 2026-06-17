@@ -90,7 +90,7 @@ what you can receive:
 `region_presets` is sent **once** during the `want_config` handshake, as a single
 `FromRadio` message, in this position:
 
-```
+```text
 my_info → (deviceuiConfig) → node_info(self) → metadata → region_presets → channel… → config… → moduleConfig… → node_info(others)… → fileInfo… → config_complete_id → (live packets)
 ```
 
@@ -106,7 +106,7 @@ i.e. **immediately after `metadata` and before the first `channel`**.
 
 Flatten the grouped wire form into `Map<RegionCode, RegionPresetInfo>`:
 
-```
+```text
 struct RegionPresetInfo { Set<ModemPreset> presets; ModemPreset default; bool licensedOnly }
 
 fun decode(map: LoRaRegionPresetMap): Map<RegionCode, RegionPresetInfo> {
