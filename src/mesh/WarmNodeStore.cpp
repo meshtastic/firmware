@@ -471,19 +471,36 @@ void WarmNodeStore::load()
     if (!f)
         return;
     WarmStoreHeader h;
-    bool ok = (size_t)f.read((uint8_t *)&h, sizeof(h)) == sizeof(h) && h.magic == WARM_STORE_MAGIC &&
-              h.entrySize == sizeof(WarmNodeEntry) && h.count <= WARM_NODE_COUNT;
-    if (ok && h.count) {
-        const size_t len = (size_t)h.count * sizeof(WarmNodeEntry);
-        ok = (size_t)f.read((uint8_t *)entries, len) == len && crc32Buffer(entries, len) == h.crc;
-        if (!ok)
-            memset(entries, 0, WARM_NODE_COUNT * sizeof(WarmNodeEntry));
+    if ((size_t)f.read((uint8_t *)&h, sizeof(h)) != sizeof(h)) {
+        f.close();
+        LOG_WARN("WarmStore: %s header read failed, starting empty", warmFileName);
+        return;
     }
-    f.close();
-    if (ok)
-        LOG_INFO("WarmStore: loaded %u warm nodes from %s", h.count, warmFileName);
-    else
-        LOG_WARN("WarmStore: %s invalid, starting empty", warmFileName);
+    if (h.magic != WARM_STORE_MAGIC || h.entrySize != sizeof(WarmNodeEntry) || h.count > WARM_NODE_COUNT) {
+        f.close();
+        LOG_WARN("WarmStore: %s header invalid (magic=0x%08x entrySize=%u count=%u), starting empty", warmFileName, h.magic,
+                 h.entrySize, h.count);
+        return;
+    }
+    // Zero the buffer now: covers h.count==0 (empty file) and ensures the tail
+    // is clean for any partial load below.
+    memset(entries, 0, WARM_NODE_COUNT * sizeof(WarmNodeEntry));
+    if (h.count) {
+        const size_t len = (size_t)h.count * sizeof(WarmNodeEntry);
+        const bool readOk = (size_t)f.read((uint8_t *)entries, len) == len;
+        f.close();
+        if (!readOk) {
+            LOG_WARN("WarmStore: %s entries read failed, starting empty", warmFileName);
+            return;
+        }
+        if (crc32Buffer(entries, len) != h.crc) {
+            LOG_WARN("WarmStore: %s CRC mismatch, starting empty", warmFileName);
+            return;
+        }
+    } else {
+        f.close();
+    }
+    LOG_INFO("WarmStore: loaded %u warm nodes from %s", h.count, warmFileName);
 }
 
 bool WarmNodeStore::save()
