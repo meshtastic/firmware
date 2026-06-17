@@ -38,6 +38,14 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
 
     void handleNewPosition();
 
+    // Pure broadcast-policy helpers, split out so they're unit-testable without the module.
+    // True when two coordinates truncate to the same precision cell (so a re-broadcast would be a
+    // duplicate). precision 0 or >=32 returns false: no coarse cell to hold within, never suppress.
+    static bool positionWithinPrecisionCell(int32_t aLat, int32_t aLon, int32_t bLat, int32_t bLon, uint32_t precision);
+    // Effective min interval: stationary positions are held to stationaryFloorMs (when that is the
+    // longer of the two); otherwise the normal configured interval.
+    static uint32_t effectiveBroadcastIntervalMs(uint32_t configuredIntervalMs, bool stationary, uint32_t stationaryFloorMs);
+
   protected:
     /** Called to handle a particular incoming message
 

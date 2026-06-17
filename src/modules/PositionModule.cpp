@@ -445,11 +445,24 @@ bool PositionModule::positionUnchangedSinceLastSend(const meshtastic_PositionLit
         if (precisionBits != 0)
             break;
     }
-    if (precisionBits == 0 || precisionBits >= 32)
-        return false; // sharing disabled or full precision: don't suppress
 
-    return truncateCoordinate(selfPos.latitude_i, precisionBits) == truncateCoordinate(lastGpsLatitude, precisionBits) &&
-           truncateCoordinate(selfPos.longitude_i, precisionBits) == truncateCoordinate(lastGpsLongitude, precisionBits);
+    return positionWithinPrecisionCell(selfPos.latitude_i, selfPos.longitude_i, lastGpsLatitude, lastGpsLongitude, precisionBits);
+}
+
+bool PositionModule::positionWithinPrecisionCell(int32_t aLat, int32_t aLon, int32_t bLat, int32_t bLon, uint32_t precision)
+{
+    if (precision == 0 || precision >= 32)
+        return false; // sharing disabled or full precision: no coarse cell to hold within
+
+    return truncateCoordinate(aLat, precision) == truncateCoordinate(bLat, precision) &&
+           truncateCoordinate(aLon, precision) == truncateCoordinate(bLon, precision);
+}
+
+uint32_t PositionModule::effectiveBroadcastIntervalMs(uint32_t configuredIntervalMs, bool stationary, uint32_t stationaryFloorMs)
+{
+    if (stationary && stationaryFloorMs > configuredIntervalMs)
+        return stationaryFloorMs;
+    return configuredIntervalMs;
 }
 
 int32_t PositionModule::runOnce()
@@ -481,20 +494,14 @@ int32_t PositionModule::runOnce()
     // Hold to the stationary floor when fixed_position is set (any role) or our position hasn't
     // moved beyond the broadcast precision since the last send. A real move still goes out early
     // via the smart-broadcast branch below; the floor only governs the keepalive cadence.
-    uint32_t effectiveIntervalMs = intervalMs;
-    {
-        bool stationary = config.position.fixed_position;
-        if (!stationary && nodeDB->hasValidPosition(node)) {
-            meshtastic_PositionLite selfPos;
-            if (nodeDB->copyNodePosition(node->num, selfPos))
-                stationary = positionUnchangedSinceLastSend(selfPos);
-        }
-        if (stationary) {
-            const uint32_t floorMs = (uint32_t)default_position_stationary_broadcast_secs * 1000UL;
-            if (floorMs > effectiveIntervalMs)
-                effectiveIntervalMs = floorMs;
-        }
+    bool stationary = config.position.fixed_position;
+    if (!stationary && nodeDB->hasValidPosition(node)) {
+        meshtastic_PositionLite selfPos;
+        if (nodeDB->copyNodePosition(node->num, selfPos))
+            stationary = positionUnchangedSinceLastSend(selfPos);
     }
+    uint32_t effectiveIntervalMs =
+        effectiveBroadcastIntervalMs(intervalMs, stationary, (uint32_t)default_position_stationary_broadcast_secs * 1000UL);
 
     if (lastGpsSend == 0 || msSinceLastSend >= effectiveIntervalMs) {
         if (waitingForFreshPosition) {
