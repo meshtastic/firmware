@@ -493,6 +493,13 @@ NodeDB::NodeDB()
     // non-self overflow, pin self to index 0, rewrite once if healed.
     nodeDBSelfCare();
 
+    // If we migrated from legacy during loadFromDisk(), persist the migrated DB
+    // only after identity and self-care are established.
+    if (migrationSavePending) {
+        saveNodeDatabaseToDisk();
+        migrationSavePending = false;
+    }
+
     // If node database has not been saved for the first time, save it now
 #ifdef FSCom
     if (!FSCom.exists(nodeDatabaseFileName)) {
@@ -1852,6 +1859,7 @@ void NodeDB::loadFromDisk()
     // of silently falling back to defaults.
     storageCorruptThisLoad = false;
 #endif
+    migrationSavePending = false;
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -1950,7 +1958,7 @@ void NodeDB::loadFromDisk()
         installDefaultNodeDatabase();
     } else if (nodeDatabase.version < DEVICESTATE_CUR_VER) {
         if (migrateLegacyNodeDatabase())
-            saveNodeDatabaseToDisk();
+            migrationSavePending = true;
         else
             installDefaultNodeDatabase();
     } else {
@@ -2288,6 +2296,12 @@ bool NodeDB::reloadFromDisk()
     // is valid at runtime) to trim/demote non-self overflow, pin self to index 0
     // and normalise the backing store before the node DB is exercised again.
     nodeDBSelfCare();
+
+    // Preserve constructor ordering: persist any migration only after self-care.
+    if (migrationSavePending) {
+        saveNodeDatabaseToDisk();
+        migrationSavePending = false;
+    }
 
     // Push the now-real config to the radio.
     if (rIface) {
