@@ -100,7 +100,11 @@ uint8_t Default::getConfiguredOrDefaultHopLimit(uint8_t configured)
 
 uint8_t Default::hopTrimGrace(meshtastic_Config_DeviceConfig_Role role, meshtastic_PortNum portnum)
 {
-    const uint8_t base = default_traffic_mgmt_hop_trim_grace_base;
+    return hopTrimGrace(role, portnum, default_traffic_mgmt_hop_trim_grace_base);
+}
+
+uint8_t Default::hopTrimGrace(meshtastic_Config_DeviceConfig_Role role, meshtastic_PortNum portnum, uint8_t base)
+{
 
     // Deprecated roles get one below base (nudge operators off them).
     if (IS_ONE_OF(role, meshtastic_Config_DeviceConfig_Role_REPEATER, meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT))

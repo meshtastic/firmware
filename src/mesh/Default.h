@@ -92,6 +92,7 @@ class Default
     // Hops of grace a relayed broadcast gets over the local hop-scaling cap before its reach is
     // clamped. Keyed on the sender's role and the packet portnum; derived from the base grace.
     static uint8_t hopTrimGrace(meshtastic_Config_DeviceConfig_Role role, meshtastic_PortNum portnum);
+    static uint8_t hopTrimGrace(meshtastic_Config_DeviceConfig_Role role, meshtastic_PortNum portnum, uint8_t base);
 
   private:
     // Note: Kept as uint32_t to match the public API parameter type

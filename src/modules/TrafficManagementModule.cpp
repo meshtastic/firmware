@@ -702,11 +702,11 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     // GPS jitter within the configured precision.
 
     if (!isFromUs(&mp) && !isToUs(&mp)) {
+        const bool dedupChannelOk = cfg.apply_to_private_channels
 #ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
-        const bool dedupChannelOk = true;
-#else
-        const bool dedupChannelOk = channels.isWellKnownChannel(mp.channel);
+                                    || true
 #endif
+                                    || channels.isWellKnownChannel(mp.channel);
         if (cfg.position_dedup_enabled && dedupChannelOk && mp.decoded.portnum == meshtastic_PortNum_POSITION_APP) {
             meshtastic_Position pos = meshtastic_Position_init_zero;
             if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Position_msg, &pos)) {
@@ -745,6 +745,9 @@ bool TrafficManagementModule::wouldHopTrim(const meshtastic_MeshPacket &p) const
 #if TMM_HOP_TRIM_ENABLED
     if (!moduleConfig.has_traffic_management || !moduleConfig.traffic_management.enabled)
         return false;
+    // Runtime disable via proto field (or compile-time USERPREFS_TMM_HOP_TRIM_DISABLE).
+    if (moduleConfig.traffic_management.hop_trim_disabled)
+        return false;
     // Decryptable broadcasts only; never our own (we scale those at Router::send).
     if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || isFromUs(&p) || !isBroadcast(p.to))
         return false;
@@ -754,11 +757,15 @@ bool TrafficManagementModule::wouldHopTrim(const meshtastic_MeshPacket &p) const
     // only on a busy enough mesh for hop-scaling to be in effect.
     if (!hopScalingModule || hopScalingModule->getLastRequiredHop() >= HOP_MAX)
         return false;
-        // Channel gate, mirroring the precision clamp: well-known channels only unless opted in.
-#ifndef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
-    if (!channels.isWellKnownChannel(p.channel))
-        return false;
+    // Channel gate: well-known channels only unless opted in via proto or compile flag.
+    if (!moduleConfig.traffic_management.apply_to_private_channels
+#ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
+        && false // compile flag overrides proto
 #endif
+    ) {
+        if (!channels.isWellKnownChannel(p.channel))
+            return false;
+    }
     // router_preserve_hops wins for infra: if we're a router deliberately preserving hops on
     // non-position/telemetry traffic, don't trim it either (those keep full reach by operator choice).
     if (moduleConfig.traffic_management.router_preserve_hops &&
@@ -808,14 +815,14 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     // ~1.5 km). chanPrec==0 means position sharing is disabled on the channel;
     // skip — not our job to zero positions on relay.
     // Ham mode (owner.is_licensed) is exempt, as is a lost-and-found origin (no anti-dox).
-    // Compile USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS to extend to private channels.
+    // Set apply_to_private_channels (proto) or USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS to extend to private channels.
     if (!owner.is_licensed && isPosition && isBroadcast(mp.to) &&
         originRole(mp.from) != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
+        const bool shouldClamp = cfg.apply_to_private_channels
 #ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
-        const bool shouldClamp = true;
-#else
-        const bool shouldClamp = channels.isWellKnownChannel(mp.channel);
+                                 || true
 #endif
+                                 || channels.isWellKnownChannel(mp.channel);
         if (shouldClamp) {
             const uint32_t chanPrec = getPositionPrecisionForChannel(mp.channel);
             if (chanPrec > 0) {
@@ -841,7 +848,9 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
         const uint8_t localCap = hopScalingModule->getLastRequiredHop();
         const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(getFrom(&mp));
         const meshtastic_Config_DeviceConfig_Role senderRole = sender ? sender->role : meshtastic_Config_DeviceConfig_Role_CLIENT;
-        const uint8_t budget = static_cast<uint8_t>(localCap + Default::hopTrimGrace(senderRole, mp.decoded.portnum));
+        const uint8_t graceBase = cfg.hop_trim_grace > 0 ? static_cast<uint8_t>(cfg.hop_trim_grace)
+                                                         : static_cast<uint8_t>(default_traffic_mgmt_hop_trim_grace_base);
+        const uint8_t budget = static_cast<uint8_t>(localCap + Default::hopTrimGrace(senderRole, mp.decoded.portnum, graceBase));
         const bool hopStartValid = (mp.hop_start >= mp.hop_limit);
         const uint8_t hopsAway = hopStartValid ? static_cast<uint8_t>(mp.hop_start - mp.hop_limit) : 0;
         const uint8_t allowedForward = budget > hopsAway ? static_cast<uint8_t>(budget - hopsAway) : 0;
