@@ -1,6 +1,6 @@
 # NextHop direct-message reliability on dense meshes — findings & plan
 
-**Status:** Proposal / design doc for branch handoff (no code changes yet)
+**Status:** Implemented — mitigations and tests in `PR3-tmm-nexthop`
 **Date:** 2026-06-13
 **Area:** `src/mesh` router stack (`NextHopRouter`, `ReliableRouter`, `FloodingRouter`, `Router`, `NodeDB`, `PacketHistory`)
 **Constraint:** No over-the-air / wire-format changes — `next_hop` and `relay_node` stay 1 byte, no `PacketHeader` changes, no breaking protobuf changes. All new state is RAM-only.
