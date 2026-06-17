@@ -962,7 +962,7 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
 
     // Compare fingerprint and check time window.
     // When minIntervalMs == 0, deduplication is disabled (withinInterval = false means never drop).
-    // Presence: pos_fingerprint != 0 (zero fingerprint from real coordinates is astronomically unlikely).
+    // Presence: pos_fingerprint != 0; computePositionFingerprint() remaps 0 -> 0xFF so zero means unseen.
     const bool hasPositionState = !isNew && entry->pos_fingerprint != 0;
     const bool samePosition = hasPositionState && entry->pos_fingerprint == fingerprint;
     const uint8_t nowPosTick = currentPosTick();
