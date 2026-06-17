@@ -360,6 +360,7 @@ void MessageStore::clearAllMessages()
     resetMessagePool();
 
 #ifdef FSCom
+    concurrency::LockGuard guard(spiLock);
     SafeFile f(filename.c_str(), false);
     uint8_t count = 0;
     f.write(&count, 1); // write "0 messages"
