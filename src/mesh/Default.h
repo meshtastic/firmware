@@ -18,6 +18,9 @@
 #define default_telemetry_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_smart_minimum_interval_secs 5 * 60
+// Floor for our own position broadcasts when stationary (unchanged beyond the broadcast
+// precision) or fixed_position: identical positions get deduped by traffic management anyway.
+#define default_position_stationary_broadcast_secs (12 * 60 * 60)
 #define min_default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define min_default_broadcast_smart_minimum_interval_secs 5 * 60
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)

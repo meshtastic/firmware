@@ -57,6 +57,10 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
   private:
     meshtastic_MeshPacket *allocPositionPacket();
     struct SmartPosition getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition);
+    // True when our position is unchanged since the last broadcast: it truncates to the same
+    // precision grid cell on the broadcast channel, so re-sending would be a duplicate that
+    // traffic management dedups downstream anyway. Used to hold stationary broadcasts to a 12h floor.
+    bool positionUnchangedSinceLastSend(const meshtastic_PositionLite &selfPos);
     meshtastic_MeshPacket *allocAtakPli();
     void trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate = false);
     uint32_t precision;
