@@ -9,6 +9,7 @@
 #include "FSCommon.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
@@ -727,6 +728,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     if (transmitHistory) {
         transmitHistory->clear();
     }
+#if HAS_SCREEN
+    messageStore.clearAllMessages();
+#endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultNodeDatabase();
     installDefaultDeviceState();
@@ -3047,8 +3051,15 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    // Only generate keys for non-licensed users and if LoRa region is set
-    if (owner.is_licensed || config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+    // Only generate keys for non-licensed users and if the LoRa region is set. The native simulator
+    // boots region-UNSET but still needs a keypair so PKI-encrypted DMs work between sim nodes, so
+    // allow keygen there regardless of region.
+    bool regionBlocksKeygen = config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+#if ARCH_PORTDUINO
+    if (portduino_config.lora_module == use_simradio)
+        regionBlocksKeygen = false;
+#endif
+    if (owner.is_licensed || regionBlocksKeygen) {
         return false;
     }
 
