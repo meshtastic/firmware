@@ -49,6 +49,17 @@ uint32_t secsToMs(uint32_t secs)
     return static_cast<uint32_t>(ms);
 }
 
+// Advertised role of the originating node (from NodeDB), or CLIENT (no exception) if unknown.
+// Position filtering grants two role exceptions: trackers may refresh duplicates hourly, and
+// lost-and-found is throttled only to the shortest tick window with no precision clamp.
+meshtastic_Config_DeviceConfig_Role originRole(NodeNum from)
+{
+    const meshtastic_NodeInfoLite *n = nodeDB ? nodeDB->getMeshNode(from) : nullptr;
+    if (n && n->has_user)
+        return n->user.role;
+    return meshtastic_Config_DeviceConfig_Role_CLIENT;
+}
+
 /**
  * Clamp precision to a valid dedup range.
  * Invalid values use the module default precision.
@@ -737,9 +748,10 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     // channel is intended to carry (e.g. a LongFast channel set to 13-bit /
     // ~1.5 km). chanPrec==0 means position sharing is disabled on the channel;
     // skip — not our job to zero positions on relay.
-    // Ham mode (owner.is_licensed) is exempt.
+    // Ham mode (owner.is_licensed) is exempt, as is a lost-and-found origin (no anti-dox).
     // Compile USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS to extend to private channels.
-    if (!owner.is_licensed && isPosition && isBroadcast(mp.to)) {
+    if (!owner.is_licensed && isPosition && isBroadcast(mp.to) &&
+        originRole(mp.from) != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
 #ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
         const bool shouldClamp = true;
 #else
@@ -923,7 +935,21 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     // contract documented below). The 12h default is only for resolution/TTL
     // sizing (constructor / runOnce), not for deciding whether to drop — feeding
     // the default here would silently turn the 0-disables-dedup contract off.
-    const uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
+    uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
+
+    // Role exceptions keyed on the originating node's advertised role.
+    const meshtastic_Config_DeviceConfig_Role role = originRole(p->from);
+    if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
+        // Lost-and-found: let it announce as fast as the tick system allows (one tick).
+        // Only when dedup is active — never tighten past an operator who disabled it (0).
+        if (minIntervalMs != 0)
+            minIntervalMs = kPosTimeTickMs;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER || role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+        // Trackers may refresh a duplicate position as often as hourly (cap, never lengthens).
+        const uint32_t trackerCapMs = secsToMs(default_traffic_mgmt_tracker_position_min_interval_secs);
+        if (minIntervalMs > trackerCapMs)
+            minIntervalMs = trackerCapMs;
+    }
 
     bool isNew = false;
     concurrency::LockGuard guard(&cacheLock);
