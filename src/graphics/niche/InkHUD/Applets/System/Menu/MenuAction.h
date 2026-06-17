@@ -129,6 +129,7 @@ enum MenuAction {
     // Administration
     RESET_NODEDB_ALL,
     RESET_NODEDB_KEEP_FAVORITES,
+    WIPE_MESSAGES_ALL,
 };
 
 } // namespace NicheGraphics::InkHUD
