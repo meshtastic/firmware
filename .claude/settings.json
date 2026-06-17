@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(tr -d '\\n' | grep -o '\"file_path\"[[:space:]]*:[[:space:]]*\"[^\"]*\"' | head -1 | sed 's/.*:[[:space:]]*\"//; s/\"$//'); [ -n \"$f\" ] && [ -f \"$f\" ] || exit 0; t=$(command -v trunk || echo \"$HOME/.cache/trunk/launcher/trunk\"); [ -x \"$t\" ] || { echo \"trunk-fmt hook: trunk not found; its launcher needs curl or wget to bootstrap the CLI (see 'Formatting & the trunk toolchain' in .github/copilot-instructions.md)\" >&2; exit 1; }; out=$(\"$t\" fmt --force \"$f\" 2>&1) || { echo \"trunk-fmt hook: trunk fmt failed on $f: $out\" >&2; exit 1; }",
+            "timeout": 120,
+            "statusMessage": "Formatting (trunk)..."
+          }
+        ]
+      }
+    ]
+  }
+}
