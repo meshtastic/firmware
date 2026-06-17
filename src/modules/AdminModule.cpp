@@ -181,8 +181,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                     // without the user doing so deliberately.
                     LOG_INFO("PKC admin valid, but not auto-favoriting node %x because role==CLIENT_BASE", mp.from);
                 } else {
-                    LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
-                    nodeDB->setProtectedFlag(remoteNode, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+                    if (nodeDB->setProtectedFlag(remoteNode, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                        LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
+                    } else {
+                        LOG_WARN("PKC admin valid, but auto-favorite refused for node %x (protected-node cap)", mp.from);
+                    }
                 }
             }
         } else {

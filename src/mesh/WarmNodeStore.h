@@ -9,7 +9,7 @@
 // per-boot chatter routes through this so it can be silenced in one place (set
 // to 0) once they're proven; genuine LOG_WARN anomalies stay unconditional.
 #ifndef MESHTASTIC_NODEDB_MIGRATION_VERBOSE
-#define MESHTASTIC_NODEDB_MIGRATION_VERBOSE 1
+#define MESHTASTIC_NODEDB_MIGRATION_VERBOSE 0
 #endif
 #if MESHTASTIC_NODEDB_MIGRATION_VERBOSE
 #define LOG_MIGRATION(...) LOG_INFO(__VA_ARGS__)

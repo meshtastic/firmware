@@ -6,10 +6,10 @@
 #
 # The 3 app-region pages below LittleFS (0xEA000-0xED000, reclaimed by whole-image
 # LTO) are reserved for the WarmNodeStore record-ring (see WarmNodeStore.h). Our
-# linker script (nrf52840_s140_v7.ld) caps the image at 0xEA000, but boards on the
-# framework-default script (FLASH ending at 0xED000) could silently place code in
-# those pages — the first warm-store save would then brick the device. This turns
-# that into a build failure.
+# linker scripts (nrf52840_s140_v6.ld and nrf52840_s140_v7.ld) cap the image at
+# 0xEA000, but boards on the framework-default script (FLASH ending at 0xED000) could
+# silently place code in those pages — the first warm-store save would then brick the
+# device. This turns that into a build failure.
 #
 # Image flash end = __etext + sizeof(.data) (loaded at LMA __etext); symbols from
 # the framework's nrf52_common.ld.
@@ -53,7 +53,7 @@ def _assert_warm_region_clear(source, target, env):
             "The 12 KB region at 0xEA000 holds the WarmNodeStore record-ring; a warm-store\n"
             "save would overwrite this firmware's tail. Shrink the image, or shrink/move\n"
             "the region (WARM_FLASH_REGION_BASE in src/mesh/WarmNodeStore.h, the FLASH\n"
-            "LENGTH in src/platform/nrf52/nrf52840_s140_v7.ld, and this guard).\n\n"
+            "LENGTH in src/platform/nrf52/nrf52840_s140_v6.ld and _v7.ld, and this guard).\n\n"
             % (flash_end, WARM_REGION_BASE)
         )
         from SCons.Script import Exit

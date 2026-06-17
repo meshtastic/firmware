@@ -466,6 +466,9 @@ void WarmNodeStore::load()
 {
     if (!entries)
         return;
+    // Clear first — all failure paths below then correctly represent "empty",
+    // even if load() is called on an already-used instance.
+    memset(entries, 0, WARM_NODE_COUNT * sizeof(WarmNodeEntry));
     concurrency::LockGuard g(spiLock);
     auto f = FSCom.open(warmFileName, FILE_O_READ);
     if (!f)
@@ -482,9 +485,6 @@ void WarmNodeStore::load()
                  h.entrySize, h.count);
         return;
     }
-    // Zero the buffer now: covers h.count==0 (empty file) and ensures the tail
-    // is clean for any partial load below.
-    memset(entries, 0, WARM_NODE_COUNT * sizeof(WarmNodeEntry));
     if (h.count) {
         const size_t len = (size_t)h.count * sizeof(WarmNodeEntry);
         const bool readOk = (size_t)f.read((uint8_t *)entries, len) == len;
@@ -520,9 +520,8 @@ bool WarmNodeStore::save()
     h.entrySize = sizeof(WarmNodeEntry);
     h.crc = crc32Buffer(packed.data(), h.count * sizeof(WarmNodeEntry));
 
-    spiLock->lock();
+    concurrency::LockGuard g(spiLock);
     FSCom.mkdir("/prefs");
-    spiLock->unlock();
 
     auto f = SafeFile(warmFileName, false);
     f.write((const uint8_t *)&h, sizeof(h));

@@ -505,7 +505,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
-                memcpy(&p->public_key.bytes, fromKey.bytes, 32);
+                memcpy(p->public_key.bytes, fromKey.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
