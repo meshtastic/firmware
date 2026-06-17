@@ -2,6 +2,7 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "SPILock.h"
@@ -19,6 +20,7 @@
 #include "main.h"
 #endif
 #ifdef ARCH_PORTDUINO
+#include "PortduinoGlue.h"
 #include "unistd.h"
 #endif
 
@@ -106,6 +108,18 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         return handled;
     }
+#ifdef ARCH_PORTDUINO
+    // Simulator only: honor exit_simulator unconditionally for the local client (from==0).
+    // The from==0 branch below now covers pki_encrypted local packets too, but is_managed
+    // can still block it. Rather than threading simulator awareness through the auth gates,
+    // intercept here before any auth logic runs. Local-origin + force_simradio only.
+    // TODO: should a local client bypass admin auth at all? Fenced to the simulator for now.
+    if (portduino_config.force_simradio && mp.from == 0 &&
+        r->which_payload_variant == meshtastic_AdminMessage_exit_simulator_tag) {
+        LOG_INFO("Exiting simulator");
+        exit(0);
+    }
+#endif
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
     // Could tighten this up further by tracking the last public_key we went an AdminMessage request to
     // and only allowing responses from that remote.
@@ -1144,7 +1158,26 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     if (channels.ensureLicensedOperation()) {
         sendWarning(licensedModeMessage);
     }
+    // Refresh derived state (primaryIndex in particular) BEFORE the precision clamp below. usesPublicKey()
+    // resolves a secondary channel's key against the primary, so it must see the post-update primaryIndex;
+    // running the clamp first could evaluate secondaries against the previous primary and skip the clamp/warning.
     channels.onConfigChanged(); // tell the radios about this change
+
+    // Persist the public-key precision clamp for all channels that may be affected (e.g. secondaries
+    // that inherit a now-public primary key) and warn the client once if anything was coarsened.
+    bool clamped = false;
+    for (uint8_t i = 0; i < channels.getNumChannels(); i++) {
+        meshtastic_Channel &ch = channels.getByIndex(i);
+        if (ch.role == meshtastic_Channel_Role_DISABLED || !ch.settings.has_module_settings)
+            continue;
+        uint32_t allowed = getPositionPrecisionForChannel(i);
+        if (allowed != ch.settings.module_settings.position_precision) {
+            ch.settings.module_settings.position_precision = allowed;
+            clamped = true;
+        }
+    }
+    if (clamped)
+        sendWarning(publicChannelPrecisionMessage);
     saveChanges(SEGMENT_CHANNELS, false);
 }
 

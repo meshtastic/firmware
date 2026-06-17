@@ -584,6 +584,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0x6A) {
                     type = LSM6DS3;
                     logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+                } else if (registerValue == 0x6B) {
+                    type = ISM330DHCX;
+                    logFoundDevice("ISM330DHCX", (uint8_t)addr.address);
                 } else {
                     type = QMI8658;
                     logFoundDevice("QMI8658", (uint8_t)addr.address);
@@ -591,7 +594,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L", (uint8_t)addr.address)
-                SCAN_SIMPLE_CASE(HMC5883L_ADDR, HMC5883L, "HMC5883L", (uint8_t)addr.address)
+            case HMC5883L_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x4FU), 1); // get ID
+                if (registerValue == 0x40) {
+                    type = IIS2MDCTR;
+                    logFoundDevice("IIS2MDCTR", (uint8_t)addr.address);
+                    break;
+                } else {
+                    type = HMC5883L;
+                    logFoundDevice("HMC5883L", (uint8_t)addr.address);
+                    break;
+                }
 #ifdef HAS_QMA6100P
                 SCAN_SIMPLE_CASE(QMA6100P_ADDR, QMA6100P, "QMA6100P", (uint8_t)addr.address)
 #else
