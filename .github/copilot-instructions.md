@@ -635,27 +635,47 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory with 17 test suites:
+Unit tests in `test/` directory with 19 test suites:
 
 - `test_admin_radio/` - LoRa region/config validation and AdminModule dispatch
 - `test_atak/` - ATAK integration
 - `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
+- `test_hop_scaling/` - Hop scaling histogram and required-hop logic
 - `test_http_content_handler/` - HTTP handling
 - `test_mac_from_string/` - MAC address parsing
 - `test_mesh_module/` - Module framework
 - `test_meshpacket_serializer/` - Packet serialization
 - `test_mqtt/` - MQTT integration
 - `test_packet_history/` - Packet history tracking
+- `test_packet_signing/` - Packet signing
 - `test_position_precision/` - Position precision helpers
 - `test_radio/` - Radio interface
 - `test_serial/` - Serial communication
-- `test_traffic_management/` - Traffic management
+- `test_traffic_management/` - Traffic management (dedup, rate-limit, hop-trim, role exceptions)
 - `test_transmit_history/` - Retransmission tracking
 - `test_type_conversions/` - NodeDB v25 type conversion (bitfield round-trips, NodeInfoLite)
 - `test_utf8/` - UTF-8 utilities
 
-Run command (preferred — avoids pipe-buffering and the Ubuntu externally-managed-environment error):
+**Preferred run command — `bin/run-tests.sh`** (uses the `coverage` env with ASan/LSan sanitizers, emits an unambiguous RED/AMBER/GREEN verdict, and catches missing suites as AMBER):
+
+```bash
+./bin/run-tests.sh                          # all suites
+./bin/run-tests.sh -f test_traffic_management  # single suite
+./bin/run-tests.sh -f test_traffic_management > /tmp/test_out.txt 2>&1; tail -5 /tmp/test_out.txt
+```
+
+Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER. The final line is machine-readable:
+
+```
+RESULT: GREEN 19/19 suites passed
+RESULT: RED test_traffic_management: 1 failed
+RESULT: AMBER 18/19 suites ran (missing: test_radio) — all that ran passed
+```
+
+> **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
+
+Raw `pio test` (no sanitizers, no verdict logic) — use only when you need to override the env:
 
 ```bash
 ~/.platformio/penv/bin/python -m platformio test -e native -f test_your_suite > /tmp/test_out.txt 2>&1
@@ -663,7 +683,7 @@ grep -E 'error:|PASS|FAIL|succeeded|failed' /tmp/test_out.txt
 tail -15 /tmp/test_out.txt
 ```
 
-Do **not** use `pio test … | tail -N` — it discards build errors and shows stale cached results. Do **not** use `pio test … | grep` — line-buffering makes the terminal appear hung until the process exits. Redirect to a file first, then grep.
+Do **not** pipe `pio test` — line-buffering makes the terminal appear hung and hides build errors.
 
 Simulation testing: `bin/test-simulator.sh`
 
