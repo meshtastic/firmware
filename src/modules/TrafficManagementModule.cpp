@@ -702,11 +702,11 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     // GPS jitter within the configured precision.
 
     if (!isFromUs(&mp) && !isToUs(&mp)) {
-        const bool dedupChannelOk = cfg.apply_to_private_channels
 #ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
-                                    || true
+        const bool dedupChannelOk = true;
+#else
+        const bool dedupChannelOk = cfg.apply_to_private_channels || channels.isWellKnownChannel(mp.channel);
 #endif
-                                    || channels.isWellKnownChannel(mp.channel);
         if (cfg.position_dedup_enabled && dedupChannelOk && mp.decoded.portnum == meshtastic_PortNum_POSITION_APP) {
             meshtastic_Position pos = meshtastic_Position_init_zero;
             if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Position_msg, &pos)) {
@@ -757,22 +757,11 @@ bool TrafficManagementModule::wouldHopTrim(const meshtastic_MeshPacket &p) const
     // only on a busy enough mesh for hop-scaling to be in effect.
     if (!hopScalingModule || hopScalingModule->getLastRequiredHop() >= HOP_MAX)
         return false;
-    // Channel gate: well-known channels only unless opted in via proto or compile flag.
-    if (!moduleConfig.traffic_management.apply_to_private_channels
-#ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
-        && false // compile flag overrides proto
-#endif
-    ) {
-        if (!channels.isWellKnownChannel(p.channel))
-            return false;
-    }
-    // router_preserve_hops wins for infra: if we're a router deliberately preserving hops on
-    // non-position/telemetry traffic, don't trim it either (those keep full reach by operator choice).
-    if (moduleConfig.traffic_management.router_preserve_hops &&
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                  meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) &&
-        p.decoded.portnum != meshtastic_PortNum_POSITION_APP && p.decoded.portnum != meshtastic_PortNum_TELEMETRY_APP)
+        // Channel gate: well-known channels only unless opted in via proto or compile flag.
+#ifndef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
+    if (!moduleConfig.traffic_management.apply_to_private_channels && !channels.isWellKnownChannel(p.channel))
         return false;
+#endif
     return true;
 #else
     (void)p;
@@ -818,11 +807,11 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     // Set apply_to_private_channels (proto) or USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS to extend to private channels.
     if (!owner.is_licensed && isPosition && isBroadcast(mp.to) &&
         originRole(mp.from) != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
-        const bool shouldClamp = cfg.apply_to_private_channels
 #ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
-                                 || true
+        const bool shouldClamp = true;
+#else
+        const bool shouldClamp = cfg.apply_to_private_channels || channels.isWellKnownChannel(mp.channel);
 #endif
-                                 || channels.isWellKnownChannel(mp.channel);
         if (shouldClamp) {
             const uint32_t chanPrec = getPositionPrecisionForChannel(mp.channel);
             if (chanPrec > 0) {
@@ -831,9 +820,12 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
                     const uint32_t packetPrec = pos.precision_bits > 0 ? pos.precision_bits : 32u;
                     if (packetPrec > chanPrec) {
                         applyPositionPrecision(pos, chanPrec);
-                        mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
-                                                                     &meshtastic_Position_msg, &pos);
-                        logAction("clamp", &mp, "precision");
+                        const size_t encodedSize = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
+                                                                      &meshtastic_Position_msg, &pos);
+                        if (encodedSize > 0) {
+                            mp.decoded.payload.size = encodedSize;
+                            logAction("clamp", &mp, "precision");
+                        }
                     }
                 }
             }
