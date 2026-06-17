@@ -12,6 +12,7 @@
 #include "Channels.h"
 #include "Default.h"
 #include "FSCommon.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
@@ -516,6 +517,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     STATE_SEND_UIDATA,
     STATE_SEND_OWN_NODEINFO,
     STATE_SEND_METADATA,
+    STATE_SEND_REGION_PRESETS, // region -> valid modem presets (one message)
     STATE_SEND_CHANNELS
     STATE_SEND_CONFIG,
     STATE_SEND_MODULE_CONFIG,
@@ -636,7 +638,20 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             memset(&fromRadioScratch.metadata, 0, sizeof(fromRadioScratch.metadata));
         }
 #endif
+        state = STATE_SEND_REGION_PRESETS;
+        break;
+
+    case STATE_SEND_REGION_PRESETS:
+        // Tell the client which modem presets are legal in each region so its UI
+        // can block illegal region+preset combinations. This is public RF /
+        // regulatory information (region and modem_preset are already in the
+        // unauthenticated LoRa whitelist below), so it is sent unconditionally —
+        // even an unauthorized/locked-down client can render a correct picker.
+        LOG_DEBUG("Send region preset map");
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_region_presets_tag;
+        getRegionPresetMap(fromRadioScratch.region_presets);
         state = STATE_SEND_CHANNELS;
+        config_state = 0; // STATE_SEND_CHANNELS indexes channels starting at 0
         break;
 
     case STATE_SEND_CHANNELS:
