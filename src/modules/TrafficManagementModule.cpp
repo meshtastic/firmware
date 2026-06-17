@@ -55,8 +55,8 @@ uint32_t secsToMs(uint32_t secs)
 meshtastic_Config_DeviceConfig_Role originRole(NodeNum from)
 {
     const meshtastic_NodeInfoLite *n = nodeDB ? nodeDB->getMeshNode(from) : nullptr;
-    if (n && n->has_user)
-        return n->user.role;
+    if (nodeInfoLiteHasUser(n))
+        return n->role;
     return meshtastic_Config_DeviceConfig_Role_CLIENT;
 }
 

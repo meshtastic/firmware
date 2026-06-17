@@ -432,7 +432,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
 #define RUNONCE_INTERVAL 5000;
 
-bool PositionModule::positionUnchangedSinceLastSend(const meshtastic_PositionLite &selfPos)
+bool PositionModule::positionUnchangedSinceLastSend(const meshtastic_PositionLite &selfPos, bool useConfiguredPrecision)
 {
     if (lastGpsLatitude == 0 && lastGpsLongitude == 0)
         return false; // no prior broadcast to compare against
@@ -497,7 +497,7 @@ int32_t PositionModule::runOnce()
     // Hold to the 12h floor when fixed_position (every role: pinning yourself forfeits the
     // exception) or when stationary. A real move still goes out early via smart-broadcast below.
     // Not-fixed exceptions: lost-and-found broadcasts freely; trackers judge movement at their
-    // own (unclamped) precision rather than the on-wire one.
+    // own (unclamped) precision rather than the on-wire one (useConfiguredPrecision).
     const auto role = config.device.role;
     bool stationary = config.position.fixed_position;
     if (!stationary && role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && nodeDB->hasValidPosition(node)) {

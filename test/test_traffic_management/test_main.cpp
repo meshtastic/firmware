@@ -13,6 +13,7 @@
 
 #include "airtime.h"
 #include "mesh/CryptoEngine.h"
+#include "mesh/Default.h"
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
@@ -77,6 +78,13 @@ class MockNodeDB : public NodeDB
 
     // Role the TMM should see for the cached node (sender-role-aware throttles).
     void setCachedNodeRole(meshtastic_Config_DeviceConfig_Role role) { cachedNode.role = role; }
+
+    // Direct mutable access to the cached node for fine-grained bitfield manipulation in tests.
+    meshtastic_NodeInfoLite &cachedNodeForTest()
+    {
+        hasCachedNode = true;
+        return cachedNode;
+    }
 
     // Seed a node into the hot-store buffer at index 1 (index 0 is reserved for
     // "self"). Respects the fixed-buffer invariant: `meshNodes` is a buffer of
@@ -1228,6 +1236,245 @@ static void test_tm_nextHop_keptAliveAcrossMaintenanceSweep(void)
 
     TEST_ASSERT_EQUAL_UINT8(0x42, module.getNextHopHint(kTargetNode));
 }
+
+// ---------------------------------------------------------------------------
+// Role exceptions: TRACKER and LOST_AND_FOUND
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify TRACKER role caps the dedup window at 1 hour.
+ * A duplicate position that would normally be blocked for 11 h (default) must
+ * be forwarded once the 1-hour tracker cap expires.
+ */
+static void test_tm_trackerRole_capsDedupWindowAtOneHour(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 16;
+    // Operator interval is 11 h — longer than the tracker cap.
+    moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
+    installWellKnownPrimaryChannel();
+
+    mockNodeDB->setCachedNode(kRemoteNode);
+    mockNodeDB->setCachedNodeRole(meshtastic_Config_DeviceConfig_Role_TRACKER);
+
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket afterCap = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+
+    ProcessMessage r1 = module.handleReceived(first);
+    ProcessMessage r2 = module.handleReceived(dup); // still within 1-hour cap
+    // Advance past 1 hour (tracker cap = 3600 s; pos-tick = 360 s → 10 ticks).
+    TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
+    ProcessMessage r3 = module.handleReceived(afterCap);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r3));
+    TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
+}
+
+/**
+ * Verify TAK_TRACKER role receives the same 1-hour dedup cap as TRACKER.
+ * Both roles share the same exception branch; this guards against future divergence.
+ */
+static void test_tm_takTrackerRole_capsDedupWindowAtOneHour(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 16;
+    moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
+    installWellKnownPrimaryChannel();
+
+    mockNodeDB->setCachedNode(kRemoteNode);
+    mockNodeDB->setCachedNodeRole(meshtastic_Config_DeviceConfig_Role_TAK_TRACKER);
+
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket afterCap = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+
+    ProcessMessage r1 = module.handleReceived(first);
+    ProcessMessage r2 = module.handleReceived(dup);
+    TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
+    ProcessMessage r3 = module.handleReceived(afterCap);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r3));
+    TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
+}
+
+/**
+ * Verify the tracker cap never lengthens an operator-configured interval shorter
+ * than the cap default. The cap is a ceiling, not a floor.
+ */
+static void test_tm_trackerRole_doesNotLengthenShorterOperatorInterval(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 16;
+    // Operator set 5-minute interval — shorter than the 1-hour tracker cap.
+    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    installWellKnownPrimaryChannel();
+
+    mockNodeDB->setCachedNode(kRemoteNode);
+    mockNodeDB->setCachedNodeRole(meshtastic_Config_DeviceConfig_Role_TRACKER);
+
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket afterShortInterval = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+
+    ProcessMessage r1 = module.handleReceived(first);
+    ProcessMessage r2 = module.handleReceived(dup);
+    // The 300 s operator interval rounds to 1 pos-tick (360 s) — dedup is tick-granular.
+    // Advance past one full tick to verify the window is 1 tick (not the 10-tick tracker cap).
+    TrafficManagementModule::s_testNowMs += 360'000UL + 1;
+    ProcessMessage r3 = module.handleReceived(afterShortInterval);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r3));
+    TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
+}
+
+/**
+ * Verify LOST_AND_FOUND role throttles duplicates to one pos-tick (360 s) only.
+ * Without the role exception, a configured 11-hour interval would drop this
+ * second packet; with it, the tick-length window expires and the packet passes.
+ */
+static void test_tm_lostAndFoundRole_throttlesToOneTick(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 16;
+    // Long interval that would normally suppress duplicates for 11 h.
+    moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
+    installWellKnownPrimaryChannel();
+
+    mockNodeDB->setCachedNode(kRemoteNode);
+    mockNodeDB->setCachedNodeRole(meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND);
+
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket afterTick = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+
+    ProcessMessage r1 = module.handleReceived(first);
+    ProcessMessage r2 = module.handleReceived(dup); // within the one tick (< 360 s elapsed)
+    // Advance past exactly one pos-tick (360 s = kPosTimeTickMs, kept as a literal
+    // because the constant is private to TrafficManagementModule).
+    TrafficManagementModule::s_testNowMs += 360'000UL + 1;
+    ProcessMessage r3 = module.handleReceived(afterTick);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r3));
+    TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
+}
+
+/**
+ * Verify a node with unknown role (absent from NodeDB) is not granted any role
+ * exception: the full configured interval applies, so a duplicate inside that
+ * window is dropped exactly as for an ordinary CLIENT.
+ */
+static void test_tm_unknownRole_noDbEntry_appliesFullInterval(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 16;
+    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    installWellKnownPrimaryChannel();
+
+    // No cached node — getMeshNode returns nullptr for kRemoteNode.
+    mockNodeDB->clearCachedNode();
+
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket afterShort = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+
+    ProcessMessage r1 = module.handleReceived(first);
+    ProcessMessage r2 = module.handleReceived(dup); // within 300-s window — must drop
+    // The 300 s operator interval rounds to 1 pos-tick (360 s) — dedup is tick-granular.
+    // Advance past one full tick to confirm the packet passes without any tracker exception.
+    TrafficManagementModule::s_testNowMs += 360'000UL + 1;
+    ProcessMessage r3 = module.handleReceived(afterShort);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r3));
+    TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
+}
+
+/**
+ * Verify a node present in NodeDB but without user info (HAS_USER bit clear)
+ * is not granted a role exception: it falls back to CLIENT and the full
+ * configured interval applies.
+ */
+static void test_tm_unknownRole_noUserBit_appliesFullInterval(void)
+{
+    moduleConfig.traffic_management.position_dedup_enabled = true;
+    moduleConfig.traffic_management.position_precision_bits = 16;
+    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    installWellKnownPrimaryChannel();
+
+    // Node is in NodeDB but the HAS_USER bit is NOT set — role must be ignored.
+    mockNodeDB->setCachedNode(kRemoteNode);
+    // Clear the HAS_USER bit that setCachedNode sets, leaving role at CLIENT default.
+    mockNodeDB->cachedNodeForTest().bitfield &= ~NODEINFO_BITFIELD_HAS_USER_MASK;
+    mockNodeDB->cachedNodeForTest().role = meshtastic_Config_DeviceConfig_Role_TRACKER;
+
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+
+    ProcessMessage r1 = module.handleReceived(first);
+    ProcessMessage r2 = module.handleReceived(dup); // within 300-s window — must drop
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
+    TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
+}
+
+/**
+ * Verify LOST_AND_FOUND origin skips the precision clamp in alterReceived
+ * (no anti-dox). A relayed position with precision higher than the channel
+ * setting must pass through unmodified.
+ */
+static void test_tm_lostAndFoundRole_skipsAlterReceivedPrecisionClamp(void)
+{
+    installWellKnownPrimaryChannel();
+    // Channel precision set to 16 bits (~1.5 km grid) via the default route.
+    moduleConfig.traffic_management.position_precision_bits = 16;
+
+    mockNodeDB->setCachedNode(kRemoteNode);
+    mockNodeDB->setCachedNodeRole(meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND);
+
+    TrafficManagementModuleTestShim module;
+
+    // Full-precision packet — 32 bits — exceeds the channel cap of 16 bits.
+    const uint32_t fullPrecision = 32;
+    meshtastic_MeshPacket packet = makePositionPacketWithPrecision(kRemoteNode, 374221234, -1220845678, fullPrecision);
+    packet.hop_start = 3;
+    packet.hop_limit = 2; // relayed (hop_limit < hop_start) so clamp logic applies
+
+    module.alterReceived(packet);
+
+    meshtastic_Position out;
+    TEST_ASSERT_TRUE(decodePositionPayload(packet, out));
+    // Precision must be unchanged — the clamp was skipped for LOST_AND_FOUND.
+    TEST_ASSERT_EQUAL_UINT32(fullPrecision, out.precision_bits);
+}
 } // namespace
 
 void setUp(void)
@@ -1286,6 +1533,13 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nextHop_servedAfterNodeDbRoll);
     RUN_TEST(test_tm_nextHop_preloadDoesNotClobberLearned);
     RUN_TEST(test_tm_nextHop_keptAliveAcrossMaintenanceSweep);
+    RUN_TEST(test_tm_trackerRole_capsDedupWindowAtOneHour);
+    RUN_TEST(test_tm_takTrackerRole_capsDedupWindowAtOneHour);
+    RUN_TEST(test_tm_trackerRole_doesNotLengthenShorterOperatorInterval);
+    RUN_TEST(test_tm_lostAndFoundRole_throttlesToOneTick);
+    RUN_TEST(test_tm_lostAndFoundRole_skipsAlterReceivedPrecisionClamp);
+    RUN_TEST(test_tm_unknownRole_noDbEntry_appliesFullInterval);
+    RUN_TEST(test_tm_unknownRole_noUserBit_appliesFullInterval);
     exit(UNITY_END());
 }
 
