@@ -392,6 +392,11 @@ int32_t NextHopRouter::doRetransmissions()
                             LOG_INFO("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
                             sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
                         }
+#if HAS_TRAFFIC_MANAGEMENT
+                        if (trafficManagementModule) {
+                            trafficManagementModule->clearNextHop(p.packet->to);
+                        }
+#endif
                         FloodingRouter::send(packetPool.allocCopy(*p.packet));
                     } else {
 #if NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED
