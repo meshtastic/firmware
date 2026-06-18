@@ -300,15 +300,26 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     if (shouldLoraWake(msecToWake)) {
         enableLoraInterrupt();
     }
-#ifdef BUTTON_PIN
-    // Avoid leakage through button pin
-    if (GPIO_IS_VALID_OUTPUT_GPIO(BUTTON_PIN)) {
-#ifdef BUTTON_NEED_PULLUP
-        pinMode(BUTTON_PIN, INPUT_PULLUP);
-#else
-        pinMode(BUTTON_PIN, INPUT);
+#if HAS_BUTTON
+    uint32_t _btnPin = 0xFF;
+#if defined(USERPREFS_BUTTON_PIN)
+    _btnPin = USERPREFS_BUTTON_PIN;
+#elif defined(BUTTON_PIN)
+    _btnPin = BUTTON_PIN;
 #endif
-        gpio_hold_en((gpio_num_t)BUTTON_PIN);
+    if (config.device.button_gpio != 0) {
+        _btnPin = config.device.button_gpio;
+    }
+    if (_btnPin != 0xFF) {
+        // Avoid leakage through button pin
+        if (GPIO_IS_VALID_OUTPUT_GPIO(_btnPin)) {
+#ifdef BUTTON_NEED_PULLUP
+            pinMode(_btnPin, INPUT_PULLUP);
+#else
+            pinMode(_btnPin, INPUT);
+#endif
+            gpio_hold_en((gpio_num_t)_btnPin);
+        }
     }
 #endif
 #ifdef SENSECAP_INDICATOR
@@ -416,8 +427,19 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 #endif
 
-#if defined(BUTTON_PIN) && defined(BUTTON_NEED_PULLUP)
-    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+#if HAS_BUTTON && defined(BUTTON_NEED_PULLUP)
+    uint32_t _btnPin_pullup = 0xFF;
+#if defined(USERPREFS_BUTTON_PIN)
+    _btnPin_pullup = USERPREFS_BUTTON_PIN;
+#elif defined(BUTTON_PIN)
+    _btnPin_pullup = BUTTON_PIN;
+#endif
+    if (config.device.button_gpio != 0) {
+        _btnPin_pullup = config.device.button_gpio;
+    }
+    if (_btnPin_pullup != 0xFF) {
+        gpio_pullup_en((gpio_num_t)_btnPin_pullup);
+    }
 #endif
 
 #ifdef SERIAL0_RX_GPIO
@@ -450,9 +472,19 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Side-key interrupt line from PCA9535 expander (active low).
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
 #endif
-#ifdef BUTTON_PIN
-    gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-    gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
+#if HAS_BUTTON
+    uint32_t _btnPin_wake = 0xFF;
+#if defined(USERPREFS_BUTTON_PIN)
+    _btnPin_wake = USERPREFS_BUTTON_PIN;
+#elif defined(BUTTON_PIN)
+    _btnPin_wake = BUTTON_PIN;
+#endif
+    if (config.device.button_gpio != 0) {
+        _btnPin_wake = config.device.button_gpio;
+    }
+    if (_btnPin_wake != 0xFF) {
+        gpio_wakeup_enable((gpio_num_t)_btnPin_wake, GPIO_INTR_LOW_LEVEL);
+    }
 #endif
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(INPUTDRIVER_ENCODER_BTN)
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
@@ -500,9 +532,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef BOARD_PCA9535_INT
     gpio_wakeup_disable((gpio_num_t)BOARD_PCA9535_INT);
 #endif
-#ifdef BUTTON_PIN
+#if HAS_BUTTON
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
-    gpio_wakeup_disable(pin);
+    if (_btnPin_wake != 0xFF) {
+        gpio_wakeup_disable((gpio_num_t)_btnPin_wake);
+    }
 #endif
 #ifdef INPUTDRIVER_WAKE_BTN_PIN
     gpio_wakeup_disable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN);
