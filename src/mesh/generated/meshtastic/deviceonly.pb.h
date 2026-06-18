@@ -69,8 +69,8 @@ typedef PB_BYTES_ARRAY_T(32) meshtastic_NodeInfoLite_public_key_t;
 typedef struct _meshtastic_NodeInfoLite {
     /* The node number */
     uint32_t num;
-    /* Returns the Signal-to-noise ratio (SNR) of the last received message,
- as measured by the receiver. Return SNR of the last received message in dB */
+    /* In-memory SNR of the last received message in dB. Not serialised directly:
+ always zeroed before encode; persisted as snr_q4 = 19 below. */
     float snr;
     /* Set to indicate the last time we received a packet from this node */
     uint32_t last_heard;
@@ -94,6 +94,10 @@ typedef struct _meshtastic_NodeInfoLite {
     meshtastic_Config_DeviceConfig_Role role;
     /* The public key of the user's device, for PKI-based encrypted DMs. */
     meshtastic_NodeInfoLite_public_key_t public_key;
+    /* Q4-encoded SNR: dB × 4, sint32 zigzag. Matches RouteDiscovery convention.
+ Encode: snr_q4 = (int32_t)(snr * 4.0f). Decode: snr = snr_q4 / 4.0f.
+ float snr is always zeroed on disk; this field carries all persisted SNR. */
+    int32_t snr_q4;
 } meshtastic_NodeInfoLite;
 
 /* This message is never sent over the wire, but it is used for serializing DB
@@ -215,7 +219,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0}
 #define meshtastic_UserLite_init_default         {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
-#define meshtastic_NodeInfoLite_init_default     {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
+#define meshtastic_NodeInfoLite_init_default     {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, 0}
 #define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
 #define meshtastic_NodePositionEntry_init_default {0, false, meshtastic_PositionLite_init_default}
 #define meshtastic_NodeTelemetryEntry_init_default {0, false, meshtastic_DeviceMetrics_init_default}
@@ -226,7 +230,7 @@ extern "C" {
 #define meshtastic_BackupPreferences_init_default {0, 0, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default, false, meshtastic_ChannelFile_init_default, false, meshtastic_User_init_default}
 #define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, 0}
 #define meshtastic_UserLite_init_zero            {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
-#define meshtastic_NodeInfoLite_init_zero        {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
+#define meshtastic_NodeInfoLite_init_zero        {0, 0, 0, 0, false, 0, 0, 0, "", "", _meshtastic_HardwareModel_MIN, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, 0}
 #define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 #define meshtastic_NodePositionEntry_init_zero   {0, false, meshtastic_PositionLite_init_zero}
 #define meshtastic_NodeTelemetryEntry_init_zero  {0, false, meshtastic_DeviceMetrics_init_zero}
@@ -263,6 +267,7 @@ extern "C" {
 #define meshtastic_NodeInfoLite_hw_model_tag     16
 #define meshtastic_NodeInfoLite_role_tag         17
 #define meshtastic_NodeInfoLite_public_key_tag   18
+#define meshtastic_NodeInfoLite_snr_q4_tag       19
 #define meshtastic_DeviceState_my_node_tag       2
 #define meshtastic_DeviceState_owner_tag         3
 #define meshtastic_DeviceState_receive_queue_tag 5
@@ -330,7 +335,8 @@ X(a, STATIC,   SINGULAR, STRING,   long_name,        14) \
 X(a, STATIC,   SINGULAR, STRING,   short_name,       15) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,         16) \
 X(a, STATIC,   SINGULAR, UENUM,    role,             17) \
-X(a, STATIC,   SINGULAR, BYTES,    public_key,       18)
+X(a, STATIC,   SINGULAR, BYTES,    public_key,       18) \
+X(a, STATIC,   SINGULAR, SINT32,   snr_q4,           19)
 #define meshtastic_NodeInfoLite_CALLBACK NULL
 #define meshtastic_NodeInfoLite_DEFAULT NULL
 
@@ -450,7 +456,7 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 #define meshtastic_ChannelFile_size              718
 #define meshtastic_DeviceState_size              1944
 #define meshtastic_NodeEnvironmentEntry_size     170
-#define meshtastic_NodeInfoLite_size             105
+#define meshtastic_NodeInfoLite_size             112
 #define meshtastic_NodePositionEntry_size        42
 #define meshtastic_NodeStatusEntry_size          89
 #define meshtastic_NodeTelemetryEntry_size       35
