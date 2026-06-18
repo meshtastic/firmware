@@ -9,8 +9,11 @@ MEMORY
    * record-ring (3 x 4 KB pages, src/mesh/WarmNodeStore.h) occupies
    * 0xEA000-0xED000, directly below the stock LittleFS partition. Boards on
    * the framework-default linker script are covered by the post-link guard
-   * in extra_scripts/nrf52_warm_region.py instead. */
-  FLASH (rx)     : ORIGIN = 0x27000, LENGTH = 0xEA000 - 0x27000
+   * in extra_scripts/nrf52_warm_region.py instead.
+   *
+   * S140 v6.x app region starts at 0x26000 (152 KB SoftDevice); v7.x uses
+   * 0x27000. All other boundaries are identical — see nrf52840_s140_v7.ld. */
+  FLASH (rx)     : ORIGIN = 0x26000, LENGTH = 0xEA000 - 0x26000
 
   /* SRAM required by Softdevice depend on
    * - Attribute Table Size (Number of Services and Characteristics)
@@ -18,7 +21,7 @@ MEMORY
    * - Max ATT MTU
    * - Concurrent connection peripheral + central + secure links
    * - Event Len, HVN queue, Write CMD queue
-   */ 
+   */
   RAM (rwx) :  ORIGIN = 0x20006000, LENGTH = 0x20040000 - 0x20006000
 }
 
@@ -31,7 +34,7 @@ SECTIONS
     KEEP(*(.svc_data))
     PROVIDE(__stop_svc_data = .);
   } > RAM
-  
+
   .fs_data :
   {
     PROVIDE(__start_fs_data = .);

@@ -24,6 +24,7 @@ class LoRaFEMInterface
     LoRaFEMType fem_type;
     bool lna_enabled = true;
     bool lna_can_control = false;
+    bool high_power_pa = true;
 };
 extern LoRaFEMInterface loraFEMInterface;
 
