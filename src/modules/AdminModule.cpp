@@ -2,6 +2,7 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "SPILock.h"
@@ -19,6 +20,7 @@
 #include "main.h"
 #endif
 #ifdef ARCH_PORTDUINO
+#include "PortduinoGlue.h"
 #include "unistd.h"
 #endif
 
@@ -106,13 +108,29 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         return handled;
     }
+#ifdef ARCH_PORTDUINO
+    // Simulator only: honor exit_simulator unconditionally for the local client (from==0).
+    // The from==0 branch below now covers pki_encrypted local packets too, but is_managed
+    // can still block it. Rather than threading simulator awareness through the auth gates,
+    // intercept here before any auth logic runs. Local-origin + force_simradio only.
+    // TODO: should a local client bypass admin auth at all? Fenced to the simulator for now.
+    if (portduino_config.force_simradio && mp.from == 0 &&
+        r->which_payload_variant == meshtastic_AdminMessage_exit_simulator_tag) {
+        LOG_INFO("Exiting simulator");
+        exit(0);
+    }
+#endif
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
     // Could tighten this up further by tracking the last public_key we went an AdminMessage request to
     // and only allowing responses from that remote.
     if (messageIsResponse(r)) {
         LOG_DEBUG("Allow admin response message");
-    } else if (mp.from == 0 && !mp.pki_encrypted) {
-        // Plain (non-PKC) local admin from BLE/USB client.
+    } else if (mp.from == 0) {
+        // Local admin from a BLE/USB/TCP client. from == 0 cannot arrive from the
+        // mesh: RF drops packets without a sender (RadioLibInterface) and MQTT treats
+        // from == 0 as our own downlink and ignores it. Clients may set pki_encrypted
+        // on self-addressed admin (the python CLI does), so don't use it to reroute
+        // local packets into the remote-PKC key check.
         //
         // Under MESHTASTIC_PHONEAPI_ACCESS_CONTROL, the per-connection auth
         // gate lives in PhoneAPI::handleToRadioPacket — any local admin
@@ -163,8 +181,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                     // without the user doing so deliberately.
                     LOG_INFO("PKC admin valid, but not auto-favoriting node %x because role==CLIENT_BASE", mp.from);
                 } else {
-                    LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
-                    nodeInfoLiteSetBit(remoteNode, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+                    if (nodeDB->setProtectedFlag(remoteNode, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                        LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
+                    } else {
+                        LOG_WARN("PKC admin valid, but auto-favorite refused for node %x (protected-node cap)", mp.from);
+                    }
                 }
             }
         } else {
@@ -454,10 +475,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client received set_favorite_node command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
         if (node != NULL) {
-            nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
-            saveChanges(SEGMENT_NODEDATABASE, false);
-            if (screen)
-                screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
+            if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                saveChanges(SEGMENT_NODEDATABASE, false);
+                if (screen)
+                    screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
+            } else if (mp.from == 0) { // local request from the phone — tell the user why it didn't take
+                sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "favorite", r->set_favorite_node, MAX_NUM_NODES - 2);
+            }
         }
         break;
     }
@@ -474,13 +498,17 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_set_ignored_node_tag: {
         LOG_INFO("Client received set_ignored_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_ignored_node);
+        // Unlike the sibling node-targeted admin commands, create the entry if
+        // it's absent so the block sticks for a node we've not heard from yet
+        // (e.g. one a remote admin asks us to block) with no NodeInfo or key.
+        meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(r->set_ignored_node);
         if (node != NULL) {
-            nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
-            nodeDB->eraseNodeSatellites(node->num);
-            node->public_key.size = 0;
-            memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
+                nodeDB->eraseNodeSatellites(node->num);
+                saveChanges(SEGMENT_NODEDATABASE, false);
+            } else if (mp.from == 0) { // local request from the phone — tell the user why it didn't take
+                sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", r->set_ignored_node, MAX_NUM_NODES - 2);
+            }
         }
         break;
     }
@@ -542,7 +570,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if HAS_SCREEN
         IF_SCREEN(screen->showSimpleBanner("Device is rebooting\ninto DFU mode.", 0));
 #endif
-#if defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
+#if defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32)
         enterDfuMode();
 #endif
         break;
@@ -987,22 +1015,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // If the client set the key to blank, go ahead and regenerate so long as we're not in ham mode
-        if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            if (config.security.private_key.size != 32) {
-                crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-
-            } else {
-                if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                    config.security.public_key.size = 32;
-                }
-            }
+        // Only regenerate keys if the private key is not 32 bytes
+        if (config.security.private_key.size != 32) {
+            nodeDB->generateCryptoKeyPair();
         }
-#endif
-        owner.public_key.size = config.security.public_key.size;
-        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
-#if !MESHTASTIC_EXCLUDE_PKI
-        crypto->setDHPrivateKey(config.security.private_key.bytes);
+        // If user provided a private key of correct size but no public key, generate the public key from private key
+        else if (config.security.private_key.size == 32 && config.security.public_key.size == 0) {
+            nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
+        }
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
                                             config.security.admin_key[2].size == 32)) {
@@ -1012,9 +1032,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             sendWarning(warning);
         }
 
-        if (config.security.debug_log_api_enabled == c.payload_variant.security.debug_log_api_enabled &&
-            config.security.serial_enabled == c.payload_variant.security.serial_enabled)
-            requiresReboot = false;
+        changes = SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+
+        requiresReboot = true;
 
         break;
     case meshtastic_Config_device_ui_tag:
@@ -1148,7 +1168,26 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     if (channels.ensureLicensedOperation()) {
         sendWarning(licensedModeMessage);
     }
+    // Refresh derived state (primaryIndex in particular) BEFORE the precision clamp below. usesPublicKey()
+    // resolves a secondary channel's key against the primary, so it must see the post-update primaryIndex;
+    // running the clamp first could evaluate secondaries against the previous primary and skip the clamp/warning.
     channels.onConfigChanged(); // tell the radios about this change
+
+    // Persist the public-key precision clamp for all channels that may be affected (e.g. secondaries
+    // that inherit a now-public primary key) and warn the client once if anything was coarsened.
+    bool clamped = false;
+    for (uint8_t i = 0; i < channels.getNumChannels(); i++) {
+        meshtastic_Channel &ch = channels.getByIndex(i);
+        if (ch.role == meshtastic_Channel_Role_DISABLED || !ch.settings.has_module_settings)
+            continue;
+        uint32_t allowed = getPositionPrecisionForChannel(i);
+        if (allowed != ch.settings.module_settings.position_precision) {
+            ch.settings.module_settings.position_precision = allowed;
+            clamped = true;
+        }
+    }
+    if (clamped)
+        sendWarning(publicChannelPrecisionMessage);
     saveChanges(SEGMENT_CHANNELS, false);
 }
 
@@ -1376,6 +1415,13 @@ void AdminModule::handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &r
 
 void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
 {
+#if WARM_NODE_COUNT > 0 && MESHTASTIC_NODEDB_MIGRATION_VERBOSE
+    // Debug aid: dump the warm tier to the console on a local metadata request
+    // (e.g. `meshtastic --info` over USB/BLE). Gated to req.from == 0 so remote
+    // or admin polling can't spam the console.
+    if (nodeDB && req.from == 0)
+        nodeDB->warmStore.dumpToLog("admin get_metadata");
+#endif
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
     r.get_device_metadata_response = getDeviceMetadata();
     r.which_payload_variant = meshtastic_AdminMessage_get_device_metadata_response_tag;
