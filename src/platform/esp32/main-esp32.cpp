@@ -15,8 +15,8 @@
 #endif
 
 #include "esp_mac.h"
-#include "meshUtils.h"
 #include "freertosinc.h"
+#include "meshUtils.h"
 #include "sleep.h"
 #include "soc/rtc.h"
 #include "target_specific.h"
