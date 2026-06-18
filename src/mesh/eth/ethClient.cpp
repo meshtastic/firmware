@@ -6,6 +6,9 @@
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
 #include "target_specific.h"
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+#include "mesh/eth/ethOTA.h"
+#endif
 #if HAS_ETHERNET && defined(HAS_ETHERNET_API)
 #include "mesh/eth/ethApiServer.h"
 #endif
@@ -161,6 +164,9 @@ static int32_t reconnectETH()
             }
 #endif
 
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+            initEthOTA();
+#endif
 #if HAS_ETHERNET && defined(HAS_ETHERNET_API)
             initEthApiServer();
 #endif
@@ -201,6 +207,9 @@ static int32_t reconnectETH()
     }
 #endif
 
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+    ethOTALoop();
+#endif
     // ethApiServer runs on its own OSThread (20ms ticks) — not polled here.
 
     return 5000; // every 5 seconds
