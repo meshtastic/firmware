@@ -1,6 +1,6 @@
 #include "Nrf52Twim.h"
 
-#ifdef ARCH_NRF52
+#if defined(ARCH_NRF52) && defined(HAS_QMA6100P)
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -29,8 +29,9 @@ void configureTwim(NRF_TWIM_Type *twim)
     twim->PSEL.SCL = PIN_WIRE_SCL;
     twim->PSEL.SDA = PIN_WIRE_SDA;
     twim->FREQUENCY = TWIM_FREQUENCY_FREQUENCY_K100;
-    // cppcheck-suppress redundantAssignment
-    twim->ENABLE = TWIM_ENABLE_ENABLE_Enabled;
+    // ENABLE is a volatile HW register: the peripheral must be disabled (above) before
+    // PSEL/FREQUENCY can be changed, then re-enabled here. Not a redundant store.
+    twim->ENABLE = TWIM_ENABLE_ENABLE_Enabled; // cppcheck-suppress redundantAssignment
 }
 
 void clearTwimEvents(NRF_TWIM_Type *twim)

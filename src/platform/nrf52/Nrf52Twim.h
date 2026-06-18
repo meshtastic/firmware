@@ -2,7 +2,9 @@
 
 #include "configuration.h"
 
-#ifdef ARCH_NRF52
+// Only the QMA6100P probing path (T1000-E) uses this TWIM helper; gate it on
+// HAS_QMA6100P so it isn't compiled/analyzed as dead code on other nRF52 boards.
+#if defined(ARCH_NRF52) && defined(HAS_QMA6100P)
 
 #include <stdint.h>
 
