@@ -54,15 +54,21 @@ uint8_t qma6100pMapAnyMotionToInt1(uint8_t value)
 
 bool qma6100pInitBounded(uint8_t address)
 {
+    // SFE_QMA6100P_SR: write 0xB6 to trigger soft-reset, then 0x00 to release
+    constexpr uint8_t QMA6100P_SOFT_RESET = 0xb6;
+    constexpr uint8_t QMA6100P_SOFT_RESET_RELEASE = 0x00;
+    // SFE_QMA6100P_INT_EN2: bits[2:0] = any-motion enable for Z, Y, X axes
+    constexpr uint8_t QMA6100P_INT_EN2_ANY_MOT_XYZ = 0b00000111;
+
     uint8_t chipID = 0;
 
     Nrf52Twim::restoreBus();
     const bool ok = Nrf52Twim::readRegister(address, SFE_QMA6100P_CHIP_ID, chipID) && chipID == QMA6100P_CHIP_ID &&
-                    Nrf52Twim::writeRegister(address, SFE_QMA6100P_SR, 0xb6) &&
-                    Nrf52Twim::writeRegister(address, SFE_QMA6100P_SR, 0) &&
+                    Nrf52Twim::writeRegister(address, SFE_QMA6100P_SR, QMA6100P_SOFT_RESET) &&
+                    Nrf52Twim::writeRegister(address, SFE_QMA6100P_SR, QMA6100P_SOFT_RESET_RELEASE) &&
                     qma6100pUpdateRegister(address, SFE_QMA6100P_FSR, qma6100pSetRange) &&
                     qma6100pUpdateRegister(address, SFE_QMA6100P_PM, qma6100pEnableAccel) &&
-                    Nrf52Twim::writeRegister(address, SFE_QMA6100P_INT_EN2, 0b00000111) &&
+                    Nrf52Twim::writeRegister(address, SFE_QMA6100P_INT_EN2, QMA6100P_INT_EN2_ANY_MOT_XYZ) &&
                     qma6100pUpdateRegister(address, SFE_QMA6100P_INT_MAP1, qma6100pMapAnyMotionToInt1) &&
                     qma6100pUpdateRegister(address, SFE_QMA6100P_INTPINT_CONF, qma6100pConfigureIntPin) &&
                     qma6100pUpdateRegister(address, SFE_QMA6100P_INT_CFG, qma6100pConfigureIntLatch);
@@ -124,6 +130,9 @@ int32_t QMA6100PSensor::runOnce()
 int32_t QMA6100PSensor::runOnce()
 {
 #ifdef ARCH_NRF52
+    // restoreBus() is intentionally omitted here: it tears down and re-initialises Wire,
+    // which would be destructive on every poll. The bus is stable after init(); a failed
+    // read is handled gracefully below.
     uint8_t tempVal = 0;
     if (!Nrf52Twim::readRegister(device.address.address, SFE_QMA6100P_INT_ST0, tempVal)) {
         LOG_DEBUG("QMA6100PS isWakeOnMotion failed to read interrupts");
