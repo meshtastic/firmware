@@ -2,20 +2,20 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_QMA6100P)
 
-#if defined(TRACKER_T1000_E) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
-#include "platform/nrf52/T1000EI2C.h"
+#ifdef ARCH_NRF52
+#include "platform/nrf52/Nrf52Twim.h"
 #endif
 
 // Flag when an interrupt has been detected
 volatile static bool QMA6100P_IRQ = false;
 
-#if defined(TRACKER_T1000_E) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+#ifdef ARCH_NRF52
 namespace
 {
 bool qma6100pUpdateRegister(uint8_t address, uint8_t reg, uint8_t (*mutate)(uint8_t))
 {
     uint8_t value = 0;
-    return T1000EI2C::readRegister(address, reg, value) && T1000EI2C::writeRegister(address, reg, mutate(value));
+    return Nrf52Twim::readRegister(address, reg, value) && Nrf52Twim::writeRegister(address, reg, mutate(value));
 }
 
 uint8_t qma6100pSetRange(uint8_t value)
@@ -56,17 +56,17 @@ bool qma6100pInitBounded(uint8_t address)
 {
     uint8_t chipID = 0;
 
-    T1000EI2C::restoreBus();
-    const bool ok = T1000EI2C::readRegister(address, SFE_QMA6100P_CHIP_ID, chipID) && chipID == QMA6100P_CHIP_ID &&
-                    T1000EI2C::writeRegister(address, SFE_QMA6100P_SR, 0xb6) &&
-                    T1000EI2C::writeRegister(address, SFE_QMA6100P_SR, 0) &&
+    Nrf52Twim::restoreBus();
+    const bool ok = Nrf52Twim::readRegister(address, SFE_QMA6100P_CHIP_ID, chipID) && chipID == QMA6100P_CHIP_ID &&
+                    Nrf52Twim::writeRegister(address, SFE_QMA6100P_SR, 0xb6) &&
+                    Nrf52Twim::writeRegister(address, SFE_QMA6100P_SR, 0) &&
                     qma6100pUpdateRegister(address, SFE_QMA6100P_FSR, qma6100pSetRange) &&
                     qma6100pUpdateRegister(address, SFE_QMA6100P_PM, qma6100pEnableAccel) &&
-                    T1000EI2C::writeRegister(address, SFE_QMA6100P_INT_EN2, 0b00000111) &&
+                    Nrf52Twim::writeRegister(address, SFE_QMA6100P_INT_EN2, 0b00000111) &&
                     qma6100pUpdateRegister(address, SFE_QMA6100P_INT_MAP1, qma6100pMapAnyMotionToInt1) &&
                     qma6100pUpdateRegister(address, SFE_QMA6100P_INTPINT_CONF, qma6100pConfigureIntPin) &&
                     qma6100pUpdateRegister(address, SFE_QMA6100P_INT_CFG, qma6100pConfigureIntLatch);
-    T1000EI2C::restoreBus();
+    Nrf52Twim::restoreBus();
 
     return ok;
 }
@@ -83,7 +83,7 @@ QMA6100PSensor::QMA6100PSensor(ScanI2C::FoundDevice foundDevice) : MotionSensor:
 
 bool QMA6100PSensor::init()
 {
-#if defined(TRACKER_T1000_E) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+#ifdef ARCH_NRF52
     if (!qma6100pInitBounded(device.address.address)) {
         LOG_WARN("QMA6100P init failed");
         return false;
@@ -123,9 +123,9 @@ int32_t QMA6100PSensor::runOnce()
 
 int32_t QMA6100PSensor::runOnce()
 {
-#if defined(TRACKER_T1000_E) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+#ifdef ARCH_NRF52
     uint8_t tempVal = 0;
-    if (!T1000EI2C::readRegister(device.address.address, SFE_QMA6100P_INT_ST0, tempVal)) {
+    if (!Nrf52Twim::readRegister(device.address.address, SFE_QMA6100P_INT_ST0, tempVal)) {
         LOG_DEBUG("QMA6100PS isWakeOnMotion failed to read interrupts");
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
