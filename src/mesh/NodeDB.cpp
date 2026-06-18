@@ -3382,6 +3382,9 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // database that is full of protected nodes — refuse rather than overrun.
         if (numMeshNodes >= MAX_NUM_NODES)
             return NULL;
+        // Pre-size before append when run before nodeDBSelfCare() (boot keygen); else at() aborts on nRF52.
+        if (static_cast<size_t>(numMeshNodes) >= meshNodes->size())
+            meshNodes->resize(numMeshNodes + 1);
         // add the node at the end
         lite = &meshNodes->at((numMeshNodes)++);
 
