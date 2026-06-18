@@ -1,6 +1,6 @@
-#include "T1000EI2C.h"
+#include "Nrf52Twim.h"
 
-#if !MESHTASTIC_EXCLUDE_I2C && defined(TRACKER_T1000_E) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+#ifdef ARCH_NRF52
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -20,7 +20,6 @@ bool waitForEventOrError(volatile uint32_t &event, NRF_TWIM_Type *twim)
             return false;
         }
     }
-
     return event && !twim->EVENTS_ERROR;
 }
 
@@ -49,11 +48,9 @@ void clearTwimEvents(NRF_TWIM_Type *twim)
 void stopTwim(NRF_TWIM_Type *twim)
 {
     twim->TASKS_STOP = 1;
-
     const uint32_t start = micros();
     while (!twim->EVENTS_STOPPED && (uint32_t)(micros() - start) < i2cTimeoutUs)
         ;
-
     clearTwimEvents(twim);
 }
 
@@ -66,21 +63,20 @@ bool waitForStop(NRF_TWIM_Type *twim)
             return false;
         }
     }
-
-    const bool ok = twim->EVENTS_STOPPED && !twim->EVENTS_ERROR;
-    if (!ok)
+    const bool stopped = twim->EVENTS_STOPPED && !twim->EVENTS_ERROR;
+    if (!stopped)
         stopTwim(twim);
     else
         clearTwimEvents(twim);
-
-    return ok;
+    return stopped;
 }
 } // namespace
 
-namespace T1000EI2C
+namespace Nrf52Twim
 {
 void restoreBus()
 {
+#if defined(TRACKER_T1000_E)
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
     pinMode(PIN_3V3_ACC_EN, OUTPUT);
@@ -90,6 +86,7 @@ void restoreBus()
     digitalWrite(T1000X_SENSOR_EN_PIN, HIGH);
 #endif
     delay(20);
+#endif
 
     Wire.end();
 
@@ -125,17 +122,11 @@ bool readRegister(uint8_t address, uint8_t reg, uint8_t &value)
     twim->ADDRESS = address;
     twim->TXD.PTR = (uint32_t)&reg;
     twim->TXD.MAXCNT = 1;
+    // LASTTX_SUSPEND shortcut: peripheral suspends automatically after the TX
+    // byte, so EVENTS_SUSPENDED is set before we even poll — no clearing race.
+    twim->SHORTS = TWIM_SHORTS_LASTTX_SUSPEND_Msk;
     twim->TASKS_RESUME = 1;
     twim->TASKS_STARTTX = 1;
-
-    if (!waitForEventOrError(twim->EVENTS_LASTTX, twim)) {
-        stopTwim(twim);
-        return false;
-    }
-
-    twim->EVENTS_LASTTX = 0;
-    twim->EVENTS_SUSPENDED = 0;
-    twim->TASKS_SUSPEND = 1;
 
     if (!waitForEventOrError(twim->EVENTS_SUSPENDED, twim)) {
         stopTwim(twim);
@@ -169,6 +160,6 @@ bool writeRegister(uint8_t address, uint8_t reg, uint8_t value)
 
     return waitForStop(twim);
 }
-} // namespace T1000EI2C
+} // namespace Nrf52Twim
 
 #endif

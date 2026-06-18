@@ -12,22 +12,20 @@
 #include "meshUtils.h" // vformat
 
 #endif
-#if defined(TRACKER_T1000_E) && defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
-#include "platform/nrf52/T1000EI2C.h"
+#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+#include "platform/nrf52/Nrf52Twim.h"
 #include <QMA6100P.h>
-#endif
 
-#if defined(TRACKER_T1000_E) && defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
 namespace
 {
-bool t1000ProbeQMA6100P(uint8_t address)
+bool probeQMA6100P(uint8_t address)
 {
     uint8_t chipID = 0;
 
-    T1000EI2C::restoreBus();
-    const bool readOk = T1000EI2C::readRegister(address, SFE_QMA6100P_CHIP_ID, chipID);
+    Nrf52Twim::restoreBus();
+    const bool readOk = Nrf52Twim::readRegister(address, SFE_QMA6100P_CHIP_ID, chipID);
     const bool found = readOk && chipID == QMA6100P_CHIP_ID;
-    T1000EI2C::restoreBus();
+    Nrf52Twim::restoreBus();
 
     return found;
 }
@@ -298,18 +296,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     // 0x7C-0x7F Reserved for future purposes
 
     for (addr.address = 8; addr.address < 120; addr.address++) {
-#if defined(TRACKER_T1000_E) && defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
-        bool t1000QmaFound = false;
+#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+        bool nrf52QmaFound = false;
 #endif
         if (asize != 0) {
             if (!in_array(address, asize, (uint8_t)addr.address))
                 continue;
             LOG_DEBUG("Scan address 0x%x", (uint8_t)addr.address);
         }
-#if defined(TRACKER_T1000_E) && defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
-        t1000QmaFound =
-            (addr.address == QMA6100P_ADDRESS_LOW || addr.address == QMA6100P_ADDRESS_HIGH) && t1000ProbeQMA6100P(addr.address);
-        err = t1000QmaFound ? 0 : 2;
+#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+        nrf52QmaFound =
+            (addr.address == QMA6100P_ADDRESS_LOW || addr.address == QMA6100P_ADDRESS_HIGH) && probeQMA6100P(addr.address);
+        err = nrf52QmaFound ? 0 : 2;
 #else
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO
@@ -614,6 +612,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0x6A) {
                     type = LSM6DS3;
                     logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+                } else if (registerValue == 0x6B) {
+                    type = ISM330DHCX;
+                    logFoundDevice("ISM330DHCX", (uint8_t)addr.address);
                 } else {
                     type = QMI8658;
                     logFoundDevice("QMI8658", (uint8_t)addr.address);
@@ -621,7 +622,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L", (uint8_t)addr.address)
-                SCAN_SIMPLE_CASE(HMC5883L_ADDR, HMC5883L, "HMC5883L", (uint8_t)addr.address)
+            case HMC5883L_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x4FU), 1); // get ID
+                if (registerValue == 0x40) {
+                    type = IIS2MDCTR;
+                    logFoundDevice("IIS2MDCTR", (uint8_t)addr.address);
+                    break;
+                } else {
+                    type = HMC5883L;
+                    logFoundDevice("HMC5883L", (uint8_t)addr.address);
+                    break;
+                }
 #ifdef HAS_QMA6100P
                 SCAN_SIMPLE_CASE(QMA6100P_ADDR, QMA6100P, "QMA6100P", (uint8_t)addr.address)
 #else
@@ -768,8 +779,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
             }
             case BMM150_ADDR:
-#if defined(TRACKER_T1000_E) && defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
-                if (t1000QmaFound) {
+#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+                if (nrf52QmaFound) {
                     logFoundDevice("QMA6100P", (uint8_t)addr.address);
                     type = QMA6100P;
                     break;
