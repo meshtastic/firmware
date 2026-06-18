@@ -28,28 +28,31 @@ enum OTAResponse : uint8_t {
     OTA_ERR_WRITE = 0x03,
     OTA_ERR_MAGIC = 0x04,
     OTA_ERR_BEGIN = 0x05,
-    OTA_ERR_TIMEOUT = 0x06,
     OTA_ACK = 0x06, // ACK uses ASCII ACK character
     OTA_ERR_AUTH = 0x07,
+    OTA_ERR_TIMEOUT = 0x08,
 };
 
-static const uint32_t OTA_TIMEOUT_MS = 30000;       // 30s inactivity timeout
-static const size_t OTA_CHUNK_SIZE = 1024;           // 1KB receive buffer
-static const uint32_t OTA_AUTH_COOLDOWN_MS = 5000;   // 5s cooldown after failed auth
+static const uint32_t OTA_TIMEOUT_MS = 30000;      // 30s inactivity timeout
+static const size_t OTA_CHUNK_SIZE = 1024;         // 1KB receive buffer
+static const uint32_t OTA_AUTH_COOLDOWN_MS = 5000; // 5s cooldown after failed auth
 static const size_t OTA_NONCE_SIZE = 32;
 static const size_t OTA_HASH_SIZE = 32;
 
 // OTA PSK — override via USERPREFS_OTA_PSK in userPrefs.jsonc
+// USERPREFS_OTA_PSK is stringified by PlatformIO (wrapped in quotes), so we
+// use a char[] and sizeof-1 to exclude the trailing NUL byte from the hash.
 #ifdef USERPREFS_OTA_PSK
-static const uint8_t otaPSK[] = USERPREFS_OTA_PSK;
+static const char otaPSKString[] = USERPREFS_OTA_PSK;
+static const uint8_t *const otaPSK = reinterpret_cast<const uint8_t *>(otaPSKString);
+static const size_t otaPSKSize = sizeof(otaPSKString) - 1;
 #else
 // Default PSK (CHANGE THIS for production deployments)
-static const uint8_t otaPSK[] = {0x6d, 0x65, 0x73, 0x68, 0x74, 0x61, 0x73, 0x74, 0x69, 0x63, 0x5f,
-                                  0x6f, 0x74, 0x61, 0x5f, 0x64, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74,
-                                  0x5f, 0x70, 0x73, 0x6b, 0x5f, 0x76, 0x31, 0x21, 0x21, 0x21};
+static const uint8_t otaPSK[] = {0x6d, 0x65, 0x73, 0x68, 0x74, 0x61, 0x73, 0x74, 0x69, 0x63, 0x5f, 0x6f, 0x74, 0x61, 0x5f, 0x64,
+                                 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x5f, 0x70, 0x73, 0x6b, 0x5f, 0x76, 0x31, 0x21, 0x21, 0x21};
 // = "meshtastic_ota_default_psk_v1!!!"
-#endif
 static const size_t otaPSKSize = sizeof(otaPSK);
+#endif
 
 static EthernetServer *otaServer = nullptr;
 static uint32_t lastAuthFailure = 0;
@@ -93,10 +96,11 @@ static void computeAuthHash(const uint8_t *nonce, size_t nonceLen, const uint8_t
 /// Challenge-response authentication. Returns true if client is authenticated.
 static bool authenticateClient(EthernetClient &client)
 {
-    // Rate-limit after failed auth
+    // Rate-limit after failed auth — close silently so the error byte is not
+    // misinterpreted as part of the nonce by a re-trying client.
     if (lastAuthFailure != 0 && (millis() - lastAuthFailure) < OTA_AUTH_COOLDOWN_MS) {
         LOG_WARN("ETH OTA: Auth cooldown active, rejecting connection");
-        client.write(OTA_ERR_AUTH);
+        client.stop();
         return false;
     }
 
@@ -144,8 +148,8 @@ static bool authenticateClient(EthernetClient &client)
 
 static void handleOTAClient(EthernetClient &client)
 {
-    LOG_INFO("ETH OTA: Client connected from %u.%u.%u.%u", client.remoteIP()[0], client.remoteIP()[1],
-             client.remoteIP()[2], client.remoteIP()[3]);
+    LOG_INFO("ETH OTA: Client connected from %u.%u.%u.%u", client.remoteIP()[0], client.remoteIP()[1], client.remoteIP()[2],
+             client.remoteIP()[3]);
 
     // Step 1: Challenge-response authentication
     if (!authenticateClient(client)) {
@@ -248,7 +252,8 @@ static void handleOTAClient(EthernetClient &client)
         return;
     }
 
-    // Finalize — this calls picoOTA.commit() which stages the update for the bootloader
+    // Finalize — this calls picoOTA.commit() which stages the update for the
+    // bootloader
     if (!Update.end(true)) {
         LOG_ERROR("ETH OTA: Update.end() failed, error=%u", Update.getError());
         client.write(OTA_ERR_WRITE);
