@@ -44,7 +44,9 @@ constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
 // Adapted from https://github.com/h2zero/NimBLE-Arduino/issues/740
 static void purgeIncompatibleBleBonds()
 {
-    if (nvs_flash_init() != ESP_OK) {
+    esp_err_t initErr = nvs_flash_init();
+    if (initErr != ESP_OK) {
+        LOG_WARN("purgeIncompatibleBleBonds: nvs_flash_init failed, err=%d", (int)initErr);
         return; // NVS should already be up; if not, nothing safe to do here
     }
 
