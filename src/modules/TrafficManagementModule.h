@@ -84,7 +84,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // =========================================================================
     //
     // A single compact structure used across ESP32, NRF52, and all other platforms.
-    // Memory: 11 bytes × 2048 entries = 22KB
+    // Memory: 11 bytes × TRAFFIC_MANAGEMENT_CACHE_SIZE entries (default 1000 = 11KB)
     //
     // Position Fingerprinting:
     //   Instead of storing full coordinates (8 bytes) or a computed hash,

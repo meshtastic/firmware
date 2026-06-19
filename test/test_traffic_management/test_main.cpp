@@ -9,11 +9,7 @@
 #define TM_TEST_ENTRY
 #endif
 
-#if HAS_TRAFFIC_MANAGEMENT
-
 #include "airtime.h"
-#if HAS_VARIABLE_HOPS
-#endif
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
@@ -736,8 +732,6 @@ static void test_tm_alterReceived_exhaustsRelayedTelemetryBroadcast(void)
     TEST_ASSERT_EQUAL_UINT32(1, stats.hop_exhausted_packets);
 }
 
-#if HAS_VARIABLE_HOPS
-#endif // HAS_VARIABLE_HOPS
 /**
  * Verify hop exhaustion skips unicast and local-origin packets.
  * Important to avoid mutating traffic that should retain normal forwarding behavior.
@@ -1222,8 +1216,6 @@ static void test_tm_nextHop_keptAliveAcrossMaintenanceSweep(void)
 
     TEST_ASSERT_EQUAL_UINT8(0x42, module.getNextHopHint(kTargetNode));
 }
-#if HAS_VARIABLE_HOPS
-#endif // HAS_VARIABLE_HOPS
 } // namespace
 
 void setUp(void)
@@ -1261,8 +1253,6 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb);
 #endif
     RUN_TEST(test_tm_alterReceived_exhaustsRelayedTelemetryBroadcast);
-#if HAS_VARIABLE_HOPS
-#endif
     RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
     RUN_TEST(test_tm_positionDedup_allowsDuplicateAfterIntervalExpires);
     RUN_TEST(test_tm_positionDedup_intervalZero_neverDrops);
@@ -1284,8 +1274,6 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nextHop_servedAfterNodeDbRoll);
     RUN_TEST(test_tm_nextHop_preloadDoesNotClobberLearned);
     RUN_TEST(test_tm_nextHop_keptAliveAcrossMaintenanceSweep);
-#if HAS_VARIABLE_HOPS
-#endif
     exit(UNITY_END());
 }
 

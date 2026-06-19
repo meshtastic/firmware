@@ -138,7 +138,11 @@ static inline int get_max_num_nodes()
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))
 
 // Traffic Management module configuration
-// Enable per-variant by defining HAS_TRAFFIC_MANAGEMENT=1 in variant.h
+// Enabled by default; STM32WL is excluded due to RAM constraints (MAX_NUM_NODES=10).
+// Disable per-variant by defining HAS_TRAFFIC_MANAGEMENT=0 in variant.h
+#ifdef ARCH_STM32WL
+#define HAS_TRAFFIC_MANAGEMENT 0
+#endif
 #ifndef HAS_TRAFFIC_MANAGEMENT
 #define HAS_TRAFFIC_MANAGEMENT 1
 #endif
