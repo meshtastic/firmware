@@ -12,7 +12,12 @@
 
 #if defined(NRF52840_XXAA)
 #include "flash/flash_nrf5x.h"
-#define WARM_RING_MAGIC 0x324E5257u // "WRN2" — v2: last_heard low bits carry role + protected category
+#define WARM_RING_MAGIC 0x324E5257u    // "WRN2" — v2: last_heard low bits carry role + protected category
+#define WARM_RING_MAGIC_V1 0x474E5257u // "WRNG" — v1: last_heard was a plain timestamp.
+// v1 pages are still read on upgrade: we keep each record's identity + public key but
+// DISCARD its last_heard (the old timestamp would be misread as role/protected bits).
+// Records re-rank and re-learn their role on the next contact. Legacy pages convert to
+// v2 naturally as the ring rotates.
 // A tombstone is an entry record whose last_heard is all-ones — getTime()
 // (unix seconds) cannot reach 0xFFFFFFFF until 2106, and erased flash is
 // detected via num == 0xFFFFFFFF before last_heard is ever inspected.
@@ -28,7 +33,10 @@ struct WarmStoreHeader {
 };
 static_assert(sizeof(WarmStoreHeader) == 16, "header layout is part of the persistence format");
 
-#define WARM_STORE_MAGIC 0x314D5257u // "WRM1"
+#define WARM_STORE_MAGIC 0x324D5257u // "WRM2" — v2: last_heard low bits carry role + protected category
+#define WARM_STORE_MAGIC_V1                                                                                                      \
+    0x314D5257u // "WRM1" — v1: last_heard was a plain timestamp. On upgrade we keep
+                // identity + key but discard last_heard, then rewrite as v2.
 
 #ifdef FSCom
 static const char *warmFileName = "/prefs/warm.dat";
@@ -247,10 +255,22 @@ bool WarmNodeStore::saveIfDirty()
 // (stranded live entries re-appended, then erased). Flash access holds spiLock —
 // the page cache is shared with InternalFS/LittleFS.
 
-bool WarmNodeStore::ringReadHeader(uint8_t page, WarmPageHeader &h) const
+bool WarmNodeStore::ringReadHeader(uint8_t page, WarmPageHeader &h, bool *legacy) const
 {
     flash_nrf5x_read(&h, WARM_FLASH_PAGE_ADDR(page), sizeof(h));
-    return h.magic == WARM_RING_MAGIC && h.seq != 0xFFFFFFFFu;
+    if (h.seq == 0xFFFFFFFFu)
+        return false; // erased page
+    if (h.magic == WARM_RING_MAGIC) {
+        if (legacy)
+            *legacy = false;
+        return true;
+    }
+    if (h.magic == WARM_RING_MAGIC_V1) {
+        if (legacy)
+            *legacy = true; // v1 page: replay it, but discard last_heard (see WARM_RING_MAGIC_V1)
+        return true;
+    }
+    return false;
 }
 
 // Caller holds spiLock.
@@ -363,11 +383,13 @@ void WarmNodeStore::load()
     // Order valid pages by ascending seq so replay applies oldest first
     uint8_t order[WARM_FLASH_PAGES] = {};
     uint32_t seqs[WARM_FLASH_PAGES] = {};
+    bool legacyOf[WARM_FLASH_PAGES] = {}; // per-page: v1 (WRNG) → discard last_heard on replay
     uint8_t nValid = 0;
     uint8_t nCorrupt = 0;
     for (uint8_t p = 0; p < WARM_FLASH_PAGES; p++) {
         WarmPageHeader h;
-        if (!ringReadHeader(p, h)) {
+        bool legacy = false;
+        if (!ringReadHeader(p, h, &legacy)) {
             // An erased page reads back all-ones; any other magic is a
             // partially-written or bit-rotted header we're dropping, so flag it
             // rather than silently treating the loss as a clean empty ring.
@@ -375,6 +397,7 @@ void WarmNodeStore::load()
                 nCorrupt++;
             continue;
         }
+        legacyOf[p] = legacy;
         uint8_t pos = nValid;
         while (pos > 0 && static_cast<int32_t>(h.seq - seqs[pos - 1]) < 0) {
             order[pos] = order[pos - 1];
@@ -398,8 +421,10 @@ void WarmNodeStore::load()
     }
 
     uint32_t replayed = 0;
+    uint32_t migrated = 0;
     for (uint8_t k = 0; k < nValid; k++) {
         const uint8_t p = order[k];
+        const bool legacy = legacyOf[p];
         uint16_t slot = 0;
         for (; slot < kRecordsPerPage; slot++) {
             WarmNodeEntry rec;
@@ -416,7 +441,14 @@ void WarmNodeStore::load()
                     memset(e, 0, sizeof(*e));
                 }
             } else {
-                const WarmNodeEntry *e = place(rec.num, rec.last_heard, rec.public_key);
+                // v1 (legacy) record: keep identity + key, but discard the old timestamp —
+                // its low bits would otherwise be misread as role/protected metadata.
+                uint32_t lh = rec.last_heard;
+                if (legacy) {
+                    lh = 0;
+                    migrated++;
+                }
+                const WarmNodeEntry *e = place(rec.num, lh, rec.public_key);
                 if (e)
                     pageOf[e - entries] = p;
             }
@@ -425,10 +457,17 @@ void WarmNodeStore::load()
             activePage = p;
             writeSlot = slot;
             nextSeq = seqs[k] + 1;
+            // If the head is a v1 page, force the next append to rotate into a fresh v2 page,
+            // so new (v2) records never land in a page whose header says v1 (which would make
+            // a later load discard their last_heard — including the role/protected we just set).
+            if (legacy)
+                writeSlot = kRecordsPerPage;
         }
     }
     if (nCorrupt)
         LOG_WARN("WarmStore: dropped %u corrupt ring page(s), some nodes lost", nCorrupt);
+    if (migrated)
+        LOG_INFO("WarmStore: migrated %u v1 record(s) (kept key, discarded last_heard)", (unsigned)migrated);
     LOG_INFO("WarmStore: replayed %u ring records -> %u live nodes (page %u, slot %u)", (unsigned)replayed, (unsigned)count(),
              activePage, writeSlot);
 }
@@ -495,7 +534,10 @@ void WarmNodeStore::load()
         LOG_WARN("WarmStore: %s header read failed, starting empty", warmFileName);
         return;
     }
-    if (h.magic != WARM_STORE_MAGIC || h.entrySize != sizeof(WarmNodeEntry) || h.count > WARM_NODE_COUNT) {
+    // v1 (WRM1) is still accepted: same record size, but its last_heard was a plain
+    // timestamp. We keep identity + key and discard last_heard on load (see below).
+    const bool legacy = (h.magic == WARM_STORE_MAGIC_V1);
+    if ((h.magic != WARM_STORE_MAGIC && !legacy) || h.entrySize != sizeof(WarmNodeEntry) || h.count > WARM_NODE_COUNT) {
         f.close();
         LOG_WARN("WarmStore: %s header invalid (magic=0x%08x entrySize=%u count=%u), starting empty", warmFileName, h.magic,
                  h.entrySize, h.count);
@@ -509,14 +551,25 @@ void WarmNodeStore::load()
             LOG_WARN("WarmStore: %s entries read failed, starting empty", warmFileName);
             return;
         }
+        // CRC covers the bytes as written (v1 still has the old last_heard), so check before migrating.
         if (crc32Buffer(entries, len) != h.crc) {
             LOG_WARN("WarmStore: %s CRC mismatch, starting empty", warmFileName);
+            memset(entries, 0, WARM_NODE_COUNT * sizeof(WarmNodeEntry));
             return;
+        }
+        if (legacy) {
+            // Migrate v1 → v2: discard the old last_heard (its low bits would be misread as
+            // role/protected); keep num + public_key. Mark dirty so save() rewrites as v2.
+            for (size_t i = 0; i < WARM_NODE_COUNT; i++)
+                if (entries[i].num)
+                    entries[i].last_heard = 0;
+            dirty = true;
         }
     } else {
         f.close();
     }
-    LOG_INFO("WarmStore: loaded %u warm nodes from %s", h.count, warmFileName);
+    LOG_INFO("WarmStore: loaded %u warm nodes from %s%s", h.count, warmFileName,
+             legacy ? " (v1 migrated: discarded last_heard)" : "");
 }
 
 bool WarmNodeStore::save()

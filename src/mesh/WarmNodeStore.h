@@ -167,7 +167,7 @@ class WarmNodeStore
     void ringAppend(const WarmNodeEntry &rec, int storeSlot /* -1 for tombstones */);
     void ringRotate();               // reclaim oldest page, compacting stranded live entries
     void ringOpenPage(uint8_t page); // erase + write header (seq = nextSeq++)
-    bool ringReadHeader(uint8_t page, WarmPageHeader &h) const;
+    bool ringReadHeader(uint8_t page, WarmPageHeader &h, bool *legacy = nullptr) const;
 #endif
 
     bool save();
