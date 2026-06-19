@@ -15,6 +15,7 @@
 #endif
 
 #include "esp_mac.h"
+#include "freertosinc.h"
 #include "meshUtils.h"
 #include "sleep.h"
 #include "soc/rtc.h"
@@ -276,6 +277,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 #endif
 
-    esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
-    esp_deep_sleep_start();                              // TBD mA sleep current (battery)
+    // User shutdown (DELAY_FOREVER / portMAX_DELAY): no RTC timer — align with nRF52 system_off semantics.
+    if (msecToWake != portMAX_DELAY)
+        esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
+    esp_deep_sleep_start();
 }
