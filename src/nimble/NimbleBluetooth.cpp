@@ -848,11 +848,13 @@ void NimbleBluetooth::setup()
     // Uncomment for testing
     // NimbleBluetooth::clearBonds();
 
+    LOG_INFO("Init the NimBLE bluetooth module");
+
 #ifdef ARCH_ESP32
+    // Runs before BLEDevice::init() reads the bond store, but logs after the "Init" line above so
+    // any bond-cleanup output doesn't appear to precede the module init.
     purgeIncompatibleBleBonds(); // wipe bonds left in an incompatible on-disk format (post-upgrade)
 #endif
-
-    LOG_INFO("Init the NimBLE bluetooth module");
 
     BLEDevice::init(getDeviceName());
     BLEDevice::setPower(ESP_PWR_LVL_P9);
@@ -994,15 +996,5 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
     }
     logRadioCharacteristic->setValue(logMessage, length);
     logRadioCharacteristic->notify();
-}
-
-void clearNVS()
-{
-    ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_OUR_SEC, nullptr);
-    ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_PEER_SEC, nullptr);
-    ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_CCCD, nullptr);
-#ifdef ARCH_ESP32
-    ESP.restart();
-#endif
 }
 #endif
