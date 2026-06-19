@@ -109,6 +109,9 @@ static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 static constexpr const char *channelFileName = "/prefs/channels.proto";
 static constexpr const char *backupFileName = "/backups/backup.proto";
 
+/// How many seconds since we last heard from a node before it is considered offline (2 hrs)
+#define NUM_ONLINE_SECS (60 * 60 * 2)
+
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 

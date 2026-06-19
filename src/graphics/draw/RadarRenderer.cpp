@@ -326,6 +326,12 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y) {
       continue;
     if (favoritesOnly && !nodeInfoLiteIsFavorite(n))
       continue;
+    // Skip stale nodes — otherwise we plot ghosts at their last-known
+    // position long after they have gone offline.  Uses the firmware-wide
+    // "online" threshold (NUM_ONLINE_SECS, 2 hrs) so the radar matches what
+    // the rest of the UI counts as an online node.
+    if (sinceLastSeen(n) >= NUM_ONLINE_SECS)
+      continue;
     meshtastic_PositionLite nodePos;
     if (!nodeDB->copyNodePosition(n->num, nodePos))
       continue;
