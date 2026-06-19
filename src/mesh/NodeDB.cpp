@@ -1629,6 +1629,20 @@ bool NodeDB::enforceSatelliteCaps()
     return trimmedAny;
 }
 
+// Classify an evicted node's hop-protected category for the warm tier. Favorite/ignored/
+// verified are local flags (rarely reach warm — they're eviction-protected — but classify
+// them if they do); otherwise tracker/sensor/tak_tracker are role-protected.
+static uint8_t warmProtectedCategory(const meshtastic_NodeInfoLite &n)
+{
+    if (n.bitfield & (NODEINFO_BITFIELD_IS_FAVORITE_MASK | NODEINFO_BITFIELD_IS_IGNORED_MASK |
+                      NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK))
+        return static_cast<uint8_t>(WarmProtected::Flag);
+    if (IS_ONE_OF(n.role, meshtastic_Config_DeviceConfig_Role_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER))
+        return static_cast<uint8_t>(WarmProtected::Role);
+    return static_cast<uint8_t>(WarmProtected::None);
+}
+
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
@@ -1655,7 +1669,7 @@ void NodeDB::cleanupMeshDB()
                 // Keep any key we learned (e.g. via a DM before the NodeInfo
                 // exchange completed) rather than losing it with the purge.
                 if (n.public_key.size == 32)
-                    warmStore.absorb(gone, n.last_heard, n.public_key.bytes);
+                    warmStore.absorb(gone, n.last_heard, n.public_key.bytes, n.role, warmProtectedCategory(n));
 #endif
 
                 eraseNodeSatellites(gone);
@@ -1838,7 +1852,8 @@ void NodeDB::demoteOldestHotNodesToWarm()
             continue;
         // Keep the public key if we have one (40 B warm record); keyless nodes
         // still get a placeholder so re-admission restores last_heard.
-        warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr);
+        warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr, n.role,
+                         warmProtectedCategory(n));
         // Demotion drops the node from the header table, so drop its satellites
         // too (the eviction chokepoint) — they'd otherwise orphan until the next
         // enforceSatelliteCaps pass.
@@ -3458,8 +3473,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 #if WARM_NODE_COUNT > 0
                 // Demote to the warm tier so the identity (and crucially the
                 // PKI key) outlives the hot-store slot.
-                warmStore.absorb(evicted.num, evicted.last_heard,
-                                 evicted.public_key.size == 32 ? evicted.public_key.bytes : NULL);
+                warmStore.absorb(evicted.num, evicted.last_heard, evicted.public_key.size == 32 ? evicted.public_key.bytes : NULL,
+                                 evicted.role, warmProtectedCategory(evicted));
 #endif
                 eraseNodeSatellites(evicted.num);
                 // Shove the remaining nodes down the chain
@@ -3488,7 +3503,10 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // Re-admission: restore what the warm tier kept for this node
         WarmNodeEntry warm;
         if (warmStore.take(n, warm)) {
-            lite->last_heard = warm.last_heard;
+            lite->last_heard = warmTimeOf(warm); // mask off the stolen role/protected metadata bits
+            // Restore the role the warm tier cached, so re-admission isn't stuck at CLIENT
+            // until the next NodeInfo arrives.
+            lite->role = static_cast<meshtastic_Config_DeviceConfig_Role>(warmRoleOf(warm));
             if (!memfll(warm.public_key, 0, sizeof(warm.public_key))) {
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);

@@ -12,7 +12,7 @@
 
 #if defined(NRF52840_XXAA)
 #include "flash/flash_nrf5x.h"
-#define WARM_RING_MAGIC 0x474E5257u // "WRNG"
+#define WARM_RING_MAGIC 0x324E5257u // "WRN2" — v2: last_heard low bits carry role + protected category
 // A tombstone is an entry record whose last_heard is all-ones — getTime()
 // (unix seconds) cannot reach 0xFFFFFFFF until 2106, and erased flash is
 // detected via num == 0xFFFFFFFF before last_heard is ever inspected.
@@ -96,11 +96,13 @@ WarmNodeEntry *WarmNodeStore::place(NodeNum num, uint32_t lastHeard, const uint8
                 slot = &e;
                 break;
             }
+            // Compare on the time bits only — the low metadata bits (role/protected) must
+            // not perturb LRU victim selection.
             if (keyIsSet(e.public_key)) {
-                if (!oldestKeyed || e.last_heard < oldestKeyed->last_heard)
+                if (!oldestKeyed || warmTimeOf(e) < warmTimeOf(*oldestKeyed))
                     oldestKeyed = &e;
             } else {
-                if (!oldestKeyless || e.last_heard < oldestKeyless->last_heard)
+                if (!oldestKeyless || warmTimeOf(e) < warmTimeOf(*oldestKeyless))
                     oldestKeyless = &e;
             }
         }
@@ -121,14 +123,28 @@ WarmNodeEntry *WarmNodeStore::place(NodeNum num, uint32_t lastHeard, const uint8
     return slot;
 }
 
-bool WarmNodeStore::absorb(NodeNum num, uint32_t lastHeard, const uint8_t *key32)
+bool WarmNodeStore::absorb(NodeNum num, uint32_t lastHeard, const uint8_t *key32, uint8_t role, uint8_t protectedCat)
 {
-    const WarmNodeEntry *slot = place(num, lastHeard, key32);
+    // Pack role + protected category into the low bits of last_heard. place() and ring
+    // replay store the raw word verbatim, so the metadata round-trips through flash.
+    const uint32_t packed = warmPackLastHeard(lastHeard, role, protectedCat);
+    const WarmNodeEntry *slot = place(num, packed, key32);
     if (!slot)
         return false;
     persistEntry(*slot);
-    LOG_MIGRATION("WarmStore absorb 0x%08x key=%d last_heard=%u (now %u/%u)", (unsigned)num, keyIsSet(slot->public_key) ? 1 : 0,
-                  (unsigned)lastHeard, (unsigned)count(), (unsigned)capacity());
+    LOG_MIGRATION("WarmStore absorb 0x%08x key=%d last_heard=%u role=%u prot=%u (now %u/%u)", (unsigned)num,
+                  keyIsSet(slot->public_key) ? 1 : 0, (unsigned)warmTimeOf(*slot), (unsigned)role, (unsigned)protectedCat,
+                  (unsigned)count(), (unsigned)capacity());
+    return true;
+}
+
+bool WarmNodeStore::lookupMeta(NodeNum num, uint8_t &role, uint8_t &protectedCat) const
+{
+    const WarmNodeEntry *e = find(num);
+    if (!e)
+        return false;
+    role = warmRoleOf(*e);
+    protectedCat = warmProtOf(*e);
     return true;
 }
 

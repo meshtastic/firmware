@@ -34,10 +34,49 @@
  */
 struct WarmNodeEntry {
     NodeNum num;            // 0 = empty slot
-    uint32_t last_heard;    // recency for LRU ordering
+    uint32_t last_heard;    // recency for LRU ordering — see the metadata steal below
     uint8_t public_key[32]; // all-zero = no key (a real key is never all-zero)
 };
 static_assert(sizeof(WarmNodeEntry) == 40, "WarmNodeEntry must stay 40 B — persistence format depends on it");
+
+// Metadata packed into the low bits of last_heard.
+//
+// The warm tier only uses last_heard to LRU-rank evicted (long-tail) nodes, so ~minute
+// recency resolution is plenty. We reclaim the low WARM_META_BITS of that field to carry
+// the evicted node's device role + a protected category, at zero cost to record size
+// (entry stays 40 B; no RAM/flash growth). The high bits remain a real unix-seconds
+// timestamp quantised to (1 << WARM_META_BITS) seconds.
+//
+// Safe because: a real timestamp can never be all-ones (the tombstone sentinel) before
+// 2106, and tombstones/erased flash are detected via num before last_heard is read. Only
+// the LOW bits are stolen — the high (era) bits are untouched, so the time range is intact.
+static constexpr uint32_t WARM_META_BITS = 6;                          // role(4) + protected(2)
+static constexpr uint32_t WARM_META_MASK = (1u << WARM_META_BITS) - 1; // 0x3F → 64 s quantum
+static constexpr uint32_t WARM_TIME_MASK = ~WARM_META_MASK;            // 0xFFFFFFC0
+static constexpr uint32_t WARM_ROLE_MASK = 0x0Fu;                      // bits [3:0] device role (0..12)
+static constexpr uint32_t WARM_PROT_SHIFT = 4;                         // bits [5:4] protected category
+static constexpr uint32_t WARM_PROT_MASK = 0x03u;
+
+// Protected category cached alongside role so consumers needn't re-derive the mapping.
+enum class WarmProtected : uint8_t { None = 0, Role = 1, Flag = 2 };
+
+inline uint32_t warmPackLastHeard(uint32_t lastHeard, uint8_t role, uint8_t prot)
+{
+    return (lastHeard & WARM_TIME_MASK) | (static_cast<uint32_t>(role) & WARM_ROLE_MASK) |
+           ((static_cast<uint32_t>(prot) & WARM_PROT_MASK) << WARM_PROT_SHIFT);
+}
+inline uint32_t warmTimeOf(const WarmNodeEntry &e)
+{
+    return e.last_heard & WARM_TIME_MASK;
+}
+inline uint8_t warmRoleOf(const WarmNodeEntry &e)
+{
+    return static_cast<uint8_t>(e.last_heard & WARM_ROLE_MASK);
+}
+inline uint8_t warmProtOf(const WarmNodeEntry &e)
+{
+    return static_cast<uint8_t>((e.last_heard >> WARM_PROT_SHIFT) & WARM_PROT_MASK);
+}
 
 // Gated on NRF52840_XXAA: the ring sits at 0xEA000
 // valid only on the 1 MB-flash nRF52840.
@@ -58,8 +97,15 @@ class WarmNodeStore
 
     /// Remember an evicted hot node. Keyless candidates never displace keyed
     /// entries; otherwise the oldest (keyless-first) entry is replaced.
+    /// @param role         the node's device role (meshtastic_Config_DeviceConfig_Role, 0..12)
+    /// @param protectedCat WarmProtected category cached for the hop-trim path
     /// @return true if the node was stored or updated
-    bool absorb(NodeNum num, uint32_t lastHeard, const uint8_t *key32 /* may be NULL */);
+    bool absorb(NodeNum num, uint32_t lastHeard, const uint8_t *key32 /* may be NULL */, uint8_t role = 0,
+                uint8_t protectedCat = 0);
+
+    /// Look up the cached device role + protected category for a warm node.
+    /// @return false if the node is not in the warm tier.
+    bool lookupMeta(NodeNum num, uint8_t &role, uint8_t &protectedCat) const;
 
     /// Find and remove an entry (used when the node is re-admitted to the hot store).
     bool take(NodeNum num, WarmNodeEntry &out);
