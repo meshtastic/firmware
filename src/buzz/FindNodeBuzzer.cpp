@@ -41,7 +41,12 @@ FindNodeBuzzer::Result FindNodeBuzzer::start(uint32_t durationSeconds, uint32_t 
         *acceptedDurationSeconds = durationSeconds;
     }
 
-    setIntervalFromNow(0);
+    if (!playFindNodeBuzzer()) {
+        stop();
+        return Result::NoBuzzer;
+    }
+
+    setIntervalFromNow(FIND_NODE_REPEAT_INTERVAL_MS);
     return Result::Started;
 }
 

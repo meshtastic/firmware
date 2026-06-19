@@ -15,6 +15,29 @@
 extern "C" void delay(uint32_t dwMs);
 #endif
 
+namespace
+{
+uint32_t getPwmBuzzerGpio()
+{
+    if (config.device.buzzer_gpio) {
+        return config.device.buzzer_gpio;
+    }
+#if defined(PIN_BUZZER)
+    return PIN_BUZZER;
+#else
+    return 0;
+#endif
+}
+
+void enableBuzzerPower()
+{
+#ifdef BUZZER_EN_PIN
+    pinMode(BUZZER_EN_PIN, OUTPUT);
+    digitalWrite(BUZZER_EN_PIN, HIGH);
+#endif
+}
+} // namespace
+
 struct ToneDuration {
     int frequency_khz;
     int duration_ms;
@@ -117,6 +140,7 @@ void playTones(const ToneDuration *tone_durations, int size)
         config.device.buzzer_gpio = PIN_BUZZER;
 #endif
     if (config.device.buzzer_gpio) {
+        enableBuzzerPower();
         for (int i = 0; i < size; i++) {
             const auto &tone_duration = tone_durations[i];
             tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);
@@ -136,7 +160,7 @@ bool hasFindNodeBuzzer()
 #if defined(PIN_BUZZER)
     return true;
 #endif
-    return config.device.buzzer_gpio ||
+    return getPwmBuzzerGpio() ||
            (moduleConfig.external_notification.output_buzzer && !moduleConfig.external_notification.use_pwm);
 }
 
@@ -156,15 +180,12 @@ bool playFindNodeBuzzer()
     }
 #endif
 
-#if defined(PIN_BUZZER)
-    if (!config.device.buzzer_gpio) {
-        config.device.buzzer_gpio = PIN_BUZZER;
-    }
-#endif
-    if (config.device.buzzer_gpio) {
+    const uint32_t buzzerGpio = getPwmBuzzerGpio();
+    if (buzzerGpio) {
+        enableBuzzerPower();
         const ToneDuration melody[] = {{NOTE_C5, DURATION_1_8}, {NOTE_C5, DURATION_1_8}, {NOTE_G5, DURATION_1_8}};
         for (const auto &tone_duration : melody) {
-            tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);
+            tone(buzzerGpio, tone_duration.frequency_khz, tone_duration.duration_ms);
             delay(1.3 * tone_duration.duration_ms);
         }
         return true;
@@ -172,6 +193,7 @@ bool playFindNodeBuzzer()
 
     if (moduleConfig.external_notification.output_buzzer && !moduleConfig.external_notification.use_pwm) {
         const uint32_t buzzerPin = moduleConfig.external_notification.output_buzzer;
+        enableBuzzerPower();
         pinMode(buzzerPin, OUTPUT);
         for (int i = 0; i < 3; i++) {
             digitalWrite(buzzerPin, HIGH);

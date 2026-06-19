@@ -49,6 +49,12 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
         return true;
     }
+    NodeNum sourceNum = getFrom(&mp);
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(sourceNum);
+    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed) {
+        LOG_WARN("Dropping unsigned NodeInfo from node 0x%08x that previously signed", sourceNum);
+        return true;
+    }
 
     // Coerce user.id to be derived from the node number
     snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));

@@ -71,9 +71,13 @@ void onConnect(uint16_t conn_handle)
     // the (single, reused) bluetoothPhoneAPI instance, so a prior session's
     // authorization can otherwise survive a quick reconnect. handleStartConfig()
     // re-locks on every want_config too; this closes the window before that.
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
     if (bluetoothPhoneAPI) {
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         bluetoothPhoneAPI->setAdminAuthorized(false);
+#endif
     }
+#endif
 
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
