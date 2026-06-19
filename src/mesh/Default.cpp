@@ -97,3 +97,29 @@ uint8_t Default::getConfiguredOrDefaultHopLimit(uint8_t configured)
     return (configured >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
 #endif
 }
+
+uint8_t Default::hopTrimGrace(meshtastic_Config_DeviceConfig_Role role, meshtastic_PortNum portnum)
+{
+    return hopTrimGrace(role, portnum, default_traffic_mgmt_hop_trim_grace_base);
+}
+
+uint8_t Default::hopTrimGrace(meshtastic_Config_DeviceConfig_Role role, meshtastic_PortNum portnum, uint8_t base)
+{
+
+    // Deprecated roles get one below base (nudge operators off them).
+    if (IS_ONE_OF(role, meshtastic_Config_DeviceConfig_Role_REPEATER, meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT))
+        return base > 0 ? static_cast<uint8_t>(base - 1) : 0;
+
+    // Infrastructure roles, and a role's specialty broadcast, get one above base.
+    if (IS_ONE_OF(role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                  meshtastic_Config_DeviceConfig_Role_CLIENT_BASE))
+        return static_cast<uint8_t>(base + 1);
+    if (role == meshtastic_Config_DeviceConfig_Role_SENSOR && portnum == meshtastic_PortNum_TELEMETRY_APP)
+        return static_cast<uint8_t>(base + 1);
+    if (IS_ONE_OF(role, meshtastic_Config_DeviceConfig_Role_TRACKER, meshtastic_Config_DeviceConfig_Role_TAK_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) &&
+        portnum == meshtastic_PortNum_POSITION_APP)
+        return static_cast<uint8_t>(base + 1);
+
+    return base;
+}

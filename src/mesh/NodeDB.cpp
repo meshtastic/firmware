@@ -1145,6 +1145,20 @@ void NodeDB::initConfigIntervals()
 #endif
 }
 
+// Always-on traffic management defaults. Only booleans are written; every
+// numeric field stays 0 and resolves to its default_traffic_mgmt_* macro at
+// use (e.g. position dedup precision/interval), so fork-wide tuning changes
+// take effect without another migration. Rate limiting and the features that
+// exhaust or reshape relayed traffic (exhaust_hop_*, drop_unknown_enabled,
+// nodeinfo_direct_response) stay opt-in.
+static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
+{
+    mc.has_traffic_management = true;
+    mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
+    mc.traffic_management.enabled = true;
+    mc.traffic_management.position_dedup_enabled = true;
+}
+
 void NodeDB::installDefaultModuleConfig()
 {
     LOG_INFO("Install default ModuleConfig");
@@ -1261,6 +1275,8 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
+
+    installTrafficManagementDefaults(moduleConfig);
 
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;
@@ -2226,6 +2242,16 @@ void NodeDB::loadFromDisk()
         }
     }
 
+    // Always-on traffic management: a device that has NEVER configured TMM
+    // (has_traffic_management false — AdminModule always sets the has_ flag on
+    // write, even when disabling) gets the fork defaults. Explicitly configured
+    // devices keep their exact settings.
+    if (!moduleConfig.has_traffic_management) {
+        LOG_INFO("Traffic management never configured, installing always-on defaults");
+        installTrafficManagementDefaults(moduleConfig);
+        saveToDisk(SEGMENT_MODULECONFIG);
+    }
+
     state = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
                       &channelFile);
     if (state != LoadFileResult::LOAD_SUCCESS) {
@@ -2966,10 +2992,12 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // Block the contact and drop its rich satellite data, but keep the
         // public key copied above — an ignored peer keeps a usable identity
         // (a verifiable target) rather than a bare node number.
-        if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true))
+        if (setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
+            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
+            eraseNodeSatellites(contact.node_num);
+        } else {
             LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
-        nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
-        eraseNodeSatellites(contact.node_num);
+        }
     } else {
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
@@ -3544,6 +3572,8 @@ bool NodeDB::createNewIdentity()
     myNodeInfo.my_node_num = newNodeNum;
 
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    if (!info)
+        return false;
     TypeConversions::CopyUserToNodeInfoLite(info, owner);
 
     return true;

@@ -143,9 +143,9 @@ static inline int get_max_num_nodes()
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))
 
 // Traffic Management module configuration
-// Enable per-variant by defining HAS_TRAFFIC_MANAGEMENT=1 in variant.h
+// Enabled by default on all platforms; disable per-variant by defining HAS_TRAFFIC_MANAGEMENT=0 in variant.h
 #ifndef HAS_TRAFFIC_MANAGEMENT
-#define HAS_TRAFFIC_MANAGEMENT 0
+#define HAS_TRAFFIC_MANAGEMENT 1
 #endif
 
 // HopScalingModule - variable hop module: dynamically adjusts broadcast hop_limit based on mesh density
@@ -157,14 +157,20 @@ static inline int get_max_num_nodes()
 #define HAS_VARIABLE_HOPS 1
 #endif
 
-// Cache size for traffic management (number of nodes to track)
-// Can be overridden per-variant based on available memory
+// Cache size for traffic management (number of nodes to track).
+// Sized to match each platform's node-store tier; can be overridden per-variant.
 #ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
-#if HAS_TRAFFIC_MANAGEMENT
-#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000
-#else
+#if !HAS_TRAFFIC_MANAGEMENT
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 0
-#endif // HAS_TRAFFIC_MANAGEMENT
+#elif defined(ARCH_STM32WL)
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 0 // STM32WL is flash/RAM-constrained; TMM disabled
+#elif defined(NRF52840_XXAA)
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 200 // ~8 KB; matches WARM_NODE_COUNT; MAX_NUM_NODES=120
+#elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARCH_PORTDUINO)
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 2000 // PSRAM/host; matches WARM_NODE_COUNT
+#else
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000 // generic ESP32 and others
+#endif
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE
 
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic

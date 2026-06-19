@@ -18,6 +18,9 @@
 #define default_telemetry_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_smart_minimum_interval_secs 5 * 60
+// Floor for our own position broadcasts when stationary (unchanged beyond the broadcast
+// precision) or fixed_position: identical positions get deduped by traffic management anyway.
+#define default_position_stationary_broadcast_secs (12 * 60 * 60)
 #define min_default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define min_default_broadcast_smart_minimum_interval_secs 5 * 60
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
@@ -34,8 +37,18 @@
 enum class TrafficType { POSITION, TELEMETRY };
 
 // Traffic management defaults
-#define default_traffic_mgmt_position_precision_bits 24               // ~10m grid cells
-#define default_traffic_mgmt_position_min_interval_secs (ONE_DAY / 2) // 12 hours between identical positions
+#define default_traffic_mgmt_position_precision_bits 19                // ~90m grid cells (±45m)
+#define default_traffic_mgmt_position_min_interval_secs (11 * 60 * 60) // 11 hours between identical positions
+// Role cap: tracker-role origins may refresh a duplicate position this often (vs the 11h default).
+#define default_traffic_mgmt_tracker_position_min_interval_secs (60 * 60) // 1 hour
+
+// Base hop grace for hop-trimming; the only tunable. Infra/specialty senders derive +1,
+// deprecated roles -1 (see Default::hopTrimGrace).
+#ifdef USERPREFS_TMM_HOP_TRIM_GRACE_BASE
+#define default_traffic_mgmt_hop_trim_grace_base USERPREFS_TMM_HOP_TRIM_GRACE_BASE
+#else
+#define default_traffic_mgmt_hop_trim_grace_base 2
+#endif
 
 // Hop scaling defaults
 #define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count
@@ -76,6 +89,10 @@ class Default
                                                    TrafficType type);
     static uint8_t getConfiguredOrDefaultHopLimit(uint8_t configured);
     static uint32_t getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue);
+    // Hops of grace a relayed broadcast gets over the local hop-scaling cap before its reach is
+    // clamped. Keyed on the sender's role and the packet portnum; derived from the base grace.
+    static uint8_t hopTrimGrace(meshtastic_Config_DeviceConfig_Role role, meshtastic_PortNum portnum);
+    static uint8_t hopTrimGrace(meshtastic_Config_DeviceConfig_Role role, meshtastic_PortNum portnum, uint8_t base);
 
   private:
     // Note: Kept as uint32_t to match the public API parameter type

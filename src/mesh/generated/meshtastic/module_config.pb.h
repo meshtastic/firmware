@@ -260,6 +260,18 @@ typedef struct _meshtastic_ModuleConfig_TrafficManagementConfig {
     bool exhaust_hop_position;
     /* Preserve hop_limit for router-to-router traffic */
     bool router_preserve_hops;
+    /* Enable hop-trimming of relayed broadcasts to the local hop-scaling cap plus grace.
+ When enabled, packets relayed on public (or private with apply_to_private_channels)
+ channels have their hop_limit clamped so they travel no further than the local mesh
+ requires. Default true (disable by setting hop_trim_disabled = true). */
+    bool hop_trim_disabled;
+    /* Base extra-hop grace budget added on top of the local hop-scaling cap before
+ hop-trimming engages. Infra/specialty senders receive an additional +1.
+ 0 = use firmware default (2). */
+    uint32_t hop_trim_grace;
+    /* Extend position dedup, precision clamping, and hop-trimming to private
+ (non-well-known-key) channels. Default false (well-known public channels only). */
+    bool apply_to_private_channels;
 } meshtastic_ModuleConfig_TrafficManagementConfig;
 
 /* Serial Config */
@@ -588,7 +600,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
@@ -607,7 +619,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
@@ -670,6 +682,9 @@ extern "C" {
 #define meshtastic_ModuleConfig_TrafficManagementConfig_exhaust_hop_telemetry_tag 12
 #define meshtastic_ModuleConfig_TrafficManagementConfig_exhaust_hop_position_tag 13
 #define meshtastic_ModuleConfig_TrafficManagementConfig_router_preserve_hops_tag 14
+#define meshtastic_ModuleConfig_TrafficManagementConfig_hop_trim_disabled_tag 15
+#define meshtastic_ModuleConfig_TrafficManagementConfig_hop_trim_grace_tag 16
+#define meshtastic_ModuleConfig_TrafficManagementConfig_apply_to_private_channels_tag 17
 #define meshtastic_ModuleConfig_SerialConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_SerialConfig_echo_tag 2
 #define meshtastic_ModuleConfig_SerialConfig_rxd_tag 3
@@ -880,7 +895,10 @@ X(a, STATIC,   SINGULAR, BOOL,     drop_unknown_enabled,  10) \
 X(a, STATIC,   SINGULAR, UINT32,   unknown_packet_threshold,  11) \
 X(a, STATIC,   SINGULAR, BOOL,     exhaust_hop_telemetry,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     exhaust_hop_position,  13) \
-X(a, STATIC,   SINGULAR, BOOL,     router_preserve_hops,  14)
+X(a, STATIC,   SINGULAR, BOOL,     router_preserve_hops,  14) \
+X(a, STATIC,   SINGULAR, BOOL,     hop_trim_disabled,  15) \
+X(a, STATIC,   SINGULAR, UINT32,   hop_trim_grace,   16) \
+X(a, STATIC,   SINGULAR, BOOL,     apply_to_private_channels,  17)
 #define meshtastic_ModuleConfig_TrafficManagementConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TrafficManagementConfig_DEFAULT NULL
 
@@ -1053,7 +1071,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TAKConfig_size   4
 #define meshtastic_ModuleConfig_TelemetryConfig_size 50
-#define meshtastic_ModuleConfig_TrafficManagementConfig_size 52
+#define meshtastic_ModuleConfig_TrafficManagementConfig_size 64
 #define meshtastic_ModuleConfig_size             227
 #define meshtastic_RemoteHardwarePin_size        21
 

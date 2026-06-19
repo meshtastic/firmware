@@ -24,6 +24,9 @@
   // "USERPREFS_CONFIG_OWNER_SHORT_NAME": "MLN",
   // "USERPREFS_CONFIG_DEVICE_ROLE": "meshtastic_Config_DeviceConfig_Role_CLIENT", // Defaults to CLIENT. ROUTER*, and LOST AND FOUND roles are restricted.
   // "USERPREFS_EVENT_MODE": "1",
+  // "USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS": "1", // Compile-time override: extend TMM to private channels (prefer runtime proto field apply_to_private_channels in TrafficManagementConfig)
+  // "USERPREFS_TMM_HOP_TRIM_DISABLE": "1",           // Compile-time override: compile out TMM hop-trimming (prefer runtime proto field hop_trim_disabled in TrafficManagementConfig)
+  // "USERPREFS_TMM_HOP_TRIM_GRACE_BASE": "2",        // Compile-time override: base hop grace (prefer runtime proto field hop_trim_grace in TrafficManagementConfig)
   // "USERPREFS_FIRMWARE_EDITION": "meshtastic_FirmwareEdition_BURNING_MAN",
   // "USERPREFS_FIXED_BLUETOOTH": "121212",
   // "USERPREFS_FIXED_GPS": "",
