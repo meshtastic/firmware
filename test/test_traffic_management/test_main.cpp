@@ -9,6 +9,8 @@
 #define TM_TEST_ENTRY
 #endif
 
+#if HAS_TRAFFIC_MANAGEMENT
+
 #include "airtime.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshService.h"
