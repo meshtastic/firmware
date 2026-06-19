@@ -1643,6 +1643,11 @@ static uint8_t warmProtectedCategory(const meshtastic_NodeInfoLite &n)
     return static_cast<uint8_t>(WarmProtected::None);
 }
 
+// The warm tier packs the device role into a 4-bit field (WARM_ROLE_MASK). Fail the build
+// loudly if a new role outgrows it, rather than silently truncating role on eviction.
+static_assert(_meshtastic_Config_DeviceConfig_Role_MAX <= WARM_ROLE_MASK,
+              "device role no longer fits the 4-bit warm metadata field");
+
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
