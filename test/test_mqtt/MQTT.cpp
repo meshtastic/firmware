@@ -27,12 +27,6 @@
 #include <utility>
 #include <variant>
 
-#if defined(UNIT_TEST)
-#define IS_RUNNING_TESTS 1
-#else
-#define IS_RUNNING_TESTS 0
-#endif
-
 namespace
 {
 // Minimal router needed to receive messages from MQTT.
@@ -800,6 +794,17 @@ void test_disabled(void)
     TEST_ASSERT_FALSE(mqtt->isEnabled());
 }
 
+void test_mqttInitSkipsAllocationWhenDisabled(void)
+{
+    delete unitTest;
+    mqtt = unitTest = NULL;
+
+    moduleConfig.mqtt.enabled = false;
+    mqttInit();
+
+    TEST_ASSERT_NULL(mqtt);
+}
+
 // Subscriptions contain the moduleConfig.mqtt.root prefix.
 void test_customMqttRoot(void)
 {
@@ -912,6 +917,7 @@ void setup()
     RUN_TEST(test_usingCustomServer);
     RUN_TEST(test_enabled);
     RUN_TEST(test_disabled);
+    RUN_TEST(test_mqttInitSkipsAllocationWhenDisabled);
     RUN_TEST(test_customMqttRoot);
     RUN_TEST(test_configEmptyIsValid);
     RUN_TEST(test_configEnabledEmptyIsValid);

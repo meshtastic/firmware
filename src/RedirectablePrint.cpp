@@ -51,7 +51,7 @@ size_t RedirectablePrint::write(uint8_t c)
 size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
 {
     va_list copy;
-#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+#if ARCH_PORTDUINO
     static char printBuf[512];
 #else
     static char printBuf[160];
@@ -225,14 +225,16 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
 #elif defined(ARCH_NRF52)
         isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
+#elif defined(ARCH_NRF54L15)
+        isBleConnected = nrf54l15Bluetooth != nullptr && nrf54l15Bluetooth->isConnected();
 #endif
         if (isBleConnected) {
             auto thread = concurrency::OSThread::currentThread;
             meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
             logRecord.level = getLogLevel(logLevel);
-            vsprintf(logRecord.message, format, arg);
+            vsnprintf(logRecord.message, sizeof(logRecord.message), format, arg);
             if (thread)
-                strcpy(logRecord.source, thread->ThreadName.c_str());
+                strlcpy(logRecord.source, thread->ThreadName.c_str(), sizeof(logRecord.source));
             logRecord.time = getValidTime(RTCQuality::RTCQualityDevice, true);
 
             auto buffer = std::unique_ptr<uint8_t[]>(new uint8_t[meshtastic_LogRecord_size]);
@@ -241,6 +243,8 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             nimbleBluetooth->sendLog(buffer.get(), size);
 #elif defined(ARCH_NRF52)
             nrf52Bluetooth->sendLog(buffer.get(), size);
+#elif defined(ARCH_NRF54L15)
+            nrf54l15Bluetooth->sendLog(buffer.get(), size);
 #endif
         }
     }

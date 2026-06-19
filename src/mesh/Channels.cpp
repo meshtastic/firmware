@@ -93,6 +93,23 @@ void Channels::initDefaultLoraConfig()
 #ifdef USERPREFS_LORACONFIG_CHANNEL_NUM
     loraConfig.channel_num = USERPREFS_LORACONFIG_CHANNEL_NUM;
 #endif
+
+    // Apply any hardcoded USERPREFS overrides for custom modem config (e.g. region-locked boards)
+#ifdef USERPREFS_LORACONFIG_USE_PRESET
+    loraConfig.use_preset = USERPREFS_LORACONFIG_USE_PRESET;
+#endif
+#ifdef USERPREFS_LORACONFIG_BANDWIDTH
+    loraConfig.bandwidth = USERPREFS_LORACONFIG_BANDWIDTH;
+#endif
+#ifdef USERPREFS_LORACONFIG_SPREAD_FACTOR
+    loraConfig.spread_factor = USERPREFS_LORACONFIG_SPREAD_FACTOR;
+#endif
+#ifdef USERPREFS_LORACONFIG_CODING_RATE
+    loraConfig.coding_rate = USERPREFS_LORACONFIG_CODING_RATE;
+#endif
+#ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
+    loraConfig.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
+#endif
 }
 
 bool Channels::ensureLicensedOperation()
@@ -385,6 +402,42 @@ bool Channels::isDefaultChannel(ChannelIndex chIndex)
             return true;
     }
     return false;
+}
+
+bool cryptoKeyIsPublic(const CryptoKey &key)
+{
+    if (key.length == 0)
+        return true; // encryption disabled
+    // Match the defaultpsk family ignoring its last byte (getKey() bumps only that byte per 1-byte index).
+    if (key.length == (int)sizeof(defaultpsk) && memcmp(key.bytes, defaultpsk, sizeof(defaultpsk) - 1) == 0)
+        return true;
+    return false;
+}
+
+bool Channels::usesPublicKey(ChannelIndex chIndex)
+{
+    const meshtastic_Channel &ch = getByIndex(chIndex);
+    if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED)
+        return false;
+
+    const auto &psk = ch.settings.psk;
+    if (psk.size == 0) {
+        // Secondary channels inherit the primary key when unset; primary size==0 means encryption disabled.
+        if (ch.role == meshtastic_Channel_Role_SECONDARY) {
+            // Guard against malformed configs with no PRIMARY channel (primaryIndex could point back to us).
+            if (primaryIndex == chIndex)
+                return true; // fail closed: treat as public
+            return usesPublicKey(primaryIndex);
+        }
+        return true;
+    }
+
+    if (psk.size == 1) {
+        // Short PSK aliases: 0 disables encryption; 1..255 are the public defaultpsk family.
+        return true;
+    }
+
+    return (psk.size == sizeof(defaultpsk) && memcmp(psk.bytes, defaultpsk, sizeof(defaultpsk) - 1) == 0);
 }
 
 bool Channels::hasDefaultChannel()
