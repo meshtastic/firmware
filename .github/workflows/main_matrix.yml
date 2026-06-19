@@ -40,7 +40,7 @@ jobs:
           - check
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
@@ -64,7 +64,7 @@ jobs:
   version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Get release version string
         run: |
           echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
@@ -86,7 +86,7 @@ jobs:
     runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
     if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Check ${{ matrix.check.board }}
@@ -189,7 +189,7 @@ jobs:
     needs: [version, build]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v8
         with:
@@ -261,7 +261,7 @@ jobs:
       # - MacOS
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -362,7 +362,7 @@ jobs:
     needs: [release-artifacts, version]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -417,7 +417,7 @@ jobs:
         esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,rp2350,stm32
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
