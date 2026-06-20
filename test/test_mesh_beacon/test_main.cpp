@@ -518,8 +518,9 @@ static void test_broadcaster_sendBeacon_fromIsLocalNodeWhenUnset(void)
 }
 
 /**
- * Verify broadcast_send_as_node overrides the 'from' field in the emitted packet.
- * Important for the admin use-case of broadcasting a beacon on behalf of another node.
+ * Verify broadcast_send_as_node is currently disabled: 'from' is always the local node
+ * even when broadcast_send_as_node is set to a remote node number.
+ * (broadcast_send_as_node is commented out as "not suitable right now".)
  */
 static void test_broadcaster_sendBeacon_fromIsCustomNodeWhenSet(void)
 {
@@ -533,7 +534,8 @@ static void test_broadcaster_sendBeacon_fromIsCustomNodeWhenSet(void)
     bcast.sendBeacon();
 
     TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
-    TEST_ASSERT_EQUAL_UINT32(kRemoteNode, mockRouter->sentPackets[0].from);
+    // broadcast_send_as_node is disabled; from is always the local node
+    TEST_ASSERT_EQUAL_UINT32(kLocalNode, mockRouter->sentPackets[0].from);
 }
 
 /**
