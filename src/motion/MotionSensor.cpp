@@ -3,8 +3,8 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "concurrency/LockGuard.h"
-#include "configuration.h"
 #include "graphics/draw/CompassRenderer.h"
+#include "mesh/NodeDB.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
