@@ -1629,6 +1629,7 @@ bool NodeDB::enforceSatelliteCaps()
     return trimmedAny;
 }
 
+#if WARM_NODE_COUNT > 0
 // Classify an evicted node's hop-protected category for the warm tier. Favorite/ignored/
 // verified are local flags (rarely reach warm — they're eviction-protected — but classify
 // them if they do); otherwise tracker/sensor/tak_tracker are role-protected.
@@ -1647,6 +1648,7 @@ static uint8_t warmProtectedCategory(const meshtastic_NodeInfoLite &n)
 // loudly if a new role outgrows it, rather than silently truncating role on eviction.
 static_assert(_meshtastic_Config_DeviceConfig_Role_MAX <= WARM_ROLE_MASK,
               "device role no longer fits the 4-bit warm metadata field");
+#endif // WARM_NODE_COUNT > 0
 
 void NodeDB::cleanupMeshDB()
 {
