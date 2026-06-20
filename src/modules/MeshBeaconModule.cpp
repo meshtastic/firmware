@@ -305,25 +305,27 @@ void MeshBeaconBroadcastModule::sendBeacon()
     // Stamp common fields shared by every outgoing beacon packet.
     const auto stampPacket = [&](meshtastic_MeshPacket *p) {
         p->to = NODENUM_BROADCAST;
-        // broadcast_send_as_node overrides the source NodeNum. NOTE: this is a *node-ID* spoof
-        // only — it rewrites the 'from' field but does NOT forge any signature. Once 'from' is
-        // not us, the packet is no longer isFromUs(), so Router::perhapsEncode() skips XEdDSA
-        // signing and receivers get an unsigned packet attributed to another node.
-        // When broadcast_send_as_node == 0 the beacon is genuinely from us and Router::perhapsEncode()
-        // signs it under the same XEdDSA broadcast policy as normal channel messages (signed iff the
-        // payload + signature fits the Data payload) — beacons need no special-case signing here.
-        p->from = (bcfg.broadcast_send_as_node != 0) ? bcfg.broadcast_send_as_node : nodeDB->getNodeNum();
+        p->from = nodeDB->getNodeNum();
+        // broadcast_send_as_node: commented out pending further review.
+        // Spoof notes preserved for when this is re-enabled:
+        //   broadcast_send_as_node overrides the source NodeNum. NOTE: this is a *node-ID* spoof
+        //   only — it rewrites the 'from' field but does NOT forge any signature. Once 'from' is
+        //   not us, the packet is no longer isFromUs(), so Router::perhapsEncode() skips XEdDSA
+        //   signing and receivers get an unsigned packet attributed to another node.
+        //   When broadcast_send_as_node == 0 the beacon is genuinely from us and Router::perhapsEncode()
+        //   signs it under the same XEdDSA broadcast policy as normal channel messages.
+        //   When broadcast_send_as_node rewrites p->from, perhapsEncode() sees isFromUs()=false and
+        //   skips setting has_bitfield — must be set explicitly so receivers can classify hop_start
+        //   correctly and so ok_to_mqtt is honoured on the spoofed packet.
+        // if (bcfg.broadcast_send_as_node != 0) {
+        //     p->from = bcfg.broadcast_send_as_node;
+        //     p->decoded.has_bitfield = true;
+        //     p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
+        // }
         p->hop_limit = 0; // all beacon packets are zero hopped to limit spamming.
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         p->want_ack = false;
         p->rx_time = getValidTime(RTCQualityFromNet);
-        // When broadcast_send_as_node rewrites p->from, perhapsEncode() sees isFromUs()=false and
-        // skips setting has_bitfield. Set it here so receivers can classify hop_start correctly
-        // and so ok_to_mqtt is honoured on the spoofed packet.
-        if (bcfg.broadcast_send_as_node != 0) {
-            p->decoded.has_bitfield = true;
-            p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
-        }
     };
 
     // ── Packet type decisions ────────────────────────────────────────────────
