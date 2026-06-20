@@ -39,8 +39,8 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define PIN_LED1 (32 + 15) // green
-#define LED_BLUE PIN_LED1  // fake for bluefruit library
+#define PIN_LED1  (32 + 15) // green
+#define LED_BLUE  PIN_LED1  // fake for bluefruit library
 #define LED_GREEN PIN_LED1
 #define LED_STATE_ON 0 // State when LED is lit
 
@@ -78,10 +78,10 @@ No longer populated on PCB
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 #define USE_KCT8103L_PA_ONLY
-#define LORA_KCT8103L_EN (0 + 15)    // CSD - KCT8103L chip enable (HIGH=on)
-#define LORA_KCT8103L_TX_RX (0 + 16) // TX or bypass control (HIGH=TX, LOW=RX)
-#define LORA_PA_POWER LORA_KCT8103L_EN
-#define RF_PA_DETECT_PIN (0 + 13) // HIGH=high-power PA, LOW=low-power
+#define LORA_KCT8103L_EN      (0 + 15)  // CSD - KCT8103L chip enable (HIGH=on)
+#define LORA_KCT8103L_TX_RX   (0 + 16)  // TX or bypass control (HIGH=TX, LOW=RX)
+#define LORA_PA_POWER         LORA_KCT8103L_EN
+#define RF_PA_DETECT_PIN      (0 + 13)  // HIGH=high-power PA, LOW=low-power
 #define RF_PA_HIGH_POWER_VALUE HIGH
 
 /*
@@ -105,10 +105,10 @@ No longer populated on PCB
 #define PIN_GPS_EN (0 + 7) // P0.07, VGNSS_Ctrl
 #define GPS_EN_ACTIVE LOW
 #define PERIPHERAL_WARMUP_MS 1000 // Make sure GNSS power is stable before continuing
-#define PIN_GPS_STANDBY (32 + 2)  // P1.02, WAKE_UP. Low allows sleep, high forces wake.
-#define PIN_GPS_PPS (32 + 4)      // P1.04, 1PPS
-#define GPS_RX_PIN (32 + 5)       // P1.05, MCU RX connected to GPS TXD.
-#define GPS_TX_PIN (32 + 7)       // P1.07, MCU TX connected to GPS RXD.
+#define PIN_GPS_STANDBY (32 + 2) // P1.02, WAKE_UP. Low allows sleep, high forces wake.
+#define PIN_GPS_PPS (32 + 4)     // P1.04, 1PPS
+#define GPS_RX_PIN (32 + 5)      // P1.05, MCU RX connected to GPS TXD.
+#define GPS_TX_PIN (32 + 7)      // P1.07, MCU TX connected to GPS RXD.
 
 #define GPS_THREAD_INTERVAL 50
 
@@ -123,9 +123,9 @@ No longer populated on PCB
 
 #define SERIAL_PRINT_PORT 0
 
-#define ADC_CTRL (0 + 21) // P0.21, ADC_Ctrl
+#define ADC_CTRL (0 + 21)     // P0.21, ADC_Ctrl
 #define ADC_CTRL_ENABLED HIGH
-#define BATTERY_PIN (0 + 4) // P0.04, ADC_IN
+#define BATTERY_PIN (0 + 4)   // P0.04, ADC_IN
 #define ADC_RESOLUTION 14
 
 #define BATTERY_SENSE_RESOLUTION_BITS 12
