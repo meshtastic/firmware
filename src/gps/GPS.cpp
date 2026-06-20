@@ -178,7 +178,6 @@ template <typename T> bool sawNmeaSentenceAtBaud(T *serialGps, uint32_t timeoutM
 
     return false;
 }
-
 } // namespace
 
 // For logging

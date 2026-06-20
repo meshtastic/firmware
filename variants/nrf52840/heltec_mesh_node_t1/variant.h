@@ -115,6 +115,7 @@ extern "C" {
 #define PIN_SPI1_SCK ST7735_SCK
 
 // GPS (UC6580)
+
 #define GPS_UC6580
 #define GPS_BAUDRATE 115200
 #define PIN_GPS_RESET (0 + 26)

@@ -1,6 +1,5 @@
 #include "MotionSensor.h"
 #include "FSCommon.h"
-#include "NodeDB.h"
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "concurrency/LockGuard.h"

@@ -15,7 +15,6 @@ web.tar
 .platformio
 .local
 .cache
-.worktrees/
 
 .DS_Store
 Thumbs.db
