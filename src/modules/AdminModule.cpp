@@ -6,6 +6,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "SPILock.h"
+#include "buzz/FindNodeBuzzer.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
@@ -70,6 +71,37 @@ static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
     if (strcmp(buf, secretReserved) == 0) {
         strncpy(buf, currentVal, bufsz);
     }
+}
+
+static uint32_t effectiveButtonGpio(uint32_t gpio)
+{
+#if defined(BUTTON_PIN)
+    return gpio ? gpio : BUTTON_PIN;
+#else
+    return gpio;
+#endif
+}
+
+static uint32_t effectiveBuzzerGpio(uint32_t gpio)
+{
+#if defined(PIN_BUZZER)
+    return gpio ? gpio : PIN_BUZZER;
+#else
+    return gpio;
+#endif
+}
+
+static bool sameDeviceConfig(const meshtastic_Config_DeviceConfig &current, const meshtastic_Config_DeviceConfig &requested)
+{
+    return current.role == requested.role &&
+           effectiveButtonGpio(current.button_gpio) == effectiveButtonGpio(requested.button_gpio) &&
+           effectiveBuzzerGpio(current.buzzer_gpio) == effectiveBuzzerGpio(requested.buzzer_gpio) &&
+           current.rebroadcast_mode == requested.rebroadcast_mode &&
+           current.node_info_broadcast_secs == requested.node_info_broadcast_secs &&
+           current.double_tap_as_button_press == requested.double_tap_as_button_press &&
+           current.disable_triple_click == requested.disable_triple_click &&
+           strncmp(current.tzdef, requested.tzdef, sizeof(current.tzdef)) == 0 &&
+           current.led_heartbeat_disabled == requested.led_heartbeat_disabled && current.buzzer_mode == requested.buzzer_mode;
 }
 
 /**
@@ -630,6 +662,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleSendInputEvent(r->send_input_event);
         break;
     }
+    case meshtastic_AdminMessage_find_node_request_tag: {
+        LOG_INFO("Client requesting find-node buzzer");
+        handleFindNodeRequest(mp, r->find_node_request);
+        break;
+    }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator");
@@ -762,23 +799,31 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     switch (c.which_payload_variant) {
     case meshtastic_Config_device_tag: {
         LOG_INFO("Set config: Device");
+        auto requestedDevice = c.payload_variant.device;
+        if (config.has_device) {
+            requestedDevice.serial_enabled = config.device.serial_enabled;
+            requestedDevice.is_managed = config.device.is_managed;
+        }
+        if (config.has_device && sameDeviceConfig(config.device, requestedDevice)) {
+            LOG_DEBUG("Device config unchanged, skipping save");
+            return;
+        }
         config.has_device = true;
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
-        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
+        if (config.device.double_tap_as_button_press == false && requestedDevice.double_tap_as_button_press == true &&
             accelerometerThread->enabled == false) {
-            config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
+            config.device.double_tap_as_button_press = requestedDevice.double_tap_as_button_press;
             accelerometerThread->enabled = true;
             accelerometerThread->start();
         }
 #endif
-        if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
-            config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
-            config.device.role == c.payload_variant.device.role &&
-            config.device.rebroadcast_mode == c.payload_variant.device.rebroadcast_mode) {
+        if (effectiveButtonGpio(config.device.button_gpio) == effectiveButtonGpio(requestedDevice.button_gpio) &&
+            effectiveBuzzerGpio(config.device.buzzer_gpio) == effectiveBuzzerGpio(requestedDevice.buzzer_gpio) &&
+            config.device.role == requestedDevice.role && config.device.rebroadcast_mode == requestedDevice.rebroadcast_mode) {
             requiresReboot = false;
         }
-        config.device = c.payload_variant.device;
+        config.device = requestedDevice;
         if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE &&
             (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
              config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
@@ -788,8 +833,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             sendWarning(warning);
         }
         // If we're setting router role for the first time, install its intervals
-        if (existingRole != c.payload_variant.device.role) {
-            nodeDB->installRoleDefaults(c.payload_variant.device.role);
+        if (existingRole != requestedDevice.role) {
+            nodeDB->installRoleDefaults(requestedDevice.role);
             changes |= SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE; // Some role defaults affect owner
         }
         if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
@@ -797,7 +842,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
         }
         // Router Client and Repeater deprecated; Set it to client
-        if (IS_ONE_OF(c.payload_variant.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT,
+        if (IS_ONE_OF(requestedDevice.role, meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT,
                       meshtastic_Config_DeviceConfig_Role_REPEATER)) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
             if (moduleConfig.store_forward.enabled && !moduleConfig.store_forward.is_server) {
@@ -867,7 +912,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                    c.payload_variant.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             config.bluetooth.enabled = false;
         }
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
         if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
             accelerometerThread->enabled == false) {
@@ -1432,6 +1477,46 @@ void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
     }
 }
 
+void AdminModule::handleFindNodeRequest(const meshtastic_MeshPacket &req, const meshtastic_AdminMessage_FindNodeRequest &request)
+{
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
+    r.which_payload_variant = meshtastic_AdminMessage_find_node_response_tag;
+
+    uint32_t acceptedDurationSeconds = 0;
+    FindNodeBuzzer::Result result = FindNodeBuzzer::Result::NoBuzzer;
+    if (findNodeBuzzer) {
+        result =
+            request.stop ? findNodeBuzzer->stop() : findNodeBuzzer->start(request.duration_seconds, &acceptedDurationSeconds);
+    }
+
+    switch (result) {
+    case FindNodeBuzzer::Result::Started:
+        r.find_node_response.result = meshtastic_AdminMessage_FindNodeResponse_Result_STARTED;
+        r.find_node_response.duration_seconds = acceptedDurationSeconds;
+        LOG_INFO("Find-node buzzer started for %u seconds", acceptedDurationSeconds);
+        break;
+    case FindNodeBuzzer::Result::Stopped:
+        r.find_node_response.result = meshtastic_AdminMessage_FindNodeResponse_Result_STOPPED;
+        LOG_INFO("Find-node buzzer stopped");
+        break;
+    case FindNodeBuzzer::Result::BuzzerDisabled:
+        r.find_node_response.result = meshtastic_AdminMessage_FindNodeResponse_Result_BUZZER_DISABLED;
+        LOG_WARN("Find-node buzzer request rejected: buzzer disabled");
+        break;
+    case FindNodeBuzzer::Result::NoBuzzer:
+    default:
+        r.find_node_response.result = meshtastic_AdminMessage_FindNodeResponse_Result_NO_BUZZER;
+        LOG_WARN("Find-node buzzer request rejected: no buzzer available");
+        break;
+    }
+
+    setPassKey(&r);
+    myReply = allocDataProtobuf(r);
+    if (req.pki_encrypted) {
+        myReply->pki_encrypted = true;
+    }
+}
+
 void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req)
 {
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
@@ -1647,6 +1732,7 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_canned_message_module_messages_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_metadata_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_find_node_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_response_tag)

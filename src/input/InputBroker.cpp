@@ -1,8 +1,10 @@
 #include "InputBroker.h"
 #include "PowerFSM.h" // needed for event trigger
+#include "buzz/FindNodeBuzzer.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "modules/ExternalNotificationModule.h"
+#include <cstring>
 #ifdef MESHTASTIC_LOCKDOWN
 #include "security/LockdownDisplay.h"
 #endif
@@ -110,6 +112,13 @@ int InputBroker::handleInputEvent(const InputEvent *event)
     }
 #endif
     powerFSM.trigger(EVENT_INPUT);
+
+    const bool isLocalInput =
+        event && event->inputEvent != INPUT_BROKER_NONE && (!event->source || strcmp(event->source, "admin") != 0);
+    if (isLocalInput && findNodeBuzzer && findNodeBuzzer->isActive()) {
+        findNodeBuzzer->stop();
+        LOG_INFO("Find-node buzzer stopped by local input");
+    }
 
     if (event && event->inputEvent != INPUT_BROKER_NONE && externalNotificationModule &&
         moduleConfig.external_notification.enabled && externalNotificationModule->nagging()) {
@@ -391,8 +400,10 @@ void InputBroker::Init()
             rotaryEncoderInterruptImpl1 = nullptr;
         }
 #endif
+#if !MESHTASTIC_EXCLUDE_I2C
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
+#endif
 #if defined(M5STACK_UNITC6L)
         i2cButton = new i2cButtonThread("i2cButtonThread");
 #endif

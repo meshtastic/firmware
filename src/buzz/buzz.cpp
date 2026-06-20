@@ -15,6 +15,29 @@
 extern "C" void delay(uint32_t dwMs);
 #endif
 
+namespace
+{
+uint32_t getPwmBuzzerGpio()
+{
+    if (config.device.buzzer_gpio) {
+        return config.device.buzzer_gpio;
+    }
+#if defined(PIN_BUZZER)
+    return PIN_BUZZER;
+#else
+    return 0;
+#endif
+}
+
+void enableBuzzerPower()
+{
+#ifdef BUZZER_EN_PIN
+    pinMode(BUZZER_EN_PIN, OUTPUT);
+    digitalWrite(BUZZER_EN_PIN, HIGH);
+#endif
+}
+} // namespace
+
 struct ToneDuration {
     int frequency_khz;
     int duration_ms;
@@ -117,6 +140,7 @@ void playTones(const ToneDuration *tone_durations, int size)
         config.device.buzzer_gpio = PIN_BUZZER;
 #endif
     if (config.device.buzzer_gpio) {
+        enableBuzzerPower();
         for (int i = 0; i < size; i++) {
             const auto &tone_duration = tone_durations[i];
             tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);
@@ -124,6 +148,63 @@ void playTones(const ToneDuration *tone_durations, int size)
             delay(1.3 * tone_duration.duration_ms);
         }
     }
+}
+
+bool hasFindNodeBuzzer()
+{
+#ifdef HAS_I2S
+    if (moduleConfig.external_notification.use_i2s_as_buzzer && audioThread) {
+        return true;
+    }
+#endif
+#if defined(PIN_BUZZER)
+    return true;
+#endif
+    return getPwmBuzzerGpio() ||
+           (moduleConfig.external_notification.output_buzzer && !moduleConfig.external_notification.use_pwm);
+}
+
+bool playFindNodeBuzzer()
+{
+    if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED) {
+        return false;
+    }
+
+#ifdef HAS_I2S
+    if (moduleConfig.external_notification.use_i2s_as_buzzer && audioThread) {
+        static constexpr const char *findNodeRtttl = "find:d=16,o=5,b=220:c6,p,c6,p,g6";
+        if (!audioThread->isPlaying()) {
+            audioThread->beginRttl(findNodeRtttl, strlen(findNodeRtttl));
+        }
+        return true;
+    }
+#endif
+
+    const uint32_t buzzerGpio = getPwmBuzzerGpio();
+    if (buzzerGpio) {
+        enableBuzzerPower();
+        const ToneDuration melody[] = {{NOTE_C5, DURATION_1_8}, {NOTE_C5, DURATION_1_8}, {NOTE_G5, DURATION_1_8}};
+        for (const auto &tone_duration : melody) {
+            tone(buzzerGpio, tone_duration.frequency_khz, tone_duration.duration_ms);
+            delay(1.3 * tone_duration.duration_ms);
+        }
+        return true;
+    }
+
+    if (moduleConfig.external_notification.output_buzzer && !moduleConfig.external_notification.use_pwm) {
+        const uint32_t buzzerPin = moduleConfig.external_notification.output_buzzer;
+        enableBuzzerPower();
+        pinMode(buzzerPin, OUTPUT);
+        for (int i = 0; i < 3; i++) {
+            digitalWrite(buzzerPin, HIGH);
+            delay(DURATION_1_8);
+            digitalWrite(buzzerPin, LOW);
+            delay(DURATION_1_8);
+        }
+        return true;
+    }
+
+    return false;
 }
 
 void playBeep()

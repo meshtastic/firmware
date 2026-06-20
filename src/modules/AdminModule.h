@@ -55,6 +55,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req);
     void handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &req);
     void handleGetDeviceUIConfig(const meshtastic_MeshPacket &req);
+    void handleFindNodeRequest(const meshtastic_MeshPacket &req, const meshtastic_AdminMessage_FindNodeRequest &request);
     /**
      * Setters
      */
