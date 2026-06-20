@@ -13,8 +13,10 @@
 
 #if WARM_NODE_COUNT > 0
 
+#include "FSCommon.h"
 #include "mesh/WarmNodeStore.h"
 #include <cstring>
+#include <vector>
 
 namespace
 {
@@ -76,12 +78,15 @@ void test_ws_take_removesEntry()
     WarmNodeStore ws;
     uint8_t key[32];
     makeKey(key, 3);
-    ws.absorb(0x400, 1234, key);
+    ws.absorb(0x400, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role);
 
     WarmNodeEntry e;
     TEST_ASSERT_TRUE(ws.take(0x400, e));
     TEST_ASSERT_EQUAL(0x400, e.num);
-    TEST_ASSERT_EQUAL(1234, e.last_heard);
+    // last_heard is quantised to the metadata quantum; role/protected ride the low bits.
+    TEST_ASSERT_EQUAL(1234u & WARM_TIME_MASK, warmTimeOf(e));
+    TEST_ASSERT_EQUAL(5, warmRoleOf(e));
+    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
     TEST_ASSERT_EQUAL_MEMORY(key, e.public_key, 32);
     TEST_ASSERT_FALSE(ws.contains(0x400));
     TEST_ASSERT_FALSE(ws.take(0x400, e));
@@ -111,13 +116,15 @@ void test_ws_keyedCandidate_evictsOldestKeylessFirst()
     // Fill with keyed entries except two keyless ones in the middle
     for (size_t i = 0; i < ws.capacity(); i++) {
         const bool keyless = (i == 5 || i == 10);
-        TEST_ASSERT_TRUE(ws.absorb(0x1000 + i, keyless ? (i == 10 ? 50 : 60) : 10, keyless ? NULL : key));
+        // Timestamps spaced by the 64 s warm metadata quantum (<<6) so LRU order survives
+        // quantisation: keyless i=10 is oldest (50), i=5 next (60), keyed all older (10).
+        TEST_ASSERT_TRUE(ws.absorb(0x1000 + i, (keyless ? (i == 10 ? 50u : 60u) : 10u) << 6, keyless ? NULL : key));
     }
     // Keyed candidate must displace the OLDEST KEYLESS entry (0x100A, ts=50),
     // even though every keyed entry is older (ts=10)
     uint8_t k2[32];
     makeKey(k2, 0x43);
-    TEST_ASSERT_TRUE(ws.absorb(0x8888, 70, k2));
+    TEST_ASSERT_TRUE(ws.absorb(0x8888, 70u << 6, k2));
     TEST_ASSERT_FALSE(ws.contains(0x1000 + 10));
     TEST_ASSERT_TRUE(ws.contains(0x1000 + 5));
     TEST_ASSERT_TRUE(ws.contains(0x8888));
@@ -137,6 +144,31 @@ void test_ws_keyedCandidate_evictsOldestKeyedWhenNoKeyless()
     TEST_ASSERT_TRUE(ws.contains(0x7777));
     TEST_ASSERT_FALSE(ws.contains(0x1000)); // oldest keyed evicted
     TEST_ASSERT_EQUAL(ws.capacity(), ws.count());
+}
+
+void test_ws_meta_roundTrip()
+{
+    WarmNodeStore ws;
+    uint8_t key[32];
+    makeKey(key, 0x77);
+    // Keyed TRACKER(5)/Role-protected and keyless SENSOR(6)/unprotected.
+    TEST_ASSERT_TRUE(ws.absorb(0x700, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role));
+    TEST_ASSERT_TRUE(ws.absorb(0x701, 5678, NULL, 6 /* SENSOR */, (uint8_t)WarmProtected::None));
+
+    uint8_t role = 0xFF, prot = 0xFF;
+    TEST_ASSERT_TRUE(ws.lookupMeta(0x700, role, prot));
+    TEST_ASSERT_EQUAL(5, role);
+    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, prot);
+    TEST_ASSERT_TRUE(ws.lookupMeta(0x701, role, prot));
+    TEST_ASSERT_EQUAL(6, role);
+    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::None, prot);
+    // Absent node yields false and leaves outputs untouched-by-contract (just check return).
+    TEST_ASSERT_FALSE(ws.lookupMeta(0x999, role, prot));
+    // Default args still compile (role/protected = 0 = CLIENT/None).
+    TEST_ASSERT_TRUE(ws.absorb(0x702, 9999, NULL));
+    TEST_ASSERT_TRUE(ws.lookupMeta(0x702, role, prot));
+    TEST_ASSERT_EQUAL(0, role);
+    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::None, prot);
 }
 
 void test_ws_remove_and_clear()
@@ -175,6 +207,56 @@ void test_ws_persistence_roundTrip()
     b.saveIfDirty();
 }
 
+// Migration: a v1 (WRM1) warm.dat must keep identity + key but discard last_heard
+// (so its low bits aren't misread as role/protected). File backend only.
+void test_ws_v1_migration_discardsLastHeard()
+{
+    WarmNodeStore a;
+    uint8_t key[32], got[32];
+    makeKey(key, 0x66);
+    a.absorb(0x900, 123456, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role);
+    if (!a.saveIfDirty()) {
+        TEST_IGNORE_MESSAGE("Filesystem not available in this test environment");
+        return;
+    }
+
+    // Read the whole v2 file, flip the 4-byte header magic to v1 ("WRM1"), write it back.
+    // (CRC covers only the entry bytes, so patching the header magic keeps it valid.)
+    std::vector<uint8_t> buf;
+    {
+        auto f = FSCom.open("/prefs/warm.dat", FILE_O_READ);
+        if (!f) {
+            TEST_IGNORE_MESSAGE("warm.dat not readable in this environment");
+            return;
+        }
+        buf.resize(f.size());
+        f.read(buf.data(), buf.size());
+        f.close();
+    }
+    TEST_ASSERT_TRUE(buf.size() >= 4);
+    const uint32_t v1magic = 0x314D5257u; // "WRM1"
+    memcpy(buf.data(), &v1magic, sizeof(v1magic));
+    {
+        auto f = FSCom.open("/prefs/warm.dat", FILE_O_WRITE);
+        TEST_ASSERT_TRUE((bool)f);
+        f.write(buf.data(), buf.size());
+        f.close();
+    }
+
+    WarmNodeStore b;
+    b.load();
+    TEST_ASSERT_TRUE(b.contains(0x900));     // identity survived migration
+    TEST_ASSERT_TRUE(b.copyKey(0x900, got)); // public key survived
+    TEST_ASSERT_EQUAL_MEMORY(key, got, 32);
+    uint8_t role = 0xFF, prot = 0xFF;
+    TEST_ASSERT_TRUE(b.lookupMeta(0x900, role, prot));
+    TEST_ASSERT_EQUAL(0, role); // last_heard discarded → role/protected reset
+    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::None, prot);
+
+    b.clear();
+    b.saveIfDirty();
+}
+
 WS_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -187,8 +269,10 @@ WS_TEST_ENTRY void setup()
     RUN_TEST(test_ws_keylessCandidate_neverEvictsKeyedEntries);
     RUN_TEST(test_ws_keyedCandidate_evictsOldestKeylessFirst);
     RUN_TEST(test_ws_keyedCandidate_evictsOldestKeyedWhenNoKeyless);
+    RUN_TEST(test_ws_meta_roundTrip);
     RUN_TEST(test_ws_remove_and_clear);
     RUN_TEST(test_ws_persistence_roundTrip);
+    RUN_TEST(test_ws_v1_migration_discardsLastHeard);
     exit(UNITY_END());
 }
 
