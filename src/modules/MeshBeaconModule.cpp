@@ -21,7 +21,7 @@ meshtastic_ChannelSettings MeshBeaconModule::originalPrimaryChannel;
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
 
 static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset *preset,
-                                   uint16_t *slot)
+                                   uint16_t *slot, bool *legacyHopOverride = nullptr)
 {
     if (!p)
         return false;
@@ -31,6 +31,8 @@ static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Co
                 *preset = entry.preset;
             if (slot)
                 *slot = entry.slot;
+            if (legacyHopOverride)
+                *legacyHopOverride = entry.legacyHopOverride;
             return true;
         }
     }
@@ -50,7 +52,7 @@ MeshBeaconModule::MeshBeaconModule()
 }
 
 void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset,
-                                              uint16_t slot)
+                                              uint16_t slot, bool legacyHopOverride)
 {
     if (!p)
         return;
@@ -69,6 +71,7 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, me
     target->id = p->id;
     target->preset = preset;
     target->slot = slot;
+    target->legacyHopOverride = legacyHopOverride;
 }
 
 bool MeshBeaconModule::hasTargetRadioSettings(const meshtastic_MeshPacket *p)
@@ -143,7 +146,15 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
                memcmp(c->psk.bytes, target.psk.bytes, c->psk.size) != 0 || c->channel_num != target.channel_num;
     };
 
-    if (p && getTargetRadioSettings(p, &targetPreset, &targetSlot)) {
+    bool legacyHopOverride = false;
+    if (p && getTargetRadioSettings(p, &targetPreset, &targetSlot, &legacyHopOverride)) {
+
+        // Legacy compatibility: older firmware (pre-v2.7.20) drops hop_start==0 packets via the
+        // pre-hop check before decryption, so they can't see has_bitfield to validate them.
+        // Setting hop_start=1 (with hop_limit remaining 0) makes the packet pass the old check
+        // while still being zero-hop (hop_limit=0 prevents any rebroadcast).
+        if (legacyHopOverride)
+            p->hop_start = 1;
 
         const auto &bcfg = moduleConfig.mesh_beacon;
         meshtastic_Config_LoRaConfig_RegionCode targetRegion;
@@ -305,6 +316,13 @@ void MeshBeaconBroadcastModule::sendBeacon()
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         p->want_ack = false;
         p->rx_time = getValidTime(RTCQualityFromNet);
+        // When broadcast_send_as_node rewrites p->from, perhapsEncode() sees isFromUs()=false and
+        // skips setting has_bitfield. Set it here so receivers can classify hop_start correctly
+        // and so ok_to_mqtt is honoured on the spoofed packet.
+        if (bcfg.broadcast_send_as_node != 0) {
+            p->decoded.has_bitfield = true;
+            p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
+        }
     };
 
     // ── Main packet(s) ──────────────────────────────────────────────────────
@@ -345,8 +363,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         pA->decoded.payload.size = offerSize;
         pA->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
         stampPacket(pA);
-        if (presetDiffers)
-            setTargetRadioSettings(pA, targetPreset, targetSlot);
+        if (presetDiffers || bcfg.broadcast_legacy_split)
+            setTargetRadioSettings(pA, targetPreset, targetSlot, bcfg.broadcast_legacy_split);
         LOG_INFO("Beacon: split-A MESH_BEACON_APP (offer only) from=%#08lx", pA->from);
         sendBeaconPacket(pA, targetPreset);
     }
@@ -363,8 +381,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         pB->decoded.payload.size = msgLen;
         pB->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
         stampPacket(pB);
-        if (presetDiffers)
-            setTargetRadioSettings(pB, targetPreset, targetSlot);
+        if (presetDiffers || bcfg.broadcast_legacy_split)
+            setTargetRadioSettings(pB, targetPreset, targetSlot, bcfg.broadcast_legacy_split);
         LOG_INFO("Beacon: split-B TEXT_MESSAGE_APP msg='%.40s' from=%#08lx", bcfg.broadcast_message, pB->from);
         sendBeaconPacket(pB, targetPreset);
     }
@@ -382,8 +400,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         p->decoded.payload.size = payloadCacheSize;
         p->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
         stampPacket(p);
-        if (presetDiffers)
-            setTargetRadioSettings(p, targetPreset, targetSlot);
+        if (presetDiffers || bcfg.broadcast_legacy_split)
+            setTargetRadioSettings(p, targetPreset, targetSlot, bcfg.broadcast_legacy_split);
         LOG_INFO("Beacon: MESH_BEACON_APP offer+msg from=%#08lx msg='%.40s'", p->from, bcfg.broadcast_message);
         sendBeaconPacket(p, targetPreset);
     }

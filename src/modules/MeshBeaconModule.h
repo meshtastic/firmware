@@ -13,6 +13,9 @@ typedef struct {
     PacketId id;
     meshtastic_Config_LoRaConfig_ModemPreset preset;
     uint16_t slot;
+    // When true, reconfigureForBeaconTX sets hop_start=1 so pre-2.7.20 firmware
+    // (which drops hop_start==0 packets) accepts the zero-hop beacon.
+    bool legacyHopOverride;
 } MeshBeaconModule_TargetRadioSettings;
 
 /**
@@ -36,7 +39,7 @@ class MeshBeaconModule
      * Sidecar holds 8 entries; evicts slot 0 on overflow.
      */
     static void setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset,
-                                       uint16_t slot);
+                                       uint16_t slot, bool legacyHopOverride = false);
 
     /**
      * Returns true if the sidecar table contains an entry for this packet's ID.
