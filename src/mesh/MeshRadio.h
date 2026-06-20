@@ -88,6 +88,11 @@ extern const RegionInfo *myRegion;
 extern void initRegion();
 extern const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code);
 
+// Fill `map` with the region->valid-preset table, grouped so regions sharing a
+// preset list reference the same group. Sent to clients during want_config so
+// their UI can block illegal region+preset combinations.
+extern void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map);
+
 // Valid LoRa spread factor range and defaults
 constexpr uint8_t LORA_SF_MIN = 5;
 constexpr uint8_t LORA_SF_MAX = 12;

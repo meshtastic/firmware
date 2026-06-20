@@ -34,7 +34,7 @@
 enum class TrafficType { POSITION, TELEMETRY };
 
 // Traffic management defaults
-#define default_traffic_mgmt_position_precision_bits 24               // ~10m grid cells
+#define default_traffic_mgmt_position_precision_bits 19               // ~90m grid cells (±45m)
 #define default_traffic_mgmt_position_min_interval_secs (ONE_DAY / 2) // 12 hours between identical positions
 
 // Hop scaling defaults

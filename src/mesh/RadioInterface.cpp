@@ -605,6 +605,62 @@ const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
     return r;
 }
 
+void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
+{
+    map = meshtastic_LoRaRegionPresetMap_init_zero;
+
+    const size_t maxGroups = sizeof(map.groups) / sizeof(map.groups[0]);
+    const size_t maxRegions = sizeof(map.region_groups) / sizeof(map.region_groups[0]);
+    const size_t maxPresets = sizeof(map.groups[0].presets) / sizeof(map.groups[0].presets[0]);
+
+    // Coalesce regions that share an identical preset list into one group. Two
+    // regions belong to the same group when they share the same RegionProfile
+    // (which owns the preset list + licensing) AND the same default preset.
+    // Keyed by profile pointer, not the preset-array pointer: PROFILE_NARROW and
+    // PROFILE_HAM_100KHZ share PRESETS_NARROW but differ in licensedOnly.
+    const RegionProfile *groupProfile[sizeof(map.groups) / sizeof(map.groups[0])] = {};
+
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
+        // No room left to map any further region; once full we can't add more, so
+        // log once and stop. An incomplete map means clients won't constrain the
+        // omitted regions, so this must be discoverable rather than silent.
+        if (map.region_groups_count >= maxRegions) {
+            LOG_ERROR("Region preset map full at %u regions; remaining regions omitted", (unsigned)maxRegions);
+            break;
+        }
+
+        // Find the group this region belongs to, or create it.
+        int gi = -1;
+        for (pb_size_t g = 0; g < map.groups_count; g++) {
+            if (groupProfile[g] == r->profile && map.groups[g].default_preset == r->getDefaultPreset()) {
+                gi = g;
+                break;
+            }
+        }
+        if (gi < 0) {
+            if (map.groups_count >= maxGroups) {
+                // Out of group slots (should not happen for the current table). The
+                // region can't be advertised; skip it but make the gap visible.
+                LOG_ERROR("Region preset map out of group slots (%u); region %d omitted", (unsigned)maxGroups, r->code);
+                continue;
+            }
+            gi = map.groups_count++;
+            groupProfile[gi] = r->profile;
+            meshtastic_LoRaPresetGroup &grp = map.groups[gi];
+            grp.default_preset = r->getDefaultPreset();
+            grp.licensed_only = r->profile->licensedOnly;
+            grp.presets_count = 0;
+            for (size_t i = 0; r->profile->presets[i] != MODEM_PRESET_END && grp.presets_count < maxPresets; i++)
+                grp.presets[grp.presets_count++] = r->profile->presets[i];
+        }
+
+        // Map this region to its group (capacity checked at the top of the loop).
+        meshtastic_LoRaRegionPresets &rg = map.region_groups[map.region_groups_count++];
+        rg.region = r->code;
+        rg.group_index = (uint8_t)gi;
+    }
+}
+
 /**
  * Get duty cycle for current region. EU_866: 10% for routers, 2.5% for mobile.
  */
