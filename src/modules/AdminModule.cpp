@@ -93,13 +93,13 @@ static uint32_t effectiveBuzzerGpio(uint32_t gpio)
 
 static bool sameDeviceConfig(const meshtastic_Config_DeviceConfig &current, const meshtastic_Config_DeviceConfig &requested)
 {
-    return current.role == requested.role && current.serial_enabled == requested.serial_enabled &&
+    return current.role == requested.role &&
            effectiveButtonGpio(current.button_gpio) == effectiveButtonGpio(requested.button_gpio) &&
            effectiveBuzzerGpio(current.buzzer_gpio) == effectiveBuzzerGpio(requested.buzzer_gpio) &&
            current.rebroadcast_mode == requested.rebroadcast_mode &&
            current.node_info_broadcast_secs == requested.node_info_broadcast_secs &&
            current.double_tap_as_button_press == requested.double_tap_as_button_press &&
-           current.is_managed == requested.is_managed && current.disable_triple_click == requested.disable_triple_click &&
+           current.disable_triple_click == requested.disable_triple_click &&
            strncmp(current.tzdef, requested.tzdef, sizeof(current.tzdef)) == 0 &&
            current.led_heartbeat_disabled == requested.led_heartbeat_disabled && current.buzzer_mode == requested.buzzer_mode;
 }
@@ -795,31 +795,37 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     bool requiresReboot = true;
+    bool reloadConfig = true;
 
     switch (c.which_payload_variant) {
     case meshtastic_Config_device_tag: {
         LOG_INFO("Set config: Device");
-        if (config.has_device && sameDeviceConfig(config.device, c.payload_variant.device)) {
+        auto requestedDevice = c.payload_variant.device;
+        if (config.has_device) {
+            requestedDevice.serial_enabled = config.device.serial_enabled;
+            requestedDevice.is_managed = config.device.is_managed;
+        }
+        if (config.has_device && sameDeviceConfig(config.device, requestedDevice)) {
             LOG_DEBUG("Device config unchanged, skipping save");
             return;
         }
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
-        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
+        if (config.device.double_tap_as_button_press == false && requestedDevice.double_tap_as_button_press == true &&
             accelerometerThread->enabled == false) {
-            config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
+            config.device.double_tap_as_button_press = requestedDevice.double_tap_as_button_press;
             accelerometerThread->enabled = true;
             accelerometerThread->start();
         }
 #endif
-        if (effectiveButtonGpio(config.device.button_gpio) == effectiveButtonGpio(c.payload_variant.device.button_gpio) &&
-            effectiveBuzzerGpio(config.device.buzzer_gpio) == effectiveBuzzerGpio(c.payload_variant.device.buzzer_gpio) &&
-            config.device.role == c.payload_variant.device.role &&
-            config.device.rebroadcast_mode == c.payload_variant.device.rebroadcast_mode) {
+        if (effectiveButtonGpio(config.device.button_gpio) == effectiveButtonGpio(requestedDevice.button_gpio) &&
+            effectiveBuzzerGpio(config.device.buzzer_gpio) == effectiveBuzzerGpio(requestedDevice.buzzer_gpio) &&
+            config.device.role == requestedDevice.role && config.device.rebroadcast_mode == requestedDevice.rebroadcast_mode) {
             requiresReboot = false;
+            reloadConfig = false;
         }
-        config.device = c.payload_variant.device;
+        config.device = requestedDevice;
         if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE &&
             (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
              config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
@@ -829,8 +835,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             sendWarning(warning);
         }
         // If we're setting router role for the first time, install its intervals
-        if (existingRole != c.payload_variant.device.role) {
-            nodeDB->installRoleDefaults(c.payload_variant.device.role);
+        if (existingRole != requestedDevice.role) {
+            nodeDB->installRoleDefaults(requestedDevice.role);
             changes |= SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE; // Some role defaults affect owner
         }
         if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
@@ -838,7 +844,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
         }
         // Router Client and Repeater deprecated; Set it to client
-        if (IS_ONE_OF(c.payload_variant.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT,
+        if (IS_ONE_OF(requestedDevice.role, meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT,
                       meshtastic_Config_DeviceConfig_Role_REPEATER)) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
             if (moduleConfig.store_forward.enabled && !moduleConfig.store_forward.is_server) {
@@ -1086,7 +1092,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         disableBluetooth();
     } // end of switch case which_payload_variant
 
-    saveChanges(changes, requiresReboot);
+    saveChanges(changes, requiresReboot, reloadConfig);
 } // end of handleSetConfig
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
@@ -1622,11 +1628,15 @@ void AdminModule::reboot(int32_t seconds)
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 
-void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
+void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool reloadConfig)
 {
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
-        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        if (reloadConfig) {
+            service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        } else {
+            nodeDB->saveToDisk(saveWhat);
+        }
     } else {
         LOG_INFO("Delay save of changes to disk until the open transaction is committed");
     }
